@@ -1,3 +1,4 @@
+import { placeInput } from "./admitted-place.test-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { routeDirectory } from "../../../../packages/agent-contracts/src/generated/route-directory";
 import { admitCaptures } from "../captures/admission";
@@ -25,11 +26,14 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
       });
       const mounted = createRouteShell(
         sourceRouteServices({ "captures.list": { kind: "use", open } }),
-      ).mount(route, {
-        read: () => new URLSearchParams({ fixture: "browse" }),
-        write: () => {},
-        subscribe: () => () => {},
-      });
+      ).mount(
+        route,
+        placeInput({
+          read: () => new URLSearchParams({ fixture: "browse" }),
+          write: () => {},
+          subscribe: () => () => {},
+        }),
+      );
       try {
         expect(renderToStaticMarkup(mounted.read("captures") as ReactNode)).toContain(
           "Ground plan",
@@ -43,11 +47,14 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
     }
     if (key === "families") {
       const { admitFamilies } = await import("../families/route");
-      const mount = createRouteShell(sourceRouteServices({})).mount(await admitFamilies(), {
-        read: () => new URLSearchParams({ fixture: "audit" }),
-        write() {},
-        subscribe: () => () => {},
-      });
+      const mount = createRouteShell(sourceRouteServices({})).mount(
+        await admitFamilies(),
+        placeInput({
+          read: () => new URLSearchParams({ fixture: "audit" }),
+          write() {},
+          subscribe: () => () => {},
+        }),
+      );
       try {
         expect(isValidElement(mount.read("main"))).toBe(true);
         expect(mount.work()).not.toBeNull();
@@ -66,15 +73,21 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
             target: () => ({ kind: "document", ref: { session: "fixture", openId: "schedules" } }),
           },
         ),
-      ).mount(await admitSchedules(), {
-        read: () =>
-          new URLSearchParams({
-            fixture: "read",
-            workspaceId: scheduleIdentity("schedule:fixture"),
-          }),
-        write() {},
-        subscribe: () => () => {},
-      });
+      ).mount(
+        await admitSchedules(),
+        placeInput(
+          {
+            read: () =>
+              new URLSearchParams({
+                fixture: "read",
+                workspaceId: scheduleIdentity("schedule:fixture"),
+              }),
+            write() {},
+            subscribe: () => () => {},
+          },
+          { target: { kind: "document", ref: { session: "fixture", openId: "schedules" } } },
+        ),
+      );
       try {
         // The grid owns DOM portals; schedules/kernel.test.tsx renders it under jsdom.
         expect(isValidElement(mount.read("grid"))).toBe(true);

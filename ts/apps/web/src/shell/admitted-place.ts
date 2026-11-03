@@ -1,15 +1,27 @@
+import type { Address, DocumentRef, ExecutionTarget } from "@pe/agent-contracts";
+import { fixtureName } from "./fixture-lane";
 import type { RouteActivityScope } from "../route/activity";
 import type { AdmittedAddressPort } from "./admitted-address";
 import { freezePage } from "./page-port";
 
+export type PlaceInput = Readonly<{
+  address: AdmittedAddressPort;
+  fixture: string | null;
+  target: ExecutionTarget | null;
+  work: Readonly<{ address: Address | null; open: DocumentRef | null }>;
+  custody: Readonly<{ current(): boolean }>;
+  memory(this: void): unknown;
+}>;
+
 type Disposable = { dispose(): void };
 export interface AdmittedPlace<State extends Disposable> extends Disposable {
   readonly address: AdmittedAddressPort;
+  readonly fixture: string | null;
   current(): boolean;
   visible(): boolean;
   setVisible(visible: boolean): void;
   state(create: () => State): State;
-  memory(): unknown;
+  memory(this: void): unknown;
   remember(page: unknown): void;
 }
 
@@ -35,6 +47,7 @@ export function createAdmittedPlace<State extends Disposable>(options: {
     addressListeners.forEach((listener) => listener());
   });
   const place: AdmittedPlace<State> = {
+    fixture: fixtureName(Object.fromEntries(options.search)),
     address: {
       read: () => new URLSearchParams(current() ? options.address.read() : captured),
       write(search, history) {

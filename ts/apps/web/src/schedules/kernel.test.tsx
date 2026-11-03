@@ -1,3 +1,4 @@
+import { placeInput } from "../shell/admitted-place.test-fixture";
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -40,13 +41,19 @@ async function fixture(name = "read") {
     fixture: name,
     workspaceId: scheduleIdentity("schedule:fixture"),
   });
-  const mount = shell.mount(route, {
-    read: () => search,
-    write: (next) => {
-      search = next;
-    },
-    subscribe: () => () => {},
-  });
+  const mount = shell.mount(
+    route,
+    placeInput(
+      {
+        read: () => search,
+        write: (next) => {
+          search = next;
+        },
+        subscribe: () => () => {},
+      },
+      { target: { kind: "document", ref: { session: "fixture", openId: "schedules" } } },
+    ),
+  );
   close.push(mount.close);
   return { mount, open, shell, route };
 }
@@ -246,11 +253,17 @@ test("keyed mount edit preserves an untouched stale cell on the real domain Work
       { target: () => ({ kind: "document", ref: scheduleFixtureReading.target }) },
     ),
     work: store,
-  }).mount(await admit(), {
-    read: () => new URLSearchParams({ workspaceId: scheduleIdentity("schedule:fixture") }),
-    write: () => {},
-    subscribe: () => () => {},
-  });
+  }).mount(
+    await admit(),
+    placeInput(
+      {
+        read: () => new URLSearchParams({ workspaceId: scheduleIdentity("schedule:fixture") }),
+        write: () => {},
+        subscribe: () => () => {},
+      },
+      { target: { kind: "document", ref: scheduleFixtureReading.target } },
+    ),
+  );
   close.push(mount.close);
   await vi.waitFor(() => expect(mount.workBasis()).not.toBeNull());
   const result = mount.invoke(
@@ -358,11 +371,22 @@ async function interactive(measured = false, native = true) {
       ref: native ? reading.target : { session: "another", openId: "document" },
     }),
   });
-  const mount = createRouteShell({ ...services, work: store }).mount(await admit(), {
-    read: () => new URLSearchParams({ workspaceId: scheduleIdentity(reading.workspaceId) }),
-    write() {},
-    subscribe: () => () => {},
-  });
+  const mount = createRouteShell({ ...services, work: store }).mount(
+    await admit(),
+    placeInput(
+      {
+        read: () => new URLSearchParams({ workspaceId: scheduleIdentity(reading.workspaceId) }),
+        write() {},
+        subscribe: () => () => {},
+      },
+      {
+        target: {
+          kind: "document",
+          ref: native ? reading.target : { session: "another", openId: "document" },
+        },
+      },
+    ),
+  );
   close.push(mount.close);
   await vi.waitFor(() => expect(mount.workBasis()).not.toBeNull());
   return {
@@ -474,11 +498,17 @@ test("push traverses U8s preview, review, real consent owner, commit and retaine
     const connected = createRouteShell({
       ...f.services,
       work: { ...f.store, submit: (c) => client.submit(c) },
-    }).mount(await admit(), {
-      read: () => new URLSearchParams({ workspaceId: scheduleIdentity(f.reading.workspaceId) }),
-      write() {},
-      subscribe: () => () => {},
-    });
+    }).mount(
+      await admit(),
+      placeInput(
+        {
+          read: () => new URLSearchParams({ workspaceId: scheduleIdentity(f.reading.workspaceId) }),
+          write() {},
+          subscribe: () => () => {},
+        },
+        { target: { kind: "document", ref: f.reading.target } },
+      ),
+    );
     close.push(connected.close);
     await vi.waitFor(() => expect(connected.workBasis()).not.toBeNull());
     vi.useFakeTimers();

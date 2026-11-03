@@ -1,3 +1,4 @@
+import { placeInput } from "../shell/admitted-place.test-fixture";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { ductsDocumentSchema, workHandleSchema, writePreviewSchema } from "@pe/agent-contracts";
@@ -199,11 +200,14 @@ test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)
       clock: { lifetime: "read", now: Date.now },
       availability: {},
     };
-    const mount = createRouteShell(services).mount(route, {
-      read: () => new URLSearchParams(),
-      write() {},
-      subscribe: () => () => {},
-    });
+    const mount = createRouteShell(services).mount(
+      route,
+      placeInput({
+        read: () => new URLSearchParams(),
+        write() {},
+        subscribe: () => () => {},
+      }),
+    );
     try {
       expect(mount.read("names")).toMatchObject({
         current: true,

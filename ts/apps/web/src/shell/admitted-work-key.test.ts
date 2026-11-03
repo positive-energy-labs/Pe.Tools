@@ -1,3 +1,4 @@
+import { placeInput } from "./admitted-place.test-fixture";
 import { expect, test } from "vite-plus/test";
 import {
   builtinData,
@@ -103,13 +104,16 @@ test("decoded subject opens existing host Work and never opens an encoded worksp
     availability: {},
   };
   let search = new URLSearchParams();
-  const mount = createRouteShell(services).mount(admitted.route, {
-    read: () => search,
-    write: (next) => {
-      search = next;
-    },
-    subscribe: () => () => {},
-  });
+  const mount = createRouteShell(services).mount(
+    admitted.route,
+    placeInput({
+      read: () => search,
+      write: (next) => {
+        search = next;
+      },
+      subscribe: () => () => {},
+    }),
+  );
   try {
     expect(mount.work()).toEqual({ revision: 1, value: { amount: 41, note: "" } });
     expect(opened.length).toBeGreaterThan(0);

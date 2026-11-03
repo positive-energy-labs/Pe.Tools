@@ -1,3 +1,4 @@
+import { placeInput } from "../shell/admitted-place.test-fixture";
 // @vitest-environment jsdom
 import { createElement } from "react";
 import { act, cleanup as cleanupView, render, screen } from "@testing-library/react";
@@ -290,10 +291,18 @@ async function witness(
     work,
   };
   const address = { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} };
-  const mount = createRouteShell(services).mount(web.route, address);
+  let eligibility: "writable" | "read-only" = "writable";
+  const input = placeInput(address, {
+    target: { kind: "document", ref: { session: "fixture", openId: "w1f" } },
+    custody: { current: () => eligibility === "writable" },
+  });
+  const mount = createRouteShell(services).mount(web.route, input);
   cleanup.push(mount.close);
   return {
     mount,
+    eligibility(next: "writable" | "read-only") {
+      eligibility = next;
+    },
     route: web.route,
     services,
     address,
@@ -304,7 +313,7 @@ async function witness(
       skipped = count;
     },
     reopen() {
-      const next = createRouteShell(services).mount(web.route, address);
+      const next = createRouteShell(services).mount(web.route, input);
       cleanup.push(next.close);
       return next;
     },
@@ -467,7 +476,7 @@ test.each([true, false])("D4: Revert respects Place write eligibility (%s)", asy
   await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
   await settle(f.mount.invoke("slot", "A") as Observation<WorkWriteOutcome>);
   const before = structuredClone(f.saved.get("ducts"));
-  f.mount.setWritable(writable);
+  f.eligibility(writable ? "writable" : "read-only");
   if (!writable) {
     expect(() => f.mount.invoke("slot", "B")).toThrow("Place is not writable");
     await expect(f.mount.history!.undo()).rejects.toThrow("Place is not writable");
@@ -488,7 +497,7 @@ test.each([true, false])(
     await f.mount.startFresh();
     expect(f.mount.review("work.salvage")?.stale).toBe(false);
     const before = structuredClone(f.saved.get("ducts"));
-    f.mount.setWritable(writable);
+    f.eligibility(writable ? "writable" : "read-only");
     if (writable) await settle(f.mount.confirm("work.salvage") as Observation<WorkWriteOutcome>);
     else
       expect(() => f.mount.confirm("work.salvage")).toThrow(
@@ -513,7 +522,7 @@ test.each([
   const closed = {
     resolution: { kind: "choose", reason: "document-closed" },
     workOpen: { session: "fixture", openId: "w1f" },
-    workAddress: start === "cold" ? workAddress : null,
+    workAddress,
     resolvedAddress: null,
   } as ReturnType<typeof useRouteTarget>;
   const selected = vi.mocked(useRouteTarget);
@@ -586,7 +595,6 @@ test("P02/P04: the application opens saved Ducts Work by document Address", asyn
   );
 });
 
-// TODO: P07 the application's Target must use its Place's captured search before mounting Work.
 test.each(["w1f", "other-document"])(
   "P07: a hidden Place keeps its own Work when the active target is %s",
   async (activeOpenId) => {
@@ -664,7 +672,6 @@ test.each(["w1f", "other-document"])(
   },
 );
 
-// TODO: Place custody must be rechecked when an old callback starts a new Work submission.
 test.each(["current", "departed"] as const)(
   "P07: a rendered callback cannot start Work after its Place is %s",
   async (custody) => {

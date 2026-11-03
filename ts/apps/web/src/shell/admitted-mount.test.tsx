@@ -1,3 +1,4 @@
+import { placeInput } from "./admitted-place.test-fixture";
 import { RouteActivity, RouteVisibility } from "../route/activity";
 import { actionReceiptSchema } from "@pe/agent-contracts";
 // @vitest-environment jsdom
@@ -18,7 +19,8 @@ import { createRouteShell, admittedMountBodyKinds, PlaceWriteRefusal } from "./a
 import { createAdmittedWork } from "./admitted-work";
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
 import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
-import { AdmittedPane, admittedRouterAddress } from "./admitted-pane";
+import { admittedRouterAddress } from "./admitted-pane";
+import { AdmittedPane } from "./admitted-place.test-fixture";
 const data = {
   version: 1,
   capabilities: [],
@@ -339,7 +341,7 @@ afterEach(() => {
 test("composition rejects stale refresh/page frames and disposes all delivery", async () => {
   const t = transports();
   const location = locationPort("?query=restored");
-  const mount = createRouteShell(t.services).mount(await admitted(), location.address);
+  const mount = createRouteShell(t.services).mount(await admitted(), placeInput(location.address));
   closes.push(mount.close);
   expect(mount.page.read().query).toBe("restored");
   const changed = vi.fn();
@@ -370,8 +372,7 @@ test("URL restore couples subject/selection/pose; history honors only origin ove
   const location = locationPort();
   const mount = createRouteShell(transports().services).mount(
     await admitted(),
-    location.address,
-    () => ({ query: "memory" }),
+    placeInput(location.address, { memory: () => ({ query: "memory" }) }),
   );
   closes.push(mount.close);
   expect(mount.page.read().query).toBe("memory");
@@ -401,7 +402,7 @@ test.each(["sample", "", "missing"])("fixture %s opens no live service", async (
   const subscribe = vi.spyOn(t.services.readings, "subscribe");
   const mount = createRouteShell(t.services).mount(
     await admitted(),
-    locationPort(`?fixture=${fixture}`).address,
+    placeInput(locationPort(`?fixture=${fixture}`).address),
   );
   closes.push(mount.close);
   expect(mount.read("main")).toMatchObject({
@@ -431,7 +432,10 @@ test("React facade owns StrictMode mount/dispose with no route callback", async 
 
 test("explicit readings wait for demand and malformed live output cannot reach bodies", async () => {
   const t = transports();
-  const mount = createRouteShell(t.services).mount(await admitted(true), locationPort().address);
+  const mount = createRouteShell(t.services).mount(
+    await admitted(true),
+    placeInput(locationPort().address),
+  );
   closes.push(mount.close);
   expect(t.frames).toHaveLength(0);
   mount.refresh("notes");
@@ -820,7 +824,7 @@ test.each(["ack-first", "stream-first"])(
     };
     const shell = createRouteShell({ ...t.services, work: door });
     const route = await workRoute();
-    const mount = shell.mount(route, locationPort().address);
+    const mount = shell.mount(route, placeInput(locationPort().address));
     expect(mount.work()?.value).toEqual({ amount: 0 });
     await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
     deliverStream?.({ kind: "pending" });
@@ -828,7 +832,7 @@ test.each(["ack-first", "stream-first"])(
     const pending = mount.invoke("change", 3) as Observation<WorkWriteOutcome>;
     mount.close();
     await settle(pending);
-    const reopened = shell.mount(route, locationPort().address);
+    const reopened = shell.mount(route, placeInput(locationPort().address));
     closes.push(reopened.close);
     expect(reopened.work()).toEqual({ revision: 2, value: { amount: 5 } });
   },
@@ -843,7 +847,7 @@ test("review uses accepted Work, becomes stale on stream edit, and subject enter
   const route = await workRoute("shown");
   const mount = createRouteShell({ ...t.services, work: store }).mount(
     route,
-    locationPort().address,
+    placeInput(locationPort().address),
   );
   closes.push(mount.close);
   mount.invoke("change", 2);
@@ -888,8 +892,8 @@ test("fixture selection centrally isolates Work across mounts", async () => {
   const t = transports();
   const route = await workRoute();
   const shell = createRouteShell(t.services);
-  const a = shell.mount(route, locationPort("?fixture=sample").address),
-    b = shell.mount(route, locationPort("?fixture=sample").address);
+  const a = shell.mount(route, placeInput(locationPort("?fixture=sample").address)),
+    b = shell.mount(route, placeInput(locationPort("?fixture=sample").address));
   closes.push(a.close, b.close);
   await settle(a.invoke("change", 4) as Observation<WorkWriteOutcome>);
   expect(a.work()?.value).toEqual({ amount: 4 });
@@ -911,7 +915,7 @@ test("mount native review submits accepted Work through the command door", async
   );
   const mount = createRouteShell({ ...t.services, work: { ...store, submit } }).mount(
     await workRoute(),
-    locationPort().address,
+    placeInput(locationPort().address),
   );
   closes.push(mount.close);
   mount.invoke("native", 0);
@@ -963,7 +967,7 @@ test("stale-base refuses without recomputing or retrying the Work edit", async (
   };
   const mount = createRouteShell({ ...t.services, work: { ...store, submitWork } }).mount(
     await workRoute(),
-    locationPort().address,
+    placeInput(locationPort().address),
   );
   closes.push(mount.close);
   const outcome = await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
@@ -989,7 +993,10 @@ test("stale-base refuses without recomputing or retrying the Work edit", async (
 test("query validates and delivers invocation input without changing Page; new runs supersede", async () => {
   const t = transports();
   const acquire = vi.spyOn(t.services.reads, "acquire");
-  const m = createRouteShell(t.services).mount(await admitted(true, true), locationPort().address);
+  const m = createRouteShell(t.services).mount(
+    await admitted(true, true),
+    placeInput(locationPort().address),
+  );
   closes.push(m.close);
   const page = m.page.read();
   const pane = () => m.read("main") as any;
@@ -1037,7 +1044,7 @@ async function nativeFixture(presenter?: (result: unknown, evidence: unknown) =>
   const acquire = vi.spyOn(t.services.reads, "acquire");
   const mount = createRouteShell({ ...t.services, work: { ...store, submit } }).mount(
     await workRoute("none", true, "nothing", presenter),
-    locationPort().address,
+    placeInput(locationPort().address),
   );
   closes.push(mount.close);
   const preview = () => {
@@ -1326,7 +1333,7 @@ async function historyFixture(pea = false) {
   };
   const route = await workRoute();
   const shell = createRouteShell({ ...t.services, work: door });
-  const mount = shell.mount(route, locationPort().address);
+  const mount = shell.mount(route, placeInput(locationPort().address));
   closes.push(mount.close);
   return {
     mount,
@@ -1441,7 +1448,7 @@ test("a departed mount recovers undo history solely from open's feed", async () 
   };
   const mount = createRouteShell({ ...transports().services, work: door }).mount(
     f.route,
-    locationPort().address,
+    placeInput(locationPort().address),
   );
   closes.push(mount.close);
   expect(mount.journal()?.undo).toHaveLength(1);
@@ -1499,7 +1506,7 @@ test("transition adjusts and refuses through the Page port, with current project
   });
   const t = transports();
   const location = locationPort();
-  const mount = createRouteShell(t.services).mount(route, location.address);
+  const mount = createRouteShell(t.services).mount(route, placeInput(location.address));
   closes.push(mount.close);
   expect(mount.initialRestore.kind).toBe("refused");
   expect(mount.page.pose({ pose: { x: 2 } }, "named").kind).toBe("refused");
@@ -1526,7 +1533,10 @@ test("transition returned patches retain role and schema checks; restore invokes
     data: { transition: "move" },
     bodies: { move: { slot: "transition", kind: "transition", source, run } },
   });
-  const mount = createRouteShell(transports().services).mount(route, locationPort().address);
+  const mount = createRouteShell(transports().services).mount(
+    route,
+    placeInput(locationPort().address),
+  );
   closes.push(mount.close);
   expect(run.mock.calls[0]![2].kind).toBe("restore");
   expect(mount.page.pose({ pose: { x: 1 } }, "named").kind).toBe("refused");
@@ -1567,7 +1577,7 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
     bodies: { pick: { ...bodies.pick, run } },
   });
   const t = transports();
-  const mount = createRouteShell(t.services).mount(route, locationPort().address);
+  const mount = createRouteShell(t.services).mount(route, placeInput(locationPort().address));
   closes.push(mount.close);
   expect(run).toHaveBeenCalled();
   t.frames.at(-1)!(ready("options"));
@@ -1603,7 +1613,10 @@ test("Page verbs also pass through transition and refuse atomically", async () =
       edit: { slot: "verbs.edit.patch", kind: "page", source, run: () => ({ query: "changed" }) },
     },
   });
-  const mount = createRouteShell(transports().services).mount(route, locationPort().address);
+  const mount = createRouteShell(transports().services).mount(
+    route,
+    placeInput(locationPort().address),
+  );
   closes.push(mount.close);
   expect(mount.invoke("edit", "change")).toMatchObject({ kind: "refused" });
   expect(mount.page.read().query).toBe("");
@@ -1626,7 +1639,7 @@ test("transition refuses a re-entrant evidence change before acceptance", async 
       },
     },
   });
-  const mount = createRouteShell(t.services).mount(route, locationPort().address);
+  const mount = createRouteShell(t.services).mount(route, placeInput(locationPort().address));
   closes.push(mount.close);
   t.frames.at(-1)!(ready("scene"));
   expect(mount.page.pose({ pose: { x: 10 } }, "named").kind).toBe("refused");
@@ -1660,9 +1673,9 @@ test("unused cell admission stays refused before acquisition", async () => {
   for (const amendment of cases) {
     const t = transports();
     const route = await admitted(false, false, amendment);
-    expect(() => createRouteShell(t.services).mount(route, locationPort().address)).toThrow(
-      /Unsupported admitted mount body slot/,
-    );
+    expect(() =>
+      createRouteShell(t.services).mount(route, placeInput(locationPort().address)),
+    ).toThrow(/Unsupported admitted mount body slot/);
     expect(t.keys).toEqual([]);
   }
 });
@@ -1752,7 +1765,9 @@ test.each([
     );
     const mount = createRouteShell({ ...services, work: { ...store, submit } }).mount(
       await workRoute("none", modelWrite, needs),
-      locationPort().address,
+      placeInput(locationPort().address, {
+        target: needs === "nothing" ? { kind: "host" } : documentA,
+      }),
     );
     closes.push(mount.close);
     const expected = needs === "nothing" ? { kind: "host" } : documentA;
@@ -1837,7 +1852,7 @@ test("global predicates drive layout gates on publication and never run during d
     bodies: { allowed: { slot: "predicates.allowed", kind: "predicate", source, run: predicate } },
   });
   const t = transports(),
-    mount = createRouteShell(t.services).mount(route, locationPort().address);
+    mount = createRouteShell(t.services).mount(route, placeInput(locationPort().address));
   closes.push(mount.close);
   expect(mount.read("main")).toBeNull();
   mount.controls.query("query", "show");
@@ -1857,7 +1872,10 @@ test("subject display receives only subject and is cached outside draw", async (
     data: { subject: { ...data.subject, show: "show" } },
     bodies: { show: { slot: "subject.show", kind: "show", source, run: show } },
   });
-  const mount = createRouteShell(transports().services).mount(route, locationPort().address);
+  const mount = createRouteShell(transports().services).mount(
+    route,
+    placeInput(locationPort().address),
+  );
   closes.push(mount.close);
   expect(mount.subjectDisplay()).toBe("No note");
   const calls = show.mock.calls.length;
@@ -1876,7 +1894,10 @@ test("subject text observes global publications with validated cached output", a
     data: { subjectText: "text" },
     bodies: { text: { slot: "subjectText", kind: "subject", source, run: text } },
   });
-  const mount = createRouteShell(transports().services).mount(route, locationPort().address);
+  const mount = createRouteShell(transports().services).mount(
+    route,
+    placeInput(locationPort().address),
+  );
   closes.push(mount.close);
   mount.controls.query("query", "changed");
   expect(mount.subjectText()).toBe("changed");
@@ -1919,7 +1940,7 @@ test("row placement uses shared query dispatch with captured input and refuses o
   });
   const t = transports();
   const acquire = vi.spyOn(t.services.reads, "acquire");
-  const mount = createRouteShell(t.services).mount(rowRoute, locationPort().address);
+  const mount = createRouteShell(t.services).mount(rowRoute, placeInput(locationPort().address));
   closes.push(mount.close);
   const input = { elementIds: [42] },
     verbs = mount.place("main", "capture", input);
@@ -2013,7 +2034,7 @@ test("cell displays, focus, take and salvage use real shared Page/Work owners", 
     );
   const mount = createRouteShell({ ...t.services, work: store }).mount(
     await workRoute("none", false, "nothing", undefined, true),
-    locationPort().address,
+    placeInput(locationPort().address),
   );
   closes.push(mount.close);
   expect(mount.cells().amount).toEqual([
@@ -2042,9 +2063,9 @@ test("cell displays, focus, take and salvage use real shared Page/Work owners", 
 test("presentation without sealed preview stays explicitly refused until result landing", async () => {
   const route = await workRoute("none", false, "nothing", () => "result");
   const t = transports();
-  expect(() => createRouteShell(t.services).mount(route, locationPort().address)).toThrow(
-    "requires a sealed preview",
-  );
+  expect(() =>
+    createRouteShell(t.services).mount(route, placeInput(locationPort().address)),
+  ).toThrow("requires a sealed preview");
   expect(t.keys).toEqual([]);
 });
 
@@ -2071,7 +2092,7 @@ test("rendered Work basis refuses old, copied and foreign edits; current basis a
   });
   const submitWork = vi.fn(store.submitWork);
   const shell = createRouteShell({ ...t.services, work: { ...store, submitWork } });
-  const mount = shell.mount(route, locationPort().address);
+  const mount = shell.mount(route, placeInput(locationPort().address));
   closes.push(mount.close);
   mount.read("main");
   const old = pane!.workBasis;
@@ -2099,7 +2120,7 @@ test("rendered Work basis refuses old, copied and foreign edits; current basis a
     (await settle(pane!.verbs.change(2, pane!.workBasis) as Observation<WorkWriteOutcome>)).kind,
   ).toBe("accepted");
   expect(mount.work()?.value).toEqual({ amount: 7 });
-  const replacement = shell.mount(route, locationPort().address);
+  const replacement = shell.mount(route, placeInput(locationPort().address));
   closes.push(replacement.close);
   expect(() => replacement.invoke("change", 9, old)).toThrow("foreign");
 });
@@ -2131,7 +2152,7 @@ test("a delayed submit keeps its captured expectedRevision across a newer accept
   };
   const mount = createRouteShell({ ...t.services, work: door }).mount(
     await workRoute(),
-    locationPort().address,
+    placeInput(locationPort().address),
   );
   closes.push(mount.close);
   const pending = settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
@@ -2190,7 +2211,7 @@ async function landingFixture(
   const route = await workRoute("none", false, "nothing", undefined, false, { run: land, output });
   const shell = createRouteShell({ ...t.services, work: door });
   const location = locationPort();
-  const mount = shell.mount(route, location.address);
+  const mount = shell.mount(route, placeInput(location.address));
   closes.push(mount.close);
   mount.invoke("native", 0);
   const submission = mount.confirm("native") as ReturnType<WorkJournalDoor["submit"]>;
@@ -2228,7 +2249,7 @@ test.each(["departure", "replacement", "superseded"] as const)(
     else {
       f.mount.close();
       if (mode === "replacement") {
-        page = f.shell.mount(f.route, locationPort("?query=replacement").address);
+        page = f.shell.mount(f.route, placeInput(locationPort("?query=replacement").address));
         closes.push(page.close);
       }
     }
@@ -2340,7 +2361,7 @@ test("migration bodies stay on the host; mount exposes typed registration refusa
   const location = locationPort();
   const mount = createRouteShell({ ...transports().services, work: door }).mount(
     route,
-    location.address,
+    placeInput(location.address),
   );
   closes.push(mount.close);
   expect(mount.workFailure()).toEqual(failure);
@@ -2366,7 +2387,7 @@ test("query lands once through transition on current success and refuses stale/s
     },
   });
   const t = transports();
-  const m = createRouteShell(t.services).mount(route, locationPort().address);
+  const m = createRouteShell(t.services).mount(route, placeInput(locationPort().address));
   closes.push(m.close);
   const invoke = () => (m.read("main") as any).verbs.capture({ elementIds: [1] });
   invoke();
@@ -2472,8 +2493,8 @@ test("two routes edit, undo and redo one owner's accepted Work in order", async 
     },
   };
   const shell = createRouteShell({ ...transports().services, work: door });
-  const a = shell.mount(owner, locationPort().address);
-  const b = shell.mount(presenter, locationPort().address);
+  const a = shell.mount(owner, placeInput(locationPort().address));
+  const b = shell.mount(presenter, placeInput(locationPort().address));
   closes.push(a.close, b.close);
   await settle(a.invoke("change", 2) as Observation<WorkWriteOutcome>);
   expect(b.work()).toEqual({ revision: 1, value: { amount: 2 } });
@@ -2538,7 +2559,7 @@ test.each(["accepted", "refused"] as const)(
     };
     const mount = createRouteShell({ ...t.services, work: door }).mount(
       route,
-      locationPort().address,
+      placeInput(locationPort().address),
     );
     closes.push(mount.close);
     mount.read("main");
@@ -2673,7 +2694,7 @@ test.each([false, true])(
     );
     const mount = createRouteShell({ ...t.services, work: store }).mount(
       route,
-      locationPort().address,
+      placeInput(locationPort().address),
     );
     closes.push(mount.close);
     expect(t.keys).toHaveLength(1);
@@ -2698,7 +2719,7 @@ test("a changed declared query argument retires its in-flight completion", async
   const t = transports();
   const mount = createRouteShell(t.services).mount(
     await admitted(true, true, { queryFromPage: true }),
-    locationPort().address,
+    placeInput(locationPort().address),
   );
   closes.push(mount.close);
   mount.invoke("capture", { elementIds: [7] });
@@ -2707,21 +2728,6 @@ test("a changed declared query argument retires its in-flight completion", async
   departed(ready("late"));
   expect((mount.read("main") as any).readings.notes.current).toBe(false);
   expect(t.releases).toHaveBeenCalledOnce();
-});
-
-test("hide and show retains the admitted Page, accepted readings and Work history", async () => {
-  const f = await historyFixture();
-  await settle(f.mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
-  const page = f.mount.page.read();
-  const moves = f.mount.journal()!.moves;
-  f.mount.setVisible(false);
-  expect(f.mount.page.read()).toEqual(page);
-  expect(f.mount.journal()!.moves).toEqual(moves);
-  expect(() => f.mount.invoke("change", 3)).toThrow("Place is not writable");
-  f.mount.setVisible(true);
-  expect(f.mount.page.read()).toEqual(page);
-  expect(f.mount.journal()!.moves).toEqual(moves);
-  expect((await f.mount.history!.undo()).ok).toBe(true);
 });
 
 test("retained pane releases leases on hide and reuses its Page and history on show", async () => {
@@ -2760,6 +2766,7 @@ test("retained pane releases leases on hide and reuses its Page and history on s
   const moves = mount.journal()!.moves;
   rendered.rerender(view(false));
   expect(mount.page.read().query).toBe("retained");
+  expect(() => mount.invoke("change", 3)).toThrow("Place is not writable");
   rendered.rerender(view(true));
   expect(spy).toHaveBeenCalledOnce();
   expect(mount.page.read().query).toBe("retained");
@@ -2770,7 +2777,10 @@ test("retained pane releases leases on hide and reuses its Page and history on s
 
 test("K4 hide and fold release attempt leases, retain accepted evidence and avoid reveal reads", async () => {
   const t = transports();
-  const mount = createRouteShell(t.services).mount(await admitted(), locationPort().address);
+  const mount = createRouteShell(t.services).mount(
+    await admitted(),
+    placeInput(locationPort().address),
+  );
   closes.push(mount.close);
   t.frames[0]!(ready("retained"));
   const status = mount.readingStatus("notes");
@@ -2785,8 +2795,8 @@ test("K4 hide and fold release attempt leases, retain accepted evidence and avoi
   expect(t.releases).toHaveBeenCalledOnce();
   mount.setPaneDemand("main", true);
   expect(t.keys).toEqual([0]);
-  mount.setVisible(false);
-  mount.setVisible(true);
+  mount.release();
+  mount.subscribe(() => {})();
   expect(t.keys).toEqual([0]);
   expect(mount.readingStatus("notes").snapshot.value).toBe("retained");
   mount.refreshPane("main");
@@ -2809,15 +2819,15 @@ test("K4 a host resolve generation change replaces the affected attempt, includi
   };
   const mount = createRouteShell(
     Object.assign(t.services, { [readingEvidencePort]: evidence }),
-  ).mount(await admitted(), locationPort().address);
+  ).mount(await admitted(), placeInput(locationPort().address));
   closes.push(mount.close);
   generations[0]!({ kind: "generation", value: "host-1" });
   t.frames[0]!(ready("old"));
   generations[0]!({ kind: "generation", value: "host-1" });
   expect(t.keys).toEqual([0]);
-  mount.setVisible(false);
+  mount.release();
   expect(stop).toHaveBeenCalledOnce();
-  mount.setVisible(true);
+  mount.subscribe(() => {})();
   expect(t.keys).toEqual([0]);
   generations[1]!({ kind: "generation", value: "host-2" });
   expect(t.keys).toEqual([0, 1]);
@@ -2855,7 +2865,7 @@ test("K4 only successful receipt effects from K1's receipt view invalidate a rea
   };
   const mount = createRouteShell(
     Object.assign({ ...t.services, work: door }, { [readingEvidencePort]: evidence }),
-  ).mount(await workRoute(), locationPort().address);
+  ).mount(await workRoute(), placeInput(locationPort().address));
   closes.push(mount.close);
   t.frames[0]!(ready("first"));
   const accepted = mount.readingStatus("notes").snapshot;
@@ -2944,7 +2954,7 @@ test("K4 pane refresh leaves an independent visible reading alone", async () => 
     },
   });
   const t = transports();
-  const mount = createRouteShell(t.services).mount(route, locationPort().address);
+  const mount = createRouteShell(t.services).mount(route, placeInput(locationPort().address));
   closes.push(mount.close);
   expect(t.keys).toEqual([0, 0]);
   t.frames[0]!(ready("main"));
@@ -2965,16 +2975,33 @@ test.each(["feed", "worker", "port"] as const)(
       bodies: { args: { ...bodies.args, kind: "adapter", slot: "readings.notes.adapter" } },
     });
     const t = transports();
-    const m = createRouteShell(t.services).mount(route, locationPort().address);
+    const m = createRouteShell(t.services).mount(route, placeInput(locationPort().address));
     closes.push(m.close);
     t.frames[0]!(ready("kept"));
-    m.setVisible(false);
+    m.release();
     expect(t.releases).toHaveBeenCalledOnce();
     expect(m.readingStatus("notes").snapshot.value).toBe("kept");
-    m.setVisible(true);
+    m.subscribe(() => {})();
     expect(t.keys).toEqual([0, 0]);
     expect(m.readingStatus("notes").previous).toBe("kept");
     t.frames[1]!(ready("resumed"));
     expect(m.readingStatus("notes").snapshot.value).toBe("resumed");
   },
 );
+
+test("a null Place target refuses Work through the shared action boundary", async () => {
+  const mount = createRouteShell(transports().services).mount(
+    await workRoute("none", false, "nothing"),
+    placeInput(locationPort().address, { target: null }),
+  );
+  closes.push(mount.close);
+  expect(() => mount.invoke("change", 3)).toThrow(PlaceWriteRefusal);
+});
+
+test("resource release never withdraws the Place's write authority", async () => {
+  const f = await historyFixture();
+  f.mount.release();
+  expect((await settle(f.mount.invoke("change", 2) as Observation<WorkWriteOutcome>)).kind).toBe(
+    "accepted",
+  );
+});

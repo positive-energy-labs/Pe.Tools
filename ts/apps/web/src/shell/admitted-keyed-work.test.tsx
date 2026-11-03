@@ -1,3 +1,4 @@
+import { placeInput } from "./admitted-place.test-fixture";
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
@@ -134,11 +135,14 @@ async function fixture(connected = false) {
       connected ? transport.submitWork(...args) : store.submitWork(...args),
     ),
   };
-  const mount = createRouteShell({ ...sourceRouteServices({}), work: door }).mount(admitted.route, {
-    read: () => new URLSearchParams(),
-    write() {},
-    subscribe: () => () => {},
-  });
+  const mount = createRouteShell({ ...sourceRouteServices({}), work: door }).mount(
+    admitted.route,
+    placeInput({
+      read: () => new URLSearchParams(),
+      write() {},
+      subscribe: () => () => {},
+    }),
+  );
   stops.push(mount.close);
   const edit = (patches: unknown, basis = mount.workBasis()!) =>
     settle(mount.invoke("edit", patches, basis) as Observation<WorkWriteOutcome>);

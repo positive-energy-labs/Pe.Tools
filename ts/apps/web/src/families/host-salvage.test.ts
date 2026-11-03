@@ -1,3 +1,4 @@
+import { placeInput } from "../shell/admitted-place.test-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { familiesRouteState, bindWork } from "@pe/agent-contracts";
@@ -212,11 +213,14 @@ test("generic mount derives a salvage review from the canonical admitted host re
   const mount = createRouteShell({
     ...sourceRouteServices({}),
     work,
-  }).mount(f.route, {
-    read: () => new URLSearchParams(),
-    write() {},
-    subscribe: () => () => {},
-  });
+  }).mount(
+    f.route,
+    placeInput({
+      read: () => new URLSearchParams(),
+      write() {},
+      subscribe: () => () => {},
+    }),
+  );
   closes.push(mount.close);
   await vi.waitFor(() => expect(mount.work()).not.toBeNull());
   await vi.waitFor(() => expect(mount.recovery().carryOver).toBe(true));
@@ -264,11 +268,14 @@ test("unreadable admitted Work starts fresh, preserves its aside and accepts car
       },
     },
   );
-  const mount = createRouteShell({ ...sourceRouteServices({}), work }).mount(f.route, {
-    read: () => new URLSearchParams(),
-    write() {},
-    subscribe: () => () => {},
-  });
+  const mount = createRouteShell({ ...sourceRouteServices({}), work }).mount(
+    f.route,
+    placeInput({
+      read: () => new URLSearchParams(),
+      write() {},
+      subscribe: () => () => {},
+    }),
+  );
   closes.push(mount.close);
   await vi.waitFor(() => expect(mount.workProblem()).not.toBeNull());
   expect(mount.work()).toBeNull();
@@ -337,11 +344,11 @@ async function recoveryMount(withSalvage = true, stale = false) {
   });
   const mount = createRouteShell({ ...sourceRouteServices({}), work: { ...door, open } }).mount(
     f.route,
-    {
+    placeInput({
       read: () => new URLSearchParams(),
       write() {},
       subscribe: () => () => {},
-    },
+    }),
   );
   closes.push(mount.close);
   await vi.waitFor(() => expect(mount.recovery().startFresh).toBe(true));

@@ -1,3 +1,4 @@
+import { placeInput } from "./admitted-place.test-fixture";
 // @vitest-environment jsdom
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
@@ -138,7 +139,13 @@ async function fixture(describe?: (...args: any[]) => unknown) {
     availability: {},
     work: door,
   };
-  return { route, door, services, acks, mount: createRouteShell(services).mount(route, address) };
+  return {
+    route,
+    door,
+    services,
+    acks,
+    mount: createRouteShell(services).mount(route, placeInput(address)),
+  };
 }
 test("drive-7 S8a row/value labels persist through reload, replay, undo, redo and Revert", async () => {
   const describe = vi.fn((value, ctx) => {
@@ -186,7 +193,10 @@ test("drive-7 S8a row/value labels persist through reload, replay, undo, redo an
         },
       }),
     };
-    const reload = createRouteShell({ ...f.services, work: replayDoor }).mount(f.route, address);
+    const reload = createRouteShell({ ...f.services, work: replayDoor }).mount(
+      f.route,
+      placeInput(address),
+    );
     try {
       expect(reload.journal()!.moves.map((move) => move.label)).toEqual(labels);
       expect(await reload.history!.undo()).toMatchObject({ ok: true });

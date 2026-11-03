@@ -1,3 +1,4 @@
+import { placeInput } from "../shell/admitted-place.test-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { familiesModule } from "./kernel";
 import { familiesRouteState, familyCellKey } from "@pe/agent-contracts";
@@ -130,11 +131,17 @@ async function setup(
     clock: { lifetime: "read", now: Date.now },
     availability: {},
   };
-  const mount = createRouteShell(services).mount(route, {
-    read: () => new URLSearchParams(),
-    write() {},
-    subscribe: () => () => {},
-  });
+  const mount = createRouteShell(services).mount(
+    route,
+    placeInput(
+      {
+        read: () => new URLSearchParams(),
+        write() {},
+        subscribe: () => () => {},
+      },
+      { target: { kind: "document", ref: document } },
+    ),
+  );
   closes.push(mount.close);
   const read = () => {
     mount.invoke("read", { filter, readId: "00000000-0000-4000-8000-000000000001" });
