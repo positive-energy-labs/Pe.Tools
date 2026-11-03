@@ -1,7 +1,12 @@
+// @vitest-environment jsdom
+import { createElement } from "react";
+import { cleanup as cleanupView, render, screen } from "@testing-library/react";
 import { z } from "zod";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   ductsDocumentSchema,
+  bindWork,
+  address,
   ductsRouteState,
   salvageDuctsWork,
   type WorkWriteAck,
@@ -11,7 +16,10 @@ import {
   builtinClosureFingerprint,
   createBuiltinRouteInventory,
 } from "../../../../packages/agent-contracts/src/route-module";
-import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type {
+  BodyBindings,
+  PaneContext,
+} from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type {
   Observation,
   WorkWriteOutcome,
@@ -21,6 +29,13 @@ import { createRouteShell } from "../shell/admitted-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { sourceRouteServices } from "../shell/source-route-services";
 import * as recoveryHost from "../route/host";
+import * as sourceServices from "../shell/source-route-services";
+import { applicationRouteShell } from "../shell/application-route-shell";
+import { useRouteTarget } from "../route/route-target";
+vi.mock("../route/route-target", async (original) => ({
+  ...(await original<typeof import("../route/route-target")>()),
+  useRouteTarget: vi.fn(),
+}));
 
 const source = { module: "fans/recovery-bootstrap-gap.test.ts", export: "witness" };
 const data = {
@@ -69,7 +84,11 @@ const schemas = {
 // The witness edits one real Ducts slot through the generic mount.
 const bodies = {
   ...captures.bodies,
-  main: { ...captures.bodies.main, run: () => null },
+  main: {
+    ...captures.bodies.main,
+    run: (ctx: PaneContext<typeof data, typeof schemas, typeof captures.entries, "captures">) =>
+      ctx.work?.parameters.fanFlow?.edit?.value ?? "No authored fan slot",
+  },
   slot: {
     slot: "verbs.slot.patches",
     kind: "work",
@@ -123,6 +142,7 @@ const neutral = {
 };
 const cleanup: (() => void)[] = [];
 afterEach(() => {
+  cleanupView();
   cleanup
     .splice(0)
     .reverse()
@@ -271,6 +291,9 @@ async function witness(
   cleanup.push(mount.close);
   return {
     mount,
+    route: web.route,
+    services,
+    address,
     ws,
     saved,
     states,
@@ -472,3 +495,75 @@ test.each([true, false])(
     else expect(f.saved.get("ducts")).toEqual(before);
   },
 );
+
+// TODO: D4 restore closed Work by its retained identity even on a cold page.
+test.each(["retained", "cold"] as const)(
+  "D4: %s closed Work remains inspectable",
+  async (start) => {
+    const f = await witness();
+    await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+    await settle(f.mount.invoke("slot", "PE_M_Fan_AirFlow") as Observation<WorkWriteOutcome>);
+    f.mount.close();
+    const before = structuredClone(f.saved.get("ducts"));
+    const closed = {
+      resolution: { kind: "choose", reason: "document-closed" },
+      workOpen: { session: "fixture", openId: "w1f" },
+      workAddress: null,
+      resolvedAddress: null,
+    } as ReturnType<typeof useRouteTarget>;
+    const selected = vi.mocked(useRouteTarget);
+    selected.mockReturnValue(
+      start === "cold"
+        ? closed
+        : {
+            ...closed,
+            resolution: { kind: "resolved", target: { kind: "document", ref: closed.workOpen! } },
+          },
+    );
+    vi.spyOn(sourceServices, "sourceRouteServices").mockReturnValue(f.services);
+    const view = render(
+      createElement(applicationRouteShell, {
+        route: f.route,
+        address: f.address,
+        pane: "captures",
+      }),
+    );
+    if (start === "retained") {
+      await screen.findByText("PE_M_Fan_AirFlow");
+      selected.mockReturnValue(closed);
+      view.rerender(
+        createElement(applicationRouteShell, {
+          route: f.route,
+          address: f.address,
+          pane: "captures",
+        }),
+      );
+    }
+    await screen.findByText("PE_M_Fan_AirFlow");
+    expect(f.saved.get("ducts")).toEqual(before);
+  },
+);
+
+// TODO: admitted Work acquisition must preserve the hook's canonical document Address.
+test("P02/P04: the application opens saved Ducts Work by document Address", async () => {
+  const f = await witness();
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  f.mount.close();
+  const workAddress = address("C:/Models/ManualD.rvt");
+  vi.mocked(useRouteTarget).mockReturnValue({
+    resolution: {
+      kind: "resolved",
+      target: { kind: "document", ref: { session: "fixture", openId: "w1f" } },
+    },
+    workAddress,
+    resolvedAddress: workAddress,
+    workOpen: null,
+  } as ReturnType<typeof useRouteTarget>);
+  vi.spyOn(sourceServices, "sourceRouteServices").mockReturnValue(f.services);
+  const open = vi.spyOn(f.services.work, "open");
+  render(
+    createElement(applicationRouteShell, { route: f.route, address: f.address, pane: "captures" }),
+  );
+  await vi.waitFor(() => expect(open).toHaveBeenCalled());
+  expect(open.mock.calls[0]![0].key).toEqual(bindWork("ducts", workAddress));
+});
