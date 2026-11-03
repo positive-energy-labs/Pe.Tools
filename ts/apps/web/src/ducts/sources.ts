@@ -17,7 +17,7 @@ import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import { callCompose, opSource, composeSource, ductsBodySource } from "#/shell/readings-api";
+import { callCompose, composeSource, ductsBodySource } from "#/shell/readings-api";
 import { acquireSource } from "#/shell/readings-use";
 
 import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
@@ -72,10 +72,6 @@ const slots = (ctx: { work: unknown }) => {
   return { slots: edit.parameters, labelParameter: edit.labelParameter ?? undefined };
 };
 
-const saved: string | undefined = import.meta.env.DEV
-  ? import.meta.env.VITE_DUCTS_FIXTURE
-  : undefined;
-
 const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
 
 function networks(): UseSource<NetworkSnapshot | null> {
@@ -88,14 +84,6 @@ function networks(): UseSource<NetworkSnapshot | null> {
       const ref = target(ctx);
 
       if (!ref) return deliver({ kind: "complete", value: null, revision: 0 });
-
-      if (saved)
-        return opSource({
-          key: "ducts.snapshot.walk",
-          request: () => ({}),
-          fixture: saved,
-          absent: null,
-        }).open(ctx, deliver);
 
       const roster = ctx.inputs.roster?.value as DuctSnapshot | null;
 
@@ -302,22 +290,11 @@ export function ductsSources(): Readonly<Record<string, ReadingSource>> {
 
     "ducts.networks": networks(),
 
-    "ducts.tables": saved
-      ? opSource({
-          key: "ducts.tables",
-          request: () => ({ ids: [...TABLE_IDS] }),
-          fixture: saved.replace(/[^/]*$/, "tables.json"),
-          map: toGrids,
-          absent: null,
-        })
-      : ductsBodySource({
-          request: (ctx) =>
-            target(ctx)
-              ? { kind: "ducts-tables", session: target(ctx)!.session, ids: [...TABLE_IDS] }
-              : null,
-          decode: toGrids,
-          absent: null,
-        }),
+    "ducts.tables": ductsBodySource({
+      request: (ctx) => target(ctx) ? { kind: "ducts-tables", session: target(ctx)!.session, ids: [...TABLE_IDS] } : null,
+      decode: toGrids,
+      absent: null,
+    }),
 
     "ducts.catalogs": {
       ...composeSource({
