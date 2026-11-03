@@ -1,3 +1,4 @@
+import type { GeometryReadDoor, ResolvedReadDescriptor } from "./native-read-door.ts";
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { z } from "zod";
 import type { AdmittedRoute } from "./route-kernel-admission.ts";
@@ -41,6 +42,14 @@ let mintGeometry: <T>(
   token: AcceptanceToken,
   request: GeometryRequest<SceneContextRepresentation>,
 ) => ResolvedGeometryRead<T>;
+let newGeometry: <T>(
+  key: ResolvedReadKey,
+  output: z.ZodType<GeometryOutcome<T>>,
+  route: AdmittedRoute,
+  token: AcceptanceToken,
+  request: GeometryRequest<SceneContextRepresentation>,
+  descriptor: ResolvedReadDescriptor,
+) => ResolvedGeometryRead<T>;
 let mintNative: (
   submit: (request: NativeWriteRequest) => JournalCommandHandle,
 ) => NativeWriteCapability;
@@ -70,14 +79,20 @@ export class PreparedDetailReach {
   }
 }
 /** An unparameterized request can ONLY ask for the zero-tessellation overview. */
-export type GeometryRequest<R extends SceneContextRepresentation = "overview"> =
-  R extends "overview"
-    ? {
-        readonly representation: "overview";
-        readonly subjects: Many<IdentityId<"element">>;
-        readonly scope: ScopeToken;
-      }
-    : { readonly representation: R; readonly reach: PreparedDetailReach };
+export type GeometryRequest<R extends SceneContextRepresentation = "overview"> = {
+  /** Admitted entry arguments, encoded once by the kernel reading plan. */
+  readonly native?: {
+    readonly operationKey: string;
+    readonly input: unknown;
+    readonly readingId?: string;
+  };
+} & (R extends "overview"
+  ? {
+      readonly representation: "overview";
+      readonly subjects: Many<IdentityId<"element">>;
+      readonly scope: ScopeToken;
+    }
+  : { readonly representation: R; readonly reach: PreparedDetailReach });
 /** No numeric refusal. Required metadata uses the generated host contract verbatim. */
 export type GeometryOutcome<T> =
   | {
@@ -96,7 +111,7 @@ export interface ResolvedReadKey {
   readonly processIncarnation: string;
   readonly documentLifetime: string;
   readonly sortedKeyInput: string;
-  readonly freshnessGeneration: number;
+  readonly freshnessGeneration: number | string | null;
 }
 export class ResolvedRead<T> {
   declare private readonly readAuthority: void;
@@ -122,6 +137,7 @@ export class ResolvedGeometryRead<T> {
     readonly route: AdmittedRoute,
     readonly token: AcceptanceToken,
     readonly request: GeometryRequest<SceneContextRepresentation>,
+    readonly descriptor?: ResolvedReadDescriptor,
   ) {
     Object.freeze(this);
   }
@@ -133,6 +149,15 @@ export class ResolvedGeometryRead<T> {
       token: AcceptanceToken,
       request: GeometryRequest<SceneContextRepresentation>,
     ) => new ResolvedGeometryRead(key, output, route, token, request);
+    newGeometry = (key, output, route, token, request, descriptor) =>
+      new ResolvedGeometryRead(
+        key,
+        output,
+        route,
+        token,
+        Object.freeze({ ...request }),
+        descriptor,
+      );
   }
 }
 /** These are synchronous acquisition/submission ports, not a Promise or fiber runtime.
@@ -276,6 +301,43 @@ export function createRouteEnvironmentIssuer() {
         throw new Error("Geometry key/request mismatch");
       return own(mintGeometry(Object.freeze({ ...key }), output, route, token, captured));
     },
+    mintGeometryFromHost: <T>(
+      descriptor: ResolvedReadDescriptor,
+      output: z.ZodType<GeometryOutcome<T>>,
+      route: AdmittedRoute,
+      token: AcceptanceToken,
+      request: GeometryRequest<SceneContextRepresentation>,
+    ) => {
+      if (
+        request.representation === "overview"
+          ? request.scope !== token.scope
+          : !owns(request.reach) || request.reach.explicit.token !== token
+      )
+        throw Error("Geometry request/attempt mismatch");
+      if (
+        (request.native && descriptor.operationKey !== request.native.operationKey) ||
+        descriptor.representation !==
+          (request.representation === "overview" ? "overview" : "detail")
+      )
+        throw Error("Host descriptor/request mismatch");
+      const freeze = (value: unknown): void => {
+        if (value && typeof value === "object" && !Object.isFrozen(value)) {
+          Object.values(value).forEach(freeze);
+          Object.freeze(value);
+        }
+      };
+      freeze(descriptor);
+      const captured = descriptor;
+      const key: ResolvedReadKey = Object.freeze({
+        op: captured.operationKey,
+        processIncarnation: canonicalEnvironmentInput(captured.processIncarnation),
+        documentLifetime: canonicalEnvironmentInput(captured.openDocumentLifetime),
+        sortedKeyInput: captured.normalizedInput,
+        freshnessGeneration: captured.freshnessGeneration,
+      });
+      // Host identity stays host-owned; only this exact D instance gains nominal authority.
+      return own(newGeometry(key, output, route, token, request, captured));
+    },
     mintNative: (submit: (request: NativeWriteRequest) => JournalCommandHandle) =>
       own(mintNative(submit)),
   });
@@ -322,9 +384,8 @@ export type KernelServices = Pick<
   "reads" | "readings" | "clock" | "availability"
 > & {
   readonly work?: never;
-  // TODO: U12a needs application-owned geometry resolution/lifetime services at the mount.
-  // The lower-level binder requires validators; routes must not supply them or mint descriptors.
-  readonly geometry?: never;
+  readonly geometry?: GeometryReadDoor<unknown>;
+  readonly target?: () => ScopeToken["identity"]["target"];
   readonly nativeWrite?: never;
   readonly submitNative?: never;
 };

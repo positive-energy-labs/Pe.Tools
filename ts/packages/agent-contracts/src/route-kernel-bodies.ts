@@ -33,7 +33,9 @@ export type ReadingValue<
   ? G["readings"][K] extends { output: infer O }
     ? SchemaValue<S, O>
     : G["readings"][K] extends { entry: infer C }
-      ? Output<E, C>
+      ? G["readings"][K] extends { geometry: object }
+        ? import("./route-kernel-environment.ts").GeometryOutcome<Output<E, C>>
+        : Output<E, C>
       : never
   : never;
 export type ReadingSnapshot<T> =
@@ -121,6 +123,17 @@ export type PaneContext<
   readonly page: PagePort<G, S>;
   readonly work: Immutable<WorkOf<G, S>> | null;
   readonly readings: Reads<G, S, E, G["panes"][P]["draws"][number]>;
+  /** Declared explicit geometry readings only. The mount owns invocation and refresh. */
+  readonly readingActions?: {
+    readonly [K in Extract<
+      G["panes"][P]["draws"][number],
+      keyof G["readings"]
+    > as G["readings"][K] extends { geometry: { representation: "detailed" } } ? K : never]: {
+      readDetailed(): void;
+      refresh(): void;
+    };
+  };
+  readonly readCosts?: Readonly<Record<string, import("./native-read-door.ts").ReadCost>>;
   readonly visible: boolean;
   readonly verbs: {
     readonly [V in Extract<Allowed<G["panes"][P]["verbs"]>, keyof G["verbs"]>]: (

@@ -21,7 +21,9 @@ export interface ResolvedReadDescriptor {
    * ordered arrays. Includes the resolved target/subject, never an active-doc placeholder. */
   readonly normalizedInput: string;
   /** Opaque host token. Fresh-after-write must not join a pre-write flight. */
-  readonly freshnessGeneration: string;
+  readonly freshnessGeneration: string | null;
+  /** null means today's wire cannot establish fresh-after-write isolation. */
+  readonly freshnessEvidence?: "unavailable";
   /** Overview stays overview; every explicit non-overview geometry mode maps to detail.
    * normalizedInput retains the exact requested mode, so distinct detail modes never share. */
   readonly representation: "overview" | "detail";

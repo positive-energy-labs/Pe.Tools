@@ -117,6 +117,7 @@ export function createAdmittedReadingPlan(options: {
       id: string,
       state: ReadingPlanContext,
       acquire: (request: ResolvedRead<unknown>) => ReadingSnapshot<unknown>,
+      geometry?: (id: string, context: unknown, input: unknown) => ReadingSnapshot<unknown>,
     ): ReadingSnapshot<unknown> {
       const cache = new Map<string, ReadingSnapshot<unknown>>();
       const evaluate = (id: string): ReadingSnapshot<unknown> => {
@@ -147,6 +148,17 @@ export function createAdmittedReadingPlan(options: {
               hash: canonicalEnvironmentInput(value),
             };
           } else {
+            if (reading.kind === "use" && reading.geometry) {
+              const linked = bindings();
+              const input = linked.entries[reading.entry]!.input.parse(
+                reading.args ? linked.bodies[reading.args]!.run(context) : {},
+              );
+              result = geometry
+                ? geometry(id, context, input)
+                : unavailable("Geometry composition unavailable");
+              cache.set(id, result);
+              return result;
+            }
             const descriptor = request(id, context);
             result = descriptor
               ? acquire(descriptor)

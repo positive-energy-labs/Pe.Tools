@@ -1,3 +1,4 @@
+import { createGeometryReadDoor } from "./geometry-read-door";
 import type {
   KernelServices,
   ResolvedRead,
@@ -6,12 +7,17 @@ import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/r
 import type { ReadingSource } from "./readings";
 
 /** Application adapter for existing domain sources. Acceptance and validation stay in the mount. */
-export function sourceRouteServices(sources: Record<string, ReadingSource>): KernelServices {
+export function sourceRouteServices(
+  sources: Record<string, ReadingSource>,
+  composition: Pick<KernelServices, "target" | "geometry"> = {},
+): KernelServices {
   const reads = new WeakMap<
     object,
     { controller: AbortController; snapshot: ReadingSnapshot<unknown> }
   >();
   return {
+    geometry: composition.geometry ?? createGeometryReadDoor(),
+    target: composition.target,
     reads: {
       lifetime: "read",
       acquire<T>(request: ResolvedRead<T>) {
@@ -49,6 +55,8 @@ export function sourceRouteServices(sources: Record<string, ReadingSource>): Ker
           });
           return () => {};
         }
+        if (typeof request.key.freshnessGeneration !== "number")
+          throw Error("Ordinary source requires its attempt generation");
         const release = Promise.resolve(
           source.open(
             {

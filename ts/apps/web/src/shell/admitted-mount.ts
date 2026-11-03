@@ -1,3 +1,6 @@
+import { createAdmittedGeometry } from "./admitted-geometry";
+import { fixtureName } from "./fixture-lane";
+import { fixtureGeometryDoor } from "./fixture-geometry-door";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import {
   createAdmittedRouteRegistry,
@@ -66,7 +69,7 @@ export function createRouteShell(services: KernelServices) {
       const bindings = resolve();
       // U8 is the read-only composition; U11/U12 extend this same door.
       if (
-        route.data.capabilities.length ||
+        route.data.capabilities.some((capability) => capability !== "geometry") ||
         route.data.work ||
         Object.keys(route.data.verbs).length
       ) {
@@ -87,7 +90,7 @@ export function createRouteShell(services: KernelServices) {
         preparePage: policy.prepare,
         issuer,
       });
-      owner.enter({ target: null, work: null }, initial.value);
+      owner.enter({ target: services.target?.() ?? null, work: null }, initial.value);
       const ports = createPagePorts(route.data, { ...owner, readPage: () => owner.read()!.page });
       const environmentIssuer = createRouteEnvironmentIssuer();
       const generations = new Map<string, number>();
@@ -133,7 +136,11 @@ export function createRouteShell(services: KernelServices) {
           return selectRouteEnvironment({
             search: Object.fromEntries(address.read()),
             live: () =>
-              createRouteEnvironment({ issuer: environmentIssuer, validate, ports: services }),
+              createRouteEnvironment({
+                issuer: environmentIssuer,
+                validate,
+                ports: { ...services, geometry: undefined },
+              }),
             fixture: (name) =>
               createNamedFixtureRouteEnvironment({
                 issuer: environmentIssuer,
@@ -150,6 +157,15 @@ export function createRouteShell(services: KernelServices) {
           throw error;
         }
       })();
+      const fixture = fixtureName(Object.fromEntries(address.read()));
+      const geometry = createAdmittedGeometry({
+        route,
+        owner,
+        issuer: environmentIssuer,
+        entries: bindings.entries,
+        door: fixture === null ? services.geometry : fixtureGeometryDoor(plan.seed(fixture)),
+        notify: () => schedule(),
+      });
       const retire = (id: string) => {
         const read = active.get(id);
         if (!read) return;
@@ -174,12 +190,15 @@ export function createRouteShell(services: KernelServices) {
           do {
             again = false;
             resolve();
+            geometry.syncSubject();
             const used = new Set<string>();
             const next: typeof readings = {};
             for (const id of Object.keys(route.data.readings)) {
               const declaration = route.data.readings[id]!;
               if (
-                (declaration.demand === "explicit" && !demanded.has(id)) ||
+                (declaration.demand === "explicit" &&
+                  !(declaration.kind === "use" && declaration.geometry) &&
+                  !demanded.has(id)) ||
                 (declaration.demand === "subject" && owner.read()!.page[subjectField] === null)
               ) {
                 next[id] = {
@@ -189,64 +208,73 @@ export function createRouteShell(services: KernelServices) {
                 };
                 continue;
               }
-              next[id] = plan.read(id, { page: owner.read()!.page, work: null }, (request) => {
-                const readingId = plan.readingId(request)!;
-                if (
-                  route.data.readings[readingId]!.demand === "explicit" &&
-                  !demanded.has(readingId)
-                )
-                  return {
-                    status: "unavailable",
-                    current: false,
-                    reason: "Explicit demand required",
-                  };
-                used.add(readingId);
-                const dependencyFields = route.data.readings[readingId]!.deps.page;
-                const signature = canonicalEnvironmentInput({
-                  key: request.key,
-                  page: Object.fromEntries(
-                    dependencyFields.map((key) => [key, owner.read()!.page[key]]),
-                  ),
-                });
-                let read = active.get(readingId);
-                if (read?.signature !== signature) {
-                  retire(readingId);
-                  read = undefined;
-                }
-                if (!read) {
-                  const record: Active = {
-                    signature,
+              next[id] = plan.read(
+                id,
+                { page: owner.read()!.page, work: null },
+                (request) => {
+                  const readingId = plan.readingId(request)!;
+                  if (
+                    route.data.readings[readingId]!.demand === "explicit" &&
+                    !demanded.has(readingId)
+                  )
+                    return {
+                      status: "unavailable",
+                      current: false,
+                      reason: "Explicit demand required",
+                    };
+                  used.add(readingId);
+                  const dependencyFields = route.data.readings[readingId]!.deps.page;
+                  const signature = canonicalEnvironmentInput({
                     key: request.key,
-                    token: owner.capture(readingId),
-                    snapshot: { status: "pending", current: false, reason: "Reading pending" },
-                  };
-                  active.set(readingId, record);
-                  record.handle = environment.environment.reads.acquire(request, record.token);
-                  const accept = (snapshot: ReadingSnapshot<unknown>) => {
-                    if (closed || active.get(readingId) !== record || !owner.current(record.token))
-                      return;
-                    if (!snapshot.current) {
-                      record.snapshot = freezePage(snapshot);
-                      return;
-                    }
-                    const parsed = request.output.safeParse(snapshot.value);
-                    record.snapshot = parsed.success
-                      ? freezePage({ ...snapshot, value: parsed.data })
-                      : { status: "failed", current: false, reason: parsed.error.message };
-                  };
-                  accept(record.handle.read());
-                  record.unsubscribe = environment.environment.readings.subscribe(
-                    request,
-                    record.token,
-                    (snapshot) => {
-                      accept(snapshot);
-                      schedule();
-                    },
-                  );
-                  read = record;
-                }
-                return read.snapshot;
-              });
+                    page: Object.fromEntries(
+                      dependencyFields.map((key) => [key, owner.read()!.page[key]]),
+                    ),
+                  });
+                  let read = active.get(readingId);
+                  if (read?.signature !== signature) {
+                    retire(readingId);
+                    read = undefined;
+                  }
+                  if (!read) {
+                    const record: Active = {
+                      signature,
+                      key: request.key,
+                      token: owner.capture(readingId),
+                      snapshot: { status: "pending", current: false, reason: "Reading pending" },
+                    };
+                    active.set(readingId, record);
+                    record.handle = environment.environment.reads.acquire(request, record.token);
+                    const accept = (snapshot: ReadingSnapshot<unknown>) => {
+                      if (
+                        closed ||
+                        active.get(readingId) !== record ||
+                        !owner.current(record.token)
+                      )
+                        return;
+                      if (!snapshot.current) {
+                        record.snapshot = freezePage(snapshot);
+                        return;
+                      }
+                      const parsed = request.output.safeParse(snapshot.value);
+                      record.snapshot = parsed.success
+                        ? freezePage({ ...snapshot, value: parsed.data })
+                        : { status: "failed", current: false, reason: parsed.error.message };
+                    };
+                    accept(record.handle.read());
+                    record.unsubscribe = environment.environment.readings.subscribe(
+                      request,
+                      record.token,
+                      (snapshot) => {
+                        accept(snapshot);
+                        schedule();
+                      },
+                    );
+                    read = record;
+                  }
+                  return read.snapshot;
+                },
+                geometry.read,
+              );
             }
             for (const id of active.keys()) if (!used.has(id)) retire(id);
             readings = Object.freeze(next);
@@ -265,6 +293,7 @@ export function createRouteShell(services: KernelServices) {
         unsubscribeOwner();
         transport?.close();
         for (const id of active.keys()) retire(id);
+        geometry.close();
         environment.close();
         plan.close();
         registration.deactivate();
@@ -307,6 +336,17 @@ export function createRouteShell(services: KernelServices) {
           resolve();
           if (id !== undefined && !Object.hasOwn(route.data.readings, id))
             throw Error(`Unknown reading: ${id}`);
+          if (id !== undefined) {
+            const declaration = route.data.readings[id]!;
+            if (declaration.kind === "use" && declaration.geometry) {
+              geometry.refresh(id);
+              return;
+            }
+          } else {
+            for (const [key, declaration] of Object.entries(route.data.readings))
+              if (declaration.kind === "use" && declaration.geometry?.representation === "overview")
+                geometry.refresh(key);
+          }
           const refresh = (key: string) => {
             demanded.add(key);
             generations.set(key, (generations.get(key) ?? 0) + 1);
@@ -328,6 +368,12 @@ export function createRouteShell(services: KernelServices) {
             readings: Object.freeze(
               Object.fromEntries(declaration.draws.map((id) => [id, readings[id]])),
             ),
+            readingActions: Object.fromEntries(
+              declaration.draws
+                .filter((id) => geometry.actions[id])
+                .map((id) => [id, geometry.actions[id]]),
+            ),
+            readCosts: Object.freeze({ ...geometry.costs }),
             visible: true,
             verbs: {},
           });

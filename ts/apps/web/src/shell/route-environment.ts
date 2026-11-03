@@ -153,7 +153,9 @@ export function createRouteEnvironment({ issuer, validate, ports }: EnvironmentO
               );
               const demand = request.request;
               check(
-                request.key.sortedKeyInput === canonicalEnvironmentInput(demand),
+                request.descriptor
+                  ? request.key.sortedKeyInput === request.descriptor.normalizedInput
+                  : request.key.sortedKeyInput === canonicalEnvironmentInput(demand),
                 "Geometry key/request mismatch",
               );
               check(

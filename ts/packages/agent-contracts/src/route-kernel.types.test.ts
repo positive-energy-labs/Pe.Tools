@@ -563,7 +563,8 @@ function capabilityTypes(baseline: KernelServices, all: RouteEnvironment) {
   const work = { capabilities: ["work"] } as const;
   const geometry = { capabilities: ["geometry"] } as const;
   const native = { capabilities: ["native-write"] } as const;
-  const readOnly: EnvironmentFor<typeof empty> = baseline;
+  const { reads, readings, clock, availability } = baseline;
+  const readOnly: EnvironmentFor<typeof empty> = { reads, readings, clock, availability };
   // @ts-expect-error unused Work/geometry services cannot be supplied via a variable
   const unused: EnvironmentFor<typeof empty> = all;
   // @ts-expect-error Work requires its services
