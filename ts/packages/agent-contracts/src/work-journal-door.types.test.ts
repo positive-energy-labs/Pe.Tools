@@ -10,6 +10,8 @@ import type {
   JournalSubmission,
   NativeOutcome,
   Observation,
+  ReceiptCursor,
+  ReceiptFeedState,
   WorkFeedState,
   WorkJournalDoor,
   WorkScope,
@@ -120,7 +122,11 @@ it("exposes inhabited Work and journal ports", () => {
   expectTypeOf<NeverMembers<Observation<AcceptedResult>>>().toBeNever();
   expectTypeOf<NeverMembers<WorkWriteOutcome>>().toBeNever();
   expectTypeOf<keyof WorkJournalDoor>().toEqualTypeOf<
-    "lifetime" | "open" | "submitWork" | "submit" | "accepted"
+    "lifetime" | "open" | "receipts" | "submitWork" | "submit" | "accepted"
+  >();
+  expectTypeOf<NeverMembers<ReceiptFeedState>>().toBeNever();
+  expectTypeOf<ReturnType<WorkJournalDoor["receipts"]>>().toEqualTypeOf<
+    Observation<ReceiptFeedState>
   >();
   expectTypeOf<Parameters<WorkJournalDoor["submitWork"]>>().toEqualTypeOf<
     [WorkScope, WorkWrite, InvocationBasis]
@@ -190,5 +196,42 @@ export function consumeFeedFailure(failure: Extract<WorkFeedState, { kind: "fail
       return [failure.code, failure.message];
     default:
       return failure satisfies never;
+  }
+}
+
+/** Compile-only receipt feed refusals and exhaustive consumer. */
+export function consumeReceiptFeed(
+  door: WorkJournalDoor,
+  scope: WorkScope,
+  receipt: import("./action-receipts.ts").ActionReceipt,
+  cursor: ReceiptCursor,
+  state: ReceiptFeedState,
+) {
+  door.receipts(scope).subscribe(
+    () => {},
+    () => {},
+  )();
+  // @ts-expect-error Cursors are host-minted, never a plain number.
+  const forged: ReceiptFeedState = { kind: "receipt", cursor: 7, receipt };
+  // @ts-expect-error A receipt emission carries its cursor.
+  const uncursored: ReceiptFeedState = { kind: "receipt", receipt };
+  // @ts-expect-error ready states its retained boundary; a bare row list is not a feed state.
+  const bare: ReceiptFeedState = { kind: "ready", receipts: [receipt] };
+  void [forged, uncursored, bare];
+  const ready: ReceiptFeedState = {
+    kind: "ready",
+    receipts: { rows: [receipt], from: cursor, through: cursor },
+  };
+  void ready;
+  switch (state.kind) {
+    case "pending":
+    case "failed":
+    case "ready":
+    case "receipt":
+    case "gap":
+      return state.kind;
+    default:
+      expectTypeOf(state).toBeNever();
+      return state satisfies never;
   }
 }

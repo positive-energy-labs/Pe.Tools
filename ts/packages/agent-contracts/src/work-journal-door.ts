@@ -12,6 +12,7 @@ import type {
 } from "./route-kernel-page.ts";
 import type { RouteStateWriteResult, WorkKey, WorkWrite, WorkWriteAck } from "./route-state.ts";
 import type { ActionAdmission } from "./semantic-actions.ts";
+import type { ActionReceipt } from "./action-receipts.ts";
 
 declare const journalCommandId: unique symbol;
 /** The existing journal command id, validated by the host adapter; no new wire identity. */
@@ -96,6 +97,36 @@ export type WorkFeedState =
       readonly from: WorkWriteAck["revision"];
       /** Next available revision, exclusive. Recover the missing interval before applying it. */
       readonly to: WorkWriteAck["revision"];
+    };
+
+declare const receiptCursor: unique symbol;
+/** Host journal sequence of one receipt emission. Monotonic per host journal; only the host mints it. */
+export type ReceiptCursor = number & { readonly [receiptCursor]: true };
+
+/** Receipts are host-authored ActionReceipts, never derived from a submission result in the browser.
+ * One receipt changes state over time (waiting -> running -> terminal). Each change is a new emission
+ * with a higher cursor. The consumer keys rows by receipt.id; the higher cursor wins. */
+export type ReceiptFeedState =
+  | { readonly kind: "pending" }
+  | { readonly kind: "failed"; readonly failure: WorkFeedFailure }
+  | {
+      readonly kind: "ready";
+      readonly receipts: {
+        /** Latest state of each retained receipt in this scope, ordered by cursor, through `through`. */
+        readonly rows: readonly ActionReceipt[];
+        /** First cursor still retained. Barriers and Timeline never claim completeness below it. */
+        readonly from: ReceiptCursor;
+        /** Cursor of the last emission the rows include. Live emissions are strictly after it. */
+        readonly through: ReceiptCursor;
+      };
+    }
+  | { readonly kind: "receipt"; readonly cursor: ReceiptCursor; readonly receipt: ActionReceipt }
+  | {
+      readonly kind: "gap";
+      /** First missing cursor, inclusive. */
+      readonly from: ReceiptCursor;
+      /** Next available cursor, exclusive. */
+      readonly to: ReceiptCursor;
     };
 
 /** ADR 0029 rule 10: transport cancellation alone cannot establish a native outcome. */
@@ -199,6 +230,17 @@ export interface WorkJournalDoor {
     write: WorkWrite,
     invocation: InvocationBasis,
   ): Observation<WorkWriteOutcome>;
+  /** Durable receipt observation for one admitted scope: the ActionJournal's read surface.
+   * Membership: every receipt whose execution target is scope.target, and every receipt whose
+   * basis or consumes names scope.key. Same ordering law as open(): subscribe BEFORE acquiring
+   * ready, buffer across that boundary, drop emissions with cursor <= ready.receipts.through,
+   * emit gap on a cursor jump, and after a gap MAY emit pending then a replacing ready.
+   * Retention (ADR 0029 rule 15): ready is bounded by count and bytes, trimming raises `from`,
+   * and a non-terminal receipt (waiting, running, unknown) is never trimmed. Consumers use rows
+   * for native barriers, Reject attribution, Timeline and reading invalidation (receipt.effects);
+   * they never infer a receipt or a dirty set from command input. Unsubscribe releases
+   * observation only, never journal-owned commands. failed is terminal. */
+  receipts(scope: WorkScope): Observation<ReceiptFeedState>;
   /** Semantic and native commands that reach Revit use submit; kind: work verbs
    * use submitWork, preserving the Work store's separate durable ownership. */
   submit(command: ActionAdmission): JournalSubmission;
