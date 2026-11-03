@@ -1,3 +1,5 @@
+import { PaneSplit } from "@pe/kit/lang/pane";
+import type { LayoutJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { JournalButtons } from "./situation-band";
 import { useRouter } from "@tanstack/react-router";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -35,7 +37,30 @@ export function admittedRouterAddress(history: {
   };
 }
 
-function Pane({ mount, pane }: { mount: AdmittedMount; pane: string }) {
+/** Layout is a projection of the existing mount's cached predicates and panes. */
+function layoutContent(mount: AdmittedMount, node: LayoutJson): ReactNode {
+  if (node.kind === "pane")
+    return mount.visible(node.id) ? (mount.read(node.id) as ReactNode) : null;
+  if (node.kind === "gate")
+    return mount.predicates()[node.when] ? layoutContent(mount, node.child) : null;
+  const children = node.children
+    .map((child) => layoutContent(mount, child))
+    .filter((child) => child !== null);
+  const split = (index: number): ReactNode =>
+    index === children.length - 1
+      ? children[index]
+      : createElement(PaneSplit, {
+          key: `${node.id}:${index}`,
+          id: `${node.id}:${index}`,
+          axis: node.axis === "h" ? "horizontal" : "vertical",
+          resize: { target: "end", defaultSize: node.size, minSize: 1 },
+          start: children[index],
+          end: split(index + 1),
+        });
+  return children.length ? split(0) : null;
+}
+
+function Pane({ mount, layout }: { mount: AdmittedMount; layout: LayoutJson }) {
   useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
   return createElement(
     Fragment,
@@ -43,7 +68,7 @@ function Pane({ mount, pane }: { mount: AdmittedMount; pane: string }) {
     mount.refreshable &&
       createElement(Button, { label: "refresh", onClick: () => mount.refresh() }, "refresh"),
     mount.history && createElement(JournalButtons, { owner: mount, words: true }),
-    mount.read(pane) as ReactNode,
+    layoutContent(mount, layout),
     ...mount.commandProblems().map((problem) =>
       createElement(OutcomeLine, {
         key: problem.receiptId,
@@ -87,7 +112,7 @@ export interface AdmittedPaneProps {
 }
 
 /** Composition runs after commit, including StrictMode cleanup/remount. No owner publishes in render. */
-export function AdmittedPane({ shell, route, address, pane }: AdmittedPaneProps) {
+export function AdmittedPane({ shell, route, address }: AdmittedPaneProps) {
   const [mounted, setMounted] = useState<{
     route: AdmittedRoute;
     shell: ReturnType<typeof createRouteShell>;
@@ -99,7 +124,7 @@ export function AdmittedPane({ shell, route, address, pane }: AdmittedPaneProps)
     return mount.close;
   }, [shell, route, address]);
   return mounted?.route === route && mounted.shell === shell
-    ? createElement(Pane, { mount: mounted.mount, pane })
+    ? createElement(Pane, { mount: mounted.mount, layout: route.data.layout })
     : null;
 }
 
