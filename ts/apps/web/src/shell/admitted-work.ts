@@ -27,10 +27,15 @@ export function createAdmittedWork(
   let problem: string | null = null;
   let failure: WorkFeedFailure | null = null;
   let reloadRequired = false;
+  let reopened: ((error?: string) => void) | undefined;
   const sync = () => {
     const snapshot = owner.read();
     if (reloadRequired || !snapshot || snapshot.scope === scopeToken) return;
     stop();
+    if (scopeToken) {
+      reopened?.("Work scope changed");
+      reopened = undefined;
+    }
     problem = null;
     failure = null;
     ready = false;
@@ -61,6 +66,8 @@ export function createAdmittedWork(
           failure = state.failure;
           reloadRequired = state.failure.kind === "registration-mismatch";
           problem = workFeedFailureMessage(state.failure);
+          reopened?.(problem);
+          reopened = undefined;
           notify();
         }
         if (state.kind === "ready") {
@@ -74,6 +81,8 @@ export function createAdmittedWork(
           problem = null;
           failure = null;
           ready = result.kind === "published" || result.kind === "duplicate";
+          reopened?.(ready ? undefined : "Work snapshot refused");
+          reopened = undefined;
           notify();
         }
         if (state.kind === "ack") {
@@ -157,11 +166,23 @@ export function createAdmittedWork(
     sync,
     write,
     submit,
+    reopen() {
+      if (reloadRequired) return Promise.reject(Error(problem ?? "Reload this tab"));
+      stop();
+      if (feedToken) owner.retire(feedToken);
+      scopeToken = undefined;
+      return new Promise<void>((resolve, reject) => {
+        reopened = (error) => (error ? reject(Error(error)) : resolve());
+        sync();
+      });
+    },
     ready: () => ready,
     problem: () => problem,
     failure: () => failure,
     close() {
       ready = false;
+      reopened?.("Work closed");
+      reopened = undefined;
       stop();
       if (feedToken) owner.retire(feedToken);
     },

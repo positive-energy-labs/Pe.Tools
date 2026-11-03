@@ -1,3 +1,4 @@
+import type { WorkSchema } from "./route-work-owner.ts";
 import type { z } from "zod";
 import type { Observation, WorkWriteOutcome, JournalSubmission } from "./work-journal-door.ts";
 import type { RouteStateSpec } from "./route-state.ts";
@@ -145,7 +146,7 @@ export type WorkPatch<S extends z.ZodType> =
       }[keyof Shape & string]
     : never;
 export type WorkPatches<G extends RouteGraphJson, S extends SchemaTable> = readonly WorkPatch<
-  S[Extract<NonNullable<G["work"]>["schema"], keyof S>]
+  WorkSchema<G, S>
 >[];
 
 type PageVerbPatch<G extends RouteGraphJson, S extends SchemaTable, V> = V extends {
@@ -194,6 +195,18 @@ export interface WorkHistoryPort {
   redo(press?: string): unknown;
   revert(press?: string): unknown;
 }
+/** Recovery is composed by the mount. Routes never receive a raw reset or Work key. */
+export interface WorkRecoveryPort {
+  state(): Readonly<{
+    sentence: string | null;
+    startFresh: boolean;
+    carryOver: boolean;
+    busy: boolean;
+    problem: string | null;
+  }>;
+  startFresh(): Promise<unknown>;
+  carryOver(): Promise<unknown>;
+}
 export type PaneContext<
   G extends RouteGraphJson,
   S extends SchemaTable,
@@ -202,6 +215,7 @@ export type PaneContext<
 > = {
   readonly page: PagePort<G, S>;
   readonly history?: "work" extends keyof G ? WorkHistoryPort : never;
+  readonly recovery?: "work" extends keyof G ? WorkRecoveryPort : never;
   readonly work: Immutable<WorkOf<G, S>> | null;
   /** Issued with this rendered Work value. Its token.scope.identity.work is the handle
    * and workRevision is the accepted revision. Kernel membership rejects copied bases. */

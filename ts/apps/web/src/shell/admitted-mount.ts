@@ -1,7 +1,9 @@
 import { routeWorkSubject } from "../../../../packages/agent-contracts/src/route-work-subject";
 import { commandResultDecoder, type CommandResultDecode } from "./admitted-command-result";
 import type { InvocationToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import { salvageRouteWork } from "../route/host";
+import { peReadings } from "../readings";
+import { OLDER_WORK, UNREADABLE_WORK } from "@pe/agent-contracts";
+import { startFreshRouteWork, salvageRouteWork } from "../route/host";
 import { admittedWorkPatches } from "./admitted-cells";
 import { createAdmittedCells } from "./admitted-cells";
 import { z } from "zod";
@@ -353,6 +355,46 @@ export function createRouteShell(services: KernelServices) {
             ? { ...environment.environment.work.read, ...environment.environment.work.submit }
             : undefined;
       const work = createAdmittedWork(route, owner, door, () => schedule());
+      let savedRecovery: { from: string; value: unknown } | null = null;
+      let recoverySentence: string | null = null;
+      let recoveryProblem: string | null = null;
+      let recoveryBusy = false;
+      let recoveryScope: unknown;
+      let recoveryRevision: number | null = null;
+      function syncRecovery() {
+        const snapshot = owner.read();
+        if (snapshot?.scope !== recoveryScope) {
+          recoveryScope = snapshot?.scope;
+          recoveryRevision = null;
+          savedRecovery = null;
+          recoverySentence = null;
+          recoveryProblem = null;
+          recoveryBusy = false;
+        }
+        if (
+          fixture !== null ||
+          !route.data.salvage ||
+          !work.ready() ||
+          !snapshot?.work ||
+          snapshot.work.revision === recoveryRevision
+        )
+          return;
+        recoveryRevision = snapshot.work.revision;
+        const scope = snapshot.scope;
+        const revision = recoveryRevision;
+        void salvageRouteWork(scope.identity.work!).then(
+          (saved) => {
+            if (closed || owner.read()?.scope !== scope || recoveryRevision !== revision) return;
+            savedRecovery = saved;
+            notify();
+          },
+          (error: unknown) => {
+            if (closed || owner.read()?.scope !== scope || recoveryRevision !== revision) return;
+            recoveryProblem = String(error);
+            notify();
+          },
+        );
+      }
       const geometry = createAdmittedGeometry({
         route,
         owner,
@@ -400,6 +442,7 @@ export function createRouteShell(services: KernelServices) {
             again = false;
             resolve();
             work.sync();
+            syncRecovery();
             geometry.syncSubject();
             for (const [id, query] of queryInputs) {
               // Read currency follows declared arguments; previews keep their exact basis.
@@ -1045,6 +1088,121 @@ export function createRouteShell(services: KernelServices) {
             revert,
           }
         : undefined;
+      const prepareSalvage = async () => {
+        action();
+        resolve();
+        const key = owner.read()?.scope.identity.work;
+        if (!route.data.salvage || !key || !work.ready() || fixture !== null)
+          throw Error("Salvage unavailable");
+        const issued = owner.invocation(
+          owner.capture("work-salvage"),
+          Object.fromEntries(
+            Object.entries(readings)
+              .filter(([, reading]) => reading.current)
+              .map(([id, reading]) => [id, (reading as { hash: string }).hash]),
+          ),
+        );
+        if (!issued.ok) throw Error(issued.reason);
+        const saved = await salvageRouteWork(key);
+        if (!owner.current(issued.value) || !work.ready()) throw Error("Salvage is stale");
+        if (!saved) return null;
+        const decoded = z
+          .discriminatedUnion("ok", [
+            z.strictObject({ ok: z.literal(true), value: z.unknown() }),
+            z.strictObject({ ok: z.literal(false), reason: z.string() }),
+          ])
+          .parse(
+            bindings.bodies[route.data.salvage]!.run(
+              freezePage(saved.value),
+              freezePage({ page: owner.read()!.page, work: owner.read()!.work!.value, readings }),
+            ),
+          );
+        if (!decoded.ok) throw Error(decoded.reason);
+        const patches = admittedWorkPatches(
+          route.data,
+          bindings.schemas,
+          decoded.value,
+          route.resolvedWork?.schema,
+        );
+        reviews.set("work.salvage", {
+          invocation: issued.value,
+          preview: patches,
+          send: () => {
+            if (!owner.current(issued.value) || !work.ready()) throw Error("Salvage is stale");
+            return work.write(
+              () => patches,
+              issued.value,
+              issued.value.id,
+              "Salvage Work",
+              issued.value,
+            );
+          },
+        });
+        notify();
+        return { kind: "review", preview: patches };
+      };
+      const salvage = async () => {
+        const scope = owner.read()?.scope;
+        recoveryProblem = null;
+        try {
+          return await prepareSalvage();
+        } catch (error) {
+          if (owner.read()?.scope === scope) recoveryProblem = String(error);
+          throw error;
+        } finally {
+          notify();
+        }
+      };
+      const recovery = () => ({
+        sentence:
+          work.problem() === OLDER_WORK || work.problem() === UNREADABLE_WORK
+            ? work.problem()
+            : work.failure()
+              ? null
+              : recoverySentence,
+        startFresh:
+          fixture === null && (work.problem() === OLDER_WORK || work.problem() === UNREADABLE_WORK),
+        carryOver: fixture === null && work.ready() && !!savedRecovery,
+        busy: recoveryBusy,
+        problem: recoveryProblem,
+      });
+      const startFresh = async () => {
+        action();
+        resolve();
+        if (!recovery().startFresh || recoveryBusy) throw Error("Start fresh unavailable");
+        const captured = owner.capture("work-recovery");
+        const scope = owner.read()!.scope;
+        const key = scope.identity.work!;
+        recoverySentence = work.problem();
+        recoveryBusy = true;
+        recoveryProblem = null;
+        notify();
+        try {
+          const result = await startFreshRouteWork(key);
+          if (!owner.current(captured)) throw Error("Recovery is stale");
+          if (!result.ok) throw Error("agentHint" in result ? result.agentHint : result.error);
+          // The terminal failed subscription cannot observe reset. Reacquire with the
+          // original admission, including its fingerprint, rather than accepting reset's ack.
+          peReadings.dirty({
+            ...key,
+            kind: "work",
+            admission: {
+              routeKey: route.resolvedWork!.spec.route,
+              fingerprint: route.workFingerprint,
+            },
+          });
+          await work.reopen();
+          if (!owner.current(captured)) throw Error("Recovery is stale");
+          if (route.data.salvage) return await salvage();
+          return null;
+        } catch (error) {
+          if (owner.read()?.scope === scope) recoveryProblem = String(error);
+          throw error;
+        } finally {
+          if (owner.read()?.scope === scope) recoveryBusy = false;
+          notify();
+        }
+      };
       let transport: ReturnType<typeof createAdmittedAddress> | undefined;
       let unsubscribeOwner = () => {};
       const close = () => {
@@ -1098,53 +1256,9 @@ export function createRouteShell(services: KernelServices) {
         subjectDisplay: observers.subject,
         subjectText: observers.text,
         cells: cells.rows,
-        async salvage() {
-          action();
-          resolve();
-          const key = owner.read()?.scope.identity.work;
-          if (!route.data.salvage || !key || !work.ready() || fixture !== null)
-            throw Error("Salvage unavailable");
-          const issued = owner.invocation(
-            owner.capture("work-salvage"),
-            Object.fromEntries(
-              Object.entries(readings)
-                .filter(([, reading]) => reading.current)
-                .map(([id, reading]) => [id, (reading as { hash: string }).hash]),
-            ),
-          );
-          if (!issued.ok) throw Error(issued.reason);
-          const saved = await salvageRouteWork(key);
-          if (!owner.current(issued.value) || !work.ready()) throw Error("Salvage is stale");
-          if (!saved) return null;
-          const decoded = z
-            .discriminatedUnion("ok", [
-              z.strictObject({ ok: z.literal(true), value: z.unknown() }),
-              z.strictObject({ ok: z.literal(false), reason: z.string() }),
-            ])
-            .parse(
-              bindings.bodies[route.data.salvage]!.run(
-                freezePage(saved.value),
-                freezePage({ page: owner.read()!.page, work: owner.read()!.work!.value, readings }),
-              ),
-            );
-          if (!decoded.ok) throw Error(decoded.reason);
-          const patches = admittedWorkPatches(
-            route.data,
-            bindings.schemas,
-            decoded.value,
-            route.resolvedWork?.schema,
-          );
-          reviews.set("work.salvage", {
-            invocation: issued.value,
-            preview: patches,
-            send: () => {
-              if (!owner.current(issued.value) || !work.ready()) throw Error("Salvage is stale");
-              return work.write(() => patches, issued.value, issued.value.id, "Salvage Work");
-            },
-          });
-          notify();
-          return { kind: "review", preview: patches };
-        },
+        salvage,
+        recovery,
+        startFresh,
         takeCell(id: string, key: unknown) {
           action();
           resolve();
@@ -1294,6 +1408,9 @@ export function createRouteShell(services: KernelServices) {
               work: owner.read()!.work?.value ?? null,
               workBasis: basis,
               history,
+              recovery: route.data.work
+                ? { state: recovery, startFresh, carryOver: salvage }
+                : undefined,
               readings: Object.freeze(
                 Object.fromEntries(declaration.draws.map((id) => [id, readings[id]])),
               ),
