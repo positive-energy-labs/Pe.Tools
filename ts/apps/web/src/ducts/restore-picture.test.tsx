@@ -149,5 +149,4 @@ async function restore(binding: boolean) {
 }
 
 test("exact URL restore after document binding", () => restore(false));
-// TODO: S1b must skip subject admission for an unbound target / absent roster in mount-page-owner.ts.
-test.fails("exact URL restore survives an absent roster while binding", () => restore(true));
+test("exact URL restore survives an absent roster while binding", () => restore(true));

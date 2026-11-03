@@ -47,7 +47,7 @@ export function createMountPage<P, W>(
     const subject = graph.subjectField;
     if (!subject) return;
     const state = readings()[subject.roster]!;
-    const admitted = state.current
+    const admitted = state.current && state.value != null
       ? admittedSubject(graph, view.read().page as Record<string, unknown>, state.value)
       : null;
     if (!admitted) return;
