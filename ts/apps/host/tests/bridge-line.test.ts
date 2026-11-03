@@ -558,3 +558,110 @@ effectTest("duplicate ids and oversized encoded items cannot replace or retain a
     expect(Exit.isSuccess(yield* Fiber.await(a))).toBe(true);
   }),
 );
+
+effectTest("handle terminal survives an unknown answer and reconnect until native terminal", () =>
+  Effect.gen(function* () {
+    const h = yield* harness;
+    const handle = yield* h.bridge.invokeHandle(
+      "test.handle",
+      {},
+      h.target.session,
+      null,
+      "handle-a",
+    );
+    yield* h.sent;
+    yield* h.frame(unsettled("handle-a"));
+    expect(failure(yield* Effect.exit(handle.answer))).toMatchObject({ _tag: "BridgeError" });
+    const terminalWait = yield* Effect.forkScoped(handle.terminal);
+    yield* turns();
+    expect(terminalWait.pollUnsafe()).toBeUndefined();
+    const second = yield* h.socket;
+    yield* turns();
+    expect(terminalWait.pollUnsafe()).toBeUndefined();
+    yield* second.frame(terminalFrame("handle-a"));
+    expect(yield* Fiber.join(terminalWait)).toBe("native-acknowledged");
+  }),
+);
+
+effectTest("handle terminal reports unknown only when process death fences its dispatch", () =>
+  Effect.gen(function* () {
+    const h = yield* harness;
+    const handle = yield* h.bridge.invokeHandle(
+      "test.death",
+      {},
+      h.target.session,
+      null,
+      "handle-death",
+    );
+    yield* h.sent;
+    yield* h.frame(unsettled("handle-death"));
+    yield* Effect.exit(handle.answer);
+    const terminalWait = yield* Effect.forkScoped(handle.terminal);
+    yield* h.close;
+    yield* TestClock.adjust("1 hour");
+    yield* turns();
+    expect(terminalWait.pollUnsafe()).toBeUndefined();
+    h.life.alive = false;
+    yield* TestClock.adjust("1 second");
+    expect(yield* Fiber.join(terminalWait)).toBe("unknown-until-reconciled");
+  }),
+);
+
+effectTest("terminal evidence is latched for late waiters and fenced by process incarnation", () =>
+  Effect.gen(function* () {
+    const h = yield* harness;
+    const old = yield* h.bridge.invokeHandle("test.old", {}, h.target.session, null, "reused-id");
+    yield* h.sent;
+    yield* h.frame(terminalFrame("reused-id"));
+    yield* Effect.exit(old.answer);
+    yield* turns();
+    expect(yield* old.terminal).toBe("native-acknowledged");
+    expect(yield* old.terminal).toBe("native-acknowledged");
+    const next = yield* h.socketOf({ processStartUtcUnixMs: 2000 });
+    const current = yield* next.bridge.invokeHandle(
+      "test.new",
+      {},
+      next.target.session,
+      null,
+      "reused-id",
+    );
+    yield* next.sent;
+    const terminalWait = yield* Effect.forkScoped(current.terminal);
+    yield* h.frame(terminalFrame("reused-id"));
+    yield* turns();
+    expect(terminalWait.pollUnsafe()).toBeUndefined();
+    yield* next.answer("reused-id");
+    expect(yield* Fiber.join(terminalWait)).toBe("native-acknowledged");
+    const answer = yield* current.answer;
+    expect(answer.actualTarget.processIncarnation).toEqual({ pid: 42, startedAt: 2000 });
+    expect(answer.freshness).toEqual({
+      freshnessGeneration: null,
+      freshnessEvidence: "unavailable",
+    });
+  }),
+);
+
+effectTest("a cancelled queued handle settles never-dispatched without an answer subscriber", () =>
+  Effect.gen(function* () {
+    const h = yield* harness;
+    const a = yield* h.call("test.hold");
+    const held = yield* h.sent;
+    const b = yield* h.bridge.invokeHandle(
+      "test.cancelled",
+      {},
+      h.target.session,
+      null,
+      "handle-b",
+    );
+    yield* h.bridge.invoke(CANCEL_OPERATION_KEY, { requestId: "handle-b" });
+    expect(yield* b.terminal).toBe("never-dispatched");
+    expect(failure(yield* Effect.exit(b.answer))).toMatchObject({
+      _tag: "BridgeError",
+      status: 499,
+    });
+    expect(yield* Queue.size(h.outgoing)).toBe(0);
+    expect((yield* h.bridge.snapshot(h.target.session)).lineBytes).toBe(0);
+    yield* h.answer(held.requestId);
+    yield* Fiber.join(a);
+  }),
+);

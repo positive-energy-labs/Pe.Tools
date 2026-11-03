@@ -3,6 +3,7 @@ import {
   makeDispatcher,
   completeBridgeRequest,
   type Connection,
+  type NativeDispatchHandle,
   type Session,
 } from "@pe/host-internal/dispatch";
 export { RevitProcessAlive, CANCEL_OPERATION_KEY } from "@pe/host-internal/dispatch";
@@ -255,6 +256,17 @@ export class RevitBridge extends Context.Service<
         target: { session: string; document: string | null; documentRef?: DocumentRef };
       },
       BridgeError | NoRevitSession
+    >;
+    /** Independent caller answer and native settlement, owned by the queued job. */
+    readonly invokeHandle: (
+      operationKey: string,
+      payload: unknown,
+      bridgeSessionId?: string,
+      openDocumentId?: string | null,
+      requestId?: string,
+    ) => Effect.Effect<
+      NativeDispatchHandle,
+      import("@pe/host-internal/request-contracts").DoorFailure
     >;
     /** Retire only a host-queued request; never send op.cancel to Revit. */
     readonly cancelQueued: (requestIds: Promise<readonly string[]>) => Promise<void>;
@@ -621,6 +633,7 @@ export const RevitBridgeLive = Layer.effect(
 
     return {
       invoke,
+      invokeHandle: dispatcher.invokeHandle,
       cancelQueued,
       snapshot,
       list,

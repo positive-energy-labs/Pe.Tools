@@ -3,6 +3,8 @@ import type {
   NoRevitSession as FrozenNoRevitSession,
   DoorEvidence,
   NativeOutcome,
+  NativeAnswer,
+  DoorFailure,
 } from "./request-contracts.d.ts";
 import { Clock, Context, Deferred, Effect, Exit, Queue, Ref, Schema } from "effect";
 import { randomUUID } from "node:crypto";
@@ -16,6 +18,12 @@ import type {
 } from "@pe/host-contracts/contracts";
 
 type DispatchRefusal = { kind: "cancelled" | "refused"; message: string };
+/** Job-owned evidence; no completed-id registry. Freshness must be supplied by read admission. */
+export interface NativeDispatchHandle {
+  readonly answer: Effect.Effect<NativeAnswer<unknown, "unavailable">, DoorFailure>;
+  readonly terminal: Effect.Effect<NativeOutcome>;
+}
+
 export interface DispatchPorts {
   command(): string | undefined;
   commandLeafRefusal(key: string, command: string | undefined): string | null;
@@ -91,6 +99,7 @@ type Job = {
   readonly command: string | undefined;
   readonly reply: Deferred.Deferred<BridgeResponse, BridgeError>;
   readonly result: Deferred.Deferred<JobAnswer, BridgeError | NoRevitSession>;
+  readonly terminal: Deferred.Deferred<NativeOutcome>;
   readonly state: Ref.Ref<JobState>;
   /**
    * Set when the caller's answer fails but Revit may still own the dispatch: the request stays
@@ -120,6 +129,7 @@ export type BridgeRequest = {
   readonly reply: Deferred.Deferred<BridgeResponse, BridgeError>;
   readonly requestId: string;
   readonly phase: "queued" | "dispatched" | "cancelled";
+  readonly terminal?: Deferred.Deferred<NativeOutcome>;
   /** The connection epoch a dispatched request went out on. */
   readonly epoch?: number;
 };
@@ -252,6 +262,11 @@ const UNSETTLED_OUTCOMES = new Set(["AbandonedStillRunning", "TimedOut"]);
 const isUnsettled = (res: BridgeResponse) =>
   !res.ok && UNSETTLED_OUTCOMES.has(rootOutcome(res.issues) ?? "");
 
+const responseOutcome = (response: BridgeResponse): NativeOutcome =>
+  REFUSED_OUTCOMES.has(rootOutcome(response.issues) ?? "")
+    ? "never-dispatched"
+    : "native-acknowledged";
+
 /** A Terminal settled the request but carries no payload: the caller cannot get the value. */
 const SETTLED_WITHOUT_PAYLOAD = "TerminalSucceeded";
 
@@ -359,6 +374,9 @@ export const completeBridgeRequest = Effect.fn("Dispatcher.completeBridgeRequest
     yield* Effect.logInfo(
       `bridge response for ${response.requestId} arrived on epoch ${epoch}; dispatched on epoch ${request.epoch}`,
     );
+  if (request.phase !== "dispatched") return false;
+  if (request.terminal && !isUnsettled(response))
+    yield* Deferred.succeed(request.terminal, responseOutcome(response));
   yield* Deferred.succeed(request.reply, response);
   return true;
 });
@@ -417,22 +435,32 @@ export const makeDispatcher = (ports: DispatchPorts) =>
      * evidence, never on elapsed time: this loop looks every DEATH_PROBE_INTERVAL and releases
      * nothing while the process lives.
      */
-    const processDeath = (session: Session, operationKey: string) =>
+    const processDeath = (
+      session: Session,
+      operationKey: string,
+      terminal?: Deferred.Deferred<NativeOutcome>,
+    ) =>
       Effect.gen(function* () {
         while (true) {
-          if ((yield* Ref.get(session.connection)) === null && !processAlive(session.processId))
+          if ((yield* Ref.get(session.connection)) === null && !processAlive(session.processId)) {
+            if (terminal) yield* Deferred.succeed(terminal, "unknown-until-reconciled");
             return yield* Effect.fail(
               new BridgeError(
                 `Revit process ${session.processId} exited before answering '${operationKey}'; its outcome is unknown.`,
                 503,
               ),
             );
+          }
           yield* Effect.sleep(DEATH_PROBE_INTERVAL);
         }
       }).pipe(
         Effect.raceFirst(
           Effect.andThen(
-            Deferred.await(session.ended),
+            Deferred.await(session.ended).pipe(
+              Effect.andThen(
+                terminal ? Deferred.succeed(terminal, "unknown-until-reconciled") : Effect.void,
+              ),
+            ),
             Effect.fail(
               new BridgeError(
                 `Revit process ${session.processId} was replaced by a new incarnation before answering '${operationKey}'; its outcome is unknown.`,
@@ -472,6 +500,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
           );
           return;
         }
+        if (request.terminal) yield* Deferred.succeed(request.terminal, responseOutcome(settled));
         if (yield* Deferred.succeed(request.reply, settled)) return;
         // The reply already holds the unsettled answer and its worker has not re-armed yet: arm the
         // next answer, unless the worker won. On effect 4.0.2 the worker re-arms before the next
@@ -558,6 +587,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
               requestId,
               reply,
               phase: "dispatched",
+              terminal: job?.terminal,
               epoch: connection.epoch,
             });
             return ["dispatched", next] as const;
@@ -613,7 +643,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
         // session) or by process death; never by a reconnect, a timer, or a cancel's acceptance.
         // Only host stop interrupts the worker mid-op (a leaving waiter never does).
         const res = yield* Deferred.await(reply).pipe(
-          Effect.raceFirst(processDeath(session, operationKey)),
+          Effect.raceFirst(processDeath(session, operationKey, job?.terminal)),
           Effect.onInterrupt(() =>
             reserved ? cancelInFlight(session, requestId, reply) : Effect.void,
           ),
@@ -705,7 +735,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
           const evidence: Exit.Exit<BridgeResponse, BridgeError> = yield* Deferred.await(
             settled,
           ).pipe(
-            Effect.raceFirst(processDeath(session, job.operationKey)),
+            Effect.raceFirst(processDeath(session, job.operationKey, job.terminal)),
             Effect.onInterrupt(() => cancelInFlight(session, job.requestId, settled)),
             Effect.exit,
           );
@@ -860,6 +890,21 @@ export const makeDispatcher = (ports: DispatchPorts) =>
         };
       }
 
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.flatMap(
+          enqueue(session, operationKey, payload, openDocumentId, requestId),
+          (handle) => restore(handle.answer),
+        ),
+      );
+    });
+
+    const enqueue = Effect.fn("Dispatcher.enqueue")(function* (
+      session: Session,
+      operationKey: string,
+      payload: unknown,
+      openDocumentId?: string | null,
+      requestId?: string,
+    ) {
       const state = yield* Ref.get(session.state);
       const selectedDocument =
         openDocumentId === null
@@ -870,7 +915,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
       // `leave` is installed to retire it, and the waiter is interruptible only while it waits.
       const command = ports.command();
       const wireId = requestId ?? randomUUID();
-      const result = yield* Effect.uninterruptibleMask((restore) =>
+      const handle = yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           for (const actor of (yield* Ref.get(sessions)).values())
             if ((yield* Ref.get(actor.requests)).has(wireId))
@@ -910,6 +955,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
             command,
             reply: yield* Deferred.make<BridgeResponse, BridgeError>(),
             result: yield* Deferred.make<JobAnswer, BridgeError | NoRevitSession>(),
+            terminal: yield* Deferred.make<NativeOutcome>(),
             state: yield* Ref.make<JobState>("queued"),
             owed: yield* Ref.make<Deferred.Deferred<BridgeResponse, BridgeError> | null>(null),
             depth,
@@ -921,6 +967,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
             operationKey,
             requestId: wireId,
             reply: job.reply,
+            terminal: job.terminal,
             phase: revokedBeforeQueue.delete(wireId) ? "cancelled" : "queued",
           });
           return yield* Effect.gen(function* () {
@@ -940,31 +987,80 @@ export const makeDispatcher = (ports: DispatchPorts) =>
             );
             if (!(yield* Queue.offer(session.line, job)))
               return yield* Effect.fail(new NoRevitSession());
-            return yield* restore(Deferred.await(job.result));
-          }).pipe(Effect.ensuring(leave(session, job)));
+            return {
+              answer: Deferred.await(job.result).pipe(Effect.ensuring(leave(session, job))),
+              terminal: Deferred.await(job.terminal),
+              nativeRequestId: wireId,
+            };
+          }).pipe(
+            Effect.onExit((exit) => (Exit.isFailure(exit) ? leave(session, job) : Effect.void)),
+          );
         }),
       );
       return {
-        value: result.value,
-        target: {
-          session: session.sessionId,
-          // The native reply confirms the execution lifetime. Never fill it from a selector or census.
-          ...(result.openDocumentId
-            ? { documentRef: { session: session.sessionId, openId: result.openDocumentId } }
-            : {}),
-          document:
-            state.openDocuments.find((document) => document.openId === result.openDocumentId)
-              ?.address ?? null,
-        },
+        terminal: handle.terminal,
+        nativeRequestId: handle.nativeRequestId,
+        answer: Effect.map(handle.answer, (result) => ({
+          value: result.value,
+          target: {
+            session: session.sessionId,
+            // The native reply confirms the execution lifetime. Never fill it from a selector or census.
+            ...(result.openDocumentId
+              ? { documentRef: { session: session.sessionId, openId: result.openDocumentId } }
+              : {}),
+            document:
+              state.openDocuments.find((document) => document.openId === result.openDocumentId)
+                ?.address ?? null,
+          },
+        })),
       };
+    });
+
+    /** Cancel uses invoke(op.cancel), which bypasses the line and never becomes a queued job. */
+    const invokeHandle = Effect.fn("Dispatcher.invokeHandle")(function* (
+      operationKey: string,
+      payload: unknown,
+      bridgeSessionId?: string,
+      openDocumentId?: string | null,
+      requestId?: string,
+    ) {
+      if (operationKey === CANCEL_OPERATION_KEY)
+        return yield* Effect.fail(
+          new BridgeError("Use invoke for out-of-band cancellation", 400, { notDispatched: true }),
+        );
+      const session = (yield* attached(bridgeSessionId))?.session;
+      if (!session) return yield* Effect.fail(new NoRevitSession());
+      const handle = yield* enqueue(session, operationKey, payload, openDocumentId, requestId);
+      return {
+        terminal: handle.terminal,
+        answer: Effect.map(handle.answer, (result) => ({
+          value: result.value,
+          nativeRequestId: handle.nativeRequestId,
+          actualTarget: {
+            processIncarnation: {
+              pid: session.processId,
+              startedAt: session.processStartUtcUnixMs!,
+            },
+            openDocumentLifetime: result.target.documentRef
+              ? { openId: result.target.documentRef.openId }
+              : { kind: "session-only" as const },
+          },
+          freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const },
+          cost: {},
+          outcome: "native-acknowledged" as const,
+        })),
+      } satisfies NativeDispatchHandle;
     });
 
     /** Gives back a job's place: its request id and its depth. Called once, by whoever retires it. */
     const retire = (session: Session, job: Job) =>
-      Effect.andThen(
-        forgetBridgeRequest(session.requests, job.requestId),
-        Ref.update(session.depth, (n) => n - 1),
-      );
+      Effect.gen(function* () {
+        if ((yield* Ref.get(job.state)) !== "sent")
+          yield* Deferred.succeed(job.terminal, "never-dispatched");
+        else yield* Deferred.interrupt(job.terminal);
+        yield* forgetBridgeRequest(session.requests, job.requestId);
+        yield* Ref.update(session.depth, (n) => n - 1);
+      });
 
     /** Claims a job still waiting; false when the worker or another leaver got there first. */
     const claimQueued = (job: Job) =>
@@ -981,6 +1077,10 @@ export const makeDispatcher = (ports: DispatchPorts) =>
      */
     const leave = Effect.fn("Dispatcher.leave")(function* (session: Session, job: Job) {
       if (!(yield* claimQueued(job))) return;
+      yield* Deferred.fail(
+        job.result,
+        new BridgeError("Waiter left before dispatch", 499, { notDispatched: true }),
+      );
       const refused = yield* Effect.sync(() => {
         const kept: Job[] = [];
         for (let n = Queue.sizeUnsafe(session.line); n > 0; n--) {
@@ -1170,6 +1270,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
       endIncarnation,
       settleTerminal,
       invoke,
+      invokeHandle,
       cancelQueued,
       register,
     };
