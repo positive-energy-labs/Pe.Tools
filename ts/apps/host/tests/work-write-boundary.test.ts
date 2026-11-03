@@ -136,7 +136,7 @@ async function fixture() {
       recovery: [],
       startedAt: new Date().toISOString(),
       state: "succeeded",
-      result,
+      result: writePreviewSchema.parse(result),
     }),
     evidence: (value: unknown) => {
       evidence = value;
