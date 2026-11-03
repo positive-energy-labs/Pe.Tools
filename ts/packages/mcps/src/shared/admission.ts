@@ -7,7 +7,6 @@ import {
   familyReads,
   instancesReading,
   workKeySchema,
-  workKey,
   workHandleSchema,
   ductsDocumentSchema,
   type ActionControlKey,
@@ -180,7 +179,12 @@ export async function runCapability(
   if (key === "ducts.preview-losses") {
     const handle = workHandleSchema.parse(input.work);
     const response = await createPeClient(context.hostBaseUrl, fetch).response("work.get", {
-      params: { route: "ducts" }, query: { work: workKey(handle.key) },
+      params: { route: "ducts" },
+      query: handle.key.binding === "address"
+        ? { target: handle.key.target, ...(handle.key.from ? { open: `${handle.key.from.session}/${handle.key.from.openId}` } : {}) }
+        : handle.key.binding === "open"
+          ? { open: `${handle.key.open.session}/${handle.key.open.openId}` }
+          : handle.key.binding === "workspace" ? { work: handle.key.work } : {},
     });
     if (!response.ok) throw Error(`Read Ducts Work before preview (${response.status})`);
     const saved = await response.json() as { revision: number; doc: unknown };

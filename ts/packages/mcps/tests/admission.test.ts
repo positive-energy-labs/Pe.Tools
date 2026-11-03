@@ -369,12 +369,23 @@ test("a direct RPC caller recovers its original command before consulting a miss
 
 import { runCapability } from "../src/shared/admission.ts";
 import { ductsDocumentSchema } from "@pe/agent-contracts";
-test.each([false, true])("loss preview preflight requires Work scope before a journal POST (scoped=%s)", async scoped => {
+test.each(["open", "address", "workspace", "host"] as const)("loss preview reads exact %s Work before submission", async binding => {
+ for (const scoped of [false, true]) {
   const posts: unknown[] = [];
-  const work = { key: {route: "ducts", binding: "open", target: null, open: target.ref}, revision: 3 };
+  const key = binding === "address" ? {route: "ducts", binding, target: "C:/Models/A.rvt"}
+    : binding === "open" ? {route: "ducts", binding, target: null, open: target.ref}
+    : binding === "workspace" ? {route: "ducts", binding, target: null, work: "draft"}
+    : {route: "ducts", binding, target: null};
+  const work = { key, revision: 3 };
   vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
-    if (url.pathname === "/pe/route-state/ducts") return Response.json({revision: 3, doc: ductsDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {walk: {unitId: 14577391, portIndex: 2}, cells: [["equipmentFlows", "14577391"]]}}}} : {})});
+    if (url.pathname === "/pe/route-state/ducts") {
+      const expected = binding === "address" ? {target: "C:/Models/A.rvt"}
+        : binding === "open" ? {open: "A/open-A"}
+        : binding === "workspace" ? {work: "draft"} : {};
+      expect(Object.fromEntries(url.searchParams)).toEqual(expected);
+      return Response.json({revision: 3, doc: ductsDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {walk: {unitId: 14577391, portIndex: 2}, cells: [["equipmentFlows", "14577391"]]}}}} : {})});
+    }
     if (url.pathname === "/actions" && init?.method === "POST") {
       const body = JSON.parse(String(init.body)); posts.push(body);
       return Response.json(receipt(body));
@@ -389,4 +400,5 @@ test.each([false, true])("loss preview preflight requires Work scope before a jo
     await expect(run()).rejects.toThrow("No preview was submitted");
     expect(posts).toEqual([]);
   }
+ }
 });

@@ -261,3 +261,39 @@ test("empty salvage crosses the HTTP response contract as 200 null", async () =>
   expect(response.status).toBe(200);
   expect(await response.json()).toBeNull();
 });
+
+
+test("an older preview refuses changed request and Work; a fresh preview keeps its seal across 60 seconds", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const f = await fixture();
+    const capture = async () => {
+      const bound = await f.executor.bind(f.ctx);
+      const result = await f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution);
+      f.receipts.push({ id: f.ctx.admission.id, key: "schedule.apply.preview",
+        target: f.ctx.admission.target, state: "succeeded", result } as ActionReceipt);
+      return result as { seal: unknown };
+    };
+    await capture();
+    f.change();
+    (f.ctx.admission.input.work as { revision: number }).revision++;
+    f.ctx.consumed = [{ kind: "file", probe: { path: "new" }, expected: "new" }];
+    f.apply();
+    const stale = await f.executor.bind(f.ctx);
+    await expect(stale.prepare!()).rejects.toMatchObject({ refusal: { code: "preview.stale" },
+      message: expect.stringContaining("requestHash, work, dependencies") });
+    // Capture again through the preview executor, then apply the exact same derived input.
+    const fresh = await fixture();
+    const bound = await fresh.executor.bind(fresh.ctx);
+    const preview = await fresh.executor.run(fresh.ctx, { prepared: await bound.prepare!() } as ActionExecution) as { seal: unknown };
+    fresh.receipts.push({ id: "fresh", key: "schedule.apply.preview", target: fresh.ctx.admission.target,
+      state: "succeeded", result: preview } as ActionReceipt);
+    vi.setSystemTime(Date.now() + 60_000);
+    fresh.apply();
+    const apply = await fresh.executor.bind(fresh.ctx);
+    const prepared = await apply.prepare!();
+    expect(prepared).toMatchObject({ seal: preview.seal });
+    await fresh.executor.run(fresh.ctx, { prepared } as ActionExecution);
+    expect(fresh.run).toHaveBeenCalledOnce();
+  } finally { vi.useRealTimers(); }
+});
