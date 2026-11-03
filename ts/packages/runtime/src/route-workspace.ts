@@ -641,8 +641,15 @@ export class RouteWorkspace {
       const raw = await this.options.store.getState({ targetKey, route });
       if (raw == null || readable(raw, spec))
         return refuse("refused", "this route's Work is readable", "Nothing to set aside.");
-      if (workSchemaAge(raw, spec) !== "older")
-        return refuse("refused", UNREADABLE_WORK, "Only a known older schema permits Start fresh.");
+      // Recovery also covers unreadable values at the current schema (U8rv). The
+      // older-schema-only rule would strand these bytes; newer/unknown schemas stay closed.
+      const age = workSchemaAge(raw, spec);
+      if (age !== "older" && age !== "current")
+        return refuse(
+          "refused",
+          UNREADABLE_WORK,
+          "Only a known current or older schema permits Start fresh.",
+        );
       let slot = 1;
       while ((await this.options.store.getState({ targetKey, route: aside(route, slot) })) != null)
         slot++;
