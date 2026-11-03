@@ -1,5 +1,9 @@
 import { expect, test, vi } from "vite-plus/test";
-import { Effect } from "effect";
+import { Context, Effect, Fiber, Layer } from "effect";
+import { TestClock } from "effect/testing";
+import { NodeCrypto } from "@effect/platform-node";
+import { RunConsents } from "../src/run-consent.ts";
+import { effectTest } from "./effect-test.ts";
 import { z } from "zod";
 import { commands, tools, type Command, type ActionReceipt } from "@pe/agent-contracts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
@@ -299,3 +303,32 @@ test("an older preview refuses changed request and Work; a fresh preview keeps i
     expect(fresh.run).toHaveBeenCalledOnce();
   } finally { vi.useRealTimers(); }
 });
+
+
+effectTest("preview seal survives the real 60-second run-consent auto-approval", () =>
+  Effect.gen(function* () {
+    const f = yield* Effect.promise(fixture);
+    const bound = yield* Effect.promise(() => f.executor.bind(f.ctx));
+    const prepared = yield* Effect.promise(() => bound.prepare!());
+    const preview = yield* Effect.promise(() => f.executor.run(f.ctx, { prepared } as ActionExecution)) as { seal: unknown };
+    f.receipts.push({ id: "preview", key: "schedule.apply.preview", target: f.ctx.admission.target,
+      state: "succeeded", result: preview } as ActionReceipt);
+    const runs = Context.get(yield* Layer.build(RunConsents.layer.pipe(Layer.provide(NodeCrypto.layer))), RunConsents);
+    runs.attach({ emit: () => {}, persist: () => {}, autoApprove: () => true });
+    const run = { thread: "sealed-write", turn: "one" };
+    yield* runs.open(run);
+    const pending = yield* Effect.forkScoped(runs.authorize({ caller: { kind: "pea", context: "minted",
+      thread: run.thread, run, root: run }, run, root: run }, "apply", [{ kind: "document", ref: { session: "A", openId: "open-A" } }]));
+    yield* TestClock.adjust("59 seconds");
+    expect(pending.pollUnsafe()).toBeUndefined();
+    yield* TestClock.adjust("1 second");
+    expect(yield* Fiber.join(pending)).toMatchObject({ decision: { by: "deadline" } });
+    f.apply();
+    const apply = yield* Effect.promise(() => f.executor.bind(f.ctx));
+    yield* Effect.promise(() => apply.preflight!());
+    const ready = yield* Effect.promise(() => apply.prepare!());
+    expect(ready).toMatchObject({ seal: preview.seal });
+    yield* Effect.promise(() => f.executor.run(f.ctx, { prepared: ready } as ActionExecution));
+    expect(f.run).toHaveBeenCalledOnce();
+  }),
+);
