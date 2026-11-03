@@ -1,4 +1,7 @@
-import { workFeedFailureMessage, type WorkFeedFailure } from "../../../../packages/agent-contracts/src/work-journal-door";
+import {
+  workFeedFailureMessage,
+  type WorkFeedFailure,
+} from "../../../../packages/agent-contracts/src/work-journal-door";
 import { z } from "zod";
 import { workKey, workWriteAckSchema, type WorkWriteAck } from "@pe/agent-contracts";
 import type {
@@ -15,7 +18,11 @@ import type {
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import type { CausalParentId } from "../../../../packages/agent-contracts/src/route-kernel-page";
 
-const snapshotSchema = z.object({ revision: z.number().int().nonnegative(), doc: z.unknown() });
+const snapshotSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  doc: z.unknown(),
+  history: z.object({ acks: z.array(workWriteAckSchema), from: z.number().int().nonnegative() }),
+});
 import { completion, workOutcome, failedWrite } from "./work-door-observation";
 // The shared Reading transport outlives shell/target remounts in this tab. A registration
 // mismatch latches until reload; recreating a client must never retry against other bytes.
@@ -62,7 +69,12 @@ export function createWorkFeedClient(
             row.state === "detached"
               ? { kind: "pending" }
               : row.state === "succeeded"
-                ? { kind: "accepted-native", receiptId: row.id, outcome: "committed", result: row.result }
+                ? {
+                    kind: "accepted-native",
+                    receiptId: row.id,
+                    outcome: "committed",
+                    result: row.result,
+                  }
                 : row.state === "unknown"
                   ? {
                       kind: "accepted-native",
@@ -112,9 +124,13 @@ export function createWorkFeedClient(
           const emit = (state: WorkFeedState) => {
             if (!closed) deliver(state);
           };
-          const fail = (message: string, failure: WorkFeedFailure = { kind: "failed", code: "WorkFeedFailed", message }) => {
+          const fail = (
+            message: string,
+            failure: WorkFeedFailure = { kind: "failed", code: "WorkFeedFailed", message },
+          ) => {
             if (closed) return;
-            if (failure.kind === "registration-mismatch") reload.set(`${scope.route}:${scope.fingerprint}`, failure);
+            if (failure.kind === "registration-mismatch")
+              reload.set(`${scope.route}:${scope.fingerprint}`, failure);
             emit({ kind: "failed", failure });
             stop();
             end();
@@ -159,29 +175,43 @@ export function createWorkFeedClient(
           };
           emit({ kind: "pending" });
           const mismatch = reload.get(`${scope.route}:${scope.fingerprint}`);
-          if (mismatch) { fail(workFeedFailureMessage(mismatch), mismatch); return stop; }
+          if (mismatch) {
+            fail(workFeedFailureMessage(mismatch), mismatch);
+            return stop;
+          }
           try {
             // A synchronous replay is buffered before the snapshot subscription even exists.
-            stopAcks = source.subscribe({ kind: "work-acks", work: scope.key, admission }, (frame) => {
-              if (closed || ("stale" in frame && frame.stale)) return;
-              if (frame.kind === "failure") return fail(frame.failure ? workFeedFailureMessage(frame.failure) : frame.error, frame.failure);
-              if (frame.kind === "gap")
-                return fail("Work acknowledgement transport lost an unknown revision interval");
-              if (frame.kind !== "event") return;
-              const parsed = workWriteAckSchema.safeParse(frame.value);
-              if (!parsed.success) return fail(parsed.error.message);
-              if (workKey(parsed.data.key) !== workKey(scope.key))
-                return fail("Work acknowledgement belongs to another Work");
-              buffered.push(parsed.data);
-              drain();
-            });
+            stopAcks = source.subscribe(
+              { kind: "work-acks", work: scope.key, admission },
+              (frame) => {
+                if (closed || ("stale" in frame && frame.stale)) return;
+                if (frame.kind === "failure")
+                  return fail(
+                    frame.failure ? workFeedFailureMessage(frame.failure) : frame.error,
+                    frame.failure,
+                  );
+                if (frame.kind === "gap")
+                  return fail("Work acknowledgement transport lost an unknown revision interval");
+                if (frame.kind !== "event") return;
+                const parsed = workWriteAckSchema.safeParse(frame.value);
+                if (!parsed.success) return fail(parsed.error.message);
+                if (workKey(parsed.data.key) !== workKey(scope.key))
+                  return fail("Work acknowledgement belongs to another Work");
+                buffered.push(parsed.data);
+                drain();
+              },
+            );
             if (closed) {
               stopAcks();
               return stop;
             }
             stopSnapshot = source.subscribe(request, (frame) => {
               if (closed || ("stale" in frame && frame.stale)) return;
-              if (frame.kind === "failure") return fail(frame.failure ? workFeedFailureMessage(frame.failure) : frame.error, frame.failure);
+              if (frame.kind === "failure")
+                return fail(
+                  frame.failure ? workFeedFailureMessage(frame.failure) : frame.error,
+                  frame.failure,
+                );
               if (!acquiring || frame.kind !== "snapshot") return;
               const parsed = snapshotSchema.safeParse(frame.value);
               if (!parsed.success) return fail(parsed.error.message);
@@ -190,6 +220,7 @@ export function createWorkFeedClient(
               emit({
                 kind: "ready",
                 snapshot: { key: scope.key, revision, value: parsed.data.doc },
+                history: parsed.data.history,
               });
               drain();
             });

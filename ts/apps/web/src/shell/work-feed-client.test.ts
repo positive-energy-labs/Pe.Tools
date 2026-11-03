@@ -32,7 +32,11 @@ const ack = (revision: number) =>
     },
   }) as Frame;
 const snapshot = (revision: number) =>
-  ({ kind: "snapshot", key: "work", value: { revision, doc: { amount: revision } } }) as Frame;
+  ({
+    kind: "snapshot",
+    key: "work",
+    value: { revision, doc: { amount: revision }, history: { from: revision + 1, acks: [] } },
+  }) as Frame;
 function harness(replay: Frame[] = []) {
   const listeners = new Map<string, (frame: Frame) => void>();
   const stops = [vi.fn(), vi.fn()];
@@ -65,7 +69,18 @@ test("subscribe before snapshot, buffer and sort acks, drop revisions covered by
   const h = harness([ack(3), ack(1), ack(2)]);
   expect(h.order).toEqual(["work-acks", "work"]);
   expect(h.values).toEqual([{ kind: "pending" }]);
-  h.emit("work", snapshot(1));
+  const frame = snapshot(1) as Extract<Frame, { kind: "snapshot" }>;
+  h.emit("work", {
+    ...frame,
+    value: {
+      revision: 1,
+      doc: { amount: 1 },
+      history: { from: 1, acks: [(ack(1) as Extract<Frame, { kind: "event" }>).value] },
+    },
+  });
+  expect(h.values.find((v) => v.kind === "ready")).toMatchObject({
+    history: { from: 1, acks: [{ revision: 1 }] },
+  });
   expect(h.values.map((value) => value.kind)).toEqual(["pending", "ready", "ack", "ack"]);
   expect(
     h.values.filter((value) => value.kind === "ack").map((value) => value.ack.revision),

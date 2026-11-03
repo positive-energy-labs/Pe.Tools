@@ -22,7 +22,11 @@ import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
-import { RouteWorkspace, type PeaRuntimeCapabilities } from "@pe/runtime";
+import {
+  DEFAULT_WORK_HISTORY_LIMITS,
+  RouteWorkspace,
+  type PeaRuntimeCapabilities,
+} from "@pe/runtime";
 import { createRouteRegistrations } from "@pe/mcps";
 import { admittedBuiltinsLayer } from "./admitted-builtins.ts";
 import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admission.ts";
@@ -266,6 +270,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     workspace: new RouteWorkspace({
       registrations,
       store: fileRouteDocumentStore(productRouteWorkPath()),
+      workHistoryLimits: DEFAULT_WORK_HISTORY_LIMITS,
     }),
   };
   const share =

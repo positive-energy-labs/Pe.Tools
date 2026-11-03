@@ -363,3 +363,66 @@ test("an addressed document's own Work is never replaced by a stale addressless 
   }).apply("human", [{ path: ["values", "a"], value: "addressed" }], 0);
   expect((await bind(module, savedAs).read())?.doc).toMatchObject({ values: { a: "addressed" } });
 });
+
+function feedSnapshot(module: RouteWorkspace) {
+  return new Promise<
+    import("../src/owner-read.ts").OwnerValue<Awaited<ReturnType<RouteWorkspace["read"]>>>
+  >((resolve) => {
+    const stop = module.observe(
+      documentA,
+      documentA.route,
+      (result) => {
+        stop();
+        resolve(result);
+      },
+      true,
+      true,
+    );
+  });
+}
+
+test.each([
+  { maxCount: 2, maxBytes: 1_000_000, from: 3 },
+  { maxCount: 20, maxBytes: 0, from: 5 },
+])(
+  "host history is a bounded contiguous suffix ($maxCount/$maxBytes)",
+  async ({ maxCount, maxBytes, from }) => {
+    const store = memoryStore();
+    const module = new RouteWorkspace({
+      registrations: [registration()],
+      store: store.store,
+      workHistoryLimits: { maxCount, maxBytes },
+    });
+    for (let revision = 0; revision < 4; revision++)
+      await module.write(documentA, documentA.route, "human", {
+        kind: "apply",
+        press: `p${revision}`,
+        expectedRevision: revision,
+        patches: [{ path: ["count"], value: revision + 1 }],
+        label: `Count ${revision + 1}`,
+      });
+    const acquired = await feedSnapshot(module);
+    expect(acquired).toMatchObject({ value: { revision: 4, history: { from } } });
+    if (!("value" in acquired) || !acquired.value?.history) throw Error("Missing history");
+    expect(acquired.value.history.acks.map((ack) => ack.revision)).toEqual(
+      from === 3 ? [3, 4] : [],
+    );
+    const persisted = [...store.state.values()][0] as { history: unknown[] };
+    expect(persisted.history.length).toBe(from === 3 ? 2 : 0);
+  },
+);
+
+test("host refuses a persisted history hole before emitting a snapshot", async () => {
+  const store = memoryStore();
+  const module = workspace(store.store);
+  const write = bind(module);
+  for (let revision = 0; revision < 3; revision++)
+    await write.apply("pea", [{ path: ["count"], value: revision + 1 }], revision);
+  const [key, raw] = [...store.state.entries()][0]!;
+  const saved = raw as { history: unknown[] };
+  saved.history.splice(1, 1);
+  store.state.set(key, saved);
+  expect(await feedSnapshot(workspace(store.store))).toMatchObject({
+    error: "Work history is not contiguous through its snapshot",
+  });
+});

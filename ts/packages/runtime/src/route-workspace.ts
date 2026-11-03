@@ -63,9 +63,12 @@ export interface RouteDocumentStore {
   }>;
 }
 
+/** Host undo-window configuration: both limits bound the retained suffix. */
+export const DEFAULT_WORK_HISTORY_LIMITS = { maxCount: 256, maxBytes: 4 * 1024 * 1024 } as const;
 export interface RouteWorkspaceOptions {
   registrations: readonly RouteWorkspaceRegistration[];
   store: RouteDocumentStore;
+  workHistoryLimits?: { readonly maxCount: number; readonly maxBytes: number };
 }
 
 const ENVELOPE_VERSION = 1;
@@ -95,6 +98,9 @@ export class RouteWorkspace {
   >();
 
   constructor(private readonly options: RouteWorkspaceOptions) {
+    const limits = options.workHistoryLimits ?? DEFAULT_WORK_HISTORY_LIMITS;
+    if (![limits.maxCount, limits.maxBytes].every((n) => Number.isSafeInteger(n) && n >= 0))
+      throw Error("Invalid Work history limits");
     for (const registration of options.registrations) {
       this.register(registration);
     }
@@ -373,21 +379,30 @@ export class RouteWorkspace {
     return this.#read(scope, route, true);
   }
 
-  async #read(scope: WorkKey, route: string, orEmpty: boolean) {
+  async #read(scope: WorkKey, route: string, orEmpty: boolean, withHistory = false) {
     const registration = this.#registry.get(route);
     if (!registration) return null;
     const { spec } = registration;
-    const envelope = await this.#serialized(() => this.#load(scope, spec, orEmpty));
-    if (!envelope) return null;
-    return {
-      route,
-      title: spec.title,
-      description: spec.description,
-      doc: structuredClone(envelope.doc),
-      revision: envelope.revision,
-      schemaVersion: envelope.schemaVersion ?? null,
-      schema: toJsonSchema(spec.schema),
-    };
+    return this.#serialized(async () => {
+      const envelope = await this.#load(scope, spec, orEmpty);
+      if (!envelope) return null;
+      const records = this.#retain(this.#inverses.get(workKey(scope)) ?? [], envelope.revision);
+      return {
+        ...(withHistory && {
+          history: {
+            from: records[0]?.write.revision ?? envelope.revision + 1,
+            acks: structuredClone(records.map(({ write }) => write)),
+          },
+        }),
+        route,
+        title: spec.title,
+        description: spec.description,
+        doc: structuredClone(envelope.doc),
+        revision: envelope.revision,
+        schemaVersion: envelope.schemaVersion ?? null,
+        schema: toJsonSchema(spec.schema),
+      };
+    });
   }
 
   /** The untrusted write envelope has no authorship field. `by` is the host caller's principal. */
@@ -745,11 +760,12 @@ export class RouteWorkspace {
     route: string,
     listener: (value: OwnerValue<Awaited<ReturnType<RouteWorkspace["read"]>>>) => void,
     orEmpty = false,
+    withHistory = false,
   ): () => void {
-    const key = `${workKey(scope)}\0${route}\0${orEmpty}`;
+    const key = `${workKey(scope)}\0${route}\0${orEmpty}\0${withHistory}`;
     return this.#reads.observe(
       key,
-      () => (orEmpty ? this.view(scope, route) : this.read(scope, route)),
+      () => this.#read(scope, route, orEmpty, withHistory),
       (notify) =>
         this.subscribe((event) => {
           if (event.route === route && workKey(event.scope) === workKey(scope)) notify();
@@ -779,9 +795,12 @@ export class RouteWorkspace {
       const raw = await this.#carryOver(scope, spec.route);
       this.#inverses.set(
         key,
-        historySchema
-          .parse((raw as { history?: unknown } | null)?.history ?? [])
-          .map((record) => ({ ...record, write: { ...record.write, key: scope } })),
+        this.#retain(
+          historySchema
+            .parse((raw as { history?: unknown } | null)?.history ?? [])
+            .map((record) => ({ ...record, write: { ...record.write, key: scope } })),
+          (raw as { revision?: number } | null)?.revision ?? 0,
+        ),
       );
       if (disposed) return;
       for (const { write } of this.#inverses.get(key) ?? [])
@@ -823,9 +842,12 @@ export class RouteWorkspace {
     }
     this.#inverses.set(
       workKey(scope),
-      historySchema
-        .parse((raw as { history?: unknown }).history ?? [])
-        .map((record) => ({ ...record, write: { ...record.write, key: scope } })),
+      this.#retain(
+        historySchema
+          .parse((raw as { history?: unknown }).history ?? [])
+          .map((record) => ({ ...record, write: { ...record.write, key: scope } })),
+        (raw as { revision: number }).revision,
+      ),
     );
     let age = (raw as { schemaVersion?: number }).schemaVersion;
     const current = spec.schemaVersion ?? 1;
@@ -855,7 +877,8 @@ export class RouteWorkspace {
           message: error instanceof Error ? error.message : String(error),
         });
       }
-      await this.#persist(scope, spec.route, migrated);
+      await this.#persist(scope, spec.route, migrated, []);
+      this.#inverses.set(workKey(scope), []);
       return migrated;
     }
     return parseEnvelope(raw, spec);
@@ -888,12 +911,40 @@ export class RouteWorkspace {
     envelope: RouteEnvelope<unknown>,
     history = this.#inverses.get(workKey(scope)) ?? [],
   ): Promise<void> {
+    const retained = this.#retain(history, envelope.revision);
+    history.splice(0, history.length, ...retained);
     // Closing a native lifetime changes availability, never the user's authored Work.
     await this.options.store.setState({
       targetKey: workKey(scope),
       route,
       value: { ...envelope, history },
     });
+  }
+
+  #retain(records: z.infer<typeof historySchema>, revision: number) {
+    const boundary = records.findLastIndex(({ write }) => write.kind === "start-fresh");
+    const suffix = records.slice(Math.max(0, boundary));
+    // Refuse corrupt canonical history inside the host, before any ready can escape.
+    if (
+      suffix.length &&
+      (suffix.at(-1)!.write.revision !== revision ||
+        suffix.some(
+          ({ write }, i) =>
+            write.base !== write.revision - 1 ||
+            (i > 0 && write.base !== suffix[i - 1]!.write.revision),
+        ))
+    )
+      throw Error("Work history is not contiguous through its snapshot");
+    const limits = this.options.workHistoryLimits ?? DEFAULT_WORK_HISTORY_LIMITS;
+    let bytes = 0;
+    let start = suffix.length;
+    while (start > 0 && suffix.length - start < limits.maxCount) {
+      const size = new TextEncoder().encode(JSON.stringify(suffix[start - 1])).byteLength;
+      if (bytes + size > limits.maxBytes) break;
+      bytes += size;
+      start--;
+    }
+    return suffix.slice(start);
   }
 
   async #publish(event: RouteWorkspaceEvent): Promise<void> {

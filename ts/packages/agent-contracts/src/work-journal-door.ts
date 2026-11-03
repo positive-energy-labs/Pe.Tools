@@ -76,7 +76,19 @@ export type WorkFeedState =
       readonly kind: "failed";
       readonly failure: WorkFeedFailure;
     }
-  | { readonly kind: "ready"; readonly snapshot: WorkSnapshot }
+  | {
+      readonly kind: "ready";
+      readonly snapshot: WorkSnapshot;
+      readonly history: {
+        /** Canonical acks for this exact admitted scope, ordered, contiguous,
+         * ending at snapshot.revision (or empty when nothing is retained). */
+        readonly acks: readonly WorkWriteAck[];
+        /** First revision the journal view may reach. Undo never crosses below it.
+         * Complete: first revision or last start-fresh boundary. Trimmed/unavailable:
+         * first retained revision, or snapshot.revision + 1 when none. */
+        readonly from: WorkWriteAck["revision"];
+      };
+    }
   | { readonly kind: "ack"; readonly ack: WorkWriteAck }
   | {
       readonly kind: "gap";
@@ -157,7 +169,9 @@ export interface WorkJournalDoor {
   readonly lifetime: "subscription";
   /** Subscribe to acks BEFORE acquiring the snapshot and buffer across that boundary.
    * After ready{snapshot}, emit buffered and later acks with revision > snapshot.revision
-   * in revision order; drop those with revision <= snapshot.revision. If the first ack
+   * in revision order. Acks at or below snapshot.revision arrive via ready.history,
+   * never as ack events. The host acquires the bounded contiguous history and snapshot
+   * consistently; every ready after a gap replaces the journal view, never Work values. If the first ack
    * after the snapshot skips revisions, emit gap{from: snapshot.revision + 1, to: ack.revision}.
    * No ack between subscribe and snapshot may be lost or reordered. Later revision jumps
    * likewise emit a gap before the next available ack, with from the first missing revision.

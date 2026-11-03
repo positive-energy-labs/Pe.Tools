@@ -73,6 +73,16 @@ export function doorRefusals(
     () => {},
     () => {},
   )();
+  const ready: WorkFeedState = {
+    kind: "ready",
+    snapshot,
+    history: { from: ack.revision, acks: [ack] },
+  };
+  // @ts-expect-error Every ready frame declares the history boundary, even when empty.
+  const noHistory: WorkFeedState = { kind: "ready", snapshot };
+  // @ts-expect-error A retained prefix cannot omit from.
+  const noFrom: WorkFeedState = { kind: "ready", snapshot, history: { acks: [] } };
+  void [ready, noHistory, noFrom];
   // @ts-expect-error An ack frame cannot carry a snapshot.
   const ackSnapshot: WorkFeedState = { kind: "ack", ack, snapshot };
   const failedAck: WorkFeedState = {

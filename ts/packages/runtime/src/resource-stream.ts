@@ -70,6 +70,7 @@ export function observeResources(
                     if (!closed) accept(value);
                   },
                   true,
+                  true,
                 )
               : work.observeAccepted(
                   scope,
