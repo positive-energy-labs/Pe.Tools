@@ -175,6 +175,8 @@ function DuctsProvider({
         ? { says: "Reading ducts", exit: "Wait for this document's snapshot" }
         : null,
     doc,
+    // TODO: u2-gate-0475a118/browser4 direct restore dispatched no scene; restore-picture.test.tsx
+    // passes with delayed readings. Capture read.current, sourceVersion and picture size on the next browser drive.
     captureSource: current && doc && version ? { document: doc, version } : null,
     reading: {
       pending: read.status === "pending",
