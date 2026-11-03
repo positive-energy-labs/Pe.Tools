@@ -201,7 +201,21 @@ export function createRouteEnvironment({ issuer, validate, ports }: EnvironmentO
     ...(ports.work
       ? {
           work: {
-            read: { lifetime: "subscription", open: (scope) => ports.work!.read.open(scope) },
+            read: {
+              lifetime: "subscription",
+              open: (scope) => ({
+                subscribe(deliver, end) {
+                  check(true, "Environment closed");
+                  let unsubscribe = () => {};
+                  const resource = track(() => unsubscribe());
+                  unsubscribe = ports.work!.read.open(scope).subscribe((value) => {
+                    if (resource.active()) deliver(value);
+                  }, end);
+                  if (!resource.active()) unsubscribe();
+                  return resource.stop;
+                },
+              }),
+            },
             submit: {
               submitWork: (scope, write, invocation) => {
                 check(validate.token(invocation.token), "Stale Work invocation");

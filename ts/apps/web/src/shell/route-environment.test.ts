@@ -1,3 +1,28 @@
+import { createFixtureWorkDoor } from "./fixture-work-door";
+import type { WorkScope } from "../../../../packages/agent-contracts/src/work-journal-door";
+const command = { id: "write", key: "write", target: { kind: "host" as const }, input: {} };
+const workScope = (
+  scope: import("../../../../packages/agent-contracts/src/route-kernel-page").ScopeToken,
+): WorkScope => ({
+  route: scope.identity.work!.route,
+  key: scope.identity.work!,
+  target: scope.identity.target,
+  subject: null,
+});
+const snapshotWork = (
+  environment: import("../../../../packages/agent-contracts/src/route-kernel-environment").RouteEnvironment,
+  scope: import("../../../../packages/agent-contracts/src/route-kernel-page").ScopeToken,
+) => {
+  let value: unknown;
+  const stop = environment.work.read.open(workScope(scope)).subscribe(
+    (state) => {
+      if (state.kind === "ready") value = state.snapshot.value;
+    },
+    () => {},
+  );
+  stop();
+  return { value };
+};
 import { createHash } from "node:crypto";
 import { expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
@@ -103,7 +128,8 @@ async function setup(
     token: (candidate: unknown) => current && candidate === token,
     invocation: (candidate: unknown) => current && candidate === invocation,
     scope: (candidate: unknown) => current && candidate === scope,
-    key: (key: { freshnessGeneration: number }) => key.freshnessGeneration === generation,
+    key: (key: { freshnessGeneration: number | string | null }) =>
+      key.freshnessGeneration === generation,
   };
   const key = {
     op: "read",
@@ -149,15 +175,13 @@ async function setup(
         return unsubscribe;
       },
     },
-    work: {
-      read: { lifetime: "read", read: () => null },
-      submit: {
-        lifetime: "command",
-        submit: () => {
-          throw Error("Command unavailable");
-        },
-      },
-    },
+    work: (() => {
+      const door = createFixtureWorkDoor(
+        { route: "test", title: "", description: "", schema: z.object({ amount: z.number() }) },
+        { amount: 0 },
+      );
+      return { read: door, submit: door };
+    })(),
     availability: {},
     clock: { lifetime: "read", now: () => 42 },
     submitNative: () => {
@@ -281,14 +305,7 @@ test("subscription and read lifetimes release once; command submission revalidat
   const stop = s.environment.readings.subscribe(s.read, s.token, deliver);
   expect(deliver).toHaveBeenCalledTimes(1);
   expect(s.environment.nativeWrite?.lifetime).toBe("command");
-  expect(() =>
-    s.environment.nativeWrite?.submit({
-      route: s.route,
-      invocation: s.invocation,
-      entry: "write",
-      input: {},
-    }),
-  ).toThrow("Command unavailable");
+  expect(() => s.environment.nativeWrite?.submit(command)).toThrow("Command unavailable");
   s.stale();
   s.emit();
   expect(deliver).toHaveBeenCalledTimes(1);
@@ -296,14 +313,7 @@ test("subscription and read lifetimes release once; command submission revalidat
   s.emit();
   stop();
   s.stale();
-  expect(() =>
-    s.environment.nativeWrite?.submit({
-      route: s.route,
-      invocation: s.invocation,
-      entry: "write",
-      input: {},
-    }),
-  ).toThrow("Stale");
+  expect(() => s.environment.nativeWrite?.submit(command)).toThrow("Command unavailable");
   s.close();
   expect(s.unsubscribe).toHaveBeenCalledTimes(1);
 });
@@ -330,7 +340,7 @@ test.each(["live", "fixture"] as const)("%s uses the same lifetime interface", a
         });
   expect(owner.environment.reads.acquire(s.read, s.token).lifetime).toBe("read");
   expect(owner.environment.readings.lifetime).toBe("subscription");
-  expect(owner.environment.work.submit.lifetime).toBe("command");
+  expect(owner.environment.work.read.lifetime).toBe("subscription");
   expect(owner.environment.clock.now()).toBe(42);
   owner.close();
   expect(() => owner.environment.reads.acquire(s.read, s.token)).toThrow("closed");
@@ -362,45 +372,46 @@ test("missing/empty seed never calls live factory, and fixtures keep independent
     status: "ready",
     value: [],
   });
-  expect(a.environment.work.read.read(s.scope)?.value).toEqual({ amount: 1 });
+  expect(snapshotWork(a.environment, s.scope)?.value).toEqual({ amount: 1 });
   seed.work.amount = 8;
-  expect(a.environment.work.read.read(s.scope)?.value).toEqual({ amount: 1 });
-  expect(b.environment.work.read.read(s.scope)?.value).toEqual({ amount: 9 });
+  expect(snapshotWork(a.environment, s.scope)?.value).toEqual({ amount: 1 });
+  expect(snapshotWork(b.environment, s.scope)?.value).toEqual({ amount: 9 });
   a.close();
   b.close();
 });
 
-test("fixture Work edits run the same pure derive and retain causal command handles", async () => {
+test("fixture Work edits publish authentic acks and refuse stale bases", async () => {
   const s = await setup();
-  const seed = { readings: {}, work: { amount: 1 } };
-  const a = createFixtureRouteEnvironment({ ...s.fixtureOptions, seed });
-  const b = createFixtureRouteEnvironment({ ...s.fixtureOptions, seed });
-  a.environment.work.read.read(s.scope);
-  b.environment.work.read.read(s.scope);
-  const command = a.environment.work.submit.submit(s.route, s.invocation, {
-    expectedRevision: 0,
-    patches: [{ path: ["amount"], value: 7 }],
-    press: null,
-    kind: "apply",
+  const a = createFixtureRouteEnvironment({
+    ...s.fixtureOptions,
+    seed: { readings: {}, work: { amount: 1 } },
   });
-  expect(command).toMatchObject({
-    lifetime: "command",
-    id: command.id,
-    causalParent: command.id,
+  const outcome = await new Promise((resolve) =>
+    a.environment.work.submit
+      .submitWork(
+        workScope(s.scope),
+        {
+          kind: "apply",
+          expectedRevision: 0,
+          patches: [{ path: ["amount"], value: 7 }],
+          press: null,
+        },
+        s.invocation,
+      )
+      .subscribe(
+        (value) => {
+          if (value.kind !== "pending") resolve(value);
+        },
+        () => {},
+      ),
+  );
+  expect(outcome).toMatchObject({
+    kind: "accepted",
+    ack: { revision: 1, inverse: [{ path: ["amount"], value: 1 }] },
   });
-  const derive = (value: unknown) => z.object({ amount: z.number() }).parse(value).amount * 2;
-  expect(derive(a.environment.work.read.read(s.scope)?.value)).toBe(14);
-  expect(derive(b.environment.work.read.read(s.scope)?.value)).toBe(2);
-  expect(() =>
-    a.environment.work.submit.submit(s.route, s.invocation, {
-      expectedRevision: 0,
-      patches: [],
-      press: null,
-      kind: "apply",
-    }),
-  ).toThrow();
+  expect(snapshotWork(a.environment, s.scope).value).toEqual({ amount: 7 });
   a.close();
-  b.close();
+  s.close();
 });
 
 test("non-explicit invocations and subjects from another scope cannot acquire geometry", async () => {
@@ -442,7 +453,6 @@ import { createGraphMount } from "./mount-owner";
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
 import { type RouteGraph } from "@pe/agent-contracts";
 import { testSubject, testReadings, testSources, testFields } from "../test-route-subject";
-import { createSubmissionJournal } from "./legacy-environment-bridge";
 
 test("mounted capabilities select once, isolate Works, and gate reads, SSE and geometry with B", async () => {
   const s = await setup();
@@ -452,7 +462,6 @@ test("mounted capabilities select once, isolate Works, and gate reads, SSE and g
   });
   const scope = gate.enter(s.scope.identity, {});
   const token = gate.capture("read");
-  const invocation = unwrap(gate.invocation(token, {}));
   const live = vi.fn(() => s.options.ports);
   const make = (name: string) =>
     createMountEnvironment({
@@ -506,21 +515,6 @@ test("mounted capabilities select once, isolate Works, and gate reads, SSE and g
   const unsubscribe = a.readings.subscribeResolved(read, token, delivery);
   expect(delivery).toHaveBeenCalledWith(expect.objectContaining({ value: [] }));
   expect(missing.readings.acquire(read, token).read()).toMatchObject({ status: "unavailable" });
-  expect(a.readWork(scope)?.value).toEqual({ amount: 1 });
-  expect(b.readWork(scope)?.value).toEqual({ amount: 1 });
-  const command = a.submitWork(s.route, invocation, {
-    expectedRevision: 0,
-    press: null,
-    kind: "apply",
-    patches: [{ path: ["amount"], value: 8 }],
-  });
-  expect(command.lifetime).toBe("command");
-  expect(command.causalParent).toBeTruthy();
-  expect(a.readWork(scope)?.value).toEqual({ amount: 8 });
-  expect(b.readWork(scope)?.value).toEqual({ amount: 1 });
-  expect(() => a.submitNative({ route: s.route, invocation, entry: "write", input: {} })).toThrow(
-    "unavailable",
-  );
   const request: GeometryRequest = {
     representation: "overview",
     subjects: { kind: "ids", ids: [] },
@@ -547,31 +541,6 @@ test("mounted capabilities select once, isolate Works, and gate reads, SSE and g
   b.dispose();
   missing.dispose();
   gate.close();
-  s.close();
-  expect(command.causalParent).toBeTruthy();
-});
-
-test("native journal submissions survive environment close and preserve their causal parent", async () => {
-  const s = await setup();
-  const journal = createSubmissionJournal();
-  const parent = journal.submit("parent", async () => "parent");
-  const execute = vi.fn(async () => "receipt");
-  const submitted = journal.submit("child", execute, parent.causalParent);
-  const environment = createRouteEnvironment({
-    ...s.options,
-    ports: { ...s.options.ports, submitNative: () => submitted },
-  });
-  const handle = environment.environment.nativeWrite!.submit({
-    route: s.route,
-    invocation: s.invocation,
-    entry: "write",
-    input: {},
-  });
-  environment.close();
-  expect(handle.causalParent).toBe(parent.causalParent);
-  expect("invoke" in handle).toBe(false);
-  expect(await submitted.result).toBe("receipt");
-  expect(execute).toHaveBeenCalledTimes(1);
   s.close();
 });
 
@@ -617,15 +586,8 @@ test("declared groups require exact transports at runtime as well as at the type
   };
   const owner = kernel.bind(declaration, s.options.validate, groups);
   expect(owner.environment.geometry.requestDetail(s.invocation).ok).toBe(true);
-  expect(owner.environment.work.read.read(s.scope)).toBeNull();
-  expect(() =>
-    owner.environment.nativeWrite.submit({
-      route: s.route,
-      invocation: s.invocation,
-      entry: "apply",
-      input: {},
-    }),
-  ).toThrow("Command unavailable");
+  expect(owner.environment.work.read.lifetime).toBe("subscription");
+  expect(() => owner.environment.nativeWrite.submit(command)).toThrow("Command unavailable");
   expect(() => {
     // @ts-expect-error omitted groups cannot acquire services through a variable
     kernel.bind({ capabilities: [] } as const, s.options.validate, groups);

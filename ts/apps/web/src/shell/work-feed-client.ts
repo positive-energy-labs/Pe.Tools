@@ -35,7 +35,10 @@ export function createWorkFeedClient(
     submitWork(scope, write, invocation) {
       return completion<WorkWriteOutcome>({ kind: "pending" }, async () => {
         try {
-          return workOutcome(await ports.write(scope.key, write, invocation));
+          const outcome = workOutcome(await ports.write(scope.key, write, invocation));
+          if (outcome.kind === "accepted" && workKey(outcome.ack.key) !== workKey(scope.key))
+            throw Error("Work response belongs to another Work");
+          return outcome;
         } catch (error) {
           return failedWrite(error);
         }

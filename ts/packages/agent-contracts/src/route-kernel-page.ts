@@ -79,7 +79,9 @@ export type WorkOf<G extends RouteGraphJson, S extends SchemaTable> = G extends 
   work: { schema: infer K };
 }
   ? SchemaValue<S, K>
-  : null;
+  : "work" extends keyof G
+    ? SchemaValue<S, NonNullable<G["work"]>["schema"]> | null
+    : null;
 export type RoleKeys<G extends RouteGraphJson, R> = {
   [K in keyof G["fields"]]: G["fields"][K]["role"] extends R ? K : never;
 }[keyof G["fields"]];

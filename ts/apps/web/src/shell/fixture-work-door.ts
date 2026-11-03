@@ -1,3 +1,4 @@
+import { routeDocDelta } from "../../../../packages/agent-contracts/src/route-doc";
 import { applyPatches, workKey, type RouteStateSpec, type WorkWriteAck } from "@pe/agent-contracts";
 import type { z } from "zod";
 import type {
@@ -73,6 +74,8 @@ export function createFixtureWorkDoor(
             "human",
             write.patches,
             write.expectedRevision,
+            false,
+            write.kind === "restore",
           );
           if (!result.ok) return workOutcome(result);
           const ack: WorkWriteAck = {
@@ -82,15 +85,8 @@ export function createFixtureWorkDoor(
             press: write.press,
             base: state.revision,
             revision: result.envelope.revision,
-            patches: structuredClone(write.patches),
-            inverse: write.patches.map((p) => ({
-              path: [...p.path],
-              value: p.path.reduce<unknown>(
-                (v, k) =>
-                  v && typeof v === "object" ? (v as Record<string, unknown>)[k] : undefined,
-                prior,
-              ),
-            })),
+            patches: routeDocDelta(prior, result.envelope.doc),
+            inverse: routeDocDelta(result.envelope.doc, prior),
             undoable: true,
           };
           state.revision = ack.revision;

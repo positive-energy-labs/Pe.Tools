@@ -133,3 +133,12 @@ test("fixture Work stores are isolated and native commands refuse", async () => 
     ),
   ).toMatchObject({ kind: "rejected", failure: "unavailable" });
 });
+
+import { checkRevision } from "../../../../packages/agent-contracts/src/route-doc";
+test("the actual stale-base refusal carries the current revision", () => {
+  expect(checkRevision({ revision: 12 }, 4)).toMatchObject({
+    ok: false,
+    code: "stale_revision",
+    revision: 12,
+  });
+});

@@ -246,7 +246,7 @@ function locationPort(search = "") {
 }
 function transports() {
   const frames: ((value: unknown) => void)[] = [];
-  const keys: number[] = [];
+  const keys: (number | string | null)[] = [];
   const releases = vi.fn();
   const unsubscribes = vi.fn();
   const services: KernelServices = {
@@ -384,4 +384,283 @@ test("explicit readings wait for demand and malformed live output cannot reach b
   expect(mount.read("main")).toMatchObject({ props: { children: "pending" } });
   t.frames[0]!(ready("valid"));
   expect(mount.read("main")).toMatchObject({ props: { children: "Label valid" } });
+});
+import { createFixtureWorkDoor } from "./fixture-work-door";
+import type {
+  WorkJournalDoor,
+  WorkFeedState,
+  WorkWriteOutcome,
+  Observation,
+} from "../../../../packages/agent-contracts/src/work-journal-door";
+import type { InvocationBasis } from "../../../../packages/agent-contracts/src/route-kernel-page";
+
+async function workRoute(review: "none" | "shown" = "none") {
+  const workData = {
+    ...data,
+    capabilities: ["work", "native-write"] as const,
+    work: { route: "note", schema: "work", version: 1, migrations: {} },
+    workSubject: "note",
+    verbs: {
+      native: {
+        kind: "command" as const,
+        entry: "native.write",
+        intent: "native",
+        input: "number",
+        label: "Native",
+        review: "shown" as const,
+        deps: { page: [], work: ["amount"], readings: [] },
+        captures: [],
+      },
+      change: {
+        kind: "work" as const,
+        input: "number",
+        label: "Change",
+        review,
+        deps: { page: [], work: ["amount"], readings: [] },
+        captures: [],
+        patches: "change",
+      },
+    },
+    panes: { ...data.panes, main: { ...data.panes.main, verbs: ["change"] } },
+  } as const;
+  const workModule = {
+    ...module,
+    data: workData,
+    entries: {
+      ...entries,
+      "native.write": {
+        input: z.object({ amount: z.number() }),
+        output: z.unknown(),
+        axes: { ...entries["notes.read"].axes, effect: "SessionWrite" as const },
+      },
+    },
+    schemas: { ...schemas, work: z.object({ amount: z.number() }), number: z.number() },
+    bodies: {
+      ...bodies,
+      main: { ...bodies.main, run: () => null },
+      native: {
+        slot: "verbs.native.intent",
+        kind: "intent",
+        source,
+        run: (ctx: { work: { amount: number } }) => ({ amount: ctx.work.amount }),
+      },
+      change: {
+        slot: "verbs.change.patches",
+        kind: "work",
+        source,
+        run: (ctx: { work: { amount: number } }, input: number) => [
+          { path: ["amount"] as const, value: ctx.work.amount + input },
+        ],
+      },
+      seed: {
+        ...bodies.seed,
+        run: () => ({ readings: { notes: "fixture" }, work: { amount: 0 } }),
+      },
+    },
+  } as const;
+  const envelope = {
+    source: "builtin-closure" as const,
+    version: 1 as const,
+    data: workData,
+    hostVersion: "test",
+    variants: [{ client: "web" as const, entry: "witness.ts" }],
+    modules: [{ id: "witness.ts", sha256: "a".repeat(64) }],
+    inputs: [],
+    externals: [],
+  };
+  const fingerprint = await builtinClosureFingerprint(envelope);
+  const inventory = createBuiltinRouteInventory({
+    note: {
+      module: workModule,
+      closure: { envelope, fingerprint },
+      catalog: [
+        { key: "notes.read", ...entries["notes.read"].axes, uses: [] },
+        { key: "native.write", ...workModule.entries["native.write"].axes, uses: [] },
+      ],
+    },
+  });
+  const result = (await inventory.prepare("note", fingerprint)).admit(workModule);
+  if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+  return result.route;
+}
+const settle = (observation: Observation<WorkWriteOutcome>) =>
+  new Promise<WorkWriteOutcome>((resolve) =>
+    observation.subscribe(
+      (value) => {
+        if (value.kind !== "pending") resolve(value);
+      },
+      () => {},
+    ),
+  );
+
+test.each(["ack-first", "stream-first"])(
+  "Work mount composes B with %s and recovers after departure",
+  async (order) => {
+    const t = transports();
+    const store = createFixtureWorkDoor(
+      { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+      { amount: 0 },
+    );
+    let deliverStream: ((state: WorkFeedState) => void) | undefined;
+    const door: WorkJournalDoor = {
+      ...store,
+      open: (scope) => ({
+        subscribe(deliver, end) {
+          return store.open(scope).subscribe((state) => {
+            if (state.kind === "ack" && order === "ack-first") deliverStream = () => deliver(state);
+            else deliver(state);
+          }, end);
+        },
+      }),
+    };
+    const shell = createRouteShell({ ...t.services, work: door });
+    const route = await workRoute();
+    const mount = shell.mount(route, locationPort().address);
+    expect(mount.work()?.value).toEqual({ amount: 0 });
+    await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
+    deliverStream?.({ kind: "pending" });
+    expect(mount.work()).toEqual({ revision: 1, value: { amount: 2 } });
+    const pending = mount.invoke("change", 3) as Observation<WorkWriteOutcome>;
+    mount.close();
+    await settle(pending);
+    const reopened = shell.mount(route, locationPort().address);
+    closes.push(reopened.close);
+    expect(reopened.work()).toEqual({ revision: 2, value: { amount: 5 } });
+  },
+);
+
+test("review uses accepted Work, becomes stale on stream edit, and subject enters unloaded Work atomically", async () => {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  const route = await workRoute("shown");
+  const mount = createRouteShell({ ...t.services, work: store }).mount(
+    route,
+    locationPort().address,
+  );
+  closes.push(mount.close);
+  mount.invoke("change", 2);
+  expect(mount.review("change")?.preview).toEqual([{ path: ["amount"], value: 2 }]);
+  await settle(
+    store.submitWork(
+      {
+        route: "note",
+        key: { binding: "workspace", route: "note", target: null, work: "default" },
+        target: null,
+        subject: null,
+      },
+      {
+        patches: [{ path: ["amount"], value: 9 }],
+        expectedRevision: 0,
+        kind: "apply",
+        press: "external",
+      },
+      {} as InvocationBasis,
+    ),
+  );
+  expect(mount.review("change")?.stale).toBe(true);
+  expect(() => mount.confirm("change")).toThrow("stale");
+  const subject = identityCodecs.local.encode({ namespace: "note", subject: "other" });
+  if (!subject.ok) throw Error(subject.reason);
+  const publications: unknown[] = [];
+  mount.subscribe(() => publications.push({ page: mount.page.read().note, work: mount.work() }));
+  expect(mount.controls.subject(subject.value).kind).toBe("accepted");
+  expect(publications.length).toBeGreaterThan(0);
+  expect(
+    publications.every(
+      (publication) =>
+        (publication as { page: unknown; work: { value: { amount: number } } | null }).page !==
+          subject.value ||
+        (publication as { work: { value: { amount: number } } | null }).work?.value.amount !== 9,
+    ),
+  ).toBe(true);
+});
+
+test("fixture selection centrally isolates Work across mounts", async () => {
+  const t = transports();
+  const route = await workRoute();
+  const shell = createRouteShell(t.services);
+  const a = shell.mount(route, locationPort("?fixture=sample").address),
+    b = shell.mount(route, locationPort("?fixture=sample").address);
+  closes.push(a.close, b.close);
+  await settle(a.invoke("change", 4) as Observation<WorkWriteOutcome>);
+  expect(a.work()?.value).toEqual({ amount: 4 });
+  expect(b.work()?.value).toEqual({ amount: 0 });
+  await settle(b.invoke("change", 8) as Observation<WorkWriteOutcome>);
+  expect(b.work()?.value).toEqual({ amount: 8 });
+  expect(a.work()?.value).toEqual({ amount: 4 });
+  expect(t.frames).toHaveLength(0);
+});
+
+test("mount native review submits accepted Work through the command door", async () => {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 6 },
+  );
+  const submit = vi.fn((command: Parameters<WorkJournalDoor["submit"]>[0]) =>
+    store.submit(command),
+  );
+  const mount = createRouteShell({ ...t.services, work: { ...store, submit } }).mount(
+    await workRoute(),
+    locationPort().address,
+  );
+  closes.push(mount.close);
+  mount.invoke("native", 0);
+  expect(submit).not.toHaveBeenCalled();
+  expect(mount.review("native")?.preview).toMatchObject({
+    input: { amount: 6 },
+    work: { revision: 0 },
+  });
+  mount.confirm("native");
+  expect(submit).toHaveBeenCalledWith(
+    expect.objectContaining({ key: "native.write", input: { amount: 6 } }),
+  );
+});
+
+test("stale-base recomputes a Work verb once over the accepted revision", async () => {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  let first = true;
+  const submitWork: WorkJournalDoor["submitWork"] = (scope, write, invocation) => {
+    if (!first) return store.submitWork(scope, write, invocation);
+    first = false;
+    return {
+      subscribe(deliver, end) {
+        store
+          .submitWork(scope, { ...write, patches: [{ path: ["amount"], value: 10 }] }, invocation)
+          .subscribe(
+            (value) => {
+              if (value.kind !== "accepted") return;
+              deliver({
+                kind: "refused",
+                refusal: {
+                  kind: "refused",
+                  code: "stale_revision",
+                  revision: value.ack.revision,
+                  error: "Moved",
+                  hint: "Rebase",
+                },
+              });
+              end();
+            },
+            () => {},
+          );
+        return () => {};
+      },
+    };
+  };
+  const mount = createRouteShell({ ...t.services, work: { ...store, submitWork } }).mount(
+    await workRoute(),
+    locationPort().address,
+  );
+  closes.push(mount.close);
+  const outcome = await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
+  expect(outcome).toMatchObject({ kind: "accepted", ack: { base: 1, revision: 2 } });
+  expect(mount.work()?.value).toEqual({ amount: 12 });
 });

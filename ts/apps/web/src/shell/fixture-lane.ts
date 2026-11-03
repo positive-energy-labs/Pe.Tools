@@ -7,9 +7,8 @@ export const currentFixture = () =>
     ? null
     : fixtureName(Object.fromEntries(new URLSearchParams(location.search)));
 
-import { applyPatches, workKey, type RouteStateSpec } from "@pe/agent-contracts";
+import { type RouteStateSpec } from "@pe/agent-contracts";
 import { z } from "zod";
-import type { CausalParentId } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
 import type {
   FixtureEnvironment,
   ResolvedRead,

@@ -202,12 +202,6 @@ export interface JournalCommandHandle {
   readonly id: string;
   readonly causalParent: CausalParentId;
 }
-export interface NativeWriteRequest {
-  readonly route: AdmittedRoute;
-  readonly invocation: InvocationToken;
-  readonly entry: string;
-  readonly input: unknown;
-}
 export class NativeWriteCapability {
   declare private readonly submitAuthority: void;
   readonly lifetime = "command";

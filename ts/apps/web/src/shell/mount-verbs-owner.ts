@@ -412,8 +412,6 @@ export function createMountVerbs<P, W>(
     reviews.clear();
   };
   return {
-    submitNative: work.submitNative,
-    submitWork: work.submitResolved,
     results,
     reviews,
     commitReview(id: string, ticket: ReviewTicket) {

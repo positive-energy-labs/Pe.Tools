@@ -76,7 +76,6 @@ export function createGraphMount<P, W>(
     readings: readingOwner,
     timeline: history.timeline,
     journals: work.journals,
-    readWork: work.readResolved,
     stage: page.stage,
     journal: work.journalFor,
     journalRefusal: work.journalRefusal,

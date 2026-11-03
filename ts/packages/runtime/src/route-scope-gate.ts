@@ -17,6 +17,7 @@ import {
   type PagePatch,
   type SchemaTable,
   ScopeToken,
+  type ScopeIdentity,
   type WorkDelivery,
   type WorkOf,
   type WorkReduction,
@@ -35,15 +36,13 @@ interface WorkServices<G extends RouteGraphJson, S extends SchemaTable> {
   /** The composition root retains one journal per Work, independently of mounted UI. */
   readonly journal: (key: WorkKey) => WorkJournal;
 }
-export type ScopeGateOptions<G extends RouteGraphJson, S extends SchemaTable> = (G extends {
-  readonly work: object;
-}
-  ? WorkServices<G, S>
-  : {
-      readonly workSchema?: never;
-      readonly hashWork?: never;
-      readonly journal?: never;
-    }) & {
+export type ScopeGateOptions<G extends RouteGraphJson, S extends SchemaTable> = (
+  | WorkServices<G, S>
+  | { readonly workSchema?: never; readonly hashWork?: never; readonly journal?: never }
+) & {
+  /** Kernel composition resolves the new Work identity before publishing a subject move. */
+  readonly scopeFields?: readonly string[];
+  readonly identityForPage?: (page: PageOf<G, S>) => ScopeIdentity;
   readonly dependencies: () => Readonly<Record<string, string>>;
   readonly preparePage: (
     page: PageOf<G, S>,
@@ -74,6 +73,10 @@ const refused = (message: string): MoveResult => ({ kind: "refused", code: "acce
 export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaTable>(
   options: ScopeGateOptions<G, S>,
 ): AcceptanceOwner<G, S> {
+  const suppliedWork = [options.workSchema, options.hashWork, options.journal].filter(
+    Boolean,
+  ).length;
+  if (suppliedWork !== 0 && suppliedWork !== 3) throw Error("Incomplete Work acceptance services");
   type Snapshot = AcceptanceSnapshot<G, S>;
   const work = options as Partial<WorkServices<G, S>>;
   const issuer = options.issuer ?? createRouteTokenIssuer();
@@ -157,6 +160,28 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
     const { page, changed, membership } = prepared.value;
     const revision = before.pageRevision + (changed ? 1 : 0);
     if (changed) {
+      const reenter =
+        options.identityForPage &&
+        options.scopeFields?.some(
+          (key) =>
+            JSON.stringify(before.page[key as keyof typeof before.page]) !==
+            JSON.stringify(page[key as keyof typeof page]),
+        );
+      if (reenter) {
+        const scope = issuer.scope(options.identityForPage!(page));
+        attempts.clear();
+        publish(
+          {
+            scope,
+            pageEpoch: issuer.pageEpoch(),
+            pageRevision: revision,
+            page: immutableCopy(page),
+            work: null,
+          },
+          origin,
+        );
+        return { kind: "accepted", revision, changed, membership };
+      }
       if (basis) continuations.set(basis, { page: revision, work: before.work?.revision ?? null });
       publish(
         {
