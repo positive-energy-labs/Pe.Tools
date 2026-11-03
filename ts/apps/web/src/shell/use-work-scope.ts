@@ -49,7 +49,7 @@ export type WorkScopeStatus = Pick<
   ReturnType<typeof useRouteTarget>,
   "resolution" | "bindingLost" | "targetProvenance"
 > & {
-  /** No inventory is acquired by fixture mounts. */
+  /** No inventory is acquired by provided mounts. */
   busy?: boolean;
   /** Readable Work whose document is not live: shown, never armed (no writer, no verb). */
   closed: boolean;
@@ -76,7 +76,7 @@ export function useWorkScope<P, W>(
   graph: RouteGraph<P, W>,
   page?: Readonly<Partial<P>>,
   binding?: { target?: string; work?: string; thread?: string; url?: boolean },
-  fixture?: WorkScopePorts<W>,
+  provided?: WorkScopePorts<W>,
 ): WorkScopePorts<W> {
   const carry = useRouteSearchSlice((search) =>
     binding?.url === false
@@ -85,17 +85,17 @@ export function useWorkScope<P, W>(
   );
   const threadAtom = useMemo(
     () =>
-      !fixture && graph.optionalTarget && binding?.thread
+      !provided && graph.optionalTarget && binding?.thread
         ? readingAtom({ kind: "thread-head", thread: binding.thread }, peReadings)
         : null,
-    [graph.optionalTarget, binding?.thread, fixture],
+    [graph.optionalTarget, binding?.thread, provided],
   );
   const threadReading = useOwned(appAtomRegistry, threadAtom);
   const head = threadHeadSchema.safeParse(threadReading && previousOf(threadReading));
   const threadTarget =
     head.success && head.data.targets.length === 1 ? head.data.targets[0]!.request : null;
   const pin = carry.target ?? (threadTarget ? JSON.stringify(threadTarget) : null);
-  const needs = fixture ? undefined : (graph.needs ?? (pin ? graph.optionalTarget : undefined));
+  const needs = provided ? undefined : (graph.needs ?? (pin ? graph.optionalTarget : undefined));
   const sessionAtom = useMemo(
     () => (needs === "session" ? readingAtom({ kind: "inventory" }, peReadings) : null),
     [needs],
@@ -155,7 +155,7 @@ export function useWorkScope<P, W>(
   const key = useMemo(() => JSON.parse(keyText) as WorkKey, [keyText]);
   const spec = useMemo(
     (): RouteStateSpec<NonNullable<typeof graph.work>> | null =>
-      graph.work && !fixture
+      graph.work && !provided
         ? {
             route: graph.workRoute ?? graph.key,
             title: graph.name,
@@ -163,7 +163,7 @@ export function useWorkScope<P, W>(
             schema: graph.work,
           }
         : null,
-    [graph, fixture],
+    [graph, provided],
   );
   // Target-owned Work never falls back to the shared host key while its document is unresolved.
   const readable =
@@ -271,12 +271,15 @@ export function useWorkScope<P, W>(
           release = () => {};
           if (!key) return;
           // TODO: docs/features/routes/LEDGER.md#s5-durable-journal prove completed Timeline replay after host restart in the browser.
-          release = peReadings.subscribe({ kind: "receipts", work: key, detail: "status" }, (frame) => {
-            if (frame.kind !== "snapshot" || frame.stale) return;
-            const rows = actionStatusSchema.array().safeParse(frame.value);
-            if (!rows.success) return;
-            for (const row of rows.data) accept(row, key);
-          });
+          release = peReadings.subscribe(
+            { kind: "receipts", work: key, detail: "status" },
+            (frame) => {
+              if (frame.kind !== "snapshot" || frame.stale) return;
+              const rows = actionStatusSchema.array().safeParse(frame.value);
+              if (!rows.success) return;
+              for (const row of rows.data) accept(row, key);
+            },
+          );
         };
         store.listeners.add(follow);
         follow();
@@ -300,5 +303,5 @@ export function useWorkScope<P, W>(
     }),
     [statusText, target.busy, closed, unreadable, failure], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  return useMemo(() => fixture ?? { ...ports, status }, [ports, status, fixture]);
+  return useMemo(() => provided ?? { ...ports, status }, [ports, status, provided]);
 }

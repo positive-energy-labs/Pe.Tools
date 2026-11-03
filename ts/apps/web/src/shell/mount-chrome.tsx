@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import type { RouteGraph } from "@pe/agent-contracts";
-import { useRouter } from "@tanstack/react-router";
 import { KeyScope, ScopeKeys, actionScopeKeys, useScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
 import {
@@ -31,42 +30,6 @@ export function Refused({ refusals }: { refusals: Readonly<ReturnType<typeof mou
           {r.path}: {r.message}
         </p>
       ))}
-    </section>
-  );
-}
-
-export function FixtureChrome<P, W>({ graph, name }: { graph: RouteGraph<P, W>; name: string }) {
-  const router = useRouter({ warn: false });
-  return (
-    <section aria-label="Fixture lane" data-tone="caution">
-      <b>Fixture · {name}</b> <span>In-memory Work · host commands disabled</span>{" "}
-      <label>
-        Seed{" "}
-        <select
-          aria-label="Fixture seed"
-          value={name}
-          onChange={(event) => {
-            const fixture = event.target.value;
-            if (router)
-              void router.navigate({
-                to: router.state.location.pathname,
-                search: { fixture },
-              } as never);
-            else {
-              const url = new URL(location.href);
-              url.search = new URLSearchParams({ fixture }).toString();
-              location.assign(url);
-            }
-          }}
-        >
-          {!graph.seeds?.[name] && <option value={name}>{name} (unavailable)</option>}
-          {Object.entries(graph.seeds ?? {}).map(([id, seed]) => (
-            <option key={id} value={id}>
-              {id} · {seed.title}
-            </option>
-          ))}
-        </select>
-      </label>
     </section>
   );
 }
@@ -219,7 +182,6 @@ export function GraphRouteView<P, W>({
           aria-label={`${graph.name} route`}
           className="flex h-full min-h-0 flex-col"
         >
-          {owner.fixture && <FixtureChrome graph={graph} name={owner.fixture.name} />}
           {[...owner.reviews].map(([id, review]) => (
             <GraphReview
               key={review.ticket.press}
@@ -294,7 +256,7 @@ function GraphSituation<P, W>({
       name={graph.name}
       context={
         <>
-          {graph.needs && !owner.fixture && <GraphTarget status={status} disabled={!enabled} />}
+          {graph.needs && <GraphTarget status={status} disabled={!enabled} />}
           {stageField && Object.keys(graph.stages).length > 1 ? (
             <Ladder
               disabled={!enabled}

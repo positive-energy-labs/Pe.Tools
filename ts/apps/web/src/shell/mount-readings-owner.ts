@@ -1,3 +1,10 @@
+import { legacyLiveVerbs, unavailableLegacyVerbs } from "./legacy-environment-bridge";
+import type {
+  ResolvedRead,
+  ResolvedGeometryRead,
+} from "../../../../packages/agent-contracts/src/route-kernel-environment";
+import type { AcceptanceToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
+import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import { type SettingsOwner } from "./settings";
 import { workKey, type RouteGraph } from "@pe/agent-contracts";
 
@@ -15,6 +22,10 @@ export function createMountReadings<P, W>(
   scope: () => MountScope<W>,
   timeline: ReturnType<typeof createRouteTimeline>,
 ) {
+  const environment = () => {
+    if (!adapters.environment) throw Error("Admitted environment unavailable");
+    return adapters.environment.environment;
+  };
   const readScope = () => ({
     target: scope().target,
     workKey: scope().workKey ?? scope().work?.handle.key ?? null,
@@ -29,7 +40,9 @@ export function createMountReadings<P, W>(
   const readings = createReadingGraph(
     {
       readings: {
-        ...graph.readings,
+        ...Object.fromEntries(
+          Object.entries(graph.readings).map(([id, reading]) => [id, { ...reading, source: id }]),
+        ),
         ...(needsPage
           ? {
               page: {
@@ -44,7 +57,12 @@ export function createMountReadings<P, W>(
     },
     {
       sources: {
-        ...adapters.sources,
+        ...Object.fromEntries(
+          Object.entries(graph.readings).map(([id, reading]) => [
+            id,
+            adapters.readingSources?.[id] ?? adapters.sources[reading.source]!,
+          ]),
+        ),
         ...(needsPage
           ? {
               "@shell/page": {
@@ -84,6 +102,19 @@ export function createMountReadings<P, W>(
     );
   return {
     ...readings,
+    legacyReads: (adapters.environment
+      ? unavailableLegacyVerbs
+      : (adapters.legacyEnvironment ?? legacyLiveVerbs)
+    ).reads,
+    acquire: <T>(request: ResolvedRead<T>, token: AcceptanceToken) =>
+      environment().reads.acquire(request, token),
+    acquireGeometry: <T>(request: ResolvedGeometryRead<T>, token: AcceptanceToken) =>
+      environment().geometry.acquire(request, token),
+    subscribeResolved: <T>(
+      request: ResolvedRead<T>,
+      token: AcceptanceToken,
+      deliver: (value: ReadingSnapshot<T>) => void,
+    ) => environment().readings.subscribe(request, token, deliver),
     basis,
     basisFor,
     states: () =>

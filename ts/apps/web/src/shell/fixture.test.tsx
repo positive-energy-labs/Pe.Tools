@@ -1,6 +1,6 @@
 import { testSubject, testFields } from "../test-route-subject";
 // @vitest-environment jsdom
-import { cleanup, render, waitFor, fireEvent } from "@testing-library/react";
+import { cleanup, render, waitFor, act } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
@@ -122,7 +122,7 @@ test("kernel fixture mounts an arbitrary graph, isolates every source, and resto
     for (const id of ["rpc", "command"])
       expect(await owner.control(id).run()).toMatchObject({
         state: "refused",
-        refusal: { message: expect.stringContaining("Fixture") },
+        refusal: { message: expect.stringContaining("unavailable") },
       });
     await owner.checkpoint();
     expect(forbidden).not.toHaveBeenCalled();
@@ -154,7 +154,7 @@ test.each(["", "unknown"])(
   },
 );
 
-test("URL fixture shows its seed and switches to a fresh memory Work without acquiring the real door", async () => {
+test("URL fixture switches to a fresh memory Work without acquiring the real door", async () => {
   const fetch = vi.fn(() => {
     throw Error("Real host called");
   });
@@ -201,15 +201,17 @@ test("URL fixture shows its seed and switches to a fresh memory Work without acq
   const unsubscribe = router.history.subscribe(router.load);
   await router.load();
   const Component = route.options.component!;
-  const view = render(
+  render(
     <RouterContextProvider router={router}>
       <Component />
     </RouterContextProvider>,
   );
   try {
-    await view.findByLabelText("Fixture lane");
     await waitFor(() => expect(owner.snapshot().work?.doc.value).toBe(1));
-    fireEvent.change(view.getByLabelText("Fixture seed"), { target: { value: "two" } });
+    await act(async () => {
+      router.history.push("/fixture-proof?fixture=two");
+      await router.load();
+    });
     await waitFor(() => expect(owner.snapshot().work?.doc.value).toBe(2));
     expect(fetch).not.toHaveBeenCalled();
   } finally {
@@ -267,6 +269,7 @@ test("separate instances of the same fixture have separate Work keys and edits",
   const b = await fixtureEnvironment(graph, "one");
   const first = a.ports.getSnapshot();
   expect(first.workKey).not.toEqual(b.ports.getSnapshot().workKey);
+  expect(first.workKey?.work).toBe(b.ports.getSnapshot().workKey?.work);
   if (!first.workKey) throw Error("Fixture Work key missing");
   expect(
     (

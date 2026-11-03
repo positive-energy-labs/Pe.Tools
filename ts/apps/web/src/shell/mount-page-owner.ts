@@ -41,15 +41,16 @@ export function createMountPage<P, W>(
         })),
   });
   if (admission) view.fail(refuse("not-ready", admission.refusal));
-  adapters.fixture?.select?.(initialPage);
 
+  adapters.selectPage?.(initialPage);
   const cleanSubject = () => {
     const subject = graph.subjectField;
     if (!subject) return;
     const state = readings()[subject.roster]!;
-    const admitted = state.current && state.value != null
-      ? admittedSubject(graph, view.read().page as Record<string, unknown>, state.value)
-      : null;
+    const admitted =
+      state.current && state.value != null
+        ? admittedSubject(graph, view.read().page as Record<string, unknown>, state.value)
+        : null;
     if (!admitted) return;
     view.setPage(admitted.patch as Partial<P>);
     view.fail(refuse("not-ready", admitted.refusal));

@@ -24,9 +24,9 @@ test("the band frames the declared primary, else the first model write, keeping 
     heal: verb({ effect: "command" }),
   };
   expect(rankVerbs(["preview", "apply", "heal"], verbs)).toEqual(["apply", "preview", "heal"]);
-  expect(rankVerbs(["preview", "apply", "heal"], { ...verbs, heal: verb({ primary: true }) })).toEqual(
-    ["heal", "preview", "apply"],
-  );
+  expect(
+    rankVerbs(["preview", "apply", "heal"], { ...verbs, heal: verb({ primary: true }) }),
+  ).toEqual(["heal", "preview", "apply"]);
   expect(rankVerbs([], verbs)).toEqual([]);
 });
 
@@ -61,10 +61,10 @@ test("a stale builtin stamp refuses that route with the fix, instead of throwing
 });
 
 test("an open consent window draws its countdown with Reject, refused on the fixture lane", () => {
-  // TimelineHead reads the owner's timeline, fixture lane, verbs and Work journal (none here).
+  // TimelineHead reads the owner's timeline, command capability, verbs and Work journal (none here).
   const owner = {
     timeline: createRouteTimeline(),
-    fixture: { name: "f", queries: {} },
+    commandRefusal: "Native commands unavailable",
     verbs: {},
     subscribe: () => () => {},
     version: () => 0,
@@ -92,7 +92,12 @@ test("an open consent window draws its countdown with Reject, refused on the fix
 
 test("Pea's preview receipt after a Work edit heads the Timeline with its caller and state", () => {
   const step = { label: "Allowance return", at: Date.now() - 5000, by: "human", press: "p1" };
-  const journal = { last: { kind: "apply", step, by: "human" }, undo: [step], redo: [], revision: 3 };
+  const journal = {
+    last: { kind: "apply", step, by: "human" },
+    undo: [step],
+    redo: [],
+    revision: 3,
+  };
   const owner = {
     timeline: createRouteTimeline(),
     fixture: null,
@@ -114,6 +119,8 @@ test("Pea's preview receipt after a Work edit heads the Timeline with its caller
       basis: { receipt: { caller: { kind: "pea", thread: "t1" } } },
       outcome: { id: "r1", state, input: {}, receiptId: "r1" },
     });
-  expect(head()).toMatch(/<span>preview<\/span><span data-slot="timeline-state">Pea · succeeded · /);
+  expect(head()).toMatch(
+    /<span>preview<\/span><span data-slot="timeline-state">Pea · succeeded · /,
+  );
   expect(head()).not.toContain("<span>Allowance return</span>");
 });

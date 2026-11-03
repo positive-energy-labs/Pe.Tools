@@ -417,3 +417,144 @@ test("non-explicit invocations and subjects from another scope cannot acquire ge
   foreign.close();
   s.close();
 });
+
+import { createMountEnvironment } from "./mount-environment";
+import { createGraphMount } from "./mount-owner";
+import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
+import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
+import { canonicalRouteInput, type RouteGraph } from "@pe/agent-contracts";
+import { testSubject, testReadings, testSources, testFields } from "../test-route-subject";
+import { createSubmissionJournal } from "./legacy-environment-bridge";
+
+test("mounted capabilities select once, isolate Works, and gate reads, SSE and geometry with B", async () => {
+  const s = await setup();
+  const gate = createRouteScopeGate({
+    workSchema: z.null(),
+    hashWork: canonicalRouteInput,
+    journal: createWorkJournal,
+    dependencies: () => ({}),
+    preparePage: () => ({ ok: false, reason: "not used" }),
+  });
+  const scope = gate.enter(s.scope.identity, {});
+  const token = gate.capture("read");
+  const invocation = unwrap(gate.invocation(token, {}));
+  const live = vi.fn(() => s.options.ports);
+  const make = (name: string) =>
+    createMountEnvironment({
+      route: s.route,
+      search: { fixture: name },
+      acceptance: gate,
+      common: {
+        issuer: s.issuer,
+        validate: {
+          ...s.options.validate,
+          token: () => true,
+          scope: () => true,
+          invocation: () => true,
+        },
+      },
+      live,
+      fixture: (name) => ({
+        ...s.fixtureOptions,
+        seed: name === "seed" ? { readings: { read: 7 }, work: { amount: 1 } } : undefined,
+      }),
+    });
+  const graph: RouteGraph<Record<string, unknown>, unknown> = {
+    ...testSubject,
+    key: s.route.data.key,
+    address: "environment-owner",
+    name: "Environment owner",
+    fields: testFields,
+    readings: testReadings,
+    verbs: {},
+    panes: { main: { label: "Main", purpose: "Proof", draws: [], verbs: [] } },
+    stages: { main: { word: "Main", panes: ["main"], verbs: [] } },
+    layout: { kind: "pane", id: "main" },
+  };
+  const mount = (environment: ReturnType<typeof make>) =>
+    createGraphMount(graph, {
+      environment,
+      sources: testSources,
+      getSnapshot: () => ({ target: { kind: "host" }, work: null }),
+      subscribe: () => () => {},
+      write: async () => {
+        throw Error("Legacy write reached");
+      },
+      subscribeAcceptedDeltas: () => () => {},
+    });
+  const a = mount(make("seed"));
+  const b = mount(make("seed"));
+  const missing = mount(make("missing"));
+  const read = s.issuer.mintRead(s.key, z.number(), s.route);
+  expect(a.readings.acquire(read, token).read()).toMatchObject({ status: "ready", value: 7 });
+  const delivery = vi.fn();
+  const unsubscribe = a.readings.subscribeResolved(read, token, delivery);
+  expect(delivery).toHaveBeenCalledWith(expect.objectContaining({ value: 7 }));
+  expect(missing.readings.acquire(read, token).read()).toMatchObject({ status: "unavailable" });
+  expect(a.readWork(scope)?.value).toEqual({ amount: 1 });
+  expect(b.readWork(scope)?.value).toEqual({ amount: 1 });
+  const command = a.submitWork(s.route, invocation, {
+    expectedRevision: 0,
+    press: null,
+    kind: "apply",
+    patches: [{ path: ["amount"], value: 8 }],
+  });
+  expect(command.lifetime).toBe("command");
+  expect(command.causalParent).toBeTruthy();
+  expect(a.readWork(scope)?.value).toEqual({ amount: 8 });
+  expect(b.readWork(scope)?.value).toEqual({ amount: 1 });
+  expect(() => a.submitNative({ route: s.route, invocation, entry: "write", input: {} })).toThrow(
+    "unavailable",
+  );
+  const request: GeometryRequest = {
+    representation: "overview",
+    subjects: { kind: "ids", ids: [] },
+    scope,
+  };
+  const geometry = s.issuer.mintGeometry(
+    { ...s.key, sortedKeyInput: canonicalEnvironmentInput(request) },
+    z.object({ kind: z.literal("unavailable"), reason: z.string() }),
+    s.route,
+    token,
+    request,
+  );
+  expect(() => a.readings.acquireGeometry(Object.assign({}, geometry), token)).toThrow();
+  expect(a.readings.acquireGeometry(geometry, token).read().status).toBe("failed");
+  gate.retire(token);
+  expect(() => a.readings.acquire(read, token)).toThrow("stale");
+  expect(() => a.readings.subscribeResolved(read, token, delivery)).toThrow("stale");
+  expect(() => a.readings.acquireGeometry(geometry, token)).toThrow("stale");
+  expect(live).not.toHaveBeenCalled();
+  expect(s.dispatch).not.toHaveBeenCalled();
+  unsubscribe();
+  a.dispose();
+  b.dispose();
+  missing.dispose();
+  gate.close();
+  s.close();
+  expect(command.causalParent).toBeTruthy();
+});
+
+test("native journal submissions survive environment close and preserve their causal parent", async () => {
+  const s = await setup();
+  const journal = createSubmissionJournal();
+  const parent = journal.submit("parent", async () => "parent");
+  const execute = vi.fn(async () => "receipt");
+  const submitted = journal.submit("child", execute, parent.causalParent);
+  const environment = createRouteEnvironment({
+    ...s.options,
+    ports: { ...s.options.ports, submitNative: () => submitted },
+  });
+  const handle = environment.environment.nativeWrite!.submit({
+    route: s.route,
+    invocation: s.invocation,
+    entry: "write",
+    input: {},
+  });
+  environment.close();
+  expect(handle.causalParent).toBe(parent.causalParent);
+  expect("invoke" in handle).toBe(false);
+  expect(await submitted.result).toBe("receipt");
+  expect(execute).toHaveBeenCalledTimes(1);
+  s.close();
+});

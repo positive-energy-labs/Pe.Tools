@@ -7,8 +7,7 @@ import { indexGraph } from "../index/graph";
 import { familiesGraph } from "../families/graph";
 import { fansGraph } from "../fans/graph";
 import { ductsGraph } from "../ducts/graph";
-import { selectRunStatus } from "@pe/agent-contracts/chat-state";
-import { fixtureThread } from "./fixture-services";
+
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createFixtureMount } from "./fixture";
 import type { RouteGraph } from "@pe/agent-contracts";
@@ -115,7 +114,8 @@ test("Pods switches seeded members, preserves their memory Work, and undoes edit
   try {
     expect(owner.readings.get("member").value).toMatchObject({ member: { pod: "mech-standards" } });
     const first = { pod: owner.view.read().page.pod, path: owner.view.read().page.path };
-    expect((await owner.control("edit", { content: '{"fixture":true}' }).run()).state).toBe("done");
+    const edit = await owner.control("edit", { content: '{"fixture":true}' }).run();
+    expect(edit, JSON.stringify(edit)).toMatchObject({ state: "done" });
     expect(owner.snapshot().work?.doc.fields[""].edit?.value).toBe('{"fixture":true}');
     owner.view.setPage({ pod: "demo", path: "settings/family/box.json" });
     expect(owner.readings.get("member").value).toMatchObject({
@@ -154,7 +154,6 @@ test("calculator fixtures recalculate with Page edits rather than freezing an ex
 
 test("companion chat stays idle and mounts its own seed beside another route", async () => {
   vi.stubGlobal("location", { pathname: "/parameter-links" });
-  expect(selectRunStatus(fixtureThread("links"))).toBe("idle");
   const owner = await createFixtureMount(
     chatGraph(() => ({ thread: "" })),
     "links",

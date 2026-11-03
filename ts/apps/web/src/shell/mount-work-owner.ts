@@ -1,3 +1,8 @@
+import { legacyLiveVerbs, unavailableLegacyVerbs } from "./legacy-environment-bridge";
+import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
+import type { InvocationToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
+import type { NativeWriteRequest } from "../../../../packages/agent-contracts/src/route-kernel-environment";
+import type { Immutable } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import type { ScopeToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import {
   workKey,
@@ -239,7 +244,26 @@ export function createMountWork<P, W>(
     target.notify();
     return result;
   };
+  const environment = () => {
+    if (!adapters.environment) throw Error("Admitted environment unavailable");
+    return adapters.environment.environment;
+  };
   return {
+    legacyCommands: (adapters.environment
+      ? unavailableLegacyVerbs
+      : (adapters.legacyEnvironment ?? legacyLiveVerbs)
+    ).commands,
+    readResolved: (token: ScopeToken) => environment().work.read.read(token),
+    submitResolved: (
+      route: AdmittedRoute,
+      invocation: InvocationToken,
+      write: Immutable<WorkWrite>,
+    ) => environment().work.submit.submit(route, invocation, write),
+    submitNative: (request: NativeWriteRequest) => {
+      const capability = environment().nativeWrite;
+      if (!capability) throw Error("Native writes unavailable");
+      return capability.submit(request);
+    },
     get scope() {
       return scope;
     },

@@ -40,9 +40,9 @@ import { docKey, heldRowParts, SessionCard, type SessionDocument } from "#/compo
 import { Switcher } from "@pe/kit/lang/switcher";
 import type { QueryCommand } from "@pe/kit/table/model";
 import { queryWords, readClause, visibleRows } from "@pe/kit/table/view";
-import { useRouteFixture } from "#/route/activity";
+
 import { keyOf, pidOf, processOf, selectionOf } from "#/machine/session";
-import { fixtureRecents } from "#/shell/fixture-services";
+
 import { OpenControlScope, outcomeOf, useOpenKernel, useOpenOwner } from "./kernel";
 import type { OutcomeKind } from "@pe/kit/lang/outcome";
 import type { TableState } from "@pe/kit/table/model";
@@ -91,16 +91,12 @@ function OutcomeOf({ outcome }: { outcome: Outcome | null }) {
  * the fixture threads and opens no transport.
  */
 export function useBayReadings(machine: Machine | null, fixture: boolean) {
-  const routeDemo = useRouteFixture();
-  const demo = fixture ? routeDemo : null;
   const owner = useOpenKernel();
-  useEffect(() => (!fixture ? owner.readings.mount(["recents"]) : undefined), [owner, fixture]);
+  useEffect(() => owner.readings.mount(["recents"]), [owner]);
   const reading = owner.readings.get("recents") as ReadingState<{
     result?: { recents?: RecentDocument[] };
   }>;
-  const recents = fixture
-    ? fixtureRecents(demo ?? "").result.recents
-    : ((reading.value ?? reading.previous)?.result?.recents ?? []);
+  const recents = (reading.value ?? reading.previous)?.result?.recents ?? [];
   const sessions = machine?.revit.sessions ?? null;
   const rows = useMemo(() => modelRows(sessions ?? [], recents), [sessions, recents]);
   const threads = useThreadSummaries(!fixture, fixture ? BAY_THREADS : null);
@@ -771,7 +767,15 @@ function Socket({
       session={session}
       facts={facts}
       anchor={keyOf(session)}
-      verbs={!administration ? <a href={`/session-admin?session=${encodeURIComponent(keyOf(session))}`}>Manage session</a> : verbs}
+      verbs={
+        !administration ? (
+          <a href={`/session-admin?session=${encodeURIComponent(keyOf(session))}`}>
+            Manage session
+          </a>
+        ) : (
+          verbs
+        )
+      }
       strip={
         <>
           {administration && lifecycle}

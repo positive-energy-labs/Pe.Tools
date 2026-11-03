@@ -127,12 +127,14 @@ export const stepState = (journal: Journal, step: Journal["undo"][number]) =>
   step.notWritten
     ? "not written — rejected"
     : step.superseded
-    ? `superseded at r${step.superseded.revision}`
-    : step.barrier
-      ? (step.barrier.basis as { receiptId?: string } | undefined)?.receiptId ? "committed" : "blocked"
-    : journal.redo.some((entry) => entry.press === step.press)
-      ? "undone"
-      : "applied";
+      ? `superseded at r${step.superseded.revision}`
+      : step.barrier
+        ? (step.barrier.basis as { receiptId?: string } | undefined)?.receiptId
+          ? "committed"
+          : "blocked"
+        : journal.redo.some((entry) => entry.press === step.press)
+          ? "undone"
+          : "applied";
 
 /** The journal's latest move as words: who edited, or who undid/redid it (Pea's undo is a step too). */
 export const lastMove = (journal: Journal) => {
@@ -148,7 +150,13 @@ export const lastMove = (journal: Journal) => {
  * restore Mod+Z runs, refused with the journal's own reason. `words` draws the labels beside the
  * glyphs (the History); the head draws glyphs alone, their names as tooltips.
  */
-export function JournalButtons<P, W>({ owner, words = false }: { owner: GraphMount<P, W>; words?: boolean }) {
+export function JournalButtons<P, W>({
+  owner,
+  words = false,
+}: {
+  owner: GraphMount<P, W>;
+  words?: boolean;
+}) {
   const journal = useWorkJournal(owner);
   if (!journal) return null;
   const undo = journal.undo.at(-1);
@@ -170,7 +178,9 @@ export function JournalButtons<P, W>({ owner, words = false }: { owner: GraphMou
       <Button
         icon={Redo2}
         label={redo ? `Redo ${redo.label}` : "Redo"}
-        refusal={owner.journalRefusal() ?? redo?.superseded?.message ?? (redo ? null : "Nothing to redo")}
+        refusal={
+          owner.journalRefusal() ?? redo?.superseded?.message ?? (redo ? null : "Nothing to redo")
+        }
         onClick={() => void owner.restore("redo")}
       >
         {words ? "redo" : undefined}
@@ -194,7 +204,9 @@ export function TimelineHead<P, W>({
   thread?: string;
 }) {
   const entries = useSyncExternalStore(
-    (notify) => owner.timeline.subscribe(notify), owner.timeline.version, owner.timeline.version,
+    (notify) => owner.timeline.subscribe(notify),
+    owner.timeline.version,
+    owner.timeline.version,
   );
   const timeline = entries ? owner.timeline.read() : [];
   // The selected thread's run consent (ADR 0027 rule 11) is the same window Pea's composer card
@@ -217,7 +229,9 @@ export function TimelineHead<P, W>({
     (entry) => entry.kind === "receipt" || owner.verbs[entry.verb ?? ""]?.kind === "command",
   );
   const last =
-    step && !(command && new Date(command.at).getTime() > step.at) ? null : (command ?? timeline.at(-1));
+    step && !(command && new Date(command.at).getTime() > step.at)
+      ? null
+      : (command ?? timeline.at(-1));
   return (
     <span data-slot="timeline-head" role="group" aria-label="Timeline">
       {windows.map(({ entry, left }) => {
@@ -225,17 +239,17 @@ export function TimelineHead<P, W>({
         const consent = consentThread(entry, thread);
         return (
           <span key={entry.outcome?.receiptId ?? entry.press} data-slot="consent-window">
-            <span role="timer" data-tone="caution" aria-label={`${entry.verb ?? "Command"} applies in`}>
+            <span
+              role="timer"
+              data-tone="caution"
+              aria-label={`${entry.verb ?? "Command"} applies in`}
+            >
               {entry.verb ?? "command"} · {left === null ? "awaiting approval" : `${left}s`}
             </span>
             <Button
               label={`Reject ${entry.verb ?? "command"}`}
               refusal={
-                owner.fixture
-                  ? "Fixture lane: host commands disabled"
-                  : consent
-                    ? null
-                    : "No thread holds this consent window"
+                owner.commandRefusal ?? (consent ? null : "No thread holds this consent window")
               }
               onClick={() =>
                 // `stop_writes` is the host's reject option (run-consent.ts): it closes the window
@@ -290,7 +304,10 @@ export function TimelineHead<P, W>({
             <span data-slot="timeline-state">No activity yet</span>
           )}
         </PopoverTrigger>
-        <SubjectPopoverContent aria-label="Timeline" className="max-h-(--available-height) overflow-y-auto">
+        <SubjectPopoverContent
+          aria-label="Timeline"
+          className="max-h-(--available-height) overflow-y-auto"
+        >
           {history}
         </SubjectPopoverContent>
       </Popover>

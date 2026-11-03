@@ -1,3 +1,4 @@
+import { legacyMountMetadata } from "./legacy-environment-bridge";
 import type { RouteGraph } from "@pe/agent-contracts";
 import { graphSettings } from "./settings";
 import { mountRefusals, type MountAdapters } from "./mount-contracts";
@@ -15,6 +16,8 @@ export function createGraphMount<P, W>(
   adapters: MountAdapters<P, W>,
   initial: Partial<P> = {},
 ) {
+  if (adapters.environment && adapters.environment.route.data.key !== graph.key)
+    throw Error("Environment admission does not belong to this route");
   const refusals = mountRefusals(graph, adapters);
   if (refusals.length) throw new Error(refusals.map((r) => `${r.path}: ${r.message}`).join("\n"));
   let readings: MountReadings<P, W> | undefined;
@@ -41,6 +44,7 @@ export function createGraphMount<P, W>(
   } catch (cause) {
     target.close();
     page.dispose();
+    adapters.environment?.close();
     throw cause;
   }
   const readingOwner: MountReadings<P, W> = readings;
@@ -58,15 +62,21 @@ export function createGraphMount<P, W>(
   };
   return {
     ...verbs,
+    ...legacyMountMetadata(adapters.legacyEnvironment),
+    commandRefusal: adapters.environment
+      ? adapters.environment.environment.nativeWrite
+        ? null
+        : "Native writes unavailable"
+      : (adapters.legacyEnvironment?.commands.refusal ?? null),
     page: page.ports.page,
     controls: page.ports.controls,
     registry: page.registry,
     settings,
-    fixture: adapters.fixture,
     view: page.view,
     readings: readingOwner,
     timeline: history.timeline,
     journals: work.journals,
+    readWork: work.readResolved,
     stage: page.stage,
     journal: work.journalFor,
     journalRefusal: work.journalRefusal,
@@ -107,7 +117,7 @@ export function createGraphMount<P, W>(
         adapters.subscribe(update),
         page.view.subscribe(() => {
           page.cleanSubject();
-          adapters.fixture?.select?.(page.view.read().page);
+          adapters.selectPage?.(page.view.read().page);
           readingOwner.syncScope();
           target.notify();
         }),
@@ -138,6 +148,7 @@ export function createGraphMount<P, W>(
       unTimeline();
       work.dispose();
       readingOwner.dispose();
+      adapters.environment?.close();
       page.dispose();
       target.dispose();
     },

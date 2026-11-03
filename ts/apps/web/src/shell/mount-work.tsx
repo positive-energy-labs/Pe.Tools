@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useContext, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { workKey, type RouteGraph } from "@pe/agent-contracts";
 import { actionScopeKeys, useScopeLive } from "@pe/kit/keys";
 import { RouteVisibility, useRouteCurrent, useRouteSearchSlice } from "../route/activity";
@@ -12,7 +12,7 @@ import { graphUrlPage } from "./mount-page";
 import type { RouteAdapters } from "./mount-pane";
 import { settingFields } from "./settings";
 import { useWorkScope, type WorkScopeStatus } from "./use-work-scope";
-import { fixtureEnvironment, pendingFixtureEnvironment, fixtureName } from "./fixture";
+import { useLegacyEnvironmentBridge } from "./legacy-environment-bridge";
 
 export interface MountRouteProps {
   hidden?: boolean;
@@ -49,26 +49,7 @@ export function useGraphRoute<P, W>(
   adapters: RouteAdapters<P, W>,
   { hidden = false, url: projectUrl = true, thread, target, work }: MountRouteProps = {},
 ) {
-  const fixture = useRouteSearchSlice(fixtureName);
-  const pendingLane = useMemo(
-    () => (fixture === null ? null : pendingFixtureEnvironment(graph, fixture)),
-    [graph, fixture],
-  );
-  const [loaded, setLoaded] = useState<{
-    pending: typeof pendingLane;
-    lane: Awaited<ReturnType<typeof fixtureEnvironment<P, W>>>;
-  } | null>(null);
-  useEffect(() => {
-    if (fixture === null) return;
-    let active = true;
-    void fixtureEnvironment(graph, fixture).then((lane) => {
-      if (active) setLoaded({ pending: pendingLane, lane });
-    });
-    return () => {
-      active = false;
-    };
-  }, [graph, fixture, pendingLane]);
-  const lane = loaded && loaded.pending === pendingLane ? loaded.lane : pendingLane;
+  const lane = useLegacyEnvironmentBridge(graph);
   const addressThread = useRouteSearchSlice((search) => (projectUrl ? search.thread : undefined));
   const boundThread = thread ?? addressThread;
   const url = useMemo(
@@ -95,8 +76,7 @@ export function useGraphRoute<P, W>(
     lane?.ports,
   );
   const owner = useRouteOwner(
-    () =>
-      createGraphMount(lane?.graph ?? graph, { ...adapters, ...scope, ...lane?.adapters }, initial),
+    () => createGraphMount(graph, { ...adapters, ...scope, ...lane?.adapters }, initial),
     lane,
   );
   mounted.current = owner;

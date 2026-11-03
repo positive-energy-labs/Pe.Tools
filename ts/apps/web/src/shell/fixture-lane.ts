@@ -174,10 +174,10 @@ export function createFixtureRouteEnvironment(
 
 /** Presence, including empty/unknown names, always selects the refusing fixture implementation.
  * Only the composition root imports this selector; bodies receive RouteEnvironment alone. */
-export function selectRouteEnvironment(options: {
+export function selectRouteEnvironment<Live, Fixture>(options: {
   readonly search: Record<string, unknown>;
-  readonly live: () => ReturnType<typeof createRouteEnvironment>;
-  readonly fixture: (name: string) => ReturnType<typeof createFixtureRouteEnvironment>;
+  readonly live: () => Live;
+  readonly fixture: (name: string) => Fixture;
 }) {
   const name = fixtureName(options.search);
   return name === null ? options.live() : options.fixture(name);

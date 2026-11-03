@@ -1,3 +1,4 @@
+import { legacyLiveVerbs, type LegacyVerbEnvironment } from "./legacy-environment-bridge";
 import { createWorkScopeAcceptance, type WorkScopeAcceptance } from "./work-scope-acceptance";
 import { reviewChanges } from "./review-value";
 import { z } from "zod";
@@ -24,8 +25,6 @@ import {
 import {
   runSemanticAction,
   actionResult,
-  submitAction,
-  recoverAction,
 } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type { createRouteOwner } from "#/shell/owner";
 import { refuse, writeRefusal, type Refusal } from "../route/refusal";
@@ -75,7 +74,7 @@ export interface VerbSnapshot {
 }
 export interface VerbContext<C extends Caller = Caller> {
   readonly acceptance?: WorkScopeAcceptance;
-  readonly fixture?: { name: string; queries: Readonly<Record<string, unknown>> };
+  readonly environment?: LegacyVerbEnvironment;
   readonly caller: C;
   readonly receipt?: (receipt: Exclude<HostReceipt, { state: "detached" }>, press: string) => void;
   readonly page?: () => Readonly<Record<string, unknown>>;
@@ -524,21 +523,15 @@ export function recoveryVerb<S extends z.ZodType>(
   return verb;
 }
 
-async function runQuery(read: ReadEntry, input: Record<string, unknown>, snapshot: VerbSnapshot) {
-  return read.run(read.input.parse(input), {
-    target: snapshot.target,
-    work: snapshot.work?.handle ?? null,
-  });
-}
-
 /** Preview commands use the same admitted transport as commit, and return host-owned evidence. */
 export async function prepareCommand<K extends SemanticActionKey>(
   scope: VerbScope,
   key: K,
   input: CommandInput<K>,
   waitSeconds = DEFAULT_WAIT_S,
+  environment: LegacyVerbEnvironment = legacyLiveVerbs,
 ) {
-  const receipt = await runSemanticAction(
+  const receipt = await environment.commands.semantic(
     key,
     structuredClone(input) as Record<string, unknown>,
     scope.snapshot.target,
@@ -546,7 +539,7 @@ export async function prepareCommand<K extends SemanticActionKey>(
     "",
     crypto.randomUUID(),
     waitSeconds * 1000,
-  );
+  ).result;
   if (receipt.state !== "succeeded") throw Error(`Preview ${receipt.state}; inspect its receipt`);
   const answer = actionResult(receipt) as { value?: unknown };
   return { receipt, response: answer?.value ?? answer };
@@ -665,11 +658,9 @@ async function invokeCore<C extends Caller>(
   phase: InvocationPhase<C> = { kind: "press" },
   rendered?: VerbSnapshot,
 ): Promise<VerbDelivery> {
-  if (ctx.fixture && verb.kind === "command")
-    return failure(
-      "refused",
-      `Fixture '${ctx.fixture.name}': ${verb.kind} verbs do not call the host`,
-    );
+  const environment = ctx.environment ?? legacyLiveVerbs;
+  if (verb.kind === "command" && environment.commands.refusal)
+    return failure("refused", environment.commands.refusal);
   const binding = bindings.get(verb);
   if (!binding) return failure("refused", "This verb has no executable binding");
   if (phase.kind === "commit" || phase.kind === "cancel") {
@@ -819,12 +810,13 @@ async function invokeCore<C extends Caller>(
               if (isRefusal(scope)) return finish(resultOf(scope, press));
             }
             // Derived writes require the host's seal even when this verb has no shown review.
-            if (binding.command && "writeBoundary" in commands[binding.command] && !ctx.fixture) {
+            if (binding.command && "writeBoundary" in commands[binding.command]) {
               await prepareCommand(
                 scope,
                 writePreviewKey(binding.command),
                 {} as CommandInput<SemanticActionKey>,
                 binding.waitSeconds,
+                environment,
               );
               const afterPreview = snapshotNow();
               if (
@@ -837,11 +829,7 @@ async function invokeCore<C extends Caller>(
             }
             let ticket: ReviewTicket | undefined;
             if (verb.review !== "none" && (!binding.raw || binding.raw(scope, input))) {
-              const evidence = ctx.fixture
-                ? { fixture: ctx.fixture.name }
-                : steps
-                  ? copy(steps[step])
-                  : await binding.prepare?.(scope, input);
+              const evidence = steps ? copy(steps[step]) : await binding.prepare?.(scope, input);
               const prepared = snapshotNow();
               if (
                 !equal(snapshot.target, prepared.target) ||
@@ -961,24 +949,14 @@ async function invokeCore<C extends Caller>(
               ) as Record<string, unknown>;
               let value: unknown;
               // Stop sends the declared cancel for this very request; the native read ends, not just the wait.
-              if (binding.queryCancel && !ctx.fixture) {
+              if (binding.queryCancel) {
                 const cancel = binding.queryCancel;
                 cancelWith(async () => {
-                  await runQuery(cancel.key, cancel.input(request), current);
+                  await environment.reads.query(cancel.key, cancel.input(request), current);
                 });
               }
               try {
-                if (ctx.fixture) {
-                  if (!Object.hasOwn(ctx.fixture.queries, binding.query.key))
-                    return finish(
-                      failure(
-                        "refused",
-                        `Fixture '${ctx.fixture.name}' has no answer for '${binding.query.key}'`,
-                        press,
-                      ),
-                    );
-                  value = structuredClone(ctx.fixture.queries[binding.query.key]);
-                } else value = await runQuery(binding.query, request, current);
+                value = await environment.reads.query(binding.query, request, current);
               } catch (cause) {
                 // A 4xx is the host refusing this read, in its own words; anything else failed.
                 const status = (cause as { status?: unknown } | null)?.status;
@@ -1057,9 +1035,13 @@ async function invokeCore<C extends Caller>(
             const raw = binding.raw?.(fresh, input);
             if (raw) {
               const wait = (binding.waitSeconds ?? ctx.waitSeconds ?? DEFAULT_WAIT_S) * 1000;
-              const receipt =
-                (await recoverAction(press, raw.key, raw.input, current.target, "", wait)) ??
-                (await submitAction({ id: press, ...raw, target: current.target }, "", wait));
+              const receipt = await environment.commands.raw(
+                press,
+                raw.key,
+                raw.input,
+                current,
+                wait,
+              ).result;
               const page =
                 binding.receiptPage && acceptance.current(started)
                   ? binding.receiptPage(receipt)
@@ -1086,7 +1068,7 @@ async function invokeCore<C extends Caller>(
               const request = binding.rpc.input.parse(
                 binding.intent(fresh, input, ticket),
               ) as Record<string, unknown>;
-              const value = await runQuery(binding.rpc, request, current);
+              const value = await environment.reads.query(binding.rpc, request, current);
               const sameScope = acceptance.current(started);
               return finish({
                 state: "done",
@@ -1109,7 +1091,7 @@ async function invokeCore<C extends Caller>(
             if (definition.work && !definition.work.optional && !current.work)
               return finish(failure("refused", "Work has not been read yet", press));
             // Domain intent stays above the existing semantic runner's Work association and admission.
-            const receipt = await runSemanticAction(
+            const receipt = await environment.commands.semantic(
               binding.command,
               structuredClone(steps?.[step] ?? binding.intent(fresh, input, ticket)),
               current.target,
@@ -1117,7 +1099,7 @@ async function invokeCore<C extends Caller>(
               "",
               steps ? crypto.randomUUID() : press,
               (binding.waitSeconds ?? ctx.waitSeconds ?? DEFAULT_WAIT_S) * 1000,
-            );
+            ).result;
             if (receipt.state === "succeeded") {
               if (steps && step < steps.length - 1) {
                 ctx.receipt?.(receipt, press);
@@ -1216,8 +1198,9 @@ export function bind<C extends Caller, S extends z.ZodType>(
     label: verb.label,
     chord: verb.chord,
     get refusal() {
-      if (ctx.fixture && verb.kind === "command")
-        return `Fixture '${ctx.fixture.name}': commands and RPCs do not call the host`;
+      const environment = ctx.environment ?? legacyLiveVerbs;
+      if (verb.kind === "command" && environment.commands.refusal)
+        return environment.commands.refusal;
       const implementation = bindings.get(verb);
       if (!implementation) return "This verb has no executable binding";
       const current = copy(ctx.snapshot());

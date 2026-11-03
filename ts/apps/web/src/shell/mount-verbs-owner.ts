@@ -81,8 +81,8 @@ export function createMountVerbs<P, W>(
   let active: string | null = null;
   let activeOrigin = "";
   const context: VerbContext<"human"> = {
-    fixture: adapters.fixture,
     caller: "human",
+    environment: { reads: readings.legacyReads, commands: work.legacyCommands },
     acceptance: target.acceptance,
     receipt: (receipt, press) => {
       history.acceptReceipt(receipt, dispatches.get(press)?.key ?? null, press, false);
@@ -409,6 +409,8 @@ export function createMountVerbs<P, W>(
     reviews.clear();
   };
   return {
+    submitNative: work.submitNative,
+    submitWork: work.submitResolved,
     results,
     reviews,
     commitReview(id: string, ticket: ReviewTicket) {

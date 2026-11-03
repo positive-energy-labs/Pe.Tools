@@ -1,3 +1,5 @@
+import type { MountEnvironment } from "./mount-environment";
+import type { LegacyVerbEnvironment } from "./legacy-environment-bridge";
 import { type SettingsOwner } from "./settings";
 import {
   validateRouteGraph,
@@ -52,7 +54,10 @@ export type BindingScope<P, W> = MountScope<W> & {
 };
 
 export interface MountAdapters<P, W> extends VerbReadingEdges {
-  fixture?: { name: string; queries: Readonly<Record<string, unknown>>; select?(page: P): void };
+  environment?: MountEnvironment;
+  legacyEnvironment?: LegacyVerbEnvironment;
+  selectPage?(page: P): void;
+  readingSources?: Readonly<Record<string, ReadingSource>>;
   settings?: SettingsOwner;
   /**
    * Immutable external-store snapshot; Page is owned by the mount's existing ViewOwner. This and

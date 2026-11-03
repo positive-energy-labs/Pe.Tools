@@ -5,7 +5,7 @@
  * (`mount-owner`). The mount-seams guard holds this file to seam imports and a line cap.
  */
 import type { RouteGraph } from "@pe/agent-contracts";
-import { FixtureChrome, GraphRouteView, Refused } from "./mount-chrome";
+import { GraphRouteView, Refused } from "./mount-chrome";
 import { codeRoute, type CodeRoute } from "./mount-page";
 import { admitRoute, type RouteAdapters } from "./mount-pane";
 import { GraphLease, useGraphRoute, type MountRouteProps } from "./mount-work";
@@ -27,16 +27,9 @@ export function mountRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapter
     };
   return function MountedRoute(props: MountRouteProps) {
     const mount = useGraphRoute(graph, adapters, props);
-    if (mount.owner.fixture && mount.status.failure)
-      return (
-        <>
-          <FixtureChrome graph={graph} name={mount.owner.fixture.name} />
-          <p role="alert">{mount.status.failure}</p>
-        </>
-      );
     return (
       <>
-        {adapters.lease && !mount.owner.fixture && (
+        {adapters.lease && !mount.owner.commandRefusal && (
           <GraphLease
             graph={graph}
             owner={mount.owner}

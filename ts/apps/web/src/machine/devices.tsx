@@ -15,7 +15,7 @@ import type { DeviceListing, Pairing } from "@pe/host-contracts/pe-api";
 import { peClient } from "#/host/pe-client";
 import { LoadingContext } from "#/route/loading-context";
 import { HOST_READ_WAIT_S } from "#/route/waits";
-import { useFixtureName } from "#/shell/fixture-services";
+import { useEnvironmentAccess } from "#/shell/environment-readings";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const LocalDevice = createContext(true);
@@ -400,10 +400,10 @@ type DeviceGateProps = {
   children: ReactNode;
 };
 export function RemoteDeviceGate(props: DeviceGateProps) {
-  const fixture = useFixtureName();
+  const { remote } = useEnvironmentAccess();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  return fixture !== null ? (
+  return !remote ? (
     mounted ? (
       <LocalDevice.Provider value={true}>{props.children}</LocalDevice.Provider>
     ) : (
