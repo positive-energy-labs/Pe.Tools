@@ -160,9 +160,9 @@ test("a failed acquisition retires its feed and later subscribers reacquire", as
 
 test("byte trimming counts UTF-8, array overhead and replacement sizes exactly", async () => {
   let deliver!: (value: Receipt) => void;
-  const a = row("a?"),
-    b = row("b?"),
-    c = row("c?");
+  const a = row("a\u00e9"),
+    b = row("b\u00e9"),
+    c = row("c\u00e9");
   const body = (value: Receipt) => {
     if (value.body.kind !== "action") throw Error("expected action");
     return value.body.value;
@@ -194,20 +194,33 @@ test("byte trimming counts UTF-8, array overhead and replacement sizes exactly",
   await Promise.resolve();
   expect(snapshot()).toMatchObject({
     kind: "ready",
-    receipts: { from: 2, through: 3, rows: [{ id: "b?" }, { id: "c?" }] },
+    receipts: { from: 2, through: 3, rows: [{ id: "b\u00e9" }, { id: "c\u00e9" }] },
   });
-  const oversized = row("c?", "running", 2);
-  body(oversized).input = { text: "?".repeat(maxBytes) };
+  const oversized = row("c\u00e9", "running", 2);
+  body(oversized).input = { text: "\u00e9".repeat(maxBytes) };
   deliver(oversized);
   expect(snapshot()).toMatchObject({
     kind: "ready",
-    receipts: { from: 3, rows: [{ id: "c?", state: "running" }] },
+    receipts: { from: 3, rows: [{ id: "c\u00e9", state: "running" }] },
   });
-  deliver(row("c?", "succeeded", 3));
-  deliver(row("d?"));
+  deliver(row("c\u00e9", "succeeded", 3));
+  deliver(row("d\u00e9"));
   expect(snapshot()).toMatchObject({
     kind: "ready",
-    receipts: { from: 3, through: 6, rows: [{ id: "c?" }, { id: "d?" }] },
+    receipts: { from: 3, through: 6, rows: [{ id: "c\u00e9" }, { id: "d\u00e9" }] },
   });
+  const belowBoundary: ReceiptFeedState[] = [];
+  const releaseBelow = observeWorkReceipts(
+    { ...journal },
+    { key, target: null },
+    (v) => belowBoundary.push(v),
+    { maxCount: 100, maxBytes: maxBytes - 1 },
+  );
+  await Promise.resolve();
+  expect(belowBoundary.at(-1)).toMatchObject({
+    kind: "ready",
+    receipts: { from: 3, rows: [{ id: "c\u00e9" }] },
+  });
+  releaseBelow();
   releases.forEach((release) => release());
 });
