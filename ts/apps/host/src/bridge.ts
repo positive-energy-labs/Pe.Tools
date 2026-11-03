@@ -3,7 +3,7 @@ import { catalogEntries } from "@pe/agent-contracts/pe-api";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 import type { DispatchRefusal } from "./action-dispatch.ts";
 import { StepFailure } from "./command-executor.ts";
-import { Clock, Context, Deferred, Effect, Layer, PubSub, Queue, Ref, Schema } from "effect";
+import { Clock, Context, Deferred, Effect, Exit, Layer, PubSub, Queue, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Socket } from "effect/socket";
 import { HttpServerResponse as Response } from "effect/http";
@@ -172,10 +172,16 @@ export async function invokeBridge<A = unknown>(
     const error = result.failure;
     switch (error._tag) {
       case "BridgeError":
-        throw new StepFailure(error.message, error.statusCode, error.outcome, error.evidence.result, {
-          nativeOutcome: error.nativeOutcome,
-          issues: error.evidence.issues ? [...error.evidence.issues] : undefined,
-        });
+        throw new StepFailure(
+          error.message,
+          error.statusCode,
+          error.outcome,
+          error.evidence.result,
+          {
+            nativeOutcome: error.nativeOutcome,
+            issues: error.evidence.issues ? [...error.evidence.issues] : undefined,
+          },
+        );
       case "NoRevitSession":
         throw new StepFailure(error.message, 503, "refused");
     }
@@ -237,6 +243,8 @@ const rootOutcome = (issues: ReadonlyArray<ValidationIssue> | null | undefined) 
  * settled.
  */
 const UNSETTLED_OUTCOMES = new Set(["AbandonedStillRunning", "TimedOut"]);
+const isUnsettled = (res: BridgeResponse) =>
+  !res.ok && UNSETTLED_OUTCOMES.has(rootOutcome(res.issues) ?? "");
 
 /** No attached Revit answers what was asked: `asked` names it, `attached` lists what is there. */
 export class NoRevitSession extends Schema.TaggedError<NoRevitSession>()("NoRevitSession", {
@@ -755,6 +763,9 @@ export const RevitBridgeLive = Layer.effect(
       requestId = randomUUID(),
       // The line reserves the reply before it queues, so a cancel can fail it before dispatch.
       reserved?: Deferred.Deferred<BridgeResponse, BridgeError>,
+      // Line only. Set when the caller's answer fails but Revit may still own the dispatch: the
+      // request stays tracked under this reply, and the worker holds the slot (see `reconcile`).
+      owed?: Ref.Ref<Deferred.Deferred<BridgeResponse, BridgeError> | null>,
     ) {
       const provenanceRefusal = commandLeafRefusal(operationKey, command);
       if (provenanceRefusal)
@@ -842,16 +853,29 @@ export const RevitBridgeLive = Layer.effect(
       }
       return yield* Effect.gen(function* () {
         const payloadJson = yield* encodePayloadJson(payload);
-        yield* dispatchedOn!.send({
-          kind: "Request",
-          request: {
-            requestId,
-            operationKey,
-            payloadJson,
-            openDocumentId,
-            derivedCommand: command,
-          },
-        });
+        const delivered = yield* Effect.exit(
+          dispatchedOn!.send({
+            kind: "Request",
+            request: {
+              requestId,
+              operationKey,
+              payloadJson,
+              openDocumentId,
+              derivedCommand: command,
+            },
+          }),
+        );
+        if (Exit.isFailure(delivered)) {
+          // A failed write may still have reached Revit: the caller gets `unknown`, and the
+          // still-tracked request keeps its reply for a late answer from any socket.
+          if (owed) yield* Ref.set(owed, reply);
+          return yield* Effect.fail(
+            new BridgeError(
+              `Sending '${operationKey}' to Revit failed; it may have been delivered, so its outcome is unknown.`,
+              503,
+            ),
+          );
+        }
         if (reserved) yield* Effect.promise(() => markBridgeDispatched(requestId));
         // The slot is released by Revit's answer to THIS request (from any socket of the
         // session) or by process death; never by a reconnect, a timer, or a cancel's acceptance.
@@ -865,13 +889,14 @@ export const RevitBridgeLive = Layer.effect(
         if (!res.ok) {
           const state = yield* Ref.get(session.state);
           const targetOpenId = res.openDocumentId ?? openDocumentId;
+          const unsettled = isUnsettled(res);
+          // Rule 11: the caller's answer fails now, but the native dispatch stays occupied.
+          if (unsettled && owed) yield* Ref.set(owed, yield* awaitAgain(session, requestId, reply));
           return yield* Effect.fail(
             new BridgeError(res.errorMessage ?? `${operationKey} failed`, res.statusCode ?? 500, {
               issues: res.issues,
               // A refusal is an answer, not a lost reply: it must never leave the action unknown.
-              ...(UNSETTLED_OUTCOMES.has(rootOutcome(res.issues) ?? "")
-                ? {}
-                : { dispatched: true as const }),
+              ...(unsettled ? {} : { dispatched: true as const }),
               resolvedTarget: {
                 session: session.sessionId,
                 document: targetOpenId
@@ -888,10 +913,72 @@ export const RevitBridgeLive = Layer.effect(
         };
       }).pipe(
         Effect.ensuring(
-          Effect.andThen(forgetBridgeRequest(session.requests, requestId), settleLoss(session)),
+          Effect.flatMap(owed ? Ref.get(owed) : Effect.succeed(null), (pending) =>
+            pending ? Effect.void : releaseRequest(session, requestId),
+          ),
         ),
       );
     });
+
+    const releaseRequest = (session: Session, requestId: string) =>
+      Effect.andThen(forgetBridgeRequest(session.requests, requestId), settleLoss(session));
+
+    /** Re-arms a dispatched request with a fresh reply, so its next answer has somewhere to land. */
+    const awaitAgain = Effect.fnUntraced(function* (
+      session: Session,
+      requestId: string,
+      previous: Deferred.Deferred<BridgeResponse, BridgeError>,
+    ) {
+      const reply = yield* Deferred.make<BridgeResponse, BridgeError>();
+      yield* Ref.update(session.requests, (live) => {
+        const request = live.get(requestId);
+        return request?.reply === previous
+          ? new Map(live).set(requestId, { ...request, reply })
+          : live;
+      });
+      return reply;
+    });
+
+    /**
+     * Holds the serial slot after the caller already has its `unknown` answer: the worker waits for
+     * terminal evidence for THIS request id (a settled answer on any socket) or process death. No
+     * timer releases it. The wire carries no native-idle frame today (BridgeAgent answers once), so
+     * a non-cooperative op holds the slot until its process dies, which is rule 11 as written.
+     */
+    const reconcile = (
+      session: Session,
+      job: Job,
+      owed: Ref.Ref<Deferred.Deferred<BridgeResponse, BridgeError> | null>,
+    ): Effect.Effect<void> =>
+      Effect.flatMap(Ref.get(owed), (first) =>
+        first ? reconcileFrom(session, job, first) : Effect.void,
+      );
+
+    const reconcileFrom = (
+      session: Session,
+      job: Job,
+      first: Deferred.Deferred<BridgeResponse, BridgeError>,
+    ): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        let reply: Deferred.Deferred<BridgeResponse, BridgeError> | null = first;
+        yield* Effect.logWarning(
+          `Revit queue reconciling op=${job.operationKey} request=${job.requestId} session=${session.sessionId}: holding the slot until terminal evidence`,
+        );
+        while (reply) {
+          const settled: Deferred.Deferred<BridgeResponse, BridgeError> = reply;
+          const evidence: Exit.Exit<BridgeResponse, BridgeError> = yield* Deferred.await(
+            settled,
+          ).pipe(
+            Effect.raceFirst(processDeath(session, job.operationKey)),
+            Effect.onInterrupt(() => cancelInFlight(session, job.requestId, settled)),
+            Effect.exit,
+          );
+          reply =
+            Exit.isSuccess(evidence) && isUnsettled(evidence.value)
+              ? yield* awaitAgain(session, job.requestId, settled)
+              : null;
+        }
+      }).pipe(Effect.ensuring(releaseRequest(session, job.requestId)));
 
     // Ids a revoke named before their request reached this registry: a begun step may still be
     // validating when the revoke lands. Such a request is refused the moment it queues.
@@ -1121,6 +1208,7 @@ export const RevitBridgeLive = Layer.effect(
       yield* Effect.logInfo(
         `Revit queue started op=${job.operationKey} session=${session.sessionId} depth=${job.depth} wait_ms=${startedAt - job.queuedAt}`,
       );
+      const owed = yield* Ref.make<Deferred.Deferred<BridgeResponse, BridgeError> | null>(null);
       yield* invokeSession(
         session,
         job.operationKey,
@@ -1129,9 +1217,12 @@ export const RevitBridgeLive = Layer.effect(
         job.command,
         job.requestId,
         job.reply,
+        owed,
       ).pipe(
         Effect.exit,
         Effect.flatMap((exit) => Deferred.done(job.result, exit)),
+        // The caller has its answer; an unsettled dispatch still holds this worker (rule 11).
+        Effect.andThen(reconcile(session, job, owed)),
         Effect.onInterrupt(() =>
           Deferred.fail(
             job.result,

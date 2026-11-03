@@ -56,6 +56,8 @@ const harness = Effect.gen(function* () {
       /** The next Request frame this socket carries. */
       sent: Queue.take(outgoing).pipe(Effect.map((frame: BridgeFrame) => frame.request!)),
       answer: (requestId: string) => Queue.offer(incoming, response(requestId)),
+      /** Any raw frame from Revit, for answers other than plain success. */
+      frame: (raw: string) => Queue.offer(incoming, raw),
       close: Fiber.interrupt(connection),
     };
   });
@@ -89,98 +91,106 @@ effectTest("interrupting a waiter never lets the one behind it overtake the runn
   }),
 );
 
-effectTest("op.cancel reaches Revit while A runs, and its acceptance does not release A's slot", () =>
-  Effect.gen(function* () {
-    const { bridge, call, sent, answer, outgoing } = yield* harness;
-    const a = yield* call("test.a");
-    const runningA = yield* sent;
-    const b = yield* call("test.b");
-    yield* turns();
-    const cancel = yield* Effect.forkScoped(
-      bridge.invoke(CANCEL_OPERATION_KEY, { requestId: runningA.requestId }),
-    );
-    const cancelFrame = yield* sent;
-    expect(cancelFrame.operationKey).toBe(CANCEL_OPERATION_KEY);
-    expect(JSON.parse(cancelFrame.payloadJson ?? "{}")).toEqual({ requestId: runningA.requestId });
-    yield* answer(cancelFrame.requestId);
-    expect(Exit.isSuccess(yield* Fiber.await(cancel))).toBe(true);
-    yield* turns();
-    expect(yield* Queue.size(outgoing)).toBe(0); // accepted cancel: B still waits for A's answer
-    yield* answer(runningA.requestId);
-    yield* Fiber.await(a);
-    const next = yield* sent;
-    expect(next.operationKey).toBe("test.b");
-    yield* answer(next.requestId);
-    yield* Fiber.await(b);
-  }),
-);
-
-effectTest("a waiter interrupted at any point of acquisition leaks no place; the line is bounded", () =>
-  Effect.gen(function* () {
-    const { call, sent, answer } = yield* harness;
-    const a = yield* call("test.a");
-    const runningA = yield* sent;
-    // 0 turns: interrupted inside enqueue (before or during the queued receipt); later: waiting.
-    for (const at of [0, 1, 2, 3, 5, 8]) {
-      const waiter = yield* call(`test.left-${at}`);
-      yield* turns(at);
-      yield* Fiber.interrupt(waiter);
-    }
-    yield* answer(runningA.requestId);
-    yield* Fiber.await(a);
-    // A leaked depth would refuse before the bound; a leaked request would be dispatched.
-    const held = yield* call("test.hold");
-    const holding = yield* sent;
-    expect(holding.operationKey).toBe("test.hold");
-    const waiting = [];
-    for (let i = 0; i < 7; i++) waiting.push(yield* call(`test.w${i}`));
-    yield* turns();
-    // The 9th place is a typed refusal, never an unbounded tail.
-    const over = yield* Fiber.await(yield* call("test.over"));
-    expect(failure(over)).toMatchObject({
-      _tag: "BridgeError",
-      statusCode: 423,
-      outcome: "refused",
-      evidence: { notDispatched: true },
-    });
-    for (const fiber of waiting) expect(fiber.pollUnsafe()).toBeUndefined();
-    yield* answer(holding.requestId);
-    yield* Fiber.await(held);
-    for (let i = 0; i < 7; i++) {
+effectTest(
+  "op.cancel reaches Revit while A runs, and its acceptance does not release A's slot",
+  () =>
+    Effect.gen(function* () {
+      const { bridge, call, sent, answer, outgoing } = yield* harness;
+      const a = yield* call("test.a");
+      const runningA = yield* sent;
+      const b = yield* call("test.b");
+      yield* turns();
+      const cancel = yield* Effect.forkScoped(
+        bridge.invoke(CANCEL_OPERATION_KEY, { requestId: runningA.requestId }),
+      );
+      const cancelFrame = yield* sent;
+      expect(cancelFrame.operationKey).toBe(CANCEL_OPERATION_KEY);
+      expect(JSON.parse(cancelFrame.payloadJson ?? "{}")).toEqual({
+        requestId: runningA.requestId,
+      });
+      yield* answer(cancelFrame.requestId);
+      expect(Exit.isSuccess(yield* Fiber.await(cancel))).toBe(true);
+      yield* turns();
+      expect(yield* Queue.size(outgoing)).toBe(0); // accepted cancel: B still waits for A's answer
+      yield* answer(runningA.requestId);
+      yield* Fiber.await(a);
       const next = yield* sent;
-      expect(next.operationKey).toBe(`test.w${i}`); // FIFO, and no left waiter in between
+      expect(next.operationKey).toBe("test.b");
       yield* answer(next.requestId);
-    }
-  }),
+      yield* Fiber.await(b);
+    }),
 );
 
-effectTest("a reconnect of the same process never opens the slot; answers match across sockets", () =>
-  Effect.gen(function* () {
-    const first = yield* harness;
-    const a = yield* first.call("test.a");
-    const runningA = yield* first.sent;
-    const b = yield* first.call("test.b");
-    yield* turns();
-    const second = yield* first.socket; // same pid + start: same incarnation, new epoch
-    expect(second.target.session).toBe(first.target.session);
-    yield* turns();
-    expect(yield* Queue.size(first.outgoing)).toBe(0);
-    expect(yield* Queue.size(second.outgoing)).toBe(0); // B not dispatched on the new socket
-    // A late answer on the replaced socket settles A instead of being dropped as unknown.
-    yield* first.answer(runningA.requestId);
-    expect(Exit.isSuccess(yield* Fiber.await(a))).toBe(true);
-    const runningB = yield* second.sent; // B goes out on the current epoch only
-    expect(runningB.operationKey).toBe("test.b");
-    expect(yield* Queue.size(first.outgoing)).toBe(0);
-    yield* first.close; // the old socket closing is harmless
-    // Transport lost while B runs natively: B's slot is held through a second reconnect.
-    yield* second.close;
-    const c = yield* Fiber.await(yield* first.call("test.c"));
-    expect(failure(c)).toMatchObject({ _tag: "NoRevitSession" }); // no new work while lost
-    const third = yield* first.socket;
-    yield* third.answer(runningB.requestId);
-    expect(Exit.isSuccess(yield* Fiber.await(b))).toBe(true);
-  }),
+effectTest(
+  "a waiter interrupted at any point of acquisition leaks no place; the line is bounded",
+  () =>
+    Effect.gen(function* () {
+      const { call, sent, answer } = yield* harness;
+      const a = yield* call("test.a");
+      const runningA = yield* sent;
+      // 0 turns: interrupted inside enqueue (before or during the queued receipt); later: waiting.
+      for (const at of [0, 1, 2, 3, 5, 8]) {
+        const waiter = yield* call(`test.left-${at}`);
+        yield* turns(at);
+        yield* Fiber.interrupt(waiter);
+      }
+      yield* answer(runningA.requestId);
+      yield* Fiber.await(a);
+      // A leaked depth would refuse before the bound; a leaked request would be dispatched.
+      const held = yield* call("test.hold");
+      const holding = yield* sent;
+      expect(holding.operationKey).toBe("test.hold");
+      const waiting = [];
+      for (let i = 0; i < 7; i++) waiting.push(yield* call(`test.w${i}`));
+      yield* turns();
+      // The 9th place is a typed refusal, never an unbounded tail.
+      const over = yield* Fiber.await(yield* call("test.over"));
+      expect(failure(over)).toMatchObject({
+        _tag: "BridgeError",
+        statusCode: 423,
+        outcome: "refused",
+        evidence: { notDispatched: true },
+      });
+      for (const fiber of waiting) expect(fiber.pollUnsafe()).toBeUndefined();
+      yield* answer(holding.requestId);
+      yield* Fiber.await(held);
+      for (let i = 0; i < 7; i++) {
+        const next = yield* sent;
+        expect(next.operationKey).toBe(`test.w${i}`); // FIFO, and no left waiter in between
+        yield* answer(next.requestId);
+      }
+    }),
+);
+
+effectTest(
+  "a reconnect of the same process never opens the slot; answers match across sockets",
+  () =>
+    Effect.gen(function* () {
+      const first = yield* harness;
+      const a = yield* first.call("test.a");
+      const runningA = yield* first.sent;
+      const b = yield* first.call("test.b");
+      yield* turns();
+      const second = yield* first.socket; // same pid + start: same incarnation, new epoch
+      expect(second.target.session).toBe(first.target.session);
+      yield* turns();
+      expect(yield* Queue.size(first.outgoing)).toBe(0);
+      expect(yield* Queue.size(second.outgoing)).toBe(0); // B not dispatched on the new socket
+      // A late answer on the replaced socket settles A instead of being dropped as unknown.
+      yield* first.answer(runningA.requestId);
+      expect(Exit.isSuccess(yield* Fiber.await(a))).toBe(true);
+      const runningB = yield* second.sent; // B goes out on the current epoch only
+      expect(runningB.operationKey).toBe("test.b");
+      expect(yield* Queue.size(first.outgoing)).toBe(0);
+      yield* first.close; // the old socket closing is harmless
+      // Transport lost while B runs natively: B's slot is held through a second reconnect.
+      yield* second.close;
+      const c = yield* Fiber.await(yield* first.call("test.c"));
+      expect(failure(c)).toMatchObject({ _tag: "NoRevitSession" }); // no new work while lost
+      const third = yield* first.socket;
+      yield* third.answer(runningB.requestId);
+      expect(Exit.isSuccess(yield* Fiber.await(b))).toBe(true);
+    }),
 );
 
 effectTest("transport loss holds the slot until process death, then releases it as unknown", () =>
@@ -232,4 +242,61 @@ effectTest("closing the host fails waiters and cancels the running op out of ban
     expect(failure(waited)).toMatchObject({ statusCode: 503, evidence: { notDispatched: true } });
     expect(failure(yield* Fiber.await(a))).toMatchObject({ statusCode: 503, outcome: "unknown" });
   }),
+);
+
+const unsettled = (requestId: string, code = "AbandonedStillRunning") =>
+  JSON.stringify({
+    kind: "Response",
+    response: {
+      requestId,
+      ok: false,
+      statusCode: 423,
+      errorMessage: `Revit task ended with '${code}'`,
+      issues: [
+        {
+          instancePath: "$",
+          code,
+          message: code,
+          severity: "error",
+          schemaPath: null,
+          suggestion: null,
+        },
+      ],
+      metrics: {
+        requestBytes: 0,
+        responseBytes: 0,
+        revitExecutionMs: 0,
+        roundTripMs: 0,
+        serializationMs: 0,
+      },
+    },
+  });
+
+effectTest(
+  "an unsettled answer fails the caller as unknown but holds the slot until terminal evidence",
+  () =>
+    Effect.gen(function* () {
+      const { call, sent, answer, frame, outgoing } = yield* harness;
+      const a = yield* call("test.a");
+      const runningA = yield* sent;
+      const b = yield* call("test.b");
+      yield* turns();
+      yield* frame(unsettled(runningA.requestId));
+      expect(failure(yield* Fiber.await(a))).toMatchObject({
+        _tag: "BridgeError",
+        outcome: "unknown",
+      });
+      yield* TestClock.adjust("1 hour");
+      yield* turns();
+      expect(yield* Queue.size(outgoing)).toBe(0); // B emits no Request frame
+      expect(b.pollUnsafe()).toBeUndefined();
+      yield* frame(unsettled(runningA.requestId, "TimedOut")); // still not terminal
+      yield* turns();
+      expect(yield* Queue.size(outgoing)).toBe(0);
+      yield* answer(runningA.requestId); // independent terminal evidence for A's id
+      const next = yield* sent;
+      expect(next.operationKey).toBe("test.b");
+      yield* answer(next.requestId);
+      expect(Exit.isSuccess(yield* Fiber.await(b))).toBe(true);
+    }),
 );
