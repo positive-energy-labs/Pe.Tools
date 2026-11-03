@@ -1,3 +1,4 @@
+import { isWritePreviewKey } from "./semantic-actions.ts";
 import { routeWorkSubject } from "./route-work-subject.ts";
 import { z } from "zod";
 import {
@@ -398,6 +399,8 @@ export function linkRouteBodies(
     if (seen.has(id)) return false;
     seen.add(id);
     const entry = linked.get(id);
+    // Journal previews own rollback reads; Touches does not select the geometry door.
+    if (entry?.effect === "TransactRead" && entry.rollsBack && isWritePreviewKey(id)) return false;
     return (
       !!entry &&
       (entry.touches.includes("Geometry") ||

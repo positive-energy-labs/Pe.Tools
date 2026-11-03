@@ -154,7 +154,7 @@ function previewReceipt(key: string, input: unknown, result: unknown) {
 }
 
 function openPreview(
-  key: "data-table.apply.preview" | "ducts.preview-losses",
+  key: "data-table.apply.preview" | "ducts.preview-losses" | "families.apply.preview",
   input = previewInput,
 ) {
   const issuer = createRouteTokenIssuer();
@@ -188,13 +188,21 @@ test.each([
     { table: { name: "Loads", columns: [], rows: [{ key: "a" }], pruneMissingRows: true } },
   ],
   ["ducts.preview-losses", { edits: [{ element: "duct-A", size: 12 }] }],
+  ["families.apply.preview", { familyNames: ["Pump"] }],
 ] as const)(
   "%s publishes sealed result and receipt with exact Work/target",
   async (key, derivedRequest) => {
     const input = {
       work: {
         ...previewInput.work,
-        key: { ...previewInput.work.key, route: key.startsWith("ducts") ? "ducts" : "data-tables" },
+        key: {
+          ...previewInput.work.key,
+          route: key.startsWith("families")
+            ? "families"
+            : key.startsWith("ducts")
+              ? "ducts"
+              : "data-tables",
+        },
       },
     };
     const result = previewResult(derivedRequest);

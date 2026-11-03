@@ -1,3 +1,4 @@
+import type { SemanticPreviewKey } from "./semantic-actions.ts";
 import type { BodyBindings, CodecBindings, EntryTable } from "./route-kernel-bodies.ts";
 import type { RouteDiagnostic, RouteGraphJson } from "./route-kernel-data.ts";
 import type { AdmittedRoute } from "./route-module.ts";
@@ -43,11 +44,12 @@ export interface RouteFingerprintInput {
     readonly members: readonly ExecutableMember[];
   }[];
 }
-/** Direct geometry entries cannot omit their policy even in checked TS authoring.
+/** Native geometry entries cannot omit their policy even in checked TS authoring.
+ * Journal-owned semantic previews use their declared rollback transport instead.
  * Admission also traverses catalog/Reading dependencies, which this finite map cannot infer. */
 type LinkedReadings<G extends RouteGraphJson, E extends EntryTable> = {
   readonly [K in keyof G["readings"]]: G["readings"][K] &
-    (G["readings"][K] extends { entry: infer C extends keyof E }
+    (G["readings"][K] extends { entry: infer C extends Exclude<keyof E, SemanticPreviewKey> }
       ? "Geometry" extends E[C]["axes"]["touches"][number]
         ? {
             readonly kind: "use";
@@ -95,8 +97,9 @@ export type RouteBodyRender<B> =
   }
     ? Render
     : never;
-/** TODO: A validates linked catalog footprint, not route opt-in: every Geometry leaf and
- * transitive geometry dependency requires an overview or explicit-detail declaration. Default
+/** TODO: A validates linked catalog footprint, not route opt-in: every native Geometry read and
+ * transitive native geometry dependency requires an overview or explicit-detail declaration.
+ * Journal-owned semantic previews retain their Geometry/TransactRead/rollback axes without that policy. Default
  * overview closure contains no detailed request. Detail demand AND refresh must be explicit.
  * Validate mixed-subject schema/identity agreement, finite dependency keys and the complete
  * migration chain (saved age to work.version), then hash migration bytes with all other bodies. */

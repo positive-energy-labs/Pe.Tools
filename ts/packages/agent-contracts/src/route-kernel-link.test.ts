@@ -23,7 +23,7 @@ import {
   type RouteAdmissionEvidence,
 } from "./route-module.ts";
 import type { RouteGraphJson } from "./route-kernel-data.ts";
-import type { RouteFingerprintInput } from "./route-kernel-admission.ts";
+import type { RouteModule, RouteFingerprintInput } from "./route-kernel-admission.ts";
 import type { BodyBindings } from "./route-kernel-bodies.ts";
 import type { CatalogLink } from "./catalog.ts";
 import { manyField, manyCodec, sortField, keyedSetField, orderedListField } from "./route-field.ts";
@@ -690,4 +690,67 @@ it("refuses workSubject fields without a codec that decodes a local Work key", a
       },
     }),
   ).toContainEqual(expect.objectContaining({ path: "workSubject", expected: "decoded Work key" }));
+});
+
+it("admits journal previews with truthful Geometry/rollback axes but still refuses native geometry", async () => {
+  const { commands } = await import("./semantic-actions.ts");
+  const { commandCatalogAxes } = await import("./command-axes.ts");
+  const key = "families.apply.preview";
+  const preview = {
+    input: commands[key].input,
+    output: commands[key].result,
+    axes: commandCatalogAxes[key],
+  };
+  const data = {
+    ...builtinData,
+    capabilities: [...builtinData.capabilities, "geometry"] as const,
+    readings: {
+      ...builtinData.readings,
+      roster: {
+        ...builtinData.readings.roster,
+        entry: key as typeof key,
+        demand: "explicit" as const,
+      },
+    },
+  };
+  const module = { ...builtinModule, data, entries: { ...entries, [key]: preview } };
+  const catalog = [...baseCatalog, { key, ...preview.axes, uses: [] }];
+  const { port, artifact } = await prepare(data, catalog, module);
+  const checked: RouteModule<typeof data, typeof schemas, typeof module.entries>["data"] = data;
+  const result = port.admitUnknown({ ...module, data: checked, artifact });
+  if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+  expect(result.ok).toBe(true);
+  const registry = createAdmittedRouteRegistry();
+  registry.register(result.route);
+  expect(resolveRouteBindings(registry, result.route)?.entries[key]?.axes).toEqual(preview.axes);
+  expect(preview.axes).toMatchObject({
+    touches: ["Geometry"],
+    effect: "TransactRead",
+    rollsBack: true,
+  });
+
+  for (const axes of [{ ...preview.axes, effect: "Read" as const }, preview.axes]) {
+    const native = {
+      ...module,
+      data: {
+        ...data,
+        readings: {
+          ...data.readings,
+          roster: { ...data.readings.roster, entry: "native.geometry" },
+        },
+      },
+      entries: { ...entries, "native.geometry": { ...preview, axes } },
+    };
+    const prepared = await prepare(
+      native.data,
+      [...baseCatalog, { key: "native.geometry", ...axes, uses: [] }],
+      native,
+    );
+    const refused = prepared.port.admitUnknown({ ...native, artifact: prepared.artifact });
+    expect(refused.ok).toBe(false);
+    if (!refused.ok)
+      expect(refused.diagnostics).toContainEqual(
+        expect.objectContaining({ path: "readings.roster.geometry" }),
+      );
+  }
 });

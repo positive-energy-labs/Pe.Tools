@@ -507,6 +507,11 @@ export const hostActions = {
 } satisfies Record<string, Command>;
 export type HostActionKey = keyof typeof hostActions;
 export type SemanticActionKey = keyof typeof commands;
+export type SemanticPreviewKey = {
+  [K in SemanticActionKey]: (typeof commands)[K] extends { writeBoundary: { phase: "preview" } }
+    ? K
+    : never;
+}[SemanticActionKey];
 /** The TransactRead half of a Work write: its receipt is review evidence, never a commit. */
 export function isWritePreviewKey(key: string): boolean {
   const command = commands[key as SemanticActionKey] as
