@@ -9,7 +9,7 @@ const files = (dir: string): string[] =>
       ? []
       : e.isDirectory()
         ? files(join(dir, e.name))
-        : e.name.endsWith(".neutral.ts")
+        : e.name === "neutral.ts" || e.name.endsWith(".neutral.ts")
           ? [join(dir, e.name)]
           : [],
   );
@@ -21,8 +21,9 @@ function forbidden(file: string, seen = new Set<string>()): string[] {
     .importedFiles.flatMap(({ fileName }) => {
       const target = fileName.startsWith(".") ? resolve(dirname(file), fileName) : fileName;
       if (
-        /^(?:react(?:-dom)?(?:\/|$)|#\/)|\.(?:css|scss|less)$/.test(fileName) ||
-        (target.replaceAll("\\", "/").includes("/apps/web/src/") && !target.endsWith(".neutral.ts"))
+        /^(?:react(?:-dom)?(?:\/|$)|@pe\/web(?:\/|$)|#\/)|\.(?:css|scss|less)$/.test(fileName) ||
+        (target.replaceAll("\\", "/").includes("/apps/web/src/") &&
+          !/(?:^|[\\/])(?:.*\.)?neutral(?:\.ts)?$/.test(target))
       )
         return [`${file}: ${fileName}`];
       if (fileName.startsWith(".")) {

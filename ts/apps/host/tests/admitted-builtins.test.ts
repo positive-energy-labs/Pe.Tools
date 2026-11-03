@@ -68,7 +68,7 @@ async function open(ws: RouteWorkspace, inventory?: readonly BuiltinEnrollment[]
     }),
   );
 }
-async function close(scope: Scope.Scope) {
+async function close(scope: Scope.Closeable) {
   // effect-edge: test-runner
   await Effect.runPromise(Scope.close(scope, Exit.void));
 }
@@ -142,7 +142,18 @@ test("neutral Work migration precedes exact feeds; stale fingerprints refuse and
 });
 test("owner precedes presenter with an unchanged pinned fingerprint and one migration", async () => {
   const f = workspace();
-  const owner = await entry();
+  const migrate = vi.fn(fixture.bodies.upgrade!.run);
+  const owner = await entry({
+    ...fixture,
+    bodies: { upgrade: { ...fixture.bodies.upgrade!, run: migrate } },
+  });
+  f.saved.set(workKey(bindWork("u8b", null)), {
+    version: 1,
+    schemaVersion: 1,
+    revision: 7,
+    doc: { old: 3 },
+    history: [],
+  });
   const pinned = workFingerprintSchema.parse(`builtin-closure:${owner.closure.fingerprint}`);
   const presenterModule: HostRouteModule = {
     data: {
@@ -159,6 +170,7 @@ test("owner precedes presenter with an unchanged pinned fingerprint and one migr
   expect(run.service).toBeDefined();
   try {
     expect(run.service!.routes.get("u8b-presenter")!.workFingerprint).toBe(pinned);
+    expect(migrate).toHaveBeenCalledOnce();
   } finally {
     await close(run.scope);
   }

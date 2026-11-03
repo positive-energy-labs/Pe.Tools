@@ -47,6 +47,8 @@ test("neutral admission preserves the full declaration without loading UI slots"
   expect(result.ok).toBe(true);
   if (!result.ok) return;
   expect(result.route.data).toEqual(neutral.data);
+  expect(Object.isFrozen(result.route.resolvedWork)).toBe(true);
+  expect(Object.isFrozen(result.route.resolvedWork!.spec)).toBe(true);
   expect(port.admitUnknown(neutral).ok).toBe(false);
   expect(() => createAdmittedRouteRegistry().register(result.route as never)).toThrow();
   const registry = createHostAdmittedRouteRegistry();

@@ -976,7 +976,12 @@ function admitHostProjection(
     data: freezeData(structuredClone(data)),
     fingerprint,
     workFingerprint,
-    resolvedWork,
+    resolvedWork:
+      resolvedWork &&
+      Object.freeze({
+        spec: freezeData(structuredClone(resolvedWork.spec)),
+        schema: resolvedWork.schema.clone(),
+      }),
   }) as HostAdmittedRoute;
   hostBindings.set(
     route,
