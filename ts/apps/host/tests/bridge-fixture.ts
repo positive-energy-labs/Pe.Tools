@@ -6,7 +6,8 @@ import { hostOwnership } from "../src/host-ownership.ts";
 export const connectTestBridge = (processId = 42, ownership: Record<string, unknown> = {}) =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
-    const incoming = yield* Queue.make<string>();
+    // A string is one frame; an array is one socket batch, decoded frame by frame in one pull.
+    const incoming = yield* Queue.make<string | readonly string[]>();
     const outgoing = yield* Queue.make<BridgeFrame>();
     // This substitutes only the socket. Registration, JSON frame decoding, response mailbox,
     // invokeSession, BridgeError and operation-owner classification are production code.
@@ -16,7 +17,9 @@ export const connectTestBridge = (processId = 42, ownership: Record<string, unkn
           write: (raw: string) => Queue.offer(outgoing, JSON.parse(raw)).pipe(Effect.asVoid),
         }),
         reader: Effect.succeed({
-          pull: Queue.take(incoming).pipe(Effect.map((raw) => [raw] as const)),
+          pull: Queue.take(incoming).pipe(
+            Effect.map((raw) => (typeof raw === "string" ? [raw] : raw)),
+          ),
         }),
       }),
     } as unknown as HttpServerRequest.HttpServerRequest;

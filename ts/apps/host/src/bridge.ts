@@ -25,6 +25,7 @@ import {
   type BridgeRegistrationRequest,
   type BridgeResponse,
   type BridgeStateSnapshot,
+  type BridgeTerminal,
   type Lane,
   type ValidationIssue,
 } from "@pe/host-contracts/contracts";
@@ -89,6 +90,8 @@ type Session = {
   // jobs that hold a place (waiting or running) and bounds the line at MAX_QUEUED_OPS.
   readonly line: Queue.Queue<Job>;
   readonly depth: Ref.Ref<number>;
+  /** Done when a newer incarnation of this pid registers: death evidence the pid probe cannot see. */
+  readonly ended: Deferred.Deferred<void>;
 };
 
 type JobAnswer = { readonly value: unknown; readonly openDocumentId?: string | null };
@@ -243,13 +246,42 @@ const rootOutcome = (issues: ReadonlyArray<ValidationIssue> | null | undefined) 
   issues?.length === 1 && issues[0]?.instancePath === "$" ? issues[0].code : undefined;
 
 /**
- * Answers in which Revit has no outcome yet for the request: the delegate is still on the API
- * thread, or it timed out, which `pe-revit op result` also leaves unsettled. Every other answer is
- * settled.
+ * Answers after which Revit still owes an outcome for the request: the add-in sends a Terminal frame
+ * for that id once the native work really finishes. Every other answer is settled.
  */
 const UNSETTLED_OUTCOMES = new Set(["AbandonedStillRunning", "TimedOut"]);
 const isUnsettled = (res: BridgeResponse) =>
   !res.ok && UNSETTLED_OUTCOMES.has(rootOutcome(res.issues) ?? "");
+
+/** A Terminal settled the request but carries no payload: the caller cannot get the value. */
+const SETTLED_WITHOUT_PAYLOAD = "TerminalSucceeded";
+
+/**
+ * A Terminal frame as the settled answer its request's reply expects. Failed and Cancelled read as
+ * ordinary dispatched answers; Succeeded carries no payload, so it gets its own root code.
+ */
+const terminalResponse = (terminal: BridgeTerminal): BridgeResponse => {
+  const code = `Terminal${terminal.outcome}`;
+  const message = `Revit finished this request after answering it (${terminal.outcome}); no payload was returned.`;
+  return {
+    requestId: terminal.requestId,
+    ok: false,
+    payloadJson: null,
+    openDocumentId: null,
+    errorMessage: message,
+    statusCode: terminal.outcome === "Cancelled" ? 499 : terminal.outcome === "Failed" ? 500 : 502,
+    issues: [
+      { instancePath: "$", code, message, severity: "error", schemaPath: null, suggestion: null },
+    ],
+    metrics: {
+      requestBytes: 0,
+      responseBytes: 0,
+      revitExecutionMs: terminal.completedAtUnixMs - terminal.startedAtUnixMs,
+      roundTripMs: 0,
+      serializationMs: 0,
+    },
+  };
+};
 
 /** No attached Revit answers what was asked: `asked` names it, `attached` lists what is there. */
 export class NoRevitSession extends Schema.TaggedError<NoRevitSession>()("NoRevitSession", {
@@ -556,7 +588,65 @@ export const RevitBridgeLive = Layer.effect(
             );
           yield* Effect.sleep(DEATH_PROBE_INTERVAL);
         }
-      });
+      }).pipe(
+        Effect.raceFirst(
+          Effect.andThen(
+            Deferred.await(session.ended),
+            Effect.fail(
+              new BridgeError(
+                `Revit process ${session.processId} was replaced by a new incarnation before answering '${operationKey}'; its outcome is unknown.`,
+                503,
+              ),
+            ),
+          ),
+        ),
+      );
+
+    /** A newer incarnation registered: the old one is dead, so its jobs settle `unknown` now. */
+    const endIncarnation = Effect.fnUntraced(function* (session: Session) {
+      // Close the line before waking the worker, so waiting jobs are refused unsent, not taken.
+      yield* Ref.set(session.connection, null);
+      yield* retireSession(
+        session,
+        "The Revit process incarnation ended before this request reached it.",
+      );
+      yield* Deferred.succeed(session.ended, undefined);
+    });
+
+    /**
+     * Terminal evidence for one request id, from a Terminal frame or a registration replay. It
+     * completes the request's current reply, so a reconciling worker ends and releases the slot.
+     * Settles once: an id already released, or never known, is ignored (duplicates are legal).
+     */
+    const settleTerminal = Effect.fnUntraced(function* (
+      session: Session,
+      terminal: BridgeTerminal,
+    ) {
+      const settled = terminalResponse(terminal);
+      while (true) {
+        const request = (yield* Ref.get(session.requests)).get(terminal.requestId);
+        if (request?.phase !== "dispatched") {
+          yield* Effect.logInfo(
+            `bridge terminal for ${terminal.requestId} ignored: no dispatched request holds it`,
+          );
+          return;
+        }
+        if (yield* Deferred.succeed(request.reply, settled)) return;
+        // The reply already holds the unsettled answer and its worker has not re-armed yet: arm the
+        // next answer, unless the worker won. On effect 4.0.2 the worker re-arms before the next
+        // frame of the same socket batch decodes (the batch test passes without this branch), so it
+        // only guards against a scheduler order change, which would otherwise strand the slot.
+        const next = yield* Deferred.make<BridgeResponse, BridgeError>();
+        yield* Deferred.succeed(next, settled);
+        const armed = yield* Ref.modify(session.requests, (live) => {
+          const current = live.get(terminal.requestId);
+          return current?.reply === request.reply
+            ? ([true, new Map(live).set(terminal.requestId, { ...current, reply: next })] as const)
+            : ([false, live] as const);
+        });
+        if (armed) return;
+      }
+    });
 
     const handleConnectionScoped = Effect.fnUntraced(function* (
       req: HttpServerRequest.HttpServerRequest,
@@ -605,6 +695,21 @@ export const RevitBridgeLive = Layer.effect(
             // Registration admitted a valid process incarnation before assigning its broker id.
             const registration = frame.registration;
             const sessionId = (yield* Effect.promise(() => computeBridgeSessionId(registration)))!;
+            // inFlight is captured from one process handle. Evidence tagged with another
+            // incarnation than the registration's cannot vouch for this session's old jobs.
+            const inFlight = registration.inFlight ?? null;
+            const vouched =
+              !inFlight ||
+              (inFlight.processId === registration.processId &&
+                inFlight.processStartUtcUnixMs === registration.processStartUtcUnixMs);
+            // A registration proves which incarnation of its pid is alive. Every other session for
+            // that pid, and this id's own session when unvouched, is dead: its jobs settle unknown.
+            for (const other of (yield* Ref.get(sessions)).values())
+              if (
+                other.processId === registration.processId &&
+                (other.sessionId !== sessionId || !vouched)
+              )
+                yield* endIncarnation(other);
             const previous = (yield* Ref.get(sessions)).get(sessionId);
             const previousConnection = previous ? yield* Ref.get(previous.connection) : null;
             const attachment: Connection = {
@@ -636,6 +741,7 @@ export const RevitBridgeLive = Layer.effect(
                 state: yield* Ref.make(registration.state),
                 line: yield* Queue.unbounded<Job>(),
                 depth: yield* Ref.make(0),
+                ended: yield* Deferred.make<void>(),
               };
               yield* Effect.forkIn(serve(registered), bridgeScope);
               yield* Ref.update(sessions, (map) => new Map(map).set(sessionId, registered));
@@ -652,6 +758,19 @@ export const RevitBridgeLive = Layer.effect(
               kind: "connected",
               docTitle: registration.state.activeDocumentTitle ?? null,
             });
+            // Re-adoption: a request inFlight lists is still held, because the carried-over session
+            // keeps it dispatched and its worker reconciling. Only replayed terminals act here.
+            for (const terminal of inFlight?.terminals ?? [])
+              yield* settleTerminal(session, terminal);
+            return;
+          }
+          case "Terminal": {
+            if (!frame.terminal) {
+              yield* Effect.logWarning("bridge Terminal frame missing terminal");
+              return;
+            }
+            // Like a Response, it is matched by request id from any socket of the session.
+            if (session) yield* settleTerminal(session, frame.terminal);
             return;
           }
           case "StateSync":
@@ -906,7 +1025,10 @@ export const RevitBridgeLive = Layer.effect(
             new BridgeError(res.errorMessage ?? `${operationKey} failed`, res.statusCode ?? 500, {
               issues: res.issues,
               // A refusal is an answer, not a lost reply: it must never leave the action unknown.
-              ...(unsettled ? {} : { dispatched: true as const }),
+              // A payload-less Terminal settled the op, but its value is lost: unknown here too.
+              ...(unsettled || rootOutcome(res.issues) === SETTLED_WITHOUT_PAYLOAD
+                ? {}
+                : { dispatched: true as const }),
               resolvedTarget: {
                 session: session.sessionId,
                 document: targetOpenId
@@ -933,27 +1055,32 @@ export const RevitBridgeLive = Layer.effect(
     const releaseRequest = (session: Session, requestId: string) =>
       Effect.andThen(forgetBridgeRequest(session.requests, requestId), settleLoss(session));
 
-    /** Re-arms a dispatched request with a fresh reply, so its next answer has somewhere to land. */
+    /**
+     * Re-arms a dispatched request with a fresh reply, so its next answer has somewhere to land.
+     * A Terminal that arrived first already armed one (see `settleTerminal`): that one is returned.
+     */
     const awaitAgain = Effect.fnUntraced(function* (
       session: Session,
       requestId: string,
       previous: Deferred.Deferred<BridgeResponse, BridgeError>,
     ) {
-      const reply = yield* Deferred.make<BridgeResponse, BridgeError>();
-      yield* Ref.update(session.requests, (live) => {
+      const fresh = yield* Deferred.make<BridgeResponse, BridgeError>();
+      return yield* Ref.modify(session.requests, (live) => {
         const request = live.get(requestId);
-        return request?.reply === previous
-          ? new Map(live).set(requestId, { ...request, reply })
-          : live;
+        if (request && request.reply !== previous) return [request.reply, live] as const;
+        return request
+          ? ([fresh, new Map(live).set(requestId, { ...request, reply: fresh })] as const)
+          : ([fresh, live] as const);
       });
-      return reply;
     });
 
     /**
      * Holds the serial slot after the caller already has its `unknown` answer: the worker waits for
-     * terminal evidence for THIS request id (a settled answer on any socket) or process death. No
-     * timer releases it. The wire carries no native-idle frame today (BridgeAgent answers once), so
-     * a non-cooperative op holds the slot until its process dies, which is rule 11 as written.
+     * terminal evidence for THIS request id or process death. Terminal evidence is a settled
+     * Response on any socket, a Terminal frame, or a Terminal replayed in Registration.inFlight
+     * (all via `settleTerminal`). No timer releases it, and the host polls no receipt.
+     * Host and add-in ship in lockstep (the exact contract version gate refuses a mismatch at
+     * registration), so no fallback exists for an add-in that never sends Terminal frames.
      */
     const reconcile = (session: Session, job: Job): Effect.Effect<void> =>
       Effect.flatMap(Ref.get(job.owed), (first) =>
@@ -983,6 +1110,16 @@ export const RevitBridgeLive = Layer.effect(
             Exit.isSuccess(evidence) && isUnsettled(evidence.value)
               ? yield* awaitAgain(session, job.requestId, settled)
               : null;
+          if (!reply)
+            yield* Effect.logInfo(
+              `Revit queue reconciled op=${job.operationKey} request=${job.requestId} outcome=${
+                Exit.isSuccess(evidence)
+                  ? evidence.value.ok
+                    ? "ok"
+                    : (rootOutcome(evidence.value.issues) ?? "failed")
+                  : "unknown"
+              }`,
+            );
         }
       }).pipe(Effect.ensuring(releaseRequest(session, job.requestId)));
 

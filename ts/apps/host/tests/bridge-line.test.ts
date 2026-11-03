@@ -45,29 +45,34 @@ const harness = Effect.gen(function* () {
   const context = yield* Layer.buildWithScope(RevitBridgeLive, bridgeScope).pipe(
     Effect.provideService(RevitProcessAlive, () => life.alive),
   );
-  /** One fake socket of Revit process 42 (the same incarnation every time). */
-  const socket = Effect.gen(function* () {
-    const { bridge, incoming, outgoing, connection, target } = yield* connectTestBridge().pipe(
-      Effect.provide(context),
-    );
-    return {
-      bridge,
-      target,
-      outgoing,
-      /** The next Request frame this socket carries. */
-      sent: Queue.take(outgoing).pipe(Effect.map((frame: BridgeFrame) => frame.request!)),
-      answer: (requestId: string) => Queue.offer(incoming, response(requestId)),
-      /** Any raw frame from Revit, for answers other than plain success. */
-      frame: (raw: string) => Queue.offer(incoming, raw),
-      close: Fiber.interrupt(connection),
-    };
-  });
+  /** One fake socket of Revit process 42; `registration` overrides fields of its Registration. */
+  const socketOf = (registration: Record<string, unknown> = {}) =>
+    Effect.gen(function* () {
+      const { bridge, incoming, outgoing, connection, target } = yield* connectTestBridge(
+        42,
+        registration,
+      ).pipe(Effect.provide(context));
+      return {
+        bridge,
+        target,
+        outgoing,
+        /** The next Request frame this socket carries. */
+        sent: Queue.take(outgoing).pipe(Effect.map((frame: BridgeFrame) => frame.request!)),
+        answer: (requestId: string) => Queue.offer(incoming, response(requestId)),
+        /** Any raw frame from Revit, for answers other than plain success. */
+        frame: (raw: string) => Queue.offer(incoming, raw),
+        /** Several frames in one socket batch: no fiber runs between them. */
+        batch: (...raws: string[]) => Queue.offer(incoming, raws),
+        close: Fiber.interrupt(connection),
+      };
+    });
+  const socket = socketOf(); // the same incarnation every time
   const first = yield* socket;
   const call = (key: string, payload: unknown = {}, requestId?: string) =>
     Effect.forkScoped(
       first.bridge.invoke(key, payload, first.target.session, first.target.openId, requestId),
     );
-  return { life, bridgeScope, socket, call, ...first };
+  return { life, bridgeScope, socket, socketOf, call, ...first };
 });
 
 effectTest("interrupting a waiter never lets the one behind it overtake the running op", () =>
@@ -376,4 +381,137 @@ effectTest("interrupted waiters take their jobs and payloads out of the physical
     const next = yield* sent;
     expect(next.operationKey).toBe("test.w6");
   }),
+);
+
+// Terminal evidence (ADR 0029 rule 11): the add-in sends a Terminal frame for the exact bridge
+// request id once abandoned native work really finishes, and replays undelivered ones on reconnect.
+const terminal = (requestId: string, outcome = "Succeeded") => ({
+  requestId,
+  outcome,
+  startedAtUnixMs: 1,
+  completedAtUnixMs: 2,
+  receiptId: null,
+});
+const terminalFrame = (requestId: string, outcome?: string) =>
+  JSON.stringify({ kind: "Terminal", terminal: terminal(requestId, outcome) });
+const inFlight = (fields: Record<string, unknown>) => ({
+  inFlight: { processId: 42, processStartUtcUnixMs: 1000, ...fields },
+});
+
+/** A held, B queued behind it, A answered AbandonedStillRunning: A failed unknown, B waits. */
+const abandoned = Effect.gen(function* () {
+  const h = yield* harness;
+  const a = yield* h.call("test.a");
+  const runningA = yield* h.sent;
+  const b = yield* h.call("test.b");
+  yield* turns();
+  yield* h.frame(unsettled(runningA.requestId));
+  expect(failure(yield* Fiber.await(a))).toMatchObject({ _tag: "BridgeError", outcome: "unknown" });
+  yield* turns();
+  expect(yield* Queue.size(h.outgoing)).toBe(0);
+  return { ...h, runningA, b };
+});
+
+effectTest("a Terminal for an abandoned request releases the slot and B dispatches", () =>
+  Effect.gen(function* () {
+    const { frame, sent, answer, runningA, b } = yield* abandoned;
+    yield* frame(terminalFrame(runningA.requestId, "Succeeded"));
+    const next = yield* sent;
+    expect(next.operationKey).toBe("test.b");
+    yield* answer(next.requestId);
+    expect(Exit.isSuccess(yield* Fiber.await(b))).toBe(true);
+  }),
+);
+
+effectTest(
+  "a Terminal right behind its unsettled answer still settles; duplicates are no-ops",
+  () =>
+    Effect.gen(function* () {
+      const { call, sent, frame, batch, answer, outgoing } = yield* harness;
+      const a = yield* call("test.a");
+      const runningA = yield* sent;
+      const b = yield* call("test.b");
+      yield* turns();
+      // One socket batch: the Terminal lands before A's worker re-arms its reply.
+      yield* batch(
+        unsettled(runningA.requestId),
+        terminalFrame(runningA.requestId, "Failed"),
+        terminalFrame(runningA.requestId, "Failed"),
+      );
+      expect(failure(yield* Fiber.await(a))).toMatchObject({ outcome: "unknown" });
+      const runningB = yield* sent;
+      expect(runningB.operationKey).toBe("test.b");
+      const c = yield* call("test.c");
+      yield* frame(terminalFrame(runningA.requestId, "Failed")); // A is released: ignored
+      yield* frame(terminalFrame("never-sent")); // unknown id: ignored
+      yield* turns();
+      expect(yield* Queue.size(outgoing)).toBe(0); // B still holds the slot; C waits
+      yield* answer(runningB.requestId);
+      expect(Exit.isSuccess(yield* Fiber.await(b))).toBe(true);
+      const runningC = yield* sent;
+      expect(runningC.operationKey).toBe("test.c");
+      yield* answer(runningC.requestId);
+      expect(Exit.isSuccess(yield* Fiber.await(c))).toBe(true);
+    }),
+);
+
+effectTest("a reconnect whose inFlight lists A keeps the slot; a later Terminal releases it", () =>
+  Effect.gen(function* () {
+    const { close, socketOf, runningA, b, target } = yield* abandoned;
+    yield* close;
+    const second = yield* socketOf(
+      inFlight({
+        requests: [
+          { requestId: runningA.requestId, state: "AbandonedStillRunning", startedAtUnixMs: 1 },
+        ],
+      }),
+    );
+    expect(second.target.session).toBe(target.session);
+    yield* TestClock.adjust("1 hour");
+    yield* turns();
+    expect(yield* Queue.size(second.outgoing)).toBe(0);
+    yield* second.frame(terminalFrame(runningA.requestId, "Cancelled"));
+    const next = yield* second.sent;
+    expect(next.operationKey).toBe("test.b");
+    yield* second.answer(next.requestId);
+    expect(Exit.isSuccess(yield* Fiber.await(b))).toBe(true);
+  }),
+);
+
+effectTest("a reconnect replaying A's terminal in inFlight releases the slot on registration", () =>
+  Effect.gen(function* () {
+    const { close, socketOf, runningA, b } = yield* abandoned;
+    yield* close;
+    const second = yield* socketOf(inFlight({ terminals: [terminal(runningA.requestId)] }));
+    const next = yield* second.sent;
+    expect(next.operationKey).toBe("test.b");
+    yield* second.answer(next.requestId);
+    expect(Exit.isSuccess(yield* Fiber.await(b))).toBe(true);
+  }),
+);
+
+effectTest(
+  "a registration from a new incarnation of the pid fails A unknown and frees the slot",
+  () =>
+    Effect.gen(function* () {
+      const { call, sent, close, socketOf, bridge, outgoing } = yield* harness;
+      const a = yield* call("test.a");
+      yield* sent; // dispatched, never answered
+      const b = yield* call("test.b");
+      yield* turns(); // B is queued in the line before the transport goes
+      yield* close; // transport lost; the pid probe still says alive (life.alive stays true)
+      yield* turns();
+      const reborn = yield* socketOf({ processStartUtcUnixMs: 2000 });
+      expect(failure(yield* Fiber.await(a))).toMatchObject({
+        _tag: "BridgeError",
+        statusCode: 503,
+        outcome: "unknown",
+      });
+      expect(failure(yield* Fiber.await(b))).toMatchObject({
+        statusCode: 503,
+        evidence: { notDispatched: true },
+      });
+      expect(yield* Queue.size(outgoing)).toBe(0); // B never went out
+      expect((yield* bridge.list).map((view) => view.sessionId)).toEqual([reborn.target.session]);
+    }),
 );
