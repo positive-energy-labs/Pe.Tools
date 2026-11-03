@@ -1,12 +1,17 @@
+import { useAtomValue } from "@effect/atom-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearch, useRouter } from "@tanstack/react-router";
+import { deepEqual, useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
-import { selectRunStatus, selectTurnFailure } from "@pe/agent-contracts/chat-state";
+import {
+  selectApprovals,
+  selectRunStatus,
+  selectTurnFailure,
+} from "@pe/agent-contracts/chat-state";
 import { previousOf, useHostStatusSlice } from "#/shell/readings-hooks";
 import { appAtomRegistry, useRouteOwner } from "#/shell/owner";
 import { createChatPageStore } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
-import { WorkbenchContext } from "./thread-summary";
+import { TranscriptContext, WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
 import { harnessClient, notFound, type PromptRequest } from "./harness-client";
 import * as Atom from "effect/reactivity/Atom";
@@ -134,7 +139,23 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     onListChange: () => void refreshThreads().catch((caught) => setError(errorMessage(caught))),
   });
   const missingThread = notFound(stream.error);
-  const chat = demo ?? stream.chat;
+  const transcript = useMemo(
+    () => (demo ? Atom.make(demo) : stream.chatAtom),
+    [demo, stream.chatAtom],
+  );
+  const summary = useMemo(
+    () =>
+      Atom.map(transcript, (state) => ({
+        id: state.id,
+        providerId: state.providerId,
+        lifecycle: state.lifecycle,
+        running: selectRunStatus(state) !== "idle",
+        failure: selectTurnFailure(state),
+        runApprovals: selectApprovals(state).filter((ask) => ask.scope === "run"),
+      })).pipe(Atom.withEquality(deepEqual)),
+    [transcript],
+  );
+  const chat = useAtomValue(summary);
   const bodyAtom = useMemo(
     () => (demo ? Atom.make(AsyncResult.success(demo)) : stream.bodyAtom),
     [demo, stream.bodyAtom],
@@ -142,8 +163,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const loading = !remote
     ? selected.reading.state === "absent"
     : chatLoading(host.known, stream.pending);
-  const isRunning = selectRunStatus(chat) !== "idle";
-  const turnFailure = selectTurnFailure(chat);
+  const isRunning = chat.running;
+  const turnFailure = chat.failure;
+  const chatId = chat.id;
+  const lifecycleRevision = chat.lifecycle.revision;
+  const runApprovals = chat.runApprovals;
 
   /** Every verb: clear the last complaint, run, and say what failed. */
   const attempt = useCallback(
@@ -345,7 +369,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     () => ({
       store,
       config,
-      chat,
+      runApprovals,
       bodyAtom,
       loading,
       error,
@@ -377,12 +401,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       },
       updateThread: (threadId, change) =>
         attempt(async () => {
-          const current =
-            threads.find((item) => item.id === threadId) ??
-            (chat.id === threadId ? chat : undefined);
+          const revision =
+            threads.find((item) => item.id === threadId)?.lifecycle.revision ??
+            (chatId === threadId ? lifecycleRevision : undefined);
           const updated = await client
             .update(threadId, {
-              expectedRevision: current?.lifecycle.revision,
+              expectedRevision: revision,
               ...change,
             })
             .catch((caught) => {
@@ -421,7 +445,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [
       attempt,
       bodyAtom,
-      chat,
+      runApprovals,
+      chatId,
+      lifecycleRevision,
       client,
       config,
       createThread,
@@ -449,5 +475,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <WorkbenchContext.Provider value={context}>{children}</WorkbenchContext.Provider>;
+  return (
+    <WorkbenchContext.Provider value={context}>
+      <TranscriptContext.Provider value={transcript}>{children}</TranscriptContext.Provider>
+    </WorkbenchContext.Provider>
+  );
 }

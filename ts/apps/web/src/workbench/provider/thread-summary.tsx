@@ -6,7 +6,7 @@ import type {
   UpdateThreadRequest,
 } from "@pe/agent-contracts";
 import { type WorkbenchEndpointConfig } from "../config";
-import { type ChatState, type ThreadBody } from "@pe/agent-contracts/chat-state";
+import { type Approval, type ChatState, type ThreadBody } from "@pe/agent-contracts/chat-state";
 import { type ChatPageStore } from "../store";
 import type * as Atom from "effect/reactivity/Atom";
 import type * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -18,7 +18,7 @@ export type StoredThreadSummary = HarnessThreadSummary;
 export interface WorkbenchContextValue {
   store: ChatPageStore;
   config: WorkbenchEndpointConfig;
-  chat: ChatState;
+  runApprovals: readonly Approval[];
   /** The selected thread body; only the transcript reads it with Suspense. */
   bodyAtom: Atom.Atom<AsyncResult.AsyncResult<ThreadBody, Error>>;
   loading: boolean;
@@ -67,3 +67,5 @@ export interface WorkbenchContextValue {
 }
 
 export const WorkbenchContext = createContext<WorkbenchContextValue | undefined>(undefined);
+
+export const TranscriptContext = createContext<Atom.Atom<ChatState> | undefined>(undefined);

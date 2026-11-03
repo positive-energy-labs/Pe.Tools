@@ -17,7 +17,7 @@ export function ComposerPending({
 }: {
   approvals: readonly Approval[];
   questions: readonly Question[];
-  calls: readonly ToolCall[];
+  calls: readonly Pick<ToolCall, "id" | "caption">[];
   resolveApproval: (requestId: string, optionId: string) => Promise<void>;
   answerQuestion: (
     requestId: string,

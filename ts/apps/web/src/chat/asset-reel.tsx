@@ -2,7 +2,7 @@
 // first (protoui ruling 2026-10-13, agent ledger). Hover previews and lights the message; a press
 // on a model `@`s it. What `@` on a capture, image or file means is owed (agent ledger), so those
 // tiles carry no mention press: plain `@Name` text would give Pea a name and nothing to read.
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Check, Copy, FileText, Image as ImageIcon } from "lucide-react";
 import { mentionToken, toolTitle, type Mention } from "@pe/agent-contracts";
 import { formatBytes, type ChatMessage } from "@pe/agent-contracts/chat-state";
@@ -83,13 +83,12 @@ function lightMessage(id: string | undefined) {
 }
 
 export function AssetReel({
-  messages,
+  assets,
   onMention,
 }: {
-  messages: ChatMessage[];
+  assets: ThreadAsset[];
   onMention: (mention: Mention) => void;
 }) {
-  const assets = useMemo(() => threadAssets(messages), [messages]);
   const [filter, setFilter] = useState<string>();
   useEffect(() => () => lightMessage(undefined), []);
   if (assets.length === 0) return null;
