@@ -1,8 +1,7 @@
-import { useState } from "react";
 import type { VerbDecl } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { Popover, SubjectPopoverContent } from "@pe/kit/lang/popover";
+import { ReviewSurface } from "./review-surface";
 import type { GraphMount } from "./mount-owner";
 import { completeVerb, type Worksharing } from "./verbs";
 
@@ -139,55 +138,15 @@ export function GraphReview<P, W>({
 }) {
   const review = owner.reviews.get(id)!;
   const verb = owner.verbs[id]!;
-  const [anchor] = useState(() => document.activeElement);
-  const press = () => void owner.commitReview(id, review.ticket);
-  const borrows = borrowWords(review.ticket.presentation.worksharing);
-  const commit = `Commit ${verb.label}${borrows ? ` · ${borrows}` : ""}`;
   return (
-    <Popover
-      open
-      replaceOnSiblingOpen={false}
-      onOpenChange={(open, details) => {
-        if (open) return;
-        if (details.reason === "escape-key") owner.stop();
-        else details.cancel();
-      }}
-    >
-      <SubjectPopoverContent
-        anchor={anchor}
-        aria-label={`${verb.label} review`}
-        className="flex max-h-(--available-height) flex-col gap-2"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="min-h-0 overflow-y-auto">
-          <output>{review.ticket.presentation.sentence}</output>
-          {review.ticket.presentation.rows.length > 0 && (
-            <span role="list" className="flex flex-col">
-              {review.ticket.presentation.rows.map((row, index) => (
-                <span role="listitem" key={index}>
-                  {row}
-                </span>
-              ))}
-            </span>
-          )}
-          {review.ticket.presentation.worksharing && (
-            <WorksharingNote worksharing={review.ticket.presentation.worksharing} />
-          )}
-        </div>
-        <div className="flex shrink-0 items-center justify-between gap-2">
-          <Button
-            kind="commit"
-            label={commit}
-            refusal={!enabled ? "This route is inactive" : null}
-            onClick={press}
-          >
-            {commit}
-          </Button>
-          <Button label={`Cancel ${verb.label}`} onClick={() => owner.stop()}>
-            Cancel
-          </Button>
-        </div>
-      </SubjectPopoverContent>
-    </Popover>
+    <ReviewSurface
+      label={verb.label}
+      sentence={review.ticket.presentation.sentence}
+      rows={review.ticket.presentation.rows}
+      worksharing={review.ticket.presentation.worksharing}
+      enabled={enabled}
+      confirm={() => void owner.commitReview(id, review.ticket)}
+      cancel={() => owner.stop()}
+    />
   );
 }
