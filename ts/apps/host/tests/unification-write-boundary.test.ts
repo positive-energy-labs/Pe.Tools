@@ -232,7 +232,7 @@ for (const foreign of [false, true])
           ? bindWork("ducts", null, undefined, { session: target.session, openId: "other-open" })
           : workKey;
         const staged = yield* Effect.promise(() => work.apply(key, "ducts", "human", edit(200), 0));
-        expect(staged.ok).toBe(true);
+        if (!staged.ok) throw Error("Expected accepted staged Work");
         const submitted = yield* post(
           intent(
             "mismatch",
@@ -328,6 +328,7 @@ test("kernel gap: preview seal refuses apply after Work changes", () =>
       const staged = yield* Effect.promise(() =>
         work.apply(workKey, "ducts", "human", edit(200), 0),
       );
+      if (!staged.ok) throw Error("Expected accepted staged Work");
       yield* post(
         intent("preview", "ducts.preview-losses", undefined, {
           work: { key: workKey, revision: staged.revision },
@@ -338,9 +339,9 @@ test("kernel gap: preview seal refuses apply after Work changes", () =>
       yield* answer(preview.frame.request!.requestId, { ...response, previewOnly: true });
       expect((yield* Effect.promise(() => owner.wait("preview")))?.state).toBe("succeeded");
       const changed = yield* Effect.promise(() =>
-        work.apply(workKey, "ducts", "human", edit(300), staged.revision!),
+        work.apply(workKey, "ducts", "human", edit(300), staged.revision),
       );
-      expect(changed.ok).toBe(true);
+      if (!changed.ok) throw Error("Expected accepted changed Work");
       yield* post(
         intent("apply", "ducts.apply-losses", undefined, {
           work: { key: workKey, revision: changed.revision },
@@ -371,6 +372,7 @@ test("unknown outcome blocks a new invocation from dispatching the same write", 
       const staged = yield* Effect.promise(() =>
         work.apply(workKey, "ducts", "human", edit(200), 0),
       );
+      if (!staged.ok) throw Error("Expected accepted staged Work");
       const payload = { work: { key: workKey, revision: staged.revision } };
       yield* post(intent("pre-unknown", "ducts.preview-losses", undefined, payload));
       const preview = yield* dispatchOrReceipt(owner, outgoing, "pre-unknown", answer);
@@ -404,6 +406,7 @@ test("host-derived preview and apply send the captured Work flow and retire only
           0,
         ),
       );
+      if (!staged.ok) throw Error("Expected accepted staged Work");
       const payload = { work: { key: workKey, revision: staged.revision } };
       for (const [id, key, previewOnly] of [
         ["preview-derived", "ducts.preview-losses", true],
