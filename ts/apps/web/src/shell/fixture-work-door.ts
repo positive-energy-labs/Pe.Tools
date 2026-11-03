@@ -56,7 +56,7 @@ export function createFixtureWorkDoor(
         } catch (error) {
           deliver({
             kind: "failed",
-            failure: { code: "FixtureWorkUnavailable", message: String(error) },
+            failure: { kind: "failed", code: "FixtureWorkUnavailable", message: String(error) },
           });
           end();
           return () => {};

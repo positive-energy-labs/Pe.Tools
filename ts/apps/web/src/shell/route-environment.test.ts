@@ -1,3 +1,4 @@
+import { workFingerprintSchema } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import type { WorkScope } from "../../../../packages/agent-contracts/src/work-journal-door";
 const command = { id: "write", key: "write", target: { kind: "host" as const }, input: {} };
@@ -5,6 +6,7 @@ const workScope = (
   scope: import("../../../../packages/agent-contracts/src/route-kernel-page").ScopeToken,
 ): WorkScope => ({
   route: scope.identity.work!.route,
+  fingerprint: workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
   key: scope.identity.work!,
   target: scope.identity.target,
   subject: null,

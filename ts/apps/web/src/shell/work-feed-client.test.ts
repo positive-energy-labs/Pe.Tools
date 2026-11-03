@@ -1,3 +1,4 @@
+import { workFingerprintSchema } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { expect, test, vi } from "vite-plus/test";
 import type { Readings } from "../readings";
 import type {
@@ -6,7 +7,13 @@ import type {
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { createWorkFeedClient } from "./work-feed-client";
 const key = { binding: "host", route: "note", target: null } as const;
-const scope: WorkScope = { route: "note", key, target: null, subject: null };
+const scope: WorkScope = {
+  route: "note",
+  fingerprint: workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
+  key,
+  target: null,
+  subject: null,
+};
 type Frame = Parameters<Parameters<Readings["subscribe"]>[1]>[0];
 const ack = (revision: number) =>
   ({
@@ -144,3 +151,57 @@ test("a wire gap with no revision bounds fails rather than inventing an interval
   expect(h.values.map((value) => value.kind)).toEqual(["pending", "failed"]);
   expect(h.end).toHaveBeenCalledOnce();
 });
+test("Work acquisition preserves the admitted source and digest on snapshot and ack subscriptions", () => {
+  const requests: unknown[] = [];
+  const source: Readings = {
+    subscribe: (request) => {
+      requests.push(request);
+      return () => {};
+    },
+    dirty: vi.fn(),
+  };
+  const stop = createWorkFeedClient(source)
+    .open(scope)
+    .subscribe(
+      () => {},
+      () => {},
+    );
+  expect(requests).toEqual([
+    {
+      kind: "work-acks",
+      work: key,
+      admission: { routeKey: scope.route, fingerprint: scope.fingerprint },
+    },
+    { ...key, kind: "work", admission: { routeKey: scope.route, fingerprint: scope.fingerprint } },
+  ]);
+  stop();
+});
+test.each([
+  {
+    kind: "registration-mismatch",
+    routeKey: "note",
+    expected: workFingerprintSchema.parse(`pod-bytes:${"b".repeat(64)}`),
+    received: scope.fingerprint,
+  },
+  {
+    kind: "migration-failed",
+    routeKey: "note",
+    fromVersion: 1,
+    toVersion: 2,
+    step: 1,
+    message: "upgrade failed",
+  },
+  { kind: "failed", code: "HostUnavailable", message: "offline" },
+] as const)(
+  "$kind is terminal and preserved unchanged; later frames cannot revive it",
+  (failure) => {
+    const h = harness();
+    h.emit("work", { kind: "failure", key: "work", error: "refused", failure });
+    h.emit("work", snapshot(10));
+    h.emit("work-acks", ack(11));
+    expect(h.values).toEqual([{ kind: "pending" }, { kind: "failed", failure }]);
+    expect(h.end).toHaveBeenCalledOnce();
+    expect(h.source.dirty).not.toHaveBeenCalled();
+    h.stops.forEach((stop) => expect(stop).toHaveBeenCalledOnce());
+  },
+);

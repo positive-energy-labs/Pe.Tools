@@ -3,6 +3,14 @@ import type { RouteDiagnostic, RouteGraphJson } from "./route-kernel-data.ts";
 import type { AdmittedRoute } from "./route-module.ts";
 import type { IdentityBindings, SchemaTable } from "./route-kernel-page.ts";
 
+import { z } from "zod";
+
+/** Work transport serializes the exact fingerprint envelope, source plus digest. */
+export const workFingerprintSchema = z
+  .string()
+  .regex(/^(builtin-closure|pod-bytes):[a-f0-9]{64}$/)
+  .transform((value) => value as RouteFingerprint);
+
 declare const fingerprint: unique symbol;
 export type RouteFingerprint = string & { readonly [fingerprint]: "sha256:route-v1" };
 export interface ExecutableMember {

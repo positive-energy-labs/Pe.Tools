@@ -1,3 +1,4 @@
+import { workFeedFailureMessage } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { completion } from "./work-door-observation";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import type {
@@ -23,9 +24,10 @@ export function createAdmittedWork(
   let scope: WorkScope | undefined;
   let ready = false;
   let problem: string | null = null;
+  let reloadRequired = false;
   const sync = () => {
     const snapshot = owner.read();
-    if (!snapshot || snapshot.scope === scopeToken) return;
+    if (reloadRequired || !snapshot || snapshot.scope === scopeToken) return;
     stop();
     problem = null;
     ready = false;
@@ -34,6 +36,7 @@ export function createAdmittedWork(
     if (!door || !key) return;
     scope = {
       route: route.data.key,
+      fingerprint: route.workFingerprint,
       key,
       target: snapshot.scope.identity.target,
       subject: snapshot.page[route.data.subject.field] as WorkScope["subject"],
@@ -50,7 +53,8 @@ export function createAdmittedWork(
         }
         if (state.kind === "failed") {
           ready = false;
-          problem = state.failure.message;
+          reloadRequired = state.failure.kind === "registration-mismatch";
+          problem = workFeedFailureMessage(state.failure);
           notify();
         }
         if (state.kind === "ready") {

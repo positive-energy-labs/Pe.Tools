@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { workFingerprintSchema, type RouteFingerprint } from "./route-kernel-admission.ts";
 import type { CommandRefusal } from "./command.ts";
 import type { AdmittedRoute } from "./route-kernel-admission.ts";
 import type { JournalCommandHandle } from "./route-kernel-environment.ts";
@@ -19,6 +21,7 @@ export type JournalCommandId = JournalCommandHandle["id"] & {
 
 export interface WorkScope {
   readonly route: AdmittedRoute["data"]["key"];
+  readonly fingerprint: RouteFingerprint;
   readonly key: WorkKey;
   readonly target: ScopeIdentity["target"];
   readonly subject: IdentityId<IdentityKind> | Many<IdentityId<IdentityKind>> | null;
@@ -36,11 +39,42 @@ export interface WorkSnapshot {
   readonly value: unknown;
 }
 
+/** registration-mismatch means the tab runs other route bytes than the host admitted,
+ * typically an old tab after a Pod update. Reload the tab; never retry or reopen in place.
+ * Every failure variant is terminal: failed -> end, with no later ready or ack. */
+export const workFeedFailureSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("registration-mismatch"),
+    routeKey: z.string(),
+    expected: workFingerprintSchema,
+    received: workFingerprintSchema,
+  }),
+  z.strictObject({
+    kind: z.literal("migration-failed"),
+    routeKey: z.string(),
+    fromVersion: z.number().int().positive(),
+    toVersion: z.number().int().positive(),
+    step: z.number().int().positive().optional(),
+    message: z.string(),
+  }),
+  z.strictObject({ kind: z.literal("failed"), code: z.string(), message: z.string() }),
+]);
+export type WorkFeedFailure = z.infer<typeof workFeedFailureSchema>;
+export const workFeedFailureMessage = (failure: WorkFeedFailure): string =>
+  failure.kind === "registration-mismatch"
+    ? "Route bytes differ from the host registration. Reload this tab."
+    : failure.message;
+export const workAdmissionSchema = z.strictObject({
+  routeKey: z.string(),
+  fingerprint: workFingerprintSchema,
+});
+export type WorkAdmission = z.infer<typeof workAdmissionSchema>;
+
 export type WorkFeedState =
   | { readonly kind: "pending" }
   | {
       readonly kind: "failed";
-      readonly failure: { readonly code: string; readonly message: string };
+      readonly failure: WorkFeedFailure;
     }
   | { readonly kind: "ready"; readonly snapshot: WorkSnapshot }
   | { readonly kind: "ack"; readonly ack: WorkWriteAck }

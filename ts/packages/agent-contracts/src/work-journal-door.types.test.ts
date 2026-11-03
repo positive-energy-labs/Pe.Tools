@@ -1,3 +1,4 @@
+import type { RouteFingerprint } from "./route-kernel-admission.ts";
 import { expectTypeOf, it } from "vite-plus/test";
 import type { ActionAdmission } from "./semantic-actions.ts";
 import type { JournalCommandHandle } from "./route-kernel-environment.ts";
@@ -31,6 +32,12 @@ export function doorRefusals(
   ack: import("./route-state.ts").WorkWriteAck,
   invocation: InvocationBasis,
 ) {
+  const { fingerprint: _fingerprint, ...withoutFingerprint } = scope;
+  // @ts-expect-error Every admitted scope requires its exact fingerprint.
+  door.open(withoutFingerprint);
+  // @ts-expect-error Plain strings are not admitted fingerprints.
+  const forgedFingerprint: WorkScope = { ...scope, fingerprint: "arbitrary" };
+  void forgedFingerprint;
   // @ts-expect-error Work submission requires a revision-checked write, not an action.
   door.submitWork(scope, command, invocation);
   // @ts-expect-error Work acceptance cannot carry a journal command handle.
@@ -70,7 +77,7 @@ export function doorRefusals(
   const ackSnapshot: WorkFeedState = { kind: "ack", ack, snapshot };
   const failedAck: WorkFeedState = {
     kind: "failed",
-    failure: { code: "read", message: "failed" },
+    failure: { kind: "failed", code: "read", message: "failed" },
     // @ts-expect-error A failed frame cannot carry an ack.
     ack,
   };
@@ -95,6 +102,7 @@ export function doorRefusals(
 it("exposes inhabited Work and journal ports", () => {
   expectTypeOf<NeverMembers<WorkJournalDoor>>().toBeNever();
   expectTypeOf<NeverMembers<WorkScope>>().toBeNever();
+  expectTypeOf<WorkScope["fingerprint"]>().toEqualTypeOf<RouteFingerprint>();
   expectTypeOf<NeverMembers<WorkSnapshot>>().toBeNever();
   expectTypeOf<NeverMembers<WorkFeedState>>().toBeNever();
   expectTypeOf<NeverMembers<JournalSubmission>>().toBeNever();
@@ -156,5 +164,21 @@ export function consumeWorkFeed(state: WorkFeedState) {
     default:
       expectTypeOf(state).toBeNever();
       return state satisfies never;
+  }
+}
+
+/** Compile-only consumer: terminal reasons must remain exhaustive. */
+export function consumeFeedFailure(failure: Extract<WorkFeedState, { kind: "failed" }>["failure"]) {
+  switch (failure.kind) {
+    case "registration-mismatch":
+      expectTypeOf(failure.expected).toEqualTypeOf<RouteFingerprint>();
+      expectTypeOf(failure.received).toEqualTypeOf<RouteFingerprint>();
+      return "reload";
+    case "migration-failed":
+      return [failure.fromVersion, failure.toVersion, failure.step, failure.message];
+    case "failed":
+      return [failure.code, failure.message];
+    default:
+      return failure satisfies never;
   }
 }

@@ -9,6 +9,7 @@ import {
   type ReadingRequest,
   type ThreadHead,
 } from "@pe/agent-contracts";
+import { workFeedFailureMessage } from "../../agent-contracts/src/work-journal-door.ts";
 import type { RouteWorkspace } from "./route-workspace.ts";
 import type { OwnerValue } from "./owner-read.ts";
 
@@ -36,12 +37,80 @@ export function observeResources(
   return (request, publish, after) => {
     const key = readingKey(request);
     const accept = (value: OwnerValue<unknown>) => publish(resourceSnapshot(key, value));
+    if ((request.kind === "work" || request.kind === "work-acks") && request.admission) {
+      let closed = false;
+      let release = () => {};
+      const scope = request.kind === "work" ? request : request.work;
+      const admission = request.admission;
+      let stopAdmission = () => {};
+      const refuse = (
+        failure: import("../../agent-contracts/src/work-journal-door.ts").WorkFeedFailure,
+      ) => {
+        if (closed) return;
+        closed = true;
+        release();
+        stopAdmission();
+        publish({ kind: "failure", key, error: workFeedFailureMessage(failure), failure });
+      };
+      stopAdmission = work.observeAdmission(admission.routeKey, () => {
+        void work.admitFeed(scope, admission).then((failure) => {
+          if (failure) refuse(failure);
+        });
+      });
+      void work.admitFeed(scope, admission).then(
+        (failure) => {
+          if (closed) return;
+          if (failure) return refuse(failure);
+          release =
+            request.kind === "work"
+              ? work.observe(
+                  scope,
+                  scope.route,
+                  (value) => {
+                    if (!closed) accept(value);
+                  },
+                  true,
+                )
+              : work.observeAccepted(
+                  scope,
+                  (ack) => publish({ kind: "event", key, value: ack }),
+                  (error) => publish({ kind: "failure", key, error: String(error) }),
+                );
+        },
+        (error) => {
+          refuse({ kind: "failed", code: "WorkAdmissionFailed", message: String(error) });
+        },
+      );
+      return () => {
+        closed = true;
+        release();
+        stopAdmission();
+      };
+    }
+    if (
+      (request.kind === "work" || request.kind === "work-acks") &&
+      work.requiresAdmission(request.kind === "work" ? request.route : request.work.route)
+    ) {
+      const failure = {
+        kind: "failed" as const,
+        code: "WorkAdmissionRequired",
+        message: "Admitted Work requires the route fingerprint",
+      };
+      publish({ kind: "failure", key, error: failure.message, failure });
+      return () => {};
+    }
     if (request.kind === "work") return work.observe(request, request.route, accept);
     if (request.kind === "thread-head") return heads.observe(request.thread, accept);
     if (request.kind === "work-acks")
-      return work.observeAccepted(request.work, (ack) =>
-        publish({ kind: "event", key, value: ack }),
-        (error) => publish({ kind: "failure", key, error: error instanceof Error ? error.message : String(error) }),
+      return work.observeAccepted(
+        request.work,
+        (ack) => publish({ kind: "event", key, value: ack }),
+        (error) =>
+          publish({
+            kind: "failure",
+            key,
+            error: error instanceof Error ? error.message : String(error),
+          }),
       );
     if (host) return host(request, publish, after);
     publish({ kind: "failure", key, error: `Resource '${request.kind}' is unavailable` });
@@ -211,7 +280,8 @@ export function resourceResponse(
     try {
       const encoded = encode(frame);
       if (encoded.byteLength <= limits.frameBytes) bytes = encoded;
-    } catch (error) { console.warn("ts/packages/runtime/src/resource-stream.ts: fallback after failure", error);
+    } catch (error) {
+      console.warn("ts/packages/runtime/src/resource-stream.ts: fallback after failure", error);
       // A bad owner value fails only this key; healthy resources keep the same connection.
     }
     try {

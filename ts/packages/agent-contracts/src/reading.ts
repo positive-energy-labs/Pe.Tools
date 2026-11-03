@@ -1,3 +1,4 @@
+import { workAdmissionSchema, workFeedFailureSchema } from "./work-journal-door.ts";
 import type { HeldElement, ProcessIdentity } from "@pe/host-contracts/pe-revit-contract";
 import type { MachineLeg } from "./machine.ts";
 import type { SdkSessionSelection } from "./sdk-session.ts";
@@ -188,17 +189,33 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("machine") }),
   sdkReadingSchema,
   z.discriminatedUnion("binding", [
-    workKeySchema.options[0].extend({ kind: z.literal("work") }),
-    workKeySchema.options[1].extend({ kind: z.literal("work") }),
-    workKeySchema.options[2].extend({ kind: z.literal("work") }),
-    workKeySchema.options[3].extend({ kind: z.literal("work") }),
+    workKeySchema.options[0].extend({
+      kind: z.literal("work"),
+      admission: workAdmissionSchema.optional(),
+    }),
+    workKeySchema.options[1].extend({
+      kind: z.literal("work"),
+      admission: workAdmissionSchema.optional(),
+    }),
+    workKeySchema.options[2].extend({
+      kind: z.literal("work"),
+      admission: workAdmissionSchema.optional(),
+    }),
+    workKeySchema.options[3].extend({
+      kind: z.literal("work"),
+      admission: workAdmissionSchema.optional(),
+    }),
   ]),
   /**
    * One Work's accepted writes, in acceptance order: each `event` frame is one host-stamped
    * `WorkWriteAck` (author, press, forward and inverse patches, revision). A subscription replays
    * the host's retained window first, so a duplicate is possible and a revision jump is a gap.
    */
-  z.strictObject({ kind: z.literal("work-acks"), work: workKeySchema }),
+  z.strictObject({
+    kind: z.literal("work-acks"),
+    work: workKeySchema,
+    admission: workAdmissionSchema.optional(),
+  }),
   z.strictObject({ kind: z.literal("thread-head"), thread: z.string().min(1).max(200) }),
   /** Every harness thread's summary, one snapshot per change (coalesced). */
   z.strictObject({ kind: z.literal("threads") }),
@@ -308,7 +325,12 @@ export const readingFrameSchema = z.discriminatedUnion("kind", [
      */
     changed: z.boolean().optional(),
   }),
-  z.strictObject({ kind: z.literal("failure"), key: z.string(), error: z.string() }),
+  z.strictObject({
+    kind: z.literal("failure"),
+    key: z.string(),
+    error: z.string(),
+    failure: workFeedFailureSchema.optional(),
+  }),
   /**
    * `id` marks a host log frame: it is the SSE id, and a reconnect resumes after the last one
    * (`?after=<id>` or `Last-Event-ID`). Log frames of every key share one lane in id order; a

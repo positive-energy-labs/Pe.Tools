@@ -1,3 +1,14 @@
+import {
+  createAdmittedRouteRegistry,
+  resolveRouteBindings,
+  type AdmittedRoute,
+} from "../../agent-contracts/src/route-module.ts";
+import type { RouteFingerprint } from "../../agent-contracts/src/route-kernel-admission.ts";
+import type {
+  WorkAdmission,
+  WorkFeedFailure,
+} from "../../agent-contracts/src/work-journal-door.ts";
+import { WorkMigrationFailure } from "./work-migration-failure.ts";
 import { createWorkJournal } from "./work-journal.ts";
 import { bindWork, workCounts, workKey, workKeySchema, type WorkKey } from "@pe/agent-contracts";
 import { z } from "zod";
@@ -63,6 +74,16 @@ const OPEN_REGISTER = { targetKey: "open-work", route: "register" };
 /** Store, order, crash barrier, and publication shell around the pure route-document machine. */
 export class RouteWorkspace {
   readonly #registry = new Map<string, RouteWorkspaceRegistration>();
+  readonly #admissionListeners = new Map<string, Set<() => void>>();
+  readonly #admissions = new Map<
+    string,
+    {
+      fingerprint: RouteFingerprint;
+      workRoute: string;
+      ready: Promise<WorkFeedFailure | null>;
+      close(): void;
+    }
+  >();
   // ponytail: serialize this host workspace; use store transactions if parallel writes become necessary.
   #tail = Promise.resolve();
   readonly #listeners = new Set<(event: RouteWorkspaceEvent) => void>();
@@ -91,6 +112,146 @@ export class RouteWorkspace {
     return () => {
       if (this.#registry.get(route) === registration) this.#registry.delete(route);
     };
+  }
+
+  /** Host admission owns migration bodies. No browser-supplied body or schema crosses the wire. */
+  registerAdmitted(route: AdmittedRoute): {
+    ready: Promise<WorkFeedFailure | null>;
+    close(): void;
+  } {
+    const registry = createAdmittedRouteRegistry();
+    const receipt = registry.register(route);
+    const bindings = resolveRouteBindings(registry, route)!;
+    const work = route.data.work;
+    if (!work) {
+      receipt.deactivate();
+      throw Error("Route declares no Work");
+    }
+    const prior = this.#admissions.get(route.data.key);
+    if (prior?.fingerprint === route.workFingerprint) {
+      receipt.deactivate();
+      return { ready: prior.ready, close() {} };
+    }
+    prior?.close();
+    const migrations = Object.fromEntries(
+      Object.entries(work.migrations).map(([age, id]) => {
+        const body = bindings.bodies[id];
+        if (!body || body.kind !== "migration") throw Error(`Missing admitted migration: ${id}`);
+        return [Number(age), (doc: unknown) => body.run(doc)];
+      }),
+    );
+    let remove: () => void;
+    try {
+      remove = this.register({
+        spec: {
+          route: work.route,
+          title: route.data.name,
+          description: route.data.directory.summary,
+          schema: bindings.schemas[work.schema]!,
+          schemaVersion: work.version,
+          migrations,
+        },
+      });
+    } catch (error) {
+      receipt.deactivate();
+      throw error;
+    }
+    // Migrations run ONCE per admitted (route key, fingerprint), installed in this persistent
+    // RouteWorkspace before any feed opens, never per browser open. Persisted version prevents
+    // reapplication after host restart. The promise also retains a failed admission's outcome.
+    const ready = this.#serialized(async (): Promise<WorkFeedFailure | null> => {
+      try {
+        if (Object.keys(migrations).length) {
+          if (!this.options.store.listState)
+            throw Error("Migration requires an indexed Work store");
+          const saved = await this.options.store.listState();
+          if (saved.truncated || saved.unreadable || saved.unindexed)
+            throw Error("Work census is incomplete; migration admission cannot open feeds");
+          const spec = this.#registry.get(work.route)!.spec;
+          for (const record of saved.records) {
+            if (record.route !== work.route) continue;
+            const key = storedWorkKey(record.targetKey, record.route);
+            if (!key) throw Error("Stored Work has an invalid identity");
+            await this.#load(key, spec, false);
+          }
+        }
+        return null;
+      } catch (error) {
+        if (error instanceof WorkMigrationFailure)
+          return { ...error.failure, routeKey: route.data.key };
+        return { kind: "failed", code: "WorkRegistrationFailed", message: String(error) };
+      }
+    });
+    const record = {
+      fingerprint: route.workFingerprint,
+      workRoute: work.route,
+      ready,
+      close: () => {
+        if (this.#admissions.get(route.data.key) !== record) return;
+        this.#admissions.delete(route.data.key);
+        remove();
+        receipt.deactivate();
+        this.#admissionChanged(route.data.key);
+      },
+    };
+    this.#admissions.set(route.data.key, record);
+    this.#admissionChanged(route.data.key);
+    return record;
+  }
+
+  #admissionChanged(routeKey: string) {
+    // Replacement is synchronous; observers see the replacement, not an intermediate removal.
+    queueMicrotask(() => {
+      for (const notify of this.#admissionListeners.get(routeKey) ?? []) notify();
+    });
+  }
+
+  observeAdmission(routeKey: string, notify: () => void): () => void {
+    const listeners = this.#admissionListeners.get(routeKey) ?? new Set();
+    this.#admissionListeners.set(routeKey, listeners);
+    listeners.add(notify);
+    return () => {
+      listeners.delete(notify);
+      if (!listeners.size) this.#admissionListeners.delete(routeKey);
+    };
+  }
+
+  requiresAdmission(workRoute: string): boolean {
+    return [...this.#admissions.values()].some((value) => value.workRoute === workRoute);
+  }
+
+  /** Check host admission before acquiring either snapshot or ack feed. */
+  async admitFeed(key: WorkKey, admission: WorkAdmission): Promise<WorkFeedFailure | null> {
+    const registered = this.#admissions.get(admission.routeKey);
+    if (!registered)
+      return {
+        kind: "failed",
+        code: "WorkRouteUnregistered",
+        message: "Host has not admitted this route",
+      };
+    // Compare the exact fingerprint envelope, source plus digest. A builtin-closure fingerprint
+    // never matches pod-bytes, even when their digest text is identical.
+    if (registered.fingerprint !== admission.fingerprint)
+      return {
+        kind: "registration-mismatch",
+        routeKey: admission.routeKey,
+        expected: registered.fingerprint,
+        received: admission.fingerprint,
+      };
+    if (key.route !== registered.workRoute)
+      return {
+        kind: "failed",
+        code: "WorkRouteMismatch",
+        message: "Work belongs to another route",
+      };
+    const failure = await registered.ready;
+    if (this.#admissions.get(admission.routeKey) !== registered)
+      return {
+        kind: "failed",
+        code: "WorkRegistrationRetired",
+        message: "Host admission retired during acquisition; reload this tab",
+      };
+    return failure;
   }
 
   list() {
@@ -533,11 +694,12 @@ export class RouteWorkspace {
     scope: WorkKey,
     route: string,
     listener: (value: OwnerValue<Awaited<ReturnType<RouteWorkspace["read"]>>>) => void,
+    orEmpty = false,
   ): () => void {
-    const key = `${workKey(scope)}\0${route}`;
+    const key = `${workKey(scope)}\0${route}\0${orEmpty}`;
     return this.#reads.observe(
       key,
-      () => this.read(scope, route),
+      () => (orEmpty ? this.view(scope, route) : this.read(scope, route)),
       (notify) =>
         this.subscribe((event) => {
           if (event.route === route && workKey(event.scope) === workKey(scope)) notify();
@@ -620,16 +782,29 @@ export class RouteWorkspace {
     if (age !== undefined && age < current && spec.migrations) {
       const saved = envelopeSchema.parse(raw);
       let doc = structuredClone(saved.doc);
-      while (age < current) {
-        const migrate = spec.migrations[age];
-        if (!migrate) throw Error(OLDER_WORK);
-        doc = migrate(doc);
-        age++;
+      const fromVersion = age;
+      let migrated: RouteEnvelope<unknown>;
+      try {
+        while (age < current) {
+          const migrate = spec.migrations[age];
+          if (!migrate) throw Error(OLDER_WORK);
+          doc = migrate(doc);
+          age++;
+        }
+        migrated = parseEnvelope(
+          { ...saved, doc, schemaVersion: age, revision: saved.revision + 1 },
+          spec,
+        );
+      } catch (error) {
+        throw new WorkMigrationFailure({
+          kind: "migration-failed",
+          routeKey: spec.route,
+          fromVersion,
+          toVersion: current,
+          step: Math.min(age, current - 1),
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
-      const migrated = parseEnvelope(
-        { ...saved, doc, schemaVersion: age, revision: saved.revision + 1 },
-        spec,
-      );
       await this.#persist(scope, spec.route, migrated);
       return migrated;
     }

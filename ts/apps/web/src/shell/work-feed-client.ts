@@ -1,3 +1,4 @@
+import { workFeedFailureMessage, type WorkFeedFailure } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { z } from "zod";
 import { workKey, workWriteAckSchema, type WorkWriteAck } from "@pe/agent-contracts";
 import type {
@@ -94,7 +95,8 @@ export function createWorkFeedClient(
           let stopAcks = () => {};
           let stopSnapshot = () => {};
           const buffered: WorkWriteAck[] = [];
-          const request = { ...scope.key, kind: "work" as const };
+          const admission = { routeKey: scope.route, fingerprint: scope.fingerprint };
+          const request = { ...scope.key, kind: "work" as const, admission };
           const stop = () => {
             if (closed) return;
             closed = true;
@@ -104,9 +106,9 @@ export function createWorkFeedClient(
           const emit = (state: WorkFeedState) => {
             if (!closed) deliver(state);
           };
-          const fail = (message: string) => {
+          const fail = (message: string, failure: WorkFeedFailure = { kind: "failed", code: "WorkFeedFailed", message }) => {
             if (closed) return;
-            emit({ kind: "failed", failure: { code: "WorkFeedFailed", message } });
+            emit({ kind: "failed", failure });
             stop();
             end();
           };
@@ -151,9 +153,9 @@ export function createWorkFeedClient(
           emit({ kind: "pending" });
           try {
             // A synchronous replay is buffered before the snapshot subscription even exists.
-            stopAcks = source.subscribe({ kind: "work-acks", work: scope.key }, (frame) => {
+            stopAcks = source.subscribe({ kind: "work-acks", work: scope.key, admission }, (frame) => {
               if (closed || ("stale" in frame && frame.stale)) return;
-              if (frame.kind === "failure") return fail(frame.error);
+              if (frame.kind === "failure") return fail(frame.failure ? workFeedFailureMessage(frame.failure) : frame.error, frame.failure);
               if (frame.kind === "gap")
                 return fail("Work acknowledgement transport lost an unknown revision interval");
               if (frame.kind !== "event") return;
@@ -170,7 +172,7 @@ export function createWorkFeedClient(
             }
             stopSnapshot = source.subscribe(request, (frame) => {
               if (closed || ("stale" in frame && frame.stale)) return;
-              if (frame.kind === "failure") return fail(frame.error);
+              if (frame.kind === "failure") return fail(frame.failure ? workFeedFailureMessage(frame.failure) : frame.error, frame.failure);
               if (!acquiring || frame.kind !== "snapshot") return;
               const parsed = snapshotSchema.safeParse(frame.value);
               if (!parsed.success) return fail(parsed.error.message);

@@ -1,3 +1,4 @@
+import { workFingerprintSchema } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { createWorkFeedClient } from "./work-feed-client";
@@ -10,6 +11,7 @@ import type {
 import type { InvocationBasis } from "../../../../packages/agent-contracts/src/route-kernel-page";
 const scope: WorkScope = {
   route: "note",
+  fingerprint: workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
   key: { binding: "host", route: "note", target: null },
   target: null,
   subject: null,

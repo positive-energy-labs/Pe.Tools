@@ -380,16 +380,20 @@ export class AdmittedRoute<
   readonly #admissionAuthority = true;
   readonly data: Immutable<G>;
   readonly fingerprint: RouteFingerprint;
+  readonly workFingerprint: RouteFingerprint;
   private constructor(
     key: symbol,
     data: G,
     fingerprint: RouteFingerprint,
     bindings: RouteBindings,
+    source: "builtin-closure" | "pod-bytes",
   ) {
     if (!this.#admissionAuthority || key !== constructionKey)
       throw Error("Admission requires the checked factory");
     this.data = freezeData(structuredClone(data));
     this.fingerprint = fingerprint;
+    // The loader stamp is a digest; Work carries the source-discriminated envelope.
+    this.workFingerprint = `${source}:${fingerprint}` as RouteFingerprint;
     admittedBindings.set(this, snapshotBindings(bindings));
     Object.freeze(this);
   }
@@ -583,6 +587,7 @@ export class AdmittedRoute<
               data,
               fingerprint,
               inspected.bindings,
+              source ? "builtin-closure" : "pod-bytes",
             ),
           };
         } catch (error) {
@@ -605,6 +610,7 @@ export class AdmittedRoute<
             inspected.data,
             fingerprint,
             inspected.bindings,
+            source ? "builtin-closure" : "pod-bytes",
           ),
         };
       },

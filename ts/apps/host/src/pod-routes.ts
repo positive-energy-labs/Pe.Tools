@@ -13,6 +13,15 @@ import type { createPackageLifecycle } from "./package-lifecycle.ts";
 import { productRouteTrustPath } from "./product-paths.ts";
 import { readJson, writeArtifact } from "./page-artifacts.ts";
 
+/** Builtin source admission and verified Pod-byte admission share this host-owned door.
+ * The caller supplies the exact authenticated handle, never a browser schema or migration. */
+export function registerAdmittedHostRoute(
+  route: contracts.AdmittedRoute,
+  workspace: RouteWorkspace,
+) {
+  return workspace.registerAdmitted(route);
+}
+
 const executableModules = new Map<
   string,
   { module: contracts.ExecutableRouteModule<CommandExecutor>; available: () => boolean }
@@ -208,7 +217,9 @@ export function createPodRoutes(
         else delete trust[key];
         await writeArtifact(dirname(path), path, JSON.stringify(trust), true);
       });
-      tail = write.catch((error) => { console.error("pod-routes: asynchronous operation failed", error); });
+      tail = write.catch((error) => {
+        console.error("pod-routes: asynchronous operation failed", error);
+      });
       await write;
       return list();
     },
