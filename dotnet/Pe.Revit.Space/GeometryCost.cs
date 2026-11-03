@@ -9,8 +9,27 @@ public sealed record GeometryCost(int PlannedCount, double PlannedCost, IReadOnl
 
 internal static class GeometryLedger {
     private static readonly Dictionary<string, HashSet<TessellatedElement>> Retained = new();
+    private static readonly Dictionary<string, HashSet<string>> SourcesByHost = new();
     private static readonly object Sync = new();
-    internal static void Closed(string key) { lock (Sync) Retained.Remove(key); }
+    internal static void Sources(string host, IEnumerable<string> sources) {
+        lock (Sync) {
+            if (!SourcesByHost.TryGetValue(host, out var keys)) SourcesByHost[host] = keys = [];
+            keys.UnionWith(sources);
+        }
+    }
+    internal static void Closed(string key) {
+        lock (Sync) {
+            // The tracker excludes linked documents; their ids live until the last host releases them.
+            SourcesByHost.Remove(key, out var sources);
+            foreach (var source in (sources ?? []).Append(key))
+                if (!SourcesByHost.Values.Any(keys => keys.Contains(source))) Retained.Remove(source);
+        }
+    }
+    internal static void Renamed(string oldKey, string newKey) {
+        lock (Sync) {
+            if (SourcesByHost.Remove(oldKey, out var sources)) Sources(newKey, sources);
+        }
+    }
     internal static void Touch(Element element) {
         var key = element.Document.GetDocumentKey();
         var entry = new TessellatedElement(key, SpaceWorld.Epoch(element.Document), element.Id.Value());
