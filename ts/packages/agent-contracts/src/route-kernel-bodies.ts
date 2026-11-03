@@ -338,11 +338,13 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         At<G["verbs"][K], "present">,
         `verbs.${K}.present`,
         "present",
-        /** ModelWrite presentation consumes the validated, sealed catalog preview. */
+        /** Pure synchronous presentation of the sealed preview and its invocation-captured
+         * declared evidence. No ports, captures or invocation authority are exposed. */
         (
           result:
             | Output<E, `${Extract<At<G["verbs"][K], "entry">, string>}.preview`>
             | Output<E, At<G["verbs"][K], "entry">>,
+          evidence: BodyContext<G, S, E, G["verbs"][K]>,
         ) => string | { readonly sentence: string; readonly rows: readonly string[] }
       >;
 }[keyof G["verbs"] & string];
