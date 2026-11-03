@@ -1,4 +1,5 @@
-import { ChildProcess, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { closeSync, openSync, realpathSync, statSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
@@ -93,14 +94,22 @@ export function adapterCommand(
 }
 
 /**
- * The event face of one scoped Spawner child. A `ChildProcess` in type only: `threads.ts`
- * holds it as one and listens for `exit`; its scope, not a handle, ends it ({@link stopChild}).
+ * The event face of one scoped Spawner child: its pid, one `exit` event, and the scope close that
+ * ends it ({@link stopChild}). Event-only on purpose: the previous `extends ChildProcess` built an
+ * unused native Process handle per child, and that handle kept the adapter and its fiber alive
+ * after the child exited (heap bisect, `.artifacts/accept/host-memory/effect-offheap-diagnosis.md`).
  */
-class AdapterChild extends ChildProcess {
+export class AdapterChild extends EventEmitter<{
+  exit: [code: number | null, signal: NodeJS.Signals | null];
+}> {
+  pid: number | undefined = undefined;
+  exitCode: number | null = null;
+  signalCode: NodeJS.Signals | null = null;
   close: Effect.Effect<void> = Effect.void;
   settle(code: number | null, signal: NodeJS.Signals | null) {
     if (this.exitCode !== null || this.signalCode !== null) return;
-    Object.assign(this, { exitCode: code, signalCode: signal });
+    this.exitCode = code;
+    this.signalCode = signal;
     this.emit("exit", code, signal);
   }
 }
@@ -129,7 +138,7 @@ export const openAdapter = Effect.fn("Adapter.open")(function* (
   const owned = Effect.gen(function* () {
     const handle = yield* (yield* Spawner).spawn(launch);
     spawned = handle;
-    Object.assign(child, { pid: handle.pid });
+    child.pid = handle.pid;
     yield* Effect.forkScoped(
       Stream.run(
         Stream.fromReadableStream({ evaluate: () => toChild.readable, onError: String }),
@@ -387,6 +396,6 @@ export function peaMcpServer(
 }
 
 /** Closing the child's scope kills its whole tree (see `CHILD_EXIT_GRACE`). */
-export function stopChild(child: ChildProcess | null): Effect.Effect<void> {
-  return child instanceof AdapterChild ? child.close : Effect.void;
+export function stopChild(child: AdapterChild | null): Effect.Effect<void> {
+  return child ? child.close : Effect.void;
 }

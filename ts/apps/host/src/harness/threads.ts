@@ -1,6 +1,6 @@
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
-import type { ChildProcess } from "node:child_process";
+import type { AdapterChild } from "./adapter.ts";
 import { createHash, randomUUID } from "node:crypto";
 import {
   appendFileSync,
@@ -124,7 +124,7 @@ type Prompt = {
 };
 type Thread = {
   meta: Meta;
-  child: ChildProcess | null;
+  child: AdapterChild | null;
   events: HarnessEvent[];
   live: Promise<Live> | null;
   /** The log as text, carried by the next prompt when the session is new over an existing log. */
@@ -421,7 +421,7 @@ type Startup = {
     open: (
       ...args: Parameters<typeof adapter.openAdapter>
     ) => Promise<Effect.Success<ReturnType<typeof adapter.openAdapter>>>;
-    stop: (child: ChildProcess | null) => Promise<void>;
+    stop: (child: AdapterChild | null) => Promise<void>;
   };
 };
 

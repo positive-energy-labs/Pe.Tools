@@ -1,3 +1,5 @@
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -203,3 +205,28 @@ test("openAdapter: a child that dies on its own reports its exit code and the st
   await settle(stopChild(opened.child));
   vi.unstubAllEnvs();
 }, 30_000);
+
+// The adapter handle is event-only: once its child exits and its scope closes, nothing keeps it.
+// (A `ChildProcess` subclass built a native Process handle that retained adapter and fiber.)
+test("openAdapter: closed adapters are collectable, none retained by a native handle", async () => {
+  setFlagsFromString("--expose-gc");
+  const gc = runInNewContext("gc") as () => void;
+  const refs: WeakRef<object>[] = [];
+  for (let i = 0; i < 5; i++) {
+    const opened = await adapterFixture(obedient);
+    await vi.waitFor(() => expect(opened.child.pid).toBeGreaterThan(0));
+    const exit = exits(opened.child);
+    await settle(stopChild(opened.child));
+    await exit;
+    refs.push(new WeakRef(opened.child));
+  }
+  vi.unstubAllEnvs();
+  await vi.waitFor(
+    async () => {
+      gc();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(refs.filter((ref) => ref.deref() !== undefined)).toHaveLength(0);
+    },
+    { timeout: 10_000, interval: 100 },
+  );
+}, 60_000);
