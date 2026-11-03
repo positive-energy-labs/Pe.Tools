@@ -47,7 +47,7 @@ import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
-import { tools, bindWork, stagedDucts, address as documentAddress } from "@pe/agent-contracts";
+import { tools, bindWork, stagedDucts, workKey, address as documentAddress } from "@pe/agent-contracts";
 import type { RevitBridge } from "../src/bridge.ts";
 import { peFind, peRead } from "../../../packages/mcps/src/pea/capability-tools.ts";
 import { buildCapabilities } from "@pe/mcps";
@@ -190,7 +190,7 @@ const kinds = (events: HarnessEvent[]) =>
     .map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
 
 test.each(["claude", "codex"] as const)(
-  "%s: find, stage, sealed preview, 60-second consent, journal apply and receipt form one chain",
+  "%s: canonical Address Work joins find, stage, sealed preview, 60-second consent, journal apply and receipt in one chain",
   async (harness) => {
     const dir = await mkdtemp(join(root, "chain-"));
     const h = await host(),
@@ -263,6 +263,7 @@ test.each(["claude", "codex"] as const)(
     });
     let base = "";
     let located: WorkHandle;
+    const failures: unknown[] = [];
     const server = createServer(async (incoming, outgoing) => {
       try {
         const path = new URL(incoming.url!, base).pathname;
@@ -295,13 +296,17 @@ test.each(["claude", "codex"] as const)(
               );
               expect(found).toMatchObject({
                 ok: true,
+                target: { document: address },
                 result: {
-                  work: { key: { binding: "address", target: address }, revision: 1 },
                   revision: 1,
                   doc: { equipmentFlows: { "14577391": { edit: { value: { cfm: 975 } } } } },
                 },
               });
-              located = (found as { result: { work: WorkHandle } }).result.work;
+              const census = await routes.workspace.instances();
+              expect(census.works).toHaveLength(1);
+              expect(census.works[0]).toMatchObject({ scope: { binding: "address" }, revision: 1 });
+              expect(workKey(census.works[0]!.scope)).toBe(workKey(key));
+              located = { key, revision: (found as { result: { revision: number } }).result.revision };
               return Response.json(found);
             }
             if (path === "/pe/capabilities")
@@ -368,6 +373,7 @@ test.each(["claude", "codex"] as const)(
         outgoing.writeHead(result.status, Object.fromEntries(result.headers));
         outgoing.end(await result.text());
       } catch (error) {
+        failures.push(error);
         outgoing.writeHead(500);
         outgoing.end(String(error));
       }
@@ -385,7 +391,7 @@ test.each(["claude", "codex"] as const)(
         () => read(id),
         (body) => !body.running || openAsks(body).some((ask) => ask.scope === "run"),
       );
-      expect(openAsks(waiting), JSON.stringify(waiting.events)).toHaveLength(1);
+      expect(openAsks(waiting), String(failures[0] ?? JSON.stringify(waiting.events))).toHaveLength(1);
       expect(JSON.stringify(waiting.events)).toContain("chain find:");
       const preview = (await journal.list(undefined, "preview"))[0];
       expect(preview).toMatchObject({
