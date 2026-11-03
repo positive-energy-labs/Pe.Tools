@@ -39,13 +39,74 @@ export function createAdmittedGeometry(options: {
       snapshot: ReadingSnapshot<unknown>;
       release(): void;
       current(): boolean;
+      request?: GeometryRequest<
+        import("../../../../packages/agent-contracts/src/route-kernel-environment").SceneContextRepresentation
+      >;
+      generation?: string | null;
     }
   >();
   const demanded = new Set<string>();
+  const retained = new Map<
+    string,
+    {
+      signature: string;
+      snapshot: ReadingSnapshot<unknown>;
+      request?: GeometryRequest<
+        import("../../../../packages/agent-contracts/src/route-kernel-environment").SceneContextRepresentation
+      >;
+      generation?: string | null;
+    }
+  >();
+  const probes = new Map<string, () => void>();
+  const stopProbe = (id: string) => {
+    probes.get(id)?.();
+    probes.delete(id);
+  };
+  const probe = (
+    id: string,
+    request: GeometryRequest<
+      import("../../../../packages/agent-contracts/src/route-kernel-environment").SceneContextRepresentation
+    >,
+    generation: string | null,
+    immediate = false,
+  ) => {
+    if (!options.door || probes.has(id)) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let release = () => {};
+    probes.set(id, () => {
+      stopped = true;
+      clearTimeout(timer);
+      release();
+    });
+    const check = () => {
+      release = options.door!.resolve(request, owner.read()!.scope).subscribe(
+        (descriptor) => {
+          if (stopped || "kind" in descriptor) return;
+          if (descriptor.freshnessGeneration !== generation) {
+            stopProbe(id);
+            retained.delete(id);
+            retire(id);
+            options.notify();
+          }
+        },
+        () => {},
+      );
+      if (stopped) release();
+      else
+        timer = setTimeout(() => {
+          release();
+          check();
+        }, 5000);
+    };
+    if (immediate) check();
+    else timer = setTimeout(check, 5000);
+  };
   const costs: Record<string, ReadCost> = {};
   let subjectSignature = "";
   let closed = false;
   const retire = (id: string) => {
+    stopProbe(id);
     const prior = active.get(id);
     if (!prior) return;
     active.delete(id);
@@ -66,6 +127,7 @@ export function createAdmittedGeometry(options: {
       subjectSignature = signature;
       for (const id of active.keys()) retire(id);
       demanded.clear();
+      retained.clear();
     }
   };
   const read = (id: string, _context: unknown, input: unknown): ReadingSnapshot<unknown> => {
@@ -76,6 +138,12 @@ export function createAdmittedGeometry(options: {
     if (geometry.representation !== "overview" && !demanded.has(id))
       return unavailable("Explicit demand required");
     const signature = canonicalEnvironmentInput({ input, subjectSignature });
+    const saved = retained.get(id);
+    if (saved?.signature === signature) {
+      if (saved.request && saved.generation !== undefined)
+        probe(id, saved.request, saved.generation, true);
+      return saved.snapshot;
+    }
     if (active.has(id) && active.get(id)!.signature !== signature) {
       retire(id);
       if (geometry.representation !== "overview") {
@@ -101,6 +169,12 @@ export function createAdmittedGeometry(options: {
       } as ReadingSnapshot<unknown>,
       release: () => {},
       current: () => owner.current(token),
+      request: undefined as
+        | GeometryRequest<
+            import("../../../../packages/agent-contracts/src/route-kernel-environment").SceneContextRepresentation
+          >
+        | undefined,
+      generation: undefined as string | null | undefined,
     };
     active.set(id, record);
     const releases = new Set<() => void>();
@@ -204,6 +278,7 @@ export function createAdmittedGeometry(options: {
       return record.snapshot;
     }
     let joined = () => {};
+    record.request = request;
     const resolution = options.door.resolve(request, token.scope).subscribe(
       (descriptor) => {
         if (!owner.current(token) || active.get(id) !== record) return;
@@ -211,6 +286,7 @@ export function createAdmittedGeometry(options: {
           accept(unavailable(descriptor.failure.message));
           return;
         }
+        record.generation = descriptor.freshnessGeneration;
         const target = token.scope.identity.target;
         if (
           request.representation !== "overview" &&
@@ -269,6 +345,7 @@ export function createAdmittedGeometry(options: {
               value: Object.freeze({ ...outcome, value: parsed.data }),
               hash: canonicalEnvironmentInput(outcome),
             });
+            if (active.get(id) === record) probe(id, request, descriptor.freshnessGeneration);
           },
           () => {},
         );
@@ -279,18 +356,36 @@ export function createAdmittedGeometry(options: {
     retain(resolution);
     return record.snapshot;
   };
-  const refresh = (id: string) => {
+  const refresh = (id: string, notify = true) => {
     if (closed) return;
     syncSubject();
     retire(id);
+    retained.delete(id);
     demanded.add(id);
-    options.notify();
+    if (notify) options.notify();
   };
   return {
     read,
     syncSubject,
+    leased: (id: string) => active.has(id),
+    suspend(id: string) {
+      const prior = active.get(id);
+      if (prior?.snapshot.current)
+        retained.set(id, {
+          signature: prior.signature,
+          snapshot: prior.snapshot,
+          request: prior.request,
+          generation: prior.generation,
+        });
+      retire(id);
+    },
+    invalidate(id: string) {
+      retire(id);
+      retained.delete(id);
+    },
     cancel(id: string) {
       retire(id);
+      retained.delete(id);
       demanded.delete(id);
     },
     costs,
@@ -302,6 +397,7 @@ export function createAdmittedGeometry(options: {
     ),
     close() {
       closed = true;
+      for (const id of probes.keys()) stopProbe(id);
       for (const id of active.keys()) retire(id);
     },
   };

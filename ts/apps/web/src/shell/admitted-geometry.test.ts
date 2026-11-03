@@ -640,3 +640,46 @@ test.each([{ openId: "foreign-doc" }, { kind: "session-only" as const }])(
     }
   },
 );
+
+test("K4 hidden geometry keeps its accepted value and only rejoins on host generation change", async () => {
+  vi.useFakeTimers();
+  const d = door();
+  let generation = "host-1";
+  const geometry: GeometryReadDoor<unknown> = {
+    ...d.geometry,
+    resolve(request, scope) {
+      const observation = d.geometry.resolve(request, scope);
+      return {
+        subscribe(deliver, end) {
+          return observation.subscribe(
+            (descriptor) =>
+              deliver(
+                "kind" in descriptor
+                  ? descriptor
+                  : { ...descriptor, freshnessGeneration: generation },
+              ),
+            end,
+          );
+        },
+      };
+    },
+  };
+  const m = mount(await admit(), geometry);
+  try {
+    const original = m.readingStatus("overview").snapshot;
+    expect(d.joins).toHaveLength(1);
+    m.setVisible(false);
+    expect(d.releases).toHaveBeenCalledOnce();
+    expect(m.readingStatus("overview").snapshot).toBe(original);
+    expect(m.readingStatus("overview").leased).toBe(false);
+    m.setVisible(true);
+    expect(d.joins).toHaveLength(1);
+    generation = "host-2";
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(d.joins).toHaveLength(2);
+    expect(m.readingStatus("overview").snapshot.current).toBe(true);
+  } finally {
+    m.close();
+    vi.useRealTimers();
+  }
+});
