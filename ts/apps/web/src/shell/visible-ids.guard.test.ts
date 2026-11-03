@@ -13,7 +13,6 @@ import { settingsGraph } from "../settings/graph";
 import { chatGraph } from "../chat/graph";
 import { designSystemGraph } from "../design-system/graph";
 import { ductLossGraph } from "../duct-loss/graph";
-import { grillesGraph } from "../grilles/graph";
 import { opsGraph } from "../ops/graph";
 import { bindGraph } from "../pages-bind/graph";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -42,7 +41,6 @@ const routes = [
   zoneAuditGraph,
   designSystemGraph,
   ductLossGraph,
-  grillesGraph,
   opsGraph,
   bindGraph,
   openGraph,

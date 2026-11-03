@@ -13,7 +13,6 @@ import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
 import { settingsRoute } from "./settings/route";
 import { ductLossRoute } from "./duct-loss/route";
-import { grillesRoute } from "./grilles/route";
 import { schedulesRoute } from "./schedules/route";
 import { familiesRoute } from "./families/route";
 import { familyRoute } from "./family/route";
@@ -39,7 +38,6 @@ const codeRoutes: AnyRoute[] = [
   opsRoute,
   openRoute,
   ductLossRoute,
-  grillesRoute,
   schedulesRoute,
   familiesRoute,
   familyRoute,
@@ -67,7 +65,6 @@ const appRouteTree = rootRoute.addChildren([
   opsRoute: typeof opsRoute;
   openRoute: typeof openRoute;
   ductLossRoute: typeof ductLossRoute;
-  grillesRoute: typeof grillesRoute;
   schedulesRoute: typeof schedulesRoute;
   familiesRoute: typeof familiesRoute;
   familyRoute: typeof familyRoute;
