@@ -1,4 +1,3 @@
-import { route as rhvacSyncRoute } from "./rhvac-sync/route";
 import { route as zoneAuditRoute } from "./zone-audit/route";
 import { sessionsRoute } from "./sessions/route";
 import {
@@ -33,7 +32,6 @@ const pathOf = (route: AnyRoute) => (route.options as { path?: string }).path;
 const codeRoutes: AnyRoute[] = [
   sessionsRoute,
   zoneAuditRoute,
-  rhvacSyncRoute,
   settingsRoute,
   opsRoute,
   openRoute,

@@ -2,9 +2,8 @@ import { expect, test } from "vite-plus/test";
 import { takeoffGraph } from "../takeoff/graph";
 import { selectedTakeoffPage } from "../takeoff/subject";
 import { zoneAuditGraph } from "../zone-audit/graph";
-import { rhvacSyncGraph } from "../rhvac-sync/graph";
 test("takeoff siblings share Work and expand all against the current roster", () => {
-  for (const graph of [takeoffGraph, zoneAuditGraph, rhvacSyncGraph])
+  for (const graph of [takeoffGraph, zoneAuditGraph])
     expect(graph.workRoute).toBe("takeoffs");
   expect(
     selectedTakeoffPage(

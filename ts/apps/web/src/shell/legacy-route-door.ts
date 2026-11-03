@@ -15,7 +15,6 @@ export const legacyBuiltinKeys: readonly string[] = [
   "instances",
   "pod-admin",
   "pods",
-  "rhvac-sync",
   "rooms",
   "session-admin",
   "settings",
