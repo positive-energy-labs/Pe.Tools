@@ -118,6 +118,7 @@ function Pane({
   layout: LayoutJson;
 }) {
   useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
+  const recovery = mount.recovery();
   const failure = mount.workFailure();
   const problem = mount.workProblem();
   const workMessage =
@@ -127,12 +128,38 @@ function Pane({
   return createElement(
     Fragment,
     null,
-    workMessage &&
+    (recovery.sentence ?? workMessage) &&
       createElement(OutcomeLine, {
         kind: "error",
         label: failure?.kind ?? "Work unavailable",
-        says: workMessage,
+        says: recovery.sentence ?? workMessage!,
       }),
+    recovery.problem &&
+      createElement(OutcomeLine, { kind: "error", label: "Work recovery", says: recovery.problem }),
+    recovery.startFresh &&
+      createElement(
+        Button,
+        {
+          label: "Start fresh",
+          refusal: recovery.busy ? "Recovery is in progress" : null,
+          onClick: () => {
+            void mount.startFresh().catch(() => {});
+          },
+        },
+        "Start fresh",
+      ),
+    recovery.carryOver &&
+      createElement(
+        Button,
+        {
+          label: "Carry over",
+          refusal: recovery.busy ? "Recovery is in progress" : null,
+          onClick: () => {
+            void mount.salvage().catch(() => {});
+          },
+        },
+        "Carry over",
+      ),
     createElement(SubjectPicker, { mount, route }),
     mount.refreshable &&
       createElement(Button, { label: "refresh", onClick: () => mount.refresh() }, "refresh"),
