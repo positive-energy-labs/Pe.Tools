@@ -76,9 +76,9 @@ A stance activates a space, then states its laws. A mix between parable, manifes
 
 ## Editing the set
 
-A skill edit is a Prose fix, rung 3 in `index`'s rungs, and it breaks the fourth wall: the writer and the governed reader are the same model in different states. The strangeness is real, name it and work inside it.
+A skill edit is a Prose fix, the last rung of `index`'s strength ladder, and it breaks the fourth wall: the writer and the governed reader are the same model in different states. The strangeness is real, name it and work inside it.
 
-- Prose decays fast. Before adding a law, ask whether a check (rung 2) or a substrate change (rung 1) would hold it instead.
+- Prose decays fast. Before adding a law, walk the ladder: a type, a projection, a boundary decode, or a guard that holds it instead.
 - A stance edit is a verdict-grade change: the user rules on it. In a sanctioned autonomous session, file the edit as Owed instead of landing it.
 - After any edit, run the check; a set that fails is not landed.
 - The edit is unproven until a fresh agent, given only the text, does the intended thing. You cannot test it on yourself; you are already primed.

@@ -18,6 +18,6 @@ prevents: "the repeated wound: a costly session pattern paid again because nobod
 - Measure with `mine`'s retro verb. Per thread: hours, owner turns, API calls, compactions, max context, cost, tool calls, tool output by tool, and the inflows over 20k characters. The context curve with its compaction marks goes on a page.
 - Compare against a good run the owner named. A finding without a comparison is a description.
 - Each finding carries its mechanism, its cost in the measured unit, an anchor (thread id plus turn time or item id), its severity, and its rung from `index`.
-- Rank by rung: a substrate or check fix beats a prose fix. A skill edit goes to `reflect`, a verdict to `docs`, a tool defect to its owner's ledger.
+- Rank by rung on `index`'s strength ladder: a fix above the line beats a guard, and a guard beats prose. A skill edit goes to `reflect`, a verdict to `docs`, a tool defect to its owner's ledger.
 - Close with what the good run did that the others did not, as copy/don't-copy pairs.
 - The report lives in the run directory. Nothing in the retro edits a skill; it ends with the owner's open questions.

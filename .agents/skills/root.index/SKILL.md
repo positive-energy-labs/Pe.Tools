@@ -54,17 +54,26 @@ A skill changes method, never authorization. Capture, instrumentation, and gloss
 2. **Quantify every change**. Restate the plan in your words before starting; misalignment is cheapest here. Gauge expected delta to data models, LOC, file topology, dependency tree, surface shape, modularity, performance, and testability. 
 3. **Chart the journey as it passes**. Handles are the substrate: consumed terminal commands, dependency changes, resource names, wave/round/agent/mux/worktree names label what is actually happening. Landmarks chart the way: a user-story fulfilled, a stance change, a realignment, a lesson. Waypoints are targets that unblock the queue. 
 4. **Stop only after proven**. A stop is reported with a stamp on the claim inside it. This is the wall every loop exits through.
-5. **End the turn on the whole account**. Before you end a turn, do every part of the ask that needs no verdict. The client shows the user only your last message, so that message stands alone: what changed, with its stamp; what you did not do, and why; then the next command or the numbered decision you need. Never end a turn on a status line, a promise ("I'll check X"), or a bare acknowledgement.
+5. **End the turn on the whole account**. Before you end a turn, do every part of the ask that needs no verdict. The client shows the user only your last message, so that message stands alone, in this order: where it lives (branch, head, merged or not); LOC flow by kind and top directory, generated excluded, tests beside source with the ratio; the counts the work claims (contracts, properties, states, booleans, lines a consumer writes); each claim with its stamp; what you did not do, and why; Owed; then the next command or the numbered decision you need. Never end a turn on a status line, a promise ("I'll check X"), or a bare acknowledgement.
+6. **Re-ground after a gap**. After a compaction, an absence, or when sibling threads touch the tree: list the sibling threads and read the heads since the last head you knew, then answer.
 
-Fix unexpected systemic signals, scope growth avoidance is an old maxim to forget. Eg. a user steer, time-box spent, excessive LOC, a repeated helper script, a misunderstanding. They are only noise if you choose to work around them. Fix the root cause by default and at the highest rung that fits. Fix above your layer? File it Owed and name the interim. Rungs:
+Fix unexpected systemic signals, scope growth avoidance is an old maxim to forget. Eg. a user steer, time-box spent, excessive LOC, a repeated helper script, a misunderstanding. They are only noise if you choose to work around them. Fix the root cause by default, at the deepest rung of the ladder that holds. Fix above your layer? File it Owed and name the interim.
 
-0. **Code**: a bug fix or feature add is expected work; normal, not systemic friction.
-1. **Substrate**: architecture, data structure, wire contract, tooling, dev setup, agent toml/json. A library the repo grows is this rung.
-2. **Check**: a lint, codegen, or test that catches it every loop, CI or not.
-3. **Prose**: a skill or `AGENTS.md` line. Prescriptive prose decay fast. 
+### Strength ladder
 
-A fix on Prose breaks the fourth wall: you are editing your own future instructions. `reflect` holds the hazards; the edit is unproven until a fresh agent, given only the text, does the intended thing.
+Correctness lives at the deepest rung that holds. Walk from the top; stop at the first rung that holds the fix. Rungs above the line narrow what a consumer must know; rungs below it add a thing to run, read, or remember. A fix below the line says, at its site, which rung above refused it and why.
 
+0. **Delete.** The state, branch, flag, or seam that permits the bug no longer exists.
+1. **Type.** The invalid is unrepresentable: a union over booleans, one noun over parallel fields, a branded id over a string, a subject over a raw id. Compile proves it in every consumer, every time.
+2. **One source, projected.** The contract is authored once; every other form is generated from it and drift is a deterministic failure (C# `[Op]` to catalog, graph to projection).
+3. **Boundary decode.** A schema decodes at the trust boundary (host door, platform read, user input) and refuses; inside the boundary the type carries it.
+---
+4. **Guard or ratchet.** A repo guard counts a class of offender across files. It reports and never prevents, and a deleted file satisfies it.
+5. **Lint rule.** Narrower and cheaper than a guard.
+6. **Surface drive.** One live drive of the changed route or op, custody named, once per landing.
+7. **Deterministic test.** Only for a rule with no home above the line (a parser, geometry, money): one falsifier per rule, never one per function.
+8. **Comment at the exception site.**
+9. **Prose.** A skill or `AGENTS.md` line. Prescriptive prose decays fast and breaks the fourth wall: you are editing your own future instructions. `reflect` holds the hazards; the edit is unproven until a fresh agent, given only the text, does the intended thing.
 ## Disposition
 
 - Talk in the reply register, plain script; number anything the user must decide. Figured speech belongs above a stance's fold and nowhere else. Use the common name and stick with it.

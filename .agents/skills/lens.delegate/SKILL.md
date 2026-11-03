@@ -19,6 +19,7 @@ Mode: no fan-out without a posture table first. Task, who (model and thinking), 
 
 - Delegate sustained independent implementation, research, and proof by default. The main agent remains responsible for triage, final judgment, discussion, and joint inspection. A small standalone task or a short check can stay in the main session. Respect explicit user constraints and existing ownership. Send new feedback to the existing owner and replace superseded instructions.
 - Every mission is bounded and specified. Give the agent an edge (stop condition, time box, report file) and make the important choices before you send it. Send unbounded work to the model with taste. An agent that lacks a choice returns a question, not a guess.
+- Every brief carries the expected delta (LOC by kind, contracts, states, lines a consumer writes) and "delete at least as much as you add"; the report prints the actual delta the same way, generated excluded.
 - Send one ask per turn. Four questions in one prompt return one averaged answer, and no part of it belongs to its question. Send the follow-up down the same line.
 - Make the shared base once (research, fixture, scaffold) and hand it to every agent.
 - Send instrument-first missions. "Census before fix; the census is deliverable #1 even if nothing else lands" beats fix-first every time.
@@ -36,6 +37,18 @@ Mode: no fan-out without a posture table first. Task, who (model and thinking), 
 
 ## Models [scope: repo]
 
-Use Sol 6.1 (`gpt-6.1-sol`) for delegated implementation work unless the user explicitly chooses another model. Resolve provider/model IDs from the live tool catalog; do not substitute Sol 6 or older Codex defaults. Choose thinking effort for the task. Fable 5.1 is for taste: design, UX and architecture opinion, never an implementation line. A second provider on a panel buys a different reading, not a better one.
+The user's budget line for the day overrides everything here. Resolve provider/model IDs from the live tool catalog; do not substitute Sol 6 or older Codex defaults. Choose thinking effort for the task. A second provider on a panel buys a different reading, not a better one.
+
+Measured affinity, 2026-10-26 to 11-02 (`.artifacts/runs/retro-20261102-paradigm/affinity.txt`; evidence, not law):
+
+| Model | Fits | Measured |
+|---|---|---|
+| Sol 6.1 (`gpt-6.1-sol`) | implementation, the default line | 114 missions, 92% complete, 0.24 h median |
+| Astra (`gpt-6-astra`) | cheap critic and review | 21 reviews, 95% complete, 0.07 h, 10% needed a second message |
+| Opus 5.5 | UI implementation when the user names it | 42 missions, 98% complete, 0.46 h, 60% needed a second message |
+| Fable 5.1 | taste: design, UX and architecture opinion; never an implementation line | 17 missions, 0% needed a second message |
+| Terra (`gpt-6.1-terra`) | census and mechanical reads | 8 censuses, 0.01 h |
+
+Substrate: anything the main agent waits on goes on T3 `delegate_task`, whose completion wakes this thread. The harness Agent tool is for reads returned as text (it cannot write files). Codex-native `spawn_agent` is never used for waited work: its children are invisible to T3 and `wait_agent` timed out on 42% of calls in the window.
 
 Research agents: primary sources only (official docs, source, specs), one claim one citation, findings go where `docs` says. Clone third-party source locally and sync before reading; grep beats the web.
