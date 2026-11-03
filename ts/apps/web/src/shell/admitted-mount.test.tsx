@@ -2424,18 +2424,28 @@ test("AdmittedPane subject picker goes through transition and reloads its accept
     bodies: {
       pick: { ...bodies.pick, run: () => [{ id: identity.value, label: "Picked note" }] },
       transition: { slot: "transition", kind: "transition", source, run: transition },
-      main: { ...bodies.main, run: (ctx: { page: { note: unknown } }) => createElement("output", { "data-testid": "subject" }, ctx.page.note === identity.value ? "picked" : "empty") },
+      main: {
+        ...bodies.main,
+        run: (ctx: { page: { read(): { note: unknown } } }) =>
+          createElement(
+            "output",
+            { "data-testid": "subject" },
+            ctx.page.read().note === identity.value ? "picked" : "empty",
+          ),
+      },
     },
   });
   const location = locationPort();
   const t = transports();
   const shell = createRouteShell(t.services);
-  const first = render(createElement(AdmittedPane, { shell, route, address: location.address, pane: "main" }));
+  const first = render(
+    createElement(AdmittedPane, { shell, route, address: location.address, pane: "main" }),
+  );
   await act(async () => t.frames[0]!(ready("roster")));
   fireEvent.click(screen.getByRole("button", { name: "Choose note" }));
   fireEvent.click(await screen.findByText("Picked note"));
   expect(screen.getByTestId("subject").textContent).toBe("picked");
-  expect(transition).toHaveBeenCalled();
+  expect(transition).toHaveBeenCalledWith(expect.anything(), { note: identity.value }, expect.objectContaining({ kind: "human", source: "subject" }), expect.anything());
   expect(location.address.read().get("note")).toContain("picked");
   first.unmount();
   render(createElement(AdmittedPane, { shell, route, address: location.address, pane: "main" }));

@@ -1,3 +1,6 @@
+import { ListPopup } from "@pe/kit/lang/list-popup";
+import { z } from "zod";
+import { canonicalEnvironmentInput } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import { PaneSplit } from "@pe/kit/lang/pane";
 import type { LayoutJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { JournalButtons } from "./situation-band";
@@ -60,11 +63,65 @@ function layoutContent(mount: AdmittedMount, node: LayoutJson): ReactNode {
   return children.length ? split(0) : null;
 }
 
-function Pane({ mount, layout }: { mount: AdmittedMount; layout: LayoutJson }) {
+const pickerOptionsSchema = z.array(z.object({ id: z.unknown(), label: z.string() }));
+
+function SubjectPicker({ mount, route }: { mount: AdmittedMount; route: AdmittedRoute }) {
+  const field = route.data.subject.field;
+  const declaration = route.data.fields[field];
+  if (declaration?.role !== "subject") return null;
+  const options = pickerOptionsSchema.parse(mount.picker(field) ?? []);
+  const value = mount.page.read()[field];
+  const many = declaration.cardinality === "many";
+  const ids = many ? ((value as { kind: string; ids?: readonly unknown[] })?.ids ?? []) : [value];
+  const selected = ids.map(canonicalEnvironmentInput);
+  return createElement(ListPopup<(typeof options)[number]>, {
+    anchor: "trigger",
+    face: "control",
+    triggerLabel: `Choose ${route.data.subject.noun}`,
+    trigger:
+      options
+        .filter((option) => selected.includes(canonicalEnvironmentInput(option.id)))
+        .map((option) => option.label)
+        .join(", ") || `Choose ${route.data.subject.noun}`,
+    "aria-label": route.data.subject.noun,
+    items: options,
+    keyOf: (option) => canonicalEnvironmentInput(option.id),
+    labelOf: (option) => option.label,
+    filter: "substring",
+    select: many ? "multi" : "single",
+    selected,
+    empty: `No ${route.data.subject.noun} available`,
+    row: (option) => ({ label: option.label }),
+    onPick: (option) => {
+      const key = canonicalEnvironmentInput(option.id);
+      mount.controls.subject(
+        many
+          ? {
+              kind: "ids",
+              ids: selected.includes(key)
+                ? ids.filter((id) => canonicalEnvironmentInput(id) !== key)
+                : [...ids, option.id],
+            }
+          : option.id,
+      );
+    },
+  });
+}
+
+function Pane({
+  mount,
+  route,
+  layout,
+}: {
+  mount: AdmittedMount;
+  route: AdmittedRoute;
+  layout: LayoutJson;
+}) {
   useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
   return createElement(
     Fragment,
     null,
+    createElement(SubjectPicker, { mount, route }),
     mount.refreshable &&
       createElement(Button, { label: "refresh", onClick: () => mount.refresh() }, "refresh"),
     mount.history && createElement(JournalButtons, { owner: mount, words: true }),
@@ -124,7 +181,7 @@ export function AdmittedPane({ shell, route, address }: AdmittedPaneProps) {
     return mount.close;
   }, [shell, route, address]);
   return mounted?.route === route && mounted.shell === shell
-    ? createElement(Pane, { mount: mounted.mount, layout: route.data.layout })
+    ? createElement(Pane, { mount: mounted.mount, route, layout: route.data.layout })
     : null;
 }
 
