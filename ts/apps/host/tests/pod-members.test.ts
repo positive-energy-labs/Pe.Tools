@@ -181,14 +181,15 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
     [{ path: ["basis"], value: { member, rawContent: '{"width":1}', sha256 } }],
     0,
   );
-  expect(observed.ok).toBe(true);
+  if (!observed.ok) throw Error("Expected accepted published Work");
   const authored = await work.apply(
     scope,
     settingsRouteState.route,
     "human",
     [{ path: ["fields"], value: { "/width": { edit: { value: 5 } } } }],
-    observed.revision!,
+    observed.revision,
   );
+  if (!authored.ok) throw Error("Expected accepted authored Work");
   const owner = new ActionJournal(join(root, "journal.json"));
   const bridge = {} as RevitBridge["Service"];
   const admit = (id: string, input: Record<string, unknown>, revision: number) =>
@@ -209,15 +210,15 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
       { workspace: work, podsRoot: root },
     ).then((row) => owner.wait(row.id));
   const destination = { pod: member.pod, path: "settings/copy.json" };
-  const copied = await admit("copy", { destination }, authored.revision!);
+  const copied = await admit("copy", { destination }, authored.revision);
   expect(copied.state, JSON.stringify(copied)).toBe("succeeded");
   expect(
     JSON.parse(await readFile(join(root, "Renamed In Explorer", destination.path), "utf8")),
   ).toEqual({ width: 5 });
   expect(JSON.parse(await readFile(file(), "utf8"))).toEqual({ width: 1 });
   expect((await work.read(scope, settingsRouteState.route))?.revision).toBe(authored.revision);
-  expect((await admit("copy-again", { destination }, authored.revision!)).state).toBe("failed");
-  const saved = await admit("save", {}, authored.revision!);
+  expect((await admit("copy-again", { destination }, authored.revision)).state).toBe("failed");
+  const saved = await admit("save", {}, authored.revision);
   expect(saved.state, JSON.stringify(saved)).toBe("succeeded");
   expect(JSON.parse(await readFile(file(), "utf8"))).toEqual({ width: 5 });
   const after = settingsRouteState.schema.parse(
