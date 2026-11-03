@@ -663,3 +663,74 @@ test.each(["w1f", "other-document"])(
     ]);
   },
 );
+
+// TODO: Place custody must be rechecked when an old callback starts a new Work submission.
+test.each(["current", "departed"] as const)(
+  "P07: a rendered callback cannot start Work after its Place is %s",
+  async (custody) => {
+    const f = await witness();
+    f.mount.close();
+    let current: "current" | "departed" = "current";
+    const owners = new Set<{ dispose(): void }>();
+    cleanup.push(() => owners.forEach((owner) => owner.dispose()));
+    const scope: RouteActivityScope = {
+      pathname: "/ducts",
+      search: {},
+      current: () => current === "current",
+      retain: (owner) => {
+        owners.add(owner);
+      },
+      retire: (owner) => {
+        owners.delete(owner);
+        owner.dispose();
+      },
+    };
+    vi.mocked(useRouteTarget).mockReturnValue({
+      resolution: {
+        kind: "resolved",
+        target: { kind: "document", ref: { session: "fixture", openId: "w1f" } },
+      },
+      workAddress: null,
+      resolvedAddress: null,
+      workOpen: null,
+    } as ReturnType<typeof useRouteTarget>);
+    vi.spyOn(sourceServices, "sourceRouteServices").mockImplementation((_sources, composition) => ({
+      ...f.services,
+      target: composition?.target,
+    }));
+    const module = await import("../shell/admitted-mount");
+    const factory = module.createRouteShell;
+    let mounted: () => ReturnType<ReturnType<typeof createRouteShell>["mount"]> | undefined = () =>
+      undefined;
+    vi.spyOn(module, "createRouteShell").mockImplementation((...args) => {
+      const shell = factory(...args);
+      const mount = vi.spyOn(shell, "mount");
+      mounted = () => mount.mock.results.at(-1)?.value;
+      return shell;
+    });
+    render(
+      createElement(
+        RouteActivity,
+        { value: scope },
+        createElement(applicationRouteShell, {
+          route: f.route,
+          address: f.address,
+          pane: "captures",
+        }),
+      ),
+    );
+    await vi.waitFor(() => expect(mounted()?.workBasis()).toBeTruthy());
+    const before = structuredClone(f.saved.get("ducts"));
+    const owner = mounted()!;
+    const basis = owner.workBasis()!;
+    const press = () =>
+      owner.invoke("slot", "Late callback", basis) as Observation<WorkWriteOutcome>;
+    // Navigation changes current() synchronously; React's visibility cleanup can run later.
+    current = custody;
+    try {
+      await settle(press());
+    } catch {}
+    if (custody === "current") expect(f.saved.get("ducts")).not.toEqual(before);
+    else expect(f.saved.get("ducts")).toEqual(before);
+  },
+);
