@@ -788,7 +788,8 @@ test("D4: a new writer at either shared Work submission path cannot bypass Place
     press: "new-writer",
     patches: [{ path: ["amount"], value: 4 }],
   };
-  const write = () => work.write(() => request.patches, issued.value, "new", "New writer");
+  const write = () =>
+    work.write(() => request.patches, issued.value, "new", { label: "New writer" });
   authority = "read-only";
   expect(write).toThrow(PlaceWriteRefusal);
   await expect(work.submit(request, issued.value)).rejects.toMatchObject({

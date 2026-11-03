@@ -983,6 +983,8 @@ function admitHostProjection(
     )
       fail(`workState.${key}`, "Work spec data changed after capture");
   }
+  if (data.historyDetail && !(module.schemas[data.historyDetail] instanceof kernelZ.ZodType))
+    fail("historyDetail", "Missing or malformed history detail schema");
   const work = data.work;
   let resolvedWork: HostAdmittedRoute["resolvedWork"];
   let workFingerprint = `builtin-closure:${fingerprint}` as RouteFingerprint;

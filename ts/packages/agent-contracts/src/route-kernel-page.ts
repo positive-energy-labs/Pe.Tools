@@ -307,6 +307,11 @@ export interface PageOwner<G extends RouteGraphJson, S extends SchemaTable> {
   ): MoveResult;
 }
 
+// JsonValue is already deeply readonly; expanding its recursive union through Immutable
+// exceeds TypeScript's depth limit. Keep that field's existing readonly contract.
+type ImmutableWorkAck = Immutable<Omit<WorkWriteAck, "meta">> &
+  Readonly<Pick<WorkWriteAck, "meta">>;
+
 /** Full snapshots and accepted deltas are distinct. A snapshot never fabricates journal history. */
 export type WorkDelivery<W> =
   | {
@@ -316,8 +321,8 @@ export type WorkDelivery<W> =
       readonly value: Immutable<W>;
       readonly hash: string;
     }
-  | { readonly kind: "ack"; readonly write: Immutable<WorkWriteAck> }
-  | { readonly kind: "stream"; readonly write: Immutable<WorkWriteAck> };
+  | { readonly kind: "ack"; readonly write: ImmutableWorkAck }
+  | { readonly kind: "stream"; readonly write: ImmutableWorkAck };
 export type WorkReduction =
   | { readonly kind: "published"; readonly revision: number; readonly receipt: "recorded" | "none" }
   | {

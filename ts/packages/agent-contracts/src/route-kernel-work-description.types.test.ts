@@ -1,5 +1,6 @@
 import { expect, test } from "vite-plus/test";
-import type { BodyBindings } from "./route-kernel-bodies.ts";
+import { z } from "zod";
+import type { BodyBindings, PaneContext } from "./route-kernel-bodies.ts";
 import { builtinData, schemas, entries } from "./route-kernel.fixtures.ts";
 const data = {
   ...builtinData,
@@ -36,3 +37,60 @@ export const numberDescription: Describe = {
 test("description slot keeps its input-first synchronous signature", () => {
   expect(describe.slot).toBe("verbs.edit.describe");
 });
+
+const typedData = { ...data, historyDetail: "detail" } as const;
+const typedSchemas = { ...schemas, detail: z.strictObject({ row: z.string() }) };
+type TypedDescribe = BodyBindings<
+  typeof typedData,
+  typeof typedSchemas,
+  typeof entries,
+  string
+>["describeEdit"];
+export const typedDescribe: TypedDescribe = {
+  ...describe,
+  run: (_input, _ctx) => ({ label: "Row edit", meta: { row: "row-1" } }),
+};
+export const wrongMeta: TypedDescribe = {
+  ...typedDescribe,
+  // @ts-expect-error The declared metadata schema requires a string row.
+  run: () => ({ label: "Row edit", meta: { row: 42 } }),
+};
+function immutableHistory(
+  ctx: PaneContext<
+    typeof typedData,
+    typeof typedSchemas,
+    typeof entries,
+    keyof typeof typedData.panes
+  >,
+) {
+  const entry = ctx.history?.entries[0];
+  if (entry?.detail === "available") {
+    const row: string = entry.meta.row;
+    void row;
+    // @ts-expect-error History detail is a readonly canonical projection.
+    entry.meta.row = "changed";
+  }
+  // @ts-expect-error Routes cannot append to canonical history.
+  ctx.history?.entries.push({});
+}
+void immutableHistory;
+
+type MetaRefusalCode = Exclude<
+  Extract<
+    import("./work-journal-door.ts").WorkWriteOutcome,
+    { kind: "refused" }
+  >["refusal"]["code"],
+  import("./families.ts").FamiliesRefusalCode | "stale_revision" | undefined
+>;
+function exhaustiveMetaRefusal(code: MetaRefusalCode) {
+  switch (code) {
+    case "invalid_meta":
+    case "meta_too_large":
+      return;
+    default: {
+      const unexpected: never = code;
+      return unexpected;
+    }
+  }
+}
+void exhaustiveMetaRefusal;

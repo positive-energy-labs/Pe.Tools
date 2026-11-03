@@ -11,12 +11,14 @@ import { RouteWorkspace } from "../src/route-workspace.ts";
 import { createWorkJournal } from "../src/work-journal.ts";
 import { createWorkJournal as browserJournal } from "../../../apps/web/src/shell/journal.ts";
 
-function fixture() {
+function fixture(limits?: { maxCount: number; maxBytes: number }) {
   const key = bindWork("history-proof", null, "one");
   let saved: unknown = null;
   const options = {
+    workHistoryLimits: limits,
     registrations: [
       {
+        historyDetail: z.strictObject({ row: z.string() }),
         spec: {
           route: key.route,
           title: "History",
@@ -50,6 +52,28 @@ function fixture() {
     get host() {
       return host;
     },
+    snapshot: () =>
+      new Promise<{
+        doc: unknown;
+        revision: number;
+        history: { from: number; acks: WorkWriteAck[] };
+      }>((resolve, reject) => {
+        const stop = host.observeFeed(
+          key,
+          (value) => {
+            stop();
+            resolve(
+              value as {
+                doc: unknown;
+                revision: number;
+                history: { from: number; acks: WorkWriteAck[] };
+              },
+            );
+          },
+          () => {},
+          reject,
+        );
+      }),
     restart() {
       host = new RouteWorkspace(options);
       return host;
@@ -276,3 +300,58 @@ test("a fresh history acquisition during undo interrupts the old cursor without 
   expect(journal.read().redo[0]!.cursor).toBe(0);
   expect(journal.read().revision).toBe(2);
 });
+
+test("history metadata survives host restart and counts toward the retained byte window", async () => {
+  const f = fixture({ maxCount: 10, maxBytes: 3300 });
+  for (let revision = 0; revision < 2; revision++) {
+    expect(
+      await f.host.write(f.key, f.key.route, "human", {
+        kind: "apply",
+        press: `meta-${revision}`,
+        label: "Edit row",
+        meta: { row: "x".repeat(2000) },
+        expectedRevision: revision,
+        patches: [{ path: ["a"], value: revision + 1 }],
+      }),
+    ).toMatchObject({ ok: true, write: { meta: { row: "x".repeat(2000) } } });
+  }
+  f.restart();
+  const view = await f.snapshot();
+  expect(view?.history.acks).toHaveLength(1);
+  expect(view?.history.acks[0]?.meta).toEqual({ row: "x".repeat(2000) });
+  const journal = createWorkJournal(f.key);
+  journal.restoreView({ revision: view!.revision, doc: view!.doc }, view!.history);
+  expect(journal.entries(z.strictObject({ row: z.string() }))[0]).toMatchObject({
+    detail: "available",
+    meta: { row: "x".repeat(2000) },
+  });
+});
+
+test.each([
+  [{ row: 42 }, "invalid_meta"],
+  [{ row: "\u00e9".repeat(2048) }, "meta_too_large"],
+] as const)(
+  "host refuses invalid or oversized meta without evicting the undo window: %s",
+  async (meta, code) => {
+    const f = fixture();
+    await f.edit("human", "retained", 1);
+    expect(
+      await f.host.write(f.key, f.key.route, "human", {
+        kind: "apply",
+        press: "bad-meta",
+        label: "Bad detail",
+        meta,
+        expectedRevision: 1,
+        patches: [{ path: ["a"], value: 2 }],
+      }),
+    ).toMatchObject({ ok: false, kind: "refused", code });
+    f.restart();
+    const view = await f.snapshot();
+    expect(view).toMatchObject({ revision: 1, doc: { a: 1 } });
+    expect(view?.history.acks.map((ack) => ack.press)).toEqual(["retained"]);
+    expect(await f.host.step(f.key, f.key.route, "human", "undo", 1)).toMatchObject({
+      ok: true,
+      doc: { a: 0 },
+    });
+  },
+);

@@ -122,7 +122,7 @@ export function createAdmittedWork(
     patches: () => import("@pe/agent-contracts").WorkWrite["patches"],
     invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken,
     press: string,
-    label: string,
+    detail: Pick<import("@pe/agent-contracts").WorkWrite, "label" | "meta">,
     basis: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken = invocation,
   ): Observation<WorkWriteOutcome> => {
     if (!scope || !door || !ready || basis.workRevision === null) throw Error("Work unavailable");
@@ -133,7 +133,7 @@ export function createAdmittedWork(
       expectedRevision: basis.workRevision,
       patches: structuredClone(patches()),
       press,
-      label,
+      ...detail,
     });
     // Admit synchronously: observation disposal cannot revoke a submitted write.
     const observation = submitWork(original, request, basis);
@@ -224,7 +224,10 @@ export function createAdmittedWork(
         () => row.input.patches,
         row.basis,
         row.input.press!,
-        row.input.label ?? "Edit Work",
+        {
+          label: row.input.label ?? "Edit Work",
+          ...(row.input.meta !== undefined && { meta: row.input.meta }),
+        },
         row.basis,
       );
     },

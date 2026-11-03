@@ -215,6 +215,8 @@ export const RouteGraphJson = z.strictObject({
     show: ref.optional(),
   }),
   subjectText: ref.optional(),
+  /** Neutral schema for route-owned history metadata. */
+  historyDetail: ref.optional(),
   work: z
     .union([
       z.strictObject({

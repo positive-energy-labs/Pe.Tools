@@ -478,3 +478,18 @@ test("a registration removed before serialized feed acquisition fails terminally
   expect(ack).not.toHaveBeenCalled();
   stop();
 });
+
+test("metadata without an admitted schema is refused before creating Work", async () => {
+  const { store } = memoryStore();
+  const module = workspace(store);
+  expect(
+    await module.write(documentA, "test-route", "human", {
+      kind: "apply",
+      press: "untyped-meta",
+      expectedRevision: 0,
+      patches: [{ path: ["count"], value: 1 }],
+      meta: { row: "one" },
+    }),
+  ).toMatchObject({ ok: false, kind: "refused", code: "invalid_meta" });
+  expect(await module.read(documentA, "test-route")).toBeNull();
+});

@@ -38,7 +38,10 @@ import {
 } from "@pe/agent-contracts";
 import type { RouteStateSpec } from "@pe/agent-contracts";
 
-export interface RouteWorkspaceRegistration extends HostWorkRegistration {}
+export interface RouteWorkspaceRegistration extends HostWorkRegistration {
+  /** Captured neutral schema; presentation decoding belongs at the host write boundary. */
+  readonly historyDetail?: z.ZodType;
+}
 
 export type RouteWorkspaceEvent = {
   type: "route_workspace";
@@ -172,6 +175,9 @@ export class RouteWorkspace {
     try {
       remove = this.register({
         spec,
+        ...(route.data.historyDetail && {
+          historyDetail: bindings.schemas[route.data.historyDetail]!,
+        }),
         ...("admit" in bindings ? { admit: bindings.admit } : {}),
       });
     } catch (error) {
@@ -421,7 +427,9 @@ export class RouteWorkspace {
     patches: RouteStatePatch[],
     expectedRevision: number,
     trusted = false,
-    context: Pick<WorkWrite, "press" | "kind" | "restoreOf" | "label"> & { receiptId?: string } = {
+    context: Pick<WorkWrite, "press" | "kind" | "restoreOf" | "label" | "meta"> & {
+      receiptId?: string;
+    } = {
       press: null,
       kind: "apply",
     },
@@ -435,6 +443,29 @@ export class RouteWorkspace {
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
 
+    // Decode untrusted presentation once, before any Work mutation or history retention.
+    let meta = context.meta;
+    if (meta !== undefined) {
+      const invalid = (
+        code: "invalid_meta" | "meta_too_large",
+        error: string,
+      ): RouteStateWriteResult => ({
+        ok: false,
+        kind: "refused",
+        code,
+        error,
+        hint: "Submit detail matching the admitted route schema within 4 KiB.",
+      });
+      const json = z.json().safeParse(meta);
+      if (!json.success) return invalid("invalid_meta", "History detail must be serializable JSON");
+      if (new TextEncoder().encode(JSON.stringify(json.data)).byteLength > 4096)
+        return invalid("meta_too_large", "History detail exceeds 4 KiB");
+      const decoded = registration.historyDetail?.safeParse(json.data);
+      if (!decoded?.success)
+        return invalid("invalid_meta", "History detail does not match the admitted schema");
+      // Capture submitted JSON before waiting on the write tail. Schema transforms never rewrite history.
+      meta = structuredClone(json.data);
+    }
     return this.#serialized(async () => {
       const envelope = await this.#load(scope, registration.spec).catch(unreadable);
       if ("ok" in envelope) return envelope;
@@ -522,6 +553,7 @@ export class RouteWorkspace {
         by,
         press,
         ...(kind === "apply" && context.label ? { label: context.label } : {}),
+        ...(kind === "apply" && meta !== undefined ? { meta } : {}),
         ...(trusted && context.receiptId ? { receiptId: context.receiptId } : {}),
         ...(kind === "apply"
           ? {
