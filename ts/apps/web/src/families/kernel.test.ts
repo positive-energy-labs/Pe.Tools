@@ -73,11 +73,17 @@ function settled(value: unknown): Promise<any> {
     ),
   );
 }
-async function setup(application = false, sources: Record<string, ReadingSource> = {}) {
+async function setup(
+  application = false,
+  sources: Record<string, ReadingSource> = {},
+  initial = seed,
+) {
   const route = await admitted(sources);
   const frames = new Map<string, (v: any) => void>();
   const requests: any[] = [];
-  const store = createFixtureWorkDoor(familiesRouteState, seed);
+  const store = createFixtureWorkDoor(familiesRouteState, initial);
+  let workScope!: Parameters<typeof store.open>[0];
+  let hostFeed!: Parameters<ReturnType<typeof store.open>["subscribe"]>[0];
   const submit = vi.fn((command: Parameters<typeof store.submit>[0]) => store.submit(command));
   const services: KernelServices = {
     ...(application
@@ -108,7 +114,19 @@ async function setup(application = false, sources: Record<string, ReadingSource>
           },
         }),
     target: () => ({ kind: "document", ref: document }),
-    work: { ...store, submit },
+    work: {
+      ...store,
+      submit,
+      open(scope) {
+        workScope = scope;
+        return {
+          subscribe(deliver, end) {
+            hostFeed = deliver;
+            return store.open(scope).subscribe(deliver, end);
+          },
+        };
+      },
+    },
     clock: { lifetime: "read", now: Date.now },
     availability: {},
   };
@@ -129,7 +147,16 @@ async function setup(application = false, sources: Record<string, ReadingSource>
       });
   };
 
-  return { mount, submit, requests, frames, read };
+  return {
+    mount,
+    submit,
+    requests,
+    frames,
+    read,
+    store,
+    scope: () => workScope,
+    hostFeed: (state: Parameters<typeof hostFeed>[0]) => hostFeed(state),
+  };
 }
 test("mounted Families edits and Revert use one accepted Work", async () => {
   const f = await setup();
@@ -226,6 +253,88 @@ test("admitted progressive Families parts stay inspectable and stale evidence re
     deliver({ kind: "complete", value: observation, revision: 5 });
     expect(await settled(f.mount.invoke("edit", edit, f.mount.workBasis()!))).toMatchObject({
       kind: "accepted",
+    });
+  } finally {
+    draw.mockRestore();
+  }
+});
+
+// Host call-route publishes takenAt before its completed read response. Never replace this
+// with a route-local baseline writer: the real completion/feed ordering must survive.
+test("kernel gap: the host completion baseline retires the Families read before its result", async () => {
+  let deliver!: ReadingDelivery;
+  let released = false;
+  const draw = vi.spyOn(familiesModule.bodies.main, "run");
+  try {
+    const f = await setup(
+      true,
+      {
+        "families.read": {
+          kind: "use",
+          open(_ctx, publish) {
+            deliver = publish;
+            return () => {
+              released = true;
+            };
+          },
+        },
+      },
+      familiesRouteState.schema.parse({ scope: { edit: { value: filter } } }),
+    );
+    f.read();
+    deliver({ kind: "part", value: observation, revision: 1 });
+    // A host publication is not a human edit of the protected takenAt path.
+    f.hostFeed({
+      kind: "ack",
+      ack: {
+        key: f.scope().key,
+        kind: "publish",
+        by: "human",
+        press: null,
+        base: 0,
+        revision: 1,
+        undoable: false,
+        patches: [{ path: ["takenAt"], value: takenAt }],
+        inverse: [{ path: ["takenAt"], value: null }],
+      },
+    });
+    expect(f.mount.work()?.value).toMatchObject({ takenAt });
+    deliver({ kind: "complete", value: observation, revision: 2 });
+    f.mount.read("main");
+    expect(draw.mock.lastCall![0].readings.matrix).toMatchObject({
+      current: false,
+      reason: "Explicit demand required",
+    });
+    expect(() => f.mount.invoke("edit", edit, f.mount.workBasis()!)).toThrow(/Reading unavailable/);
+    await Promise.resolve();
+    expect(released).toBe(true);
+  } finally {
+    draw.mockRestore();
+  }
+});
+
+test("kernel gap: a staged cell edit also retires the completed matrix", async () => {
+  const draw = vi.spyOn(familiesModule.bodies.main, "run");
+  try {
+    const f = await setup();
+    f.read();
+    expect(await settled(f.mount.invoke("edit", edit, f.mount.workBasis()!))).toMatchObject({
+      kind: "accepted",
+    });
+    f.mount.read("main");
+    expect(draw.mock.lastCall![0].readings.matrix).toMatchObject({
+      current: false,
+      reason: "Explicit demand required",
+    });
+    expect(() =>
+      f.mount.invoke(
+        "edit",
+        { ...edit, value: { ...edit.value, value: "1.3" } },
+        f.mount.workBasis()!,
+      ),
+    ).toThrow(/Reading unavailable/);
+    expect(f.mount.work()?.value).toMatchObject({
+      cells: { [key]: { edit: { value: edit.value } } },
     });
   } finally {
     draw.mockRestore();
