@@ -74,7 +74,13 @@ import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/r
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
 import { createPagePolicy, createPagePorts, freezePage } from "./page-port";
 import { createAdmittedAddress, type AdmittedAddressPort } from "./admitted-address";
-import { createAdmittedReadingPlan } from "./admitted-reading-plan";
+import {
+  createAdmittedReadingPlan,
+  readingClosure,
+  receiptHitsReading,
+  type AdmittedReadingStatus,
+} from "./admitted-reading-plan";
+import { sourceReadingEvidence } from "./source-route-services";
 import { createRouteEnvironment, type EnvironmentValidation } from "./route-environment";
 import { createNamedFixtureRouteEnvironment, selectRouteEnvironment } from "./fixture-lane";
 
@@ -123,6 +129,10 @@ type PresentationEvidence = Readonly<{
 
 /** Application services are installed once. Routes supply only admission and location. */
 const applicationWorkDoor = createWorkFeedClient();
+const sourceTimeline = new WeakMap<
+  object,
+  import("../../../../packages/runtime/src/work-journal").TimelineEntry[]
+>();
 const registriesByDoor = new WeakMap<object, ReturnType<typeof createApplicationWorkRegistry>>();
 export function createRouteShell(
   services: KernelServices,
@@ -253,7 +263,10 @@ export function createRouteShell(
         if (!lease || (lease.released && shown && !closed)) {
           lease = registryForWork.acquire(key);
           leases.set(id, lease);
-          const unsubscribe = lease.entry.subscribe(() => notify());
+          const unsubscribe = lease.entry.subscribe(() => {
+            observeReceipts();
+            notify();
+          });
           const release = lease.release.bind(lease);
           lease.release = () => {
             unsubscribe();
@@ -340,6 +353,74 @@ export function createRouteShell(
         unsubscribe?: () => void;
       };
       const active = new Map<string, Active>();
+      const retained = new Map<string, { signature: string; snapshot: ReadingSnapshot<unknown> }>();
+      const previous = new Map<string, unknown>();
+      const dependencies = new Map<string, readonly import("@pe/agent-contracts").Effect[]>();
+      const hostGenerations = new Map<string, string | null>();
+      const seenReceipts = new Map<string, string>();
+      const paneDemand = new Map<string, boolean>();
+      const evidence = sourceReadingEvidence(services);
+      const invalidate = (id: string) => {
+        generations.set(id, (generations.get(id) ?? 0) + 1);
+        retire(id);
+        retained.delete(id);
+        geometry.invalidate(id);
+        const stale = new Set([id]);
+        for (let changed = true; changed; ) {
+          changed = false;
+          for (const [key, reading] of Object.entries(route.data.readings))
+            if (!stale.has(key) && reading.deps.readings.some((dep) => stale.has(dep))) {
+              stale.add(key);
+              changed = true;
+            }
+        }
+        readings = Object.freeze({
+          ...readings,
+          ...Object.fromEntries(
+            [...stale].map((key) => [
+              key,
+              {
+                status: "unavailable" as const,
+                current: false as const,
+                value: previous.get(key),
+                reason: "Host evidence changed",
+              },
+            ]),
+          ),
+        });
+      };
+      function observeReceipts() {
+        const key = owner.read()?.scope.identity.work;
+        if (!key) return;
+        const receipts = entryFor(key).activity();
+        const ids = new Set(receipts.map((receipt) => receipt.id));
+        for (const id of seenReceipts.keys()) if (!ids.has(id)) seenReceipts.delete(id);
+        for (const receipt of receipts) {
+          const stamp = canonicalEnvironmentInput([receipt.state, receipt.effects]);
+          if (seenReceipts.get(receipt.id) === stamp) continue;
+          seenReceipts.set(receipt.id, stamp);
+          for (const [id, effects] of dependencies)
+            if (receiptHitsReading(receipt, effects)) invalidate(id);
+        }
+        schedule();
+      }
+      const wantedReadings = () => {
+        const roots = new Set<string>(route.data.observe);
+        for (const [id, pane] of Object.entries(route.data.panes))
+          if (visible && paneDemand.get(id) !== false && observers.visible(id))
+            pane.draws.forEach((reading) => roots.add(reading));
+        // Picker/observers and active invocations are consumers too.
+        for (const field of Object.values(route.data.fields))
+          if (
+            field.role === "subject" &&
+            visible &&
+            paneDemand.get(route.data.subject.pane) !== false &&
+            observers.visible(route.data.subject.pane)
+          )
+            roots.add(field.picker.reading);
+        for (const id of queryInputs.keys()) roots.add(id);
+        return readingClosure(route, roots);
+      };
       const environment = (() => {
         try {
           return selectRouteEnvironment({
@@ -446,8 +527,47 @@ export function createRouteShell(
         if (!read) return;
         owner.retire(read.token);
         active.delete(id);
+        if (read.snapshot.current)
+          retained.set(id, { signature: read.signature, snapshot: read.snapshot });
         read.unsubscribe?.();
         read.handle?.release();
+      };
+      const watchEvidence = (
+        readingId: string,
+        request: import("../../../../packages/agent-contracts/src/route-kernel-environment").ResolvedRead<unknown>,
+        record: Active,
+      ) => {
+        return fixture === null
+          ? evidence?.observe(request, record.token, (event) => {
+              if (closed || active.get(readingId) !== record) return;
+              if (event.kind === "log") {
+                const key = owner.read()?.scope.identity.work;
+                if (key) {
+                  const entry = entryFor(key);
+                  const rows = sourceTimeline.get(entry) ?? [];
+                  rows.push(
+                    freezePage({
+                      kind: "feed",
+                      at: services.clock.now(),
+                      subject: readingId,
+                      basis: event.value,
+                    }),
+                  );
+                  if (rows.length > 200) rows.shift();
+                  sourceTimeline.set(entry, rows);
+                }
+                notify();
+              } else {
+                const had = hostGenerations.has(readingId);
+                const prior = hostGenerations.get(readingId);
+                hostGenerations.set(readingId, event.value);
+                if (had && prior !== event.value) {
+                  invalidate(readingId);
+                  schedule();
+                }
+              }
+            })
+          : undefined;
       };
       const pickerOptions: Record<string, unknown> = {};
       const demanded = new Set<string>();
@@ -464,6 +584,7 @@ export function createRouteShell(
       >();
       const queryLandings = new Map<string, CommandResultDecode>();
       const subjectField = route.data.subject.field;
+      let evidenceScope = owner.read()!.scope;
       let drawing = false;
       let scheduling = false;
       let again = false;
@@ -481,6 +602,15 @@ export function createRouteShell(
             resolve();
             work.sync();
             syncRecovery();
+            if (evidenceScope !== owner.read()!.scope) {
+              evidenceScope = owner.read()!.scope;
+              for (const [id, reading] of Object.entries(route.data.readings))
+                if (reading.retain.evidence === "scope") {
+                  retire(id);
+                  retained.delete(id);
+                  previous.delete(id);
+                }
+            }
             geometry.syncSubject();
             for (const [id, query] of queryInputs) {
               // Read currency follows declared arguments; previews keep their exact basis.
@@ -496,6 +626,13 @@ export function createRouteShell(
               geometry.cancel(id);
             }
             const used = new Set<string>();
+            observers.update({
+              page: owner.read()!.page,
+              work: owner.read()!.work?.value ?? null,
+              readings,
+            });
+            const wanted = wantedReadings();
+            const cache = new Map<string, ReadingSnapshot<unknown>>();
             const next: typeof readings = {};
             for (const id of Object.keys(route.data.readings)) {
               const declaration = route.data.readings[id]!;
@@ -512,6 +649,20 @@ export function createRouteShell(
                 };
                 continue;
               }
+              if (!wanted.has(id)) {
+                next[id] = readings[id] ?? {
+                  status: "unavailable",
+                  current: false,
+                  reason: "Pane hidden",
+                };
+                geometry.suspend(id);
+                continue;
+              }
+              if (declaration.kind === "use" && declaration.geometry)
+                dependencies.set(
+                  id,
+                  target?.kind === "document" ? [{ kind: "document", ref: target.ref }] : [],
+                );
               next[id] = plan.read(
                 id,
                 {
@@ -533,6 +684,23 @@ export function createRouteShell(
                     };
                   used.add(readingId);
                   const signature = canonicalEnvironmentInput(request.key);
+                  dependencies.set(
+                    readingId,
+                    evidence?.dependencies(request, owner.capture(`dependencies:${readingId}`)) ??
+                      (target?.kind === "document" ? [{ kind: "document", ref: target.ref }] : []),
+                  );
+                  const saved = retained.get(readingId);
+                  if (saved?.signature === signature && !active.has(readingId)) {
+                    const record: Active = {
+                      signature,
+                      key: request.key,
+                      token: owner.capture(readingId),
+                      snapshot: saved.snapshot,
+                    };
+                    active.set(readingId, record);
+                    record.unsubscribe = watchEvidence(readingId, request, record);
+                    return saved.snapshot;
+                  }
                   let read = active.get(readingId);
                   if (read?.signature !== signature) {
                     retire(readingId);
@@ -543,7 +711,12 @@ export function createRouteShell(
                       signature,
                       key: request.key,
                       token: owner.capture(readingId),
-                      snapshot: { status: "pending", current: false, reason: "Reading pending" },
+                      snapshot: {
+                        status: "pending",
+                        current: false,
+                        value: previous.get(readingId),
+                        reason: "Reading pending",
+                      },
                     };
                     active.set(readingId, record);
                     record.handle = environment.environment.reads.acquire(request, record.token);
@@ -555,7 +728,10 @@ export function createRouteShell(
                       )
                         return;
                       if (!snapshot.current) {
-                        record.snapshot = freezePage(snapshot);
+                        record.snapshot = freezePage({
+                          ...snapshot,
+                          value: snapshot.value ?? previous.get(readingId),
+                        });
                         return;
                       }
                       const parsed = request.output.safeParse(snapshot.value);
@@ -569,12 +745,14 @@ export function createRouteShell(
                             problem: parsed.error.message,
                           });
                       }
+                      if (parsed.success) previous.set(readingId, freezePage(parsed.data));
                       record.snapshot = parsed.success
                         ? freezePage({ ...snapshot, value: parsed.data })
                         : { status: "failed", current: false, reason: parsed.error.message };
                     };
                     accept(record.handle.read());
-                    record.unsubscribe = environment.environment.readings.subscribe(
+                    const stopEvidence = watchEvidence(readingId, request, record);
+                    const stopReading = environment.environment.readings.subscribe(
                       request,
                       record.token,
                       (snapshot) => {
@@ -582,16 +760,30 @@ export function createRouteShell(
                         schedule();
                       },
                     );
+                    record.unsubscribe = () => {
+                      stopEvidence?.();
+                      stopReading();
+                    };
                     read = record;
                   }
                   return read.snapshot;
                 },
                 geometry.read,
                 (key) => queryInputs.get(key),
+                cache,
               );
             }
             for (const id of active.keys()) if (!used.has(id)) retire(id);
-            readings = Object.freeze(next);
+            for (const [id, snapshot] of Object.entries(next)) {
+              if (snapshot.current) previous.set(id, snapshot.value);
+              else if (snapshot.value === undefined && previous.has(id))
+                next[id] = { ...snapshot, value: previous.get(id) };
+            }
+            readings = Object.freeze(
+              Object.fromEntries(
+                Object.entries(next).map(([id, snapshot]) => [id, Object.freeze(snapshot)]),
+              ),
+            );
             // Derived dependencies can change during this pass. Retire their dependent
             // query before publishing or landing a result against the previous inputs.
             if (
@@ -608,6 +800,8 @@ export function createRouteShell(
               work: owner.read()!.work?.value ?? null,
               readings,
             });
+            const afterDemand = wantedReadings();
+            if ([...afterDemand].some((id) => !wanted.has(id))) again = true;
             for (const [readingId, query] of queryInputs) {
               const result = readings[readingId];
               if (
@@ -1278,6 +1472,15 @@ export function createRouteShell(
           notify();
         }
       };
+      const refreshReadings = (roots: Iterable<string>) => {
+        for (const id of readingClosure(route, roots)) {
+          demanded.add(id);
+          invalidate(id);
+          if (route.data.readings[id]?.kind === "use" && route.data.readings[id]?.geometry)
+            geometry.refresh(id, false);
+        }
+        schedule();
+      };
       let transport: ReturnType<typeof createAdmittedAddress> | undefined;
       let unsubscribeOwner = () => {};
       const close = () => {
@@ -1334,7 +1537,7 @@ export function createRouteShell(
           visible = next;
           if (!visible) {
             for (const id of active.keys()) retire(id);
-            for (const id of Object.keys(route.data.readings)) geometry.cancel(id);
+            for (const id of Object.keys(route.data.readings)) geometry.suspend(id);
           } else schedule();
         },
         dispose: close,
@@ -1493,7 +1696,13 @@ export function createRouteShell(
         },
         timeline: () => {
           const key = owner.read()?.scope.identity.work;
-          return key ? entryFor(key).timeline() : [];
+          if (!key) return [];
+          const entry = entryFor(key);
+          return freezePage(
+            [...entry.timeline(), ...(sourceTimeline.get(entry) ?? [])].sort(
+              (a, b) => Number(new Date(a.at)) - Number(new Date(b.at)),
+            ),
+          );
         },
         activity: () => {
           const key = owner.read()?.scope.identity.work;
@@ -1512,30 +1721,35 @@ export function createRouteShell(
           (reading) => reading.refresh === "explicit",
         ),
         restore: () => transport!.restore(),
+        paneDemand(pane: string) {
+          if (!route.data.panes[pane]) throw Error(`Unknown pane: ${pane}`);
+          return visible && paneDemand.get(pane) !== false && observers.visible(pane);
+        },
+        setPaneDemand(pane: string, next: boolean) {
+          if (!route.data.panes[pane]) throw Error(`Unknown pane: ${pane}`);
+          paneDemand.set(pane, next);
+          schedule();
+        },
+        readingStatus(id: string): AdmittedReadingStatus {
+          if (!route.data.readings[id]) throw Error(`Unknown reading: ${id}`);
+          return Object.freeze({
+            snapshot: readings[id] ?? {
+              status: "unavailable" as const,
+              current: false as const,
+              reason: "Not read",
+            },
+            previous: previous.get(id),
+            demanded: visible && wantedReadings().has(id),
+            leased: !!active.get(id)?.handle || geometry.leased(id),
+          });
+        },
+        refreshPane(pane: string) {
+          if (!route.data.panes[pane]) throw Error(`Unknown pane: ${pane}`);
+          refreshReadings(route.data.panes[pane]!.draws);
+        },
         refresh(id?: string) {
           resolve();
-          if (id !== undefined && !Object.hasOwn(route.data.readings, id))
-            throw Error(`Unknown reading: ${id}`);
-          if (id !== undefined) {
-            const declaration = route.data.readings[id]!;
-            if (declaration.kind === "use" && declaration.geometry) {
-              geometry.refresh(id);
-              return;
-            }
-          } else {
-            for (const [key, declaration] of Object.entries(route.data.readings))
-              if (declaration.kind === "use" && declaration.geometry?.representation === "overview")
-                geometry.refresh(key);
-          }
-          const refresh = (key: string) => {
-            demanded.add(key);
-            generations.set(key, (generations.get(key) ?? 0) + 1);
-            retire(key);
-            for (const dependency of route.data.readings[key]!.deps.readings) refresh(dependency);
-          };
-          if (id === undefined) for (const key of Array.from(active.keys())) refresh(key);
-          else refresh(id);
-          schedule();
+          refreshReadings(id === undefined ? wantedReadings() : [id]);
         },
         read(pane: string) {
           const current = resolve();

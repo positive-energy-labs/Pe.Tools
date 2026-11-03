@@ -235,6 +235,7 @@ async function admitted(
         : {}),
       readings: {
         ...data.readings,
+        ...((amendment.data?.readings ?? {}) as typeof data.readings),
         notes: {
           ...data.readings.notes,
           demand: explicit ? ("explicit" as const) : ("visible" as const),
@@ -1772,6 +1773,7 @@ test("global predicates drive layout gates on publication and never run during d
   const route = await admitted(false, false, {
     data: {
       predicates: { allowed: "allowed" },
+      observe: ["notes"],
       layout: { kind: "gate", when: "allowed", child: data.layout },
     },
     bodies: { allowed: { slot: "predicates.allowed", kind: "predicate", source, run: predicate } },
@@ -2706,4 +2708,192 @@ test("retained pane releases leases on hide and reuses its Page and history on s
   expect(mount.journal()!.moves).toEqual(moves);
   rendered.unmount();
   for (const owner of owners) owner.dispose();
+});
+
+test("K4 hide and fold release attempt leases, retain accepted evidence and avoid reveal reads", async () => {
+  const t = transports();
+  const mount = createRouteShell(t.services).mount(await admitted(), locationPort().address);
+  closes.push(mount.close);
+  t.frames[0]!(ready("retained"));
+  const status = mount.readingStatus("notes");
+  expect(Object.isFrozen(status.snapshot)).toBe(true);
+  mount.setPaneDemand("main", false);
+  expect(mount.readingStatus("notes")).toMatchObject({
+    demanded: false,
+    leased: false,
+    previous: "retained",
+    snapshot: { current: true, value: "retained" },
+  });
+  expect(t.releases).toHaveBeenCalledOnce();
+  mount.setPaneDemand("main", true);
+  expect(t.keys).toEqual([0]);
+  mount.setVisible(false);
+  mount.setVisible(true);
+  expect(t.keys).toEqual([0]);
+  expect(mount.readingStatus("notes").snapshot.value).toBe("retained");
+  mount.refreshPane("main");
+  expect(t.keys).toEqual([0, 1]); // notes is both drawn and label's dependency.
+  expect(mount.readingStatus("notes").previous).toBe("retained");
+});
+
+import { readingEvidencePort, type SourceReadingEvidence } from "./source-route-services";
+
+test("K4 a host resolve generation change replaces the affected attempt, including after hide", async () => {
+  const t = transports();
+  const generations: ((event: { kind: "generation"; value: string }) => void)[] = [];
+  const stop = vi.fn();
+  const evidence: SourceReadingEvidence = {
+    dependencies: () => [],
+    observe: (_request, _token, deliver) => {
+      generations.push(deliver);
+      return stop;
+    },
+  };
+  const mount = createRouteShell(
+    Object.assign(t.services, { [readingEvidencePort]: evidence }),
+  ).mount(await admitted(), locationPort().address);
+  closes.push(mount.close);
+  generations[0]!({ kind: "generation", value: "host-1" });
+  t.frames[0]!(ready("old"));
+  generations[0]!({ kind: "generation", value: "host-1" });
+  expect(t.keys).toEqual([0]);
+  mount.setVisible(false);
+  expect(stop).toHaveBeenCalledOnce();
+  mount.setVisible(true);
+  expect(t.keys).toEqual([0]);
+  generations[1]!({ kind: "generation", value: "host-2" });
+  expect(t.keys).toEqual([0, 1]);
+  expect(mount.readingStatus("notes").previous).toBe("old");
+  t.frames[0]!(ready("late"));
+  expect(mount.readingStatus("notes").snapshot.current).toBe(false);
+});
+
+test("K4 only successful receipt effects from K1's receipt view invalidate a reading", async () => {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  let emit: (
+    value: import("../../../../packages/agent-contracts/src/work-journal-door").ReceiptFeedState,
+  ) => void = () => {};
+  const door: WorkJournalDoor = {
+    ...store,
+    receipts: () => ({
+      subscribe(deliver) {
+        emit = deliver;
+        return () => {};
+      },
+    }),
+  };
+  const effects = [{ kind: "file" as const, path: "model.data" }];
+  let log: Parameters<SourceReadingEvidence["observe"]>[2] = () => {};
+  const evidence: SourceReadingEvidence = {
+    dependencies: () => effects,
+    observe: (_request, _token, deliver) => {
+      log = deliver;
+      return () => {};
+    },
+  };
+  const mount = createRouteShell(
+    Object.assign({ ...t.services, work: door }, { [readingEvidencePort]: evidence }),
+  ).mount(await workRoute(), locationPort().address);
+  closes.push(mount.close);
+  t.frames[0]!(ready("first"));
+  const accepted = mount.readingStatus("notes").snapshot;
+  log({ kind: "log", value: { message: "source progress" } });
+  expect(mount.timeline()).toContainEqual(
+    expect.objectContaining({
+      kind: "feed",
+      subject: "notes",
+      basis: { message: "source progress" },
+    }),
+  );
+  expect(mount.readingStatus("notes").snapshot).toBe(accepted);
+  const receipt = (id: string, state: string, path: string) =>
+    actionReceiptSchema.parse({
+      id,
+      key: "external.write",
+      caller: { kind: "human", via: "local" },
+      target: { kind: "host" },
+      basis: null,
+      input: {},
+      steps: [],
+      effects: [{ kind: "file", path }],
+      consumes: [],
+      claims: [],
+      consent: null,
+      prepared: { state: "unprepared" },
+      recovery: [],
+      startedAt: "2026-11-03T00:00:00Z",
+      state,
+      ...(state === "succeeded" ? { result: {} } : { error: state, status: 400 }),
+    });
+  let cursor = 0;
+  const send = (id: string, state: string, path: string) =>
+    emit({
+      kind: "receipt",
+      cursor:
+        ++cursor as import("../../../../packages/agent-contracts/src/work-journal-door").ReceiptCursor,
+      receipt: receipt(id, state, path),
+    });
+  send("unrelated", "succeeded", "elsewhere.data");
+  send("failed", "failed", "model.data");
+  send("cancelled", "cancelled", "model.data");
+  expect(t.keys).toEqual([0]);
+  send("changed", "succeeded", "model.data");
+  expect(t.keys).toEqual([0, 1]);
+  expect(mount.readingStatus("notes").previous).toBe("first");
+  emit({
+    kind: "receipt",
+    cursor:
+      ++cursor as import("../../../../packages/agent-contracts/src/work-journal-door").ReceiptCursor,
+    receipt: receipt("changed", "succeeded", "model.data"),
+  });
+  expect(t.keys).toEqual([0, 1]);
+});
+
+test("K4 pane refresh leaves an independent visible reading alone", async () => {
+  const other = {
+    ...data.readings.notes,
+    args: "otherArgs",
+    deps: { page: [], work: [], readings: [] },
+  };
+  const route = await admitted(false, false, {
+    data: {
+      readings: { other },
+      panes: {
+        ...data.panes,
+        other: { label: "Other", purpose: "Read", draws: ["other"], verbs: [], body: "otherPane" },
+      },
+      layout: {
+        kind: "split",
+        id: "both",
+        axis: "h",
+        size: 1,
+        children: [data.layout, { kind: "pane", id: "other" }],
+      },
+      stages: { main: { ...data.stages.main, panes: ["main", "other"] } },
+    },
+    bodies: {
+      otherPane: { slot: "panes.other.body", kind: "pane", source, run: () => null },
+      otherArgs: {
+        slot: "readings.other.args",
+        kind: "args",
+        source,
+        run: () => ({ query: "independent" }),
+      },
+    },
+  });
+  const t = transports();
+  const mount = createRouteShell(t.services).mount(route, locationPort().address);
+  closes.push(mount.close);
+  expect(t.keys).toEqual([0, 0]);
+  t.frames[0]!(ready("main"));
+  t.frames[1]!(ready("other"));
+  const independent = mount.readingStatus("other").snapshot;
+  mount.refreshPane("main");
+  expect(t.keys).toEqual([0, 0, 1]);
+  expect(mount.readingStatus("other").snapshot).toBe(independent);
+  expect(mount.readingStatus("other").leased).toBe(true);
 });

@@ -10,6 +10,53 @@ import {
   createAdmittedRouteRegistry,
   resolveRouteBindings,
 } from "../../../../packages/agent-contracts/src/route-module";
+import type { ActionReceipt, Effect } from "@pe/agent-contracts";
+
+/** Pane chrome consumes this projection; accepted evidence outlives attempt leases. */
+export interface AdmittedReadingStatus {
+  readonly snapshot: ReadingSnapshot<unknown>;
+  readonly previous: unknown;
+  readonly demanded: boolean;
+  readonly leased: boolean;
+}
+
+export function readingClosure(route: AdmittedRoute, roots: Iterable<string>): Set<string> {
+  const result = new Set<string>();
+  const visit = (id: string) => {
+    if (result.has(id)) return;
+    const reading = route.data.readings[id];
+    if (!reading) throw Error(`Unknown admitted reading: ${id}`);
+    result.add(id);
+    reading.deps.readings.forEach(visit);
+  };
+  for (const id of roots) visit(id);
+  return result;
+}
+
+export function receiptHitsReading(
+  receipt: Pick<ActionReceipt, "state" | "effects">,
+  dependencies: readonly Effect[],
+): boolean {
+  if (receipt.state !== "succeeded") return false;
+  const overlaps = (a: Effect, b: Effect): boolean => {
+    if (a.kind === "session" && b.kind === "document") return a.session === b.ref.session;
+    if (b.kind === "session" && a.kind === "document") return b.session === a.ref.session;
+    if (a.kind === "directory" && (b.kind === "file" || b.kind === "directory")) {
+      const root = a.path.replaceAll("\\", "/").replace(/\/$/, "");
+      const path = b.path.replaceAll("\\", "/");
+      return path === root || path.startsWith(`${root}/`);
+    }
+    if (b.kind === "directory") return a.kind === "file" && overlaps(b, a);
+    if (a.kind === "member" && b.kind === "member")
+      return (
+        a.pod === b.pod &&
+        a.path === b.path &&
+        (!a.location || !b.location || a.location === b.location)
+      );
+    return canonicalEnvironmentInput(a) === canonicalEnvironmentInput(b);
+  };
+  return receipt.effects.some((effect) => dependencies.some((dep) => overlaps(effect, dep)));
+}
 
 export interface ReadingPlanContext {
   readonly page: Readonly<Record<string, unknown>>;
@@ -123,8 +170,8 @@ export function createAdmittedReadingPlan(options: {
       acquire: (request: ResolvedRead<unknown>) => ReadingSnapshot<unknown>,
       geometry?: (id: string, context: unknown, input: unknown) => ReadingSnapshot<unknown>,
       invocationFor?: (id: string) => { readonly input: unknown } | undefined,
+      cache = new Map<string, ReadingSnapshot<unknown>>(),
     ): ReadingSnapshot<unknown> {
-      const cache = new Map<string, ReadingSnapshot<unknown>>();
       const evaluate = (id: string): ReadingSnapshot<unknown> => {
         const prior = cache.get(id);
         if (prior) return prior;
