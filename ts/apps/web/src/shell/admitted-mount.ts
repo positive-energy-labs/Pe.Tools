@@ -1,3 +1,4 @@
+import { createAdmittedCells } from "./admitted-cells";
 import { z } from "zod";
 import { placeAdmittedVerbs } from "./admitted-placement";
 import { createAdmittedObservers } from "./admitted-observers";
@@ -76,6 +77,7 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "subject",
   "placement",
   "present",
+  "group",
 ]);
 
 /** Application services are installed once. Routes supply only admission and location. */
@@ -113,6 +115,7 @@ export function createRouteShell(services: KernelServices) {
         }
       }
       const observers = createAdmittedObservers(route.data, bindings.bodies);
+      const cells = createAdmittedCells(route.data, bindings.schemas, bindings.bodies);
       let readings: Record<string, ReadingSnapshot<unknown>> = {};
       const policy = createPagePolicy(
         route.data,
@@ -444,6 +447,7 @@ export function createRouteShell(services: KernelServices) {
             }
             for (const id of active.keys()) if (!used.has(id)) retire(id);
             readings = Object.freeze(next);
+            cells.update((owner.read()!.work?.value ?? null) as Record<string, unknown> | null);
             observers.update({
               page: owner.read()!.page,
               work: owner.read()!.work?.value ?? null,
@@ -843,6 +847,7 @@ export function createRouteShell(services: KernelServices) {
         picker: (field: string) => pickerOptions[field],
         subjectDisplay: observers.subject,
         subjectText: observers.text,
+        cells: cells.rows,
         predicates: observers.predicates,
         visible: observers.visible,
         initialRestore: transport.initial,
