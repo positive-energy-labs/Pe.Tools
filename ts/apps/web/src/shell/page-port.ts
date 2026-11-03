@@ -235,6 +235,7 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
   graph: G,
   schemas: S,
   membership: (page: PageOf<G, S>) => "verified" | "unresolved" | { readonly reason: string },
+  transition?: (current: PageOf<G, S>, patch: unknown, origin: MoveOrigin) => DecodeResult<unknown>,
 ) {
   const fields = Object.entries(graph.fields);
   const subject = fields.filter(([, field]) => field.role === "subject");
@@ -311,6 +312,76 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
     Object.keys(input).every((key) =>
       ["subject", "selection", "pose", "stage", "query", "draft"].includes(role(key) ?? ""),
     );
+  const prepare = (
+    current: PageOf<G, S>,
+    patch: unknown,
+    origin: MoveOrigin,
+    runTransition = true,
+  ): PagePreparation<G, S> => {
+    if (!originSchema.safeParse(origin).success) return failure("Missing or invalid move origin");
+    const parsed = record.safeParse(patch);
+    if (!parsed.success) return failure("Invalid Page patch");
+    const entries = Object.entries(parsed.data);
+    for (const [key] of entries) {
+      const r = role(key);
+      if (!r || key === "__proto__" || key === "constructor")
+        return failure(`Unknown Page field: ${key}`);
+      if (origin.kind === "human" && r !== origin.source)
+        return failure(`Human ${origin.source} cannot write ${key}`);
+      if (
+        origin.kind === "restore" &&
+        !["subject", "selection", "pose", "stage", "query", "draft"].includes(r)
+      )
+        return failure(`Restore cannot write ${key}`);
+      if (
+        origin.kind === "pea" &&
+        (r === "device" ||
+          r === "transient" ||
+          ("agent" in graph.fields[key]! && graph.fields[key]!.agent !== "set"))
+      )
+        return failure(`Pea cannot write ${key}`);
+    }
+    if (
+      origin.kind === "restore" &&
+      (!Object.hasOwn(parsed.data, subjectKey) || !Object.hasOwn(parsed.data, selectionKey))
+    )
+      return failure("Restore requires subject and selection together");
+    if (transition && runTransition) {
+      // Validate the proposed patch before route code, then validate its returned patch identically.
+      const proposed = prepare(current, patch, origin, false);
+      if (!proposed.ok) return proposed;
+      const adjusted = transition(current, freezePage(parsed.data), origin);
+      return adjusted.ok ? prepare(current, adjusted.value, origin, false) : adjusted;
+    }
+    const next: Record<string, unknown> = { ...current };
+    for (const [key, value] of entries) {
+      const decoded = decodeField(key, value);
+      if (!decoded.ok) return decoded;
+      next[key] = decoded.value;
+    }
+    if (origin.kind !== "restore" && !deepEqual(current[subjectKey], next[subjectKey])) {
+      next[selectionKey] = [];
+      for (const [key, field] of fields) if (field.role === "pose") next[key] = field.initial;
+    } else if (
+      origin.kind !== "restore" &&
+      !deepEqual(current[selectionKey], next[selectionKey]) &&
+      fields.some(([key, field]) => field.role === "pose" && !deepEqual(current[key], next[key]))
+    ) {
+      return failure("Selection and pose are separate moves");
+    }
+    const result = decode(next);
+    if (!result.ok) return result;
+    const checked = membership(result.value);
+    if (typeof checked !== "string") return failure(checked.reason);
+    return {
+      ok: true,
+      value: {
+        page: result.value,
+        changed: !deepEqual(current, result.value),
+        membership: checked,
+      },
+    };
+  };
   return Object.freeze({
     decode,
     initial: () => decode(defaults()),
@@ -338,64 +409,7 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
         ? { ok: true, value: freezePage(restored) }
         : failure("Invalid restore");
     },
-    prepare(current: PageOf<G, S>, patch: unknown, origin: MoveOrigin): PagePreparation<G, S> {
-      if (!originSchema.safeParse(origin).success) return failure("Missing or invalid move origin");
-      const parsed = record.safeParse(patch);
-      if (!parsed.success) return failure("Invalid Page patch");
-      const entries = Object.entries(parsed.data);
-      for (const [key] of entries) {
-        const r = role(key);
-        if (!r || key === "__proto__" || key === "constructor")
-          return failure(`Unknown Page field: ${key}`);
-        if (origin.kind === "human" && r !== origin.source)
-          return failure(`Human ${origin.source} cannot write ${key}`);
-        if (
-          origin.kind === "restore" &&
-          !["subject", "selection", "pose", "stage", "query", "draft"].includes(r)
-        )
-          return failure(`Restore cannot write ${key}`);
-        if (
-          origin.kind === "pea" &&
-          (r === "device" ||
-            r === "transient" ||
-            ("agent" in graph.fields[key]! && graph.fields[key]!.agent !== "set"))
-        )
-          return failure(`Pea cannot write ${key}`);
-      }
-      if (
-        origin.kind === "restore" &&
-        (!Object.hasOwn(parsed.data, subjectKey) || !Object.hasOwn(parsed.data, selectionKey))
-      )
-        return failure("Restore requires subject and selection together");
-      const next: Record<string, unknown> = { ...current };
-      for (const [key, value] of entries) {
-        const decoded = decodeField(key, value);
-        if (!decoded.ok) return decoded;
-        next[key] = decoded.value;
-      }
-      if (origin.kind !== "restore" && !deepEqual(current[subjectKey], next[subjectKey])) {
-        next[selectionKey] = [];
-        for (const [key, field] of fields) if (field.role === "pose") next[key] = field.initial;
-      } else if (
-        origin.kind !== "restore" &&
-        !deepEqual(current[selectionKey], next[selectionKey]) &&
-        fields.some(([key, field]) => field.role === "pose" && !deepEqual(current[key], next[key]))
-      ) {
-        return failure("Selection and pose are separate moves");
-      }
-      const result = decode(next);
-      if (!result.ok) return result;
-      const checked = membership(result.value);
-      if (typeof checked !== "string") return failure(checked.reason);
-      return {
-        ok: true,
-        value: {
-          page: result.value,
-          changed: !deepEqual(current, result.value),
-          membership: checked,
-        },
-      };
-    },
+    prepare,
   });
 }
 

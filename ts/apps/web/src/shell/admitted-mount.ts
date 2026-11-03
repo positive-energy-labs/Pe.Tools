@@ -55,6 +55,21 @@ import { createAdmittedReadingPlan } from "./admitted-reading-plan";
 import { createRouteEnvironment, type EnvironmentValidation } from "./route-environment";
 import { createNamedFixtureRouteEnvironment, selectRouteEnvironment } from "./fixture-lane";
 
+/** Closed slot census. Other kinds refuse before resource acquisition. */
+export const admittedMountBodyKinds: readonly string[] = Object.freeze([
+  "args",
+  "adapter",
+  "derive",
+  "picker",
+  "ready",
+  "work",
+  "intent",
+  "page",
+  "pane",
+  "seed",
+  "transition",
+]);
+
 /** Application services are installed once. Routes supply only admission and location. */
 export function createRouteShell(services: KernelServices) {
   const liveDoor = services.work ?? createWorkFeedClient();
@@ -83,7 +98,46 @@ export function createRouteShell(services: KernelServices) {
         return bindings;
       };
       const bindings = resolve();
-      const policy = createPagePolicy(route.data, bindings.schemas, () => "unresolved");
+      for (const body of Object.values(bindings.bodies)) {
+        if (!admittedMountBodyKinds.includes(body.kind)) {
+          registration.deactivate();
+          throw Error(`Unsupported admitted mount body slot: ${body.slot}`);
+        }
+      }
+      let readings: Record<string, ReadingSnapshot<unknown>> = {};
+      const policy = createPagePolicy(
+        route.data,
+        bindings.schemas,
+        () => "unresolved",
+        route.data.transition
+          ? (current, patch, origin) => {
+              const deps = route.data.transitionDeps ?? { page: [], work: [], readings: [] };
+              if (deps.readings.some((id) => !readings[id]?.current))
+                return { ok: false, reason: "Transition reading evidence unavailable or stale" };
+              const acceptedWork = owner.read()?.work?.value as Record<string, unknown> | undefined;
+              if (deps.work.length && !acceptedWork)
+                return { ok: false, reason: "Transition Work unavailable" };
+              const evidence = Object.fromEntries(deps.readings.map((id) => [id, readings[id]]));
+              const result = resolve().bodies[route.data.transition!]!.run(
+                current,
+                patch,
+                origin,
+                freezePage({
+                  page: Object.fromEntries(deps.page.map((key) => [key, current[key]])),
+                  work: Object.fromEntries(deps.work.map((key) => [key, acceptedWork?.[key]])),
+                  readings: evidence,
+                }),
+              ) as import("../../../../packages/agent-contracts/src/route-kernel-page").DecodeResult<unknown>;
+              // Re-entrant publication cannot decide on the evidence captured above.
+              if (
+                deps.readings.some((id) => readings[id] !== evidence[id] || !readings[id]?.current)
+              )
+                return { ok: false, reason: "Transition reading evidence changed" };
+              return result;
+            }
+          : undefined,
+      );
+
       const initial = policy.initial();
       if (!initial.ok) {
         registration.deactivate();
@@ -254,6 +308,7 @@ export function createRouteShell(services: KernelServices) {
         read.unsubscribe?.();
         read.handle?.release();
       };
+      const pickerOptions: Record<string, unknown> = {};
       const demanded = new Set<string>();
       // Invocation arguments belong to the attempt, never to Page or selection.
       const queryInputs = new Map<
@@ -264,7 +319,6 @@ export function createRouteShell(services: KernelServices) {
         }
       >();
       const subjectField = route.data.subject.field;
-      let readings: Record<string, ReadingSnapshot<unknown>> = {};
       let scheduling = false;
       let again = false;
       const schedule = () => {
@@ -381,6 +435,12 @@ export function createRouteShell(services: KernelServices) {
             }
             for (const id of active.keys()) if (!used.has(id)) retire(id);
             readings = Object.freeze(next);
+            for (const [key, field] of Object.entries(route.data.fields)) {
+              if (field.role === "subject")
+                pickerOptions[key] = freezePage(
+                  bindings.bodies[field.picker.options]!.run(readings[field.picker.reading]),
+                );
+            }
             for (const [id, pending] of preparing) {
               if (!owner.current(pending.invocation)) {
                 preparing.delete(id);
@@ -491,18 +551,25 @@ export function createRouteShell(services: KernelServices) {
           if (modelWrite && (!work.ready() || !accepted.work || !accepted.scope.identity.work))
             throw Error("Accepted Work unavailable");
           // ModelWrite has one input authority: B's accepted key and revision, never draft intent.
-          const intent: Record<string, unknown> = modelWrite
-            ? freezePage({
-                work: workHandleSchema.parse({
-                  key: accepted.scope.identity.work,
-                  revision: accepted.work!.revision,
-                }),
-              })
-            : freezePage(
-                entry.input.parse(
-                  bindings.bodies[declaration.intent]!.run(context(), parsed),
-                ) as Record<string, unknown>,
-              );
+          const declaredIntent = bindings.bodies[declaration.intent]!.run(
+            context(),
+            parsed,
+          ) as Record<string, unknown>;
+          if (modelWrite && Object.hasOwn(declaredIntent, "work"))
+            throw Error("ModelWrite intent cannot supply Work identity");
+          const intent: Record<string, unknown> = freezePage(
+            entry.input.parse(
+              modelWrite
+                ? {
+                    ...declaredIntent,
+                    work: workHandleSchema.parse({
+                      key: accepted.scope.identity.work,
+                      revision: accepted.work!.revision,
+                    }),
+                  }
+                : declaredIntent,
+            ) as Record<string, unknown>,
+          );
           entry.input.parse(intent);
           preview = freezePage({ work: accepted.work, input: intent });
           // ActionJournal owns the existing Reject? consent window after this admission.
@@ -696,6 +763,7 @@ export function createRouteShell(services: KernelServices) {
         listeners.clear();
       };
       try {
+        if (route.data.transition) schedule();
         transport = createAdmittedAddress({
           route,
           registry,
@@ -705,7 +773,8 @@ export function createRouteShell(services: KernelServices) {
           memory,
           origin: { kind: "restore", source: "url", token: issuer.restore("url") },
         });
-        if (transport.initial.kind === "refused") throw Error(transport.initial.message);
+        if (transport.initial.kind === "refused" && !route.data.transition)
+          throw Error(transport.initial.message);
         unsubscribeOwner = owner.subscribe(schedule);
         schedule();
       } catch (error) {
@@ -725,6 +794,8 @@ export function createRouteShell(services: KernelServices) {
         },
         revision: () => revision,
         invoke,
+        picker: (field: string) => pickerOptions[field],
+        initialRestore: transport.initial,
         review: (id: string) => {
           const review = reviews.get(id);
           return review

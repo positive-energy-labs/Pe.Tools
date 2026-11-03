@@ -24,10 +24,11 @@ export interface EntryContract {
 export type EntryTable = Readonly<Record<string, EntryContract>>;
 type Input<E extends EntryTable, K> = K extends keyof E ? z.output<E[K]["input"]> : never;
 /** ModelWrite intent cannot supply Work identity; the mount binds accepted Work. */
+type IntentForEffect<I, Effect> = Effect extends "ModelWrite"
+  ? Omit<I, "work"> & { readonly work?: never }
+  : I;
 type CommandIntent<E extends EntryTable, K> = K extends keyof E
-  ? E[K]["axes"]["effect"] extends "ModelWrite"
-    ? Omit<Input<E, K>, "work"> & { readonly work?: never }
-    : Input<E, K>
+  ? IntentForEffect<Input<E, K>, E[K]["axes"]["effect"]>
   : never;
 type Output<E extends EntryTable, K> = K extends keyof E ? z.output<E[K]["output"]> : never;
 export type ReadingValue<
@@ -390,6 +391,8 @@ export type BodySlots<
         current: PageOf<G, S>,
         patch: PagePatch<G, S>,
         origin: MoveOrigin,
+        /** Only declared transitionDeps, immutable and current at acceptance. */
+        ctx: BodyContext<G, S, E, { deps: At<G, "transitionDeps"> }>,
       ) => DecodeResult<PagePatch<G, S>>
     >
   | Slot<

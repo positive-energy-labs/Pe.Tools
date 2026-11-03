@@ -161,6 +161,11 @@ export function linkRouteBodies(
   body(data.subject.show, "subject.show", "show");
   body(data.subjectText, "subjectText", "subject");
   body(data.transition, "transition", "transition");
+  if (data.transitionDeps) {
+    deps(data.transitionDeps, "transitionDeps");
+    if (!data.transition)
+      fail("transitionDeps", "", "transition body", "Dependencies require transition");
+  }
   body(data.salvage, "salvage", "salvage");
   for (const [key, identity] of Object.entries(data.identities)) {
     reference(bindings.identities, identity.codec, `identities.${key}.codec`, "identity codec");

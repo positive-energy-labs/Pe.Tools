@@ -12,7 +12,7 @@ import {
 } from "../../../../packages/agent-contracts/src/route-module";
 
 import { identityCodecs } from "./page-port";
-import { createRouteShell } from "./admitted-mount";
+import { createRouteShell, admittedMountBodyKinds } from "./admitted-mount";
 import { AdmittedPane, admittedRouterAddress } from "./admitted-pane";
 const data = {
   version: 1,
@@ -177,12 +177,17 @@ const module = {
     },
   },
 };
-async function admitted(explicit = false, query = false) {
+async function admitted(
+  explicit = false,
+  query = false,
+  amendment: { data?: Record<string, unknown>; bodies?: Record<string, unknown> } = {},
+) {
   const selectedModule = {
     ...module,
     schemas: { ...schemas, ids: z.object({ elementIds: z.array(z.number()) }) },
     bodies: {
       ...bodies,
+      ...amendment.bodies,
       ...(query
         ? {
             queryArgs: {
@@ -199,6 +204,7 @@ async function admitted(explicit = false, query = false) {
     },
     data: {
       ...data,
+      ...amendment.data,
       ...(query
         ? {
             verbs: {
@@ -523,7 +529,7 @@ async function workRoute(review: "none" | "shown" = "none", modelWrite = false) 
         slot: "verbs.native.intent",
         kind: "intent",
         source,
-        run: (ctx: { work: { amount: number } }) => ({ amount: ctx.work.amount }),
+        run: (ctx: { work: { amount: number } }) => (modelWrite ? {} : { amount: ctx.work.amount }),
       },
       change: {
         slot: "verbs.change.patches",
@@ -1234,4 +1240,272 @@ test("shared shell buttons expose Work undo and redo without route callbacks", a
     fireEvent.click(screen.getByRole("button", { name: "Pane undo" }));
   });
   expect(f.mount.work()?.value).toEqual({ amount: 0 });
+});
+
+test("transition adjusts and refuses through the Page port, with current projected evidence", async () => {
+  const run = vi.fn((current, patch, origin, ctx) => {
+    expect(Object.keys(ctx.page)).toEqual(["query"]);
+    expect(Object.keys(ctx.work)).toEqual([]);
+    expect(Object.keys(ctx.readings)).toEqual(["notes"]);
+    expect(ctx.readings.notes.current).toBe(true);
+    expect(Object.isFrozen(ctx.readings.notes)).toBe(true);
+    if (origin.kind === "restore") return { ok: true, value: patch };
+    expect(current.pose.x).toBe(0);
+    return patch.pose.x < 0
+      ? { ok: false, reason: "Outside scene" }
+      : { ok: true, value: { pose: { x: patch.pose.x + ctx.readings.notes.value.length } } };
+  });
+  const route = await admitted(false, false, {
+    data: {
+      transition: "move",
+      transitionDeps: { page: ["query"], work: [], readings: ["notes"] },
+    },
+    bodies: { move: { slot: "transition", kind: "transition", source, run } },
+  });
+  const t = transports();
+  const location = locationPort();
+  const mount = createRouteShell(t.services).mount(route, location.address);
+  closes.push(mount.close);
+  expect(mount.initialRestore.kind).toBe("refused");
+  expect(mount.page.pose({ pose: { x: 2 } }, "named").kind).toBe("refused");
+  expect(run).not.toHaveBeenCalled();
+  t.frames.at(-1)!(ready("scene"));
+  expect(mount.page.pose({ pose: { x: -1 } }, "named").kind).toBe("refused");
+  expect(mount.page.read().pose).toEqual({ x: 0 });
+  expect(location.writes).toEqual([]);
+  expect(mount.page.pose({ pose: { x: 2 } }, "named").kind).toBe("accepted");
+  expect(mount.page.read().pose).toEqual({ x: 7 });
+  mount.refresh("notes");
+  const calls = run.mock.calls.length;
+  expect(mount.page.pose({ pose: { x: 8 } }, "named").kind).toBe("refused");
+  expect(run).toHaveBeenCalledTimes(calls);
+  expect(mount.page.read().pose).toEqual({ x: 7 });
+});
+
+test("transition returned patches retain role and schema checks; restore invokes it", async () => {
+  let value: unknown = { query: "smuggled" };
+  const run = vi.fn((_page, patch, origin) =>
+    origin.kind === "restore" ? { ok: true, value: patch } : { ok: true, value },
+  );
+  const route = await admitted(false, false, {
+    data: { transition: "move" },
+    bodies: { move: { slot: "transition", kind: "transition", source, run } },
+  });
+  const mount = createRouteShell(transports().services).mount(route, locationPort().address);
+  closes.push(mount.close);
+  expect(run.mock.calls[0]![2].kind).toBe("restore");
+  expect(mount.page.pose({ pose: { x: 1 } }, "named").kind).toBe("refused");
+  value = { pose: { x: "invalid" } };
+  expect(mount.page.pose({ pose: { x: 1 } }, "named").kind).toBe("refused");
+  expect(mount.page.read().pose).toEqual({ x: 0 });
+});
+
+test("slot census refuses unsupported bodies at mount admission and invokes picker options", async () => {
+  expect(admittedMountBodyKinds).toEqual([
+    "args",
+    "adapter",
+    "derive",
+    "picker",
+    "ready",
+    "work",
+    "intent",
+    "page",
+    "pane",
+    "seed",
+    "transition",
+  ]);
+  for (const [slot, kind, dataPatch] of [
+    ["salvage", "salvage", { salvage: "unsupported" }],
+    ["subjectText", "subject", { subjectText: "unsupported" }],
+    ["subject.show", "show", { subject: { ...data.subject, show: "unsupported" } }],
+    ["predicates.allowed", "predicate", { predicates: { allowed: "unsupported" } }],
+  ] as const) {
+    const t = transports();
+    const run = vi.fn();
+    const route = await admitted(false, false, {
+      data: dataPatch,
+      bodies: { unsupported: { slot, kind, source, run } },
+    });
+    expect(() => createRouteShell(t.services).mount(route, locationPort().address)).toThrow(slot);
+    expect(t.keys).toEqual([]);
+    expect(run).not.toHaveBeenCalled();
+  }
+  const run = vi.fn((snapshot) => (snapshot.current ? [{ id: null, label: snapshot.value }] : []));
+  const route = await admitted(false, false, {
+    bodies: { pick: { ...bodies.pick, run } },
+  });
+  const t = transports();
+  const mount = createRouteShell(t.services).mount(route, locationPort().address);
+  closes.push(mount.close);
+  expect(run).toHaveBeenCalled();
+  t.frames.at(-1)!(ready("options"));
+  expect(mount.picker("note")).toEqual([{ id: null, label: "options" }]);
+});
+
+test("Page verbs also pass through transition and refuse atomically", async () => {
+  const run = vi.fn(() => ({ ok: false, reason: "No Page verb" }));
+  const route = await admitted(false, false, {
+    data: {
+      transition: "move",
+      verbs: {
+        edit: {
+          kind: "page",
+          patch: "edit",
+          fields: ["query"],
+          input: "text",
+          label: "Edit",
+          review: "none",
+          deps: { page: [], work: [], readings: [] },
+          captures: [],
+        },
+      },
+    },
+    bodies: {
+      move: {
+        slot: "transition",
+        kind: "transition",
+        source,
+        run: (_page: unknown, patch: unknown, origin: { kind: string }) =>
+          origin.kind === "restore" ? { ok: true, value: patch } : run(),
+      },
+      edit: { slot: "verbs.edit.patch", kind: "page", source, run: () => ({ query: "changed" }) },
+    },
+  });
+  const mount = createRouteShell(transports().services).mount(route, locationPort().address);
+  closes.push(mount.close);
+  expect(mount.invoke("edit", "change")).toMatchObject({ kind: "refused" });
+  expect(mount.page.read().query).toBe("");
+  expect(run).toHaveBeenCalledOnce();
+});
+
+test("transition refuses a re-entrant evidence change before acceptance", async () => {
+  const t = transports();
+  const route = await admitted(false, false, {
+    data: { transition: "move", transitionDeps: { page: [], work: [], readings: ["notes"] } },
+    bodies: {
+      move: {
+        slot: "transition",
+        kind: "transition",
+        source,
+        run: (_page: unknown, patch: unknown) => {
+          t.frames.at(-1)!(ready("replacement"));
+          return { ok: true, value: patch };
+        },
+      },
+    },
+  });
+  const mount = createRouteShell(t.services).mount(route, locationPort().address);
+  closes.push(mount.close);
+  t.frames.at(-1)!(ready("scene"));
+  expect(mount.page.pose({ pose: { x: 10 } }, "named").kind).toBe("refused");
+  expect(mount.page.read().pose).toEqual({ x: 0 });
+});
+
+test("remaining slot census refuses cells, placement, presentation and migrations before acquisition", async () => {
+  const empty = { page: [], work: [], readings: [] };
+  const cases = [
+    ...["groupOf", "show", "label", "focus", "take", "admit"].map((key) => ({
+      data: {
+        cells: {
+          test: {
+            segment: null,
+            key: "text",
+            value: "text",
+            groupOf: "group",
+            deps: empty,
+            ...(key === "groupOf" ? {} : { [key]: "unsupported" }),
+          },
+        },
+      },
+      bodies: {
+        group: { slot: "cells.test.groupOf", kind: "group", source, run: () => [] },
+        ...(key === "groupOf"
+          ? {}
+          : { unsupported: { slot: `cells.test.${key}`, kind: key, source, run: () => [] } }),
+      },
+    })),
+    {
+      data: {
+        panes: {
+          main: { ...data.panes.main, verbs: { choose: "unsupported", row: "text", allowed: [] } },
+        },
+      },
+      bodies: {
+        unsupported: { slot: "panes.main.verbs.choose", kind: "placement", source, run: () => [] },
+      },
+    },
+    {
+      data: {
+        verbs: {
+          edit: {
+            kind: "page",
+            input: "text",
+            label: "Edit",
+            review: "none",
+            deps: empty,
+            captures: [],
+            fields: ["query"],
+            patch: "edit",
+            present: "unsupported",
+          },
+        },
+      },
+      bodies: {
+        edit: { slot: "verbs.edit.patch", kind: "page", source, run: () => ({}) },
+        unsupported: { slot: "verbs.edit.present", kind: "present", source, run: () => "" },
+      },
+    },
+    {
+      data: {
+        capabilities: ["work"],
+        work: { route: "note", schema: "pose", version: 2, migrations: { 1: "unsupported" } },
+      },
+      bodies: {
+        unsupported: { slot: "work.migrations.1", kind: "migration", source, run: () => ({}) },
+      },
+    },
+  ];
+  for (const amendment of cases) {
+    const t = transports();
+    const route = await admitted(false, false, amendment);
+    expect(() => createRouteShell(t.services).mount(route, locationPort().address)).toThrow(
+      /Unsupported admitted mount body slot/,
+    );
+    expect(t.keys).toEqual([]);
+  }
+});
+
+const transitionData = {
+  ...data,
+  transition: "move",
+  transitionDeps: { page: ["query"], work: [], readings: ["notes"] },
+} as const;
+export function transitionProjectionWitness(
+  ctx: Parameters<
+    BodyBindings<typeof transitionData, typeof schemas, typeof entries>["move"]["run"]
+  >[3],
+) {
+  const query: string = ctx.page.query;
+  const evidence = ctx.readings.notes;
+  // @ts-expect-error Only transitionDeps readings are available.
+  ctx.readings.label;
+  // @ts-expect-error Only transitionDeps Page fields are in the evidence context.
+  ctx.page.pose;
+  return { query, evidence };
+}
+
+test("transition dependency references are linked at admission", async () => {
+  await expect(
+    admitted(false, false, {
+      data: { transition: "move", transitionDeps: { page: [], work: [], readings: ["missing"] } },
+      bodies: {
+        move: {
+          slot: "transition",
+          kind: "transition",
+          source,
+          run: () => ({ ok: true, value: {} }),
+        },
+      },
+    }),
+  ).rejects.toThrow(/missing/);
 });

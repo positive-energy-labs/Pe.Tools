@@ -193,6 +193,8 @@ export const RouteGraphJson = z.strictObject({
   stageOrder: refs,
   predicates: z.record(ref, ref),
   transition: ref.optional(),
+  /** Evidence projection for transition; omitted means no evidence dependencies. */
+  transitionDeps: dependencies.optional(),
   salvage: ref.optional(),
   cells: z.record(
     ref,
