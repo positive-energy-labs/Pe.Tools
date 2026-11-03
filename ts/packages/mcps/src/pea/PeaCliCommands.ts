@@ -346,6 +346,7 @@ export class PeaCliCommands {
             );
 
           const timeoutSeconds = asOptionalNumber(ctx.values.timeoutSeconds);
+          // TODO: Manual D drive-7 verdict F: without --json, "Target document lifetime or kind differs from the command contract"; "The same call with --json succeeds." Prove the target-selection difference.
           const result = await this.createScriptingTools(ctx.values, timeoutSeconds).execute({
             scriptContent,
             sourcePath,
