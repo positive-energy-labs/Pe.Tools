@@ -1,3 +1,4 @@
+import type { AdmittedMount } from "./admitted-mount";
 /**
  * ADR 0027 rule 3: the Situation is one line. The route's name and context lead, one primary verb
  * stands framed, the rest wait in an overflow, and the Timeline head closes the line. Layout only:
@@ -115,8 +116,11 @@ export function openConsentWindows(entries: readonly TimelineEntry[], now = Date
 }
 
 /** The Work journal behind the owner's current scope: the one history of authored edits. */
-export function useWorkJournal<P, W>(owner: GraphMount<P, W>) {
-  useSyncExternalStore(owner.subscribe, owner.version, owner.version);
+type HistoryOwner<P, W> = GraphMount<P, W> | AdmittedMount;
+export function useWorkJournal<P, W>(owner: HistoryOwner<P, W>) {
+  const version = "restoreWork" in owner ? owner.revision : owner.version;
+  useSyncExternalStore(owner.subscribe, version, version);
+  if ("restoreWork" in owner) return owner.journal();
   const scope = owner.snapshot();
   const key = scope.work?.handle.key ?? scope.workKey ?? scope.unreadable;
   return key ? (owner.journals.get(workKey(key))?.read() ?? null) : null;
@@ -154,7 +158,7 @@ export function JournalButtons<P, W>({
   owner,
   words = false,
 }: {
-  owner: GraphMount<P, W>;
+  owner: HistoryOwner<P, W>;
   words?: boolean;
 }) {
   const journal = useWorkJournal(owner);
@@ -171,7 +175,9 @@ export function JournalButtons<P, W>({
           undo?.superseded?.message ??
           (undo ? null : "Nothing to undo: no edit to this Work since this tab opened it")
         }
-        onClick={() => void owner.restore("undo")}
+        onClick={() =>
+          void ("restoreWork" in owner ? owner.restoreWork("undo") : owner.restore("undo"))
+        }
       >
         {words ? "undo" : undefined}
       </Button>
@@ -181,7 +187,9 @@ export function JournalButtons<P, W>({
         refusal={
           owner.journalRefusal() ?? redo?.superseded?.message ?? (redo ? null : "Nothing to redo")
         }
-        onClick={() => void owner.restore("redo")}
+        onClick={() =>
+          void ("restoreWork" in owner ? owner.restoreWork("redo") : owner.restore("redo"))
+        }
       >
         {words ? "redo" : undefined}
       </Button>

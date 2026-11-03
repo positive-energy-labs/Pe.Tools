@@ -1,3 +1,4 @@
+import { JournalButtons } from "./situation-band";
 import { useRouter } from "@tanstack/react-router";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
@@ -40,6 +41,7 @@ function Pane({ mount, pane }: { mount: AdmittedMount; pane: string }) {
     null,
     mount.refreshable &&
       createElement(Button, { label: "refresh", onClick: () => mount.refresh() }, "refresh"),
+    mount.history && createElement(JournalButtons, { owner: mount, words: true }),
     mount.read(pane) as ReactNode,
     ...mount.reviewIds().map((id) => {
       const review = mount.review(id)!;

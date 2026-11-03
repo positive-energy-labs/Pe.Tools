@@ -83,11 +83,13 @@ export function createFixtureWorkDoor(
             kind: write.kind,
             by: "human",
             press: write.press,
+            ...(write.label && { label: write.label }),
             base: state.revision,
             revision: result.envelope.revision,
             patches: routeDocDelta(prior, result.envelope.doc),
             inverse: routeDocDelta(result.envelope.doc, prior),
             undoable: true,
+            ...(write.restoreOf !== undefined && { restoreOf: write.restoreOf }),
           };
           state.revision = ack.revision;
           state.value = result.envelope.doc;

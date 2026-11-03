@@ -120,6 +120,12 @@ type Allowed<P> = P extends readonly string[]
   : P extends { allowed: readonly string[] }
     ? P["allowed"][number]
     : never;
+/** Mount-owned Work history; routes never supply replay callbacks or inverse authority. */
+export interface WorkHistoryPort {
+  undo(press?: string): unknown;
+  redo(press?: string): unknown;
+  revert(press?: string): unknown;
+}
 export type PaneContext<
   G extends RouteGraphJson,
   S extends SchemaTable,
@@ -127,6 +133,7 @@ export type PaneContext<
   P extends keyof G["panes"],
 > = {
   readonly page: PagePort<G, S>;
+  readonly history?: "work" extends keyof G ? WorkHistoryPort : never;
   readonly work: Immutable<WorkOf<G, S>> | null;
   readonly readings: Reads<G, S, E, G["panes"][P]["draws"][number]>;
   /** Declared explicit geometry readings only. The mount owns invocation and refresh. */

@@ -513,7 +513,12 @@ async function workRoute(review: "none" | "shown" = "none", modelWrite = false) 
             },
           }
         : {}),
-      main: { ...bodies.main, run: () => null },
+      main: {
+        ...bodies.main,
+        run: (ctx: {
+          history?: import("../../../../packages/agent-contracts/src/route-kernel-bodies").WorkHistoryPort;
+        }) => createElement("button", { onClick: () => ctx.history!.undo() }, "Pane undo"),
+      },
       native: {
         slot: "verbs.native.intent",
         kind: "intent",
@@ -1036,3 +1041,197 @@ test.each(["reject", "timeout"])(
     }
   },
 );
+
+async function historyFixture(pea = false) {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  const acks: import("@pe/agent-contracts").WorkWriteAck[] = [];
+  const outcomes: WorkWriteOutcome[] = [];
+  let stream: ((state: WorkFeedState) => void) | undefined;
+  let paused = false;
+  let scope: Parameters<WorkJournalDoor["open"]>[0];
+  const author = (ack: import("@pe/agent-contracts").WorkWriteAck) => ({
+    ...ack,
+    by: pea && ack.kind === "apply" ? ("pea" as const) : ack.by,
+  });
+  const submitWork = vi.fn<WorkJournalDoor["submitWork"]>((key, write, invocation) => ({
+    subscribe(deliver, end) {
+      return store.submitWork(key, write, invocation).subscribe((outcome) => {
+        outcomes.push(outcome);
+        if (outcome.kind === "accepted") {
+          const ack = author(outcome.ack);
+          acks.push(ack);
+          deliver({ kind: "accepted", ack });
+        } else deliver(outcome);
+      }, end);
+    },
+  }));
+  const door: WorkJournalDoor = {
+    ...store,
+    submitWork,
+    open(key) {
+      scope = key;
+      return {
+        subscribe(deliver, end) {
+          stream = deliver;
+          return store.open(key).subscribe((state) => {
+            if (state.kind === "ack") {
+              if (!paused) deliver({ kind: "ack", ack: author(state.ack) });
+            } else deliver(state);
+          }, end);
+        },
+      };
+    },
+  };
+  const route = await workRoute();
+  const shell = createRouteShell({ ...t.services, work: door });
+  const mount = shell.mount(route, locationPort().address);
+  closes.push(mount.close);
+  return {
+    mount,
+    shell,
+    route,
+    door,
+    acks,
+    outcomes,
+    submitWork,
+    pause: () => {
+      paused = true;
+    },
+    flush: () => {
+      acks.forEach((ack) => stream?.({ kind: "ack", ack }));
+      paused = false;
+    },
+    external: async (amount: number) =>
+      settle(
+        submitWork(
+          scope!,
+          {
+            kind: "apply",
+            press: "external",
+            expectedRevision: acks.at(-1)?.revision ?? 0,
+            patches: [{ path: ["amount"], value: amount }],
+          },
+          {} as Parameters<WorkJournalDoor["submitWork"]>[2],
+        ),
+      ),
+  };
+}
+
+test("admitted Work undo/redo crosses the door with restoreOf and declared labels", async () => {
+  const f = await historyFixture();
+  await settle(f.mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
+  expect(f.mount.journal()?.moves.at(-1)?.label).toBe("Change");
+  expect(await f.mount.history!.undo()).toMatchObject({ ok: true });
+  expect(f.mount.work()).toEqual({ revision: 2, value: { amount: 0 } });
+  expect(f.submitWork.mock.calls.at(-1)?.[1]).toMatchObject({
+    kind: "restore",
+    restoreOf: 1,
+    expectedRevision: 1,
+  });
+  expect(await f.mount.history!.redo()).toMatchObject({ ok: true });
+  expect(f.mount.work()).toEqual({ revision: 3, value: { amount: 2 } });
+  expect(f.mount.journal()?.moves.map((m) => [m.kind, m.label])).toEqual([
+    ["apply", "Change"],
+    ["undo", "Change"],
+    ["redo", "Change"],
+  ]);
+});
+
+test("admitted mount undoes Pea's accepted feed step", async () => {
+  const f = await historyFixture(true);
+  await f.external(7);
+  expect(f.mount.journal()?.undo.at(-1)?.by).toBe("pea");
+  expect(await f.mount.history!.undo()).toMatchObject({ ok: true });
+  expect(f.mount.work()?.value).toEqual({ amount: 0 });
+});
+
+test("Revert appends an inverse step and undo restores the reverted value", async () => {
+  const f = await historyFixture();
+  await settle(f.mount.invoke("change", 5) as Observation<WorkWriteOutcome>);
+  expect(await f.mount.history!.revert()).toMatchObject({ ok: true });
+  expect(f.mount.work()?.value).toEqual({ amount: 0 });
+  expect(f.mount.journal()?.undo.map((s) => s.label)).toEqual(["Change", "Revert Change"]);
+  expect(f.mount.journal()?.moves.at(-1)?.label).toBe("Revert Change");
+  expect(await f.mount.history!.undo()).toMatchObject({ ok: true });
+  expect(f.mount.work()?.value).toEqual({ amount: 5 });
+});
+
+test("undo refuses the door's stale base after a concurrent write without retrying", async () => {
+  const f = await historyFixture();
+  await settle(f.mount.invoke("change", 5) as Observation<WorkWriteOutcome>);
+  f.pause();
+  await f.external(9);
+  const before = f.submitWork.mock.calls.length;
+  expect(await f.mount.history!.undo()).toMatchObject({ ok: false, code: "write-refused" });
+  expect(f.submitWork.mock.calls).toHaveLength(before + 1);
+  expect(f.submitWork.mock.calls.at(-1)?.[1].expectedRevision).toBe(1);
+  expect(f.outcomes.at(-1)).toMatchObject({
+    kind: "refused",
+    refusal: { code: "stale_revision", revision: 2 },
+  });
+  expect(f.mount.journalRefusal()).toBeTruthy();
+  f.flush();
+  expect(f.mount.journalRefusal()).toBeNull();
+  expect(f.mount.work()).toEqual({ revision: 2, value: { amount: 9 } });
+  expect(await f.mount.history!.undo(f.acks[0]!.press!)).toMatchObject({
+    ok: false,
+    code: "entry-changed",
+  });
+});
+
+test("a departed mount recovers undo history solely from open's feed", async () => {
+  const f = await historyFixture();
+  await settle(f.mount.invoke("change", 6) as Observation<WorkWriteOutcome>);
+  f.mount.close();
+  // A new shell has no retained journal or submit callback. Snapshot then replay owns recovery.
+  const door: WorkJournalDoor = {
+    ...f.door,
+    open: (scope) => ({
+      subscribe(deliver) {
+        deliver({ kind: "ready", snapshot: { key: scope.key, revision: 1, value: { amount: 6 } } });
+        for (const ack of f.acks) deliver({ kind: "ack", ack });
+        return () => {};
+      },
+    }),
+  };
+  const mount = createRouteShell({ ...transports().services, work: door }).mount(
+    f.route,
+    locationPort().address,
+  );
+  closes.push(mount.close);
+  expect(mount.journal()?.undo).toHaveLength(1);
+  expect(await mount.history!.undo()).toMatchObject({ ok: true });
+  expect(mount.work()?.value).toEqual({ amount: 0 });
+});
+
+test("shared shell buttons expose Work undo and redo without route callbacks", async () => {
+  const f = await historyFixture();
+  const { JournalButtons } = await import("./situation-band");
+  render(
+    createElement(
+      "div",
+      null,
+      createElement(JournalButtons, { owner: f.mount, words: true }),
+      f.mount.read("main") as import("react").ReactNode,
+    ),
+  );
+  await act(async () => {
+    await settle(f.mount.invoke("change", 4) as Observation<WorkWriteOutcome>);
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Undo Change" }));
+  });
+  expect(f.mount.work()?.value).toEqual({ amount: 0 });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Redo Change" }));
+  });
+  expect(f.mount.work()?.value).toEqual({ amount: 4 });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Pane undo" }));
+  });
+  expect(f.mount.work()?.value).toEqual({ amount: 0 });
+});

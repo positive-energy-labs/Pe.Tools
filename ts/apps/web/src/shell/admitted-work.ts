@@ -95,6 +95,7 @@ export function createAdmittedWork(
     patches: () => import("@pe/agent-contracts").WorkWrite["patches"],
     invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken,
     press: string,
+    label: string,
   ): Observation<WorkWriteOutcome> => {
     if (!scope || !door || !ready) throw Error("Work unavailable");
     const original = scope;
@@ -103,6 +104,7 @@ export function createAdmittedWork(
       expectedRevision: owner.read()!.work!.revision,
       patches: patches(),
       press,
+      label,
     };
     return completion<WorkWriteOutcome>(
       { kind: "pending" },
@@ -166,12 +168,45 @@ export function createAdmittedWork(
         }),
     );
   };
+  // Replay is never recomputed over a concurrent edit: return the door's stale refusal.
+  const submit = (
+    request: import("@pe/agent-contracts").WorkWrite,
+    invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken,
+  ): Promise<import("@pe/agent-contracts").RouteStateWriteResult> => {
+    if (!scope || !door || !ready || !owner.current(invocation)) throw Error("Work unavailable");
+    const original = scope;
+    return new Promise((resolve) => {
+      door.submitWork(original, request, invocation).subscribe(
+        (outcome) => {
+          if (outcome.kind === "pending") return;
+          if (outcome.kind === "accepted") {
+            owner.acceptWork(invocation, { kind: "ack", write: outcome.ack });
+            resolve({ ok: true, revision: outcome.ack.revision, write: outcome.ack });
+          } else {
+            problem = outcome.refusal.error;
+            resolve({
+              ok: false,
+              kind: "refused",
+              error: outcome.refusal.error,
+              hint: outcome.refusal.hint,
+              code: outcome.refusal.code === "stale_revision" ? "stale_revision" : undefined,
+              ...("revision" in outcome.refusal && { revision: outcome.refusal.revision }),
+            });
+          }
+          notify();
+        },
+        () => {},
+      );
+    });
+  };
   return {
     sync,
     write,
+    submit,
     ready: () => ready,
     problem: () => problem,
     close() {
+      ready = false;
       stop();
       abandonRebases();
       if (feedToken) owner.retire(feedToken);
