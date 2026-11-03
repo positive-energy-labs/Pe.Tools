@@ -1,10 +1,14 @@
+import {
+  submitAction,
+  actionResult,
+} from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { createGeometryReadDoor } from "./geometry-read-door";
 import type {
   KernelServices,
   ResolvedRead,
 } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import type { ReadingSource } from "./readings";
+import type { ReadingSource, UseSource } from "./readings";
 
 /** Application adapter for existing domain sources. Acceptance and validation stay in the mount. */
 export function sourceRouteServices(
@@ -13,7 +17,11 @@ export function sourceRouteServices(
 ): KernelServices {
   const reads = new WeakMap<
     object,
-    { controller: AbortController; snapshot: ReadingSnapshot<unknown> }
+    {
+      controller: AbortController;
+      snapshot: ReadingSnapshot<unknown>;
+      target: import("@pe/agent-contracts").ExecutionTarget;
+    }
   >();
   return {
     geometry: composition.geometry ?? createGeometryReadDoor(),
@@ -23,6 +31,7 @@ export function sourceRouteServices(
       acquire<T>(request: ResolvedRead<T>) {
         const state = {
           controller: new AbortController(),
+          target: composition.target?.() ?? { kind: "host" as const },
           snapshot: {
             status: "pending",
             current: false,
@@ -46,7 +55,32 @@ export function sourceRouteServices(
         deliver: (value: ReadingSnapshot<T>) => void,
       ) {
         const state = reads.get(request);
-        const source = sources[request.key.op];
+        // Native previews are catalog queries, shared by every admitted ModelWrite route.
+        const source =
+          sources[request.key.op] ??
+          (request.key.op.endsWith(".preview")
+            ? {
+                kind: "use" as const,
+                async open(
+                  context: Parameters<UseSource["open"]>[0],
+                  deliver: Parameters<UseSource["open"]>[1],
+                ) {
+                  try {
+                    const receipt = await submitAction({
+                      id: crypto.randomUUID(),
+                      key: request.key.op,
+                      target: state!.target,
+                      input: JSON.parse(request.key.sortedKeyInput),
+                    });
+                    const result = actionResult(receipt);
+                    if (!context.signal.aborted)
+                      deliver({ kind: "complete", value: result, revision: 0 });
+                  } catch (error) {
+                    if (!context.signal.aborted) deliver({ kind: "failure", error });
+                  }
+                },
+              }
+            : undefined);
         if (!state || !source || source.kind !== "use") {
           deliver({
             status: "unavailable",

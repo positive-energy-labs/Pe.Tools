@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { createElement, StrictMode } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
@@ -429,12 +429,26 @@ import type {
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import type { InvocationBasis } from "../../../../packages/agent-contracts/src/route-kernel-page";
 
-async function workRoute(review: "none" | "shown" = "none") {
+async function workRoute(review: "none" | "shown" = "none", modelWrite = false) {
   const workData = {
     ...data,
     capabilities: ["work", "native-write"] as const,
     work: { route: "note", schema: "work", version: 1, migrations: {} },
     workSubject: "note",
+    readings: {
+      ...data.readings,
+      ...(modelWrite
+        ? {
+            preview: {
+              ...data.readings.notes,
+              entry: "native.write.preview",
+              args: "previewArgs",
+              demand: "explicit" as const,
+              deps: { page: [], work: [], readings: [] },
+            },
+          }
+        : {}),
+    },
     verbs: {
       native: {
         kind: "command" as const,
@@ -466,12 +480,39 @@ async function workRoute(review: "none" | "shown" = "none") {
       "native.write": {
         input: z.object({ amount: z.number() }),
         output: z.unknown(),
-        axes: { ...entries["notes.read"].axes, effect: "SessionWrite" as const },
+        axes: {
+          ...entries["notes.read"].axes,
+          effect: modelWrite ? ("ModelWrite" as const) : ("SessionWrite" as const),
+        },
+        ...(modelWrite ? { input: z.strictObject({ work: workHandleSchema }) } : {}),
       },
+      ...(modelWrite
+        ? {
+            "native.write.preview": {
+              input: z.strictObject({ work: workHandleSchema }),
+              output: writePreviewSchema,
+              axes: {
+                ...entries["notes.read"].axes,
+                effect: "TransactRead" as const,
+                rollsBack: true,
+              },
+            },
+          }
+        : {}),
     },
     schemas: { ...schemas, work: z.object({ amount: z.number() }), number: z.number() },
     bodies: {
       ...bodies,
+      ...(modelWrite
+        ? {
+            previewArgs: {
+              slot: "readings.preview.args",
+              kind: "args",
+              source,
+              run: () => null,
+            },
+          }
+        : {}),
       main: { ...bodies.main, run: () => null },
       native: {
         slot: "verbs.native.intent",
@@ -511,6 +552,15 @@ async function workRoute(review: "none" | "shown" = "none") {
       catalog: [
         { key: "notes.read", ...entries["notes.read"].axes, uses: [] },
         { key: "native.write", ...workModule.entries["native.write"].axes, uses: [] },
+        ...(modelWrite
+          ? [
+              {
+                key: "native.write.preview",
+                ...workModule.entries["native.write.preview"]!.axes,
+                uses: [],
+              },
+            ]
+          : []),
       ],
     },
   });
@@ -729,4 +779,184 @@ test("query validates and delivers invocation input without changing Page; new r
   t.frames[2]!(ready("departed"));
   expect(pane().readings.notes.current).toBe(false);
   expect(acquire).toHaveBeenCalledTimes(3);
+});
+
+import { workHandleSchema, writePreviewSchema, type WorkHandle } from "@pe/agent-contracts";
+const sealedPreview = (handle: WorkHandle) => ({
+  previewOnly: true,
+  derivedRequest: { amount: 7 },
+  seal: { requestHash: "sealed", work: { handle }, incarnation: {}, dependencies: "deps" },
+  takenAt: "2026-11-03T00:00:00Z",
+  response: { changes: [{ kind: "Parameter", key: "amount", before: 6, after: 7 }] },
+});
+async function nativeFixture() {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 6 },
+  );
+  const submit = vi.fn((command: Parameters<WorkJournalDoor["submit"]>[0]) =>
+    store.submit(command),
+  );
+  const acquire = vi.spyOn(t.services.reads, "acquire");
+  const mount = createRouteShell({ ...t.services, work: { ...store, submit } }).mount(
+    await workRoute("none", true),
+    locationPort().address,
+  );
+  closes.push(mount.close);
+  const preview = () => {
+    const index = acquire.mock.calls.findLastIndex(
+      ([request]) => request.key.op === "native.write.preview",
+    );
+    const input = JSON.parse(acquire.mock.calls[index]![0].key.sortedKeyInput);
+    return {
+      input,
+      deliver: (handle = input.work) =>
+        t.frames[index]!({
+          status: "ready",
+          current: true,
+          hash: "seal",
+          value: sealedPreview(handle),
+        }),
+    };
+  };
+  return { ...t, mount, submit, acquire, preview };
+}
+test("ModelWrite waits for sealed preview, reviews old-to-new, and submits accepted handle rather than draft", async () => {
+  const f = await nativeFixture();
+  await settle(f.mount.invoke("change", 1) as Observation<WorkWriteOutcome>);
+  expect(f.mount.invoke("native", 999)).toEqual({ kind: "preview" });
+  expect(f.mount.review("native")).toBeNull();
+  expect(() => f.mount.confirm("native")).toThrow("No review");
+  expect(f.submit).not.toHaveBeenCalled();
+  const p = f.preview();
+  expect(p.input).toEqual({
+    work: {
+      key: { binding: "workspace", route: "note", target: null, work: "default" },
+      revision: 1,
+    },
+  });
+  p.deliver();
+  expect(f.mount.review("native")).toMatchObject({
+    stale: false,
+    preview: { previewOnly: true },
+    rows: ["Parameter amount: 6 \u2192 7"],
+  });
+  f.mount.confirm("native");
+  expect(f.submit).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ key: "native.write", input: p.input }),
+  );
+});
+test.each(["during-preview", "after-review"])(
+  "Work changes %s refuse stale review without re-deriving",
+  async (when) => {
+    const f = await nativeFixture();
+    f.mount.invoke("native", 0);
+    const p = f.preview();
+    if (when === "after-review") p.deliver();
+    await settle(f.mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
+    p.deliver();
+    expect(() => f.mount.confirm("native")).toThrow(
+      when === "after-review" ? "stale" : "No review",
+    );
+    expect(f.submit).not.toHaveBeenCalled();
+    expect(f.acquire.mock.calls.filter(([r]) => r.key.op === "native.write.preview")).toHaveLength(
+      1,
+    );
+    f.mount.invoke("native", 0);
+    const next = f.preview();
+    expect(next.input.work.revision).toBe(1);
+    next.deliver();
+    f.mount.confirm("native");
+    expect(f.submit).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ input: next.input }),
+    );
+  },
+);
+test("a preview for another Work revision never becomes a review", async () => {
+  const f = await nativeFixture();
+  f.mount.invoke("native", 0);
+  const p = f.preview();
+  expect(() => p.deliver({ ...p.input.work, revision: 91 })).toThrow("different Work handle");
+  expect(f.mount.review("native")).toBeNull();
+  expect(f.submit).not.toHaveBeenCalled();
+});
+
+import * as actionClient from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { actionReceiptSchema } from "@pe/agent-contracts";
+import { sourceRouteServices } from "./source-route-services";
+test("shared preview transport renders before-to-after review and commits identical Work through the door", async () => {
+  const previewCall = vi.spyOn(actionClient, "submitAction").mockImplementation(async (admission) =>
+    actionReceiptSchema.parse({
+      ...admission,
+      state: "succeeded",
+      caller: { kind: "human", via: "local" },
+      basis: null,
+      steps: [],
+      prepared: { state: "ready", value: null },
+      recovery: [],
+      result: sealedPreview((admission.input as { work: WorkHandle }).work),
+      startedAt: "2026-11-03T00:00:00Z",
+    }),
+  );
+  try {
+    const store = createFixtureWorkDoor(
+      { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+      { amount: 6 },
+    );
+    const submit = vi.fn((command: Parameters<WorkJournalDoor["submit"]>[0]) =>
+      store.submit(command),
+    );
+    const shell = createRouteShell({ ...sourceRouteServices({}), work: { ...store, submit } });
+    const mounted = vi.spyOn(shell, "mount");
+    render(
+      createElement(AdmittedPane, {
+        shell,
+        route: await workRoute("none", true),
+        address: locationPort().address,
+        pane: "main",
+      }),
+    );
+    const mount = mounted.mock.results[0]!.value;
+    act(() => {
+      mount.invoke("native", 1234);
+    });
+    await screen.findByText("Parameter amount: 6 \u2192 7");
+    expect(previewCall).toHaveBeenCalledTimes(1);
+    expect(submit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Commit native" }));
+    expect(submit).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        key: "native.write",
+        input: previewCall.mock.calls[0]![0].input,
+      }),
+    );
+  } finally {
+    previewCall.mockRestore();
+  }
+});
+
+import {
+  builtinData,
+  schemas as fixtureSchemas,
+  entries as fixtureEntries,
+} from "../../../../packages/agent-contracts/src/route-kernel.fixtures";
+const nativeEntries = {
+  ...fixtureEntries,
+  apply: {
+    ...fixtureEntries.apply,
+    input: z.strictObject({ work: workHandleSchema }),
+  },
+};
+type NativeIntent = BodyBindings<
+  typeof builtinData,
+  typeof fixtureSchemas,
+  typeof nativeEntries
+>["apply"]["run"];
+const acceptedWorkIntent: NativeIntent = () => ({});
+// @ts-expect-error Work identity belongs to B and cannot come from a route intent body.
+const forgedWorkIntent: NativeIntent = () => ({ work: { key: {}, revision: 99 } });
+test("typed native intent leaves accepted Work binding to the mount", () => {
+  expect(acceptedWorkIntent).toBeTypeOf("function");
+  expect(forgedWorkIntent).toBeTypeOf("function");
 });

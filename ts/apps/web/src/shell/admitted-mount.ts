@@ -1,4 +1,5 @@
-import { bindWork, workKey } from "@pe/agent-contracts";
+import { reviewChanges } from "./review-value";
+import { bindWork, workKey, workHandleSchema, writePreviewSchema } from "@pe/agent-contracts";
 import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
 import { createWorkFeedClient } from "./work-feed-client";
 import { createAdmittedWork } from "./admitted-work";
@@ -380,12 +381,41 @@ export function createRouteShell(services: KernelServices) {
             }
             for (const id of active.keys()) if (!used.has(id)) retire(id);
             readings = Object.freeze(next);
+            for (const [id, pending] of preparing) {
+              if (!owner.current(pending.invocation)) {
+                preparing.delete(id);
+                continue;
+              }
+              const result = readings[pending.reading];
+              if (!result?.current) continue;
+              preparing.delete(id);
+              const sealed = writePreviewSchema.parse(result.value);
+              const handle = workHandleSchema.parse(
+                (sealed.seal.work as { handle?: unknown })?.handle,
+              );
+              if (canonicalEnvironmentInput(handle) !== pending.handle)
+                throw Error("Preview sealed a different Work handle");
+              reviews.set(id, {
+                invocation: pending.invocation,
+                preview: result.value,
+                send: () => pending.send(),
+              });
+            }
           } while (again && !closed);
         } finally {
           scheduling = false;
         }
         notify();
       };
+      const preparing = new Map<
+        string,
+        {
+          invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
+          reading: string;
+          handle: string;
+          send(): unknown;
+        }
+      >();
       const reviews = new Map<
         string,
         {
@@ -448,10 +478,25 @@ export function createRouteShell(services: KernelServices) {
           };
         } else if (declaration.kind === "command") {
           const entry = bindings.entries[declaration.entry]!;
-          const intent = entry.input.parse(
-            bindings.bodies[declaration.intent]!.run(context(), parsed),
-          ) as Record<string, unknown>;
-          preview = freezePage({ work: owner.read()!.work, input: intent });
+          const modelWrite = entry.axes.effect === "ModelWrite";
+          const accepted = owner.read()!;
+          if (modelWrite && (!work.ready() || !accepted.work || !accepted.scope.identity.work))
+            throw Error("Accepted Work unavailable");
+          // ModelWrite has one input authority: B's accepted key and revision, never draft intent.
+          const intent: Record<string, unknown> = modelWrite
+            ? freezePage({
+                work: workHandleSchema.parse({
+                  key: accepted.scope.identity.work,
+                  revision: accepted.work!.revision,
+                }),
+              })
+            : freezePage(
+                entry.input.parse(
+                  bindings.bodies[declaration.intent]!.run(context(), parsed),
+                ) as Record<string, unknown>,
+              );
+          entry.input.parse(intent);
+          preview = freezePage({ work: accepted.work, input: intent });
           // ActionJournal owns the existing Reject? consent window after this admission.
           send = () => {
             if (!door) throw Error("Native commands unavailable");
@@ -470,6 +515,46 @@ export function createRouteShell(services: KernelServices) {
               input: intent,
             });
           };
+          if (modelWrite) {
+            const previewKey = `${declaration.entry}.preview`;
+            const previewEntry = bindings.entries[previewKey];
+            if (
+              !previewEntry ||
+              previewEntry.axes.effect !== "TransactRead" ||
+              !previewEntry.axes.rollsBack
+            )
+              throw Error("ModelWrite requires its rolled-back catalog preview");
+            const candidates = Object.entries(route.data.readings).filter(
+              ([, reading]) =>
+                reading.kind === "use" &&
+                reading.entry === previewKey &&
+                reading.demand === "explicit",
+            );
+            if (candidates.length !== 1)
+              throw Error("ModelWrite preview must identify exactly one explicit reading");
+            previewEntry.input.parse(intent);
+            const readingId = candidates[0]![0];
+            reviews.delete(id);
+            preparing.set(id, {
+              invocation,
+              reading: readingId,
+              handle: canonicalEnvironmentInput(intent.work),
+              send: () => {
+                if (!work.ready() || !owner.current(invocation))
+                  throw Error("Review is stale; prepare it again");
+                return send();
+              },
+            });
+            const previous = queryInputs.get(readingId);
+            if (previous) owner.retire(previous.invocation.token);
+            queryInputs.set(readingId, { input: intent, invocation });
+            demanded.add(readingId);
+            generations.set(readingId, (generations.get(readingId) ?? 0) + 1);
+            retire(readingId);
+            schedule();
+            const review = reviews.get(id);
+            return review ? { kind: "review", preview: review.preview } : { kind: "preview" };
+          }
         } else if (declaration.kind === "page") {
           const patch = bindings.bodies[declaration.patch]!.run(context(), parsed);
           preview = patch;
@@ -563,8 +648,20 @@ export function createRouteShell(services: KernelServices) {
         review: (id: string) => {
           const review = reviews.get(id);
           return review
-            ? { preview: review.preview, stale: !owner.current(review.invocation) }
+            ? {
+                preview: review.preview,
+                rows: reviewChanges(review.preview),
+                stale: (!!route.data.work && !work.ready()) || !owner.current(review.invocation),
+              }
             : null;
+        },
+        reviewIds: () => Array.from(reviews.keys()),
+        cancelReview: (id: string) => {
+          const invocation = preparing.get(id)?.invocation ?? reviews.get(id)?.invocation;
+          if (invocation) owner.retire(invocation.token);
+          preparing.delete(id);
+          reviews.delete(id);
+          schedule();
         },
         confirm: (id: string) => {
           const review = reviews.get(id);

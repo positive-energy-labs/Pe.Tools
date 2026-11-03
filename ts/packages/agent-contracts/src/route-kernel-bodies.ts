@@ -23,6 +23,12 @@ export interface EntryContract {
 }
 export type EntryTable = Readonly<Record<string, EntryContract>>;
 type Input<E extends EntryTable, K> = K extends keyof E ? z.output<E[K]["input"]> : never;
+/** ModelWrite intent cannot supply Work identity; the mount binds accepted Work. */
+type CommandIntent<E extends EntryTable, K> = K extends keyof E
+  ? E[K]["axes"]["effect"] extends "ModelWrite"
+    ? Omit<Input<E, K>, "work"> & { readonly work?: never }
+    : Input<E, K>
+  : never;
 type Output<E extends EntryTable, K> = K extends keyof E ? z.output<E[K]["output"]> : never;
 export type ReadingValue<
   G extends RouteGraphJson,
@@ -220,7 +226,7 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         (
           ctx: InvocationContext<G, S, E, G["verbs"][K]>,
           input: VerbInput<G, S, K>,
-        ) => Input<E, At<G["verbs"][K], "entry">>
+        ) => CommandIntent<E, At<G["verbs"][K], "entry">>
       >
     | Slot<
         At<G["verbs"][K], "args">,

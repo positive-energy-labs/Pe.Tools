@@ -41,6 +41,29 @@ function Pane({ mount, pane }: { mount: AdmittedMount; pane: string }) {
     mount.refreshable &&
       createElement(Button, { label: "refresh", onClick: () => mount.refresh() }, "refresh"),
     mount.read(pane) as ReactNode,
+    ...mount.reviewIds().map((id) => {
+      const review = mount.review(id)!;
+      return createElement(
+        "section",
+        { key: id, "aria-label": `${id} review` },
+        createElement("output", null, review.rows.join("\n")),
+        createElement(
+          Button,
+          {
+            label: `Commit ${id}`,
+            kind: "commit",
+            refusal: review.stale ? "Review is stale; prepare it again" : null,
+            onClick: () => mount.confirm(id),
+          },
+          `Commit ${id}`,
+        ),
+        createElement(
+          Button,
+          { label: `Cancel ${id}`, onClick: () => mount.cancelReview(id) },
+          "Cancel",
+        ),
+      );
+    }),
   );
 }
 
