@@ -46,19 +46,26 @@ export type ReadingValue<
         : Output<E, C>
       : never
   : never;
-export type ReadingSnapshot<T> =
-  | {
-      readonly status: "ready";
-      readonly current: true;
-      readonly value: Immutable<T>;
-      readonly hash: string;
-    }
-  | {
-      readonly status: "pending" | "unavailable" | "failed";
-      readonly current: false;
-      readonly value?: Immutable<T>;
-      readonly reason: string;
-    };
+/** Journal evidence stays attached even when preview decoding or host execution refuses. */
+type ReadingEvidence = {
+  readonly receipt?: import("./action-receipts.ts").ActionReceipt;
+  readonly refusal?: import("./command.ts").CommandRefusal | import("./caller.ts").Refusal;
+};
+export type ReadingSnapshot<T> = ReadingEvidence &
+  (
+    | {
+        readonly status: "ready";
+        readonly current: true;
+        readonly value: Immutable<T>;
+        readonly hash: string;
+      }
+    | {
+        readonly status: "pending" | "unavailable" | "failed";
+        readonly current: false;
+        readonly value?: Immutable<T>;
+        readonly reason: string;
+      }
+  );
 type Reads<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, K> = {
   readonly [R in Extract<K, keyof G["readings"]>]: ReadingSnapshot<ReadingValue<G, S, E, R>>;
 };

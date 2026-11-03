@@ -1,3 +1,10 @@
+import {
+  commands,
+  refusalSchema,
+  writePreviewSchema,
+  type SemanticActionKey,
+} from "@pe/agent-contracts";
+import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { callOp } from "./readings-api";
 import { createGeometryReadDoor } from "./geometry-read-door";
@@ -57,6 +64,66 @@ export function sourceRouteServices(
         deliver: (value: ReadingSnapshot<T>) => void,
       ) {
         const state = reads.get(request);
+        // Semantic previews belong to the host journal, never the native /call door.
+        const command = Object.hasOwn(commands, request.key.op)
+          ? commands[request.key.op as SemanticActionKey]
+          : undefined;
+        if (
+          state &&
+          command &&
+          "writeBoundary" in command &&
+          command.writeBoundary.phase === "preview"
+        ) {
+          const publish = (snapshot: ReadingSnapshot<T>) => {
+            if (state.controller.signal.aborted) return;
+            state.snapshot = snapshot;
+            deliver(snapshot);
+          };
+          void (async () => {
+            let receipt: import("@pe/agent-contracts").ActionReceipt | undefined;
+            try {
+              const input = command.input.parse(JSON.parse(request.key.sortedKeyInput));
+              const row = await submitAction({
+                id: crypto.randomUUID(),
+                key: request.key.op,
+                target: state.target,
+                input,
+              });
+              if (row.state === "detached")
+                throw Error(`Preview receipt ${row.id} requires recovery`);
+              receipt = row;
+              if (row.state !== "succeeded") {
+                publish({
+                  status: "failed",
+                  current: false,
+                  reason: "error" in row ? row.error : `Preview ${row.state}`,
+                  receipt: row,
+                  refusal: row.refusal,
+                });
+                return;
+              }
+              const value = request.output.parse(writePreviewSchema.parse(row.result));
+              publish({
+                status: "ready",
+                current: true,
+                value:
+                  value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
+                hash: JSON.stringify(value),
+                receipt: row,
+              });
+            } catch (error) {
+              const refusal = refusalSchema.safeParse((error as { refusal?: unknown })?.refusal);
+              publish({
+                status: "failed",
+                current: false,
+                reason: String(error),
+                receipt,
+                ...(refusal.success ? { refusal: refusal.data } : {}),
+              });
+            }
+          })();
+          return () => state.controller.abort();
+        }
         // Native catalog queries share the same scoped read door.
         const source =
           sources[request.key.op] ??

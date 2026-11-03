@@ -110,3 +110,190 @@ test("ordinary sources receive admitted args and an empty Page; stale completion
   release();
   read.release();
 });
+
+import { commands, actionReceiptSchema } from "@pe/agent-contracts";
+import * as actions from "../../../../packages/mcps/src/shared/takeoff-action-client";
+const previewTarget = {
+  kind: "document" as const,
+  ref: { session: "preview-session", openId: "preview-document" },
+};
+const previewInput = {
+  work: {
+    key: { route: "data-tables", binding: "open" as const, target: null, open: previewTarget.ref },
+    revision: 7,
+  },
+};
+const previewResult = (derivedRequest: unknown) => ({
+  previewOnly: true,
+  derivedRequest,
+  seal: {
+    requestHash: "sealed",
+    work: { handle: previewInput.work },
+    incarnation: {},
+    dependencies: "deps",
+  },
+  takenAt: "2026-11-03T00:00:00Z",
+});
+function previewReceipt(key: string, input: unknown, result: unknown) {
+  return actionReceiptSchema.parse({
+    id: "preview-receipt",
+    key,
+    input,
+    target: previewTarget,
+    state: "succeeded",
+    result,
+    caller: { kind: "human", via: "local" },
+    basis: null,
+    steps: [],
+    prepared: { state: "unprepared" },
+    recovery: [],
+    startedAt: "2026-11-03T00:00:00Z",
+  });
+}
+function openPreview(
+  key: "data-table.apply.preview" | "ducts.preview-losses",
+  input = previewInput,
+) {
+  const issuer = createRouteTokenIssuer();
+  const attempt = issuer.attempt(
+    issuer.scope({ target: previewTarget, work: input.work.key }),
+    "preview",
+    1,
+  );
+  if (!attempt.ok) throw Error(attempt.reason);
+  const services = sourceRouteServices({});
+  const request = {
+    key: { op: key, sortedKeyInput: JSON.stringify(input), freshnessGeneration: 1 },
+    output: commands[key].result,
+  } as ResolvedRead<unknown>;
+  const read = services.reads.acquire(request, attempt.value);
+  const deliver = vi.fn();
+  const release = services.readings.subscribe(request, attempt.value, deliver);
+  return {
+    read,
+    deliver,
+    close() {
+      release();
+      read.release();
+    },
+  };
+}
+
+test.each([
+  [
+    "data-table.apply.preview",
+    { table: { name: "Loads", columns: [], rows: [{ key: "a" }], pruneMissingRows: true } },
+  ],
+  ["ducts.preview-losses", { edits: [{ element: "duct-A", size: 12 }] }],
+] as const)(
+  "%s publishes sealed result and receipt with exact Work/target",
+  async (key, derivedRequest) => {
+    const input = {
+      work: {
+        ...previewInput.work,
+        key: { ...previewInput.work.key, route: key.startsWith("ducts") ? "ducts" : "data-tables" },
+      },
+    };
+    const result = previewResult(derivedRequest);
+    const submit = vi
+      .spyOn(actions, "submitAction")
+      .mockImplementation(async (admission) =>
+        previewReceipt(admission.key, admission.input, result),
+      );
+    const native = vi.spyOn(host, "hostFetch");
+    const f = openPreview(key, input);
+    try {
+      await vi.waitFor(() =>
+        expect(f.deliver).toHaveBeenCalledWith(
+          expect.objectContaining({
+            status: "ready",
+            value: result,
+            receipt: expect.objectContaining({ id: "preview-receipt", result, steps: [] }),
+          }),
+        ),
+      );
+      expect(submit).toHaveBeenCalledExactlyOnceWith({
+        id: expect.any(String),
+        key,
+        target: previewTarget,
+        input,
+      });
+      expect(f.read.read()).toEqual(f.deliver.mock.calls[0]![0]);
+      expect(native).not.toHaveBeenCalled();
+    } finally {
+      f.close();
+      submit.mockRestore();
+      native.mockRestore();
+    }
+  },
+);
+
+test("semantic preview retains a typed stale Work refusal and receipt", async () => {
+  const refusal = { kind: "stale_revision" as const, handle: previewInput.work, live: 8 };
+  const {
+    result: _,
+    outcome: _outcome,
+    ...base
+  } = previewReceipt("data-table.apply.preview", previewInput, {});
+  const row = actionReceiptSchema.parse({
+    ...base,
+    state: "failed",
+    error: "Work changed",
+    status: 409,
+    refusal,
+  });
+  const submit = vi.spyOn(actions, "submitAction").mockResolvedValue(row);
+  const f = openPreview("data-table.apply.preview");
+  try {
+    await vi.waitFor(() =>
+      expect(f.deliver).toHaveBeenCalledWith({
+        status: "failed",
+        current: false,
+        reason: "Work changed",
+        refusal,
+        receipt: row,
+      }),
+    );
+  } finally {
+    f.close();
+    submit.mockRestore();
+  }
+});
+
+test("semantic preview exposes typed admission refusal", async () => {
+  const refusal = { code: "acquisition.unproven", door: "preview", reason: "Document closed" };
+  const submit = vi
+    .spyOn(actions, "submitAction")
+    .mockRejectedValue(Object.assign(Error("Document closed"), { refusal }));
+  const f = openPreview("data-table.apply.preview");
+  try {
+    await vi.waitFor(() =>
+      expect(f.deliver).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "failed", refusal }),
+      ),
+    );
+  } finally {
+    f.close();
+    submit.mockRestore();
+  }
+});
+
+test("undecodable preview retains receipt and released preview cannot deliver", async () => {
+  const row = previewReceipt("data-table.apply.preview", previewInput, { previewOnly: false });
+  const submit = vi.spyOn(actions, "submitAction").mockResolvedValue(row);
+  const f = openPreview("data-table.apply.preview");
+  try {
+    await vi.waitFor(() =>
+      expect(f.deliver).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "failed", receipt: row }),
+      ),
+    );
+    const retired = openPreview("data-table.apply.preview");
+    retired.close();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(retired.deliver).not.toHaveBeenCalled();
+  } finally {
+    f.close();
+    submit.mockRestore();
+  }
+});
