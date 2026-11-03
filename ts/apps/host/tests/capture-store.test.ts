@@ -1,11 +1,11 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { expect } from "vite-plus/test";
 import { address, bindWork } from "@pe/agent-contracts";
-import { CaptureStore } from "../src/takeoff-captures.ts";
+import { CaptureStore, CaptureStoreClosed } from "../src/takeoff-captures.ts";
 import { effectTest } from "./effect-test.ts";
 
 const document = { session: "s", openId: "o" };
@@ -55,4 +55,26 @@ effectTest("a reading survives a CaptureStore layer swap and is stamped by Clock
     expect(restored?.completedAt).toBe("2026-11-02T12:00:00.000Z");
     yield* Scope.close(second.scope, Exit.void);
   }),
+);
+
+effectTest(
+  "a Families publish racing close completes before close returns, or is refused typed",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.acquireRelease(
+        Effect.promise(() => mkdtemp(join(tmpdir(), "capture-store-"))),
+        (dir) => Effect.promise(() => rm(dir, { recursive: true, force: true })),
+      );
+      const store = yield* open(directory);
+      let published = false;
+      const racing = store.captures.saveFamilies(reading).then(() => (published = true));
+      yield* Scope.close(store.scope, Exit.void);
+      expect(published).toBe(true); // admitted before close: joined, not left to land afterwards
+      yield* Effect.promise(() => racing);
+      const files = yield* Effect.promise(() => readdir(join(directory, "families")));
+      yield* Effect.promise(() =>
+        expect(store.captures.saveFamilies(reading)).rejects.toBeInstanceOf(CaptureStoreClosed),
+      );
+      expect(yield* Effect.promise(() => readdir(join(directory, "families")))).toEqual(files);
+    }),
 );

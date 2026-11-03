@@ -186,6 +186,14 @@ const progressReading = (manifest: ProgressManifest, families: unknown[]) => ({
   },
 });
 
+/** The store's scope closed: this write was refused before it touched a file. */
+export class CaptureStoreClosed extends Error {
+  readonly _tag = "CaptureStoreClosed";
+  constructor() {
+    super("The capture store closed with its host; nothing was written.");
+  }
+}
+
 export class TakeoffCaptures {
   private readonly states = new Map<string, TakeoffObservation>();
   private readonly generations = new Map<string, number>();
@@ -208,7 +216,24 @@ export class TakeoffCaptures {
     private readonly now: () => string,
   ) {}
 
-  close() {
+  /**
+   * Families publication is admitted or refused here: an admitted write is joined by `close`, and
+   * after close begins every write is refused typed. So no file appears after close returned.
+   */
+  private closing = false;
+  private readonly writes = new Set<Promise<unknown>>();
+  private admit<T>(write: () => Promise<T>): Promise<T> {
+    if (this.closing) return Promise.reject(new CaptureStoreClosed());
+    const running = write();
+    this.writes.add(running);
+    const forget = () => void this.writes.delete(running);
+    running.then(forget, forget);
+    return running;
+  }
+
+  async close() {
+    this.closing = true;
+    while (this.writes.size) await Promise.allSettled([...this.writes]);
     this.states.clear();
     this.generations.clear();
     this.pending.clear();
@@ -528,7 +553,10 @@ export class TakeoffCaptures {
       .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
   }
   /** One latest pointer per durable Families Work; full observations remain immutable. */
-  async saveFamilies(
+  saveFamilies(...args: Parameters<TakeoffCaptures["writeFamilies"]>) {
+    return this.admit(() => this.writeFamilies(...args));
+  }
+  private async writeFamilies(
     value: Omit<FamiliesObservation, "id" | "completedAt" | "result"> & { result: unknown },
     expectedLatestId?: string,
   ): Promise<FamiliesObservation> {
@@ -571,7 +599,10 @@ export class TakeoffCaptures {
       }
     };
     const pending = (this.familiesSaves.get(key) ?? Promise.resolve())
-      .catch((error) => { console.error("takeoff-captures: asynchronous operation failed", error); return undefined; })
+      .catch((error) => {
+        console.error("takeoff-captures: asynchronous operation failed", error);
+        return undefined;
+      })
       .then(save);
     this.familiesSaves.set(key, pending);
     try {
@@ -738,7 +769,10 @@ export class TakeoffCaptures {
   }
 
   /** Per-family blobs are written once. Tiny immutable manifests project each revision for the existing envelope. */
-  async saveFamiliesProgress(
+  saveFamiliesProgress(...args: Parameters<TakeoffCaptures["writeFamiliesProgress"]>) {
+    return this.admit(() => this.writeFamiliesProgress(...args));
+  }
+  private async writeFamiliesProgress(
     value: Omit<FamiliesObservation, "id" | "completedAt"> & { progress: FamiliesReadProgress },
   ) {
     if (value.progress.state === "reading") this.liveReads.add(value.progress.runId);
@@ -994,7 +1028,7 @@ export class CaptureStore extends Context.Service<CaptureStore, TakeoffCaptures>
             new Date(clock.currentTimeMillisUnsafe()).toISOString(),
           );
         }),
-        (captures) => Effect.sync(() => captures.close()),
+        (captures) => Effect.promise(() => captures.close()),
       ),
     );
 }
