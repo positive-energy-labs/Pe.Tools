@@ -185,12 +185,20 @@ export const RouteGraphJson = z.strictObject({
   }),
   subjectText: ref.optional(),
   work: z
-    .strictObject({
-      schema: ref,
-      route: ref,
-      version: z.number().int().positive(),
-      migrations: z.record(z.string().regex(/^[1-9][0-9]*$/), ref),
-    })
+    .union([
+      z.strictObject({
+        schema: ref,
+        route: ref,
+        version: z.number().int().positive(),
+        migrations: z.record(z.string().regex(/^[1-9][0-9]*$/), ref),
+      }),
+      z.strictObject({
+        route: ref,
+        schema: z.never().optional(),
+        version: z.never().optional(),
+        migrations: z.never().optional(),
+      }),
+    ])
     .optional(),
   readings: z.record(ref, routeReadingJsonSchema),
   verbs: z.record(ref, routeVerbJsonSchema),

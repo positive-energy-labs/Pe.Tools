@@ -38,7 +38,7 @@ export function createAdmittedWork(
     const key = snapshot.scope.identity.work;
     if (!door || !key) return;
     scope = {
-      route: route.data.key,
+      route: route.resolvedWork!.spec.route,
       fingerprint: route.workFingerprint,
       key,
       target: snapshot.scope.identity.target,

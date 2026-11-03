@@ -99,6 +99,7 @@ export function linkRouteBodies(
   data: RouteGraphJson,
   bindings: RouteBindings,
   catalog: readonly CatalogLink[],
+  ownerSchema?: z.ZodType,
 ): RouteDiagnostic[] {
   const errors: RouteDiagnostic[] = [];
   const fail = (
@@ -149,7 +150,7 @@ export function linkRouteBodies(
   if (data.work) requireCapability("work", "work");
   if (data.capabilities.includes("work") && !data.work)
     fail("capabilities", "work", "Work declaration", "Work capability requires Work", "policy");
-  const workSchema = data.work && bindings.schemas[data.work.schema];
+  const workSchema = ownerSchema ?? (data.work?.schema && bindings.schemas[data.work.schema]);
   const workObject = workSchema && bare(workSchema);
   const workKeys = workObject instanceof z.ZodObject ? workObject.shape : {};
   const deps = (d: ReadingDependencies, path: string) => {
@@ -278,7 +279,7 @@ export function linkRouteBodies(
       if (s) validateSubjectSchema(field, s, fail, path);
     }
   }
-  if (data.work) {
+  if (data.work?.schema) {
     schemaRef(data.work.schema, "work.schema");
     if (!(workObject instanceof z.ZodObject))
       fail(
@@ -289,7 +290,13 @@ export function linkRouteBodies(
         "schema",
       );
     if (data.work.route !== data.key)
-      fail("work.route", data.work.route, data.key, "Work belongs to another route");
+      fail(
+        "work.route",
+        data.work.route,
+        data.key,
+        "A referencing route cannot redeclare Work schema",
+        "policy",
+      );
     for (let version = 1; version < data.work.version; version++)
       if (!Object.hasOwn(data.work.migrations, String(version)))
         fail(

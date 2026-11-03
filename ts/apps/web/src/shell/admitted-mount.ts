@@ -222,7 +222,7 @@ export function createRouteShell(services: KernelServices) {
             route: route.data.work.route,
             title: route.data.name,
             description: "",
-            schema: bindings.schemas[route.data.work.schema]!,
+            schema: route.resolvedWork!.schema,
           }
         : undefined;
       const issuer = createRouteTokenIssuer();

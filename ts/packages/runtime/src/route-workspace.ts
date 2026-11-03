@@ -127,6 +127,13 @@ export class RouteWorkspace {
       receipt.deactivate();
       throw Error("Route declares no Work");
     }
+    // Presenters never install a second registry or run the owner's migrations.
+    // Their feeds carry the fingerprint captured in their verified link evidence.
+    if (work.route !== route.data.key) {
+      receipt.deactivate();
+      return { ready: Promise.resolve(null), close() {} };
+    }
+    if (!work.schema) throw Error("Work owner has no schema");
     const prior = this.#admissions.get(route.data.key);
     if (prior?.fingerprint === route.workFingerprint) {
       receipt.deactivate();

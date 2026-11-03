@@ -223,3 +223,25 @@ test("registration mismatch survives client and shell recreation on the same tab
   expect(h.order).toEqual(["work-acks", "work"]);
   expect(end).toHaveBeenCalledOnce();
 });
+
+test("a stale presenter refusal does not poison an up-to-date owner on the same transport", () => {
+  const h = harness();
+  const fingerprint = workFingerprintSchema.parse(`builtin-closure:${"c".repeat(64)}`);
+  const failure = {
+    kind: "registration-mismatch" as const,
+    routeKey: scope.route,
+    expected: fingerprint,
+    received: scope.fingerprint,
+  };
+  h.emit("work", { kind: "failure", key: "work", error: "reload", failure });
+  const values: WorkFeedState[] = [];
+  const stop = createWorkFeedClient(h.source)
+    .open({ ...scope, fingerprint })
+    .subscribe(
+      (state) => values.push(state),
+      () => {},
+    );
+  expect(values).toEqual([{ kind: "pending" }]);
+  expect(h.order).toEqual(["work-acks", "work", "work-acks", "work"]);
+  stop();
+});
