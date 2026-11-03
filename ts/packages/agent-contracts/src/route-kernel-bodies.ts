@@ -344,7 +344,7 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
           result:
             | Output<E, `${Extract<At<G["verbs"][K], "entry">, string>}.preview`>
             | Output<E, At<G["verbs"][K], "entry">>,
-          evidence: BodyContext<G, S, E, G["verbs"][K]>,
+          evidence: Immutable<BodyContext<G, S, E, G["verbs"][K]>>,
         ) => string | { readonly sentence: string; readonly rows: readonly string[] }
       >;
 }[keyof G["verbs"] & string];
