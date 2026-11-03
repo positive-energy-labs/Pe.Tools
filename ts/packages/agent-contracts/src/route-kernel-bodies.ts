@@ -129,8 +129,16 @@ type VerbInput<
   S extends SchemaTable,
   V extends keyof G["verbs"],
 > = SchemaValue<S, G["verbs"][V]["input"]>;
+/** A description failure refuses before patches or journal submission. */
+export type WorkDescriptionRefusal = {
+  readonly kind: "refused";
+  readonly reason: "describe-threw" | "describe-not-string";
+};
 /** Preserve the mount's existing outcome, including review preparation before dispatch. */
-type VerbOutcome<V> = V extends { review: "none" }
+type VerbOutcome<V> = V extends { kind: "work" }
+  ? WorkDescriptionRefusal | WorkVerbOutcome<V>
+  : WorkVerbOutcome<V>;
+type WorkVerbOutcome<V> = V extends { review: "none" }
   ? V extends { kind: "work" }
     ? Observation<WorkWriteOutcome>
     : V extends { kind: "page" }
@@ -258,6 +266,14 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
           ctx: InvocationContext<G, S, E, G["verbs"][K]>,
           input: VerbInput<G, S, K>,
         ) => WorkPatches<G, S>
+      >
+    | Slot<
+        At<G["verbs"][K], "describe">,
+        `verbs.${K}.describe`,
+        "describe",
+        /** Pure, synchronous label, evaluated once from accepted input and declared evidence.
+         * No captures, invocation authority, ports or implicit dependencies are provided. */
+        (input: VerbInput<G, S, K>, ctx: BodyContext<G, S, E, G["verbs"][K]>) => string
       >
     | Slot<
         At<G["verbs"][K], "patch">,

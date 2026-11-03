@@ -86,7 +86,7 @@ const verb = {
   chord: ref.optional(),
 };
 export const routeVerbJsonSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("work"), ...verb, patches: ref }),
+  z.strictObject({ kind: z.literal("work"), ...verb, patches: ref, describe: ref.optional() }),
   z.strictObject({ kind: z.literal("page"), ...verb, patch: ref, fields: refs }),
   z.strictObject({
     kind: z.literal("command"),
