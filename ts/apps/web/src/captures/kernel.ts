@@ -1,3 +1,4 @@
+import { capturesSources } from "./sources";
 import { createElement, Fragment, type ReactNode } from "react";
 import { CapturesList } from "./list";
 import type { RouteModule } from "../../../../packages/agent-contracts/src/route-kernel-admission";
@@ -190,6 +191,7 @@ export const bodies = {
   },
 } satisfies BodyBindings<typeof capturesData, typeof schemas, typeof entries, ReactNode>;
 export const module = {
+  sources: capturesSources(),
   data: capturesData,
   schemas,
   entries,

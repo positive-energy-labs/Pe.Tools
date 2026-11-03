@@ -3,17 +3,10 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { createRouteShell } from "./admitted-mount";
 import { AdmittedPane, type AdmittedPaneProps } from "./admitted-pane";
 import { sourceRouteServices } from "./source-route-services";
-import { dataTablesSources } from "../data-tables/sources";
-import { capturesSources } from "../captures/sources";
+import { admittedSources } from "./admitted-sources";
 import { useRouteTarget } from "../route/route-target";
 import { appAtomRegistry } from "./owner";
 import { fixtureName } from "./fixture-lane";
-
-// One application inventory. Domain sources own transport; routes only name admitted entries.
-export const applicationSources: Parameters<typeof sourceRouteServices>[0] = {
-  ...capturesSources(),
-  ...dataTablesSources(),
-};
 
 /** Reuse the selected-document owner. A new target replaces the shell through AdmittedPane's
  * effect cleanup/remount boundary, so old reads, Work and reviews retire together. */
@@ -34,8 +27,8 @@ function ApplicationRouteShell({ route, address, pane }: Omit<AdmittedPaneProps,
   const target = selected.resolution.kind === "resolved" ? selected.resolution.target : null;
   const targetKey = JSON.stringify(target);
   const shell = useMemo(
-    () => createRouteShell(sourceRouteServices(applicationSources, { target: () => target })),
-    [targetKey],
+    () => createRouteShell(sourceRouteServices(admittedSources(route), { target: () => target })),
+    [targetKey, route],
   );
   if (!target)
     return createElement(OutcomeLine, {

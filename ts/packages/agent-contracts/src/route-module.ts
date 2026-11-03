@@ -328,6 +328,7 @@ function snapshotBindings(bindings: RouteBindings): RouteBindings {
   // Do not freeze caller-owned Zod internals; clone schemas and capture executable
   // functions once. Runtime bodies are trusted code, not mutable registry lookups.
   return Object.freeze({
+    sources: Object.freeze(Object.fromEntries(Object.entries(bindings.sources).map(([key, source]) => [key, source && typeof source === "object" ? Object.freeze({ ...source }) : source]))),
     schemas: Object.freeze(
       Object.fromEntries(
         Object.entries(bindings.schemas).map(([key, schema]) => [key, schema.clone()]),
@@ -682,9 +683,10 @@ export function resolveRouteBindings(registry: AdmittedRouteRegistry, candidate:
 function sameLoadedBindings(actual: RouteBindings, loaded: RouteBindings): boolean {
   const sameKeys = (a: object, b: object) =>
     canonicalRouteJson(Object.keys(a).sort()) === canonicalRouteJson(Object.keys(b).sort());
-  for (const key of ["schemas", "codecs", "identities", "entries", "bodies"] as const)
+  for (const key of ["sources", "schemas", "codecs", "identities", "entries", "bodies"] as const)
     if (!sameKeys(actual[key], loaded[key])) return false;
   return (
+    Object.entries(actual.sources).every(([id, source]) => source === loaded.sources[id]) &&
     Object.entries(actual.schemas).every(([id, schema]) => schema === loaded.schemas[id]) &&
     Object.entries(actual.codecs).every(
       ([id, codec]) =>

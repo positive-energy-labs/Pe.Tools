@@ -69,6 +69,8 @@ export interface RouteModule<
   readonly identities: IdentityBindings<G>;
   readonly entries: E;
   readonly bodies: BodyBindings<G, S, E, Render>;
+  /** Source adapters imported by the module travel in its verified executable closure. */
+  readonly sources?: Readonly<Record<string, unknown>>;
   readonly artifact: RouteFingerprintInput;
 }
 /** Only A's admission implementation mints this value after all checks succeed.
