@@ -155,6 +155,12 @@ export function createAdmittedGeometry(options: {
     else {
       const regionId = candidates[0];
       const region = input && typeof input === "object" && "region" in input ? input.region : null;
+      // The reading plan has validated entry input. Native ids retain the exact document scope;
+      // they must never be encoded as fabricated UniqueIds or installed in Page/selection.
+      const nativeIds =
+        subject === null && input && typeof input === "object" && "elementIds" in input
+          ? input.elementIds
+          : undefined;
       const preparedSubject: GeometryScope | undefined = ids.length
         ? { kind: "subjects", ids: [ids[0]!, ...ids.slice(1)] }
         : identity?.kind === "local" &&
@@ -164,12 +170,17 @@ export function createAdmittedGeometry(options: {
             region &&
             typeof region === "object"
           ? { kind: "region", id: regionId as IdentityId<"local"> }
-          : undefined;
+          : Array.isArray(nativeIds) &&
+              nativeIds.length > 0 &&
+              nativeIds.every((id) => Number.isSafeInteger(id) && id > 0) &&
+              token.scope.identity.target?.kind === "document"
+            ? { kind: "subjects", ids: [nativeIds[0], ...nativeIds.slice(1)], scope: token.scope }
+            : undefined;
       // TODO: Prepare family-document detail only once the host door can establish family-document
       // evidence for the exact openId; a document identity alone also names unbounded projects.
       if (!preparedSubject) {
         record.snapshot = unavailable(
-          "Explicit detail requires native subjects or an admitted region input",
+          "Explicit detail requires native subjects, an admitted region input, or validated elementIds with an exact document target",
         );
         return record.snapshot;
       }
@@ -198,6 +209,18 @@ export function createAdmittedGeometry(options: {
         if (!owner.current(token) || active.get(id) !== record) return;
         if ("kind" in descriptor) {
           accept(unavailable(descriptor.failure.message));
+          return;
+        }
+        const target = token.scope.identity.target;
+        if (
+          request.representation !== "overview" &&
+          request.reach.subject.kind === "subjects" &&
+          "scope" in request.reach.subject &&
+          (target?.kind !== "document" ||
+            !("openId" in descriptor.openDocumentLifetime) ||
+            descriptor.openDocumentLifetime.openId !== target.ref.openId)
+        ) {
+          accept(unavailable("Host descriptor does not match the invocation document lifetime"));
           return;
         }
         const output = z.custom<GeometryOutcome<unknown>>((value) => {

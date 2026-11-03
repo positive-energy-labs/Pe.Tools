@@ -21,6 +21,12 @@ export type GeometryScope =
       readonly kind: "subjects";
       readonly ids: readonly [IdentityId<"element">, ...IdentityId<"element">[]];
     }
+  | {
+      readonly kind: "subjects";
+      /** Native ids are invocation input, never stable Page identities. */
+      readonly ids: readonly [number, ...number[]];
+      readonly scope: ScopeToken;
+    }
   | { readonly kind: "region"; readonly id: IdentityId<"local"> }
   | { readonly kind: "family-document"; readonly id: IdentityId<"document"> };
 let mintExplicit: (token: AcceptanceToken) => ExplicitDetailRequest;
@@ -251,12 +257,27 @@ export function createRouteEnvironmentIssuer() {
         reachFt < 5
       )
         throw new Error("Invalid explicit detail reach");
+      if (
+        subject.kind === "subjects" &&
+        ("scope" in subject
+          ? subject.scope !== explicit.token.scope ||
+            subject.scope.identity.target?.kind !== "document" ||
+            !subject.ids.length ||
+            !subject.ids.every((id) => Number.isSafeInteger(id) && id > 0)
+          : subject.ids.some((id) => typeof id !== "string"))
+      )
+        throw new Error("Native detail subjects require the invocation document scope");
       const captured: GeometryScope =
         subject.kind === "subjects"
-          ? Object.freeze({
-              ...subject,
-              ids: Object.freeze([subject.ids[0], ...subject.ids.slice(1)] as const),
-            })
+          ? "scope" in subject
+            ? Object.freeze({
+                ...subject,
+                ids: Object.freeze([subject.ids[0], ...subject.ids.slice(1)] as const),
+              })
+            : Object.freeze({
+                ...subject,
+                ids: Object.freeze([subject.ids[0], ...subject.ids.slice(1)] as const),
+              })
           : Object.freeze({ ...subject });
       return own(mintReach(captured, reachFt, explicit));
     },
@@ -307,8 +328,17 @@ export function createRouteEnvironmentIssuer() {
           : !owns(request.reach) || request.reach.explicit.token !== token
       )
         throw Error("Geometry request/attempt mismatch");
+      const nativeTarget =
+        request.representation !== "overview" &&
+        request.reach.subject.kind === "subjects" &&
+        "scope" in request.reach.subject
+          ? request.reach.subject.scope.identity.target
+          : undefined;
       if (
         (request.native && descriptor.operationKey !== request.native.operationKey) ||
+        (nativeTarget?.kind === "document" &&
+          (!("openId" in descriptor.openDocumentLifetime) ||
+            descriptor.openDocumentLifetime.openId !== nativeTarget.ref.openId)) ||
         descriptor.representation !==
           (request.representation === "overview" ? "overview" : "detail")
       )

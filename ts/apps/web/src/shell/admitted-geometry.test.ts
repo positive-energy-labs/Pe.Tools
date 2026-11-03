@@ -21,9 +21,16 @@ import {
   createRouteEnvironmentIssuer,
 } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src/route-kernel-page";
+import type { IdentityId } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { spaceBinding, spacePageSchema } from "../space/graph";
 import { spaceReads } from "../space/reads";
-const nativeId = '["doc",null,"unique-element"]';
+function decoded<T>(result: { ok: true; value: T } | { ok: false; reason: string }): T {
+  if (!result.ok) throw Error(result.reason);
+  return result.value;
+}
+const nativeId = decoded(
+  identityCodecs.element.encode({ document: "doc", link: null, uniqueId: "unique-element" }),
+);
 const outcome = {
   kind: "ready" as const,
   value: { artifact: "scene" },
@@ -46,7 +53,7 @@ const once = <A>(value: A) => ({
 async function admit(
   options: {
     kind?: "element" | "local" | "document";
-    subject?: string;
+    subject?: string | null;
     input?: unknown;
     reachFt?: number;
     query?: boolean;
@@ -54,9 +61,10 @@ async function admit(
   } = {},
 ) {
   const kind = options.kind ?? "element";
+  const identityKey: "system" | "element" | "document" = kind === "local" ? "system" : kind;
   const module = {
     ...readOnlyModule,
-    identities: identityCodecs,
+    identities: { ...identityCodecs },
     data: {
       ...readOnlyModule.data,
       capabilities: ["geometry"] as const,
@@ -82,16 +90,21 @@ async function admit(
         : {}),
       seeds: { sample: { title: "Geometry", load: "geometrySeed" } },
       identities: {
-        system: { kind, codec: kind },
-        element: { kind: "element" as const, codec: "element" },
+        system: { kind: "local" as const, codec: "local" as const },
+        document: { kind: "document" as const, codec: "document" as const },
+        element: { kind: "element" as const, codec: "element" as const },
       },
       fields: {
         ...readOnlyModule.data.fields,
-        system: { ...readOnlyModule.data.fields.system, initial: options.subject ?? nativeId },
+        system: {
+          ...readOnlyModule.data.fields.system,
+          identity: identityKey,
+          initial: options.subject === undefined ? nativeId : options.subject,
+        },
       },
       readings: {
         ...readOnlyModule.data.readings,
-        overview: podData.readings.overview,
+        overview: { ...podData.readings.overview, demand: "visible" as const },
         detail: {
           ...podData.readings.detail,
           geometry: {
@@ -107,11 +120,11 @@ async function admit(
           ...(options.query ? { verbs: ["capture"] } : {}),
         },
       },
-    },
+    } as const,
     schemas: {
       ...readOnlyModule.schemas,
       ids: z.object({ elementIds: z.array(z.number()) }),
-      subjectOne: z.custom(
+      subjectOne: z.custom<IdentityId<"element" | "local" | "document"> | null>(
         (value) =>
           value === null || (typeof value === "string" && identityCodecs[kind].decode(value).ok),
       ),
@@ -149,25 +162,32 @@ async function admit(
       ...(options.query
         ? {
             captureArgs: {
-              slot: "verbs.capture.args",
-              kind: "args",
+              slot: "verbs.capture.args" as const,
+              kind: "args" as const,
               source: { module: "bodies.js", export: "captureArgs" },
               run: (_ctx: unknown, input: { elementIds: number[] }) => ({
-                ...regionInput,
-                elementIds: input.elementIds,
+                ...(options.subject === null
+                  ? spaceReads["revit.detail.space-scene"].input.parse(
+                      spaceBinding("detailed", { input }, { page: spacePageSchema.parse({}) }).args,
+                    )
+                  : { ...regionInput, elementIds: input.elementIds }),
                 contextRepresentation: "meshes",
               }),
             },
           }
         : {}),
       geometrySeed: {
-        slot: "seeds.sample.load",
-        kind: "seed",
+        slot: "seeds.sample.load" as const,
+        kind: "seed" as const,
         source: { module: "bodies.js", export: "geometrySeed" },
         run: () => ({
           readings: {
             overview: outcome,
-            detail: { ...outcome, representation: "meshes", value: { artifact: "detail" } },
+            detail: {
+              ...outcome,
+              representation: "meshes" as const,
+              value: { artifact: "detail" },
+            },
           },
         }),
       },
@@ -200,7 +220,10 @@ async function admit(
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   return result.route;
 }
-function door(result?: "retiring" | "refused") {
+function door(
+  result?: "retiring" | "refused",
+  lifetime: ResolvedReadDescriptor["openDocumentLifetime"] = { openId: "doc" },
+) {
   const requests: any[] = [];
   const descriptors: ResolvedReadDescriptor[] = [];
   const joins: ResolvedReadDescriptor[] = [];
@@ -213,7 +236,7 @@ function door(result?: "retiring" | "refused") {
       const descriptor = {
         operationKey: "scene",
         processIncarnation: { pid: 1, startedAt: 2 },
-        openDocumentLifetime: { openId: "doc" },
+        openDocumentLifetime: lifetime,
         normalizedInput: canonicalEnvironmentInput(request.native?.input ?? {}),
         freshnessGeneration: null,
         representation: request.representation === "overview" ? "overview" : "detail",
@@ -280,7 +303,9 @@ test("mount composes default overview and declared explicit detail with cost met
   }
 });
 
-const regionId = '["space.region","room-uid"]';
+const regionId = decoded(
+  identityCodecs.local.encode({ namespace: "space.region", subject: "room-uid" }),
+);
 const regionInput = spaceReads["revit.detail.space-scene"].input.parse(
   spaceBinding("detailed", undefined, {
     page: spacePageSchema.parse({ region: { kind: "room", uniqueId: "room-uid" } }),
@@ -329,7 +354,11 @@ test.each([5, 15])(
         current: true,
       });
       const late = d.late();
-      m.controls.subject('["space.region","another-room"]');
+      m.controls.subject(
+        decoded(
+          identityCodecs.local.encode({ namespace: "space.region", subject: "another-room" }),
+        ),
+      );
       expect(d.releases).toHaveBeenCalledTimes(2);
       late?.({ kind: "retiring" });
       expect((m.read("main") as any).readings.detail.current).toBe(false);
@@ -388,7 +417,7 @@ test("selection supersedes joins, clears detail demand, and rejects late publica
   const m = mount(await admit(), d.geometry);
   (m.read("main") as any).readingActions.detail.readDetailed();
   const late = d.late();
-  m.page.select([{ kind: "element", id: nativeId as any }]);
+  m.page.select([{ kind: "element", id: nativeId }]);
   expect(d.releases).toHaveBeenCalledTimes(2);
   late?.({ kind: "retiring" });
   expect((m.read("main") as any).readings.overview.current).toBe(true);
@@ -449,7 +478,11 @@ test("subject changes retire overview and detail before replacement", async () =
   const d = door();
   const m = mount(await admit(), d.geometry);
   (m.read("main") as any).readingActions.detail.readDetailed();
-  m.controls.subject('["doc",null,"another-unique"]');
+  m.controls.subject(
+    decoded(
+      identityCodecs.element.encode({ document: "doc", link: null, uniqueId: "another-unique" }),
+    ),
+  );
   expect(d.releases).toHaveBeenCalledTimes(2);
   expect(d.requests.map((r) => r.representation)).toEqual(["overview", "meshes", "overview"]);
   m.close();
@@ -500,6 +533,108 @@ test.each([null, "missing"])(
         /exactly one/,
       );
       expect(d.requests).toHaveLength(1);
+    } finally {
+      m.close();
+    }
+  },
+);
+
+test("null region prepares validated native ids in the invocation document scope without changing Page", async () => {
+  const d = door();
+  const m = mount(
+    await admit({ kind: "local", subject: null, query: true, reachFt: 15 }),
+    d.geometry,
+  );
+  try {
+    const pane = () => m.read("main") as any;
+    const page = m.page.read();
+    expect(d.requests.map((r) => r.representation)).toEqual(["overview"]);
+    expect(pane().readings.detail.current).toBe(false);
+    expect(() => pane().verbs.capture({ elementIds: [-1] })).toThrow();
+    expect(d.requests).toHaveLength(1);
+    pane().verbs.capture({ elementIds: [101, 202] });
+    const detail = d.requests[1];
+    expect(detail).toMatchObject({
+      representation: "meshes",
+      native: { input: { elementIds: [101, 202], contextPaddingFt: 15 } },
+      reach: { subject: { kind: "subjects", ids: [101, 202] }, reachFt: 15 },
+    });
+    expect(detail.native.input).not.toHaveProperty("region");
+    expect(detail.reach.subject.scope).toBe(detail.reach.explicit.token.scope);
+    expect(detail.reach.subject.scope.identity.target).toEqual({
+      kind: "document",
+      ref: { session: "geometry-test", openId: "doc" },
+    });
+    expect(Object.isFrozen(detail.reach.subject.ids)).toBe(true);
+    expect(d.joins[1]).toBe(d.descriptors[1]);
+    expect(pane().readings.detail).toMatchObject({ status: "ready", current: true });
+    const late = d.late();
+    pane().verbs.capture({ elementIds: [303] });
+    late?.({ kind: "retiring" });
+    expect(d.requests[2].reach.subject.ids).toEqual([303]);
+    expect(d.joins[2]).toBe(d.descriptors[2]);
+    expect(pane().readings.detail.current).toBe(true);
+    expect(m.page.read()).toEqual(page);
+  } finally {
+    m.close();
+  }
+});
+
+test("null region and empty invocation ids refuse detail before resolving", async () => {
+  const d = door();
+  const m = mount(
+    await admit({ kind: "local", subject: null, query: true, reachFt: 15 }),
+    d.geometry,
+  );
+  try {
+    const pane = () => m.read("main") as any;
+    pane().verbs.capture({ elementIds: [] });
+    expect(d.requests.map((r) => r.representation)).toEqual(["overview"]);
+    expect(pane().readings.detail).toMatchObject({
+      status: "unavailable",
+      current: false,
+      reason: expect.stringContaining("validated elementIds with an exact document target"),
+    });
+  } finally {
+    m.close();
+  }
+});
+
+test("native reach refuses foreign scopes, session-only targets and sub-law context", () => {
+  const issuer = createRouteEnvironmentIssuer();
+  const tokens = createRouteTokenIssuer();
+  const target = { kind: "document" as const, ref: { session: "test", openId: "doc" } };
+  const scope = tokens.scope({ target, work: null });
+  const attempt = decoded(tokens.attempt(scope, "detail", 1));
+  const explicit = issuer.mintExplicit(attempt);
+  expect(() => issuer.mintReach({ kind: "subjects", ids: [101], scope }, 4, explicit)).toThrow();
+  const foreign = tokens.scope({ target, work: null });
+  expect(() =>
+    issuer.mintReach({ kind: "subjects", ids: [101], scope: foreign }, 15, explicit),
+  ).toThrow(/document scope/);
+  const session = tokens.scope({ target: { kind: "session", session: "test" }, work: null });
+  const sessionExplicit = issuer.mintExplicit(decoded(tokens.attempt(session, "detail", 1)));
+  expect(() =>
+    issuer.mintReach({ kind: "subjects", ids: [101], scope: session }, 15, sessionExplicit),
+  ).toThrow(/document scope/);
+});
+
+test.each([{ openId: "foreign-doc" }, { kind: "session-only" as const }])(
+  "native detail cannot join a descriptor for another document lifetime: %j",
+  async (lifetime) => {
+    const d = door(undefined, lifetime);
+    const m = mount(
+      await admit({ kind: "local", subject: null, query: true, reachFt: 15 }),
+      d.geometry,
+    );
+    try {
+      (m.read("main") as any).verbs.capture({ elementIds: [101] });
+      expect(d.requests).toHaveLength(2);
+      expect(d.joins).toHaveLength(1);
+      expect((m.read("main") as any).readings.detail).toMatchObject({
+        status: "unavailable",
+        reason: expect.stringContaining("document lifetime"),
+      });
     } finally {
       m.close();
     }
