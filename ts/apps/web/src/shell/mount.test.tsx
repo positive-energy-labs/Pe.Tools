@@ -740,7 +740,7 @@ test("stage changes replace key registration and pane bindings stay inside kit P
   await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(10));
 });
 
-test("late command receipt remains associated with dispatch Work after switching to another Work", async () => {
+test('late receipt stays on dispatch Work: "unconsumed edits remain undoable; an undo that would cross a committed native write is blocked by its receipt barrier"', async () => {
   const f = await fixture();
   const owner = createGraphMount(f.graph, f.adapters);
   const disconnect = owner.connect();
@@ -772,10 +772,25 @@ test("late command receipt remains associated with dispatch Work after switching
   expect(owner.journal(second).read().undo).toHaveLength(0);
   resolve(receipt());
   await pending;
-  expect(owner.timeline.read().at(-1)?.basis).toMatchObject({ workKey: workKey(key) });
-  expect(await owner.journal(key).undo((write) => f.adapters.write(key, write))).toMatchObject({
-    code: "barrier",
+  expect(owner.timeline.read().at(-1)?.basis).toEqual({
+    workKey: workKey(key), receipt: receipt(), receiptId: "native-1",
   });
+  expect(owner.journal(key).read().undo).toMatchObject([
+    { transitions: [{ revision: 1 }], barrier: { receiptId: "native-1" } },
+    { transitions: [{ revision: 2, forward: [{ path: ["writeIntent", "takeoffs.initialize"] }] }] },
+  ]);
+  expect(await owner.journal(key).undo((write) => f.adapters.write(key, write))).toMatchObject({
+    ok: true, revision: 3,
+  });
+  expect(f.writes.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2, expectedRevision: 2 });
+  const before = f.writes.length;
+  expect(await owner.journal(key).undo((write) => f.adapters.write(key, write))).toMatchObject({
+    ok: false, code: "barrier", barrier: { receiptId: "native-1" },
+  });
+  expect(f.writes).toHaveLength(before);
+  expect((await f.workspace.read(key, key.route))!.doc).toMatchObject({ rows: { slot: { n: 2 } }, writeIntent: {} });
+  // The fixture writer refreshes its written Work; return to the second Work for its own edit.
+  await f.refresh(second);
   await owner.control("edit").run();
   expect(await owner.restore("undo")).toMatchObject({ ok: true });
 });
