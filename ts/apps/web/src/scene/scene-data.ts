@@ -109,11 +109,11 @@ class SceneData {
       }
       const source = this.source;
       // An explicit read belongs to its subscribers, not a clock. Leaving releases the wait.
-      // TODO: /call disconnect still cannot cancel an already dispatched native operation.
+      // /call disconnect releases this joiner; the host sends op.cancel when the last leaves.
       let retry: ReturnType<typeof setTimeout> | undefined;
       owned.release = () => clearTimeout(retry);
       const send = (delay: number) => {
-        if (abort.signal.aborted) return;
+        if (abort.signal.aborted || !this.listeners.size) return;
         const call = (request: ReturnType<typeof sceneRequest>) =>
           callHostRpc("revit.detail.space-scene", request, {
             bridgeSessionId: source.document.session,
@@ -141,7 +141,8 @@ class SceneData {
             });
           });
       };
-      send(BUSY_RETRY_FIRST_MS);
+      // Let selection replacement release the previous subscription before native dispatch.
+      queueMicrotask(() => send(BUSY_RETRY_FIRST_MS));
       return;
     }
     const id = this.source.id;

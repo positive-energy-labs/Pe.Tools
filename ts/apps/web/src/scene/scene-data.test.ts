@@ -130,6 +130,7 @@ it("the last reader leaving aborts the client wait and ignores a late native ans
   });
   const first = data.subscribe(() => {});
   const last = data.subscribe(() => {});
+  await vi.advanceTimersByTimeAsync(0);
   const signal = io.call.mock.calls[0]![2].signal as AbortSignal;
   first();
   await vi.advanceTimersByTimeAsync(0);
@@ -142,4 +143,37 @@ it("the last reader leaving aborts the client wait and ignores a late native ans
   await vi.advanceTimersByTimeAsync(0);
   expect(io.fetch).toHaveBeenCalledTimes(fetched);
   expect(data.read().state).toBe("pending");
+});
+
+it("supersedes unsent selections and releases a dispatched detailed read before the replacement", async () => {
+  vi.useFakeTimers();
+  const answers: ((value: { id: string }) => void)[] = [];
+  io.call.mockImplementation(() => new Promise(resolve => answers.push(resolve)));
+  const source = (ids: number[], representation: "overview" | "meshes" = "overview") => sceneData({
+    kind: "capture", document: { session: "supersede", openId: "doc" }, revision: 1,
+    request: sceneRequest(ids, false, 15, representation),
+  });
+  const first = source([1]).subscribe(() => {});
+  first();
+  const second = source([1, 2]).subscribe(() => {});
+  second();
+  const detailed = source([1, 2, 3], "meshes").subscribe(() => {});
+  await vi.advanceTimersByTimeAsync(0);
+  expect(io.call).toHaveBeenCalledTimes(1);
+  const signal = io.call.mock.calls[0]![2].signal as AbortSignal;
+  detailed();
+  const latest = source([4]);
+  const release = latest.subscribe(() => {});
+  await vi.advanceTimersByTimeAsync(0);
+  expect(signal.aborted).toBe(true);
+  expect(io.call).toHaveBeenCalledTimes(2);
+  const fetches = io.fetch.mock.calls.length;
+  answers[0]!({ id: "stale-detail" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(io.fetch).toHaveBeenCalledTimes(fetches);
+  answers[1]!({ id: "latest-overview" });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(latest.read().state).toBe("ready");
+  release();
+  await vi.advanceTimersByTimeAsync(0);
 });

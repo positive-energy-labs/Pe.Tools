@@ -142,11 +142,13 @@ it("arms capture on growth from 0×0, renders, and re-arms after collapse during
   view.resize(0, 0);
   expect(io.call).not.toHaveBeenCalled();
   view.resize(640, 480);
+  await act(async () => {});
   expect(io.call).toHaveBeenCalledTimes(1);
   view.resize(0, 0);
   await act(async () => {});
   expect(io.call.mock.calls[0]![2].signal.aborted).toBe(true);
   view.resize(640, 480);
+  await act(async () => {});
   expect(io.call).toHaveBeenCalledTimes(2);
   await act(async () => resolvers[1]!({ id: "grown-picture" }));
   await waitFor(() =>
@@ -166,6 +168,7 @@ it("clears capture words when capture settles, then refresh words when the readi
   );
   const view = mount("status-settles", true);
   view.resize(640, 480);
+  await act(async () => {});
   expect(view.container.querySelector("output")!.textContent).toContain("capturing meshes");
   await act(async () => resolve({ id: "settled-picture" }));
   await waitFor(() =>
