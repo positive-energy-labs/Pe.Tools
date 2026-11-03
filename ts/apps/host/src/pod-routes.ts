@@ -1,10 +1,5 @@
-import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
-import { podExecutor, podOperationBinding } from "./pod-executor.ts";
-import { gatewayExecutor } from "./gateway-actions.ts";
 import type { RevitBridge } from "./bridge.ts";
-import { createHash } from "node:crypto";
 import * as contracts from "@pe/agent-contracts";
-import { type CommandExecutor } from "./command-executor.ts";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { type PodRouteDescriptor } from "@pe/agent-contracts";
@@ -21,91 +16,6 @@ export function registerAdmittedHostRoute(
   workspace: RouteWorkspace,
 ) {
   return workspace.registerAdmitted(route);
-}
-
-const executableModules = new Map<
-  string,
-  { module: contracts.ExecutableRouteModule<CommandExecutor>; available: () => boolean }
->();
-export function podCommand(key: string) {
-  for (const { module, available } of executableModules.values()) {
-    if (!available()) continue;
-    const executor = module.bodies[key];
-    if (executor && module.entries[key]?.effect === "command")
-      return { executor, work: module.work };
-  }
-  return undefined;
-}
-export function admitPodModule(
-  module: contracts.ExecutableRouteModule<CommandExecutor>,
-  actualHash: string,
-  workspace: RouteWorkspace,
-  available = () => true,
-) {
-  contracts.validateExecutableRouteModule(module, actualHash);
-  if (executableModules.has(module.key)) throw Error("Route module already admitted");
-  for (const [key, executor] of Object.entries(module.bodies)) {
-    if (podCommand(key)) throw Error(`Catalog key already admitted: ${key}`);
-    if (executor.definition !== module.entries[key]) throw Error("Body and projection disagree");
-    const operation = podOperationBinding(executor);
-    if (!operation) throw Error("Pod bodies require the sealed operation adapter");
-    if (executor.definition.effect === "command") {
-      if (typeof operation.retires !== "function" || !executor.definition.dirties.length)
-        throw Error("Pod ModelWrite requires retirement and reading invalidation declarations");
-      const boundary = (
-        executor.definition as contracts.Command & {
-          writeBoundary?: contracts.WriteBoundaryBinding;
-        }
-      ).writeBoundary;
-      if (
-        !boundary ||
-        boundary.route !== module.work.route ||
-        (boundary.phase === "preview" ? boundary.previewKey : boundary.key) !== key ||
-        typeof boundary.derive !== "function" ||
-        typeof boundary.preview !== "function"
-      )
-        throw Error("Pod commands require typed Work derive and preview bindings");
-    }
-  }
-  const removeWork = workspace.register({ spec: module.work });
-  executableModules.set(module.key, { module, available });
-  contracts.admittedRouteEntries.set(module.key, { entries: module.entries, available });
-  return () => {
-    if (executableModules.get(module.key)?.module !== module) return;
-    executableModules.delete(module.key);
-    contracts.admittedRouteEntries.delete(module.key);
-    removeWork();
-  };
-}
-
-/** Resolve a catalog query before the normal /call metadata, policy and dispatch checks. */
-export function podReadRequest(key: string, input: unknown) {
-  for (const { module, available } of executableModules.values()) {
-    if (!available() || !module.entries[key]) continue;
-    const entry = module.entries[key]!;
-    if (entry.effect !== "query") throw Error("Pod mutations require action admission");
-    const op = podOperationBinding(module.bodies[key]!);
-    if (!op) throw Error("Pod read adapter unavailable");
-    return { key: op.key, request: op.input(entry.input.parse(input) as Record<string, unknown>) };
-  }
-  if (key.startsWith("pod.") && !isAnyOperationKey(key))
-    throw Error(`Pod query unavailable: ${key}`);
-  return { key, request: input };
-}
-
-/**
- * A write's preview entry defaults to the write's operation: the boundary seals the derived
- * request in the preview phase and never dispatches it, so the Pod author adds nothing.
- */
-export function podOperation(declaration: contracts.PodModule, key: string) {
-  const boundary = (
-    declaration.entries[key] as { writeBoundary?: contracts.WriteBoundaryBinding } | undefined
-  )?.writeBoundary;
-  const op =
-    declaration.operations[key] ??
-    (boundary?.phase === "preview" ? declaration.operations[boundary.key] : undefined);
-  if (!op) throw Error(`Missing Pod operation: ${key}`);
-  return op;
 }
 
 const trustSchema = z.record(z.string(), z.string().regex(/^pod-bytes:[a-f0-9]{64}$/));

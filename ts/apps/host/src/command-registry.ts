@@ -1,5 +1,4 @@
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
-import { podCommand } from "./pod-routes.ts";
 import { workIntentBoundary, workWriteBoundary } from "./work-write-boundary.ts";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 import type { CommandExecutor, CommandRegistry } from "./command-executor.ts";
@@ -111,17 +110,18 @@ export function commandRegistry(
     const intent = "workIntent" in (typeof entry.definition === "function" ? {} : entry.definition);
     if (modelWrite !== (boundary?.phase === "apply"))
       throw Error(`${key}: the seal follows the axis; only ModelWrite has a write boundary`);
-    const wrapped = !boundary && intent
-      ? workIntentBoundary(entry, bridge, deps)
-      : boundary
-      ? workWriteBoundary(
-          entry,
-          bridge,
-          deps,
-          undefined,
-          ownExecutors.has(key) && boundary.phase === "preview",
-        )
-      : entry;
+    const wrapped =
+      !boundary && intent
+        ? workIntentBoundary(entry, bridge, deps)
+        : boundary
+          ? workWriteBoundary(
+              entry,
+              bridge,
+              deps,
+              undefined,
+              ownExecutors.has(key) && boundary.phase === "preview",
+            )
+          : entry;
     if (modelWrite && wrapped.boundary !== "work")
       throw Error(`ModelWrite ${key} is not behind the Work write boundary`);
     implementations[key] = complete(wrapped, key);
@@ -129,14 +129,6 @@ export function commandRegistry(
   for (const key of Object.keys(commands))
     if (!implementations[key]) throw Error(`Semantic command '${key}' has no executor`);
   return (key) => {
-    const pod = podCommand(key);
-    if (pod)
-      return complete(
-        "writeBoundary" in pod.executor.definition
-          ? workWriteBoundary(pod.executor, bridge, deps, pod.work)
-          : pod.executor,
-        key,
-      );
     if (key.startsWith("pod.") && !isAnyOperationKey(key))
       throw Error(`Pod command unavailable: ${key}`);
     return (implementations[key] ??= complete(gatewayExecutor(key, bridge, local, deps.sdk)));

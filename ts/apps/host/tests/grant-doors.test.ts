@@ -206,3 +206,14 @@ test("the human RHVAC launch RPC refuses every other caller before dispatch", as
     await send(human, "/call", { key: "rhvac.launch", request: { path: "test.r10" } }),
   ).toMatchObject({ status: 200 });
 });
+
+// Pod-authored queries have no legacy transform/dispatch route around admission.
+test("an unavailable Pod query gets one typed refusal before dispatch", async () => {
+  const result = await send(human, "/call", { key: "pod.fixture.unavailable", request: {} });
+  expect(result.status).toBe(403);
+  expect(result.json.refusal).toMatchObject({
+    code: "permission.undeclared",
+    door: "/call",
+    reason: "Pod query has no admitted route: pod.fixture.unavailable",
+  });
+});

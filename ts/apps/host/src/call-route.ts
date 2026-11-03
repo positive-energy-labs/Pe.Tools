@@ -1,5 +1,5 @@
 import { ductsSnapshotReadingSchema } from "@pe/agent-contracts";
-import { podReadRequest } from "./pod-routes.ts";
+import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { peRoutes, catalogEntries } from "@pe/agent-contracts/pe-api";
 import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
 import {
@@ -295,11 +295,15 @@ export function makeCallRoute(
       // call to the user's live Revit — session targeting travels ONLY in the header.
       const unknownKey = Object.keys(body).find((k) => k !== "key" && k !== "request");
       if (unknownKey) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknownKey)));
-      const resolvedPod = yield* Effect.try({
-        try: () => podReadRequest(body.key as string, "request" in body ? body.request : undefined),
-        catch: (error) => error,
-      });
-      const key = resolvedPod.key;
+      const key = body.key;
+      if (key.startsWith("pod.") && !isAnyOperationKey(key))
+        return yield* Effect.fail(
+          new Refused({
+            code: "permission.undeclared",
+            door: "/call",
+            reason: `Pod query has no admitted route: ${key}`,
+          }),
+        );
       const entry = callEntries.get(key) ?? {};
       const humanDoor = entry.humanOnly;
       if (humanDoor && caller.kind !== "human")
@@ -308,7 +312,7 @@ export function makeCallRoute(
           { status: 403 },
         );
       yield* Effect.try({ try: () => admitAnonymousCall(caller, key), catch: (error) => error });
-      const request = resolvedPod.request;
+      const request = "request" in body ? body.request : undefined;
       let scope = yield* Effect.try({
         try: () => readSessionScope(req.headers),
         catch: (error) => invalidBody(String(error)),
