@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "vite-plus/test";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,7 @@ import {
   buildBuiltinClosure,
   buildBuiltinClosures,
   checkBuiltinClosure,
+  writeBuiltinClosurePin,
 } from "./route-source-hash.ts";
 import { canonicalRouteJson } from "../../packages/agent-contracts/src/route-graph.ts";
 import { builtinData } from "../../packages/agent-contracts/src/route-kernel.fixtures.ts";
@@ -161,4 +162,18 @@ test("all builtin envelopes are generated owner-first with the current owner Wor
     closures.get("presenter")!.envelope.workOwner,
   );
   await expect(buildBuiltinClosures([options[0]!])).rejects.toThrow("Missing or cyclic");
+});
+
+test("dev repairs stale builtin pins in one step and leaves fresh pins untouched", async () => {
+  const f = fixture();
+  const closure = await f.build();
+  const path = join(f.root, "pin.json");
+  writeFileSync(path, "stale");
+  expect(() => checkBuiltinClosure(path, closure)).toThrow();
+  const text = canonicalRouteJson(closure) + "\n";
+  writeBuiltinClosurePin(path, text);
+  checkBuiltinClosure(path, closure);
+  const before = statSync(path).mtimeMs;
+  writeBuiltinClosurePin(path, text);
+  expect(statSync(path).mtimeMs).toBe(before);
 });

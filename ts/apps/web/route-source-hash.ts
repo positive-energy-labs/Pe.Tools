@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, relative } from "node:path";
 import { build, type InlineConfig, type Plugin } from "vite-plus";
 import ts from "typescript";
@@ -225,4 +225,10 @@ export async function buildBuiltinClosures(inventory: readonly BuiltinClosureOpt
       throw Error(`Missing or cyclic builtin Work owners: ${[...pending.keys()].join(", ")}`);
   }
   return closures;
+}
+
+/** Dev repair is idempotent so its own filesystem event cannot trigger a restart loop. */
+export function writeBuiltinClosurePin(path: string, text: string) {
+  if (existsSync(path) && readFileSync(path, "utf8").replaceAll("\r\n", "\n") === text) return;
+  writeFileSync(path, text);
 }

@@ -1,4 +1,5 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { promisify } from "node:util";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { statSync, watch } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
@@ -60,6 +61,12 @@ process.once("SIGTERM", interrupt);
 try {
   do {
     restart = false;
+    // Host imports committed pins before the frontend plugin can run.
+    await promisify(execFile)(process.execPath, [
+      fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)),
+      "--builtin-closure-only",
+    ]);
+    if (stopped) break;
     child = spawn(
       process.execPath,
       [

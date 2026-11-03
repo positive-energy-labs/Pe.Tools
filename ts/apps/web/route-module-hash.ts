@@ -145,24 +145,28 @@ export async function buildRouteArtifact(options: {
 }
 
 const exec = promisify(execFile);
-async function runtimeRoutes() {
-  // Current closure evidence stays in memory. Only repo guards compare committed projections.
+async function runtimeRoutes(mode: "dev" | "build" | "test") {
+  const producer = fileURLToPath(new URL("./scripts/route-graphs.ts", import.meta.url));
+  if (mode === "build")
+    await exec(process.execPath, [producer, "--builtin-closure-only", "--check"]);
+  // Dev repairs committed pins before publishing a coordinated generation. Build only checks.
   const { stdout } = await exec(
     process.execPath,
-    [fileURLToPath(new URL("./scripts/route-graphs.ts", import.meta.url)), "--runtime"],
+    [producer, "--runtime", ...(mode === "dev" ? ["--write-builtin-closures"] : [])],
     { maxBuffer: 16 * 1024 * 1024 },
   );
   return JSON.parse(stdout) as Record<string, string>;
 }
 
-/** Dev, test and build consume fresh projections without writing tracked files. */
+/** Dev regenerates pins before startup/HMR; production refuses a stale build pin. */
 export function routeModuleHash(
-  generate: () => Promise<Record<string, string> | void> = runtimeRoutes,
+  generate?: (mode: "dev" | "build" | "test") => Promise<Record<string, string> | void>,
 ): Plugin {
+  let mode: "dev" | "build" | "test" = "test";
   let projections: Record<string, string> = {};
   let pending: Promise<void> = Promise.resolve();
   const update = async () => {
-    projections = (await generate()) ?? {};
+    projections = (await (generate ? generate(mode) : runtimeRoutes(mode))) ?? {};
   };
   const refresh = () => (pending = pending.then(update, update));
   const watchFiles = () =>
@@ -182,6 +186,9 @@ export function routeModuleHash(
   return {
     name: "route-module-hash",
     enforce: "pre",
+    configResolved(config) {
+      mode = config.command === "build" ? "build" : config.mode === "test" ? "test" : "dev";
+    },
     async buildStart() {
       await refresh();
       // Watch current resolved inputs, even when the committed inventory is stale or missing.

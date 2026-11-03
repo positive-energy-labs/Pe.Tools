@@ -20,6 +20,11 @@ import { fileURLToPath } from "node:url";
 
 const TS = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const steps: [name: string, cwd: string, cmd: string[]][] = [
+  [
+    "builtin pins",
+    resolve(TS, "apps/web"),
+    [process.execPath, "scripts/route-graphs.ts", "--builtin-closure-only", "--check"],
+  ],
   ["check", TS, ["vp", "check"]],
   ["knip", TS, ["vp", "exec", "knip", "--no-progress"]],
   // The host serves and exports Pages from packages/kit/dist (gitignored); a fresh worktree has none

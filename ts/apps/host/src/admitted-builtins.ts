@@ -16,7 +16,11 @@ export class BuiltinEnrollmentFailed extends Schema.TaggedError<BuiltinEnrollmen
     routeKey: Schema.String,
     reason: Schema.String,
   },
-) {}
+) {
+  override get message() {
+    return `Builtin ${this.routeKey} enrollment failed: ${this.reason}. Regenerate from ts/apps/web: node scripts/route-graphs.ts --builtin-closure-only`;
+  }
+}
 export class AdmittedBuiltins extends Context.Service<
   AdmittedBuiltins,
   {

@@ -1,4 +1,4 @@
-import { Context, Effect, Exit, Layer, Scope } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Scope } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { bindWork, workKey, type ReadingFrame, type ReadingRequest } from "@pe/agent-contracts";
@@ -9,7 +9,11 @@ import {
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
 import type { HostRouteModule } from "../../../packages/agent-contracts/src/host-route-admission.ts";
 import { createRouteRegistrations } from "../../../packages/mcps/src/pea/routes.ts";
-import { AdmittedBuiltins, admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
+import {
+  AdmittedBuiltins,
+  admittedBuiltinsLayer,
+  BuiltinEnrollmentFailed,
+} from "../src/admitted-builtins.ts";
 import { builtinEnrollments, type BuiltinEnrollment } from "../src/builtin-enrollment.ts";
 import { fixture } from "./fixtures/builtin.neutral.ts";
 
@@ -78,7 +82,9 @@ test("Captures admits only a registry receipt using its generated full web closu
   expect(run.service).toBeDefined();
   const route = run.service!.routes.get("captures")!;
   try {
-    expect(route.fingerprint).toBe(builtinEnrollments[0]!.closure.fingerprint);
+    expect(route.fingerprint).toBe(
+      builtinEnrollments.find((entry) => entry.routeKey === "captures")!.closure.fingerprint,
+    );
     expect(run.service!.registry.resolve(route)).toBe(route);
     expect(route.data.work).toBeUndefined();
   } finally {
@@ -249,4 +255,22 @@ test("shutdown fences a neutral load that resolves after its acquisition scope c
       fingerprint: workFingerprintSchema.parse(`builtin-closure:${good.closure.fingerprint}`),
     }),
   ).toMatchObject({ code: "WorkRouteUnregistered" });
+});
+
+test("startup refuses a stale committed pin with the typed regeneration instruction", async () => {
+  const good = await entry();
+  // Model the producer finding changed source while the deployment pin remains old.
+  const stale = {
+    ...good,
+    closure: { ...good.closure, envelope: { ...good.closure.envelope, hostVersion: "changed" } },
+  };
+  const run = await open(workspace().workspace, [stale]);
+  expect(Exit.isFailure(run.result)).toBe(true);
+  if (!Exit.isFailure(run.result)) throw Error("stale builtin admitted");
+  const error = Cause.squash(run.result.cause);
+  expect(error).toBeInstanceOf(BuiltinEnrollmentFailed);
+  expect((error as BuiltinEnrollmentFailed).message).toContain(
+    "node scripts/route-graphs.ts --builtin-closure-only",
+  );
+  expect(run.service).toBeUndefined();
 });

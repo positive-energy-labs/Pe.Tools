@@ -263,3 +263,21 @@ test("runtime projections replace stale disk content without writing it", async 
   expect(await (plugin.load as Function)(id)).toBe("fresh body");
   expect(readFileSync(id, "utf8")).toBe(before);
 });
+
+test("dev startup and HMR select pin regeneration; build and tests select read-only modes", async () => {
+  const generate = vi.fn(async (_mode: "dev" | "build" | "test") => ({}));
+  for (const [command, mode, expected] of [
+    ["serve", "development", "dev"],
+    ["build", "production", "build"],
+    ["serve", "test", "test"],
+  ]) {
+    const plugin = routeModuleHash(generate);
+    (plugin.configResolved as Function)({ command, mode });
+    await (plugin.buildStart as Function).call({ addWatchFile: vi.fn() });
+    expect(generate).toHaveBeenLastCalledWith(expected);
+    await (plugin.handleHotUpdate as Function)({
+      server: { moduleGraph: { invalidateAll: vi.fn() }, ws: { send: vi.fn() } },
+    });
+    expect(generate).toHaveBeenLastCalledWith(expected);
+  }
+});
