@@ -19,7 +19,6 @@ export const legacyBuiltinKeys: readonly string[] = [
   "session-admin",
   "settings",
   "takeoffs",
-  "zone-audit",
 ];
 
 /** The discoverable projection of a route's full, typed manifest. */

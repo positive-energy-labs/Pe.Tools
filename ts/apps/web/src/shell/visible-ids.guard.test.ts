@@ -1,4 +1,3 @@
-import { zoneAuditGraph } from "../zone-audit/graph";
 import { sessionsGraph } from "../sessions/graph";
 import { podAdminGraph } from "../pod-admin/graph";
 import { indexGraph } from "../index/graph";
@@ -36,7 +35,6 @@ const routes = [
   indexGraph,
   podAdminGraph,
   sessionsGraph,
-  zoneAuditGraph,
   designSystemGraph,
   ductLossGraph,
   opsGraph,

@@ -1,6 +1,5 @@
 import { createRouteDiscovery, admittedWork, type DiscoveredRoute } from "./route-discovery";
 import { builtinRouteKeys, builtinRouteStamp, loadBuiltinRoute } from "./builtin-inventory";
-import { zoneAuditGraph } from "#/zone-audit/graph";
 import { sessionsGraph } from "#/sessions/graph";
 import { podAdminGraph } from "#/pod-admin/graph";
 import { lazy, type ComponentType } from "react";
@@ -79,6 +78,4 @@ const sessionsRoute = lazy(async () => ({
 }));
 registerLegacyGraph(sessionsGraph, hosted(sessionsRoute));
 
-const zoneAuditRoute = lazy(async () => ({ default: (await import("#/zone-audit/route")).Body }));
-registerLegacyGraph(zoneAuditGraph, hosted(zoneAuditRoute));
 

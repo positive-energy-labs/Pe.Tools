@@ -1,4 +1,3 @@
-import { route as zoneAuditRoute } from "./zone-audit/route";
 import { sessionsRoute } from "./sessions/route";
 import {
   createRouter as createTanStackRouter,
@@ -31,7 +30,6 @@ import { Route as rootRoute } from "./routes/__root";
 const pathOf = (route: AnyRoute) => (route.options as { path?: string }).path;
 const codeRoutes: AnyRoute[] = [
   sessionsRoute,
-  zoneAuditRoute,
   settingsRoute,
   opsRoute,
   openRoute,
