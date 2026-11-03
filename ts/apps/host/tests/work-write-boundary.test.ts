@@ -5,7 +5,7 @@ import { NodeCrypto } from "@effect/platform-node";
 import { RunConsents } from "../src/run-consent.ts";
 import { effectTest } from "./effect-test.ts";
 import { z } from "zod";
-import { commands, tools, type Command, type ActionReceipt } from "@pe/agent-contracts";
+import { commands, tools, writePreviewSchema, type Command, type ActionReceipt } from "@pe/agent-contracts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
@@ -120,6 +120,24 @@ async function fixture() {
     },
     run,
     receipts,
+    recordPreview: (id: string, result: unknown) => receipts.push({
+      id,
+      key: "schedule.apply.preview",
+      caller: ctx.caller,
+      target: ctx.admission.target,
+      input: ctx.admission.input,
+      basis: ctx.basis,
+      effects: [],
+      consumes: [],
+      claims: [],
+      consent: null,
+      steps: [],
+      prepared: { state: "unprepared" },
+      recovery: [],
+      startedAt: new Date().toISOString(),
+      state: "succeeded",
+      result,
+    }),
     evidence: (value: unknown) => {
       evidence = value;
     },
@@ -137,14 +155,7 @@ test("preview exposes a derived request without running the write; changed deriv
   const preview = await f.executor.run(f.ctx, { prepared } as ActionExecution);
   expect(preview).toMatchObject({ previewOnly: true, derivedRequest: { request: "one" } });
   expect(f.run).not.toHaveBeenCalled();
-  f.receipts.push({
-    id: "preview",
-    key: "schedule.apply.preview",
-    target: f.ctx.admission.target,
-    state: "succeeded",
-    result: preview,
-    startedAt: new Date().toISOString(),
-  } as ActionReceipt);
+  f.recordPreview("preview", preview);
   f.apply();
   const apply = await f.executor.bind(f.ctx);
   await expect(apply.prepare!()).resolves.toMatchObject({
@@ -162,13 +173,7 @@ test("re-derived identical inputs apply; a changed dependency refuses before exe
   const preview = await f.executor.run(f.ctx, {
     prepared: await bound.prepare!(),
   } as ActionExecution);
-  f.receipts.push({
-    id: "preview",
-    key: "schedule.apply.preview",
-    target: f.ctx.admission.target,
-    state: "succeeded",
-    result: preview,
-  } as ActionReceipt);
+  f.recordPreview("preview", preview);
   f.apply();
   f.evidence({ model: 1 });
   const apply = await f.executor.bind(f.ctx);
@@ -196,14 +201,7 @@ test("a new Work revision invalidates the seal even when the request is identica
   const preview = await f.executor.run(f.ctx, {
     prepared: await bound.prepare!(),
   } as ActionExecution);
-  f.receipts.push({
-    id: "preview",
-    key: "schedule.apply.preview",
-    target: f.ctx.admission.target,
-    state: "succeeded",
-    result: preview,
-    startedAt: new Date().toISOString(),
-  } as ActionReceipt);
+  f.recordPreview("preview", preview);
   f.apply();
   (f.ctx.admission.input.work as { revision: number }).revision++;
   const apply = await f.executor.bind(f.ctx);
@@ -220,13 +218,7 @@ test("refetching the same dependency set in a different order preserves the prev
   const preview = await f.executor.run(f.ctx, {
     prepared: await bound.prepare!(),
   } as ActionExecution);
-  f.receipts.push({
-    id: "preview",
-    key: "schedule.apply.preview",
-    target: f.ctx.admission.target,
-    state: "succeeded",
-    result: preview,
-  } as ActionReceipt);
+  f.recordPreview("preview", preview);
   f.apply();
   f.ctx.consumed = [b, a, b];
   const apply = await f.executor.bind(f.ctx);
@@ -251,8 +243,7 @@ test("re-pricing a changed preview remains a successful read and never runs a wr
     const bound = await f.executor.bind(f.ctx);
     const preview = await f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution);
     expect(preview).toMatchObject({ previewOnly: true });
-    f.receipts.push({ id, key: "schedule.apply.preview", target: f.ctx.admission.target,
-      state: "succeeded", result: preview, startedAt: new Date().toISOString() } as ActionReceipt);
+    f.recordPreview(id, preview);
     f.change();
   }
   expect(f.run).not.toHaveBeenCalled();
@@ -276,8 +267,7 @@ test("an older preview refuses changed request and Work; a fresh preview keeps i
     const capture = async () => {
       const bound = await f.executor.bind(f.ctx);
       const result = await f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution);
-      f.receipts.push({ id: f.ctx.admission.id, key: "schedule.apply.preview",
-        target: f.ctx.admission.target, state: "succeeded", result } as ActionReceipt);
+      f.recordPreview(f.ctx.admission.id, result);
       return result as { seal: unknown };
     };
     await capture();
@@ -291,9 +281,8 @@ test("an older preview refuses changed request and Work; a fresh preview keeps i
     // Capture again through the preview executor, then apply the exact same derived input.
     const fresh = await fixture();
     const bound = await fresh.executor.bind(fresh.ctx);
-    const preview = await fresh.executor.run(fresh.ctx, { prepared: await bound.prepare!() } as ActionExecution) as { seal: unknown };
-    fresh.receipts.push({ id: "fresh", key: "schedule.apply.preview", target: fresh.ctx.admission.target,
-      state: "succeeded", result: preview } as ActionReceipt);
+    const preview = writePreviewSchema.parse(await fresh.executor.run(fresh.ctx, { prepared: await bound.prepare!() } as ActionExecution));
+    fresh.recordPreview("fresh", preview);
     vi.setSystemTime(Date.now() + 60_000);
     fresh.apply();
     const apply = await fresh.executor.bind(fresh.ctx);
@@ -310,9 +299,8 @@ effectTest("preview seal survives the real 60-second run-consent auto-approval",
     const f = yield* Effect.promise(fixture);
     const bound = yield* Effect.promise(() => f.executor.bind(f.ctx));
     const prepared = yield* Effect.promise(() => bound.prepare!());
-    const preview = yield* Effect.promise(() => f.executor.run(f.ctx, { prepared } as ActionExecution)) as { seal: unknown };
-    f.receipts.push({ id: "preview", key: "schedule.apply.preview", target: f.ctx.admission.target,
-      state: "succeeded", result: preview } as ActionReceipt);
+    const preview = writePreviewSchema.parse(yield* Effect.promise(() => f.executor.run(f.ctx, { prepared } as ActionExecution)));
+    f.recordPreview("preview", preview);
     const runs = Context.get(yield* Layer.build(RunConsents.layer.pipe(Layer.provide(NodeCrypto.layer))), RunConsents);
     runs.attach({ emit: () => {}, persist: () => {}, autoApprove: () => true });
     const run = { thread: "sealed-write", turn: "one" };
