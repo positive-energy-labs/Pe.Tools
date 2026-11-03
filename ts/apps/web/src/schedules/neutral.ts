@@ -6,6 +6,7 @@ import {
   scheduleGridRouteState,
   scheduleGridCellSchema,
   showCellValue,
+  splitScheduleCellKey,
   commands,
   actionReceiptListDecoder,
   workKeySchema,
@@ -89,7 +90,10 @@ export function scheduleOutcome(
     .filter((r) => r.key === "schedule.grid.push")
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
   if (!receipt) return { unread: 0, refused: {}, readbackError: null, receiptId: null };
-  const wrapped = z.object({ value: z.unknown() }).safeParse(receipt.result);
+  const wrapped = z
+    .object({ value: z.unknown() })
+    .refine((v) => Object.hasOwn(v, "value"))
+    .safeParse(receipt.result);
   const result = z
     .object({
       failures: z.array(z.object({ key: z.string(), error: z.string() })).default([]),
@@ -288,10 +292,16 @@ export const schedulesData = {
       input: "edit",
       label: "Edit schedule cells",
       review: "none",
-      deps: { ...deps, work: ["cells", "basis", "takenAt"] },
+      deps: {
+        ...deps,
+        page: ["workspaceId"],
+        work: ["cells", "basis", "takenAt"],
+        readings: ["retained"],
+      },
       captures: [],
       patches: "edit",
       describe: "describeEdit",
+      ready: "editReady",
     },
   },
   panes: {
@@ -337,7 +347,10 @@ export const schemas = {
           value: scheduleGridCellSchema,
         }),
         z
-          .strictObject({ path: z.tuple([z.literal("cells"), z.string()]), op: z.literal("delete").optional() })
+          .strictObject({
+            path: z.tuple([z.literal("cells"), z.string()]),
+            op: z.literal("delete").optional(),
+          })
           .transform((p) => ({ path: p.path, op: "delete" as const })),
         z
           .object({
@@ -461,10 +474,21 @@ export const neutralBodies = {
     slot: "verbs.push.present",
     kind: "present",
     source,
-    run: (result) => ({
-      sentence: "Apply reviewed schedule cells",
-      rows: [JSON.stringify(result.derivedRequest)],
-    }),
+    run: (_result, evidence) => {
+      const reading = evidence.readings.saved.value;
+      const edits = Object.entries(evidence.work.cells).filter(([, cell]) => cell.edit);
+      return {
+        sentence: `Apply ${edits.length} edited schedule cells`,
+        rows: edits.map(([key, cell]) => {
+          const { rowNumber, columnNumber } = splitScheduleCellKey(key);
+          const row = reading?.snapshot.rows.find((r) => r.rowNumber === rowNumber);
+          const column = reading?.snapshot.columns.find((c) => c.columnNumber === columnNumber);
+          const index =
+            reading?.snapshot.columns.findIndex((c) => c.columnNumber === columnNumber) ?? -1;
+          return `${row?.values[0] ?? `Row ${rowNumber}`} \u00b7 ${column?.headerText ?? `Column ${columnNumber}`}: ${showCellValue(row?.values[index])} \u2192 ${showCellValue(cell.edit?.value)}`;
+        }),
+      };
+    },
   },
   empty: { slot: "readings.catalog.args", kind: "args", source, run: () => ({}) },
   workspace: {
@@ -489,6 +513,23 @@ export const neutralBodies = {
     source,
     run: (reading) => ({ workspaceId: scheduleIdentity(reading.workspaceId) }),
   },
+  editReady: {
+    slot: "verbs.edit.ready",
+    kind: "ready",
+    source,
+    run: (ctx) => {
+      const reading = ctx.readings.retained.value;
+      const target = ctx.workBasis?.token.scope.identity.target;
+      return reading &&
+        ctx.work.basis &&
+        ctx.page.workspaceId === scheduleIdentity(reading.workspaceId) &&
+        target?.kind === "document" &&
+        target.ref.session === reading.target.session &&
+        target.ref.openId === reading.target.openId
+        ? true
+        : "Read and bind the schedule in this exact document lifetime before editing";
+    },
+  },
   edit: {
     slot: "verbs.edit.patches",
     kind: "work",
@@ -503,7 +544,7 @@ export const neutralBodies = {
       input.patches
         .map(
           (patch) =>
-            `Cell ${patch.path[1]} ? ${"value" in patch ? showCellValue(patch.value) : "unstage"}`,
+            `Cell ${patch.path[1]} \u2192 ${"value" in patch ? showCellValue(patch.value) : "unstage"}`,
         )
         .join(", "),
   },
@@ -530,4 +571,5 @@ export const neutralBodies = {
     }),
   },
 } satisfies Omit<BodyBindings<typeof schedulesData, typeof schemas, typeof entries>, "grid">;
+// TODO: W3c G4: host admission must preserve scheduleGridRouteState.reconcileEdit before cutover.
 export const schedulesHostModule = { data: schedulesData, schemas, bodies: {} };

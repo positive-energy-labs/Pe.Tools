@@ -48,22 +48,29 @@ export const bodies = {
               resolve({ code: "not-ready", message: "Schedule Work is unavailable" });
               return;
             }
-            const observation = ctx.verbs.edit(schemas.edit.parse({ patches }), ctx.workBasis);
-            if (!("subscribe" in observation)) {
-              resolve({ code: "not-ready", message: observation.reason });
-              return;
+            try {
+              const observation = ctx.verbs.edit(schemas.edit.parse({ patches }), ctx.workBasis);
+              if (!("subscribe" in observation)) {
+                resolve({ code: "not-ready", message: observation.reason });
+                return;
+              }
+              observation.subscribe(
+                (outcome) => {
+                  if (outcome.kind === "accepted") resolve(null);
+                  if (outcome.kind === "refused")
+                    resolve({
+                      code: "not-ready",
+                      message: outcome.refusal.error,
+                    });
+                },
+                () => {},
+              );
+            } catch (error) {
+              resolve({
+                code: "not-ready",
+                message: error instanceof Error ? error.message : String(error),
+              });
             }
-            observation.subscribe(
-              (outcome) => {
-                if (outcome.kind === "accepted") resolve(null);
-                if (outcome.kind === "refused")
-                  resolve({
-                    code: "not-ready",
-                    message: outcome.refusal.error,
-                  });
-              },
-              () => {},
-            );
           }),
         execute: async () => ({
           code: "not-ready",
