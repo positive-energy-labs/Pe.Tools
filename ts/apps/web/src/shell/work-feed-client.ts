@@ -114,7 +114,7 @@ export function createWorkFeedClient(
           };
           const fail = (message: string, failure: WorkFeedFailure = { kind: "failed", code: "WorkFeedFailed", message }) => {
             if (closed) return;
-            if (failure.kind === "registration-mismatch") reload.set(scope.route, failure);
+            if (failure.kind === "registration-mismatch") reload.set(`${scope.route}:${scope.fingerprint}`, failure);
             emit({ kind: "failed", failure });
             stop();
             end();
@@ -158,7 +158,7 @@ export function createWorkFeedClient(
             }
           };
           emit({ kind: "pending" });
-          const mismatch = reload.get(scope.route);
+          const mismatch = reload.get(`${scope.route}:${scope.fingerprint}`);
           if (mismatch) { fail(workFeedFailureMessage(mismatch), mismatch); return stop; }
           try {
             // A synchronous replay is buffered before the snapshot subscription even exists.

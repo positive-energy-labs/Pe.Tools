@@ -146,7 +146,7 @@ export function createRouteShell(services: KernelServices) {
         }
       }
       const observers = createAdmittedObservers(route.data, bindings.bodies);
-      const cells = createAdmittedCells(route.data, bindings.schemas, bindings.bodies);
+      const cells = createAdmittedCells(route.data, bindings.schemas, bindings.bodies, route.resolvedWork?.schema);
       let readings: Record<string, ReadingSnapshot<unknown>> = {};
       const policy = createPagePolicy(
         route.data,
@@ -694,7 +694,7 @@ export function createRouteShell(services: KernelServices) {
                     label: declaration.label,
                   });
                 }
-                notify();
+                if (owner.read()?.scope === invocation.token.scope) notify();
               },
               () => {},
             );
@@ -1012,7 +1012,7 @@ export function createRouteShell(services: KernelServices) {
               ),
             );
           if (!decoded.ok) throw Error(decoded.reason);
-          const patches = admittedWorkPatches(route.data, bindings.schemas, decoded.value);
+          const patches = admittedWorkPatches(route.data, bindings.schemas, decoded.value, route.resolvedWork?.schema);
           reviews.set("work.salvage", {
             invocation: issued.value,
             preview: patches,
