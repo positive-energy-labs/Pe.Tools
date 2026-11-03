@@ -80,6 +80,7 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "group",
   "label",
   "focus",
+  "take",
 ]);
 
 /** Application services are installed once. Routes supply only admission and location. */
@@ -850,6 +851,20 @@ export function createRouteShell(services: KernelServices) {
         subjectDisplay: observers.subject,
         subjectText: observers.text,
         cells: cells.rows,
+        takeCell(id: string, key: unknown) {
+          action(); resolve();
+          const declaration = route.data.cells[id];
+          if (!declaration) throw Error(`Unknown cell: ${id}`);
+          const context = () => {
+            if (!work.ready()) throw Error("Work unavailable");
+            for (const reading of declaration.deps.readings) if (!readings[reading]?.current) throw Error(`Reading unavailable: ${reading}`);
+            return freezePage({page: project(declaration.deps.page, owner.read()!.page), work: project(declaration.deps.work, (owner.read()!.work!.value as Record<string, unknown>)), readings: Object.fromEntries(declaration.deps.readings.map(key => [key, readings[key]]))});
+          };
+          context();
+          const issued = owner.invocation(owner.capture(`cell-take:${id}`), Object.fromEntries(declaration.deps.readings.map(key => [key, (readings[key] as {hash:string}).hash])));
+          if (!issued.ok) throw Error(issued.reason);
+          return work.write(() => cells.take(id, key, context()), issued.value, issued.value.id, `Take ${id}`);
+        },
         focusCell(id: string, key: unknown) {
           action(); resolve();
           const issued = owner.invocation(owner.capture(`cell-focus:${id}`), {});
