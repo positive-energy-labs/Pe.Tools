@@ -1,6 +1,12 @@
+import { applyTally, applyOutcome } from "./apply-outcome";
 import { refuse } from "#/route/refusal";
 import { useRef } from "react";
-import { familiesRouteState, familyCellAddress, type FamilyCellState } from "@pe/agent-contracts";
+import {
+  actionReceiptListDecoder,
+  familiesRouteState,
+  familyCellAddress,
+  type FamilyCellState,
+} from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import type { PaneContext } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
@@ -18,6 +24,7 @@ type Context = PaneContext<
 export function FamiliesKernelMatrix({ ctx }: { ctx: Context }) {
   const scroller = useRef<HTMLDivElement>(null);
   const work = ctx.work ? familiesRouteState.schema.parse(ctx.work) : null;
+  const receipts = actionReceiptListDecoder().parse(ctx.readings.receipts.value ?? []);
   const shown = ctx.readings.matrix.value;
   const families = shown ? familiesSchemas.observation.parse(shown).result.families : [];
   const { rows, params } = matrixModel(families);
@@ -104,7 +111,11 @@ export function FamiliesKernelMatrix({ ctx }: { ctx: Context }) {
           ))}
         <Button
           label="Read families"
-          onClick={() => ctx.verbs.read({ filter, readId: crypto.randomUUID() })}
+          onClick={() => {
+            const readId = crypto.randomUUID();
+            ctx.page.pose({ readId }, "named");
+            ctx.verbs.read({ filter, readId });
+          }}
         >
           Read families
         </Button>
@@ -112,7 +123,10 @@ export function FamiliesKernelMatrix({ ctx }: { ctx: Context }) {
           label="Stop family read"
           onClick={() =>
             ctx.verbs.stop({
-              readId: shown?.progress?.runId ?? "00000000-0000-4000-8000-000000000000",
+              readId:
+                ctx.page.read().readId ||
+                shown?.progress?.runId ||
+                "00000000-0000-4000-8000-000000000000",
             })
           }
         >
@@ -125,6 +139,20 @@ export function FamiliesKernelMatrix({ ctx }: { ctx: Context }) {
       {!ctx.readings.matrix.current && (
         <OutcomeLine kind="advisory" label="Family read" says={ctx.readings.matrix.reason} />
       )}
+      {receipts
+        .filter((r) => r.key === "families.apply")
+        .map((r) => {
+          const outcome = applyOutcome(r, filter.familyNames);
+          const tally = r.state === "succeeded" ? applyTally(r) : null;
+          return (
+            <OutcomeLine
+              key={r.id}
+              kind={outcome ? "error" : "advisory"}
+              label="Family receipt"
+              says={outcome?.message ?? `${tally?.converged ?? 0} families converged`}
+            />
+          );
+        })}
       <TypeGrid
         rows={pivot.pivotRows}
         types={rows}

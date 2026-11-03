@@ -13,7 +13,6 @@ import {
 export const legacyBuiltinKeys: readonly string[] = [
   "data-tables",
   "ducts",
-  "families",
   "family",
   "fans",
   "instances",

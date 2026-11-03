@@ -4,7 +4,6 @@ import type { RouteGraph } from "@pe/agent-contracts";
 import { dataTablesGraph } from "../data-tables/graph";
 import { ductsGraph } from "../ducts/graph";
 import { fansGraph } from "../fans/graph";
-import { familiesGraph } from "../families/graph";
 import { familyGraph } from "../family/graph";
 import { parameterLinksGraph } from "../parameter-links/graph";
 import { podsGraph } from "../pods/graph";
@@ -16,7 +15,7 @@ const graphs = [
   dataTablesGraph,
   ductsGraph,
   fansGraph,
-  familiesGraph,
+
   familyGraph,
   parameterLinksGraph,
   podsGraph,

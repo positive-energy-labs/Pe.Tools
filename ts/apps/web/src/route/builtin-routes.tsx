@@ -10,7 +10,6 @@ import { podsGraph } from "#/pods/graph";
 import { takeoffGraph } from "#/takeoff/graph";
 import { roomsGraph } from "#/rooms/graph";
 import { familyGraph } from "#/family/graph";
-import { familiesGraph } from "#/families/graph";
 import { settingsGraph } from "#/settings/graph";
 import { fansGraph } from "#/fans/graph";
 import { ductsGraph } from "#/ducts/graph";
@@ -29,9 +28,6 @@ const OpenPage = lazy(async () => ({
 const RoomsRoute = named(() => import("#/rooms/route"), "RoomsRoute");
 const FamilyRoute = lazy(async () => ({
   default: mountRoute(familyGraph, (await import("#/family/route")).familyAdapters),
-}));
-const FamiliesRoute = lazy(async () => ({
-  default: mountRoute(familiesGraph, (await import("#/families/route")).familiesAdapters),
 }));
 
 const DuctsRoute = lazy(async () => ({
@@ -64,7 +60,6 @@ function hosted(Body: ComponentType<MountRouteProps>) {
 }
 registerLegacyGraph(roomsGraph, hosted(RoomsRoute));
 registerLegacyGraph(familyGraph, hosted(FamilyRoute));
-registerLegacyGraph(familiesGraph, hosted(FamiliesRoute));
 registerLegacyGraph(ductsGraph, hosted(DuctsRoute));
 registerLegacyGraph(parameterLinksGraph, hosted(ParameterLinksRoute));
 registerLegacyGraph(podsGraph, hosted(PodsRoute));

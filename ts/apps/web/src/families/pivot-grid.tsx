@@ -18,8 +18,8 @@ import {
   type ParamColumn,
   type TypeRow,
 } from "#/families/matrix-columns";
-import type { PivotFamily, PivotRow } from "#/families/pivot";
-import type { FamiliesStore } from "#/families/store";
+import type { PivotFamily, PivotRow } from "./kernel-matrix-model";
+import type { ProposeFamilyCell } from "./matrix-columns";
 import type { MeasuredAnswer } from "#/host/measured-parse";
 import { familyCellKey, type MeasuredDisplayUnit } from "@pe/agent-contracts";
 import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
@@ -61,7 +61,7 @@ export interface TypeGridEdit {
   metadata?: ReadonlyMap<string, readonly ParameterMetadataRecord[]>;
   params: ReadonlyMap<string, ParamColumn>;
   live: LiveCells;
-  propose: FamiliesStore["actions"]["propose"];
+  propose: ProposeFamilyCell;
   parse?: (unit: MeasuredDisplayUnit | null | undefined, text: string) => Promise<MeasuredAnswer>;
   readOnly: boolean;
   /** The native patch projected on this reading; absent on an archived reading. */

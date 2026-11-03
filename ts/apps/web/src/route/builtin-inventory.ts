@@ -1,3 +1,5 @@
+import { module as familiesModule } from "../families/kernel";
+import familiesGenerated from "../families/source-closure.generated.json";
 import { z } from "zod";
 import { createBuiltinRouteInventory } from "../../../../packages/agent-contracts/src/route-module";
 import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
@@ -33,7 +35,29 @@ const schedulesClosure = {
     })),
   },
 };
+const familiesClosure = {
+  fingerprint: familiesGenerated.fingerprint,
+  envelope: {
+    ...familiesGenerated.envelope,
+    source: z.literal("builtin-closure").parse(familiesGenerated.envelope.source),
+    version: z.literal(1).parse(familiesGenerated.envelope.version),
+    data: RouteGraphJson.parse(familiesGenerated.envelope.data),
+    variants: familiesGenerated.envelope.variants.map((v) => ({
+      ...v,
+      client: z.enum(["web", "pea"]).parse(v.client),
+    })),
+  },
+};
 const inventory = createBuiltinRouteInventory({
+  families: {
+    module: familiesModule,
+    closure: familiesClosure,
+    catalog: Object.entries(familiesModule.entries).map(([key, entry]) => ({
+      key,
+      ...entry.axes,
+      uses: [],
+    })),
+  },
   schedules: {
     module: schedulesModule,
     closure: schedulesClosure,
@@ -53,11 +77,20 @@ const inventory = createBuiltinRouteInventory({
     })),
   },
 });
-export const builtinRouteStamp = (key: "captures" | "schedules") =>
-  key === "schedules" ? schedulesClosure.fingerprint : closure.fingerprint;
-export async function loadBuiltinRoute(key: "captures" | "schedules", expectedFingerprint: string) {
+export const builtinRouteStamp = (key: "captures" | "schedules" | "families") =>
+  key === "families"
+    ? familiesClosure.fingerprint
+    : key === "schedules"
+      ? schedulesClosure.fingerprint
+      : closure.fingerprint;
+export async function loadBuiltinRoute(
+  key: "captures" | "schedules" | "families",
+  expectedFingerprint: string,
+) {
   const prepared = await inventory.prepare(key, expectedFingerprint);
-  return key === "schedules"
-    ? prepared.admitUnknown(schedulesModule)
-    : prepared.admitUnknown(module);
+  return key === "families"
+    ? prepared.admitUnknown(familiesModule)
+    : key === "schedules"
+      ? prepared.admitUnknown(schedulesModule)
+      : prepared.admitUnknown(module);
 }

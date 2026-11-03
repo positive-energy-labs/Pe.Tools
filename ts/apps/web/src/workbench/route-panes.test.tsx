@@ -18,7 +18,7 @@ import { RouteDock } from "./route-panes";
 import { useRouteCurrent } from "#/route/activity";
 import { useRouteLease } from "#/route/view-bridge";
 import { useGraphRoute } from "#/shell/mount";
-import { familiesGraph } from "#/families/graph";
+import { familyGraph as familiesGraph } from "#/family/graph";
 import { useRouteThread } from "#/shell/binding";
 
 import { registerSubject } from "#/shell/subject";
@@ -112,7 +112,9 @@ vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 
 const familiesProbeGraph: typeof familiesGraph = {
   ...familiesGraph,
-  subjectField: { ...familiesGraph.subjectField, roster: "probe", detail: "probe" },
+  key: "families",
+  name: "Families",
+  subjectField: { ...familiesGraph.subjectField, noun: "draft", roster: "probe", detail: "probe" },
   fields: Object.fromEntries(
     Object.entries(familiesGraph.fields).map(([id, value]) => [
       id,
@@ -693,7 +695,9 @@ test("a Pea open of a new tool keeps its first lease instance, and a set against
       commandId: "55555555-5555-4555-8555-555555555555",
       revision: 1,
       patch: {
-        sort: routeAddress("families").agent.write({ sort: { columns: [{ key: "Name", dir: "asc" }] } }).sort!,
+        sort: routeAddress("families").agent.write({
+          sort: { columns: [{ key: "Name", dir: "asc" }] },
+        }).sort!,
       },
     }),
   );
@@ -732,9 +736,9 @@ test("after first-Send promotion and a chat pick, a Pea open keeps one lease and
     await settle();
     expect(hostCalls("view.remove")).toEqual([]);
     expect(places().filter((tab) => tab.route === "families")).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: "Families \u00b7 draft" }).length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      screen.getAllByRole("button", { name: "Families \u00b7 current" }).length,
+    ).toBeGreaterThan(0);
   } finally {
     threads.pop();
   }

@@ -3,7 +3,6 @@ import { rhvacSyncGraph } from "../rhvac-sync/graph";
 import { sessionsGraph } from "../sessions/graph";
 import { podAdminGraph } from "../pod-admin/graph";
 import { indexGraph } from "../index/graph";
-import { familiesGraph } from "../families/graph";
 import { fansGraph } from "../fans/graph";
 import { ductsGraph } from "../ducts/graph";
 import type { RouteGraph } from "@pe/agent-contracts";
@@ -43,7 +42,7 @@ afterEach(() => vi.unstubAllGlobals());
 const routes = [
   ductsGraph,
   fansGraph,
-  familiesGraph,
+
   indexGraph,
   podAdminGraph,
   sessionsGraph,

@@ -1,6 +1,7 @@
 import { commandCatalogAxes } from "../../../../packages/agent-contracts/src/command-axes.ts";
 import { z } from "zod";
 import {
+  actionReceiptListDecoder,
   commands,
   routeStatePatchSchema,
   canonicalRouteInput,
@@ -24,9 +25,6 @@ import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/ro
 import { familiesReads } from "../../../../packages/mcps/src/shared/families-client.ts";
 
 // Host admission consumes this module without loading the browser pane or sources.
-// TODO: W2 cutover requires admitted host registration to preserve familiesAdmission.
-// host-admission-gap.test.ts proves unknown family/type writes lose their refusal.
-// RouteStateSpec parity does not carry RouteWorkspaceRegistration.admit.
 const scopeSchema = z.custom<
   import("../../../../packages/agent-contracts/src/route-kernel-page.ts").IdentityId<"local">
 >((value) => value === '["families","draft"]');
@@ -68,6 +66,15 @@ export const familiesData = {
       agent: "set",
     },
     selected: { role: "selection", kinds: ["scope"] },
+    readId: {
+      role: "pose",
+      schema: "text",
+      codec: "json",
+      initial: "",
+      url: false,
+      share: false,
+      agent: "none",
+    },
     focus: {
       role: "pose",
       schema: "text",
@@ -88,6 +95,15 @@ export const familiesData = {
   salvage: "salvage",
   work: { route: "families", schema: "work", version: 1, migrations: {} },
   readings: {
+    receipts: {
+      kind: "use",
+      entry: "families.receipts",
+      args: "receiptArgs",
+      deps: { page: [], work: [], readings: ["matrix"] },
+      demand: "visible",
+      retain: retained,
+      refresh: "dependencies",
+    },
     catalog: {
       kind: "use",
       entry: "revit.catalog.loaded-families",
@@ -205,7 +221,7 @@ export const familiesData = {
     main: {
       label: "Families",
       purpose: "Audit family values",
-      draws: ["matrix", "catalog"],
+      draws: ["matrix", "catalog", "receipts"],
       verbs: ["writeCells", "pick", "read", "stop", "edit", "revert", "apply"],
       body: "main",
     },
@@ -230,7 +246,7 @@ export const familiesData = {
     cells: { label: "family parameters", internal: false },
     takenAt: { label: "capture time", internal: true },
   },
-  seeds: {},
+  seeds: { audit: { title: "Family parameters", load: "seed" } },
   needs: "project",
   resetOnTarget: [],
   observe: [],
@@ -264,6 +280,11 @@ const readAxes = {
   cardinality: "One",
 } as const;
 export const familiesEntries = {
+  "families.receipts": {
+    input: workKeySchema.nullable(),
+    output: actionReceiptListDecoder(),
+    axes: readAxes,
+  },
   "revit.catalog.loaded-families": {
     input: z.object({ filter: z.object({}), budget: z.object({ maxEntries: z.number() }) }),
     output: z.object({
@@ -301,6 +322,12 @@ export const familiesEntries = {
 };
 const source = { module: "families/neutral.ts", export: "familiesNeutralBodies" };
 export const familiesNeutralBodies = {
+  receiptArgs: {
+    slot: "readings.receipts.args",
+    kind: "args",
+    source,
+    run: (ctx) => ctx.readings.matrix.value?.work ?? null,
+  },
   describeCells: {
     slot: "verbs.writeCells.describe",
     kind: "describe",
@@ -554,7 +581,7 @@ export const familiesNeutralBodies = {
   },
 } satisfies Omit<
   BodyBindings<typeof familiesData, typeof familiesSchemas, typeof familiesEntries>,
-  "main"
+  "main" | "seed"
 >;
 // Host recovery extracts canonical bytes; web salvage derives review patches.
 export const familiesHostModule = {

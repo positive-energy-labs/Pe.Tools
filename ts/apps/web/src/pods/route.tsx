@@ -15,7 +15,6 @@ import { RunsList } from "#/route/runs-list";
 import { isSpecOf } from "#/route/workflow";
 import type { PodRow, Run } from "#/route/pods";
 import { familyGraph, FAMILY_MODEL_SCHEMA } from "#/family/graph";
-import { familiesGraph, FAMILIES_SPEC_SCHEMAS } from "#/families/graph";
 import { podsGraph } from "./graph";
 import { podsBinding, podsCell, editRefusal } from "./actions";
 import { podsSources } from "./sources";
@@ -31,10 +30,7 @@ import {
 import type { PodsPage } from "./page";
 
 type Body = MountBody<PodsPage, SettingsRouteDocument>;
-const PRODUCTS = [
-  { route: "family", graph: familyGraph, schema: FAMILY_MODEL_SCHEMA },
-  { route: "families", graph: familiesGraph, schema: FAMILIES_SPEC_SCHEMAS },
-] as const;
+const PRODUCTS = [{ route: "family", graph: familyGraph, schema: FAMILY_MODEL_SCHEMA }] as const;
 const scopeOf = ({ owner, page }: Body) => ({
   ...owner.snapshot(),
   page,

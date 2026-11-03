@@ -23,7 +23,7 @@ import { peClient } from "#/host/pe-client";
 import { peReadings } from "#/readings";
 import { useRouteSearch, useRouteFixture, useRouteNavigate } from "#/route/activity";
 import { ductsGraph } from "#/ducts/graph";
-import { familiesGraph } from "#/families/graph";
+import { familyGraph as familiesGraph } from "#/family/graph";
 import { useGraphRoute } from "#/shell/mount";
 import { graphUrlPage } from "#/shell/mount-page";
 import { queryVerb, workVerb } from "#/shell/verbs";
@@ -75,6 +75,7 @@ const graph: typeof ductsGraph = {
 };
 const otherGraph: typeof familiesGraph = {
   ...familiesGraph,
+  key: "families",
   subjectField: { ...familiesGraph.subjectField, roster: "testSubject", detail: "testSubject" },
   fields: Object.fromEntries(
     Object.entries(familiesGraph.fields).map(([id, value]) => [

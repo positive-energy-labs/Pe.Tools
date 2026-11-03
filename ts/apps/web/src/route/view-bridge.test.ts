@@ -2,7 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
 import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
 import { graphUrlPage } from "#/shell/mount-page";
-import { familiesGraph, familiesPageSchema } from "#/families/graph";
 import { familyGraph, familyPageSchema } from "#/family/graph";
 import { podsGraph } from "#/pods/graph";
 import { podsPageSchema } from "#/pods/page";
@@ -13,13 +12,6 @@ describe("route addresses match their manifests", () => {
     expect(graphUrlPage(familyGraph).keys).toEqual(["family", ...routeAddress("family").keys]);
     const page = familyPageSchema.parse({});
     for (const key of routeAddress("family").agent.keys) expect(key in page).toBe(true);
-  });
-  it("Families projects URL and agent keys from its graph", () => {
-    expect(graphUrlPage(familiesGraph).keys).toEqual(["scope", ...routeAddress("families").keys]);
-    const page = familiesPageSchema.parse({});
-    const { agent, defaults } = routeAddress("families");
-    for (const key of agent.keys)
-      expect(key in page || (defaults as Record<string, unknown>)[key] === undefined).toBe(true);
   });
   it("Ducts projects URL policy from its graph fields", () => {
     const page = ductsPageSchema.parse({});

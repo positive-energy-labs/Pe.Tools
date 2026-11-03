@@ -15,7 +15,13 @@ import type { MeasuredAnswer } from "#/host/measured-parse";
 import { CellListSelect } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
-import type { FamiliesStore } from "#/families/store";
+import type { FamilyCellAddress } from "@pe/agent-contracts";
+import type { Refusal } from "#/route/refusal";
+export type ProposeFamilyCell = (
+  address: FamilyCellAddress,
+  value: FamilyCellValue,
+  current: string,
+) => Promise<Refusal | null>;
 import { cn } from "@pe/kit/lib/utils";
 
 export interface TypeRow {
@@ -155,7 +161,7 @@ export function ParamCell({
   row: TypeRow;
   col: ParamColumn;
   live: LiveCells;
-  propose: FamiliesStore["actions"]["propose"];
+  propose: ProposeFamilyCell;
   parse?: (unit: MeasuredDisplayUnit | null | undefined, text: string) => Promise<MeasuredAnswer>;
 }) {
   // Identity by NAME (ruling, msg-authority-family-identity): a cell keys on the family's
@@ -279,7 +285,7 @@ function YesNoCell({
   current: string;
   cell: FamilyCellState | undefined;
   reason: string;
-  onPick: (choice: string) => ReturnType<FamiliesStore["actions"]["propose"]>;
+  onPick: (choice: string) => ReturnType<ProposeFamilyCell>;
 }) {
   const [refused, setRefused] = useState<string | undefined>();
   const rung = cell?.edit ?? cell?.suggestion;

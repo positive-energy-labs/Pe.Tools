@@ -1,63 +1,24 @@
 import { z } from "zod";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-
 import {
-  actionReceiptListDecoder,
   canonicalRouteInput,
   workKey,
   workKeySchema,
-  type AppliedFilter,
   familiesMatrixEnvelopeSchema,
   familiesObservationSchema,
-  type FamiliesRouteDocument,
   type ReadingRequest,
 } from "@pe/agent-contracts";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
-
 import {
-  type FamiliesObservation,
-  type FamiliesObservationSummary,
   familiesReads,
   readFamiliesCapture,
+  type FamiliesObservation,
 } from "../../../../packages/mcps/src/shared/families-client";
-import { callCompose, opSource, composeSource } from "#/shell/readings-api";
+import { callCompose } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
-import type { ReadingAttempt, ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
+import type { ReadingAttempt, UseSource } from "#/shell/readings";
 import type { Readings } from "#/readings";
-import type { FamiliesPage } from "./graph";
-
-export type { FamiliesObservation, FamiliesObservationSummary };
-export type FamiliesDraft = {
-  placement: AppliedFilter["placementScope"];
-  categories: string[];
-  families: string[] | null;
-};
-export const draftFilter = (draft: FamiliesDraft): AppliedFilter => ({
-  categoryNames: [...draft.categories],
-  familyNames: [...(draft.families ?? [])],
-  placementScope: draft.placement,
-});
-export const scopeDraft = (
-  draft: FamiliesDraft | null,
-  work: FamiliesRouteDocument | null,
-): FamiliesDraft => {
-  if (draft) return draft;
-  const filter = work?.scope.edit?.value;
-  return {
-    categories: [...(filter?.categoryNames ?? [])],
-    families: filter?.familyNames.length ? [...filter.familyNames] : null,
-    placement: filter?.placementScope ?? "PlacedOnly",
-  };
-};
-const scopeFilter = (scope: { page: unknown; work: unknown; args?: unknown }) => {
-  const input = familiesReads["families.read"].input
-    .extend({ work: workKeySchema })
-    .safeParse(scope.args);
-  if (input.success) return input.data.filter;
-  const drafted = (scope.page as FamiliesPage).draft;
-  return draftFilter(scopeDraft(drafted, scope.work as FamiliesRouteDocument | null));
-};
-
+const scopeFilter = (scope: { args?: unknown }) =>
+  familiesReads["families.read"].input.extend({ work: workKeySchema }).parse(scope.args).filter;
 type FamilyRecord = RevitMatrixLoadedFamilies.Res.FamilySnapshotRecord;
 
 /** A promise keeps the attempt that fetched it. A returned A cannot adopt the first A's parts. */
@@ -73,7 +34,6 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
   >();
   return {
     kind: "use",
-    key: scopeFilter,
     dirties: ["families", "matrix"],
     async open(ctx, deliver) {
       const target = ctx.target.kind === "document" ? ctx.target.ref : null;
@@ -84,11 +44,7 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
       const bound = args.success
         ? z.object({ work: workKeySchema }).parse(ctx.args).work
         : ctx.workKey;
-      if (
-        !target ||
-        !filter?.categoryNames.length ||
-        (ctx.page as FamiliesPage).stage === "history"
-      )
+      if (!target || !filter?.categoryNames.length)
         return deliver({ kind: "complete", value: null, revision: 0 });
       let latest = "";
       let serial = 0;
@@ -207,83 +163,6 @@ export function familiesMatrixSource(resources?: Readings): UseSource<FamiliesOb
           });
       }
       return close;
-    },
-  };
-}
-
-const page = (ctx: ReadingContext) => ctx.page as FamiliesPage;
-export function familiesSources(): Readonly<Record<string, ReadingSource>> {
-  return {
-    "families.scopes": {
-      kind: "derive",
-      derive: (ctx) => [{ id: "draft", label: "Family draft scope", filter: scopeFilter(ctx) }],
-    },
-    "families.matrix": familiesMatrixSource(),
-    "families.receipts": {
-      kind: "use",
-      dirties: ["families", "receipts"],
-      open(ctx, deliver) {
-        const work = ctx.workKey;
-        if (!work) return deliver({ kind: "complete", value: [], revision: 0 });
-        return subscriptionSource({
-          request: () => ({ kind: "receipts", work }),
-          decode: (value) => actionReceiptListDecoder().parse(value),
-        }).open(ctx, deliver);
-      },
-    },
-    "families.categories": {
-      kind: "use",
-      dirties: ["families"],
-      open(ctx, deliver) {
-        const target = ctx.target.kind === "document" ? ctx.target.ref : null;
-        if (!target) return deliver({ kind: "complete", value: [], revision: 0 });
-        return subscriptionSource({
-          request: () => ({ kind: "field-options", target, key: "category-names" }),
-          decode: (value) =>
-            nativeResponseSchema("revit.catalog.field-options")
-              .parse(value)
-              .items.map((item) => item.value),
-        }).open(ctx, deliver);
-      },
-    },
-    "families.catalog": opSource({
-      key: "revit.catalog.loaded-families",
-      request: (ctx) =>
-        ctx.target.kind === "document" ? { filter: {}, budget: { maxEntries: 5000 } } : null,
-      map: (value) => value.families,
-      absent: [],
-    }),
-    "families.archive": composeSource({
-      key: "families.readings",
-      map: (value) => {
-        if (!Array.isArray(value)) throw Error("Expected Families archive");
-        return value;
-      },
-      input: (ctx) => (page(ctx).stage === "history" ? {} : null),
-      absent: [],
-    }),
-    "families.saved": composeSource({
-      key: "families.readings",
-      map: (value) => {
-        if (value !== null && !("result" in value)) throw Error("Expected saved Families reading");
-        return value;
-      },
-      input: (ctx) =>
-        page(ctx).stage === "history" && page(ctx).past ? { query: { id: page(ctx).past } } : null,
-      absent: null,
-    }),
-    "families.pods": {
-      ...opSource({
-        key: "pod.list",
-        request: () => ({}),
-        map: (value) => {
-          if (!("pods" in value)) throw Error("Expected full pod inventory");
-          return value.pods;
-        },
-        absent: [],
-      }),
-      effects: () => [],
-      dirties: ["pods"],
     },
   };
 }

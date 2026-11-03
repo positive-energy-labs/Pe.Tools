@@ -41,6 +41,21 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
       }
       return;
     }
+    if (key === "families") {
+      const { admitFamilies } = await import("../families/route");
+      const mount = createRouteShell(sourceRouteServices({})).mount(await admitFamilies(), {
+        read: () => new URLSearchParams({ fixture: "audit" }),
+        write() {},
+        subscribe: () => () => {},
+      });
+      try {
+        expect(isValidElement(mount.read("main"))).toBe(true);
+        expect(mount.work()).not.toBeNull();
+      } finally {
+        mount.close();
+      }
+      return;
+    }
     if (key === "schedules") {
       const { admitSchedules } = await import("../schedules/route");
       const { scheduleIdentity } = await import("../schedules/neutral");
@@ -64,7 +79,8 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
         // The grid owns DOM portals; schedules/kernel.test.tsx renders it under jsdom.
         expect(isValidElement(mount.read("grid"))).toBe(true);
         expect(mount.workBasis()?.token.scope.identity.work).toMatchObject({
-          binding: "workspace", work: "schedule:fixture",
+          binding: "workspace",
+          work: "schedule:fixture",
         });
         expect(mount.picker("workspaceId")).toEqual([
           { id: scheduleIdentity("schedule:fixture"), label: "Mechanical equipment" },
