@@ -477,3 +477,16 @@ test("an older reread cannot roll back the journal revision or discard history",
   f.journal.observe({ revision: 0, doc: f.initial });
   expect(f.journal.read()).toMatchObject({ revision: 2, undo: [{}, {}], redo: [] });
 });
+
+
+test("explicit verb labels survive move, late describe and repeated namer registration", () => {
+  const key = { route: "labels", binding: "host" as const, target: null };
+  const journal = createWorkJournal(key);
+  journal.name(() => ({ label: "Edit Work" }));
+  journal.accept({ key, kind: "apply", by: "human", base: 0, revision: 1, press: "verb", undoable: true, patches: [{path: ["flow"], value: 950}], inverse: [{path: ["flow"], value: 900}] }, {label: "Set fan flow"});
+  expect(journal.read().moves[0]?.label).toBe("Set fan flow");
+  journal.describe("verb", {label: "Set MUAS-1 flow"});
+  journal.name(() => ({ label: "Edit Work" }));
+  expect(journal.read().undo[0]?.label).toBe("Set MUAS-1 flow");
+  expect(journal.read().moves[0]?.label).toBe("Set MUAS-1 flow");
+});

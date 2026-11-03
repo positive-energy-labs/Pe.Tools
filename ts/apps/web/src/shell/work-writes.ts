@@ -204,7 +204,7 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
           }
       }
       result =
-        failure || domain ? refused(failure ?? domain!.message) : await port(current!, request);
+        failure || domain ? refused(failure ?? domain!.message) : await port(current!, { ...request, ...(request.press && pending.get(request.press) ? { label: pending.get(request.press)!.history?.entry.label ?? pending.get(request.press)!.label.label } : {}) });
       if (result.ok) {
         const ack = result.write;
         if (

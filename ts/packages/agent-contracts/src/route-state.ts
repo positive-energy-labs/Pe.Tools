@@ -128,6 +128,7 @@ export type RouteStatePatch = z.infer<typeof routeStatePatchSchema>;
 /** One invocation, never one identity per patch. Authorship comes from the host principal. */
 export const workWriteSchema = z.object({
   causalParent: z.string().min(1).optional(),
+  label: z.string().trim().min(1).optional(),
   patches: z.array(routeStatePatchSchema),
   expectedRevision: z.number().int().nonnegative(),
   press: z.string().min(1).nullable(),
@@ -142,6 +143,7 @@ export type WorkWriteAck = {
   press: string | null;
   /** Host-issued step identity and exact transition restored, never inferred from patch equality. */
   step?: string;
+  label?: string;
   restoreOf?: number;
   /** Receipt whose confirmed outcome retired these cells. */
   receiptId?: string;
@@ -166,6 +168,7 @@ export const workWriteAckSchema: z.ZodType<WorkWriteAck> = z.object({
   by: z.enum(["pea", "human"]),
   press: z.string().min(1).nullable(),
   step: z.string().min(1).optional(),
+  label: z.string().trim().min(1).optional(),
   receiptId: z.string().min(1).optional(),
   restoreOf: z.number().int().positive().optional(),
   base: z.number().int().nonnegative(),

@@ -135,8 +135,8 @@ test("fresh host replay renders identical History with human edits and committed
     one.deliver(receipt);
   });
   const before = one.ui.container.textContent;
-  expect(before).toContain("Edit fan flow");
-  expect(before).toContain("committed");
+  expect(before).toContain("flow MUAS-1");
+  expect(before).toContain("applied");
   expect(before).toContain("Write to Revit");
   expect(before).not.toContain("running");
   one.close();

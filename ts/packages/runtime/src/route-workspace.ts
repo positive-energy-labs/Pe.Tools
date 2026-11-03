@@ -222,7 +222,7 @@ export class RouteWorkspace {
     patches: RouteStatePatch[],
     expectedRevision: number,
     trusted = false,
-    context: Pick<WorkWrite, "press" | "kind" | "restoreOf"> & { receiptId?: string } = {
+    context: Pick<WorkWrite, "press" | "kind" | "restoreOf" | "label"> & { receiptId?: string } = {
       press: null,
       kind: "apply",
     },
@@ -322,6 +322,7 @@ export class RouteWorkspace {
         kind,
         by,
         press,
+        ...(kind === "apply" && context.label ? { label: context.label } : {}),
         ...(trusted && context.receiptId ? { receiptId: context.receiptId } : {}),
         ...(kind === "apply"
           ? {

@@ -130,7 +130,7 @@ export const stepState = (journal: Journal, step: Journal["undo"][number]) =>
       ? `superseded at r${step.superseded.revision}`
       : step.barrier
         ? (step.barrier.basis as { receiptId?: string } | undefined)?.receiptId
-          ? "committed"
+          ? "applied"
           : "blocked"
         : journal.redo.some((entry) => entry.press === step.press)
           ? "undone"

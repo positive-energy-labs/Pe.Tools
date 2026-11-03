@@ -132,7 +132,7 @@ export function createWorkJournal(key: WorkKey) {
       {
         kind,
         press: step.press,
-        label: namer(step.transitions.flatMap((transition) => transition.forward)).label,
+        label: step.label,
         ...(step.internal && { internal: true as const }),
         by,
         at,
@@ -227,8 +227,8 @@ export function createWorkJournal(key: WorkKey) {
       ack.press = pea
         ? `pea:${ack.press ?? `r${ack.revision}`}`
         : (ack.press ?? `r${ack.revision}`);
-      if (!detail) unnamed.add(ack.step ?? ack.press);
-      detail ??= namer(ack.patches);
+      if (!detail && !ack.label) unnamed.add(ack.step ?? ack.press);
+      detail ??= ack.label ? { label: ack.label } : namer(ack.patches);
     }
     if (
       !detail ||
@@ -493,7 +493,7 @@ export function createWorkJournal(key: WorkKey) {
       );
       for (const entry of moves)
         if (entry.press === press) {
-          entry.label = namer(step.transitions.flatMap((transition) => transition.forward)).label;
+          entry.label = step.label;
           if (step.internal) entry.internal = true;
         }
     },
@@ -502,8 +502,10 @@ export function createWorkJournal(key: WorkKey) {
       namer = next;
       for (const step of [...undo, ...redo]) {
         const detail = namer(step.transitions.flatMap((transition) => transition.forward));
-        if (unnamed.has(step.id)) Object.assign(step, detail);
-        for (const entry of moves) if (entry.press === step.press) Object.assign(entry, detail);
+        if (unnamed.has(step.id)) {
+          Object.assign(step, detail);
+          for (const entry of moves) if (entry.press === step.press) Object.assign(entry, detail);
+        }
       }
     },
     /** Subscribe this to the route timeline before dispatching commands; retain barriers after its log is trimmed. */
