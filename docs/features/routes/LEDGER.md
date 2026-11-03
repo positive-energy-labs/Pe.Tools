@@ -54,6 +54,12 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-09-09, the claim that document keys and receipts alone prevent every stale read or duplicate mutation: keys separate open lifetimes; Effect refresh orders reads within one lifetime; host admission and request identity govern retries.
 
 ## Owed
+
+- Decide receipt rendering for `ducts.apply.preview`, `ducts.assign-fan.preview`, `ducts.heal.preview`, `revit.apply.parameter-links.preview`, `revit.catalog.electrical-circuits.roster`, `revit.detail.electrical-circuits.walk`, and `rooms.roster` (`action-authority.guard.test.ts`, renderer or explicit raw receipt decision).
+- Move `ts/apps/web/src/revit/element-menu.tsx` native submissions through the observation-scoped kernel door (`host-door.guard.test.ts`, host door bypasses can only shrink).
+- Provide the shared observation-scoped Select and Section Box kernel verb door (`host-door.guard.test.ts`, kernel gap assertion); coordinate with the `element-menu.tsx` submission migration.
+- Replace raw-id fallback presentation in `ts/apps/web/src/space/facts.tsx` with the admitted subject display identity (`kit-census.guard.test.ts`, `subject-fallback-ids`).
+- Use the shared Reading/List projection in `ts/apps/web/src/ops/route.tsx` and `ts/apps/web/src/sessions/route.tsx`, then prove row behavior (`kit-census.guard.test.ts`, `reading-list-adapter`).
 - Revisit the Reject UX after the kernel rudiments land (kaitpw 2026-11-02): judge it in a real, space-constrained route with a live Pea thread, not a fixture lineup with open space; the protoui guided story stalls at step 3. Open questions: how a rejection feels and functions in practice, whether Reject should touch Work at all, where auto-approve re-arms, and house rule B·3 in `docs/design/SURFACE-PHILOSOPHY.md`.
 - Geometry law not yet enforced: Revit read priority (a user read never waits behind a background read) and real host-side cancel of an abandoned reading.
 - Merge gate before `t3/unification-2` reaches main: the perf thread re-runs `tools/space-proof/verbs.py` on Chadds, Cleremont and Manuella and `/ducts` `fan` = 1, 3, `all` on Chadds, on the sha the orchestrator names.

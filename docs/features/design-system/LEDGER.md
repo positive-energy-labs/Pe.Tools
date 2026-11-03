@@ -695,6 +695,15 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 
 ## Owed
 
+- Reconcile `dl-button` contextual overrides in `ts/apps/web/src/shell/situation-band.css` and `ts/apps/web/src/workbench/route-tabs.css` with the component owner (`design-guard.test.ts`, contextual override reasons).
+- Replace or explicitly admit `text-xs` in `ts/apps/web/src/shell/mount-reading.tsx` (`design-guard.test.ts`, unregistered classes).
+- Remove the `teachText(title) || id` machine-id fallback in `ts/packages/kit/src/components/lang/pane.tsx` and prove meaningful Tutorial region naming when the title is absent (`kit-census.guard.test.ts`, `tutorial-no-machine-region-title`).
+- Visually confirm scene ground and contrast in `ts/apps/web/src/scene/levels.ts`, `marks.ts`, `strands.ts`, and `veil.ts` against house tokens before changing paint (`kit-census.guard.test.ts`, `scene-ground-presets`).
+- Reconcile `ts/apps/web/src/scene/picture/picture.tsx` furniture with the Picture owner and verify placement behavior (`kit-census.guard.test.ts`, `picture-furniture-floater`).
+- Move hover ownership from `ts/apps/web/src/ducts/sheet/blocker-row.tsx` to the shared row interaction primitive while preserving hit testing (`kit-census.guard.test.ts`, `web-hover-handler`).
+- Review the move from `duct/charts.tsx` to `duct-loss/duct/charts.tsx` and transfer or remove its prose allowance; the failure establishes identity drift, not changed prose behavior (`kit-census.guard.test.ts`, `t-prose-ratchet`).
+- Inspect list ownership in `ts/apps/web/src/ducts/proto/e/screen.tsx`, `ducts/sheet/view.tsx`, `shell/mount-timeline.tsx`, and `shell/mount-verbs.tsx`; remove the stale `ducts/proto/e/preview-lines.tsx` allowance only with structural replacement (`kit-census.guard.test.ts`, `nav-list-kit`).
+
 - An "indirectly hovered" tier, one step lighter than hovered (kaitpw 2026-11-02): marks every place the hovered thing also appears (list row, picture, card).
 - The picture seam (Decided 2026-10-28), after `3a0be1cd` (/ducts and the fan sheet mount `scene/picture/` `Picture`):
   - live proof on Chadds: selection, orbit pivot, group hover, the context control and the layer picker on both views;
