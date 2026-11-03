@@ -1,4 +1,4 @@
-import { inputsFor, TEST_FIRM } from "./test-inputs.ts";
+import { inputsFor, TEST_FIRM, TEST_SLOTS } from "./test-inputs.ts";
 /**
  * The path engine, deterministic. Synthetic: the kernel's independently computed network
  * (price-leg.test.ts, handcalc.py totals T6/T8) hung off a roster fan with a return run; a
@@ -1406,10 +1406,7 @@ it("model fan flow conflict names its slot and the terminal sum", () => {
     .find((n) => n.id === 100)!
     .facts.push({ key: "fanFlow", value: 1200, unit: "cfm", provenance: "designer-stated" });
   snap.slots = {
-    fanStatic: "",
-    componentDrop: "",
-    fittingCoefficient: "",
-    terminalFlow: "",
+    ...TEST_SLOTS,
     fanFlow: "PE_M_Fan_AirFlow",
   };
   const sheet = buildSheet({

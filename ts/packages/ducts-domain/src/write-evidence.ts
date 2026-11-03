@@ -98,7 +98,7 @@ const DuctSystem = (v: DuctsSnapshotWalk.Res.DuctSystem) => ({
   ...pick(v, "id", "name", "classification", "isWellConnected", "baseEquipmentId", "baseEquipmentConnector", "criticalPathLossInWg", "criticalPath"),
   sections: set(v.sections.map(DuctSection))
 });
-const DuctParameterSlots = (v: DuctsSnapshotWalk.Res.DuctParameterSlots) => ({
+const DuctParameterSlots = (v: DuctsSnapshotWalk.Res.DuctParameterSlotOverrides) => ({
   ...pick(v, "fanStatic", "fanFlow", "componentDrop", "terminalDrop", "fittingCoefficient", "terminalFlow")
 });
 const DuctLossStore = (v: DuctsSnapshotWalk.Res.DuctLossStore) => ({

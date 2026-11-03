@@ -14,6 +14,7 @@ import { withHealth } from "./sheet/health.fixture.ts";
 import { survey } from "./survey.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
+import { TEST_SLOTS } from "./sheet/test-inputs.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
@@ -109,13 +110,7 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
     issues,
     layers: [],
     systems: [],
-    slots: {
-      fanStatic: "",
-      fanFlow: "",
-      componentDrop: "",
-      fittingCoefficient: "",
-      terminalFlow: "",
-    },
+    slots: { ...TEST_SLOTS },
   };
 };
 const staging = (id: string, verdict: "ignore" | "connect"): DuctsRouteDocument =>

@@ -5,8 +5,18 @@
  */
 import type { DuctsFirm, DuctsInputs, DuctUnitKind } from "@pe/agent-contracts";
 import { catalogLinkKey } from "../catalog.ts";
+import type { DuctSnapshot } from "../types.ts";
 import type { SheetSnapshot } from "./build.ts";
 import { END_KEY, FITTING_DROP_CELL, JOIN_KEY, resolveInputs, type WorkLayer } from "./inputs.ts";
+
+export const TEST_SLOTS: DuctSnapshot["slots"] = {
+  fanStatic: "",
+  fanFlow: "",
+  componentDrop: "",
+  terminalDrop: "PE_M_Grd_ExternalStaticPressure",
+  fittingCoefficient: "",
+  terminalFlow: "",
+};
 
 export const TEST_FIRM: DuctsFirm = {
   version: "test",
