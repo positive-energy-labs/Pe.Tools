@@ -54,6 +54,7 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-09-09, the claim that document keys and receipts alone prevent every stale read or duplicate mutation: keys separate open lifetimes; Effect refresh orders reads within one lifetime; host admission and request identity govern retries.
 
 ## Owed
+- Superseded native reads are not cancelled in Revit (FALSIFIED live at 3d0c1f04, `.artifacts/accept/u2-regate-3d0c1f04/REPORT.md` item 7): the browser aborts, but the host never sees the request close, so `call-route.ts` `sharedRead` never sends `op.cancel`; a changed-mind Read detailed still costs the full read (Chadds SA 7: 66.7 s, +5.6 GiB retained). Fix: detect `close`/`aborted` on the real Node request/socket through the dev proxy and the packaged server, with a live test; home is ADR 0029 phase 5 NativeReads (host).
 
 - Decide receipt rendering for `ducts.apply.preview`, `ducts.assign-fan.preview`, `ducts.heal.preview`, `revit.apply.parameter-links.preview`, `revit.catalog.electrical-circuits.roster`, `revit.detail.electrical-circuits.walk`, and `rooms.roster` (`action-authority.guard.test.ts`, renderer or explicit raw receipt decision).
 - Move `ts/apps/web/src/revit/element-menu.tsx` native submissions through the observation-scoped kernel door (`host-door.guard.test.ts`, host door bypasses can only shrink).
