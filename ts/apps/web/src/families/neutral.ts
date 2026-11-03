@@ -16,7 +16,10 @@ import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/ro
 import { familiesReads } from "../../../../packages/mcps/src/shared/families-client";
 
 // Host admission consumes this module without loading the browser pane or sources.
-export const familiesScopeId = '["families","draft"]';
+const scopeSchema = z.custom<import("../../../../packages/agent-contracts/src/route-kernel-page").IdentityId<"local">>(
+  value => value === '["families","draft"]',
+);
+export const familiesScopeId = scopeSchema.parse('["families","draft"]');
 const empty = { page: [], work: [], readings: [] } as const;
 const retained = { evidence: "scope", resource: "scope" } as const;
 const workKeys = ["scope", "cells", "patch", "excluded", "takenAt"] as const;
@@ -170,7 +173,7 @@ export const familiesData = {
   observe: [],
 } as const satisfies RouteGraphJson;
 export const familiesSchemas = {
-  subject: z.literal(familiesScopeId).nullable(),
+  subject: scopeSchema.nullable(),
   scopes: z.array(z.object({ id: z.string(), label: z.string() })),
   work: familiesRouteState.schema,
   edit: z.object({
