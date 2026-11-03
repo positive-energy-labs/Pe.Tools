@@ -90,14 +90,15 @@ export function createRouteShell(services: KernelServices) {
       owner.enter({ target: null, work: null }, initial.value);
       const ports = createPagePorts(route.data, { ...owner, readPage: () => owner.read()!.page });
       const environmentIssuer = createRouteEnvironmentIssuer();
+      const generations = new Map<string, number>();
       const plan = createAdmittedReadingPlan({
         route,
         issuer: environmentIssuer,
-        key: {
+        key: (id) => ({
           processIncarnation: "application",
           documentLifetime: "none",
-          freshnessGeneration: 0,
-        },
+          freshnessGeneration: generations.get(id) ?? 0,
+        }),
       });
       let closed = false;
       const listeners = new Set<() => void>();
@@ -291,6 +292,7 @@ export function createRouteShell(services: KernelServices) {
         page: ports.page as PagePort<G, S>,
         controls: ports.controls as FieldControls<G, S>,
         subscribe: (listener: () => void) => {
+          if (closed) return () => {};
           listeners.add(listener);
           return () => {
             listeners.delete(listener);
@@ -302,8 +304,14 @@ export function createRouteShell(services: KernelServices) {
           resolve();
           if (id !== undefined && !Object.hasOwn(route.data.readings, id))
             throw Error(`Unknown reading: ${id}`);
-          if (id !== undefined) demanded.add(id);
-          for (const key of active.keys()) if (id === undefined || key === id) retire(key);
+          const refresh = (key: string) => {
+            demanded.add(key);
+            generations.set(key, (generations.get(key) ?? 0) + 1);
+            retire(key);
+            for (const dependency of route.data.readings[key]!.deps.readings) refresh(dependency);
+          };
+          if (id === undefined) for (const key of Array.from(active.keys())) refresh(key);
+          else refresh(id);
           schedule();
         },
         read(pane: string) {

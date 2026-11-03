@@ -246,17 +246,21 @@ function locationPort(search = "") {
 }
 function transports() {
   const frames: ((value: unknown) => void)[] = [];
+  const keys: number[] = [];
   const releases = vi.fn();
   const unsubscribes = vi.fn();
   const services: KernelServices = {
     reads: {
       lifetime: "read",
-      acquire: (request) => ({
-        lifetime: "read",
-        key: request.key,
-        release: releases,
-        read: () => ({ status: "pending", current: false, reason: "Waiting" }),
-      }),
+      acquire: (request) => {
+        keys.push(request.key.freshnessGeneration);
+        return {
+          lifetime: "read",
+          key: request.key,
+          release: releases,
+          read: () => ({ status: "pending", current: false, reason: "Waiting" }),
+        };
+      },
     },
     readings: {
       lifetime: "subscription",
@@ -268,7 +272,7 @@ function transports() {
     clock: { lifetime: "read", now: Date.now },
     availability: {},
   };
-  return { services, frames, releases, unsubscribes };
+  return { services, frames, releases, unsubscribes, keys };
 }
 const ready = (value: string) => ({ status: "ready", current: true, value, hash: value });
 const closes: (() => void)[] = [];
@@ -286,7 +290,8 @@ test("composition rejects stale refresh/page frames and disposes all delivery", 
   mount.subscribe(changed);
   t.frames[0]!(ready("first"));
   expect(mount.read("main")).toMatchObject({ props: { children: "Label first" } });
-  mount.refresh("notes");
+  mount.refresh("label");
+  expect(t.keys).toEqual([0, 1]);
   t.frames[1]!(ready("second"));
   t.frames[0]!(ready("stale"));
   expect(mount.read("main")).toMatchObject({ props: { children: "Label second" } });

@@ -34,7 +34,9 @@ function freeze<T>(value: T): T {
 export function createAdmittedReadingPlan(options: {
   route: AdmittedRoute;
   issuer: RouteEnvironmentIssuer;
-  key: Omit<ResolvedReadKey, "op" | "sortedKeyInput">;
+  key:
+    | Omit<ResolvedReadKey, "op" | "sortedKeyInput">
+    | ((id: string) => Omit<ResolvedReadKey, "op" | "sortedKeyInput">);
 }) {
   const registry = createAdmittedRouteRegistry();
   const registration = registry.register(options.route);
@@ -65,7 +67,11 @@ export function createAdmittedReadingPlan(options: {
     const entry = linked.entries[reading.entry]!;
     const args = entry.input.parse(input);
     const descriptor = options.issuer.mintRead(
-      { ...options.key, op: reading.entry, sortedKeyInput: canonicalEnvironmentInput(args) },
+      {
+        ...(typeof options.key === "function" ? options.key(id) : options.key),
+        op: reading.entry,
+        sortedKeyInput: canonicalEnvironmentInput(args),
+      },
       entry.output,
       options.route,
     );
