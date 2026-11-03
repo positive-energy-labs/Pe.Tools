@@ -18,6 +18,7 @@ export function createAdmittedWork(
   route: AdmittedRoute,
   owner: Owner,
   door: WorkJournalDoor | undefined,
+  requireWritable: () => void,
   notify: () => void,
   restoreHistory: (
     key: WorkScope["key"],
@@ -31,6 +32,10 @@ export function createAdmittedWork(
     key: WorkScope["key"],
   ) => Map<string, import("./application-work-registry").RefusedWorkEdit>,
 ) {
+  const submitWork: WorkJournalDoor["submitWork"] = (...args) => {
+    requireWritable();
+    return door!.submitWork(...args);
+  };
   const localRefusals = new Map<string, import("./application-work-registry").RefusedWorkEdit>();
   const refusals = (key = scope?.key) => (key && refusalsFor ? refusalsFor(key) : localRefusals);
   let stop = () => {};
@@ -130,11 +135,13 @@ export function createAdmittedWork(
       press,
       label,
     });
+    // Admit synchronously: observation disposal cannot revoke a submitted write.
+    const observation = submitWork(original, request, basis);
     return completion<WorkWriteOutcome>(
       { kind: "pending" },
       () =>
         new Promise((resolve) => {
-          door.submitWork(original, request, basis).subscribe(
+          observation.subscribe(
             (value) => {
               if (value.kind === "pending") return;
               if (value.kind === "accepted")
@@ -163,7 +170,7 @@ export function createAdmittedWork(
     if (!scope || !door || !ready || !owner.current(invocation)) throw Error("Work unavailable");
     const original = scope;
     return new Promise((resolve) => {
-      door.submitWork(original, request, invocation).subscribe(
+      submitWork(original, request, invocation).subscribe(
         (outcome) => {
           if (outcome.kind === "pending") return;
           if (outcome.kind === "accepted") {

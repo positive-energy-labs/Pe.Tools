@@ -121,6 +121,14 @@ export class ReviewRefusal extends Error {
     this.name = "ReviewRefusal";
   }
 }
+export class PlaceWriteRefusal extends Error {
+  readonly kind = "refused";
+  readonly reason = "place-read-only";
+  constructor() {
+    super("Place is not writable");
+    this.name = "PlaceWriteRefusal";
+  }
+}
 type PresentationEvidence = Readonly<{
   page: Readonly<Record<string, unknown>>;
   work: Readonly<Record<string, unknown>>;
@@ -467,6 +475,7 @@ export function createRouteShell(
         route,
         owner,
         door,
+        () => action(),
         () => schedule(),
         (key, state) => {
           entryFor(key).restore(state);
@@ -940,7 +949,7 @@ export function createRouteShell(
         if (drawing) throw Error("Admitted action cannot run during render");
         if (presenting) throw Error("Admitted action cannot run during presentation");
         if (closed) throw Error("Mount closed");
-        if (!visible || !writable) throw Error("Place is not writable");
+        if (!visible || !writable) throw new PlaceWriteRefusal();
       };
       const place = (
         pane: string,
