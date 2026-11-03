@@ -87,6 +87,7 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "focus",
   "take",
   "salvage",
+  "migration",
 ]);
 
 /** Application services are installed once. Routes supply only admission and location. */
@@ -123,7 +124,8 @@ export function createRouteShell(services: KernelServices) {
           throw Error(`Unsupported admitted mount body slot: ${body.slot}`);
         }
       }
-      // TODO: Register admitted migrations with the host RouteWorkspace before admitting migration.
+      // Migration bodies execute only in host admission. The Work feed proves registration
+      // and finishes persistent migration before exposing Work; no body or schema is sent here.
       // Result landing owns presentation for verbs without a sealed ModelWrite preview.
       for (const [id, verb] of Object.entries(route.data.verbs)) {
         if (
@@ -1043,6 +1045,7 @@ export function createRouteShell(services: KernelServices) {
         commandProblems: () =>
           [...landings.values()].filter((result) => result.kind === "result-undecodable"),
         workProblem: work.problem,
+        workFailure: work.failure,
         history,
         journal: () => journal()?.read() ?? null,
         journalRefusal: () =>

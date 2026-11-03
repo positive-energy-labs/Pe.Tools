@@ -22,12 +22,13 @@ afterEach(() => {
   roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true }));
 });
 async function route(migrate?: (doc: unknown) => unknown) {
+  const migrations: Record<string, string> = migrate ? { "1": "upgrade" } : {};
   const data = {
     ...builtinModule.data,
     work: {
       ...builtinModule.data.work,
       version: migrate ? 2 : 1,
-      migrations: migrate ? { "1": "upgrade" } : {},
+      migrations,
     },
   };
   const module = {

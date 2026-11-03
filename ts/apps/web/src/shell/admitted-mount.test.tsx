@@ -764,6 +764,7 @@ test("review uses accepted Work, becomes stale on stream edit, and subject enter
     store.submitWork(
       {
         route: "note",
+        fingerprint: route.workFingerprint,
         key: { binding: "workspace", route: "note", target: null, work: "default" },
         target: null,
         subject: null,
@@ -1452,6 +1453,7 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
     "focus",
     "take",
     "salvage",
+    "migration",
   ]);
   const run = vi.fn((snapshot) => (snapshot.current ? [{ id: null, label: snapshot.value }] : []));
   const route = await admitted(false, false, {
@@ -1524,7 +1526,7 @@ test("transition refuses a re-entrant evidence change before acceptance", async 
   expect(mount.page.read().pose).toEqual({ x: 0 });
 });
 
-test("remaining slot census refuses cells, placement, presentation and migrations before acquisition", async () => {
+test("unused cell admission stays refused before acquisition", async () => {
   const empty = { page: [], work: [], readings: [] };
   const cases = [
     ...["admit"].map((key) => ({
@@ -1547,15 +1549,6 @@ test("remaining slot census refuses cells, placement, presentation and migration
           : { unsupported: { slot: `cells.test.${key}`, kind: key, source, run: () => [] } }),
       },
     })),
-    {
-      data: {
-        capabilities: ["work"],
-        work: { route: "note", schema: "pose", version: 2, migrations: { 1: "unsupported" } },
-      },
-      bodies: {
-        unsupported: { slot: "work.migrations.1", kind: "migration", source, run: () => ({}) },
-      },
-    },
   ];
   for (const amendment of cases) {
     const t = transports();
@@ -2151,4 +2144,28 @@ test("mount admits absent output only when the submitted schema permits undefine
   f.deliver({ kind: "accepted-native", outcome: "committed", receiptId: "r" });
   expect(f.mount.page.read().query).toBe("outputless");
   expect(f.land.mock.calls[0]![0]).toBeUndefined();
+});
+
+test("migration bodies stay on the host; mount exposes typed registration refusal without reopening an old tab", async () => {
+  const migrate = vi.fn(() => { throw Error("must never execute in browser"); });
+  const route = await admitted(false, false, {
+    data: { capabilities: ["work"], workSubject: "note", work: { route: "note", schema: "pose", version: 2, migrations: { 1: "upgrade" } } },
+    bodies: { upgrade: { slot: "work.migrations.1", kind: "migration", source, run: migrate } },
+  });
+  const failure = { kind: "registration-mismatch" as const, routeKey: route.data.key, expected: route.workFingerprint, received: route.workFingerprint };
+  const open = vi.fn<WorkJournalDoor["open"]>((scope) => ({ subscribe(deliver, end) {
+    expect(scope.fingerprint).toBe(route.workFingerprint);
+    deliver({ kind: "pending" }); deliver({ kind: "failed", failure }); end(); return () => {};
+  } }));
+  const door: WorkJournalDoor = { lifetime: "subscription", open, submitWork: () => { throw Error("unavailable"); },
+    submit: () => { throw Error("unavailable"); }, accepted: () => ({ kind: "pending" }) };
+  const location = locationPort();
+  const mount = createRouteShell({ ...transports().services, work: door }).mount(route, location.address);
+  closes.push(mount.close);
+  expect(mount.workFailure()).toEqual(failure);
+  expect(mount.workProblem()).toContain("Reload this tab");
+  expect(mount.work()).toBeNull();
+  location.navigate("/note?note=%5B%22note%22%2C%22B%22%5D");
+  expect(open).toHaveBeenCalledOnce();
+  expect(migrate).not.toHaveBeenCalled();
 });

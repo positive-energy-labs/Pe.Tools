@@ -6,6 +6,7 @@ import type {
   WorkScope,
   Observation,
   WorkWriteOutcome,
+  WorkFeedFailure,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import type { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
 import { canonicalEnvironmentInput } from "../../../../packages/agent-contracts/src/route-kernel-environment";
@@ -24,12 +25,14 @@ export function createAdmittedWork(
   let scope: WorkScope | undefined;
   let ready = false;
   let problem: string | null = null;
+  let failure: WorkFeedFailure | null = null;
   let reloadRequired = false;
   const sync = () => {
     const snapshot = owner.read();
     if (reloadRequired || !snapshot || snapshot.scope === scopeToken) return;
     stop();
     problem = null;
+    failure = null;
     ready = false;
     scopeToken = snapshot.scope;
     const key = snapshot.scope.identity.work;
@@ -44,15 +47,18 @@ export function createAdmittedWork(
     const capturedScope = scope;
     const token = owner.capture("work-feed");
     feedToken = token;
+    let feedEnded = false;
     stop = door.open(scope).subscribe(
       (state) => {
-        if (!owner.current(token)) return;
+        if (feedEnded || !owner.current(token)) return;
         if (state.kind === "pending" || state.kind === "gap") {
           ready = false;
           notify();
         }
         if (state.kind === "failed") {
           ready = false;
+          feedEnded = true;
+          failure = state.failure;
           reloadRequired = state.failure.kind === "registration-mismatch";
           problem = workFeedFailureMessage(state.failure);
           notify();
@@ -66,6 +72,7 @@ export function createAdmittedWork(
             hash: canonicalEnvironmentInput(state.snapshot.value),
           });
           problem = null;
+          failure = null;
           ready = result.kind === "published" || result.kind === "duplicate";
           notify();
         }
@@ -151,6 +158,7 @@ export function createAdmittedWork(
     submit,
     ready: () => ready,
     problem: () => problem,
+    failure: () => failure,
     close() {
       ready = false;
       stop();
