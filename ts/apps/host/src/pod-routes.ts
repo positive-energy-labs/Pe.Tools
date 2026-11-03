@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { z } from "zod";
 import { type PodRouteDescriptor } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
+import type { HostAdmittedRoute } from "../../../packages/agent-contracts/src/host-route-admission.ts";
 import type { createPackageLifecycle } from "./package-lifecycle.ts";
 import { productRouteTrustPath } from "./product-paths.ts";
 import { readJson, writeArtifact } from "./page-artifacts.ts";
@@ -12,7 +13,7 @@ import { admitPodArtifact, verifyPodArtifact } from "./pod-artifact.ts";
 /** Builtin source admission and verified Pod-byte admission share this host-owned door.
  * The caller supplies the exact authenticated handle, never a browser schema or migration. */
 export function registerAdmittedHostRoute(
-  route: contracts.AdmittedRoute,
+  route: contracts.AdmittedRoute | HostAdmittedRoute,
   workspace: RouteWorkspace,
 ) {
   return workspace.registerAdmitted(route);

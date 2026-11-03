@@ -20,12 +20,17 @@ export interface HostAdmittedRoute {
 export interface HostRouteModule {
   readonly data: RouteGraphJson;
   readonly schemas: Readonly<Record<string, z.ZodType>>;
-  readonly bodies: Readonly<Record<string, {
-    readonly slot: string;
-    readonly kind: "migration";
-    readonly source: { readonly module: string; readonly export: string };
-    readonly run: (doc: unknown) => unknown;
-  }>>;
+  readonly bodies: Readonly<
+    Record<
+      string,
+      {
+        readonly slot: string;
+        readonly kind: "migration";
+        readonly source: { readonly module: string; readonly export: string };
+        readonly run: (doc: unknown) => unknown;
+      }
+    >
+  >;
 }
 export type HostRouteAdmission =
   | { readonly ok: true; readonly route: HostAdmittedRoute }
@@ -34,4 +39,39 @@ export interface HostRouteAdmissionPort {
   /** Decode the unchanged declaration, compare it to the verified builtin closure,
    * and require every host slot. UI-only slots supply no host bindings or authority. */
   admitHost(module: HostRouteModule): HostRouteAdmission;
+}
+
+import { z as hostZ } from "zod";
+import { RouteGraphJson as hostGraphSchema } from "./route-kernel-data.ts";
+const hostModuleSchema = hostZ.strictObject({
+  data: hostGraphSchema,
+  schemas: hostZ.record(
+    hostZ.string(),
+    hostZ.custom<z.ZodType>((v) => v instanceof hostZ.ZodType),
+  ),
+  bodies: hostZ.record(
+    hostZ.string(),
+    hostZ.strictObject({
+      slot: hostZ.string(),
+      kind: hostZ.literal("migration"),
+      source: hostZ.strictObject({ module: hostZ.string().min(1), export: hostZ.string().min(1) }),
+      run: hostZ.custom<(doc: unknown) => unknown>((v) => typeof v === "function"),
+    }),
+  ),
+});
+/** Capture exports before fingerprint verification yields. Never freeze caller-owned Zod internals. */
+export function captureHostModule(input: unknown): HostRouteModule {
+  const value = hostModuleSchema.parse(input);
+  return Object.freeze({
+    data: structuredClone(value.data),
+    schemas: Object.freeze({ ...value.schemas }),
+    bodies: Object.freeze(
+      Object.fromEntries(
+        Object.entries(value.bodies).map(([id, body]) => [
+          id,
+          Object.freeze({ ...body, source: Object.freeze({ ...body.source }) }),
+        ]),
+      ),
+    ),
+  });
 }

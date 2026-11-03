@@ -1,8 +1,8 @@
 import {
-  createAdmittedRouteRegistry,
-  resolveRouteBindings,
+  captureAdmittedHostBindings,
   type AdmittedRoute,
 } from "../../agent-contracts/src/route-module.ts";
+import type { HostAdmittedRoute } from "../../agent-contracts/src/host-route-admission.ts";
 import type { RouteFingerprint } from "../../agent-contracts/src/route-kernel-admission.ts";
 import type {
   WorkAdmission,
@@ -115,13 +115,12 @@ export class RouteWorkspace {
   }
 
   /** Host admission owns migration bodies. No browser-supplied body or schema crosses the wire. */
-  registerAdmitted(route: AdmittedRoute): {
+  registerAdmitted(route: AdmittedRoute | HostAdmittedRoute): {
     ready: Promise<WorkFeedFailure | null>;
     close(): void;
   } {
-    const registry = createAdmittedRouteRegistry();
-    const receipt = registry.register(route);
-    const bindings = resolveRouteBindings(registry, route)!;
+    const receipt = captureAdmittedHostBindings(route);
+    const bindings = receipt.bindings;
     const work = route.data.work;
     if (!work) {
       receipt.deactivate();
@@ -509,8 +508,18 @@ export class RouteWorkspace {
         ...(recorded ? { step: recorded.write.step, restoreOf: recorded.write.revision } : {}),
         base: envelope.revision,
         revision: landed.envelope.revision,
-        patches: routeDocDelta(envelope.doc, landed.envelope.doc),
-        inverse: routeDocDelta(landed.envelope.doc, envelope.doc),
+        patches: routeDocDelta(
+          envelope.doc,
+          landed.envelope.doc,
+          [],
+          patches.filter((p) => p.path.length > 1).map((p) => String(p.path[0])),
+        ),
+        inverse: routeDocDelta(
+          landed.envelope.doc,
+          envelope.doc,
+          [],
+          patches.filter((p) => p.path.length > 1).map((p) => String(p.path[0])),
+        ),
         undoable: true,
         at: Date.now(),
       };

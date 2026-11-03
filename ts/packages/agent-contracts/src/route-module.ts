@@ -1,5 +1,12 @@
 import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
 import type { SchemaTable } from "./route-kernel-page.ts";
+import {
+  captureHostModule,
+  type HostRouteModule,
+  type HostRouteAdmission,
+  type HostRouteAdmissionPort,
+  type HostAdmittedRoute,
+} from "./host-route-admission.ts";
 import type { RouteModule as KernelModule, RouteBodyRender } from "./route-kernel-admission.ts";
 import { bare, manyCodec } from "./route-field.ts";
 import { catalogEntries } from "./pe-api.ts";
@@ -260,7 +267,8 @@ const sourceEvidence = new WeakMap<
   object,
   {
     module: unknown;
-    workOwner?: AdmittedRoute;
+    workOwner?: AdmittedRoute | HostAdmittedRoute;
+    host?: boolean;
     closure: BuiltinClosure;
     fingerprint: string;
     catalog: readonly CatalogLink[];
@@ -277,7 +285,8 @@ export function createBuiltinRouteInventory<
     string,
     {
       readonly module: unknown;
-      readonly workOwner?: AdmittedRoute;
+      readonly workOwner?: AdmittedRoute | HostAdmittedRoute;
+      readonly host?: boolean;
       readonly closure: { readonly envelope: BuiltinClosure; readonly fingerprint: string };
       readonly catalog: readonly CatalogLink[];
     }
@@ -287,7 +296,10 @@ export function createBuiltinRouteInventory<
     Object.entries(inventory).map(([key, entry]) => {
       const receipt: SourceRouteAdmissionEvidence = Object.freeze({ source: "builtin-closure" });
       sourceEvidence.set(receipt, {
-        module: routeBindingSchema.parse(entry.module),
+        module: entry.host
+          ? captureHostModule(entry.module)
+          : routeBindingSchema.parse(entry.module),
+        host: entry.host,
         workOwner: entry.workOwner,
         closure: structuredClone(entry.closure.envelope),
         fingerprint: entry.closure.fingerprint,
@@ -308,7 +320,7 @@ export function createBuiltinRouteInventory<
     },
   });
 }
-export interface CheckedRouteAdmission extends RouteAdmissionPort {
+export interface CheckedRouteAdmission extends RouteAdmissionPort, HostRouteAdmissionPort {
   admit<
     G extends KernelGraph,
     S extends SchemaTable,
@@ -437,16 +449,19 @@ export class AdmittedRoute<
     let envelope: RouteFingerprintInput | undefined;
     let fingerprint: RouteFingerprint | undefined;
     let loadedBindings: RouteBindings | undefined;
-    let workOwner =
+    const linkedWorkOwner =
       "source" in evidence ? sourceEvidence.get(evidence)?.workOwner : evidence.workOwner;
+    let workOwner = linkedWorkOwner instanceof AdmittedRoute ? linkedWorkOwner : undefined;
     let source: BuiltinClosure | undefined;
+    let hostModule: ReturnType<typeof captureHostModule> | undefined;
     let catalog: readonly CatalogLink[] = [];
     try {
       if ("source" in evidence) {
         const owned = sourceEvidence.get(evidence);
         if (!owned) throw Error("Builtin evidence requires the build-owned inventory");
         source = owned.closure;
-        loadedBindings = routeBindingSchema.parse(owned.module);
+        if (owned.host) hostModule = captureHostModule(owned.module);
+        else loadedBindings = routeBindingSchema.parse(owned.module);
         catalog = owned.catalog;
         fingerprint = await builtinClosureFingerprint(source);
         if (fingerprint !== owned.fingerprint) throw Error("Builtin closure fingerprint mismatch");
@@ -511,6 +526,20 @@ export class AdmittedRoute<
       );
     }
     const inspect = (module: unknown) => {
+      if (hostModule)
+        return {
+          ok: false as const,
+          diagnostics: [
+            routeDiagnostic(
+              {},
+              "module",
+              "",
+              "web admission",
+              "Host evidence cannot admit web bindings",
+              "identity",
+            ),
+          ],
+        };
       if (diagnostics.length) return { ok: false as const, diagnostics };
       const input = kernelZ
         .object({ data: kernelZ.unknown(), artifact: kernelZ.unknown().optional() })
@@ -648,6 +677,39 @@ export class AdmittedRoute<
       }
     };
     return {
+      admitHost(module) {
+        if (diagnostics.length) return { ok: false, diagnostics };
+        if (!source || !fingerprint || !hostModule)
+          return {
+            ok: false,
+            diagnostics: [
+              routeDiagnostic(
+                {},
+                "module",
+                "",
+                "host builtin evidence",
+                "Host admission requires a neutral builtin inventory",
+                "identity",
+              ),
+            ],
+          };
+        try {
+          return admitHostProjection(
+            captureHostModule(module),
+            hostModule,
+            source,
+            fingerprint,
+            linkedWorkOwner,
+          );
+        } catch (error) {
+          return {
+            ok: false,
+            diagnostics: [
+              routeDiagnostic({}, "module", "", "neutral host module", String(error), "schema"),
+            ],
+          };
+        }
+      },
       admit<
         G extends KernelGraph,
         S extends SchemaTable,
@@ -811,4 +873,165 @@ function sameLoadedBindings(actual: RouteBindings, loaded: RouteBindings): boole
         canonicalRouteJson(body.source) === canonicalRouteJson(loaded.bodies[id]!.source),
     )
   );
+}
+
+const hostBindings = new WeakMap<HostAdmittedRoute, HostRouteModule>();
+function admitHostProjection(
+  module: HostRouteModule,
+  captured: HostRouteModule,
+  closure: BuiltinClosure,
+  fingerprint: RouteFingerprint,
+  owner?: AdmittedRoute | HostAdmittedRoute,
+): HostRouteAdmission {
+  const decoded = decodeRouteGraph(module.data);
+  if (!decoded.ok) return decoded;
+  const data = decoded.data;
+  const errors: RouteDiagnostic[] = [];
+  const fail = (path: string, message: string) =>
+    errors.push(routeDiagnostic(data, path, "", "neutral host binding", message));
+  if (canonicalRouteJson(data) !== canonicalRouteJson(closure.data))
+    fail("data", "Neutral declaration differs from the verified builtin closure");
+  if (canonicalRouteJson(data) !== canonicalRouteJson(captured.data))
+    fail("data", "Neutral declaration changed after capture");
+  for (const table of ["schemas", "bodies"] as const) {
+    if (
+      Object.keys(module[table]).sort().join("\n") !==
+      Object.keys(captured[table]).sort().join("\n")
+    )
+      fail(table, "Bindings differ from captured exports");
+  }
+  for (const [id, schema] of Object.entries(module.schemas))
+    if (captured.schemas[id] !== schema)
+      fail(`schemas.${id}`, "Schema differs from captured exports");
+  for (const [id, body] of Object.entries(module.bodies)) {
+    const original = captured.bodies[id];
+    if (
+      !original ||
+      original.run !== body.run ||
+      original.slot !== body.slot ||
+      original.kind !== body.kind ||
+      canonicalRouteJson(original.source) !== canonicalRouteJson(body.source)
+    )
+      fail(`bodies.${id}`, "Body differs from captured exports");
+  }
+  const work = data.work;
+  let resolvedWork: HostAdmittedRoute["resolvedWork"];
+  let workFingerprint = `builtin-closure:${fingerprint}` as RouteFingerprint;
+  if (work && !data.capabilities.includes("work")) fail("work", "Work capability is missing");
+  if (!work && data.capabilities.includes("work")) fail("work", "Work declaration is missing");
+  if (work?.route !== undefined && work.route !== data.key) {
+    if (work.schema) fail("work.schema", "Presenter cannot redeclare owner schema");
+    if (
+      !owner ||
+      (!hostBindings.has(owner as HostAdmittedRoute) && !admittedBindings.has(owner)) ||
+      owner.data.key !== work.route ||
+      owner.resolvedWork?.spec.route !== work.route
+    )
+      fail("work.route", "Work owner is not admitted");
+    else if (
+      closure.workOwner?.route !== work.route ||
+      closure.workOwner.fingerprint !== owner.workFingerprint
+    )
+      fail("work.route", "Linked owner fingerprint differs");
+    else {
+      resolvedWork = owner.resolvedWork;
+      workFingerprint = owner.workFingerprint;
+    }
+  } else if (work) {
+    if (!work.schema) fail("work.schema", "Owner must declare its Work schema");
+    else {
+      const schema = module.schemas[work.schema];
+      if (!(schema && bare(schema) instanceof kernelZ.ZodObject))
+        fail("work.schema", "Work needs a finite object schema");
+      else
+        resolvedWork = { spec: work as Extract<KernelGraph["work"], { schema: string }>, schema };
+      for (let age = 1; age < work.version; age++)
+        if (!Object.hasOwn(work.migrations, String(age)))
+          fail(`work.migrations.${age}`, "Incomplete migration chain");
+      for (const [age, id] of Object.entries(work.migrations)) {
+        const body = module.bodies[id];
+        if (Number(age) >= work.version)
+          fail(`work.migrations.${age}`, "Migration age must precede current version");
+        if (
+          !body ||
+          body.kind !== "migration" ||
+          body.slot !== `work.migrations.${age}` ||
+          typeof body.run !== "function"
+        )
+          fail(`work.migrations.${age}`, "Missing or misbound host migration");
+      }
+    }
+  }
+  for (const [id, body] of Object.entries(module.bodies))
+    if (
+      !work?.schema ||
+      !Object.entries(work.migrations).some(
+        ([age, ref]) => ref === id && body.slot === `work.migrations.${age}`,
+      )
+    )
+      fail(`bodies.${id}`, "Undeclared host body");
+  if (errors.length) return { ok: false, diagnostics: errors };
+  // Only this factory, after source verification and host linking, asserts the nominal type.
+  const route = Object.freeze({
+    data: freezeData(structuredClone(data)),
+    fingerprint,
+    workFingerprint,
+    resolvedWork,
+  }) as HostAdmittedRoute;
+  hostBindings.set(
+    route,
+    Object.freeze({
+      ...captured,
+      schemas: Object.freeze(
+        Object.fromEntries(
+          Object.entries(captured.schemas).map(([id, schema]) => [id, schema.clone()]),
+        ),
+      ),
+    }),
+  );
+  return { ok: true, route };
+}
+export function createHostAdmittedRouteRegistry() {
+  const active = new Map<HostAdmittedRoute, number>();
+  const retired = new WeakSet<HostAdmittedRoute>();
+  return {
+    resolve(route: HostAdmittedRoute) {
+      return active.has(route) ? route : null;
+    },
+    register(route: HostAdmittedRoute) {
+      if (!hostBindings.has(route) || retired.has(route))
+        throw Error("Foreign, copied or retired host admission");
+      active.set(route, (active.get(route) ?? 0) + 1);
+      let live = true;
+      return {
+        deactivate() {
+          if (!live) return;
+          live = false;
+          const count = active.get(route)! - 1;
+          if (count) active.set(route, count);
+          else {
+            active.delete(route);
+            retired.add(route);
+          }
+        },
+      };
+    },
+  };
+}
+/** Workspace registration authenticates either authority, without granting host handles web authority. */
+export function captureAdmittedHostBindings(route: AdmittedRoute | HostAdmittedRoute) {
+  if (hostBindings.has(route as HostAdmittedRoute)) {
+    const registry = createHostAdmittedRouteRegistry();
+    const receipt = registry.register(route as HostAdmittedRoute);
+    return {
+      bindings: hostBindings.get(route as HostAdmittedRoute)!,
+      deactivate: receipt.deactivate,
+    };
+  }
+  const registry = createAdmittedRouteRegistry();
+  const receipt = registry.register(route as AdmittedRoute);
+  return {
+    bindings: resolveRouteBindings(registry, route as AdmittedRoute)!,
+    deactivate: receipt.deactivate,
+  };
 }
