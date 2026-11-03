@@ -195,37 +195,37 @@ export function workWriteBoundary(
       derivedContext.admission.id = !previewOnly && preview ? preview.id : ctx.admission.id;
       const bound = await executor.bind(derivedContext);
       const prepare = async () => {
-          const value = executor.prepared.parse(await bound.prepare?.());
-          if (!previewOnly && !preview)
-            throw refused("Preview the current Work first", "preview.stale");
-          const dependencies = [...ctx.consumed, ...(bound.consumes ?? [])].filter(
-            (item) => item.kind !== "document-mark",
+        const value = executor.prepared.parse(await bound.prepare?.());
+        if (!previewOnly && !preview)
+          throw refused("Preview the current Work first", "preview.stale");
+        const dependencies = [...ctx.consumed, ...(bound.consumes ?? [])].filter(
+          (item) => item.kind !== "document-mark",
+        );
+        const projection = project(value);
+        const seal = writeSeal(
+          projection.request,
+          input,
+          work,
+          { target, process: observed.process },
+          dependencies,
+          projection.evidence,
+        );
+        const previousSeal =
+          preview?.state === "succeeded"
+            ? (preview.result as { seal?: Record<string, unknown> }).seal
+            : undefined;
+        if (!previewOnly && canonicalRouteInput(previousSeal) !== canonicalRouteInput(seal)) {
+          const changed = Object.keys(seal).filter(
+            (key) =>
+              canonicalRouteInput(previousSeal?.[key]) !==
+              canonicalRouteInput(seal[key as keyof typeof seal]),
           );
-          const projection = project(value);
-          const seal = writeSeal(
-            projection.request,
-            input,
-            work,
-            { target, process: observed.process },
-            dependencies,
-            projection.evidence,
+          throw refused(
+            `Preview changed; preview the current Work and dependencies again (${changed.join(", ")})`,
+            "preview.stale",
           );
-          const previousSeal =
-            preview?.state === "succeeded"
-              ? (preview.result as { seal?: Record<string, unknown> }).seal
-              : undefined;
-          if (!previewOnly && canonicalRouteInput(previousSeal) !== canonicalRouteInput(seal)) {
-            const changed = Object.keys(seal).filter(
-              (key) =>
-                canonicalRouteInput(previousSeal?.[key]) !==
-                canonicalRouteInput(seal[key as keyof typeof seal]),
-            );
-            throw refused(
-              `Preview changed; preview the current Work and dependencies again (${changed.join(", ")})`,
-              "preview.stale",
-            );
-          }
-          return { input, value, seal, previewOnly, takenAt };
+        }
+        return { input, value, seal, previewOnly, takenAt };
       };
       return {
         ...bound,
@@ -253,7 +253,11 @@ export function workWriteBoundary(
             : []),
         ],
         // Seal eligibility is read-only; rederive again after consent to catch intervening changes.
-        preflight: previewOnly ? undefined : async () => { await prepare(); },
+        preflight: previewOnly
+          ? undefined
+          : async () => {
+              await prepare();
+            },
         prepare,
       };
     },

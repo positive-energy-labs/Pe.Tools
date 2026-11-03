@@ -13,17 +13,35 @@ test("a typed stale-preview refusal reaches the receipt before consent opens", a
   const authorize = vi.spyOn(control, "authorizeCommand");
   try {
     const owner = new ActionJournal(join(dir, "journal.jsonl"));
-    const entry = fixtureCommand([{ kind: "file", path: "C:/write" }], async () => null,
-      async () => { throw Error("must not execute"); });
+    const entry = fixtureCommand(
+      [{ kind: "file", path: "C:/write" }],
+      async () => null,
+      async () => {
+        throw Error("must not execute");
+      },
+    );
     const bind = entry.bind;
-    entry.bind = async ctx => ({ ...await bind(ctx), preflight: async () => {
-      throw refused("Preview the current Work first", "preview.stale");
-    } });
-    await invokeFixtureCommand(owner, { id: "no-preview", key: "test.preflight",
-      target: { kind: "host" }, input: {} }, crossingOf("agent"), entry);
+    entry.bind = async (ctx) => ({
+      ...(await bind(ctx)),
+      preflight: async () => {
+        throw refused("Preview the current Work first", "preview.stale");
+      },
+    });
+    await invokeFixtureCommand(
+      owner,
+      { id: "no-preview", key: "test.preflight", target: { kind: "host" }, input: {} },
+      crossingOf("agent"),
+      entry,
+    );
     const receipt = await owner.wait("no-preview");
-    expect(receipt).toMatchObject({ notDispatched: true, refusal: { kind: "domain", code: "preview.stale" } });
+    expect(receipt).toMatchObject({
+      notDispatched: true,
+      refusal: { kind: "domain", code: "preview.stale" },
+    });
     expect(authorize).not.toHaveBeenCalled();
     expect(receipt.consentWindow).toBeUndefined();
-  } finally { authorize.mockRestore(); await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    authorize.mockRestore();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
