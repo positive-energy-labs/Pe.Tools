@@ -147,6 +147,7 @@ test("preview exposes a derived request without running the write; changed deriv
     seal: (preview as { seal: unknown }).seal,
   });
   f.change();
+  await expect(apply.preflight!()).rejects.toMatchObject({ refusal: { code: "preview.stale" } });
   await expect(apply.prepare!()).rejects.toThrow("Preview changed");
   expect(f.run).not.toHaveBeenCalled();
 });
@@ -178,6 +179,7 @@ test("missing preview and foreign Work refuse before native execution", async ()
   const f = await fixture();
   f.apply();
   const binding = await f.executor.bind(f.ctx);
+  await expect(binding.preflight!()).rejects.toMatchObject({ refusal: { code: "preview.stale" } });
   await expect(binding.prepare!()).rejects.toThrow("Preview the current Work");
   (f.ctx.admission.input.work as { key: { open: { openId: string } } }).key.open.openId = "foreign";
   await expect(f.executor.bind(f.ctx)).rejects.toThrow("another document");

@@ -86,6 +86,8 @@ export interface CommandBinding {
   claims?: Claim[];
   effects: Footprint;
   basis?: Basis | null;
+  /** Read-only eligibility check before opening consent; preparation still rechecks after it. */
+  preflight?(): Promise<void>;
   /** Closes over already bound source facts. It runs after consent and never on resume. */
   prepare?(): Promise<unknown>;
 }

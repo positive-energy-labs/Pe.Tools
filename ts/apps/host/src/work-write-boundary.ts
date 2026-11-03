@@ -194,32 +194,7 @@ export function workWriteBoundary(
       // Reproduce generated paths and plan references from this exact preview, never a new caller payload.
       derivedContext.admission.id = !previewOnly && preview ? preview.id : ctx.admission.id;
       const bound = await executor.bind(derivedContext);
-      return {
-        ...bound,
-        effects: previewOnly ? [] : bound.effects,
-        claims: [
-          ...(bound.claims ?? []),
-          ...(!previewOnly && preview ? [{ kind: "receipt" as const, id: preview.id }] : []),
-        ],
-        consumes: [
-          ...(bound.consumes ?? []),
-          ...(!previewOnly && preview
-            ? [
-                {
-                  kind: "document-mark" as const,
-                  probe: {
-                    ref: target,
-                    takenAt:
-                      preview.state === "succeeded"
-                        ? (preview.result as { takenAt: string }).takenAt
-                        : "",
-                  },
-                  expected: true as const,
-                },
-              ]
-            : []),
-        ],
-        prepare: async () => {
+      const prepare = async () => {
           const value = executor.prepared.parse(await bound.prepare?.());
           if (!previewOnly && !preview)
             throw refused("Preview the current Work first", "preview.stale");
@@ -251,7 +226,35 @@ export function workWriteBoundary(
             );
           }
           return { input, value, seal, previewOnly, takenAt };
-        },
+      };
+      return {
+        ...bound,
+        effects: previewOnly ? [] : bound.effects,
+        claims: [
+          ...(bound.claims ?? []),
+          ...(!previewOnly && preview ? [{ kind: "receipt" as const, id: preview.id }] : []),
+        ],
+        consumes: [
+          ...(bound.consumes ?? []),
+          ...(!previewOnly && preview
+            ? [
+                {
+                  kind: "document-mark" as const,
+                  probe: {
+                    ref: target,
+                    takenAt:
+                      preview.state === "succeeded"
+                        ? (preview.result as { takenAt: string }).takenAt
+                        : "",
+                  },
+                  expected: true as const,
+                },
+              ]
+            : []),
+        ],
+        // Seal eligibility is read-only; rederive again after consent to catch intervening changes.
+        preflight: previewOnly ? undefined : async () => { await prepare(); },
+        prepare,
       };
     },
     run: async (ctx, execution) => {

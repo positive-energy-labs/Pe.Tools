@@ -1700,6 +1700,7 @@ export class ActionJournal implements ReceiptReader {
               effects: row.effects,
             });
           await gate(row, "authorize");
+          if (!retirementOnly) await binding?.preflight?.();
           const cancelled = new Promise<never>((_, reject) =>
             this.cancelWaits.set(row.id, () =>
               reject(new StepFailure("Command cancelled before authorization", 499, "refused")),
