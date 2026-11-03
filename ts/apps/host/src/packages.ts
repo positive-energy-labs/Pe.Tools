@@ -16,6 +16,48 @@ import {
 } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPodsRootPath } from "./product-paths.ts";
+import { z } from "zod";
+import { routeFingerprint } from "../../../packages/agent-contracts/src/route-module.ts";
+import type { RouteFingerprintInput } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
+
+const octets = z.array(z.number().int().min(0).max(255));
+const serializedRouteArtifact = z.strictObject({
+  artifact: z.custom<RouteFingerprintInput>(),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  contracts: z.array(z.strictObject({ id: z.string(), bytes: octets })),
+  executables: z.array(
+    z.strictObject({
+      client: z.enum(["web", "pea", "shared"]),
+      entry: z.string(),
+      resolved: z.literal(true),
+      members: z.array(z.strictObject({ path: z.string(), bytes: octets })),
+    }),
+  ),
+});
+
+/** Inventory checks evidence without executing package code; admission still links the module. */
+async function checkRouteArtifact(bytes: Uint8Array, expected: string) {
+  const input = serializedRouteArtifact.parse(JSON.parse(new TextDecoder().decode(bytes)));
+  const hash = (bytes: number[]) =>
+    createHash("sha256").update(Uint8Array.from(bytes)).digest("hex");
+  const actual: RouteFingerprintInput = {
+    version: 1,
+    data: input.artifact.data,
+    contracts: input.contracts.map((item) => ({ id: item.id, sha256: hash(item.bytes) })),
+    executables: input.executables.map((item) => ({
+      client: item.client,
+      entry: item.entry,
+      members: item.members.map((member) => ({ path: member.path, sha256: hash(member.bytes) })),
+    })),
+  };
+  const declared = await routeFingerprint(input.artifact);
+  if (
+    `pod-bytes:${declared}` !== expected ||
+    declared !== input.fingerprint ||
+    (await routeFingerprint(actual)) !== declared
+  )
+    throw Error("Route artifact fingerprint mismatch");
+}
 
 export type PackageEntrypoint = {
   sourcePath: string;
@@ -363,13 +405,19 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
   for (const raw of Array.isArray(value.routes) ? value.routes : []) {
     try {
       const declaration = podRouteDeclarationSchema.parse(raw);
-      const slug = declaration.sourcePath.split("/")[1];
+      const slug = declaration.artifact.split("/")[1];
       if (`pod.${value.id}.${slug}`.length > 100)
         throw Error("Route Work identity exceeds 100 characters");
-      if (routes.some((route) => route.sourcePath === declaration.sourcePath))
-        throw Error("Duplicate route sourcePath");
-      if (!members.some((member) => member.path === declaration.sourcePath))
-        throw Error("Route has no admitted module");
+      if (routes.some((route) => route.artifact === declaration.artifact))
+        throw Error("Duplicate route artifact");
+      const artifact = members.find((member) => member.path === declaration.artifact);
+      if (!artifact) throw Error("Route has no admitted artifact");
+      try {
+        await checkRouteArtifact(artifact.bytes, declaration.fingerprint);
+      } catch (error) {
+        diagnostics.push(problem("RouteFingerprintMismatch", declaration.artifact, message(error)));
+        continue;
+      }
       if (
         declaration.page &&
         !members.some((member) => member.path === `${declaration.page}/index.html`)
@@ -419,9 +467,9 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
       ...contributions,
       ...routes.map((route) => ({
         kind: "route" as const,
-        path: route.sourcePath,
-        memberPath: route.sourcePath,
-        key: contributionKey({ kind: "route", packageId: value.id, path: route.sourcePath }),
+        path: route.artifact,
+        memberPath: route.artifact,
+        key: contributionKey({ kind: "route", packageId: value.id, path: route.artifact }),
         name: route.name,
         description: route.description,
       })),

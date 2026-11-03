@@ -3,6 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { capturePackage, kindOfMember, listPackages, readPackage } from "../src/packages.ts";
+import { createHash } from "node:crypto";
+import { routeFingerprint } from "../../../packages/agent-contracts/src/route-module.ts";
+import { builtinData } from "../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
 
 let root: string;
 const authored: Record<string, string | Uint8Array> = {
@@ -92,4 +95,60 @@ test("directory links cannot admit files outside the package", async () => {
     expect.objectContaining({ path: "linked", severity: "error" }),
   );
   await expect(capturePackage(pod)).rejects.toThrow(/links/);
+});
+
+test("route inventory binds actual artifact bytes to the declared fingerprint", async () => {
+  const bytes = [101, 120, 112, 111, 114, 116];
+  const sha256 = createHash("sha256").update(Uint8Array.from(bytes)).digest("hex");
+  const artifact = {
+    version: 1 as const,
+    data: builtinData,
+    contracts: [{ id: "test", sha256 }],
+    executables: [
+      { client: "web" as const, entry: "route.js", members: [{ path: "route.js", sha256 }] },
+    ],
+  };
+  const fingerprint = await routeFingerprint(artifact);
+  const envelope = {
+    artifact,
+    fingerprint,
+    contracts: [{ id: "test", bytes }],
+    executables: [
+      {
+        client: "web",
+        entry: "route.js",
+        resolved: true,
+        members: [{ path: "route.js", bytes: [...bytes] }],
+      },
+    ],
+  };
+  const route = {
+    artifact: "routes/calculator/route.artifact",
+    fingerprint: `pod-bytes:${fingerprint}`,
+    name: "Calculator",
+    description: "Inputs",
+  };
+  await put("Original", "pod.json", JSON.stringify({ id: "mixed", routes: [route] }));
+  await put("Original", route.artifact, JSON.stringify(envelope));
+  expect((await readPackage("mixed", root)).routes).toEqual([route]);
+  envelope.executables[0]!.members[0]!.bytes[0] = 0;
+  await put("Original", route.artifact, JSON.stringify(envelope));
+  const tampered = await readPackage("mixed", root);
+  expect(tampered.routes).toEqual([]);
+  expect(tampered.diagnostics).toContainEqual(
+    expect.objectContaining({ code: "RouteFingerprintMismatch", path: route.artifact }),
+  );
+  await put(
+    "Original",
+    "pod.json",
+    JSON.stringify({
+      id: "mixed",
+      routes: [
+        { sourcePath: "routes/calculator/index.js", name: "Legacy", description: "Removed" },
+      ],
+    }),
+  );
+  expect((await readPackage("mixed", root)).diagnostics).toContainEqual(
+    expect.objectContaining({ code: "InvalidRoute" }),
+  );
 });

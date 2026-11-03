@@ -455,7 +455,7 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
     "plugins.routeTrust": route(
       "PUT",
       "/pe/plugin-routes/:key/trust",
-      z.strictObject({ sha256: z.string().regex(/^[a-f0-9]{64}$/), trusted: z.boolean() }),
+      z.strictObject({ fingerprint: z.string().regex(/^pod-bytes:[a-f0-9]{64}$/), trusted: z.boolean() }),
       z.array(podRouteDescriptorSchema),
       "human",
       "plugins",
