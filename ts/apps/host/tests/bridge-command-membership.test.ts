@@ -24,8 +24,8 @@ test("nonempty provenance cannot authorize another command's Internal leaf", () 
 
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { readFileSync } from "node:fs";
-import { requireEligibleCaller } from "../src/gateway-actions";
-import { pea } from "./callers";
+import { requireEligibleCaller } from "../src/gateway-actions.ts";
+import { pea } from "./callers.ts";
 test("every advertised native preview admits a direct Pea call and agrees with C# metadata", () => {
   const source = readFileSync(new URL("../../../../dotnet/Pe.Revit.Global/Services/Host/RevitDataRequestService.cs", import.meta.url), "utf8");
   const previews = hostOpCatalog.filter(op => op.key.endsWith(".preview"));
