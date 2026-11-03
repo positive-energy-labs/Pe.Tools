@@ -857,6 +857,7 @@ export function ThreadsSidebar({
     const work = works.of.get(thread.id);
     const lead = leadWork(work);
     // The remembered documents lead; the conversation title stands in when there are none.
+    // TODO: Manual D drive-7 verdict E (S9): "Thread titles carry ids" including a model GUID and "grille 8747668". Give historical titles readable names.
     const title = documentsLabel(work) ?? thread.title;
     return {
       label: compactRows ? (

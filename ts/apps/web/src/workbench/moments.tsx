@@ -637,6 +637,7 @@ function ToolCallPart({
       ? " — cancelled"
       : null;
   const denied = call.status === "denied";
+  // TODO: Manual D drive-7 verdict E (S9): "The Pea transcript shows its tool rows' paths" to raw-id tool-result files. Present inspectable names here.
   const title = toolTitle(call.title);
   const detail = toolDetail(call);
   const tone = failed ? "failed" : running && !approval ? "active" : "";
