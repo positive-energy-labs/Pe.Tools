@@ -101,6 +101,7 @@ export function createFixtureWorkDoor(
       }),
     submit: (command) => ({
       lifetime: "command",
+      key: command.key,
       handle: {
         lifetime: "command",
         id: command.id as JournalCommandId,

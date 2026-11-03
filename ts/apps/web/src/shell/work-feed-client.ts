@@ -55,7 +55,7 @@ export function createWorkFeedClient(
             row.state === "detached"
               ? { kind: "pending" }
               : row.state === "succeeded"
-                ? { kind: "accepted-native", receiptId: row.id, outcome: "committed" }
+                ? { kind: "accepted-native", receiptId: row.id, outcome: "committed", result: row.result }
                 : row.state === "unknown"
                   ? {
                       kind: "accepted-native",
@@ -80,6 +80,7 @@ export function createWorkFeedClient(
       });
       return {
         lifetime: "command",
+        key: command.key,
         handle: { lifetime: "command", id, causalParent: id as unknown as CausalParentId },
         accepted: observation,
       };

@@ -54,3 +54,10 @@ it("declares result landing only on native command verbs", () => {
   expect(routeVerbJsonSchema.safeParse({ ...data.verbs.edit, lands: "bad" }).success).toBe(false);
   expect(routeVerbJsonSchema.safeParse({ ...data.verbs.apply, lands: "" }).success).toBe(false);
 });
+
+export function committedResultTypes(result: import("./work-journal-door.ts").AcceptedResult) {
+  if (result.kind !== "accepted-native") return;
+  if (result.outcome === "committed") return result.result;
+  // @ts-expect-error Uncommitted native outcomes have no catalog result.
+  return result.result;
+}

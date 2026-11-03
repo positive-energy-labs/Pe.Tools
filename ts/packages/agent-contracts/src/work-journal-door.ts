@@ -65,10 +65,15 @@ export type AcceptedResult =
   | {
       readonly kind: "accepted-native";
       readonly receiptId: string;
-      readonly outcome: NativeOutcome;
+      readonly outcome: "committed";
       /** Authoritative catalog output, decoded by the mount before lands. Only committed
        * outcomes may land; absent output is decoded as undefined, never a guessed result. */
       readonly result?: unknown;
+    }
+  | {
+      readonly kind: "accepted-native";
+      readonly receiptId: string;
+      readonly outcome: Exclude<NativeOutcome, "committed">;
     }
   | {
       readonly kind: "rejected";
@@ -79,6 +84,8 @@ export type AcceptedResult =
   | { readonly kind: "pending" };
 
 export interface JournalSubmission {
+  /** Catalog entry captured by the submission, never inferred from a later Page. */
+  readonly key: ActionAdmission["key"];
   readonly lifetime: "command";
   readonly handle: JournalCommandHandle & { readonly id: JournalCommandId };
   /** Journal-owned observation replays current status, then resolves once with a non-pending
