@@ -3,7 +3,13 @@ import type { Observation } from "../../../../packages/agent-contracts/src/work-
 import type { ResolvedReadDescriptor } from "../../../../packages/agent-contracts/src/native-read-door";
 import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { createRouteEnvironmentIssuer } from "../../../../packages/agent-contracts/src/route-kernel-environment";
-const mocks = vi.hoisted(() => ({ rpc: vi.fn(), artifact: vi.fn(), decode: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  rpc: vi.fn(),
+  fetch: vi.fn(),
+  artifact: vi.fn(),
+  decode: vi.fn(),
+}));
+vi.mock("#/host/runtime", () => ({ hostFetch: mocks.fetch }));
 vi.mock("#/host/client", () => ({ callHostRpc: mocks.rpc }));
 vi.mock("#/scene/artifact", () => ({ fetchSceneArtifact: mocks.artifact }));
 vi.mock("#/scene/psc1", () => ({ decodeScene: mocks.decode }));
@@ -17,24 +23,21 @@ const target = () =>
   });
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.rpc.mockImplementation(async (key) =>
-    key === "bridge.sessions.list"
-      ? {
-          sessions: [
-            {
-              sessionId: "bridge",
-              processId: 71,
-              processStartUtcUnixMs: 92,
-              openDocuments: [{ openId: "open" }],
-            },
-          ],
-        }
-      : {
-          id: "artifact",
-          bytes: 30,
-          scene: { elements: 50000, triangles: 60000, work: { nativeMilliseconds: 100 } },
-        },
+  mocks.fetch.mockResolvedValue(
+    Response.json({
+      operationKey: "revit.detail.space-scene",
+      processIncarnation: { pid: 71, startedAt: 92 },
+      openDocumentLifetime: { openId: "open" },
+      normalizedInput: '{"contextRepresentation":"overview","elementIds":[3],"z":{"a":2,"b":1}}',
+      freshnessGeneration: "host-generation:7",
+      representation: "overview",
+    }),
   );
+  mocks.rpc.mockResolvedValue({
+    id: "artifact",
+    bytes: 30,
+    scene: { elements: 50000, triangles: 60000, work: { nativeMilliseconds: 100 } },
+  });
   mocks.artifact.mockResolvedValue(new ArrayBuffer(0));
   mocks.decode.mockReturnValue({
     metadata: {
@@ -48,7 +51,7 @@ beforeEach(() => {
     },
   });
 });
-test("atomic host incarnation, canonical wire, pinned headers and no invented generation", async () => {
+test("host owns the entire descriptor; resolve sends input and exact scope without a local fallback", async () => {
   const door = createGeometryReadDoor();
   const scope = target();
   const descriptor = await first(
@@ -66,26 +69,36 @@ test("atomic host incarnation, canonical wire, pinned headers and no invented ge
     ),
   );
   if ("kind" in descriptor) throw Error(descriptor.failure.message);
-  expect(mocks.rpc).toHaveBeenCalledTimes(1);
+  expect(mocks.fetch).toHaveBeenCalledTimes(1);
   expect(descriptor.processIncarnation).toEqual({ pid: 71, startedAt: 92 });
-  expect(descriptor.freshnessGeneration).toBeNull();
-  expect(descriptor.freshnessEvidence).toBe("unavailable");
+  expect(descriptor.freshnessGeneration).toBe("host-generation:7");
+  expect(descriptor.freshnessEvidence).toBeUndefined();
+  expect(mocks.fetch.mock.calls[0][0]).toBe("/pe/reads/resolve");
+  expect(JSON.parse(mocks.fetch.mock.calls[0][1].body).input.contextRepresentation).toBe(
+    "overview",
+  );
   expect(descriptor.normalizedInput).toBe(
     '{"contextRepresentation":"overview","elementIds":[3],"z":{"a":2,"b":1}}',
   );
   const result = await first(door.join(descriptor));
   expect(result.kind).toBe("value");
-  expect(mocks.rpc.mock.calls[1][2]).toMatchObject({
+  expect(mocks.rpc.mock.calls[0][2]).toMatchObject({
     bridgeSessionId: "bridge",
     openDocumentId: "open",
   });
   expect((await first(door.join({ ...descriptor }))).kind).toBe("refused");
-  expect(mocks.rpc).toHaveBeenCalledTimes(2);
+  expect(mocks.rpc).toHaveBeenCalledTimes(1);
 });
 test("missing incarnation refuses without native dispatch", async () => {
-  mocks.rpc.mockResolvedValue({
-    sessions: [{ sessionId: "bridge", processId: 71, processStartUtcUnixMs: null }],
-  });
+  mocks.fetch.mockResolvedValue(
+    Response.json(
+      {
+        kind: "refused",
+        failure: { code: "ReadResolutionRefused", message: "Missing incarnation" },
+      },
+      { status: 409 },
+    ),
+  );
   const door = createGeometryReadDoor();
   const scope = target();
   const result = await first(
@@ -100,9 +113,20 @@ test("missing incarnation refuses without native dispatch", async () => {
     ),
   );
   expect(result).toMatchObject({ kind: "refused" });
-  expect(mocks.rpc).toHaveBeenCalledTimes(1);
+  expect(mocks.rpc).not.toHaveBeenCalled();
 });
 test("non-overview modes classify as detail and release aborts transport", async () => {
+  mocks.fetch.mockResolvedValue(
+    Response.json({
+      operationKey: "revit.detail.space-scene",
+      processIncarnation: { pid: 71, startedAt: 92 },
+      openDocumentLifetime: { openId: "open" },
+      normalizedInput:
+        '{"contextRepresentation":"oriented","elementIds":[3],"contextPaddingFt":50000}',
+      freshnessGeneration: "host:8",
+      representation: "detail",
+    }),
+  );
   const door = createGeometryReadDoor();
   const scope = target();
   const tokens = createRouteTokenIssuer();

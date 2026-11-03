@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -32,9 +33,22 @@ import type {
  * a host restart kills every harness child, so a token from before it is `context.unknown`.
  */
 
-export class Refused extends Error {
-  constructor(readonly refusal: Refusal) {
-    super(`${refusal.code}: ${refusal.reason}`);
+export class Refused extends Schema.TaggedError<Refused>()("Refused", {
+  message: Schema.String,
+  status: Schema.Number,
+  problem: Schema.String,
+  refusal: Schema.declare<Refusal>(
+    (value): value is Refusal =>
+      typeof value === "object" && value !== null && "code" in value && "reason" in value,
+  ),
+}) {
+  constructor(refusal: Refusal) {
+    super({
+      message: `${refusal.code}: ${refusal.reason}`,
+      status: 403,
+      problem: refusal.code,
+      refusal,
+    });
   }
 }
 /** A door's 403 names its refusal code here; request admission counts it (request-identity.ts). */

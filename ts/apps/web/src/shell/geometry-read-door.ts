@@ -1,13 +1,20 @@
+import { Schema } from "effect";
+import {
+  nativeReadResolveEndpoint,
+  resolvedReadDescriptorSchema,
+} from "../../../../packages/agent-contracts/src/native-read-endpoint";
+import {
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
+} from "@pe/host-contracts/operation-types";
+import { hostFetch } from "#/host/runtime";
 import type {
   GeometryReadDoor,
   NativeReadRefusal,
   ResolvedReadDescriptor,
 } from "../../../../packages/agent-contracts/src/native-read-door";
 import type { Observation } from "../../../../packages/agent-contracts/src/work-journal-door";
-import {
-  canonicalEnvironmentInput,
-  type GeometryOutcome,
-} from "../../../../packages/agent-contracts/src/route-kernel-environment";
+import { type GeometryOutcome } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import { callHostRpc } from "#/host/client";
 import { fetchSceneArtifact } from "#/scene/artifact";
 import { decodeScene } from "#/scene/psc1";
@@ -53,28 +60,20 @@ export function createGeometryReadDoor(): GeometryReadDoor<unknown> {
           };
           if (!(Array.isArray(input.elementIds) && input.elementIds.length) && !input.region)
             return refuse("Project geometry requires a narrow subject");
-          // One atomic host observation supplies both parts of the process incarnation.
-          const inventory = await callHostRpc("bridge.sessions.list", {}, { signal });
-          const session = inventory.sessions.find((row) => row.sessionId === target.ref.session);
-          if (
-            !session ||
-            !session.processId ||
-            !session.processStartUtcUnixMs ||
-            !session.openDocuments?.some((doc) => doc.openId === target.ref.openId)
-          )
-            return refuse("Document or process lifetime unavailable");
-          const descriptor: ResolvedReadDescriptor = Object.freeze({
-            operationKey: request.native.operationKey,
-            processIncarnation: Object.freeze({
-              pid: session.processId,
-              startedAt: session.processStartUtcUnixMs,
-            }),
-            openDocumentLifetime: Object.freeze({ openId: target.ref.openId }),
-            normalizedInput: canonicalEnvironmentInput(input),
-            freshnessGeneration: null,
-            freshnessEvidence: "unavailable",
-            representation: mode === "overview" ? "overview" : "detail",
+          const response = await hostFetch(nativeReadResolveEndpoint.path, {
+            method: nativeReadResolveEndpoint.method,
+            signal,
+            headers: {
+              "content-type": "application/json",
+              [HOST_RPC_BRIDGE_SESSION_HEADER]: target.ref.session,
+              [HOST_RPC_DOCUMENT_HEADER]: target.ref.openId,
+            },
+            body: JSON.stringify({ operationKey: request.native.operationKey, input }),
           });
+          if (!response.ok) return refuse("Host refused native read resolution");
+          const descriptor = Schema.decodeUnknownSync(resolvedReadDescriptorSchema)(
+            await response.json(),
+          );
           resolved.set(descriptor, { session: target.ref.session, openId: target.ref.openId });
           return descriptor;
         } catch (error) {

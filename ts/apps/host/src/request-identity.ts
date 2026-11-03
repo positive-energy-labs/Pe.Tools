@@ -1,3 +1,7 @@
+import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
+import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
+import { RequestIdentity, admittedRequestIdentity } from "./request-services.ts";
+import { readSessionScope } from "./sdk-session.ts";
 import { Deferred, Effect, Option } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import {
@@ -369,6 +373,8 @@ export async function readRequestIdentity(
 
 /** The declared API owns product permissions; protocol and machine lifecycle are separate transports. */
 function requestPermission(path: string, method: string): RoutePermission {
+  if (method === nativeReadResolveEndpoint.method && path === nativeReadResolveEndpoint.path)
+    return "read";
   const declared = matchPeRoute(method === "HEAD" ? "GET" : method, path);
   if (declared) return declared.route.permission;
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") return "read";
@@ -401,7 +407,9 @@ export type IdentityLayerOptions = Omit<IdentityOptions, "frontendOrigin"> & {
 };
 
 export const requestIdentityLayer = (options: IdentityLayerOptions) =>
-  HttpRouter.middleware(
+  HttpRouter.middleware<{
+    provides: import("@pe/host-internal/request-contracts").RequestIdentity;
+  }>()(
     (handler) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
@@ -433,27 +441,53 @@ export const requestIdentityLayer = (options: IdentityLayerOptions) =>
           countRefusal(options.telemetry, identity.refusal.code);
           return HttpServerResponse.jsonUnsafe(identity, { status: 403 });
         }
+        const admission = yield* Effect.try({
+          try: () => admittedRequestIdentity(identity.caller, readSessionScope(request.headers)),
+          catch: () => "Invalid request target headers",
+        }).pipe(Effect.result);
+        if (admission._tag === "Failure")
+          return HttpServerResponse.jsonUnsafe({ message: admission.failure }, { status: 400 });
+        const admitted = admission.success;
+        const path = request.url.split("?")[0];
+        const call =
+          path === "/call" ? yield* request.json.pipe(Effect.orElseSucceed(() => null)) : null;
+        const native =
+          path === nativeReadResolveEndpoint.path ||
+          (path === "/call" &&
+            call !== null &&
+            typeof call === "object" &&
+            "key" in call &&
+            typeof call.key === "string" &&
+            !isTsOnlyOperationKey(call.key));
         const services = yield* Effect.context<never>();
-        const exit = yield* Effect.promise((signal) =>
-          withInvocationContext(
-            {
-              hostBaseUrl: `http://127.0.0.1:${options.port()}`,
-              principal: identity.principal,
-              caller: identity.caller,
-              device: identity.device,
-              headers: identity.headers,
-            },
-            // The AsyncLocalStorage crossing for invocation context; a FiberRef retires it.
-            // effect-edge: als-crossing
-            () => Effect.runPromiseExitWith(services)(handler, { signal }),
-          ),
-        );
+        const run = Effect.provideService(handler, RequestIdentity, admitted);
+        const exit = native
+          ? yield* Effect.exit(run)
+          : yield* Effect.promise((signal) =>
+              withInvocationContext(
+                {
+                  hostBaseUrl: `http://127.0.0.1:${options.port()}`,
+                  principal: identity.principal,
+                  caller: identity.caller,
+                  device: identity.device,
+                  headers: identity.headers,
+                },
+                // I removes this legacy crossing after non-/call consumers migrate. /call receives
+                // immutable RequestIdentity once and never reads ambient authority.
+                // effect-edge: als-crossing
+                () => Effect.runPromiseExitWith(services)(run, { signal }),
+              ),
+            );
         const response = yield* exit;
         const refused = response.headers[REFUSAL_HEADER];
         if (response.status === 403 && refused) countRefusal(options.telemetry, refused);
         return identity.setCookie
           ? HttpServerResponse.setHeader(response, "set-cookie", identity.setCookie)
           : response;
-      }),
+      }).pipe(
+        // Effect 4.0.2 HttpEffect enters uninterruptibly; route interruptibility begins
+        // inside the legacy ALS child. The Node close must interrupt this outer wait too.
+        Effect.interruptible,
+      ),
     { global: true },
   );

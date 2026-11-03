@@ -1,5 +1,8 @@
+import { BridgeError as DispatchBridgeError } from "@pe/host-internal/dispatch";
+import type { DoorFailure, ResolvedSdkSession } from "@pe/host-internal/request-contracts";
+import { RequestIdentity } from "./request-services.ts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import {
   docListArgv,
@@ -12,14 +15,14 @@ import {
   HOST_RPC_DOCUMENT_HEADER,
   type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
-import { BridgeError, NoRevitSession, type RevitBridge } from "./bridge.ts";
+import { BridgeError, NoRevitSession, RevitBridge } from "./bridge.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { runPeRevitCli } from "./session-route.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { hostServiceName, runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 
-/** The one 30 s `pe-revit` read the Promise-world SDK doors share (native-receipts reads through it). */
+/** Transitional: phase 5 I deletes readSdk with its remaining consumers. Do not add imports. */
 export const readSdk: SdkReceiptReader = (args) =>
   // effect-edge: island, phase 5
   Effect.runPromise(
@@ -28,7 +31,15 @@ export const readSdk: SdkReceiptReader = (args) =>
 const refusal = (message: string, result?: unknown) =>
   new BridgeError(message, 409, { notDispatched: true, result });
 const refuse = (message: string, result?: unknown) => Effect.fail(refusal(message, result));
-const resolutions = new WeakMap<object, Map<string, { resolved: Resolved; sessionId: string }>>();
+type ResolutionCache = Map<string, { resolved: Resolved; sessionId: string }>;
+type SdkDriver = (args: readonly string[]) => Effect.Effect<string, unknown>;
+export const SdkDriver = Context.Service<SdkDriver>("SdkDriver");
+export const SdkCacheLimits = Context.Reference<{ entries: number; bytes: number }>(
+  "SdkCacheLimits",
+  {
+    defaultValue: () => ({ entries: 64, bytes: 1024 * 1024 }),
+  },
+);
 
 export function readSessionScope(headers: Record<string, string | undefined>): HostSessionScope {
   const raw = headers[HOST_RPC_SDK_SESSION_HEADER];
@@ -40,10 +51,11 @@ export function readSessionScope(headers: Record<string, string | undefined>): H
 }
 
 /** The SDK runs its ladder. An exact product reference constrains it to the held process. */
-const resolveSdk = Effect.fn("SdkSession.sdk")(function* (
+const resolveSdkCore = Effect.fn("SdkSession.sdk")(function* (
   bridge: Pick<RevitBridge["Service"], "list">,
-  scope: HostSessionScope = {},
-  read: SdkReceiptReader = readSdk,
+  scope: HostSessionScope,
+  read: SdkDriver,
+  cache: ResolutionCache,
 ) {
   const selection =
     scope.session === undefined ? undefined : sdkSessionSelectionSchema.parse(scope.session);
@@ -66,8 +78,6 @@ const resolveSdk = Effect.fn("SdkSession.sdk")(function* (
   const only = held ?? (owned.length === 1 ? owned[0] : undefined);
   const argv = docListArgv(selection ?? (only ? { pid: only.processId } : {}));
   const key = JSON.stringify(argv);
-  let cache = resolutions.get(bridge);
-  if (!cache) resolutions.set(bridge, (cache = new Map()));
   const cached = cache.get(key);
   const sockets = yield* bridge.list;
   let resolved = cached?.resolved;
@@ -91,10 +101,9 @@ const resolveSdk = Effect.fn("SdkSession.sdk")(function* (
   const envelope = resolved
     ? undefined
     : parsePeRevitEnvelope<DocListResult, Resolved | null>(
-        yield* Effect.tryPromise({
-          try: () => read(argv),
-          catch: (error) => refusal(`pe-revit did not answer: ${String(error)}`),
-        }),
+        yield* read(argv).pipe(
+          Effect.mapError((error) => refusal(`pe-revit did not answer: ${String(error)}`)),
+        ),
         argv,
         peRevitLauncher(),
       );
@@ -172,10 +181,22 @@ const resolveSdk = Effect.fn("SdkSession.sdk")(function* (
   };
 });
 
-export type SdkSession = Effect.Success<ReturnType<typeof resolveSdk>>;
+/** I removes these legacy callable faces with their L/R consumers. Converted reads use the scoped service below. */
+const resolveSdk = (
+  bridge: Pick<RevitBridge["Service"], "list">,
+  scope: HostSessionScope = {},
+  read: SdkReceiptReader = readSdk,
+) =>
+  resolveSdkCore(
+    bridge,
+    scope,
+    (args) => Effect.tryPromise({ try: () => read(args), catch: (error) => error }),
+    new Map(),
+  );
+export type SdkSession = Effect.Success<ReturnType<typeof resolveSdkCore>>;
 export const sdkSession = resolveSdk;
 
-/** {@link sdkSession} for Promise callers until phase 5; a refusal is thrown as its `BridgeError`. */
+/** Transitional: phase 5 I deletes resolveSdkSession with its remaining consumers. Do not add imports. */
 export const resolveSdkSession = (...args: Parameters<typeof resolveSdk>) =>
   // effect-edge: island, phase 5
   Effect.runPromise(resolveSdk(...args));
@@ -215,4 +236,101 @@ export const resolveAttachment = Effect.fn("SdkSession.resolve")(function* (
 });
 
 /** The attachment lookup on its service face. */
-export const SdkSession = { resolve: resolveAttachment, sdk: resolveSdk };
+type ResolvedSession = SdkSession & ResolvedSdkSession;
+const SdkSessionService = Context.Service<
+  import("@pe/host-internal/request-contracts").SdkSession,
+  {
+    readonly resolve: (
+      scope: Readonly<HostSessionScope>,
+    ) => Effect.Effect<
+      ResolvedSession,
+      DoorFailure,
+      import("@pe/host-internal/request-contracts").RequestIdentity
+    >;
+    readonly resolveAttachment: (
+      target: AttachmentTarget,
+    ) => Effect.Effect<
+      ResolvedSession,
+      DoorFailure,
+      import("@pe/host-internal/request-contracts").RequestIdentity
+    >;
+  }
+>("SdkSession");
+const SdkSessionLayer = Layer.effect(
+  SdkSessionService,
+  Effect.gen(function* () {
+    const bridge = yield* RevitBridge;
+    const driver = yield* SdkDriver;
+    const limits = yield* SdkCacheLimits;
+    if (Object.values(limits).some((value) => !Number.isSafeInteger(value) || value < 1))
+      return yield* Effect.die(new Error("SDK cache bounds must be positive safe integers"));
+    const cache: ResolutionCache = new Map();
+    let generation = 0;
+    const clear = () => {
+      generation++;
+      cache.clear();
+    };
+    yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        bridge.subscribe((event) => {
+          if (event.kind !== "event") clear();
+        }),
+      ),
+      (release) => Effect.sync(release),
+    );
+    yield* Effect.addFinalizer(() => Effect.sync(clear));
+    const resolve = Effect.fn("SdkSession.resolve")(
+      function* (scope: Readonly<HostSessionScope>) {
+        yield* RequestIdentity;
+        const observed = generation;
+        const resolved = yield* resolveSdkCore(bridge, scope, driver, cache);
+        if (generation !== observed) {
+          cache.clear();
+          return yield* refuse("SDK attachment changed during resolution; retry admission");
+        }
+        while (
+          cache.size &&
+          (cache.size > limits.entries ||
+            Buffer.byteLength(JSON.stringify([...cache])) > limits.bytes)
+        )
+          cache.delete(cache.keys().next().value!);
+        return {
+          ...resolved,
+          processIncarnation: {
+            pid: resolved.processId,
+            startedAt: resolved.processStartUtcUnixMs,
+          },
+          openDocumentLifetime: scope.openDocumentId
+            ? { openId: scope.openDocumentId }
+            : { kind: "session-only" as const },
+        };
+      },
+      Effect.mapError(
+        (error) => new DispatchBridgeError(error.message, error.statusCode, error.evidence),
+      ),
+    );
+    return {
+      resolve,
+      resolveAttachment: Effect.fn("SdkSession.resolveAttachment")(function* (
+        target: AttachmentTarget,
+      ) {
+        const attachment = yield* resolveAttachment(bridge, target).pipe(
+          Effect.mapError(
+            (error) => new DispatchBridgeError(error.message, 409, { notDispatched: true }),
+          ),
+        );
+        return yield* resolve({ bridgeSessionId: attachment.sessionId });
+      }),
+    };
+  }),
+);
+/** Required Effect service. Static attachment helpers remain only for later slice consumers. */
+export const SdkSession = Object.assign(SdkSessionService, {
+  resolve: resolveAttachment,
+  sdk: resolveSdk,
+  layer: SdkSessionLayer,
+});
+
+export const SdkDriverLive = Layer.succeed(SdkDriver, (args) =>
+  runPeRevitCli(args).pipe(Effect.timeout("30 seconds")),
+);

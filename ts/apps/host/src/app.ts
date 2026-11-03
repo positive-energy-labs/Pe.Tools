@@ -305,7 +305,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
       : () => emptyNotFound;
   const CommonAppLive = Layer.mergeAll(
     RemoteLive,
-    identity,
     shareRoute(share),
     deviceRoutes(devices),
     mcpRoute(() => `http://127.0.0.1:${port()}`),
@@ -332,9 +331,9 @@ export function makeHttpLive(options: HttpLiveOptions) {
     // accepted while claim acquisition awaits SDK work must not be stranded without a handler.
     return ServiceFileLive.pipe(
       Layer.provideMerge(
-        HttpRouter.serve(Layer.mergeAll(revitComposition.routes, CommonAppLive)).pipe(
-          Layer.provideMerge(ServerLive),
-        ),
+        HttpRouter.serve(
+          Layer.mergeAll(revitComposition.routes, CommonAppLive).pipe(Layer.provide(identity)),
+        ).pipe(Layer.provideMerge(ServerLive)),
       ),
       Layer.provide(NodeHttpClient.layerUndici),
       // Inside the bridge's provision, so the reader's finalizer (cancel, then join its reads)
@@ -367,7 +366,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
           opsCatalogRoute(spa),
           noRevitHostStatusRoute,
           CommonAppLive,
-        ),
+        ).pipe(Layer.provide(identity)),
       ).pipe(Layer.provideMerge(ServerLive)),
     ),
     // The empty in-memory bridge registry admits no native connection on this composition.
