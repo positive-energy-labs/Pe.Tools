@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { ductsDocumentSchema, type DuctsRouteDocument } from "@pe/agent-contracts";
+import { ductsDocumentSchema } from "@pe/agent-contracts";
 import type { WorkPatch } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import {
   builtinClosureFingerprint,
@@ -18,28 +18,26 @@ const slot = {
   path: ["parameters", "fanFlow"],
   value: { edit: { value: "PE_M_Fan_AirFlow" } },
 } as const;
-// TODO: W1d drive-7 S0/S8a: WorkPatch must expose the owner's finite parameter keys before the keyed slot cutover.
-// @ts-expect-error The actual Ducts owner schema's finite record has no typed keyed patch.
-const refusedSlot: WorkPatch<DuctsRouteDocument> = slot;
-const drop: WorkPatch<DuctsRouteDocument> = {
+const typedSlot: WorkPatch<typeof ductsDocumentSchema> = slot;
+const drop: WorkPatch<typeof ductsDocumentSchema> = {
   path: ["componentDrops", "14607308"],
   value: { edit: { value: { inWg: 0.0132 } } },
 };
-const replacement: WorkPatch<DuctsRouteDocument> = {
+const replacement: WorkPatch<typeof ductsDocumentSchema> = {
   path: ["parameters"],
   value: { fanFlow: { edit: { value: "PE_M_Fan_AirFlow" } } },
 };
 
-test("drive-7 S0/S8a: finite slot keys are absent from typed Work patches", () => {
+test("drive-7 S0/S8a: finite slot keys are accepted by typed Work patches", () => {
   expect(
     ductsDocumentSchema.parse({ parameters: { fanFlow: slot.value } }).parameters.fanFlow,
   ).toEqual(slot.value);
-  expect(refusedSlot).toEqual(slot);
+  expect(typedSlot).toEqual(slot);
   expect(drop.path).toHaveLength(2);
   expect(replacement.path).toHaveLength(1);
 });
 
-test("the real admitted mount accepts the keyed slot through unknown admission", async () => {
+test("the real admitted mount accepts the typed finite-key slot", async () => {
   const key = `w1d-slots-${crypto.randomUUID()}`;
   const module = {
     ...captures,
@@ -69,7 +67,7 @@ test("the real admitted mount accepts the keyed slot through unknown admission",
         slot: "verbs.slot.patches",
         kind: "work",
         source: { module: "slot-patch-gap.test.ts", export: "slot" },
-        run: () => [slot],
+        run: (): readonly WorkPatch<typeof ductsDocumentSchema>[] => [typedSlot],
       },
       describeSlot: {
         slot: "verbs.slot.describe",
