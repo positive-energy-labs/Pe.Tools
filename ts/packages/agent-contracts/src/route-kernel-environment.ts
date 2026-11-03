@@ -315,13 +315,28 @@ export interface RouteEnvironment {
 }
 /** Baseline services are installed once by application composition. A route cannot
  * request an optional group without declaring it, even through a non-literal variable. */
-export type KernelServices = Pick<RouteEnvironment, "reads" | "readings" | "clock" | "availability">;
-type GroupFor<D extends Pick<RouteGraphJson, "capabilities">, C extends RouteGraphJson["capabilities"][number], K extends keyof RouteEnvironment> =
-  C extends D["capabilities"][number]
-    ? { readonly [P in K]-?: RouteEnvironment[P] }
-    : { readonly [P in K]?: never };
-export type EnvironmentFor<D extends Pick<RouteGraphJson, "capabilities">> = KernelServices &
-  GroupFor<D, "work", "work"> & GroupFor<D, "geometry", "geometry"> &
+export type KernelServices = Pick<
+  RouteEnvironment,
+  "reads" | "readings" | "clock" | "availability"
+> & {
+  readonly work?: never;
+  readonly geometry?: never;
+  readonly nativeWrite?: never;
+  readonly submitNative?: never;
+};
+type GroupFor<
+  D extends Pick<RouteGraphJson, "capabilities">,
+  C extends RouteGraphJson["capabilities"][number],
+  K extends keyof RouteEnvironment,
+> = C extends D["capabilities"][number]
+  ? { readonly [P in K]-?: NonNullable<RouteEnvironment[P]> }
+  : { readonly [P in K]?: never };
+export type EnvironmentFor<D extends Pick<RouteGraphJson, "capabilities">> = Pick<
+  RouteEnvironment,
+  "reads" | "readings" | "clock" | "availability"
+> &
+  GroupFor<D, "work", "work"> &
+  GroupFor<D, "geometry", "geometry"> &
   GroupFor<D, "native-write", "nativeWrite">;
 
 /** Same operations with isolated Work and seed-backed reads. Missing seed is unavailable,

@@ -300,7 +300,8 @@ export function linkRouteBodies(
     if (entry.touches.includes("Geometry")) requireCapability("geometry", path);
     if (entry.effect !== "Read" && entry.effect !== "TransactRead") {
       requireCapability("native-write", path);
-      if (read) fail(path, key, "read closure", "A reading/query dependency cannot write", "policy");
+      if (read)
+        fail(path, key, "read closure", "A reading/query dependency cannot write", "policy");
     }
     for (const child of entry.uses)
       checkEffects(typeof child === "string" ? child : child.key, path, read, seen);

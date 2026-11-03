@@ -51,13 +51,17 @@ test("current is read-only and follows accepted Page and Work continuations", ()
   let preparations = 0;
   const f = fixture((current, patch) => {
     preparations++;
-    return { ok: true, value: { page: { ...current, ...patch }, changed: true, membership: "verified" } };
+    return {
+      ok: true,
+      value: { page: { ...current, ...patch }, changed: true, membership: "verified" },
+    };
   });
   const token = f.invocation();
   const state = f.owner.read()!;
   let publications = 0;
   f.owner.subscribe(() => publications++);
-  for (const candidate of [state.scope, f.read, token]) expect(f.owner.current(candidate)).toBe(true);
+  for (const candidate of [state.scope, f.read, token])
+    expect(f.owner.current(candidate)).toBe(true);
   expect(f.owner.read()).toBe(state);
   expect(preparations).toBe(0);
   expect(publications).toBe(0);
@@ -101,14 +105,20 @@ test("current checks lease continuations and independently moved Page", () => {
   const f = fixture();
   const state = f.owner.read()!;
   const issued = f.issuer.lease({
-    token: f.read, pageEpoch: state.pageEpoch, pageRevision: state.pageRevision,
-    workRevision: state.work!.revision, dependencies: {},
+    token: f.read,
+    pageEpoch: state.pageEpoch,
+    pageRevision: state.pageRevision,
+    workRevision: state.work!.revision,
+    dependencies: {},
   });
   if (!issued.ok) throw new Error(issued.reason);
   expect(f.owner.current(issued.value)).toBe(true);
   expect(f.owner.acceptPage(issued.value, { search: "lease move" }).kind).toBe("accepted");
   expect(f.owner.current(issued.value)).toBe(true);
-  f.owner.movePage({ search: "human move" }, { kind: "human", source: "query", history: "replace" });
+  f.owner.movePage(
+    { search: "human move" },
+    { kind: "human", source: "query", history: "replace" },
+  );
   expect(f.owner.current(issued.value)).toBe(false);
 });
 type Options = ScopeGateOptions<typeof builtinData, typeof schemas>;
@@ -484,4 +494,29 @@ test("superseding a write attempt retires its Page but preserves its successful 
   expect(f.owner.acceptWork(invocation, { kind: "ack", write: ack() }).kind).toBe("receipt-only");
   expect(f.owner.read()?.work?.revision).toBe(0);
   expect(f.journal().read().receipts).toEqual([ack()]);
+});
+
+test("a route without Work constructs without schema, hash or journal", () => {
+  const { work: _work, ...withoutWork } = builtinData;
+  const declaration = { ...withoutWork, capabilities: [] } as const;
+  const options: ScopeGateOptions<typeof declaration, typeof schemas> = {
+    dependencies: () => ({}),
+    preparePage: (value) => ({
+      ok: true,
+      value: { page: value, changed: false, membership: "verified" },
+    }),
+  };
+  const owner = createRouteScopeGate<typeof declaration, typeof schemas>(options);
+  owner.enter({ target: null, work: null }, page);
+  expect(owner.read()?.work).toBeNull();
+  const token = owner.capture("roster");
+  expect(owner.current(token)).toBe(true);
+  const unused: ScopeGateOptions<typeof declaration, typeof schemas> = {
+    ...options,
+    // @ts-expect-error no Work declaration means no Work schema argument
+    workSchema: schemas.work,
+  };
+  void unused;
+  owner.close();
+  expect(owner.current(token)).toBe(false);
 });

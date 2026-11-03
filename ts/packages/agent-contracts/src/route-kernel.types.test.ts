@@ -264,17 +264,15 @@ export function criticRefusals(
   const copiedScope: ScopeToken = { ...scope, identity: { target: null, work: null } };
   // @ts-expect-error arbitrary channel/attempt cannot be minted around an authentic scope
   const forgedAttempt: AcceptanceToken = { scope, channel: "read", attempt: 99 };
+  const copiedDelivery = {
+    kind: "snapshot" as const,
+    key: { binding: "host" as const, route: "tiny", target: null },
+    revision: 1,
+    value: { amount: 1, note: "" },
+    hash: "x",
+  };
   // @ts-expect-error a copied attempt is not an owner-issued attempt
-  owner.acceptWork(
-    { ...attempt, attempt: 99 },
-    {
-      kind: "snapshot",
-      key: { binding: "host", route: "tiny", target: null },
-      revision: 1,
-      value: { amount: 1, note: "" },
-      hash: "x",
-    },
-  );
+  owner.acceptWork({ ...attempt, attempt: 99 }, copiedDelivery);
   // @ts-expect-error copied invocation cannot revive a stale Page revision
   owner.acceptPage({ ...invocation, pageRevision: 999 }, { search: "x" });
   // @ts-expect-error critic R6: spread does not carry the admission authority
@@ -553,3 +551,27 @@ export function sourceRetention(
   }
   void [schema, entry, address, pane, derive, copied, wrong];
 }
+
+// A variable with extra services is also refused, not only fresh object literals.
+import type {
+  EnvironmentFor,
+  KernelServices,
+  RouteEnvironment,
+} from "./route-kernel-environment.ts";
+function capabilityTypes(baseline: KernelServices, all: RouteEnvironment) {
+  const empty = { capabilities: [] } as const;
+  const work = { capabilities: ["work"] } as const;
+  const geometry = { capabilities: ["geometry"] } as const;
+  const native = { capabilities: ["native-write"] } as const;
+  const readOnly: EnvironmentFor<typeof empty> = baseline;
+  // @ts-expect-error unused Work/geometry services cannot be supplied via a variable
+  const unused: EnvironmentFor<typeof empty> = all;
+  // @ts-expect-error Work requires its services
+  const missingWork: EnvironmentFor<typeof work> = baseline;
+  // @ts-expect-error geometry requires its services
+  const missingGeometry: EnvironmentFor<typeof geometry> = baseline;
+  // @ts-expect-error native-write requires nominal authority
+  const missingNative: EnvironmentFor<typeof native> = baseline;
+  return [readOnly, unused, missingWork, missingGeometry, missingNative];
+}
+void capabilityTypes;

@@ -497,3 +497,37 @@ export const ductsBodies = {
     },
   },
 } satisfies BodyBindings<typeof ductsData, typeof schemas, typeof entries, string>;
+
+// A captures-like admitted source needs only declared reads and Page services.
+const { work: _readOnlyWork, ...readOnlyBase } = builtinData;
+export const readOnlyData = {
+  ...readOnlyBase,
+  capabilities: [],
+  readings: {
+    ...builtinData.readings,
+    total: {
+      ...builtinData.readings.total,
+      deps: { ...builtinData.readings.total.deps, work: [] },
+    },
+  },
+  verbs: {},
+  panes: { main: { ...builtinData.panes.main, verbs: [] } },
+  stages: { inspect: { ...builtinData.stages.inspect, verbs: [] } },
+} as const satisfies RouteGraphJson;
+export const readOnlyModule = {
+  ...builtinModule,
+  data: readOnlyData,
+  entries: { roster: entries.roster },
+  bodies: {
+    pick: builtinBodies.pick,
+    rosterArgs: builtinBodies.rosterArgs,
+    calculate: { ...builtinBodies.calculate, run: () => ({ total: 0 }) },
+    main: { ...builtinBodies.main, run: () => "Read only" },
+  },
+  artifact: artifact(readOnlyData),
+} satisfies RouteModule<
+  typeof readOnlyData,
+  typeof schemas,
+  { roster: typeof entries.roster },
+  string
+>;

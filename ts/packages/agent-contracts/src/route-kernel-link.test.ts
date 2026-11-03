@@ -11,7 +11,7 @@ import {
   entries,
 } from "./route-kernel.fixtures.ts";
 import { canonicalRouteJson } from "./route-graph.ts";
-import { decodeRouteGraph } from "./route-bodies.ts";
+import { decodeRouteGraph, linkRouteBodies, routeBindingSchema } from "./route-bodies.ts";
 import {
   AdmittedRoute,
   createAdmittedRouteRegistry,
@@ -521,4 +521,53 @@ it("links capture to Page fields and validates catalog entries even when unused"
       },
     }),
   ).toContainEqual(expect.objectContaining({ path: "entries.unused" }));
+});
+
+// Capabilities select services, never relax the catalog's actual footprint.
+it("requires closed capabilities and Work agreement", async () => {
+  expect(decodeRouteGraph({ ...builtinData, capabilities: undefined }).ok).toBe(false);
+  expect(decodeRouteGraph({ ...builtinData, capabilities: ["other"] }).ok).toBe(false);
+  expect(decodeRouteGraph({ ...builtinData, capabilities: ["work", "work"] }).ok).toBe(false);
+  expect(await refuse({ ...builtinData, capabilities: [] })).toContainEqual(
+    expect.objectContaining({ path: "work", reference: "work", code: "policy" }),
+  );
+  expect(
+    linkRouteBodies(
+      { ...builtinData, work: undefined },
+      routeBindingSchema.parse(builtinModule),
+      baseCatalog,
+    ),
+  ).toContainEqual(expect.objectContaining({ path: "capabilities", reference: "work" }));
+});
+it("requires geometry and native-write for transitive catalog dependencies", () => {
+  for (const effect of ["Read", "ModelWrite"] as const) {
+    const leaf: CatalogLink = {
+      key: "hidden",
+      subject: "None",
+      touches: ["Geometry"],
+      effect,
+      cost: "Cheap",
+      cardinality: "One",
+      uses: [],
+    };
+    const catalog = baseCatalog.map((entry) =>
+      entry.key === "roster" ? { ...entry, uses: [leaf.key] } : entry,
+    );
+    const errors = linkRouteBodies(
+      { ...builtinData, capabilities: ["work"] },
+      routeBindingSchema.parse(builtinModule),
+      [...catalog, leaf],
+    );
+    expect(errors).toContainEqual(
+      expect.objectContaining({ path: "readings.roster.entry", reference: "geometry" }),
+    );
+    if (effect === "ModelWrite") {
+      expect(errors).toContainEqual(
+        expect.objectContaining({ reference: "native-write", code: "policy" }),
+      );
+      expect(errors).toContainEqual(
+        expect.objectContaining({ expected: "read closure", code: "policy" }),
+      );
+    }
+  }
 });

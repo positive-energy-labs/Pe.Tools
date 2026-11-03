@@ -35,10 +35,15 @@ interface WorkServices<G extends RouteGraphJson, S extends SchemaTable> {
   /** The composition root retains one journal per Work, independently of mounted UI. */
   readonly journal: (key: WorkKey) => WorkJournal;
 }
-export type ScopeGateOptions<G extends RouteGraphJson, S extends SchemaTable> =
-  (G extends { readonly work: object } ? WorkServices<G, S> : {
-    readonly workSchema?: never; readonly hashWork?: never; readonly journal?: never;
-  }) & {
+export type ScopeGateOptions<G extends RouteGraphJson, S extends SchemaTable> = (G extends {
+  readonly work: object;
+}
+  ? WorkServices<G, S>
+  : {
+      readonly workSchema?: never;
+      readonly hashWork?: never;
+      readonly journal?: never;
+    }) & {
   readonly dependencies: () => Readonly<Record<string, string>>;
   readonly preparePage: (
     page: PageOf<G, S>,
@@ -50,7 +55,7 @@ export type ScopeGateOptions<G extends RouteGraphJson, S extends SchemaTable> =
     readonly membership: "verified" | "unresolved";
   }>;
   readonly issuer?: RouteTokenIssuer;
-}
+};
 
 function immutableCopy<T>(value: T): T {
   const copy: T = structuredClone(value);
@@ -240,10 +245,7 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
         true,
         true,
       );
-      if (
-        !projected.ok ||
-        work.hashWork(projected.envelope.doc) !== work.hashWork(current.value)
-      )
+      if (!projected.ok || work.hashWork(projected.envelope.doc) !== work.hashWork(current.value))
         return recover("contradiction");
       continueInvocation();
       return { kind: "duplicate", revision, receipt };

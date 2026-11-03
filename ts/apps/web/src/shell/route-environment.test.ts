@@ -5,7 +5,7 @@ import { effectTest } from "../../../host/tests/effect-test.ts";
 import { z } from "zod";
 import {
   builtinModule,
-  entries,
+  readOnlyModule,
   localCodec,
 } from "../../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
 import {
@@ -33,19 +33,20 @@ const unwrap = <T>(result: DecodeResult<T>): T => {
   if (!result.ok) throw new Error(result.reason);
   return result.value;
 };
-async function setup() {
+async function setup(readOnly = false) {
+  const source = readOnly ? readOnlyModule : builtinModule;
   const bytes = new TextEncoder().encode("test bodies");
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const artifact: RouteFingerprintInput = {
     version: 1,
-    data: builtinModule.data,
+    data: source.data,
     contracts: [{ id: "contracts", sha256 }],
     executables: [
       { client: "shared", entry: "bodies.js", members: [{ path: "bodies.js", sha256 }] },
     ],
   };
   const admission = await createRouteAdmission({
-    loadedBindings: builtinModule,
+    loadedBindings: source,
     artifact,
     expectedFingerprint: await routeFingerprint(artifact),
     contracts: [{ id: "contracts", bytes }],
@@ -57,9 +58,13 @@ async function setup() {
         members: [{ path: "bodies.js", bytes }],
       },
     ],
-    catalog: Object.entries(entries).map(([key, entry]) => ({ key, ...entry.axes, uses: [] })),
+    catalog: Object.entries(source.entries).map(([key, entry]) => ({
+      key,
+      ...entry.axes,
+      uses: [],
+    })),
   });
-  const admitted = admission.admit({ ...builtinModule, artifact });
+  const admitted = admission.admitUnknown({ ...source, artifact });
   if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
   const route = admitted.route;
   const tokens = createRouteTokenIssuer();
@@ -290,7 +295,7 @@ test("subscription and read lifetimes release once; command submission revalidat
 });
 effectTest("Effect service scope releases acquisitions", () =>
   Effect.gen(function* () {
-    const s = yield* Effect.promise(setup);
+    const s = yield* Effect.promise(() => setup());
     yield* Effect.scoped(
       Effect.gen(function* () {
         const environment = yield* RouteEnvironmentService;
@@ -421,17 +426,13 @@ test("non-explicit invocations and subjects from another scope cannot acquire ge
 import { createMountEnvironment } from "./mount-environment";
 import { createGraphMount } from "./mount-owner";
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
-import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
-import { canonicalRouteInput, type RouteGraph } from "@pe/agent-contracts";
+import { type RouteGraph } from "@pe/agent-contracts";
 import { testSubject, testReadings, testSources, testFields } from "../test-route-subject";
 import { createSubmissionJournal } from "./legacy-environment-bridge";
 
 test("mounted capabilities select once, isolate Works, and gate reads, SSE and geometry with B", async () => {
   const s = await setup();
   const gate = createRouteScopeGate({
-    workSchema: z.null(),
-    hashWork: canonicalRouteInput,
-    journal: createWorkJournal,
     dependencies: () => ({}),
     preparePage: () => ({ ok: false, reason: "not used" }),
   });
@@ -556,5 +557,68 @@ test("native journal submissions survive environment close and preserve their ca
   expect("invoke" in handle).toBe(false);
   expect(await submitted.result).toBe("receipt");
   expect(execute).toHaveBeenCalledTimes(1);
+  s.close();
+});
+
+import { createRouteEnvironmentKernel, type CapabilityPortsFor } from "./route-environment";
+
+test("empty capability composition needs only application baseline and retains descriptor refusal", async () => {
+  const s = await setup(true);
+  const baseline = {
+    reads: s.options.ports.reads,
+    readings: s.options.ports.readings,
+    clock: s.options.ports.clock,
+    availability: s.options.ports.availability,
+  };
+  const kernel = createRouteEnvironmentKernel(baseline);
+  const owner = kernel.bind(readOnlyModule.data, s.options.validate, {});
+  expect(Object.keys(owner.environment).sort()).toEqual([
+    "availability",
+    "clock",
+    "readings",
+    "reads",
+  ]);
+  expect("issuer" in owner).toBe(false);
+  const request = owner.resolveRead(s.key, z.number(), s.route);
+  expect(owner.environment.reads.acquire(request, s.token).read().status).toBe("pending");
+  expect(() => owner.environment.reads.acquire(s.read, s.token)).toThrow("Unissued");
+  owner.close();
+  expect(() => owner.environment.reads.acquire(request, s.token)).toThrow("closed");
+  s.close();
+});
+test("declared groups require exact transports at runtime as well as at the type boundary", async () => {
+  const s = await setup();
+  const kernel = createRouteEnvironmentKernel({
+    reads: s.options.ports.reads,
+    readings: s.options.ports.readings,
+    clock: s.options.ports.clock,
+    availability: s.options.ports.availability,
+  });
+  const declaration = { capabilities: ["work", "geometry", "native-write"] } as const;
+  const groups: CapabilityPortsFor<typeof declaration> = {
+    work: s.options.ports.work,
+    geometry: s.options.ports.geometry,
+    nativeWrite: s.options.ports.submitNative!,
+  };
+  const owner = kernel.bind(declaration, s.options.validate, groups);
+  expect(owner.environment.geometry.requestDetail(s.invocation).ok).toBe(true);
+  expect(owner.environment.work.read.read(s.scope)).toBeNull();
+  expect(() =>
+    owner.environment.nativeWrite.submit({
+      route: s.route,
+      invocation: s.invocation,
+      entry: "apply",
+      input: {},
+    }),
+  ).toThrow("Command unavailable");
+  expect(() => {
+    // @ts-expect-error omitted groups cannot acquire services through a variable
+    kernel.bind({ capabilities: [] } as const, s.options.validate, groups);
+  }).toThrow("Capability service mismatch");
+  expect(() => {
+    // @ts-expect-error declared groups require their services
+    kernel.bind(declaration, s.options.validate, {});
+  }).toThrow("Capability service mismatch");
+  owner.close();
   s.close();
 });

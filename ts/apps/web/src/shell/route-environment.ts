@@ -1,6 +1,9 @@
 import { Context, Effect, Layer } from "effect";
 import {
   canonicalEnvironmentInput,
+  createRouteEnvironmentIssuer,
+  type EnvironmentFor,
+  type KernelServices,
   ExplicitDetailRequest,
   PreparedDetailReach,
   ResolvedRead,
@@ -14,6 +17,7 @@ import {
   type NativeWriteRequest,
   type JournalCommandHandle,
 } from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
+import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission.ts";
 import type {
   AcceptanceToken,
@@ -100,7 +104,7 @@ export function createRouteEnvironment({ issuer, validate, ports }: EnvironmentO
     if (!ports.submitNative) throw new Error("Native writes unavailable");
     return ports.submitNative(request);
   };
-  const environment = Object.freeze<RouteEnvironment>({
+  const environment = Object.freeze<Partial<RouteEnvironment>>({
     reads: {
       lifetime: "read",
       acquire: <T>(request: ResolvedRead<T>, token: AcceptanceToken) => {
@@ -108,65 +112,69 @@ export function createRouteEnvironment({ issuer, validate, ports }: EnvironmentO
         return handle(ports.reads.acquire(request, token), () => valid(request, token));
       },
     },
-    geometry: {
-      lifetime: "read",
-      requestDetail: (invocation: InvocationToken) => {
-        if (
-          closed ||
-          !validate.invocation(invocation) ||
-          !validate.detail(invocation) ||
-          !validate.token(invocation.token)
-        )
-          return { ok: false, reason: "Explicit current invocation required" };
-        return { ok: true, value: issuer.mintExplicit(invocation.token) };
-      },
-      prepareReach: (subject, reachFt, explicit) => {
-        if (
-          closed ||
-          !issuer.owns(explicit) ||
-          !(explicit instanceof ExplicitDetailRequest) ||
-          !validate.token(explicit.token) ||
-          !validate.geometryScope(subject, explicit.token) ||
-          !Number.isFinite(reachFt) ||
-          reachFt < 5 ||
-          (subject.kind === "subjects" && subject.ids.length === 0)
-        )
-          return { ok: false, reason: "Explicit bounded detail reach required" };
-        return { ok: true, value: issuer.mintReach(subject, reachFt, explicit) };
-      },
-      acquire: <T>(
-        request: ResolvedGeometryRead<T>,
-        token: AcceptanceToken,
-      ): ReadHandle<GeometryOutcome<T>> => {
-        check(
-          request instanceof ResolvedGeometryRead &&
-            valid(request, token) &&
-            request.token === token,
-          "Unissued, rebound or stale geometry descriptor",
-        );
-        const demand = request.request;
-        check(
-          request.key.sortedKeyInput === canonicalEnvironmentInput(demand),
-          "Geometry key/request mismatch",
-        );
-        check(
-          demand.representation === "overview"
-            ? demand.scope === token.scope && validate.scope(demand.scope)
-            : issuer.owns(demand.reach) &&
-                demand.reach instanceof PreparedDetailReach &&
-                issuer.owns(demand.reach.explicit) &&
-                demand.reach.explicit.token === token &&
-                validate.geometryScope(demand.reach.subject, token) &&
-                demand.reach.reachFt >= 5 &&
-                Number.isFinite(demand.reach.reachFt),
-          "Geometry scope/attempt mismatch",
-        );
-        return handle(
-          ports.geometry.acquire(request, token),
-          () => valid(request, token) && validate.scope(token.scope),
-        );
-      },
-    },
+    ...(ports.geometry
+      ? {
+          geometry: {
+            lifetime: "read",
+            requestDetail: (invocation: InvocationToken) => {
+              if (
+                closed ||
+                !validate.invocation(invocation) ||
+                !validate.detail(invocation) ||
+                !validate.token(invocation.token)
+              )
+                return { ok: false, reason: "Explicit current invocation required" };
+              return { ok: true, value: issuer.mintExplicit(invocation.token) };
+            },
+            prepareReach: (subject, reachFt, explicit) => {
+              if (
+                closed ||
+                !issuer.owns(explicit) ||
+                !(explicit instanceof ExplicitDetailRequest) ||
+                !validate.token(explicit.token) ||
+                !validate.geometryScope(subject, explicit.token) ||
+                !Number.isFinite(reachFt) ||
+                reachFt < 5 ||
+                (subject.kind === "subjects" && subject.ids.length === 0)
+              )
+                return { ok: false, reason: "Explicit bounded detail reach required" };
+              return { ok: true, value: issuer.mintReach(subject, reachFt, explicit) };
+            },
+            acquire: <T>(
+              request: ResolvedGeometryRead<T>,
+              token: AcceptanceToken,
+            ): ReadHandle<GeometryOutcome<T>> => {
+              check(
+                request instanceof ResolvedGeometryRead &&
+                  valid(request, token) &&
+                  request.token === token,
+                "Unissued, rebound or stale geometry descriptor",
+              );
+              const demand = request.request;
+              check(
+                request.key.sortedKeyInput === canonicalEnvironmentInput(demand),
+                "Geometry key/request mismatch",
+              );
+              check(
+                demand.representation === "overview"
+                  ? demand.scope === token.scope && validate.scope(demand.scope)
+                  : issuer.owns(demand.reach) &&
+                      demand.reach instanceof PreparedDetailReach &&
+                      issuer.owns(demand.reach.explicit) &&
+                      demand.reach.explicit.token === token &&
+                      validate.geometryScope(demand.reach.subject, token) &&
+                      demand.reach.reachFt >= 5 &&
+                      Number.isFinite(demand.reach.reachFt),
+                "Geometry scope/attempt mismatch",
+              );
+              return handle(
+                ports.geometry.acquire(request, token),
+                () => valid(request, token) && validate.scope(token.scope),
+              );
+            },
+          },
+        }
+      : {}),
     readings: {
       lifetime: "subscription",
       subscribe: <T>(
@@ -193,31 +201,35 @@ export function createRouteEnvironment({ issuer, validate, ports }: EnvironmentO
         return resource.stop;
       },
     },
-    work: {
-      read: {
-        lifetime: "read",
-        read: (scope) => {
-          check(validate.scope(scope), "Stale Work scope");
-          return ports.work.read.read(scope);
-        },
-      },
-      submit: {
-        lifetime: "command",
-        submit: (route, invocation, write) => {
-          check(
-            validate.admitted(route) && validate.invocation(invocation),
-            "Stale or unadmitted Work write",
-          );
-          return ports.work.submit.submit(route, invocation, write);
-        },
-      },
-    },
+    ...(ports.work
+      ? {
+          work: {
+            read: {
+              lifetime: "read",
+              read: (scope) => {
+                check(validate.scope(scope), "Stale Work scope");
+                return ports.work.read.read(scope);
+              },
+            },
+            submit: {
+              lifetime: "command",
+              submit: (route, invocation, write) => {
+                check(
+                  validate.admitted(route) && validate.invocation(invocation),
+                  "Stale or unadmitted Work write",
+                );
+                return ports.work.submit.submit(route, invocation, write);
+              },
+            },
+          },
+        }
+      : {}),
     clock: ports.clock,
     availability: Object.freeze({ ...ports.availability }),
     ...(ports.submitNative ? { nativeWrite: issuer.mintNative(command) } : {}),
   });
   return {
-    environment,
+    environment: environment as RouteEnvironment,
     close: () => {
       if (closed) return;
       closed = true;
@@ -239,3 +251,64 @@ export const routeEnvironmentLayer = (options: EnvironmentOptions) =>
       return owner.environment;
     }),
   );
+
+/** Group transports are thin clients of host doors. This kernel owns issuance and
+ * retirement guards; host services retain deduplication and freshness ownership. */
+interface GroupPorts {
+  readonly work: RouteEnvironment["work"];
+  readonly geometry: Pick<RouteEnvironment["geometry"], "acquire">;
+  readonly nativeWrite: NonNullable<EnvironmentPorts["submitNative"]>;
+}
+type PortGroup<
+  D extends Pick<RouteGraphJson, "capabilities">,
+  C extends RouteGraphJson["capabilities"][number],
+  K extends keyof GroupPorts,
+> = C extends D["capabilities"][number] ? Pick<GroupPorts, K> : { readonly [P in K]?: never };
+export type CapabilityPortsFor<D extends Pick<RouteGraphJson, "capabilities">> = PortGroup<
+  D,
+  "work",
+  "work"
+> &
+  PortGroup<D, "geometry", "geometry"> &
+  PortGroup<D, "native-write", "nativeWrite">;
+
+/** Application composition installs baseline services once. Only this kernel mints
+ * descriptors; routes receive the selected environment, never an issuer. */
+export function createRouteEnvironmentKernel(services: KernelServices) {
+  const { reads, readings, clock, availability } = services;
+  const baseline = { reads, readings, clock, availability };
+  return {
+    bind<const D extends Pick<RouteGraphJson, "capabilities">>(
+      declaration: D,
+      validate: EnvironmentValidation,
+      groups: CapabilityPortsFor<NoInfer<D>>,
+    ) {
+      const issuer = createRouteEnvironmentIssuer();
+      const supplied = groups as {
+        work?: EnvironmentPorts["work"];
+        geometry?: EnvironmentPorts["geometry"];
+        nativeWrite?: EnvironmentPorts["submitNative"];
+      };
+      for (const [group, port] of [
+        ["work", "work"],
+        ["geometry", "geometry"],
+        ["native-write", "nativeWrite"],
+      ] as const) {
+        if (declaration.capabilities.includes(group) !== (supplied[port] !== undefined))
+          throw new Error(`Capability service mismatch: ${group}`);
+      }
+      const owner = createRouteEnvironment({
+        issuer,
+        validate,
+        // The checked group set is captured above; absent groups are not synthesized.
+        ports: { ...baseline, ...supplied, submitNative: supplied.nativeWrite } as EnvironmentPorts,
+      });
+      return {
+        environment: owner.environment as unknown as EnvironmentFor<D>,
+        close: owner.close,
+        resolveRead: issuer.mintRead,
+        resolveGeometry: issuer.mintGeometry,
+      };
+    },
+  };
+}
