@@ -66,7 +66,7 @@ type Step = JournalDetail & {
   /** Number of transitions currently applied; a failed multi-write replay resumes here. */
   cursor: number;
   barrier?: TimelineBarrier;
-  notWritten?: { invocation: string; reason: string };
+  notWritten?: { invocation: string; reason: string; rejected: boolean };
   superseded?: { revision: number; path: RouteStatePatch["path"]; message: string };
 };
 
@@ -534,17 +534,22 @@ export function createWorkJournal(key: WorkKey) {
           // latest-edit rejection is live-proven, older-value exclusion is deterministic-only.
           if (
             !step.transitions.some((t) =>
-              t.forward.some((patch) =>
-                consumed.probe.paths.some((other) => overlaps(patch.path, other)) &&
-                canonicalRouteInput(valueAt(consumed.expected, patch.path)) === canonicalRouteInput(patch.value),
+              t.forward.some(
+                (patch) =>
+                  consumed.probe.paths.some((other) => overlaps(patch.path, other)) &&
+                  canonicalRouteInput(valueAt(consumed.expected, patch.path)) ===
+                    canonicalRouteInput(patch.value),
               ),
             )
           )
             continue;
           if (receipt.state === "succeeded") delete step.notWritten;
-          else if (receipt.state === "cancelled" && receipt.error.includes("rejected by") &&
-            step.by === receipt.caller.kind)
-            step.notWritten = { invocation: receipt.id, reason: receipt.error };
+          else if (receipt.state === "cancelled" && receipt.error.includes("rejected by"))
+            step.notWritten = {
+              invocation: receipt.id,
+              reason: receipt.error,
+              rejected: step.by === receipt.caller.kind,
+            };
         }
       }
       return structuredClone({

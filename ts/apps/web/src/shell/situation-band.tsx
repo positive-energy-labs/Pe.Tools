@@ -129,7 +129,9 @@ type Journal = NonNullable<ReturnType<typeof useWorkJournal>>;
 export const stepSource = (step: Journal["undo"][number]) => (step.by === "pea" ? "Pea" : "you");
 export const stepState = (journal: Journal, step: Journal["undo"][number]) =>
   step.notWritten
-    ? "not written — rejected"
+    ? step.notWritten.rejected
+      ? "not written — rejected"
+      : "not written"
     : step.superseded
       ? `superseded at r${step.superseded.revision}`
       : step.barrier
