@@ -232,9 +232,9 @@ test("accepted writes reach a stream subscriber with the host's stamps; a Pea wr
       by: "human",
       base: 0,
       revision: 1,
-      // The host's accepted delta, not the request: it reconciles to the parent it created.
-      patches: [{ path: ["values"], value: { a: "1" } }],
-      inverse: [{ path: ["values"] }],
+      // Keyed Work history retains the entry footprint, including insertion/deletion.
+      patches: [{ path: ["values", "a"], value: "1" }],
+      inverse: [{ path: ["values", "a"] }],
     },
   });
   expect(second).toMatchObject({

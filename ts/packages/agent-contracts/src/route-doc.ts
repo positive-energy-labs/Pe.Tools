@@ -104,15 +104,28 @@ export function routeDocDelta(
   before: unknown,
   after: unknown,
   path: RouteStatePatch["path"] = [],
+  keyedFields: readonly string[] = [],
 ): RouteStatePatch[] {
   if (JSON.stringify(before) === JSON.stringify(after)) return [];
+  // Keyed Work records have identity by key. Do not widen deletion/insertion history
+  // to the entire map merely to preserve object enumeration order.
+  if (
+    path.length === 1 &&
+    keyedFields.includes(String(path[0])) &&
+    isRecord(before) &&
+    isRecord(after)
+  )
+    return [...new Set([...Object.keys(before), ...Object.keys(after)])].flatMap((key) =>
+      routeDocDelta(before[key], after[key], [...path, key]),
+    );
+
   if (
     isRecord(before) &&
     isRecord(after) &&
     JSON.stringify(Object.keys(before)) === JSON.stringify(Object.keys(after))
   )
     return Object.keys(before).flatMap((key) =>
-      routeDocDelta(before[key], after[key], [...path, key]),
+      routeDocDelta(before[key], after[key], [...path, key], keyedFields),
     );
   return [{ path, ...(after === undefined ? {} : { value: structuredClone(after) }) }];
 }
@@ -183,13 +196,16 @@ function formatPath(path: (string | number)[]): string {
 }
 
 function formatZodError(error: z.ZodError): string {
-  return error.issues
-    .map((issue) =>
-      issue.path.length ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
-    )
-    .join("; ") + (error.issues.some(issue => issue.path.includes("edit"))
+  return (
+    error.issues
+      .map((issue) =>
+        issue.path.length ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
+      )
+      .join("; ") +
+    (error.issues.some((issue) => issue.path.includes("edit"))
       ? ' Cell edits wrap the typed value: patch path ["equipmentFlows","<id>","edit"] with value {"value":{"cfm":1050}}. For another cell, read its value schema; do not put cfm directly under edit.'
-      : "");
+      : "")
+  );
 }
 
 export function refuse(

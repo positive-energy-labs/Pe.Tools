@@ -696,10 +696,12 @@ export function createRouteShell(services: KernelServices) {
             label = described;
           }
           const patches = () =>
-            bindings.bodies[declaration.patches]!.run(
-              context(),
-              parsed,
-            ) as import("@pe/agent-contracts").WorkWrite["patches"];
+            admittedWorkPatches(
+              route.data,
+              bindings.schemas,
+              bindings.bodies[declaration.patches]!.run(context(), parsed),
+              route.resolvedWork!.schema,
+            );
           preview = freezePage(patches());
           send = () => {
             const observation = work.write(

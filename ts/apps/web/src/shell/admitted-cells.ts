@@ -11,15 +11,41 @@ export function admittedWorkPatches(
   ownerSchema?: z.ZodType,
 ) {
   if (!data.work) throw Error("Work unavailable");
-  const shape = bare(ownerSchema ?? schemas[data.work.schema ?? ""]!) as z.ZodObject;
+  const shape = bare(ownerSchema ?? schemas[data.work.schema ?? ""]!);
+  if (!(shape instanceof z.ZodObject)) throw Error("Work must be an object");
+  const patchSchema = z.union([
+    z.strictObject({ path: z.tuple([z.string()]), value: z.unknown() }),
+    z.strictObject({ path: z.tuple([z.string(), z.string()]), value: z.unknown() }),
+    z.strictObject({ path: z.tuple([z.string(), z.string(), z.string()]), value: z.unknown() }),
+    z.strictObject({ path: z.tuple([z.string(), z.string()]), op: z.literal("delete") }),
+  ]);
   return freezePage(
     z
-      .array(z.strictObject({ path: z.tuple([z.string()]), value: z.unknown() }))
+      .array(patchSchema)
       .parse(value)
       .map((patch) => {
-        const schema = shape.shape[patch.path[0]];
+        if (patch.path.some((key) => ["__proto__", "constructor", "prototype"].includes(key)))
+          throw Error("Forbidden Work path");
+        let schema: z.ZodType | undefined = shape.shape[patch.path[0]];
         if (!schema) throw Error(`Undeclared Work field: ${patch.path[0]}`);
-        return { path: patch.path, value: schema.parse(patch.value) };
+        if (patch.path.length > 1) {
+          const record = bare(schema);
+          if (!(record instanceof z.ZodRecord)) throw Error("Keyed Work field must be a record");
+          z.parse(record.keyType, patch.path[1]);
+          schema = record.valueType as z.ZodType;
+          if (patch.path.length === 3) {
+            const entry = bare(schema);
+            if (!(entry instanceof z.ZodObject)) throw Error("Work entry must be an object");
+            schema = entry.shape[patch.path[2]];
+            if (!schema) throw Error(`Undeclared Work entry field: ${patch.path[2]}`);
+          }
+        }
+        if (!("op" in patch) && !Object.hasOwn(patch, "value")) throw Error("Work replacement requires value");
+        // WorkWrite's existing delete spelling omits value; the correlated path is unchanged.
+        if (!schema) throw Error("Missing Work schema");
+        return "op" in patch
+          ? { path: patch.path }
+          : { path: patch.path, value: schema.parse(patch.value) };
       }),
   );
 }

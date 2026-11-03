@@ -74,7 +74,7 @@ export function createFixtureWorkDoor(
             "human",
             write.patches,
             write.expectedRevision,
-            false,
+            write.kind === "restore",
             write.kind === "restore",
           );
           if (!result.ok) return workOutcome(result);
@@ -86,8 +86,18 @@ export function createFixtureWorkDoor(
             ...(write.label && { label: write.label }),
             base: state.revision,
             revision: result.envelope.revision,
-            patches: routeDocDelta(prior, result.envelope.doc),
-            inverse: routeDocDelta(result.envelope.doc, prior),
+            patches: routeDocDelta(
+              prior,
+              result.envelope.doc,
+              [],
+              write.patches.filter((p) => p.path.length > 1).map((p) => String(p.path[0])),
+            ),
+            inverse: routeDocDelta(
+              result.envelope.doc,
+              prior,
+              [],
+              write.patches.filter((p) => p.path.length > 1).map((p) => String(p.path[0])),
+            ),
             undoable: true,
             ...(write.restoreOf !== undefined && { restoreOf: write.restoreOf }),
           };
