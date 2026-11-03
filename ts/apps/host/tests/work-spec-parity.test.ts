@@ -132,7 +132,7 @@ for (const registration of [
     spec: fixture,
     admit: async (doc: unknown) =>
       (doc as { value: number }).value < 0
-        ? { ok: false as const, code: "blocked", agentHint: "Negative value refused" }
+        ? { ok: false as const, kind: "refused" as const, code: "scope-unresolved" as const, agentHint: "Negative value refused" }
         : null,
   } satisfies HostWorkRegistration,
 ])
