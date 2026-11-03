@@ -832,7 +832,15 @@ export class RouteWorkspace {
     let disposed = false;
     void this.#serialized(async () => {
       const spec = this.#registry.get(scope.route)?.spec;
-      if (!spec || disposed) return;
+      if (disposed) return;
+      if (!spec) {
+        failed({
+          kind: "failed",
+          code: "WorkRouteUnregistered",
+          message: "route no longer registered",
+        } satisfies WorkFeedFailure);
+        return;
+      }
       const listeners = this.#acceptedListeners.get(key) ?? new Set();
       this.#acceptedListeners.set(key, listeners);
       listeners.add(listener);

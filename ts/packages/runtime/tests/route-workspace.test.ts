@@ -460,3 +460,21 @@ test("a write racing feed acquisition is delivered exactly once", async () => {
   expect(revisions).toEqual([1]);
   release();
 });
+
+test("a registration removed before serialized feed acquisition fails terminally", async () => {
+  const module = new RouteWorkspace({ registrations: [], store: memoryStore().store });
+  const unregister = module.register(registration());
+  const snapshot = vi.fn();
+  const ack = vi.fn();
+  const failure = deferred<unknown>();
+  const stop = module.observeFeed(documentA, snapshot, ack, failure.resolve);
+  unregister();
+  expect(await failure.promise).toEqual({
+    kind: "failed",
+    code: "WorkRouteUnregistered",
+    message: "route no longer registered",
+  });
+  expect(snapshot).not.toHaveBeenCalled();
+  expect(ack).not.toHaveBeenCalled();
+  stop();
+});

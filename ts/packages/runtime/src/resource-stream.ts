@@ -9,7 +9,10 @@ import {
   type ReadingRequest,
   type ThreadHead,
 } from "@pe/agent-contracts";
-import { workFeedFailureMessage } from "../../agent-contracts/src/work-journal-door.ts";
+import {
+  workFeedFailureMessage,
+  workFeedFailureSchema,
+} from "../../agent-contracts/src/work-journal-door.ts";
 import type { RouteWorkspace } from "./route-workspace.ts";
 import type { OwnerValue } from "./owner-read.ts";
 
@@ -78,12 +81,15 @@ export function observeResources(
                     if (!closed) accept({ value });
                   },
                   (ack) => publish({ kind: "event", key, value: ack }),
-                  (error) =>
+                  (error) => {
+                    const typed = workFeedFailureSchema.safeParse(error);
+                    if (typed.success) return refuse(typed.data);
                     publish({
                       kind: "failure",
                       key,
                       error: error instanceof Error ? error.message : String(error),
-                    }),
+                    });
+                  },
                 );
         },
         (error) => {
