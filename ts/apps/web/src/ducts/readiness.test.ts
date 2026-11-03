@@ -70,6 +70,7 @@ const snapshot = {
   layers: [],
   systems: [],
   slots: {
+    terminalDrop: "PE_M_Grd_ExternalStaticPressure",
     fanStatic: "PE_M_Fan_ExternalStaticPressure",
     fanFlow: "PE_M_Fan_AirFlow",
     componentDrop: "Pressure Drop",
