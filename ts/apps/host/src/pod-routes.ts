@@ -130,7 +130,8 @@ export function createPodRoutes(
         JSON.parse(Buffer.from(member.bytes).toString("utf8")),
         route.fingerprint,
       );
-      return wire;
+      // ponytail: JSON number arrays inflate payload roughly 3?4x; move to base64 or a raw octet-stream if Pod artifacts grow.
+      return { fingerprint: route.fingerprint, artifact: wire };
     },
     close() {
       closed = true;

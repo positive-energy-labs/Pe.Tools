@@ -11,6 +11,9 @@ import { buildRouteArtifact } from "../../web/route-module-hash.ts";
 import { createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
 import { createPodRoutes } from "../src/pod-routes.ts";
+import { createPluginsHandler } from "../src/plugins-handler.ts";
+import { peRouteUrl } from "@pe/agent-contracts/pe-api";
+import { admitPodArtifact } from "../src/pod-artifact.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 
 async function fixture(root: string, fail = false, salt = "first") {
@@ -140,7 +143,30 @@ test("trusted Pod transports complete evidence and opens fingerprint-bound feeds
     await expect(f.routes.bundle(row!.key, f.artifact.fingerprint)).rejects.toThrow("trust");
     await f.routes.trust(row!.key, f.artifact.fingerprint, true);
     expect(f.workspace.requiresAdmission(f.key.route)).toBe(true);
-    expect(await f.routes.bundle(row!.key, f.artifact.fingerprint)).toEqual(f.artifact.wire);
+    expect(await f.routes.bundle(row!.key, f.artifact.fingerprint)).toEqual({
+      fingerprint: f.artifact.fingerprint,
+      artifact: f.artifact.wire,
+    });
+    const handler = createPluginsHandler(
+      { lifecycle: f.lifecycle } as Parameters<typeof createPluginsHandler>[0],
+      f.routes,
+    );
+    const response = await handler(
+      new Request(
+        `http://host${peRouteUrl("plugins.routeBundle", { params: { key: row!.key, hash: f.artifact.fingerprint } })}`,
+      ),
+    );
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({
+      fingerprint: f.artifact.fingerprint,
+      artifact: f.artifact.wire,
+    });
+    const tampered = structuredClone(f.artifact.wire);
+    tampered.executables[0].members[0].bytes.push(32);
+    await expect(admitPodArtifact(tampered, f.artifact.fingerprint)).rejects.toThrow(
+      "bytes or fingerprint differ",
+    );
     const snapshot = f.feed("work"),
       acks = f.feed("work-acks");
     await new Promise((resolve) => setTimeout(resolve, 20));
