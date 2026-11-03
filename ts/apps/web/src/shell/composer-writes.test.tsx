@@ -1,3 +1,4 @@
+import { legacyWork } from "../route/route-discovery";
 import { testSources, testSubject, testFields, testReadings } from "../test-route-subject";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
@@ -102,7 +103,7 @@ async function scenario() {
       status: result.ok ? 200 : 409,
     });
   });
-  const entries = [{ graph, key }];
+  const entries = [{ work: legacyWork(graph)!, key }];
   function Head() {
     const work = useWorkHandles(entries)[0]!;
     return (

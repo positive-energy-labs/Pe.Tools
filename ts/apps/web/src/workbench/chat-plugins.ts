@@ -39,7 +39,8 @@ const parsed = (value: unknown): unknown => {
   if (typeof value !== "string") return value;
   try {
     return JSON.parse(value);
-  } catch (error) { console.warn("ts/apps/web/src/workbench/chat-plugins.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/workbench/chat-plugins.ts: fallback after failure", error);
     return undefined;
   }
 };
@@ -95,7 +96,7 @@ export function capturedPlace(
       : scope.binding === "address" && scope.from
         ? { kind: "open", ref: scope.from }
         : (named ?? null);
-  const needs = (publicRoutes.get(route)?.manifest as { needs?: unknown } | undefined)?.needs;
+  const needs = publicRoutes.get(route)?.manifest.needs;
   if (!target && needs && needs !== "nothing")
     return {
       ok: false,

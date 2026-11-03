@@ -48,7 +48,7 @@ const familiesClosure = {
     })),
   },
 };
-const inventory = createBuiltinRouteInventory({
+const definitions = {
   families: {
     module: familiesModule,
     closure: familiesClosure,
@@ -76,7 +76,9 @@ const inventory = createBuiltinRouteInventory({
       uses: [],
     })),
   },
-});
+};
+const inventory = createBuiltinRouteInventory(definitions);
+export const builtinRouteKeys = Object.keys(definitions) as (keyof typeof definitions)[];
 export const builtinRouteStamp = (key: "captures" | "schedules" | "families") =>
   key === "families"
     ? familiesClosure.fingerprint

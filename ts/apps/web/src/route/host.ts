@@ -99,17 +99,24 @@ export function subscribeAcceptedDeltas(
   onAck: (ack: WorkWriteAck) => void,
   onGap?: () => void,
   source: Readings = peReadings,
+  admission?: {
+    routeKey: string;
+    fingerprint: import("../../../../packages/agent-contracts/src/route-kernel-admission").RouteFingerprint;
+  },
 ): () => void {
   let seen: number | null = null;
-  return source.subscribe({ kind: "work-acks", work: key }, (frame) => {
-    if (frame.kind === "gap") return onGap?.();
-    if (frame.kind !== "event") return;
-    const parsed = workWriteAckSchema.safeParse(frame.value);
-    if (!parsed.success) return onGap?.();
-    const ack = parsed.data;
-    if (seen !== null && ack.revision <= seen) return;
-    if (seen !== null && ack.base !== seen) onGap?.();
-    seen = ack.revision;
-    onAck(ack);
-  });
+  return source.subscribe(
+    { kind: "work-acks", work: key, ...(admission && { admission }) },
+    (frame) => {
+      if (frame.kind === "gap") return onGap?.();
+      if (frame.kind !== "event") return;
+      const parsed = workWriteAckSchema.safeParse(frame.value);
+      if (!parsed.success) return onGap?.();
+      const ack = parsed.data;
+      if (seen !== null && ack.revision <= seen) return;
+      if (seen !== null && ack.base !== seen) onGap?.();
+      seen = ack.revision;
+      onAck(ack);
+    },
+  );
 }

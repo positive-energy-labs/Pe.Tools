@@ -1,3 +1,4 @@
+import { legacyWork } from "../route/route-discovery";
 import { testSources, testSubject, testFields, testReadings } from "../test-route-subject";
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from "@testing-library/react";
@@ -40,7 +41,7 @@ test("a Chat head Work write acknowledges the canonical kernel journal", async (
     layout: pane("main"),
   };
   const key = bindWork(graph.key, null, crypto.randomUUID());
-  const entries = [{ graph, key }];
+  const entries = [{ work: legacyWork(graph)!, key }];
   const held = acquireWorkJournal(key);
   vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
     if (request.kind === "work")
@@ -145,8 +146,8 @@ test("a head and its route share real host admission, undo, redo and author barr
     .spyOn(host, "writeRouteWork")
     .mockImplementation((key, request) => workspace.write(key, route, "human", request));
   const entries = [
-    { graph, key: headKey },
-    { graph, key: otherKey },
+    { work: legacyWork(graph)!, key: headKey },
+    { work: legacyWork(graph)!, key: otherKey },
   ];
   const hook = renderHook(() => useWorkHandles(entries));
   const atom = docAtom(spec, pageKey);

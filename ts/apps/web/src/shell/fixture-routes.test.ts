@@ -188,9 +188,18 @@ test("companion chat stays idle and mounts its own seed beside another route", a
 
 // Registration executes the normal builtin composition; fixture owners exercise every legacy graph.
 test("every registered builtin admits without a graph hash, and the legacy door refuses unknown keys", () => {
-  expect(publicRoutes.keys().sort()).toEqual([...legacyBuiltinKeys].sort());
-  for (const key of publicRoutes.keys()) {
-    const graph = publicRoutes.get(key)!.graph!;
+  expect(
+    publicRoutes
+      .entries()
+      .filter(({ graph }) => graph)
+      .map(({ manifest }) => manifest.key)
+      .sort(),
+  ).toEqual([...legacyBuiltinKeys].sort());
+  for (const {
+    manifest: { key },
+    graph,
+  } of publicRoutes.entries()) {
+    if (!graph) continue;
     expect(builtinAdmission({ ...graph, moduleHash: undefined }), key).toBeNull();
   }
   expect(builtinAdmission({ ...routes[0]!, key: "not-in-the-legacy-census" })).toContain(

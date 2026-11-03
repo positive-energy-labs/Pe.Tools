@@ -18,12 +18,17 @@ class RouteAtomKey implements Equal.Equal {
     readonly spec: RouteStateSpec<any>,
     readonly key: WorkKey,
     readonly resources: Readings,
+    readonly admission?: {
+      routeKey: string;
+      fingerprint: import("../../../../packages/agent-contracts/src/route-kernel-admission").RouteFingerprint;
+    },
   ) {}
   [Equal.symbol](that: Equal.Equal): boolean {
     return (
       that instanceof RouteAtomKey &&
       this.spec.route === that.spec.route &&
       this.resources === that.resources &&
+      this.admission?.fingerprint === that.admission?.fingerprint &&
       workKey(this.key) === workKey(that.key)
     );
   }
@@ -34,7 +39,10 @@ class RouteAtomKey implements Equal.Equal {
 
 const routeAtom = Atom.family((key: RouteAtomKey) => {
   const { spec } = key;
-  const resource = readingAtom({ ...key.key, kind: "work" }, key.resources);
+  const resource = readingAtom(
+    { ...key.key, kind: "work", ...(key.admission && { admission: key.admission }) },
+    key.resources,
+  );
   return Atom.make((get) => {
     const result = get(resource);
     try {
@@ -64,6 +72,10 @@ export function docAtom<S extends RouteStateSpec<any>>(
   spec: S,
   key: WorkKey,
   resources: Readings = peReadings,
+  admission?: {
+    routeKey: string;
+    fingerprint: import("../../../../packages/agent-contracts/src/route-kernel-admission").RouteFingerprint;
+  },
 ): Atom.Atom<Reading<Slice<RouteDocOf<S>>>> {
-  return routeAtom(new RouteAtomKey(spec, key, resources));
+  return routeAtom(new RouteAtomKey(spec, key, resources, admission));
 }

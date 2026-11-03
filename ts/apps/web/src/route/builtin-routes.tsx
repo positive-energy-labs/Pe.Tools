@@ -1,9 +1,11 @@
+import { createRouteDiscovery, admittedWork, type DiscoveredRoute } from "./route-discovery";
+import { builtinRouteKeys, builtinRouteStamp, loadBuiltinRoute } from "./builtin-inventory";
 import { rhvacSyncGraph } from "#/rhvac-sync/graph";
 import { zoneAuditGraph } from "#/zone-audit/graph";
 import { sessionsGraph } from "#/sessions/graph";
 import { podAdminGraph } from "#/pod-admin/graph";
 import { lazy, type ComponentType } from "react";
-import { legacyRouteDiscovery, registerLegacyGraph } from "#/shell/legacy-route-door";
+import { registerLegacyGraph } from "#/shell/legacy-route-door";
 import { openGraph } from "#/open/graph";
 import { parameterLinksGraph } from "#/parameter-links/graph";
 import { podsGraph } from "#/pods/graph";
@@ -19,6 +21,9 @@ import { mountRoute, type MountRouteProps } from "#/shell/mount";
 /** A route body stays out of the shell chunk until a pane mounts it. */
 const named = <K extends string, P>(load: () => Promise<Record<K, ComponentType<P>>>, name: K) =>
   lazy(() => load().then((module) => ({ default: module[name] })));
+const HostedAdmittedRoute = lazy(() =>
+  import("../workbench/hosted-route").then((module) => ({ default: module.HostedAdmittedRoute })),
+);
 const PodsRoute = named(() => import("#/pods/route"), "PodsRoute");
 const ParameterLinksRoute = named(() => import("#/parameter-links/route"), "ParameterLinksRoute");
 const TakeoffsPane = named(() => import("#/takeoff/pane"), "TakeoffsPane");
@@ -40,8 +45,23 @@ const DataTablesRoute = lazy(async () => ({
 const SettingsRoute = lazy(async () => ({
   default: mountRoute(settingsGraph, (await import("#/settings/route")).settingsAdapters),
 }));
-// TODO: S1d combine admitted kernel discovery after the first route migrates.
-export const publicRoutes = legacyRouteDiscovery;
+const admitted = new Map<string, DiscoveredRoute>();
+export const publicRoutes = createRouteDiscovery(() => [...admitted.values()]);
+export const publicRoutesReady = Promise.all(
+  builtinRouteKeys.map(async (key) => {
+    const result = await loadBuiltinRoute(key, builtinRouteStamp(key));
+    if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+    const route = result.route;
+    admitted.set(key, {
+      manifest: route.data,
+      admitted: route,
+      work: admittedWork(route),
+      hosted: (props) => <HostedAdmittedRoute route={route} {...props} />,
+    });
+    publicRoutes.changed();
+  }),
+);
+void publicRoutesReady.catch((error) => console.error("Builtin discovery refused", error));
 registerLegacyGraph(settingsGraph, hosted(SettingsRoute));
 registerLegacyGraph(openGraph, hosted(OpenPage));
 registerLegacyGraph(takeoffGraph, ({ visible, ...binding }) => (
