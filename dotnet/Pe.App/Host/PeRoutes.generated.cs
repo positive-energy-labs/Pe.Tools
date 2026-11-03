@@ -365,7 +365,6 @@ internal static class PeRoutes {
             public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string Scene = "scene";
-            public const string Ids = "ids";
             public const string Mode = "mode";
             public const string Viewport = "viewport";
             public const string Cuts = "cuts";
