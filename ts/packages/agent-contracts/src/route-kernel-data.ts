@@ -88,7 +88,13 @@ const verb = {
 export const routeVerbJsonSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("work"), ...verb, patches: ref }),
   z.strictObject({ kind: z.literal("page"), ...verb, patch: ref, fields: refs }),
-  z.strictObject({ kind: z.literal("command"), ...verb, entry: ref, intent: ref }),
+  z.strictObject({
+    kind: z.literal("command"),
+    ...verb,
+    entry: ref,
+    intent: ref,
+    lands: ref.optional(),
+  }),
   z.strictObject({
     kind: z.literal("query"),
     ...verb,

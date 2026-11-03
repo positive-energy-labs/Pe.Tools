@@ -5,6 +5,7 @@ import type { ExecutionTarget } from "./target.ts";
 import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
 import type {
   DecodeResult,
+  InvocationToken,
   MoveOrigin,
   PageOf,
   PagePatch,
@@ -95,6 +96,9 @@ type InvocationContext<
   E extends EntryTable,
   D,
 > = BodyContext<G, S, E, D> & {
+  /** Mount-issued basis of the accepted Work used by this invocation.
+   * Work writes carry it unchanged; routes cannot mint or rebase it. */
+  readonly workBasis: InvocationToken | null;
   /** Frozen at invocation capture, separate from invalidating dependencies. */
   readonly captures: Reads<G, S, E, D extends { captures: readonly (infer K)[] } ? K : never>;
 };
@@ -136,6 +140,9 @@ export type PaneContext<
   readonly page: PagePort<G, S>;
   readonly history?: "work" extends keyof G ? WorkHistoryPort : never;
   readonly work: Immutable<WorkOf<G, S>> | null;
+  /** Issued with this rendered Work value. Its token.scope.identity.work is the handle
+   * and workRevision is the accepted revision. Kernel membership rejects copied bases. */
+  readonly workBasis: InvocationToken | null;
   readonly readings: Reads<G, S, E, G["panes"][P]["draws"][number]>;
   /** Declared explicit geometry readings only. The mount owns invocation and refresh. */
   readonly readingActions?: {
@@ -159,6 +166,7 @@ export type PaneContext<
   readonly verbs: {
     readonly [V in Extract<Allowed<G["panes"][P]["verbs"]>, keyof G["verbs"]>]: (
       input: VerbInput<G, S, V>,
+      ...basis: G["verbs"][V] extends { kind: "work" } ? [basis: InvocationToken] : []
     ) => void;
   };
 };
@@ -257,6 +265,15 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         `verbs.${K}.ready`,
         "ready",
         (ctx: InvocationContext<G, S, E, G["verbs"][K]>, input: VerbInput<G, S, K>) => true | string
+      >
+    | Slot<
+        At<G["verbs"][K], "lands">,
+        `verbs.${K}.lands`,
+        "lands",
+        /** Run only on a decoded authoritative committed result, while the invocation
+         * remains current. B/C accepts the patch; departure retains the receipt and
+         * leaves the replacement Page untouched. Never run on preview or failure. */
+        (result: Output<E, At<G["verbs"][K], "entry">>, page: PageOf<G, S>) => PagePatch<G, S>
       >
     | Slot<
         At<G["verbs"][K], "present">,

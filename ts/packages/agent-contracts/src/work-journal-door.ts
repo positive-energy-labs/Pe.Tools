@@ -66,6 +66,9 @@ export type AcceptedResult =
       readonly kind: "accepted-native";
       readonly receiptId: string;
       readonly outcome: NativeOutcome;
+      /** Authoritative catalog output, decoded by the mount before lands. Only committed
+       * outcomes may land; absent output is decoded as undefined, never a guessed result. */
+      readonly result?: unknown;
     }
   | {
       readonly kind: "rejected";

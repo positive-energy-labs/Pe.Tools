@@ -129,6 +129,9 @@ export class AcceptanceToken {
 }
 declare const causalParent: unique symbol;
 export type CausalParentId = string & { readonly [causalParent]: true };
+/** An edit carries its rendered accepted Work key (token.scope.identity.work) and
+ * workRevision unchanged to submitWork.expectedRevision. A stale-base refusal, including
+ * a delayed submit, must not be retried with a newer basis or recomputed patches. */
 export interface InvocationBasis {
   readonly causalParent?: CausalParentId;
   readonly token: AcceptanceToken;
