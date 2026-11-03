@@ -407,6 +407,17 @@ export function createPagePorts<G extends RouteGraphJson, S extends SchemaTable>
   graph: G,
   owner: PageOwner<G, S> & { readPage(): PageOf<G, S> },
 ): { readonly page: PagePort<G, S>; readonly controls: FieldControls<G, S> } {
+  return createRolePagePorts(graph.fields, owner);
+}
+
+/** Applies the same role boundary to legacy mounts without fabricating an admitted graph. */
+export function createRolePagePorts<P>(
+  fields: Readonly<Record<string, { readonly role: string }>>,
+  owner: {
+    readPage(): P;
+    movePage(patch: Partial<P>, origin: Extract<MoveOrigin, { kind: "human" }>): MoveResult;
+  },
+) {
   const send = (
     patch: unknown,
     source: Extract<MoveOrigin, { kind: "human" }>["source"],
@@ -417,12 +428,12 @@ export function createPagePorts<G extends RouteGraphJson, S extends SchemaTable>
       if (
         !parsed.success ||
         Object.keys(parsed.data).some(
-          (key) => !Object.hasOwn(graph.fields, key) || graph.fields[key]?.role !== source,
+          (key) => !Object.hasOwn(fields, key) || fields[key]?.role !== source,
         )
       )
         return refused(`Only ${source} fields are allowed`);
       // The owner decodes values. Build only declared role keys; the pane never receives this writer.
-      const checked: Partial<PageOf<G, S>> = {};
+      const checked: Partial<P> = {};
       for (const [key, value] of Object.entries(parsed.data))
         Object.defineProperty(checked, key, { value, enumerable: true });
       return owner.movePage(checked, { kind: "human", source, history });
@@ -435,7 +446,7 @@ export function createPagePorts<G extends RouteGraphJson, S extends SchemaTable>
       ? send({ [key]: value }, source, "replace")
       : refused("Invalid field key");
   const one = (source: "subject" | "selection" | "stage", value: unknown) => {
-    const keys = Object.keys(graph.fields).filter((key) => graph.fields[key]!.role === source);
+    const keys = Object.keys(fields).filter((key) => fields[key]!.role === source);
     return keys.length === 1
       ? send({ [keys[0]!]: value }, source, "push")
       : refused(`Expected one ${source} field`);
@@ -443,18 +454,18 @@ export function createPagePorts<G extends RouteGraphJson, S extends SchemaTable>
   return Object.freeze({
     page: Object.freeze({
       read: () => freezePage(owner.readPage()),
-      select: (next) => one("selection", next),
-      set: (key, value) => field(key, value, "setting"),
-      pose: (patch, intent) =>
+      select: (next: unknown) => one("selection", next),
+      set: (key: keyof P, value: P[keyof P]) => field(key, value, "setting"),
+      pose: (patch: unknown, intent: "gesture" | "named") =>
         intent === "gesture" || intent === "named"
           ? send(patch, "pose", intent === "gesture" ? "replace" : "push")
           : refused("Invalid pose intent"),
-    } satisfies PagePort<G, S>),
+    }),
     controls: Object.freeze({
-      subject: (value) => one("subject", value),
-      stage: (value) => one("stage", value),
-      query: (key, value) => field(key, value, "query"),
-      draft: (key, value) => field(key, value, "draft"),
-    } satisfies FieldControls<G, S>),
+      subject: (value: unknown) => one("subject", value),
+      stage: (value: unknown) => one("stage", value),
+      query: (key: keyof P, value: P[keyof P]) => field(key, value, "query"),
+      draft: (key: keyof P, value: P[keyof P]) => field(key, value, "draft"),
+    }),
   });
 }

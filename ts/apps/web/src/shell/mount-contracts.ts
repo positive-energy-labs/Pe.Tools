@@ -1,5 +1,21 @@
 import { type SettingsOwner } from "./settings";
-import { validateRouteGraph, type ActionReceipt, type ActionStatus, type DocumentRef, type ExecutionTarget, type FieldDecl, type FieldRole, type RouteGraph, type RouteStatePatch, type RouteStateWriteResult, type WorkHandle, type WorkKey, type WorkWrite, type VerbReadingEdges, type WorkWriteAck } from "@pe/agent-contracts";
+import {
+  validateRouteGraph,
+  type ActionReceipt,
+  type ActionStatus,
+  type DocumentRef,
+  type ExecutionTarget,
+  type FieldDecl,
+  type FieldRole,
+  type RouteGraph,
+  type RouteStatePatch,
+  type RouteStateWriteResult,
+  type WorkHandle,
+  type WorkKey,
+  type WorkWrite,
+  type VerbReadingEdges,
+  type WorkWriteAck,
+} from "@pe/agent-contracts";
 
 import { type ReadingLog, type ReadingSource, type ReadingState } from "./readings";
 
@@ -100,4 +116,3 @@ export function mountRefusals<P, W>(
         invalid(`readings.${id}.source`, `Unresolved ${reading.kind} source '${reading.source}'`);
   return all;
 }
-

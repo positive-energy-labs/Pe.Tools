@@ -7,7 +7,14 @@ import { createRouteTimeline } from "./timeline";
 import { type MountAdapters, type MountScope } from "./mount-contracts";
 import type { MountPage } from "./mount-page-owner";
 /** Owns graph reading acquisition, dependency bases and reading-scope refresh. */
-export function createMountReadings<P,W>(graph: RouteGraph<P,W>, adapters: MountAdapters<P,W>, page: MountPage<P,W>, settings: SettingsOwner, scope: () => MountScope<W>, timeline: ReturnType<typeof createRouteTimeline>) {
+export function createMountReadings<P, W>(
+  graph: RouteGraph<P, W>,
+  adapters: MountAdapters<P, W>,
+  page: MountPage<P, W>,
+  settings: SettingsOwner,
+  scope: () => MountScope<W>,
+  timeline: ReturnType<typeof createRouteTimeline>,
+) {
   const readScope = () => ({
     target: scope().target,
     workKey: scope().workKey ?? scope().work?.handle.key ?? null,
@@ -20,47 +27,47 @@ export function createMountReadings<P,W>(graph: RouteGraph<P,W>, adapters: Mount
   const needsPage =
     !graph.readings.page && Object.values(graph.readings).some((r) => r.deps?.includes("page"));
   const readings = createReadingGraph(
-      {
-        readings: {
-          ...graph.readings,
-          ...(needsPage
-            ? {
-                page: {
-                  kind: "derive" as const,
-                  source: "@shell/page",
-                  retire: "page" as const,
-                  args: (p: Readonly<P>) => p,
-                },
-              }
-            : {}),
-        },
+    {
+      readings: {
+        ...graph.readings,
+        ...(needsPage
+          ? {
+              page: {
+                kind: "derive" as const,
+                source: "@shell/page",
+                retire: "page" as const,
+                args: (p: Readonly<P>) => p,
+              },
+            }
+          : {}),
       },
-      {
-        sources: {
-          ...adapters.sources,
-          ...(needsPage
-            ? {
-                "@shell/page": {
-                  kind: "derive" as const,
-                  derive: (ctx: { page: unknown }) => ctx.page,
-                },
-              }
-            : {}),
-        },
-        scope: readScope(),
-        log: (entry) => {
-          adapters.logReading?.(entry);
-          if (entry.kind === "feed")
-            timeline.append({
-              kind: "feed",
-              at: Date.now(),
-              verb: entry.reading,
-              subject: entry.value,
-              basis: { workKey: entry.attempt.workKey ? workKey(entry.attempt.workKey) : null },
-            });
-        },
+    },
+    {
+      sources: {
+        ...adapters.sources,
+        ...(needsPage
+          ? {
+              "@shell/page": {
+                kind: "derive" as const,
+                derive: (ctx: { page: unknown }) => ctx.page,
+              },
+            }
+          : {}),
       },
-    );
+      scope: readScope(),
+      log: (entry) => {
+        adapters.logReading?.(entry);
+        if (entry.kind === "feed")
+          timeline.append({
+            kind: "feed",
+            at: Date.now(),
+            verb: entry.reading,
+            subject: entry.value,
+            basis: { workKey: entry.attempt.workKey ? workKey(entry.attempt.workKey) : null },
+          });
+      },
+    },
+  );
   const basisFor = (ids: readonly string[]) =>
     Object.fromEntries(
       ids.map((id) => {
@@ -75,6 +82,13 @@ export function createMountReadings<P,W>(graph: RouteGraph<P,W>, adapters: Mount
         return [id, { version: state.version, current: state.current, basis: state.basis }];
       }),
     );
-return { ...readings, basis, basisFor, states: () => Object.fromEntries(Object.keys(graph.readings).map(id => [id, readings.get(id)])), syncScope: () => readings.update(readScope()) };
+  return {
+    ...readings,
+    basis,
+    basisFor,
+    states: () =>
+      Object.fromEntries(Object.keys(graph.readings).map((id) => [id, readings.get(id)])),
+    syncScope: () => readings.update(readScope()),
+  };
 }
-export type MountReadings<P,W> = ReturnType<typeof createMountReadings<P,W>>;
+export type MountReadings<P, W> = ReturnType<typeof createMountReadings<P, W>>;
