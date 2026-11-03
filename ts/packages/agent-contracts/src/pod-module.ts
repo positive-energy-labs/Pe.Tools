@@ -7,7 +7,8 @@ import type {
 } from "./index.ts";
 import type { z } from "zod";
 
-/** One content-pinned declaration is consumed by both shells. UI bodies receive pane props only. */
+/** SHIM: Remove PodModule/register(api) when P3 removes pod-view and its legacy loader tests;
+ * P2 has removed the host consumer. New packages export PodRouteAuthoring, never register(api). */
 export interface PodModule {
   version: 1;
   namespace: string;

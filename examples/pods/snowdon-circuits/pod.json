@@ -4,9 +4,24 @@
   "name": "Snowdon Circuits",
   "version": "0.1.0",
   "description": "Read real electrical circuits in your licensed Snowdon Towers sample, compare voltage drop, and export a portable worksheet.",
-  "routes": [{ "sourcePath": "routes/voltage-drop/index.js", "name": "Voltage Drop", "description": "Read electrical circuits, compare conductor sizes and review voltage-drop proposals.", "page": "pages/tour" }],
+  "routes": [
+    {
+      "artifact": "routes/voltage-drop/route.artifact",
+      "fingerprint": "pod-bytes:ef3271d06b72622533b2b22b5a2a921dc807804a6a2c8f889bbdbefc2cf37036",
+      "name": "Circuit voltage drop",
+      "description": "Compare authored copper conductor inputs with the 75 C K method"
+    }
+  ],
   "entrypoints": [
-    { "sourcePath": "src/Census.cs", "name": "Circuit census", "description": "Read-only numeric electrical facts with explicit units and unavailable values." },
-    { "sourcePath": "src/InspectRun.cs", "name": "Inspect selected circuit", "description": "Read-only circuit facts for the circuit or connected load selected in Revit." }
+    {
+      "sourcePath": "src/Census.cs",
+      "name": "Circuit census",
+      "description": "Read-only numeric electrical facts with explicit units and unavailable values."
+    },
+    {
+      "sourcePath": "src/InspectRun.cs",
+      "name": "Inspect selected circuit",
+      "description": "Read-only circuit facts for the circuit or connected load selected in Revit."
+    }
   ]
 }
