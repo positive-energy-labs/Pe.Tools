@@ -11,7 +11,7 @@ registerHooks({
 });
 /** Graph declarations own the directory and Pea projections; browser bodies never ship to MCP. */
 import { createJiti } from "jiti";
-import { buildBuiltinClosure, routeSourceHash } from "../route-source-hash.ts";
+import { buildBuiltinClosures, routeSourceHash } from "../route-source-hash.ts";
 import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 const jiti = createJiti(import.meta.url, {
@@ -61,66 +61,68 @@ async function emit(destination: URL, text: string) {
     await writeFile(destination, text);
   }
 }
+const { admittedBuiltinKeys } = await jiti.import<
+  typeof import("../../../packages/agent-contracts/src/admitted-builtin-keys.ts")
+>("../../../packages/agent-contracts/src/admitted-builtin-keys.ts");
+const root = fileURLToPath(new URL("../", import.meta.url));
+const host = JSON.parse(
+  await readFile(new URL("../../host/package.json", import.meta.url), "utf8"),
+);
+const builtinOptions = [];
+for (const key of admittedBuiltinKeys) {
+  const files = await readdir(new URL(`../src/${key}/`, import.meta.url));
+  const kernel = files.includes("kernel.ts") ? "kernel.ts" : "kernel.tsx";
+  const entry = fileURLToPath(new URL(`../src/${key}/${kernel}`, import.meta.url));
+  const { module } = await jiti.import<{ module: { data: unknown } }>(entry);
+  builtinOptions.push({
+    root,
+    identityRoot: fileURLToPath(new URL("../../../../", import.meta.url)),
+    data: module.data,
+    hostVersion: host.version,
+    variants: (["web", "pea"] as const).map((client) => ({
+      client,
+      entry,
+    })),
+    config: { resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] } },
+    inputs: [
+      "../vite.config.ts",
+      "../tsconfig.json",
+      "../route-source-hash.ts",
+      "../route-module-hash.ts",
+      "../../host/package.json",
+      "../../../pnpm-lock.yaml",
+      "../../../package.json",
+      "../../../packages/agent-contracts/src/route-kernel-data.ts",
+      "../../../packages/agent-contracts/src/route-module.ts",
+      "../../../packages/agent-contracts/src/admitted-builtin-keys.ts",
+    ].map((path) => fileURLToPath(new URL(path, import.meta.url))),
+  });
+}
+const closures = await buildBuiltinClosures(builtinOptions);
+if (closureDestination && closures.size !== 1)
+  throw Error("--closure-output requires exactly one builtin");
 const directory = [];
+for (const [key, closure] of closures) {
+  await emit(
+    closureDestination
+      ? pathToFileURL(closureDestination)
+      : new URL(`../src/${key}/source-closure.generated.json`, import.meta.url),
+    canonicalRouteJson(closure) + "\n",
+  );
+  if (closureOnly) continue;
+  const data = closure.envelope.data;
+  directory.push({ key, directory: projectKernelDirectory(data), moduleHash: closure.fingerprint });
+  await emit(
+    new URL(`../../../packages/mcps/src/pea/generated/${key}-graph.json`, import.meta.url),
+    `${JSON.stringify(data, null, 2)}\n`,
+  );
+}
 for (const folder of (await readdir(new URL("../src/", import.meta.url), { withFileTypes: true }))
   .filter((d) => d.isDirectory())
   .sort((a, b) => a.name.localeCompare(b.name))) {
   const files = await readdir(new URL(`../src/${folder.name}/`, import.meta.url));
   if (!files.includes("graph.ts")) continue;
-  if (folder.name === "captures") {
-    const { capturesGraph } = await jiti.import<typeof import("../src/captures/graph.ts")>(
-      "../src/captures/graph.ts",
-    );
-    const root = fileURLToPath(new URL("../", import.meta.url));
-    const host = JSON.parse(
-      await readFile(new URL("../../host/package.json", import.meta.url), "utf8"),
-    );
-    const closure = await buildBuiltinClosure({
-      root,
-      identityRoot: fileURLToPath(new URL("../../../../", import.meta.url)),
-      data: capturesGraph,
-      hostVersion: host.version,
-      variants: [
-        {
-          client: "web",
-          entry: fileURLToPath(new URL("../src/captures/kernel.ts", import.meta.url)),
-        },
-        {
-          client: "pea",
-          entry: fileURLToPath(new URL("../src/captures/kernel.ts", import.meta.url)),
-        },
-      ],
-      config: { resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] } },
-      inputs: [
-        "../vite.config.ts",
-        "../tsconfig.json",
-        "../route-source-hash.ts",
-        "../route-module-hash.ts",
-        "../../host/package.json",
-        "../../../pnpm-lock.yaml",
-        "../../../package.json",
-        "../../../packages/agent-contracts/src/route-kernel-data.ts",
-        "../../../packages/agent-contracts/src/route-module.ts",
-      ].map((path) => fileURLToPath(new URL(path, import.meta.url))),
-    });
-    await emit(
-      closureDestination
-        ? pathToFileURL(closureDestination)
-        : new URL("../src/captures/source-closure.generated.json", import.meta.url),
-      canonicalRouteJson(closure) + "\n",
-    );
-    if (closureOnly) continue;
-    directory.push({
-      key: capturesGraph.key,
-      directory: projectKernelDirectory(capturesGraph),
-      moduleHash: closure.fingerprint,
-    });
-    await emit(
-      new URL("../../../packages/mcps/src/pea/generated/captures-graph.json", import.meta.url),
-      `${JSON.stringify(capturesGraph, null, 2)}\n`,
-    );
-    continue;
-  }
+  if (closures.has(folder.name)) continue;
   if (closureOnly) continue;
   const module = await jiti.import<Record<string, unknown>>(`../src/${folder.name}/graph.ts`);
   const graphs = Object.entries(module).filter(([name]) => name.endsWith("Graph"));

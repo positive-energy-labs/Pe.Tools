@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { isAbsolute, relative } from "node:path";
 import { build, type InlineConfig, type Plugin } from "vite-plus";
 import ts from "typescript";
+import { workFingerprintSchema } from "../../packages/agent-contracts/src/route-kernel-admission.ts";
 import { canonicalRouteJson } from "../../packages/agent-contracts/src/route-graph.ts";
 import { RouteGraphJson } from "../../packages/agent-contracts/src/route-kernel-data.ts";
 
@@ -35,6 +36,7 @@ export interface BuiltinClosureOptions {
   readonly variants: readonly { readonly client: "web" | "pea"; readonly entry: string }[];
   readonly data: unknown;
   readonly hostVersion: string;
+  readonly workOwner?: Extract<RouteFingerprint, { source: "builtin-closure" }>["workOwner"];
   /** Resolver/transform config is passed directly to Vite. Never discover config from cwd. */
   readonly config?: InlineConfig;
   /** Config, lockfile, catalog and toolchain contracts not reachable by runtime imports. */
@@ -172,6 +174,7 @@ export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
     version: 1,
     data: RouteGraphJson.parse(options.data),
     hostVersion: options.hostVersion,
+    ...(options.workOwner ? { workOwner: options.workOwner } : {}),
     variants: options.variants
       .map((v) => ({ client: v.client, entry: idFor(v.entry) }))
       .sort((a, b) => (a.client < b.client ? -1 : 1)),
@@ -189,4 +192,37 @@ export function checkBuiltinClosure(
 ) {
   if (readFileSync(path, "utf8").replaceAll("\r\n", "\n") !== canonicalRouteJson(closure) + "\n")
     throw Error(`Builtin source closure drifted: ${path}`);
+}
+
+/** Resolve owner dependencies before hashing presenters; never read an old owner pin. */
+export async function buildBuiltinClosures(inventory: readonly BuiltinClosureOptions[]) {
+  const pending = new Map(
+    inventory.map((options) => {
+      const data = RouteGraphJson.parse(options.data);
+      return [data.key, { options, data }] as const;
+    }),
+  );
+  if (pending.size !== inventory.length) throw Error("Duplicate builtin route");
+  const closures = new Map<string, Awaited<ReturnType<typeof buildBuiltinClosure>>>();
+  while (pending.size) {
+    let progress = false;
+    for (const [key, { options, data }] of pending) {
+      const ownerKey = data.work?.route;
+      const owner = ownerKey && ownerKey !== key ? closures.get(ownerKey) : undefined;
+      if (ownerKey && ownerKey !== key && !owner) continue;
+      const workOwner =
+        owner && ownerKey
+          ? {
+              route: ownerKey,
+              fingerprint: workFingerprintSchema.parse(`builtin-closure:${owner.fingerprint}`),
+            }
+          : undefined;
+      closures.set(key, await buildBuiltinClosure({ ...options, workOwner }));
+      pending.delete(key);
+      progress = true;
+    }
+    if (!progress)
+      throw Error(`Missing or cyclic builtin Work owners: ${[...pending.keys()].join(", ")}`);
+  }
+  return closures;
 }

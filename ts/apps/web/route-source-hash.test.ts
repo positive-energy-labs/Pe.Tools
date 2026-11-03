@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { buildBuiltinClosure, checkBuiltinClosure } from "./route-source-hash.ts";
+import {
+  buildBuiltinClosure,
+  buildBuiltinClosures,
+  checkBuiltinClosure,
+} from "./route-source-hash.ts";
 import { canonicalRouteJson } from "../../packages/agent-contracts/src/route-graph.ts";
 import { builtinData } from "../../packages/agent-contracts/src/route-kernel.fixtures.ts";
 const roots: string[] = [];
@@ -123,4 +127,38 @@ test("computed imports refuse, external content integrity affects the envelope",
   await expect(buildBuiltinClosure({ ...f.options, identityRoot: "relative" })).rejects.toThrow(
     "absolute path",
   );
+});
+
+test("all builtin envelopes are generated owner-first with the current owner Work pin", async () => {
+  const f = fixture();
+  const owner = {
+    ...builtinData,
+    key: "owner",
+    address: "/owner",
+    work: { ...builtinData.work, route: "owner" },
+  };
+  const presenter = {
+    ...builtinData,
+    key: "presenter",
+    address: "/presenter",
+    capabilities: ["work"],
+    work: { route: "owner" },
+  };
+  const options = [presenter, owner].map((data) => ({ ...f.options, data }));
+  const closures = await buildBuiltinClosures(options);
+  expect([...closures.keys()]).toEqual(["owner", "presenter"]);
+  expect(closures.get("presenter")!.envelope.workOwner).toEqual({
+    route: "owner",
+    fingerprint: `builtin-closure:${closures.get("owner")!.fingerprint}`,
+  });
+  writeFileSync(join(f.root, "body.ts"), "export const body = () => 99;");
+  const changed = await buildBuiltinClosures(options);
+  expect(changed.get("presenter")!.envelope.workOwner).toEqual({
+    route: "owner",
+    fingerprint: `builtin-closure:${changed.get("owner")!.fingerprint}`,
+  });
+  expect(changed.get("presenter")!.envelope.workOwner).not.toEqual(
+    closures.get("presenter")!.envelope.workOwner,
+  );
+  await expect(buildBuiltinClosures([options[0]!])).rejects.toThrow("Missing or cyclic");
 });

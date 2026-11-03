@@ -6,9 +6,7 @@ import { buildBuiltinClosure, fingerprintRouteSource } from "../../route-source-
 import { module as captures } from "../captures/kernel";
 import { builtinClosureFingerprint } from "../../../../packages/agent-contracts/src/route-module";
 
-// TODO: W1 owner-before-presenter cutover needs the existing producer to carry
-// the admitted ducts Work fingerprint into fans' closure and its drift check.
-test("the builtin closure producer drops supplied owner evidence", async () => {
+test("the builtin closure producer preserves supplied owner evidence", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-w1c-closure-"));
   try {
     const entry = join(root, "module.ts");
@@ -42,11 +40,9 @@ test("the builtin closure producer drops supplied owner evidence", async () => {
       workOwner,
     };
     const closure = await buildBuiltinClosure(options);
-    expect(closure.envelope).not.toHaveProperty("workOwner");
+    expect(closure.envelope.workOwner).toEqual(workOwner);
     expect(closure.fingerprint).toBe(fingerprintRouteSource(closure.envelope));
-    expect(closure.fingerprint).not.toBe(
-      fingerprintRouteSource({ ...closure.envelope, workOwner }),
-    );
+    expect(closure.fingerprint).toBe(fingerprintRouteSource({ ...closure.envelope, workOwner }));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
