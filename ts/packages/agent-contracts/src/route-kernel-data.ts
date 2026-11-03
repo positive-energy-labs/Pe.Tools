@@ -114,6 +114,14 @@ const pane = z.strictObject({
   verbs: placement,
   body: ref.optional(),
   history: z.strictObject({ receipts: ref.optional() }).optional(),
+  frame: z
+    .strictObject({
+      picture: z.boolean().optional(),
+      scroll: z.enum(["auto", "clip", "visible"]).optional(),
+      flush: z.boolean().optional(),
+      header: z.literal(false).optional(),
+    })
+    .optional(),
 });
 export type LayoutJson =
   | { readonly kind: "pane"; readonly id: string }
@@ -124,6 +132,14 @@ export type LayoutJson =
       readonly axis: "h" | "v";
       readonly size: number;
       readonly children: readonly LayoutJson[];
+      readonly sized?: "start" | "end";
+      readonly minSize?: number;
+      readonly maxSize?: number;
+      readonly minOtherSize?: number;
+      readonly persist?: string;
+      readonly rails?: Partial<
+        Record<"start" | "end", { readonly title: string; readonly collapseBelow?: number }>
+      >;
     };
 const layout: z.ZodType<LayoutJson> = z.lazy(() =>
   z.discriminatedUnion("kind", [
@@ -135,6 +151,21 @@ const layout: z.ZodType<LayoutJson> = z.lazy(() =>
       axis: z.enum(["h", "v"]),
       size: z.number().positive(),
       children: z.array(layout).min(2),
+      sized: z.enum(["start", "end"]).optional(),
+      minSize: z.number().nonnegative().optional(),
+      maxSize: z.number().positive().optional(),
+      minOtherSize: z.number().nonnegative().optional(),
+      persist: ref.optional(),
+      rails: z
+        .strictObject({
+          start: z
+            .strictObject({ title: z.string(), collapseBelow: z.number().nonnegative().optional() })
+            .optional(),
+          end: z
+            .strictObject({ title: z.string(), collapseBelow: z.number().nonnegative().optional() })
+            .optional(),
+        })
+        .optional(),
     }),
   ]),
 );

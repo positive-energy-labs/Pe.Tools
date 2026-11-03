@@ -208,17 +208,24 @@ export function TimelineHead<P, W>({
   owner,
   history,
   thread,
+  verbs: declaredVerbs,
 }: {
-  owner: GraphMount<P, W>;
+  owner: HistoryOwner<P, W>;
+  verbs?: Readonly<Record<string, { label: string; kind: string }>>;
   history: ReactNode;
   thread?: string;
 }) {
-  const entries = useSyncExternalStore(
-    (notify) => owner.timeline.subscribe(notify),
-    owner.timeline.version,
-    owner.timeline.version,
+  const admitted = "restoreWork" in owner;
+  const version = admitted ? owner.revision : owner.timeline.version;
+  useSyncExternalStore(
+    admitted ? owner.subscribe : (notify) => owner.timeline.subscribe(notify),
+    version,
+    version,
   );
-  const timeline = entries ? owner.timeline.read() : [];
+  const timeline: readonly TimelineEntry[] = admitted ? owner.timeline() : owner.timeline.read();
+  const verbs = declaredVerbs ?? (admitted ? {} : owner.verbs);
+  const labelOf = (id?: string) =>
+    admitted ? ((id ? verbs[id]?.label : undefined) ?? "Command") : (id ?? "Command");
   // The selected thread's run consent (ADR 0027 rule 11) is the same window Pea's composer card
   // answers; the head shows it too, so a "Reject?" countdown is never only inside the chat pane.
   const workbench = useContext(WorkbenchContext);
@@ -235,9 +242,9 @@ export function TimelineHead<P, W>({
   const journal = useWorkJournal(owner);
   const step = journal?.last?.step;
   // A command press or any receipt (Pea's previews included, ADR 0028) outranks an older Work edit.
-  const command = timeline.findLast(
-    (entry) => entry.kind === "receipt" || owner.verbs[entry.verb ?? ""]?.kind === "command",
-  );
+  const command = [...timeline]
+    .reverse()
+    .find((entry) => entry.kind === "receipt" || verbs[entry.verb ?? ""]?.kind === "command");
   const last =
     step && !(command && new Date(command.at).getTime() > step.at)
       ? null
@@ -249,17 +256,14 @@ export function TimelineHead<P, W>({
         const consent = consentThread(entry, thread);
         return (
           <span key={entry.outcome?.receiptId ?? entry.press} data-slot="consent-window">
-            <span
-              role="timer"
-              data-tone="caution"
-              aria-label={`${entry.verb ?? "Command"} applies in`}
-            >
-              {entry.verb ?? "command"} · {left === null ? "awaiting approval" : `${left}s`}
+            <span role="timer" data-tone="caution" aria-label={`${labelOf(entry.verb)} applies in`}>
+              {labelOf(entry.verb)} · {left === null ? "awaiting approval" : `${left}s`}
             </span>
             <Button
-              label={`Reject ${entry.verb ?? "command"}`}
+              label={`Reject ${labelOf(entry.verb)}`}
               refusal={
-                owner.commandRefusal ?? (consent ? null : "No thread holds this consent window")
+                (!admitted ? owner.commandRefusal : owner.journalRefusal()) ??
+                (consent ? null : "No thread holds this consent window")
               }
               onClick={() =>
                 // `stop_writes` is the host's reject option (run-consent.ts): it closes the window
@@ -305,7 +309,7 @@ export function TimelineHead<P, W>({
             </>
           ) : last ? (
             <>
-              <span>{last.verb ?? last.kind}</span>
+              <span>{labelOf(last.verb)}</span>
               <span data-slot="timeline-state">
                 {entryCaller(last)} · {last.outcome?.state ?? last.kind} · {activityTime(last.at)}
               </span>
