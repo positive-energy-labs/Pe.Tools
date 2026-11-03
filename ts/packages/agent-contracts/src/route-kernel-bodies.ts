@@ -111,30 +111,43 @@ type InvocationContext<
   /** Frozen at invocation capture, separate from invalidating dependencies. */
   readonly captures: Reads<G, S, E, D extends { captures: readonly (infer K)[] } ? K : never>;
 };
-/** Bounded paths preserve domain edit meaning without expanding recursive dot paths.
- * Record entries may be replaced/deleted, or patched at a typed entry field. */
-type EntryPatch<K extends string, V> =
-  | { readonly path: readonly [K, string]; readonly value: V; readonly op?: never }
-  | { readonly path: readonly [K, string]; readonly op: "delete"; readonly value?: never }
-  | (V extends object
+/** Match route-field.bare: wrappers do not change record/object path eligibility. */
+type BareSchema<S> = S extends {
+  def: {
+    type: "default" | "optional" | "nullable" | "readonly" | "catch" | "prefault";
+    innerType: infer I;
+  };
+}
+  ? BareSchema<I>
+  : S;
+type EntryPatch<K extends string, Key extends string, V extends z.core.SomeType> =
+  | { readonly path: readonly [K, Key]; readonly value: z.output<V>; readonly op?: never }
+  | { readonly path: readonly [K, Key]; readonly op: "delete"; readonly value?: never }
+  | (BareSchema<V> extends z.ZodObject<infer Shape>
       ? {
-          [L in keyof V & string]: {
-            readonly path: readonly [K, string, L];
-            readonly value: V[L];
+          [L in keyof Shape & string]: {
+            readonly path: readonly [K, Key, L];
+            readonly value: z.output<Shape[L]>;
             readonly op?: never;
           };
-        }[keyof V & string]
+        }[keyof Shape & string]
       : never);
-export type WorkPatch<W> = {
-  [K in keyof W & string]:
-    | { readonly path: readonly [K]; readonly value: W[K]; readonly op?: never }
-    | (string extends keyof NonNullable<W[K]>
-        ? EntryPatch<K, NonNullable<W[K]>[keyof NonNullable<W[K]> & string]>
-        : never);
-}[keyof W & string];
+/** Eligibility comes from ZodRecord, never the structurally identical object output.
+ * Paths stay bounded to a root, record entry, or object field within that entry. */
+export type WorkPatch<S extends z.ZodType> =
+  BareSchema<S> extends z.ZodObject<infer Shape>
+    ? {
+        [K in keyof Shape & string]:
+          | { readonly path: readonly [K]; readonly value: z.output<Shape[K]>; readonly op?: never }
+          | (BareSchema<Shape[K]> extends z.ZodRecord<infer Key, infer Value>
+              ? EntryPatch<K, Extract<z.output<Key>, string>, Value>
+              : never);
+      }[keyof Shape & string]
+    : never;
 export type WorkPatches<G extends RouteGraphJson, S extends SchemaTable> = readonly WorkPatch<
-  WorkOf<G, S>
+  S[Extract<NonNullable<G["work"]>["schema"], keyof S>]
 >[];
+
 type PageVerbPatch<G extends RouteGraphJson, S extends SchemaTable, V> = V extends {
   fields: readonly (infer K)[];
 }

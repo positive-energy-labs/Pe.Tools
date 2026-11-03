@@ -34,7 +34,7 @@ const seed = () =>
 const patch = {
   path: ["cells", "1::1", "edit"],
   value: { value: "reviewed" },
-} as const satisfies WorkPatch<z.output<typeof spec.schema>>;
+} as const satisfies WorkPatch<typeof spec.schema>;
 const stops: (() => void)[] = [];
 afterEach(() => stops.splice(0).forEach((stop) => stop()));
 const settle = (o: Observation<WorkWriteOutcome>) =>
@@ -72,7 +72,7 @@ async function fixture(connected = false) {
     schemas: {
       ...base.schemas,
       work: spec.schema,
-      edit: z.custom<readonly WorkPatch<z.output<typeof spec.schema>>[]>(),
+      edit: z.custom<readonly WorkPatch<typeof spec.schema>[]>(),
     },
     bodies: {
       ...base.bodies,
@@ -80,8 +80,7 @@ async function fixture(connected = false) {
         slot: "verbs.edit.patches",
         kind: "work" as const,
         source: { module: "shell/admitted-keyed-work.test.tsx", export: "fixture" },
-        run: (_ctx: unknown, patches: readonly WorkPatch<z.output<typeof spec.schema>>[]) =>
-          patches,
+        run: (_ctx: unknown, patches: readonly WorkPatch<typeof spec.schema>[]) => patches,
       },
     },
   };

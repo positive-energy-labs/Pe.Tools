@@ -1,5 +1,10 @@
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
+import {
+  acceptedWorkPatches,
+  rejectedWorkPatches,
+  workPatchSchema,
+} from "../../../../packages/agent-contracts/src/route-kernel-work-patches.fixtures";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { createAdmittedCells, admittedWorkPatches } from "./admitted-cells";
 test("cell display validates shapes and caches bodies; takes validate Work patches", () => {
@@ -63,4 +68,17 @@ test("shared Work cell patches use the owner's schema without a presenter schema
   expect(() =>
     admittedWorkPatches(data, {}, [{ path: ["amount"], value: "bad" }], owner),
   ).toThrow();
+});
+
+test("schema-derived typed Work paths agree with runtime admission", () => {
+  const data = { work: { schema: "work" } } as unknown as RouteGraphJson;
+  const schemas = { work: workPatchSchema };
+  for (const patch of acceptedWorkPatches) {
+    const admitted = admittedWorkPatches(data, schemas, [patch]);
+    expect(admitted).toEqual([
+      "op" in patch ? { path: patch.path } : { path: patch.path, value: patch.value },
+    ]);
+  }
+  for (const patch of rejectedWorkPatches)
+    expect(() => admittedWorkPatches(data, schemas, [patch]), JSON.stringify(patch)).toThrow();
 });
