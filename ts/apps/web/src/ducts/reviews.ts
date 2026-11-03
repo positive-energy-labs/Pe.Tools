@@ -216,7 +216,7 @@ export function presentLosses(result: unknown, scope: VerbScope): VerbPresentati
   const name = snapshot ? subjectNamer(snapshot) : () => null;
   return {
     sentence: response.writes.length
-      ? outcomeWords(response)
+      ? `${response.writes.length} Revit target${response.writes.length === 1 ? "" : "s"}: ${outcomeWords(response)}`
       : "Nothing to write: no native targets were derived from this Work in the selected scope.",
     rows: response.writes.map((write) => {
       const proposed =

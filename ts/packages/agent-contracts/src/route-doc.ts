@@ -187,7 +187,9 @@ function formatZodError(error: z.ZodError): string {
     .map((issue) =>
       issue.path.length ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
     )
-    .join("; ");
+    .join("; ") + (error.issues.some(issue => issue.path.includes("edit"))
+      ? ' Cell edits wrap the typed value: patch path ["equipmentFlows","<id>","edit"] with value {"value":{"cfm":1050}}. For another cell, read its value schema; do not put cfm directly under edit.'
+      : "");
 }
 
 export function refuse(

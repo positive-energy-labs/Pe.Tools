@@ -19,7 +19,7 @@ import { accessoryWrites } from "@pe/ducts-domain/sheet/accessory-writes";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { readFirm, workLayer } from "./ducts-inputs.ts";
 import { followAcceptedJoins } from "./ducts-walk.ts";
-import { appliedCellPaths } from "@pe/ducts-domain/staged";
+import { scopeApplyRequest, appliedCellPaths } from "@pe/ducts-domain/staged";
 import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
 
 const prepared = z.object({
@@ -210,7 +210,7 @@ export function ductsExecutors(
               ];
             }
             return {
-              input: request as unknown as Record<string, unknown>,
+              input: scopeApplyRequest(request, snapshot.store, intent?.cells) as unknown as Record<string, unknown>,
               dependencies: {
                 snapshot: ductWriteEvidence(snapshot),
                 grids,

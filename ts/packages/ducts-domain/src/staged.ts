@@ -67,3 +67,32 @@ export function appliedCellPaths(
   }
   return paths;
 }
+
+/** Explicit cell scope limits both native writes and the provenance delta sent with them. */
+export function scopeApplyRequest(
+  request: DuctsApplyInput,
+  store: DuctSnapshot["store"],
+  cells: readonly (readonly [string, string])[] | undefined,
+): DuctsApplyInput {
+  if (!cells) return request;
+  const has = (segment: string, key: string | number) => cells.some(([s, k]) => s === segment && k === String(key));
+  const fittings = request.fittings.filter(row => row.ruleKey && has("rules", row.ruleKey));
+  const terminals = request.terminals.filter(row => has("terminalDrops", row.id));
+  const components = request.components.filter(row => has("componentDrops", row.id));
+  const equipment = request.equipment.filter(row => has("esp", row.id));
+  const terminalFlows = request.terminalFlows.filter(row => has("flows", row.id));
+  const equipmentFlows = request.equipmentFlows.filter(row => has("equipmentFlows", row.id));
+  const merge = (key: "instances" | "terminals" | "terminalFlows" | "equipmentFlows", ids: readonly number[]) => ({
+    ...store?.[key],
+    ...Object.fromEntries(Object.entries(request.store?.[key] ?? {}).filter(([id]) => ids.includes(Number(id)))),
+  });
+  return { ...request, fittings, terminals, components, equipment, terminalFlows, equipmentFlows,
+    store: { ...store, version: 2, workRevision: store?.workRevision ?? 0, appliedAt: request.store?.appliedAt,
+      rules: { ...store?.rules, ...Object.fromEntries(Object.entries(request.store?.rules ?? {}).filter(([key]) => has("rules", key))) },
+      instances: merge("instances", fittings.map(row => row.id)),
+      terminals: merge("terminals", terminals.map(row => row.id)),
+      terminalFlows: merge("terminalFlows", terminalFlows.map(row => row.id)),
+      equipmentFlows: merge("equipmentFlows", equipmentFlows.map(row => row.id)),
+    },
+  };
+}

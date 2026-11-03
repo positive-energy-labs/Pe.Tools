@@ -332,3 +332,12 @@ test("Pea's undo pops its edit off the one journal: pre-edit Work, a restore rev
   expect(await history("redo", 9)).toMatchObject({ ok: false });
   expect(await history("undo", 3)).toMatchObject({ ok: false, code: "stale_revision" });
 });
+
+
+test("wrong cell edit shape returns a concrete wrapper example and remains unchanged", async () => {
+  const h = await fixture();
+  const result = await h.post({patches: [{path: ["cells", "a", "edit"], value: {value: 1050}}], expectedRevision: 0, press: "bad-cell"});
+  expect(result).toMatchObject({ok: false});
+  expect(result.hint).toContain('Cell edits wrap the typed value');
+  expect(result.hint).toContain('{"value":{"cfm":1050}}');
+});

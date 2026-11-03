@@ -470,6 +470,7 @@ export const ductsGraph: RouteGraph<DuctsPage, DuctsRouteDocument> = defineRoute
         label: "Choose write scope",
         input: z.strictObject({
           groups: z.array(z.string()).optional(),
+          cells: z.array(z.tuple([z.enum(["rules", "terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows"]), z.string().min(1)])).min(1).optional(),
           walk: z.object({ unitId: z.number().int(), portIndex: z.number().int() }).optional(),
           fan: z.object({ unitId: z.number().int(), systemId: z.number().int() }).optional(),
         }),

@@ -364,6 +364,7 @@ export const ductsDocumentSchema = z
     writeIntent: draftCellSchema(
       z.strictObject({
         groups: z.array(z.string().min(1)).optional(),
+        cells: z.array(z.tuple([z.enum(["rules", "terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows"]), z.string().min(1)])).min(1).optional().describe('Exact Work cells to write, for example [["equipmentFlows","14577391"]]. Omit only for an explicitly reviewed whole-network write. Preview and apply use the same scope.'),
         walk: z.strictObject({ unitId: z.number().int(), portIndex: z.number().int() }).optional(),
         fan: z.strictObject({ unitId: z.number().int(), systemId: z.number().int() }).optional(),
       }),
