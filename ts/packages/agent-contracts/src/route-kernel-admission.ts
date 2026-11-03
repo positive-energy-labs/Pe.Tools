@@ -69,23 +69,43 @@ export interface RouteModule<
  * at registration, mounting and dispatch; copies/proxies/forged prototypes fail validation.
  * Private nominal membership is deliberately lost by object spread. Branding is an API boundary, not a JS security sandbox. */
 export type { AdmittedRoute } from "./route-module.ts";
-export type RouteAdmission<G extends RouteGraphJson> =
-  | { readonly ok: true; readonly route: AdmittedRoute<G> }
+export type RouteAdmission<
+  G extends RouteGraphJson,
+  S extends SchemaTable = SchemaTable,
+  E extends EntryTable = EntryTable,
+  Render = unknown,
+> =
+  | { readonly ok: true; readonly route: AdmittedRoute<G, S, E, Render> }
   | { readonly ok: false; readonly diagnostics: readonly RouteDiagnostic[] };
+/** Infer the client render value from pane bodies, rather than a mapped-type inference hole. */
+export type RouteBodyRender<B> =
+  Extract<B[keyof B], { readonly kind: "pane" }> extends {
+    readonly run: (...args: never[]) => infer Render;
+  }
+    ? Render
+    : never;
 /** TODO: A validates linked catalog footprint, not route opt-in: every Geometry leaf and
  * transitive geometry dependency requires an overview or explicit-detail declaration. Default
  * overview closure contains no detailed request. Detail demand AND refresh must be explicit.
  * Validate mixed-subject schema/identity agreement, finite dependency keys and the complete
  * migration chain (saved age to work.version), then hash migration bytes with all other bodies. */
 export interface RouteAdmissionPort {
-  admit<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, Render>(
-    module: RouteModule<G, S, E, Render>,
-  ): RouteAdmission<G>;
+  admit<
+    G extends RouteGraphJson,
+    S extends SchemaTable,
+    E extends EntryTable,
+    B extends BodyBindings<G, S, E, unknown>,
+  >(
+    module: Omit<RouteModule<G, S, E>, "bodies"> & { readonly bodies: B },
+  ): RouteAdmission<G, S, E, RouteBodyRender<B>>;
 }
 /** Registration/discovery/execution consume the same admitted handle. Refused descriptors
  * have no executable handle. No namespace prefix bypass, no publication before admission. */
 export interface AdmittedRouteRegistry {
   /** Return only the exact issued handle; copied/foreign/retired handles return null. */
+  resolve<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, Render>(
+    candidate: AdmittedRoute<G, S, E, Render>,
+  ): AdmittedRoute<G, S, E, Render> | null;
   resolve(candidate: unknown): AdmittedRoute | null;
   register(route: AdmittedRoute): { deactivate(): void };
 }

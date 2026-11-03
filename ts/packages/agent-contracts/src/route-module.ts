@@ -1,3 +1,6 @@
+import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
+import type { SchemaTable } from "./route-kernel-page.ts";
+import type { RouteModule as KernelModule, RouteBodyRender } from "./route-kernel-admission.ts";
 import { bare, manyCodec } from "./route-field.ts";
 import { catalogEntries } from "./pe-api.ts";
 import { requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
@@ -264,7 +267,14 @@ function snapshotBindings(bindings: RouteBindings): RouteBindings {
     ),
   });
 }
-export class AdmittedRoute<G extends KernelGraph = KernelGraph> {
+export class AdmittedRoute<
+  G extends KernelGraph = KernelGraph,
+  S extends SchemaTable = SchemaTable,
+  E extends EntryTable = EntryTable,
+  Render = unknown,
+> {
+  // Type witness only; executable bindings remain in the private exact-object table.
+  declare private readonly bindingTypes: { schemas: S; entries: E; render: Render };
   readonly #admissionAuthority = true;
   readonly data: Immutable<G>;
   readonly fingerprint: RouteFingerprint;
@@ -433,7 +443,14 @@ export class AdmittedRoute<G extends KernelGraph = KernelGraph> {
       }
     };
     return {
-      admit(module) {
+      admit<
+        G extends KernelGraph,
+        S extends SchemaTable,
+        E extends EntryTable,
+        B extends BodyBindings<G, S, E, unknown>,
+      >(
+        module: Omit<KernelModule<G, S, E>, "bodies"> & { readonly bodies: B },
+      ): RouteAdmission<G, S, E, RouteBodyRender<B>> {
         try {
           // Validate before cloning: structuredClone accepts undefined and non-finite numbers.
           canonicalRouteJson(module.data);
@@ -443,7 +460,12 @@ export class AdmittedRoute<G extends KernelGraph = KernelGraph> {
           if (!fingerprint) return { ok: false, diagnostics };
           return {
             ok: true,
-            route: new AdmittedRoute(constructionKey, data, fingerprint, inspected.bindings),
+            route: new AdmittedRoute<G, S, E, RouteBodyRender<B>>(
+              constructionKey,
+              data,
+              fingerprint,
+              inspected.bindings,
+            ),
           };
         } catch (error) {
           return {
@@ -475,16 +497,21 @@ export const createRouteAdmission = AdmittedRoute.prepare;
 export function createAdmittedRouteRegistry(): AdmittedRouteRegistry {
   const active = new Map<AdmittedRoute, number>();
   const retired = new WeakSet<AdmittedRoute>();
+  function resolve<G extends KernelGraph, S extends SchemaTable, E extends EntryTable, Render>(
+    candidate: AdmittedRoute<G, S, E, Render>,
+  ): AdmittedRoute<G, S, E, Render> | null;
+  function resolve(candidate: unknown): AdmittedRoute | null;
+  function resolve(candidate: unknown): AdmittedRoute | null {
+    return candidate !== null &&
+      typeof candidate === "object" &&
+      admittedBindings.has(candidate) &&
+      candidate instanceof AdmittedRoute &&
+      active.has(candidate)
+      ? candidate
+      : null;
+  }
   return {
-    resolve(candidate) {
-      return candidate !== null &&
-        typeof candidate === "object" &&
-        admittedBindings.has(candidate) &&
-        candidate instanceof AdmittedRoute &&
-        active.has(candidate)
-        ? candidate
-        : null;
-    },
+    resolve,
     register(route) {
       if (!admittedBindings.has(route) || retired.has(route))
         throw Error("Foreign, copied or retired admission");
@@ -506,10 +533,24 @@ export function createAdmittedRouteRegistry(): AdmittedRouteRegistry {
   };
 }
 /** Mount/dispatch must resolve through their registry immediately before using these bindings. */
+export function resolveRouteBindings<
+  G extends KernelGraph,
+  S extends SchemaTable,
+  E extends EntryTable,
+  Render,
+>(
+  registry: AdmittedRouteRegistry,
+  candidate: AdmittedRoute<G, S, E, Render>,
+):
+  | (KernelGraph extends G
+      ? RouteBindings
+      : Omit<KernelModule<G, S, E, Render>, "data" | "artifact">)
+  | null;
 export function resolveRouteBindings(
   registry: AdmittedRouteRegistry,
   candidate: unknown,
-): RouteBindings | null {
+): RouteBindings | null;
+export function resolveRouteBindings(registry: AdmittedRouteRegistry, candidate: unknown): unknown {
   const route = registry.resolve(candidate);
   return route ? (admittedBindings.get(route) ?? null) : null;
 }

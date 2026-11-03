@@ -1,4 +1,5 @@
 /* eslint-disable typescript/no-misused-spread -- Deliberate hostile copies test nominal authority refusals. */
+import { createRouteAdmission, resolveRouteBindings } from "./route-module.ts";
 import { describe, expect, it } from "vite-plus/test";
 import { RouteGraphJson, type FieldJson } from "./route-kernel-data.ts";
 import type { BodyBindings } from "./route-kernel-bodies.ts";
@@ -264,7 +265,9 @@ export function criticRefusals(
   // @ts-expect-error arbitrary channel/attempt cannot be minted around an authentic scope
   const forgedAttempt: AcceptanceToken = { scope, channel: "read", attempt: 99 };
   // @ts-expect-error a copied attempt is not an owner-issued attempt
-  owner.acceptWork({ ...attempt, attempt: 99 }, {
+  owner.acceptWork(
+    { ...attempt, attempt: 99 },
+    {
       kind: "snapshot",
       key: { binding: "host", route: "tiny", target: null },
       revision: 1,
@@ -484,7 +487,8 @@ export function geometryRebind(
   token: AcceptanceToken,
 ) {
   const request: { readonly representation: "meshes"; readonly reach: PreparedDetailReach } = {
-    representation: "meshes", reach,
+    representation: "meshes",
+    reach,
   };
   // @ts-expect-error a generic read plus a request lacks resolver-issued geometry authority
   return geometry.acquire(Object.assign({}, read, { request }), token);
@@ -500,4 +504,52 @@ export function geometryDoors(
   environment.reads.acquire(read, token);
   // @ts-expect-error subscriptions cannot bypass geometry acquisition validation
   environment.readings.subscribe(read, token, () => {});
+}
+
+/** The source admission and both resolution doors retain the same authoring contract. */
+export function sourceRetention(
+  port: Awaited<ReturnType<typeof createRouteAdmission>>,
+  registry: AdmittedRouteRegistry,
+) {
+  const admitted = port.admit(builtinModule);
+  if (!admitted.ok) return;
+  const resolved = registry.resolve(admitted.route);
+  if (!resolved) return;
+  const bindings = resolveRouteBindings(registry, resolved);
+  if (!bindings) return;
+  const bodies: Builtin = bindings.bodies;
+  const schema: typeof schemas.number = bindings.schemas.number;
+  const entry: typeof entries.roster = bindings.entries.roster;
+  const address: "/tiny" = resolved.data.address;
+  const pane: Builtin["main"] = {
+    ...bodies.main,
+    run: (ctx) => {
+      const density: number = ctx.page.read().density;
+      // @ts-expect-error renamed field is unavailable after admission
+      void ctx.page.read().oldDensity;
+      // @ts-expect-error query field is not a setting
+      ctx.page.set("search", "bad");
+      return String(density);
+    },
+  };
+  const derive: Builtin["calculate"] = {
+    ...bodies.calculate,
+    run: (ctx) => {
+      // @ts-expect-error undeclared dependency stays hidden after admission
+      void ctx.page.density;
+      return { total: ctx.work.amount };
+    },
+  };
+  // @ts-expect-error copied handles never acquire nominal membership
+  const copied: typeof admitted.route = { ...admitted.route };
+  // @ts-expect-error resolved slot retains its literal kind
+  const wrong: Builtin["calculate"] = bodies.pick;
+  const unknown = port.admitUnknown(builtinModule);
+  if (unknown.ok) {
+    const broad = resolveRouteBindings(registry, unknown.route);
+    // @ts-expect-error unknown JSON never gets source schema inference
+    const narrow: typeof schemas.number = broad!.schemas.number;
+    void narrow;
+  }
+  void [schema, entry, address, pane, derive, copied, wrong];
 }
