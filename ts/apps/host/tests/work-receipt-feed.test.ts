@@ -131,3 +131,29 @@ test("scope membership is target OR consumed Work, including a refused basis", a
   expect(ready.receipts.rows.map((row) => row.id)).toEqual(["target", "consumed", "basis"]);
   release();
 });
+
+test("a failed acquisition retires its feed and later subscribers reacquire", async () => {
+  const stop = vi.fn();
+  const journal = {
+    subscribe: vi.fn(() => stop),
+    read: vi
+      .fn<() => Promise<Receipt[]>>()
+      .mockRejectedValueOnce(Error("journal unavailable"))
+      .mockResolvedValue([]),
+  };
+  const first: ReceiptFeedState[] = [];
+  const releaseFirst = observeWorkReceipts(journal, { key, target: null }, (v) => first.push(v));
+  await Promise.resolve();
+  expect(first.at(-1)).toMatchObject({ kind: "failed" });
+  const second: ReceiptFeedState[] = [];
+  const releaseSecond = observeWorkReceipts(journal, { key, target: null }, (v) => second.push(v));
+  releaseFirst();
+  await Promise.resolve();
+  expect(second.at(-1)).toMatchObject({ kind: "ready" });
+  const releaseThird = observeWorkReceipts(journal, { key, target: null }, () => {});
+  expect(journal.read).toHaveBeenCalledTimes(2);
+  expect(journal.subscribe).toHaveBeenCalledTimes(2);
+  releaseSecond();
+  releaseThird();
+  expect(stop).toHaveBeenCalledTimes(2);
+});

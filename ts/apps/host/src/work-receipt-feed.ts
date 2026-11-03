@@ -31,6 +31,7 @@ export function observeWorkReceipts(
   const publish = (state: ReceiptFeedState) => consumers.forEach((listener) => listener(state));
   let closed = false;
   let acquiring = true;
+  let failure: Extract<ReceiptFeedState, { kind: "failed" }> | undefined;
   let through = 0;
   let from = 0;
   const rows = new Map<string, { cursor: number; revision: number; receipt: ActionReceipt }>();
@@ -80,13 +81,15 @@ export function observeWorkReceipts(
   const feed: Feed = {
     subscribe(listener) {
       consumers.add(listener);
-      listener(acquiring ? { kind: "pending" } : ready());
+      listener(failure ?? (acquiring ? { kind: "pending" } : ready()));
       return () => {
         consumers.delete(listener);
         if (!consumers.size) {
-          closed = true;
-          stop();
-          registry.delete(identity);
+          if (!closed) {
+            closed = true;
+            stop();
+          }
+          if (registry.get(identity) === feed) registry.delete(identity);
         }
       };
     },
@@ -102,12 +105,15 @@ export function observeWorkReceipts(
     },
     (error: unknown) => {
       if (closed) return;
-      publish({
+      failure = {
         kind: "failed",
         failure: { kind: "failed", code: "ReceiptFeedFailed", message: String(error) },
-      });
+      };
       closed = true;
+      // Retire before publishing so even a reentrant subscriber acquires a fresh feed.
+      registry.delete(identity);
       stop();
+      publish(failure);
     },
   );
   return release;
