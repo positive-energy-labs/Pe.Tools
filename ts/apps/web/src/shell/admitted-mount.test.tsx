@@ -448,7 +448,7 @@ async function workRoute(
   review: "none" | "shown" = "none",
   modelWrite = false,
   needs: "nothing" | "document" = "nothing",
-  presenter?: (result: unknown) => unknown,
+  presenter?: (result: unknown, evidence: unknown) => unknown,
   cellBodies = false,
   landing?: {
     run: (result: unknown, page: unknown) => unknown;
@@ -953,7 +953,7 @@ const sealedPreview = (handle: WorkHandle) => ({
   takenAt: "2026-11-03T00:00:00Z",
   response: { changes: [{ kind: "Parameter", key: "amount", before: 6, after: 7 }] },
 });
-async function nativeFixture(presenter?: (result: unknown) => unknown) {
+async function nativeFixture(presenter?: (result: unknown, evidence: unknown) => unknown) {
   const t = transports();
   const store = createFixtureWorkDoor(
     { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
@@ -1021,7 +1021,10 @@ test.each(["during-preview", "after-review"])(
     await settle(f.mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
     p.deliver();
     expect(() => f.mount.confirm("native")).toThrow(
-      when === "after-review" ? "stale" : "No review",
+      expect.objectContaining({
+        kind: "refused",
+        reason: "review-stale",
+      }),
     );
     expect(f.submit).not.toHaveBeenCalled();
     expect(f.acquire.mock.calls.filter(([r]) => r.key.op === "native.write.preview")).toHaveLength(
@@ -1877,10 +1880,50 @@ test("presenter runs once on the sealed current preview and publishes sentence/r
   expect(() => f.mount.confirm("native")).toThrow("stale");
   expect(presenter).toHaveBeenCalledOnce();
 });
+test("a presenter throw refuses with a typed reason and never submits", async () => {
+  const f = await nativeFixture(() => {
+    throw Error("display failed");
+  });
+  f.mount.invoke("native", 0);
+  expect(() => f.preview().deliver()).toThrow(
+    expect.objectContaining({
+      kind: "refused",
+      reason: "present-threw",
+    }),
+  );
+  expect(f.mount.review("native")).toBeNull();
+  expect(f.mount.reviewRefusal("native")).toMatchObject({ reason: "present-threw" });
+  expect(() => f.mount.confirm("native")).toThrow(
+    expect.objectContaining({ reason: "present-threw" }),
+  );
+  expect(f.submit).not.toHaveBeenCalled();
+});
+
+test("one-argument Data Tables-shaped presenter keeps its sentence and ordered rows", async () => {
+  const presenter = vi.fn((result: unknown) => {
+    expect(result).toMatchObject({ previewOnly: true });
+    return {
+      sentence: "Apply table. Prune deletes 1 row.",
+      rows: ["Upsert 2 rows and 3 columns.", "Delete row obsolete"],
+    };
+  });
+  const f = await nativeFixture(presenter);
+  f.mount.invoke("native", 0);
+  f.preview().deliver();
+  expect(f.mount.review("native")).toMatchObject({
+    stale: false,
+    sentence: "Apply table. Prune deletes 1 row.",
+    rows: ["Upsert 2 rows and 3 columns.", "Delete row obsolete"],
+  });
+  expect(presenter).toHaveBeenCalledOnce();
+});
+
 test("invalid presenter output cannot become a review", async () => {
   const f = await nativeFixture(() => ({ sentence: 12, rows: ["bad"] }));
   f.mount.invoke("native", 0);
-  expect(() => f.preview().deliver()).toThrow();
+  expect(() => f.preview().deliver()).toThrow(
+    expect.objectContaining({ reason: "present-invalid" }),
+  );
   expect(f.mount.review("native")).toBeNull();
   expect(f.submit).not.toHaveBeenCalled();
 });
