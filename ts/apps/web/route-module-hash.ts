@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { build, type Plugin } from "vite-plus";
 import { createHash } from "node:crypto";
-import { dirname } from "node:path";
+import { dirname, isAbsolute } from "node:path";
 import ts from "typescript";
 import { routeFingerprint } from "../../packages/agent-contracts/src/route-module.ts";
 import type { RouteFingerprintInput } from "../../packages/agent-contracts/src/route-kernel-admission.ts";
@@ -23,6 +23,8 @@ export async function buildRouteArtifact(options: {
   readonly contracts: readonly { readonly id: string; readonly bytes: Uint8Array }[];
   readonly shared?: readonly SharedRouteModule[];
 }) {
+  if (!isAbsolute(options.entry) || (options.root !== undefined && !isAbsolute(options.root)))
+    throw Error("Pod artifact entry and root must be absolute");
   const shared = (options.shared ?? [])
     .map((item) => ({
       ...item,
@@ -183,10 +185,9 @@ export function routeModuleHash(check = checkRoutes): Plugin {
       }
       await refresh();
     },
-    async handleHotUpdate({ file, server }) {
+    async handleHotUpdate({ server }) {
       // The closure includes schemas, codecs, assets and build inputs outside graph.ts.
       // Conservatively check every watched source edit; failed checks block reload.
-      if (file.includes("node_modules") || file.includes(".generated.")) return;
       await refresh();
       // Graphs register at module scope. Replace graph + directory together, never HMR one half.
       server.moduleGraph.invalidateAll();
