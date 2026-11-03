@@ -38,24 +38,51 @@ afterEach(() => {
 });
 
 // This fixture declares the web salvage slot, so an absent declaration cannot explain null.
-// Host projection accepts it but exposes only migrations to RouteWorkspace.registerAdmitted.
-async function witness(aside = false) {
+// The neutral projection extracts canonical bytes; the web body derives review patches.
+async function witness(aside = false, failRecovery = false, withSalvage = true) {
   const salvage = vi.fn(() => ({ ok: true as const, value: [] }));
-  const data = { ...familiesModule.data, salvage: "salvage" } as const;
+  const data = {
+    ...familiesModule.data,
+    ...(withSalvage ? { salvage: "salvage" as const } : {}),
+  } as const;
   const module = {
     ...familiesModule,
     data,
     bodies: {
       ...familiesModule.bodies,
-      salvage: {
-        slot: "salvage" as const,
-        kind: "salvage" as const,
-        source: { module: "families/host-salvage.test.ts", export: "witness" },
-        run: salvage,
-      },
+      ...(withSalvage
+        ? {
+            salvage: {
+              slot: "salvage" as const,
+              kind: "salvage" as const,
+              source: { module: "families/host-salvage.test.ts", export: "witness" },
+              run: salvage,
+            },
+          }
+        : {}),
     },
   };
-  const hostModule = { ...familiesHostModule, data };
+  const recover = vi.fn((raw: unknown) => {
+    if (failRecovery) throw Error("Broken recovery extractor");
+    return familiesRouteState.salvage!(raw);
+  });
+  const hostModule = {
+    ...familiesHostModule,
+    data,
+    bodies: {
+      ...familiesHostModule.bodies,
+      ...(withSalvage
+        ? {
+            salvage: {
+              slot: "salvage" as const,
+              kind: "recovery" as const,
+              source: { module: "families/host-salvage.test.ts", export: "recover" },
+              run: recover,
+            },
+          }
+        : {}),
+    },
+  };
   const envelope = {
     source: "builtin-closure" as const,
     version: 1 as const,
@@ -85,7 +112,10 @@ async function witness(aside = false) {
       })),
     },
   });
-  const webRoute = (await webInventory.prepare("families", closure.fingerprint)).admit(module);
+  // This fixture varies declaration presence at runtime, so use the runtime linker entry.
+  const webRoute = (await webInventory.prepare("families", closure.fingerprint)).admitUnknown(
+    module,
+  );
   if (!webRoute.ok) throw Error(JSON.stringify(webRoute.diagnostics));
   const workspace = (legacy: boolean) => {
     const saved = new Map<string, unknown>(
@@ -125,19 +155,19 @@ async function witness(aside = false) {
       fingerprint: hostRoute.route.workFingerprint,
     }),
   ).toBeNull();
-  return { host, legacy, route: webRoute.route, salvage };
+  return { host, legacy, route: webRoute.route, salvage, recover };
 }
 
-test("kernel gap: admitted host enrollment loses Families scope and excluded-name/id salvage", async () => {
+test("admitted host enrollment preserves Families scope and excluded-name/id salvage", async () => {
   const f = await witness();
   expect(await f.legacy.salvage(key, "families")).toEqual(carried);
-  expect(await f.host.salvage(key, "families")).toBeNull();
+  expect(await f.host.salvage(key, "families")).toEqual(carried);
   const recovered = await witness(true);
   expect(await recovered.legacy.salvage(key, "families")).toEqual({ ...carried, from: "aside:1" });
-  expect(await recovered.host.salvage(key, "families")).toBeNull();
+  expect(await recovered.host.salvage(key, "families")).toEqual({ ...carried, from: "aside:1" });
 });
 
-test("kernel gap: generic mount cannot offer carry-over when the real admitted host returns null", async () => {
+test("generic mount derives a salvage review from the canonical admitted host recovery", async () => {
   const f = await witness(true);
   const request = vi
     .spyOn(workHost, "salvageRouteWork")
@@ -164,8 +194,27 @@ test("kernel gap: generic mount cannot offer carry-over when the real admitted h
   });
   closes.push(mount.close);
   await vi.waitFor(() => expect(mount.work()).not.toBeNull());
-  expect(await mount.salvage()).toBeNull();
+  expect(await mount.salvage()).toEqual({ kind: "review", preview: [] });
   expect(request).toHaveBeenCalledOnce();
-  expect(f.salvage).not.toHaveBeenCalled();
-  expect(mount.review("work.salvage")).toBeNull();
+  expect(f.recover).toHaveBeenCalledWith(raw.doc);
+  expect(f.salvage).toHaveBeenCalledWith(carried.value, expect.anything());
+  expect(mount.review("work.salvage")).toMatchObject({ preview: [] });
+});
+
+test("host recovery exceptions return a typed refusal for unreadable Work and newest aside", async () => {
+  for (const aside of [false, true]) {
+    const f = await witness(aside, true);
+    expect(await f.host.salvage(key, "families")).toMatchObject({
+      ok: false,
+      kind: "error",
+      error: "Work salvage failed: Error: Broken recovery extractor",
+      hint: "Saved Work was left untouched.",
+    });
+  }
+});
+
+test("a route without salvage keeps recovery unavailable", async () => {
+  const f = await witness(false, false, false);
+  expect(await f.host.salvage(key, "families")).toBeNull();
+  expect(f.recover).not.toHaveBeenCalled();
 });
