@@ -155,6 +155,7 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 - 2026-10-08, shelved loss-server shape revived on the evaluation-order proof; Specific Coefficient alone as a product shape stays off the table (it is the storage Revit charges).
 
 ## Owed
+- [M] Split /fans Work from /ducts Work per the routes ledger 2026-11-03 kaitpw direction; census first, then a persisted-Work migration that loses no saved cell.
 
 - S9 native consumption: prove host result matching against Revit velocity pressure for elbows, transitions and both tap legs; changed or ambiguous bases must refuse. See `PeLossServer.Calculate` TODO. No Revit session was authorized for S9.
 - 2026-11-02 FD1: re-drive Chadds `/ducts` and `/fans` after the producer-schema and fan-write fixes. Retained K2 payloads and fixture transport pass; browser preview was unavailable. Confirm names, Picture, and native preview before claiming session proof. Fan write preview currently requires one selected fan.
