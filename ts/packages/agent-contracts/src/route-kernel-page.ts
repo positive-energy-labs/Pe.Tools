@@ -1,9 +1,12 @@
+import type { WorkSchema, workOwnerBinding, WorkOwnerSource } from "./route-work-owner.ts";
 import type { z } from "zod";
 import type { ExecutionTarget } from "./target.ts";
 import type { WorkKey, WorkWriteAck } from "./route-state.ts";
 import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
 
-export type SchemaTable = Readonly<Record<string, z.ZodType>>;
+export type SchemaTable = Readonly<Record<string, z.ZodType>> & {
+  readonly [workOwnerBinding]?: WorkOwnerSource;
+};
 export type SchemaValue<S extends SchemaTable, K> = K extends keyof S ? z.output<S[K]> : never;
 declare const identity: unique symbol;
 export type IdentityKind = "document" | "link" | "element" | "local";
@@ -75,13 +78,11 @@ type FieldValue<G extends RouteGraphJson, S extends SchemaTable, F> = F extends 
 export type PageOf<G extends RouteGraphJson, S extends SchemaTable> = {
   readonly [K in keyof G["fields"]]: Immutable<FieldValue<G, S, G["fields"][K]>>;
 };
-export type WorkOf<G extends RouteGraphJson, S extends SchemaTable> = G extends {
-  work: { schema: infer K };
-}
-  ? SchemaValue<S, K>
-  : "work" extends keyof G
-    ? SchemaValue<S, NonNullable<G["work"]>["schema"]> | null
-    : null;
+export type WorkOf<G extends RouteGraphJson, S extends SchemaTable> = [WorkSchema<G, S>] extends [
+  never,
+]
+  ? null
+  : z.output<WorkSchema<G, S>>;
 export type RoleKeys<G extends RouteGraphJson, R> = {
   [K in keyof G["fields"]]: G["fields"][K]["role"] extends R ? K : never;
 }[keyof G["fields"]];

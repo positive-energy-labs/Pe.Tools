@@ -1,6 +1,7 @@
 import { isWritePreviewKey } from "./semantic-actions.ts";
 import { routeWorkSubject } from "./route-work-subject.ts";
 import { z } from "zod";
+import type { SchemaTable } from "./route-kernel-page.ts";
 import {
   RouteGraphJson,
   type RouteDiagnostic,
@@ -36,7 +37,16 @@ export const routeBindingSchema = z.object({
         .refine((source) => (source.kind === "use" ? !!source.open : !!source.derive)),
     )
     .default({}),
-  schemas: z.record(z.string(), schema),
+  // Preserve symbol-keyed owner metadata after validating every schema entry.
+  schemas: z
+    .custom<SchemaTable>(
+      (value) =>
+        value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        z.record(z.string(), schema).safeParse(Object.fromEntries(Object.entries(value))).success,
+    )
+    .transform((value): SchemaTable => ({ ...value })),
   codecs: z.record(z.string(), z.object({ encode: fn, decode: fn })),
   identities: z.record(
     z.string(),

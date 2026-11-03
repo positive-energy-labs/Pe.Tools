@@ -1,3 +1,4 @@
+import { workOwnerBinding } from "./route-work-owner.ts";
 import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
 import type { SchemaTable } from "./route-kernel-page.ts";
 import {
@@ -357,11 +358,14 @@ function snapshotBindings(bindings: RouteBindings): RouteBindings {
         ]),
       ),
     ),
-    schemas: Object.freeze(
-      Object.fromEntries(
+    schemas: Object.freeze({
+      ...Object.fromEntries(
         Object.entries(bindings.schemas).map(([key, schema]) => [key, schema.clone()]),
       ),
-    ),
+      ...(bindings.schemas[workOwnerBinding] && {
+        [workOwnerBinding]: bindings.schemas[workOwnerBinding],
+      }),
+    }),
     codecs: Object.freeze(
       Object.fromEntries(
         Object.entries(bindings.codecs).map(([key, codec]) => [key, Object.freeze({ ...codec })]),
@@ -626,6 +630,27 @@ export class AdmittedRoute<
               ),
             );
         }
+        const typedOwner = bindings.data.schemas[workOwnerBinding];
+        if (typedOwner) {
+          const owner = typedOwner;
+          const spec = owner.data.work;
+          if (
+            !workOwner ||
+            !spec?.schema ||
+            canonicalRouteJson(owner.data) !== canonicalRouteJson(workOwner.data) ||
+            owner.schemas[spec.schema] !== workOwner.resolvedWork?.schema
+          )
+            errors.push(
+              routeDiagnostic(
+                decoded.data,
+                "work.route",
+                work?.route ?? "",
+                "typed owner matching admitted owner",
+                "Typed Work owner differs from the runtime owner",
+                "identity",
+              ),
+            );
+        }
         errors.push(
           ...linkRouteBodies(decoded.data, bindings.data, catalog, workOwner?.resolvedWork?.schema),
         );
@@ -832,6 +857,7 @@ export function resolveRouteBindings(registry: AdmittedRouteRegistry, candidate:
 function sameLoadedBindings(actual: RouteBindings, loaded: RouteBindings): boolean {
   const sameKeys = (a: object, b: object) =>
     canonicalRouteJson(Object.keys(a).sort()) === canonicalRouteJson(Object.keys(b).sort());
+  if (actual.schemas[workOwnerBinding] !== loaded.schemas[workOwnerBinding]) return false;
   for (const key of ["sources", "schemas", "codecs", "identities", "entries", "bodies"] as const)
     if (!sameKeys(actual[key], loaded[key])) return false;
   return (
