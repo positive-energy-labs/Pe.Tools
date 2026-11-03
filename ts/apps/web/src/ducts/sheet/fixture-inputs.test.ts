@@ -1,37 +1,54 @@
-import { expect, test, vi } from "vite-plus/test";
-import { createFixtureMount } from "#/shell/fixture";
-import { ductsBinding } from "../actions";
-import { ductsGraph } from "../graph";
-import type { SheetReading } from "../sources";
-
-// The fixture lane re-resolves criteria from Work like the host: an edited allowance reads Work, undo reads firm.
-test("editing the return allowance resolves Work, and undo resolves the firm value again", async () => {
-  vi.stubGlobal("fetch", vi.fn(() => { throw Error("Host called"); }));
-  const owner = await createFixtureMount(ductsGraph, "layout", { binding: ductsBinding }, { fan: "all" });
-  const release = owner.connect();
-  const demand = owner.readings.mount(["sheet"]);
-  const allowance = () =>
-    (owner.readings.get("sheet").value as SheetReading | null)?.open?.inputs?.inputs.criteria
+import { afterEach, expect, test, vi } from "vite-plus/test";
+import { ductsDocumentSchema, stagedDucts } from "@pe/agent-contracts";
+import { resolveCriteria } from "@pe/ducts-domain/sheet/index";
+import { createWitness } from "../../fans/cutover.test-support";
+import type {
+  Observation,
+  WorkWriteOutcome,
+} from "../../../../../packages/agent-contracts/src/work-journal-door";
+import fixture from "./sheet.fixture.json";
+const closes: (() => void)[] = [];
+afterEach(() =>
+  closes
+    .splice(0)
+    .reverse()
+    .forEach((close) => close()),
+);
+const settle = (value: Observation<WorkWriteOutcome>) =>
+  new Promise<WorkWriteOutcome>((resolve) =>
+    value.subscribe(
+      (outcome) => {
+        if (outcome.kind !== "pending") resolve(outcome);
+      },
+      () => {},
+    ),
+  );
+test("the admitted criteria editor resolves Work, and host Undo resolves the firm layer again", async () => {
+  const f = await createWitness(closes);
+  await vi.waitFor(() => expect(f.fans.workBasis()).not.toBeNull());
+  const changed = await settle(
+    f.fans.invoke("sheetEdit", {
+      edits: { criteria: { allowanceInWg: { return: 0.35 } } },
+      basis: fixture.overview.basis,
+      history: { label: "Return allowance" },
+    }) as Observation<WorkWriteOutcome>,
+  );
+  expect(changed).toMatchObject({ kind: "accepted" });
+  const firm = {
+    version: "fixture-firm",
+    criteria: {
+      velocityLimitFpm: { supply: 900, return: 800 },
+      terminalDropInWg: 0.03,
+      autoJoinGapIn: 2,
+      healBoxIn: 4,
+      splitPolicy: "even" as const,
+      allowanceInWg: { supply: 0.1, return: 0.2 },
+    },
+  };
+  const current = () =>
+    resolveCriteria(stagedDucts(ductsDocumentSchema.parse(f.fans.work()!.value)), null, firm)
       .allowanceInWg.return;
-  try {
-    await vi.waitFor(() => expect(allowance()).toMatchObject({ source: "firm" }));
-    const firm = allowance()!.value;
-    const sheet = owner.readings.get("sheet").value as SheetReading;
-    const result = await owner
-      .control("sheet-inputs", {
-        edits: { criteria: { allowanceInWg: { return: 0.35 } } },
-        expectedRevision: owner.snapshot().work!.handle.revision,
-        basis: sheet.open!.overview.basis,
-      })
-      .run();
-    expect(result).toMatchObject({ state: "done" });
-    await vi.waitFor(() => expect(allowance()).toMatchObject({ value: 0.35, source: "Work" }));
-    await owner.restore("undo");
-    await vi.waitFor(() => expect(allowance()).toMatchObject({ value: firm, source: "firm" }));
-  } finally {
-    demand();
-    release();
-    owner.dispose();
-    vi.unstubAllGlobals();
-  }
+  expect(current()).toMatchObject({ value: 0.35, source: "Work" });
+  expect(await f.fans.history!.undo()).toMatchObject({ ok: true });
+  expect(current()).toMatchObject({ value: 0.2, source: "firm" });
 });

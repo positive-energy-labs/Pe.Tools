@@ -7,8 +7,8 @@ import {
   resolveMany,
 } from "../../../../packages/agent-contracts/src/route-field";
 import { validateRouteGraph } from "@pe/agent-contracts";
-import { ductsGraph } from "../ducts/graph";
-import { fansGraph } from "../fans/graph";
+import { systemSubjectGraph as ductsGraph } from "./subject.test-support";
+import { fanSubjectGraph as fansGraph } from "./subject.test-support";
 import { graphUrlPage } from "./mount-page";
 import { restorePageSearch } from "../route/url";
 test("subject many codec preserves exact sets and resolves all against the current roster", () => {
@@ -28,7 +28,6 @@ test("URL beats tab memory, which beats Page defaults", () => {
 test("typed graphs declare one subject and one kernel selection", () => {
   expect(validateRouteGraph(ductsGraph)).toEqual([]);
   expect(validateRouteGraph(fansGraph)).toEqual([]);
-  expect(fansGraph.workRoute).toBe(ductsGraph.key);
   for (const graph of [ductsGraph, fansGraph])
     expect(
       Object.entries(graph.fields)
@@ -38,7 +37,6 @@ test("typed graphs declare one subject and one kernel selection", () => {
   const custom = { encode: JSON.stringify, decode: JSON.parse };
   // @ts-expect-error Page arrays must use manyField
   field(z.array(z.object({ key: z.string() })), {}, custom);
-
 });
 
 test("restore is per field; explicit empty clears memory but absent and undefined do not", () => {

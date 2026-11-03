@@ -280,7 +280,7 @@ export function SystemMark({
   issues: readonly SystemIssue[];
   /** `systemNoteCount().total`: the chip's "+n" counts the same notes the scrollbar shades. */
   total: number;
-  open: () => void;
+  open: (() => void) | undefined;
 }) {
   const list = useList({
     items: issues,
@@ -343,7 +343,7 @@ export function SystemMark({
  */
 export function systemRowParts(
   s: ReturnType<typeof systemList>[number],
-  open: () => void,
+  open: (() => void) | undefined,
   note: SystemNote | undefined,
   /** The system's fans in words: the row's hover hint carries them. */
   fans: readonly string[] = [],
@@ -408,14 +408,16 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
   const attentionDoc = useContext(AttentionDocument) ?? "";
   const [expanded, setExpanded] = useState(false);
   const owner = useContext(DuctsOwner);
-  const selected = owner?.view.read().page.selected;
+  const selected = owner?.props.page.selected;
   const entries = useMemo(
     () => barRows(split, scale, context?.nodes ?? new Map()),
     [split, scale, context?.nodes],
   );
   const ids = selected?.startsWith("elements:")
     ? selected.slice("elements:".length).split(",").map(Number)
-    : selected && /^\d+$/.test(selected) ? [Number(selected)] : [];
+    : selected && /^\d+$/.test(selected)
+      ? [Number(selected)]
+      : [];
   const current = selectedBarRow(entries, ids.length ? { key: "", ids } : null);
   const small = entries.filter(
     (entry) => entry.dp > 0 && entry.share < 3 && entry.key !== current?.key,
@@ -451,7 +453,7 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
   const choose = (row: BarRow) =>
     row.key === "other"
       ? setExpanded(true)
-      : owner?.view.setPage({ selected: `elements:${row.ids.join(",")}` });
+      : owner?.props.setPage({ selected: `elements:${row.ids.join(",")}` });
   const columns: Column<BarRow>[] = [
     {
       key: "loss",
@@ -583,7 +585,7 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
             label="Collapse small loss groups"
             onClick={() => {
               setExpanded(false);
-              owner?.view.setPage({ selected: "" });
+              owner?.props.setPage({ selected: "" });
             }}
           >
             collapse groups under 3%

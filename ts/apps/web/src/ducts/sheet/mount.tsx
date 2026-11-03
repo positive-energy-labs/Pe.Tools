@@ -17,14 +17,9 @@ import type { SheetViewProps } from "./types";
 import { Roster, Ledger } from "./view";
 import { sheetState } from "./state";
 import { describeCloser, type Closer } from "./closer";
-import type { DuctsSheetEdits, RouteStatePatch } from "@pe/agent-contracts";
-import type { SheetReading } from "../sources";
-import {
-  editLabel,
-  inputHistoryMetaSchema,
-  presentInputHistory,
-  type EditMeta,
-} from "./input-history";
+import type { DuctsSheetEdits } from "@pe/agent-contracts";
+import type { SheetReading } from "../neutral.ts";
+import { editLabel, presentInputHistory, type EditMeta } from "./input-history";
 
 const SheetPanes = createContext<Readonly<Record<string, ReactNode>>>({});
 export function SheetPane({ id }: { id: string }) {
@@ -34,17 +29,10 @@ export function SheetPane({ id }: { id: string }) {
 export function SheetProvider({ props, children }: { props: ProtoProps; children: ReactNode }) {
   const owner = useContext(DuctsOwner)!;
   const search = useRouteSearchSlice((search) => search);
-  const reading = owner.readings.get("sheet");
-  // A failed selection cannot replace the last successful ledger. It is display-only until current.
-  const prior = reading.previous as SheetReading | undefined;
-  const target = owner.snapshot().target;
-  const sameDocument =
-    target.kind === "document" &&
-    prior?.open?.overview.target.session === target.ref.session &&
-    prior.open.overview.target.openId === target.ref.openId;
-  const value = (reading.value ?? (sameDocument ? prior : undefined)) as SheetReading | undefined;
+  const reading = owner.sheetRead;
+  const value = reading.value as SheetReading | undefined;
   const sheet = value?.open ?? null;
-  const fans = owner.readings.get("fans");
+  const fans = owner.fanRead;
   // One computation: the roster's status reads the same sheet value the ledger draws.
   const roster = rosterOrder(
     withComputed(
@@ -71,22 +59,9 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     edits: DuctsSheetEdits,
     history: EditMeta = { label: editLabel(edits, nameOf) },
   ) => {
-    const result = await owner
-      .control("sheet-inputs", {
-        edits,
-        history,
-        expectedRevision: props.work.revision,
-        basis: sheet?.overview.basis ?? null,
-      })
-      .run();
-    return "refusal" in result ? { message: result.refusal.message } : undefined;
+    return (await owner.sheetEdit(edits, history, sheet?.overview.basis ?? null)) ?? undefined;
   };
-  const write = async (patches: RouteStatePatch[], history: EditMeta) => {
-    const result = await owner
-      .control("edit", { patches, history, expectedRevision: props.work.revision })
-      .run();
-    return "refusal" in result ? result.refusal : null;
-  };
+  const write: typeof owner.write = (...args) => owner.write(...args);
   const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null) =>
     describeCloser(blocker, typed, {
       terminalDrop: state.inputs?.criteria.terminalDropInWg ?? null,
@@ -182,21 +157,16 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
           id: elementId,
           family: snapshot.nodes.find((node) => node.id === elementId)?.family ?? null,
         };
-  const work = owner.snapshot().work;
-  const journal = work ? owner.journal(work.handle.key).entries(inputHistoryMetaSchema) : [];
   const history = {
-    ...presentInputHistory(
-      journal as Parameters<typeof presentInputHistory>[0],
-      owner.journalRefusal(),
-    ),
+    ...presentInputHistory(owner.history?.entries ?? [], null),
     undo: () => {
-      void owner.restore("undo");
+      void owner.history?.undo();
     },
     redo: () => {
-      void owner.restore("redo");
+      void owner.history?.redo();
     },
     restore: (press: string) => {
-      void owner.restore("undo", press);
+      void owner.history?.undo(press);
     },
   };
   const fanReading = fans.value as { slots: SheetViewProps["slots"]; activeSlot: string } | null;
@@ -210,33 +180,17 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     activeSlot: fanReading?.activeSlot ?? "",
     busy,
     loading: fans.status === "pending",
-    error: reading.error ?? fans.error ?? null,
+    error:
+      (reading.status === "failed" ? reading.reason : null) ??
+      (fans.status === "failed" ? fans.reason : null),
     progress: value?.progress ?? null,
-    open: (ref) => {
-      const fan = roster.find(
-        (row) => row.unitId === ref.unitId && row.portIndex === ref.portIndex,
-      );
-      if (!fan) return;
-      owner.view.setPage({
-        fan:
-          props.page.fan === "all"
-            ? roster.filter((row) => stableFanKey(row) !== stableFanKey(fan)).map(stableFanKey)
-            : props.page.fan.includes(stableFanKey(fan))
-              ? props.page.fan.filter((id) => id !== stableFanKey(fan))
-              : [...props.page.fan, stableFanKey(fan)],
-        sheetPath: "",
-      });
-    },
-    cancel: () => {
-      owner.view.setPage({ fan: [] });
-    },
     refresh: () => {
-      void owner.control("refresh").run();
+      props.setPage({ sheetPath: props.page.sheetPath });
     },
     changeInputs,
     rule: (proposal) => changeInputs({ joins: [proposal] }),
     pickPath: (sheetPath) => {
-      owner.view.setPage({ sheetPath });
+      props.setPage({ sheetPath });
     },
     closerOf,
     close: (closer) => changeInputs(editsFor([closer]), { label: closer.verb }),

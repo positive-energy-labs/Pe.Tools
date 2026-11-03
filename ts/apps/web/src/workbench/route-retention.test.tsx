@@ -22,7 +22,7 @@ import { z } from "zod";
 import { peClient } from "#/host/pe-client";
 import { peReadings } from "#/readings";
 import { useRouteSearch, useRouteFixture, useRouteNavigate } from "#/route/activity";
-import { ductsGraph } from "#/ducts/graph";
+import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
 import { familyGraph as familiesGraph } from "#/family/graph";
 import { useGraphRoute } from "#/shell/mount";
 import { graphUrlPage } from "#/shell/mount-page";

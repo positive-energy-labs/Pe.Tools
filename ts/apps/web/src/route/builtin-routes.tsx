@@ -13,8 +13,6 @@ import { takeoffGraph } from "#/takeoff/graph";
 import { roomsGraph } from "#/rooms/graph";
 import { familyGraph } from "#/family/graph";
 import { settingsGraph } from "#/settings/graph";
-import { fansGraph } from "#/fans/graph";
-import { ductsGraph } from "#/ducts/graph";
 import { dataTablesGraph } from "#/data-tables/graph";
 import { mountRoute, type MountRouteProps } from "#/shell/mount";
 
@@ -35,9 +33,6 @@ const FamilyRoute = lazy(async () => ({
   default: mountRoute(familyGraph, (await import("#/family/route")).familyAdapters),
 }));
 
-const DuctsRoute = lazy(async () => ({
-  default: mountRoute(ductsGraph, (await import("#/ducts/route")).ductsAdapters),
-}));
 const DataTablesRoute = lazy(async () => ({
   default: mountRoute(dataTablesGraph, (await import("#/data-tables/route")).dataTablesAdapters),
 }));
@@ -80,7 +75,6 @@ function hosted(Body: ComponentType<MountRouteProps>) {
 }
 registerLegacyGraph(roomsGraph, hosted(RoomsRoute));
 registerLegacyGraph(familyGraph, hosted(FamilyRoute));
-registerLegacyGraph(ductsGraph, hosted(DuctsRoute));
 registerLegacyGraph(parameterLinksGraph, hosted(ParameterLinksRoute));
 registerLegacyGraph(podsGraph, hosted(PodsRoute));
 registerLegacyGraph(dataTablesGraph, hosted(DataTablesRoute));
@@ -98,8 +92,3 @@ registerLegacyGraph(zoneAuditGraph, hosted(zoneAuditRoute));
 
 const rhvacSyncRoute = lazy(async () => ({ default: (await import("#/rhvac-sync/route")).Body }));
 registerLegacyGraph(rhvacSyncGraph, hosted(rhvacSyncRoute));
-
-const FansRoute = lazy(async () => ({
-  default: mountRoute(fansGraph, (await import("#/ducts/route")).ductsAdapters),
-}));
-registerLegacyGraph(fansGraph, hosted(FansRoute));

@@ -847,7 +847,9 @@ test.each(["invalid_meta", "meta_too_large"] as const)(
       code === "invalid_meta"
         ? { ...description.meta, kind: "not-ducts-input" }
         : { ...description.meta, rowKey: "\u00e9".repeat(2048) };
-    const f = await witness(undefined, undefined, undefined, { ...description, meta });
+    const f = await witness(undefined, undefined, undefined, { ...description, meta } as ReturnType<
+      typeof describeInputHistory
+    >);
     await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
     const before = structuredClone(f.saved.get("ducts"));
     expect(
@@ -893,6 +895,6 @@ test("W04: equal-Work Undo/Redo paths render the same label-only history", async
   const undoEffect = presentInputHistory(undoHistory!.entries, null);
   const redoEffect = presentInputHistory(redoHistory!.entries, null);
   expect(undoEffect).toEqual(redoEffect);
-  expect(undoEffect.last).toEqual({ label: "undid Fan flow", words: "" });
+  expect(undoEffect.last).toEqual({ label: "Fan flow", words: "" });
   expect(redoEffect.last?.words).not.toMatch(/\d/);
 });

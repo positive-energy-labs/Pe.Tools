@@ -11,10 +11,8 @@ import {
   type FittingPricing,
   type Resolved,
 } from "@pe/agent-contracts";
-import { editCells } from "@pe/ducts-domain/sheet/index";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { fittingGroups, tableMeaning } from "./fitting-groups";
-import { cellsAt, effectWords, restorePatches } from "./input-history";
 import { inputRows } from "./input-rows";
 import { kindMeaning } from "./kind-meaning";
 
@@ -296,56 +294,6 @@ it("unmatched fittings group by family, and a choice in Work no fitting of this 
 it("ASHRAE titles read as the fitting, without the id and the source", () => {
   expect(tableMeaning("CD3-21", TITLES)).toBe("Elbow, Round, 5 Gore, 90 Degree");
   expect(tableMeaning("CD3-9", TITLES)).toBeNull();
-});
-
-it("undo restores the exact Work cells an edit wrote, a cell that did not exist by deleting it", () => {
-  const edits = {
-    kinds: { [KEY]: { kind: "air-handler" as const } },
-    tables: { "elbow-1d-le10": null },
-  };
-  const cells = editCells(edits);
-  expect(cells).toEqual([
-    ["kinds", KEY],
-    ["rules", "elbow-1d-le10"],
-  ]);
-  const before = {
-    kinds: {},
-    rules: { "elbow-1d-le10": { edit: { value: { table: "CD3-21" }, by: "human" } } },
-  };
-  const saved = cellsAt(before, cells);
-  expect(restorePatches(cells, saved)).toEqual([
-    { path: ["kinds", KEY] },
-    {
-      path: ["rules", "elbow-1d-le10"],
-      value: { edit: { value: { table: "CD3-21" }, by: "human" } },
-    },
-  ]);
-});
-
-it("an edit's effect reads before → after on what moved, ≥ marking an incomplete side's known subtotal", () => {
-  const side = (worstPath: number | null, knownInWg: number, complete: boolean) => ({
-    worstPath,
-    knownInWg,
-    complete,
-    assumedInWg: null,
-    allowanceInWg: 0,
-    telFt: 0,
-    frictionRatePer100: null,
-  });
-  const r14 = {
-    supply: side(null, 0.028054, false),
-    return: side(0.046875, 0.046875, true),
-    requiredEspInWg: null,
-    requiredEspAssumedInWg: null,
-  };
-  const r20 = {
-    supply: side(null, 0.016504, false),
-    return: side(0.035566, 0.035566, true),
-    requiredEspInWg: null,
-    requiredEspAssumedInWg: null,
-  };
-  expect(effectWords(r14, r20)).toBe("supply ≥0.0281 → ≥0.0165 · return 0.0469 → 0.0356");
-  expect(effectWords(r14, r14)).toBe("no change to this fan's totals");
 });
 
 it("a kind that would take the unit off the fan list is a disabled option; the rest stay pickable", () => {

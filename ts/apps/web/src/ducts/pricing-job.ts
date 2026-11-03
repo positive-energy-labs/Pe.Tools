@@ -4,12 +4,12 @@ import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { price, type Priced } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { PricingDelta } from "./pricing-delta";
+import type { PricingDelta } from "./pricing-delta.ts";
 import { healPlan, rememberHealPlan } from "@pe/ducts-domain/heal";
 import { inferJoints, rememberInference } from "@pe/ducts-domain/proximity";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
-import { systemNotes, type SystemNote } from "./system-list-search";
-import { systemList } from "./system-list";
+import { systemNotes, type SystemNote } from "./system-list-search.ts";
+import { systemList } from "./system-list.ts";
 
 interface PricingBase {
   snapshot: DuctSnapshot;

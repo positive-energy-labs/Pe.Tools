@@ -45,13 +45,11 @@ export function Roster({ props }: { props: SheetViewProps }) {
     items: props.roster,
     keyOf: fanKey,
     search: rosterSearch,
-    select: "multi",
     state: {
       ...listState,
       selected: props.roster.filter((row) => props.picked?.includes(stableFanKey(row))).map(fanKey),
     },
     onState: (next) => setListState({ ...next, selected: [] }),
-    onPick: (row) => props.open(row),
     refusalOf: () => wait,
   });
   // A blank firm tag falls back to the unit's Mark or family; a name shared by two units (Chadds
@@ -74,7 +72,7 @@ export function Roster({ props }: { props: SheetViewProps }) {
       </span>
     ),
     revit: [fan.unitId],
-    title: `Open ${labelOf(fan)}`,
+    title: labelOf(fan),
   });
   // The roster pane clips; the list scrolls in its own Scroll, as the /ducts systems pane does.
   return (
@@ -87,18 +85,6 @@ export function Roster({ props }: { props: SheetViewProps }) {
         empty={{ message: "No fan ports on the roster", exit: "Read a model with air movers" }}
       />
     </Scroll>
-  );
-}
-
-export function RosterVerbs({ props }: { props: SheetViewProps }) {
-  return (
-    <span className="flex items-baseline gap-1">
-      {props.busy && (
-        <Button kind="framed" label="Cancel" onClick={props.cancel}>
-          cancel
-        </Button>
-      )}
-    </span>
   );
 }
 

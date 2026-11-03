@@ -1,3 +1,4 @@
+import { localId } from "./neutral";
 import { Deferred } from "@pe/kit/lang/section";
 import { Link } from "@tanstack/react-router";
 import { CASE_GROUPS, DUCT_CASES, type DuctCase } from "@pe/agent-contracts/ducts-guide";
@@ -35,7 +36,15 @@ function CaseCard({ c }: { c: DuctCase }) {
             <Link
               key={i}
               to="/ducts"
-              search={{ system: e.system ? [e.system] : [], selected: e.selected ?? "" }}
+              search={{
+                system: JSON.stringify({
+                  kind: "ids",
+                  ids: e.system ? [localId("ducts-system", e.system)] : [],
+                }),
+                selected: JSON.stringify(
+                  e.selected ? [{ kind: "focus", id: localId("ducts-focus", e.selected) }] : [],
+                ),
+              }}
               className="mr-3 underline"
             >
               {e.system ?? "no system"}

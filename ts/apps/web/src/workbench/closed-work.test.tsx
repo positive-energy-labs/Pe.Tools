@@ -12,7 +12,7 @@ import { address, ductsRouteState, readingKey } from "@pe/agent-contracts";
 import { z } from "zod";
 import { peReadings } from "#/readings";
 import { useEffect } from "react";
-import { ductsGraph } from "#/ducts/graph";
+import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
 import { useGraphRoute } from "#/shell/mount";
 import { graphUrlPage } from "#/shell/mount-page";
 import { subscriptionSource } from "#/shell/readings-use";

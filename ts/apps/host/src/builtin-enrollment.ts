@@ -1,3 +1,7 @@
+import { ductsHostModule } from "../../web/src/ducts/neutral.ts";
+import { fansHostModule } from "../../web/src/fans/neutral.ts";
+import ductsGenerated from "../../web/src/ducts/source-closure.generated.json" with { type: "json" };
+import fansGenerated from "../../web/src/fans/source-closure.generated.json" with { type: "json" };
 import { familiesHostModule } from "../../web/src/families/neutral.ts";
 import familiesGenerated from "../../web/src/families/source-closure.generated.json" with { type: "json" };
 import { z } from "zod";
@@ -13,55 +17,48 @@ export interface BuiltinEnrollment {
   readonly closure: { readonly envelope: BuiltinClosure; readonly fingerprint: string };
   readonly load: () => Promise<HostRouteModule>;
 }
-const envelope: BuiltinClosure = {
-  ...generated.envelope,
-  source: "builtin-closure",
-  version: 1,
-  data: RouteGraphJson.parse(generated.envelope.data),
-  variants: generated.envelope.variants.map((v) => ({
-    ...v,
-    client: z.enum(["web", "pea"]).parse(v.client),
-  })),
-};
-/** Captures is registry-only. Its generated declaration imports no UI or browser code. */
+type Generated =
+  | typeof generated
+  | typeof schedulesGenerated
+  | typeof familiesGenerated
+  | typeof ductsGenerated
+  | typeof fansGenerated;
+const closure = (generated: Generated): BuiltinEnrollment["closure"] => ({
+  fingerprint: generated.fingerprint,
+  envelope: {
+    hostVersion: generated.envelope.hostVersion,
+    modules: generated.envelope.modules,
+    inputs: generated.envelope.inputs,
+    externals: generated.envelope.externals,
+    source: "builtin-closure",
+    version: 1,
+    data: RouteGraphJson.parse(generated.envelope.data),
+    ...("workOwner" in generated.envelope && {
+      workOwner: generated.envelope.workOwner as BuiltinClosure["workOwner"],
+    }),
+    variants: generated.envelope.variants.map((variant) => ({
+      ...variant,
+      client: z.enum(["web", "pea"]).parse(variant.client),
+    })),
+  },
+});
+/** Owner enrollment precedes every presenter; a presenter creates no second Work registration. */
 export const builtinEnrollments: readonly BuiltinEnrollment[] = [
   {
     routeKey: "families",
     load: async () => familiesHostModule,
-    closure: {
-      fingerprint: familiesGenerated.fingerprint,
-      envelope: {
-        ...familiesGenerated.envelope,
-        source: "builtin-closure",
-        version: 1,
-        data: RouteGraphJson.parse(familiesGenerated.envelope.data),
-        variants: familiesGenerated.envelope.variants.map((v) => ({
-          ...v,
-          client: z.enum(["web", "pea"]).parse(v.client),
-        })),
-      },
-    },
+    closure: closure(familiesGenerated),
   },
   {
     routeKey: "schedules",
     load: async () => schedulesHostModule,
-    closure: {
-      fingerprint: schedulesGenerated.fingerprint,
-      envelope: {
-        ...schedulesGenerated.envelope,
-        source: "builtin-closure",
-        version: 1,
-        data: RouteGraphJson.parse(schedulesGenerated.envelope.data),
-        variants: schedulesGenerated.envelope.variants.map((v) => ({
-          ...v,
-          client: z.enum(["web", "pea"]).parse(v.client),
-        })),
-      },
-    },
+    closure: closure(schedulesGenerated),
   },
   {
     routeKey: "captures",
-    closure: { envelope, fingerprint: generated.fingerprint },
-    load: async () => ({ data: envelope.data, schemas: {}, bodies: {} }),
+    load: async () => ({ data: closure(generated).envelope.data, schemas: {}, bodies: {} }),
+    closure: closure(generated),
   },
+  { routeKey: "ducts", load: async () => ductsHostModule, closure: closure(ductsGenerated) },
+  { routeKey: "fans", load: async () => fansHostModule, closure: closure(fansGenerated) },
 ];

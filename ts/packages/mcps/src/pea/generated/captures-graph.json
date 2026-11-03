@@ -8,26 +8,20 @@
     "group": "Coordinate model data",
     "summary": "Inspect retained view pictures and receipts",
     "label": "Revit data",
-    "exposure": "Preview",
-    "runtimeNeed": "Host retained view images",
     "icon": "Image",
-    "aliases": [
-      "Revit",
-      "data"
-    ],
-    "listed": true,
-    "satellites": [],
+    "exposure": "Preview",
     "surfaces": {
       "web": "full",
       "pwa": "full",
       "tray": false
-    }
-  },
-  "identities": {
-    "capture": {
-      "kind": "local",
-      "codec": "local"
-    }
+    },
+    "aliases": [
+      "Revit",
+      "data"
+    ],
+    "runtimeNeed": "Host retained view images",
+    "listed": true,
+    "satellites": []
   },
   "fields": {
     "sha": {
@@ -35,15 +29,15 @@
       "schema": "subject",
       "codec": "subject",
       "initial": null,
+      "url": "push",
+      "share": true,
+      "agent": "set",
       "cardinality": "one",
       "identity": "capture",
       "picker": {
         "reading": "captures",
         "options": "pick"
-      },
-      "url": "push",
-      "share": true,
-      "agent": "set"
+      }
     },
     "selected": {
       "role": "selection",
@@ -62,6 +56,12 @@
       "url": "replace",
       "share": true,
       "agent": "set"
+    }
+  },
+  "identities": {
+    "capture": {
+      "kind": "local",
+      "codec": "local"
     }
   },
   "subject": {

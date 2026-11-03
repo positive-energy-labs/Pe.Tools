@@ -19,7 +19,7 @@ import { SceneMeshes } from "#/scene/types";
 import { boundsOfPoints } from "#/scene/orbit";
 import { NAVIGATION_FIXTURE } from "../navigation.fixture";
 import type { ProtoProps } from "../proto/props";
-import type { OpenSheet } from "../sources";
+import type { OpenSheet } from "../neutral.ts";
 import { selectedFans, type FanPort } from "./model";
 import { routeAddress } from "@pe/agent-contracts";
 import { beyondPicture, SheetPicture } from "./picture";
@@ -30,8 +30,18 @@ vi.mock("#/scene/artifact", () => ({ fetchSceneArtifact: async () => new ArrayBu
 vi.mock("#/scene/psc1", () => ({
   SCENE_FORMAT: "space-scene-v2",
   decodeScene: () => ({
-    meshes: new SceneMeshes(new Float32Array(), { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 }, []),
-    metadata: { elements: [], stamp: { sources: [] }, omittedElements: 0, unavailableElements: [], completeness: { complete: true } },
+    meshes: new SceneMeshes(
+      new Float32Array(),
+      { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 },
+      [],
+    ),
+    metadata: {
+      elements: [],
+      stamp: { sources: [] },
+      omittedElements: 0,
+      unavailableElements: [],
+      completeness: { complete: true },
+    },
   }),
 }));
 const seen = vi.hoisted(() => ({

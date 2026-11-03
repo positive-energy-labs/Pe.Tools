@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
-import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
+import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
+import { ductsPageSchema } from "#/ducts/page";
 import { graphUrlPage } from "#/shell/mount-page";
 import { familyGraph, familyPageSchema } from "#/family/graph";
 import { podsGraph } from "#/pods/graph";

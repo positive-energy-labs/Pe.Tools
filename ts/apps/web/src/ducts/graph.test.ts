@@ -1,244 +1,164 @@
 import { expect, test } from "vite-plus/test";
 import {
-  bindWork,
+  ductsDocumentSchema,
   ductsRouteState,
-  projectRouteGraph,
-  validateRouteGraph,
-  type DuctsRouteDocument,
+  applyPatches,
+  transitionPatches,
 } from "@pe/agent-contracts";
-import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
-import { pricingJob, type PricingResult } from "./pricing-job";
-import { ductsGraph, ductsPageSchema, type DuctsPage } from "./graph";
-import { ductsBinding, ductsWriteStage } from "./actions";
-import type { BindingScope } from "#/shell/mount-owner";
-import type { ReadingState } from "#/shell/readings";
+import { editPatches } from "@pe/ducts-domain/sheet/index";
+import { ductsData, schemas, neutralBodies, authoredPatches, localId } from "./neutral";
 import { snapshot } from "./test-fixture";
-import { noTerminalSnapshot } from "./no-terminal.fixture";
-import { twoHealNetworksSnapshot } from "./heal.fixture";
-const state = (value: unknown): ReadingState => ({
-  status: "ready",
-  value,
-  current: true,
-  complete: true,
-  version: 1,
-  basis: {
-    workRevision: 1,
-    attempt: {
-      target: { kind: "document", ref: { session: "s", openId: "d" } },
-      workKey: { binding: "host", route: "ducts", target: null },
-      generation: 1,
-    },
-    inputs: {},
-  },
-});
-export function scopeFor(doc: DuctsRouteDocument): BindingScope<DuctsPage, DuctsRouteDocument> {
-  const grids = {};
-  const input = { snapshot, grids, catalogs: EMPTY_CATALOGS };
-  const response = pricingJob()({ id: 1, base: input, doc });
-  if (!("result" in response)) throw Error("Pricing failed");
-  return {
-    target: { kind: "document", ref: { session: "s", openId: "d" } },
-    work: {
-      handle: {
-        key: bindWork("ducts", null, undefined, { session: "s", openId: "d" }),
-        revision: 1,
-      },
-      doc,
-    },
-    page: ductsPageSchema.parse({ system: ["SA"] }) as DuctsPage,
-    readings: {
-      ducts: state(snapshot),
-      tables: state(grids),
-      catalogs: state({ tables: EMPTY_CATALOGS, findings: [] }),
-      pricing: state(response.result as PricingResult),
-    },
-  };
-}
-test("Heal and Preview heal need a current network and Work, even when pricing failed", () => {
-  const scope = scopeFor(ductsRouteState.schema.parse({}));
-  scope.page = { ...scope.page, system: ["EX 1"] };
-  const network = noTerminalSnapshot();
-  network.segments[0]!.connectors[1]!.flowCfm = 0;
-  scope.readings = {
-    ducts: state(network),
-    pricing: {
-      ...state(undefined),
-      status: "failed",
-      current: false,
-      error: "EX 1 has no terminal; nothing to price",
-    },
-  };
-  for (const id of ["heal", "heal-preview"])
-    expect(ductsBinding(id, { group: "g1" }, scope).args).toMatchObject({
-      refusal: null,
-      request: { groups: [{ group: "g1" }] },
-    });
-  expect(ductsBinding("price", undefined, scope).args).toMatchObject({
-    refusal: "pricing failed: EX 1 has no terminal; nothing to price",
-  });
-});
+import sheet from "./sheet/sheet.fixture.json";
 
-test("a pointed-at Heal row overrides an older element pick and never falls back to another network", () => {
-  const scope = scopeFor(ductsRouteState.schema.parse({}));
-  scope.page = { ...scope.page, system: ["RA 23"], selected: "heal:g6953999" };
-  scope.readings = { ducts: state(twoHealNetworksSnapshot()) };
-  expect(ductsBinding("heal-preview", undefined, scope).args).toMatchObject({
-    refusal: null,
-    request: { groups: [{ group: "g6953999" }] },
-  });
-  scope.page.selected = "heal:retired-network";
-  expect(ductsBinding("heal-preview", undefined, scope).args).toMatchObject({
-    refusal: expect.stringContaining("no longer available"),
-  });
+const work = () => ductsDocumentSchema.parse({});
+type Scope = Parameters<typeof neutralBodies.lossReady.run>[0];
+const ready = <T>(value: T) => ({
+  status: "ready" as const,
+  current: true as const,
+  value,
+  hash: "fixture",
 });
-test("the product graph keeps all ducts inputs in Work across fourteen cell families", () => {
-  expect(ductsGraph.work).toBe(ductsRouteState.schema);
-  expect(validateRouteGraph(ductsGraph)).toEqual([]);
-  const graph = projectRouteGraph(ductsGraph);
-  expect(graph.cells).toHaveLength(14);
-  expect(graph.cells?.some((family) => family.segment === "parameters")).toBe(true);
-  expect(graph.fields).not.toHaveProperty("terminalFlow");
-  expect(graph.fields).not.toHaveProperty("fanStatic");
-  expect(Object.values(graph.fields).some((field) => field.role === "setting")).toBe(false);
-  expect(graph.stageOrder).toEqual(["network"]);
-  expect(graph.verbs.price).toMatchObject({ does: "ducts.apply-losses", review: "shown" });
-  expect(graph.verbs.heal).toMatchObject({ does: "ducts.apply-heal", review: "shown" });
-  expect(graph.verbs["assign-fan"]).toMatchObject({
-    does: "ducts.apply-assign-fan",
+const scope = (stage: "network" | "sheet" = "network"): Scope =>
+  ({
+    page: {
+      stage,
+      system: { kind: "ids", ids: [localId("ducts-system", snapshot.systems[0]!.name)] },
+      fan: { kind: "ids", ids: [] },
+    },
+    work: work(),
+    readings: {
+      ducts: ready(snapshot),
+      sheetSnapshot: ready(snapshot),
+      sheet: ready({
+        open: {
+          overview: sheet.overview,
+          inputs: null,
+          elements: null,
+          legs: null,
+          worstLegs: [],
+          worksheet: null,
+        },
+        rows: [],
+        progress: null,
+      }),
+    },
+  }) as Scope;
+
+test("the admitted declaration keeps Ducts Work, thirteen record families and the criteria root editor", () => {
+  expect(schemas.work).toBe(ductsRouteState.schema);
+  expect(Object.keys(ductsData.cells)).toHaveLength(13);
+  expect(ductsData.workFields.criteria.label).toBe("design criteria");
+  expect(ductsData.cells.parameters.segment).toBe("parameters");
+  expect(ductsData.fields).not.toHaveProperty("terminalFlow");
+  expect(ductsData.stageOrder).toEqual(["network"]);
+  expect(ductsData.fields.system.cardinality).toBe("many");
+  expect(ductsData.verbs.losses).toMatchObject({ entry: "ducts.apply-losses", review: "shown" });
+  expect(ductsData.verbs.heal).toMatchObject({ entry: "ducts.apply-heal", review: "shown" });
+  expect(ductsData.verbs.assign).toMatchObject({
+    entry: "ducts.apply-assign-fan",
     review: "shown",
   });
-  expect(Object.keys(graph.fields)).not.toEqual(
-    expect.arrayContaining(["evaluation", "heal", "fan", "epoch"]),
-  );
-});
-test("the price request is scoped and stable for one reading basis; standing Set rows hold only the ESP", () => {
-  const scope = scopeFor(
-    ductsRouteState.schema.parse({
-      flows: { "4": { edit: { value: { cfm: 100, source: "override" } } } },
-      esp: { "100": { edit: { value: { inWg: 0.5 } } } },
-    }),
-  );
-  const first = ductsBinding("price", undefined, scope).args as {
-    request: { equipment: unknown[]; terminalFlows: unknown[] };
-    refusal: null;
-  };
-  expect(first.refusal).toBeNull();
-  expect(first.request.equipment).toEqual([]);
-  expect(first.request.terminalFlows).toContainEqual({
-    id: 4,
-    cfm: 100,
-    source: "override",
-    slot: "Observed flow",
-  });
-  expect((ductsBinding("price", undefined, scope).args as { request: unknown }).request).toBe(
-    first.request,
-  );
-  scope.work!.handle.revision = 2;
-  expect(ductsBinding("price", undefined, scope).args).toMatchObject({
-    refusal: expect.stringContaining("Pricing is refreshing"),
-  });
-});
-test("native writes refuse a historical slot that conflicts with the observed element slot", () => {
-  const scope = scopeFor(
-    ductsRouteState.schema.parse({
-      parameters: { terminalFlow: { edit: { value: "Historical flow" } } },
-      flows: { "4": { edit: { value: { cfm: 100, source: "override" } } } },
-    }),
-  );
-  const observed = { ...snapshot, slots: { ...snapshot.slots, terminalFlow: "Observed flow" } };
-  scope.readings = { ...scope.readings, ducts: state(observed) };
-  expect(ductsBinding("price", undefined, scope).args).toMatchObject({
-    refusal: expect.stringContaining("no observed airflow parameter 'Historical flow'"),
-  });
 });
 
-test("system changes retain a shared camera and selection, clear them for a different subject, and retain every opened system", () => {
-  const current = {
-    ...ductsPageSchema.parse({ system: ["SA"], selected: "4" }),
-    viewport: { kind: "orbit", yaw: 20, elev: 30, zoom: 2, pivot: [0, 0, 0] },
-  } as DuctsPage;
-  expect(ductsGraph.transition!(current, { system: ["SA", "RA"] }, "page")).toMatchObject({
-    patch: { system: ["SA", "RA"] },
-  });
-  expect(ductsGraph.transition!(current, { system: ["Other"] }, "page")).toMatchObject({
-    patch: { selected: "", viewport: null },
-  });
-  expect(
-    ductsGraph.transition!(current, { system: ["A", "B", "C", "D", "SA"] }, "page"),
-  ).toMatchObject({ patch: { system: ["A", "B", "C", "D", "SA"] } });
-});
-
-test("criteria and kinds review rows keep the sheet's words and grouping", () => {
-  const criteria = ductsGraph.cells!.find((c) => c.key === "criteria")!;
-  expect(
-    criteria.show!({ velocityLimitFpm: { supply: 850, return: 700 }, splitPolicy: "even" }),
-  ).toBe("velocity limit supply 850 return 700, split policy even");
-  expect(criteria.show!({ velocityLimitFpm: { supply: 850 } })).toBe("velocity limit supply 850");
-  const kinds = ductsGraph.cells!.find((c) => c.segment === "kinds")!;
-  expect(kinds.groupOf(JSON.stringify(["Broan", "B210E75RT"]))).toEqual(["Broan", "B210E75RT"]);
-  expect(kinds.show!({ kind: "erv" })).toBe("erv");
-  expect(ductsRouteState.schemaVersion).toBe(1);
-});
-
-test("fan-stage selection and framing remain Page fields without a network read", () => {
-  const current = ductsPageSchema.parse({ stage: "sheet" });
-  const patch = {
-    selected: "14577391",
-    viewport: {
-      kind: "orbit" as const,
-      yaw: 20,
-      elev: 30,
-      zoom: 2,
-      pivot: [0, 0, 0] as [number, number, number],
+test("bounded record-entry edits preserve siblings, encode deletion and reject invalid authored values", () => {
+  const doc = ductsDocumentSchema.parse({
+    componentDrops: {
+      "7": { edit: { value: { inWg: 0.18 } } },
+      "8": { edit: { value: { inWg: 0.25 } } },
     },
-  };
-  expect(ductsGraph.transition!(current, patch, "page")).toMatchObject({ patch });
-  expect(ductsGraph.fields.selected.url).not.toBe(false);
-  expect(ductsGraph.fields.viewport.url).not.toBe(false);
-});
-
-test("Work choices stage the selected heal network, fan pair and system before commands", () => {
-  const scope = scopeFor(ductsRouteState.schema.parse({}));
-  const heal = {
-    subject: null,
-    args: { request: { groups: [{ group: "g1", items: [] }] }, refusal: null },
-  };
-  expect(ductsWriteStage("heal-preview", heal, scope)).toEqual({
-    verb: "stage-write",
-    input: { groups: ["g1"] },
   });
-  expect(
-    ductsWriteStage(
-      "assign-fan",
-      { subject: null, args: { request: { unitId: 12, systemId: 34 }, refusal: null } },
-      scope,
-    ),
-  ).toEqual({ verb: "stage-write", input: { fan: { unitId: 12, systemId: 34 } } });
-  expect(
-    ductsWriteStage("preview", { subject: null, args: { request: {}, refusal: null } }, scope),
-  ).toMatchObject({ verb: "stage-write", input: { groups: expect.any(Array) } });
-  scope.work!.doc.writeIntent = { edit: { value: { groups: ["g1"] } } };
-  expect(ductsWriteStage("heal", heal, scope)).toBeNull();
-  expect(
-    ductsWriteStage("heal", { subject: null, args: { refusal: "Read first" } }, scope),
-  ).toBeNull();
-});
-
-test("fan write previews use the fan reading, never undemanded network pricing", () => {
-  const scope = scopeFor(
-    ductsRouteState.schema.parse({
-      componentDrops: { "10": { edit: { value: { inWg: 0.18 } } } },
-    }),
+  const patches = authoredPatches(doc, [{ path: ["componentDrops", "7"] }]);
+  expect(patches).toEqual([{ path: ["componentDrops", "7"], op: "delete" }]);
+  const changed = applyPatches(
+    ductsRouteState,
+    { version: 1, revision: 0, doc },
+    "human",
+    [{ path: ["componentDrops", "7"] }],
+    0,
   );
-  scope.page = { ...scope.page, stage: "sheet" };
-  scope.readings = {
-    sheet: state({ open: { overview: { fan: { unitId: 14577391, portIndex: 2 } } } }),
-    sheetSnapshot: state(snapshot),
-  };
-  const bound = ductsBinding("price", undefined, scope);
-  expect(bound.args).toMatchObject({ refusal: null });
-  expect(ductsWriteStage("price", bound, scope)).toEqual({
-    verb: "stage-write",
-    input: { walk: { unitId: 14577391, portIndex: 2 } },
+  expect(changed).toMatchObject({
+    ok: true,
+    envelope: { doc: { componentDrops: { "8": doc.componentDrops["8"] } } },
   });
+  expect(() =>
+    authoredPatches(doc, [
+      { path: ["componentDrops", "7", "edit"], value: { value: { inWg: "wrong" } } },
+    ]),
+  ).toThrow();
+});
+
+test("criteria edits merge the selected side and lifecycle actions remain bounded root patches", () => {
+  const doc = ductsDocumentSchema.parse({
+    criteria: { edit: { value: { allowanceInWg: { supply: 0.1, return: 0.2 } } } },
+  });
+  const patches = authoredPatches(
+    doc,
+    editPatches({ criteria: { allowanceInWg: { return: 0.35 } } }, doc),
+  );
+  expect(patches).toEqual([
+    {
+      path: ["criteria"],
+      value: { edit: { value: { allowanceInWg: { supply: 0.1, return: 0.35 } } } },
+    },
+  ]);
+  const clear = authoredPatches(
+    doc,
+    transitionPatches([], "criteria", doc.criteria, { kind: "clear" }),
+  );
+  expect(clear).toEqual([{ path: ["criteria"], value: { edit: null } }]);
+});
+
+test("loss preview refuses the previous fan scope and a combined multi-fan sheet", () => {
+  const ctx = scope("sheet");
+  expect(neutralBodies.lossReady.run(ctx)).toMatch(/scope/);
+  const fan = sheet.overview.fan;
+  const chosen = {
+    ...ctx,
+    work: {
+      ...ctx.work,
+      writeIntent: { edit: { value: { walk: { unitId: fan.unitId, portIndex: fan.portIndex } } } },
+    },
+  } as Scope;
+  expect(neutralBodies.lossReady.run(chosen)).toBe(true);
+  expect(
+    neutralBodies.lossReady.run({
+      ...chosen,
+      work: {
+        ...ctx.work,
+        writeIntent: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } },
+      },
+    } as Scope),
+  ).toMatch(/scope/);
+  const combined = {
+    ...chosen,
+    readings: {
+      ...chosen.readings,
+      sheet: ready({
+        ...chosen.readings.sheet.value,
+        opened: [chosen.readings.sheet.value!.open, chosen.readings.sheet.value!.open],
+      }),
+    },
+  } as Scope;
+  expect(neutralBodies.lossReady.run(combined)).toMatch(/scope/);
+});
+
+test("native loss and repair scopes stay inside the active system", () => {
+  const ctx = scope();
+  expect(neutralBodies.lossReady.run(ctx)).toMatch(/scope/);
+  const groups = snapshot.groups
+    .filter((group) => group.systemNames.includes(snapshot.systems[0]!.name))
+    .map((group) => group.id);
+  expect(groups.length).toBeGreaterThan(0);
+  const chosen = {
+    ...ctx,
+    work: { ...ctx.work, writeIntent: { edit: { value: { groups } } } },
+  } as Scope;
+  expect(neutralBodies.lossReady.run(chosen)).toBe(true);
+  expect(neutralBodies.healReady.run(chosen)).toBe(true);
+  const foreign = {
+    ...chosen,
+    work: { ...ctx.work, writeIntent: { edit: { value: { groups: ["retired-network"] } } } },
+  } as Scope;
+  expect(neutralBodies.lossReady.run(foreign)).toMatch(/scope/);
+  expect(neutralBodies.healReady.run(foreign)).toMatch(/active system/);
 });

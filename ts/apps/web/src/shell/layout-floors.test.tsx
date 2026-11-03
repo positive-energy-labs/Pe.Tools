@@ -5,7 +5,16 @@ import {
   GraphLayoutView,
   type PaneApi,
 } from "../../../../packages/kit/src/components/lang/graph-layout";
-import { ductsGraph } from "#/ducts/graph";
+import { ductsData } from "#/ducts/neutral";
+import { fansData } from "#/fans/neutral";
+const ductsGraph = ductsData;
+const layoutPanes = (panes: Readonly<Record<string, { label: string; purpose: string }>>) =>
+  Object.fromEntries(
+    Object.entries(panes).map(([id, { label, purpose }]) => [
+      id,
+      { label, purpose, draws: [], verbs: [] },
+    ]),
+  );
 import { opsGraph } from "#/ops/graph";
 import { PaneSplit } from "../../../../packages/kit/src/components/lang/pane-resize";
 
@@ -33,13 +42,14 @@ for (const width of [720, 1280, 1920]) {
       vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
         new DOMRect(0, 0, width, 900),
       );
+      const ductsGraph = stage === "network" ? ductsData : fansData;
       const bodies = Object.fromEntries(
         Object.keys(ductsGraph.panes).map((id) => [id, (frame: PaneApi) => frame(id)]),
       );
       const { container } = render(
         <GraphLayoutView
           layout={ductsGraph.layout}
-          panes={ductsGraph.panes}
+          panes={layoutPanes(ductsGraph.panes)}
           active={(key) => key === stage || key === "system"}
           bodies={bodies}
         />,
@@ -86,7 +96,7 @@ test("persisted widths fit around the network drawing floors", () => {
   const { container } = render(
     <GraphLayoutView
       layout={ductsGraph.layout}
-      panes={ductsGraph.panes}
+      panes={layoutPanes(ductsGraph.panes)}
       active={(key) => key === "network" || key === "system"}
       bodies={bodies}
       state={{
@@ -110,7 +120,7 @@ test("folding a leaf does not fold its containing support branch", () => {
   const { container } = render(
     <GraphLayoutView
       layout={ductsGraph.layout}
-      panes={ductsGraph.panes}
+      panes={layoutPanes(ductsGraph.panes)}
       active={(key) => key === "network" || key === "system"}
       bodies={Object.fromEntries(
         Object.keys(ductsGraph.panes).map((id) => [id, (frame: PaneApi) => frame(id)]),
