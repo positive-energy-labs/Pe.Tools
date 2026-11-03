@@ -960,3 +960,79 @@ test("typed native intent leaves accepted Work binding to the mount", () => {
   expect(acceptedWorkIntent).toBeTypeOf("function");
   expect(forgedWorkIntent).toBeTypeOf("function");
 });
+
+import { testConsents } from "../../../host/tests/effect-test";
+import type { ConsentEvent } from "../../../host/src/run-consent";
+import { createWorkFeedClient } from "./work-feed-client";
+test.each(["reject", "timeout"])(
+  "mounted native submission follows real consent owner: %s",
+  async (decision) => {
+    const f = await nativeFixture();
+    vi.useFakeTimers();
+    const run = { thread: "u8n", turn: decision };
+    const events: ConsentEvent[] = [];
+    const runs = testConsents((_, event) => events.push(event));
+    runs.open(run);
+    let applied = 0;
+    const client = createWorkFeedClient(undefined, {
+      write: async () => {
+        throw Error("Not a Work write");
+      },
+      submit: async (admission) => {
+        await runs.authorize(
+          {
+            caller: { kind: "pea", context: "fixture", thread: run.thread, run, root: run },
+            run,
+            root: run,
+          },
+          admission.id,
+          [{ kind: "file", path: "C:/fixture/native.json" }],
+        );
+        applied++;
+        return actionReceiptSchema.parse({
+          ...admission,
+          state: "succeeded",
+          caller: { kind: "human", via: "local" },
+          basis: null,
+          steps: [],
+          prepared: { state: "ready", value: null },
+          recovery: [],
+          result: {},
+          startedAt: "2026-11-03T00:00:00Z",
+        });
+      },
+    });
+    f.submit.mockImplementation((command) => client.submit(command));
+    try {
+      f.mount.invoke("native", 0);
+      f.preview().deliver();
+      const submission = f.mount.confirm("native") as ReturnType<WorkJournalDoor["submit"]>;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(applied).toBe(0);
+      const request = events.find((event) => event.kind === "permission_request");
+      if (!request || request.kind !== "permission_request") throw Error("Consent window missing");
+      if (decision === "reject") {
+        expect(runs.decide(run.thread, request.requestId, "stop_writes")).toBe(true);
+        await vi.advanceTimersByTimeAsync(60_000);
+      } else {
+        await vi.advanceTimersByTimeAsync(59_999);
+        expect(applied).toBe(0);
+        await vi.advanceTimersByTimeAsync(1);
+      }
+      expect(applied).toBe(decision === "timeout" ? 1 : 0);
+      let outcome: unknown;
+      submission.accepted.subscribe(
+        (value) => {
+          outcome = value;
+        },
+        () => {},
+      );
+      expect(outcome).toMatchObject({
+        kind: decision === "timeout" ? "accepted-native" : "rejected",
+      });
+    } finally {
+      runs.closeAll();
+      vi.useRealTimers();
+    }
+  },
+);
