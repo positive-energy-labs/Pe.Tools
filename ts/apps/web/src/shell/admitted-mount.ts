@@ -102,7 +102,9 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
 export class ReviewRefusal extends Error {
   readonly kind = "refused";
   constructor(readonly reason: "review-stale" | "present-threw" | "present-invalid") {
-    super(reason === "review-stale" ? "Review is stale; prepare it again" : `Review refused: ${reason}`);
+    super(
+      reason === "review-stale" ? "Review is stale; prepare it again" : `Review refused: ${reason}`,
+    );
     this.name = "ReviewRefusal";
   }
 }
@@ -645,7 +647,9 @@ export function createRouteShell(services: KernelServices) {
           reviewRefusals.set(id, refusal);
           throw refusal;
         }
-        return freezePage(typeof parsed.data === "string" ? { sentence: parsed.data, rows: [] } : parsed.data);
+        return freezePage(
+          typeof parsed.data === "string" ? { sentence: parsed.data, rows: [] } : parsed.data,
+        );
       };
       const project = (keys: readonly string[], value: Readonly<Record<string, unknown>>) =>
         freezePage(Object.fromEntries(keys.map((key) => [key, value[key]])));
@@ -781,6 +785,15 @@ export function createRouteShell(services: KernelServices) {
         } else if (declaration.kind === "command") {
           const entry = bindings.entries[declaration.entry]!;
           const modelWrite = entry.axes.effect === "ModelWrite";
+          const captured = context();
+          // Display evidence labels only. owner.current enforces freshness; the host seal binds the write.
+          const evidence = freezePage(
+            structuredClone({
+              page: captured.page,
+              work: captured.work,
+              readings: captured.readings,
+            }),
+          );
           const accepted = owner.read()!;
           if (modelWrite && basis && basis.workRevision !== accepted.work?.revision)
             throw Error("Stale accepted Work basis; prepare from the current revision");
@@ -870,11 +883,6 @@ export function createRouteShell(services: KernelServices) {
             previewEntry.input.parse(intent);
             const readingId = candidates[0]![0];
             reviews.delete(id);
-            const captured = context();
-            // Display evidence labels only. owner.current enforces freshness; the host seal binds the write.
-            const evidence = freezePage(structuredClone({
-              page: captured.page, work: captured.work, readings: captured.readings,
-            }));
             preparing.set(id, {
               evidence,
               invocation,
@@ -1194,16 +1202,17 @@ export function createRouteShell(services: KernelServices) {
           const stale = (!!route.data.work && !work.ready()) || !owner.current(review.invocation);
           return {
             preview: stale ? undefined : review.preview,
-            sentence: stale ? null : review.presentation?.sentence ?? null,
-            rows: stale ? [] : review.presentation?.rows ?? reviewChanges(review.preview),
+            sentence: stale ? null : (review.presentation?.sentence ?? null),
+            rows: stale ? [] : (review.presentation?.rows ?? reviewChanges(review.preview)),
             stale,
           };
         },
         reviewRefusal: (id: string) => {
           const review = reviews.get(id);
-          return review && ((!!route.data.work && !work.ready()) || !owner.current(review.invocation))
+          return review &&
+            ((!!route.data.work && !work.ready()) || !owner.current(review.invocation))
             ? new ReviewRefusal("review-stale")
-            : reviewRefusals.get(id) ?? null;
+            : (reviewRefusals.get(id) ?? null);
         },
         reviewIds: () => Array.from(reviews.keys()),
         cancelReview: (id: string) => {
