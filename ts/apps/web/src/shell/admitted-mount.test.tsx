@@ -177,11 +177,46 @@ const module = {
     },
   },
 };
-async function admitted(explicit = false) {
+async function admitted(explicit = false, query = false) {
   const selectedModule = {
     ...module,
+    schemas: { ...schemas, ids: z.object({ elementIds: z.array(z.number()) }) },
+    bodies: {
+      ...bodies,
+      ...(query
+        ? {
+            queryArgs: {
+              slot: "verbs.capture.args",
+              kind: "args",
+              source,
+              run: (_ctx: unknown, input: { elementIds: number[] }) => ({
+                query: input.elementIds.join(","),
+              }),
+            },
+            main: { ...bodies.main, run: (ctx: unknown) => ctx },
+          }
+        : {}),
+    },
     data: {
       ...data,
+      ...(query
+        ? {
+            verbs: {
+              capture: {
+                kind: "query" as const,
+                entry: "notes.read",
+                args: "queryArgs",
+                input: "ids",
+                label: "Capture",
+                review: "none" as const,
+                cancellation: "scope" as const,
+                deps: { page: [], work: [], readings: [] },
+                captures: [],
+              },
+            },
+            panes: { main: { ...data.panes.main, verbs: ["capture"] } },
+          }
+        : {}),
       readings: {
         ...data.readings,
         notes: {
@@ -663,4 +698,35 @@ test("stale-base recomputes a Work verb once over the accepted revision", async 
   const outcome = await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
   expect(outcome).toMatchObject({ kind: "accepted", ack: { base: 1, revision: 2 } });
   expect(mount.work()?.value).toEqual({ amount: 12 });
+});
+
+test("query validates and delivers invocation input without changing Page; new runs supersede", async () => {
+  const t = transports();
+  const acquire = vi.spyOn(t.services.reads, "acquire");
+  const m = createRouteShell(t.services).mount(await admitted(true, true), locationPort().address);
+  closes.push(m.close);
+  const page = m.page.read();
+  const pane = () => m.read("main") as any;
+  expect(() => pane().verbs.capture({ elementIds: ["bad"] })).toThrow();
+  expect(acquire).not.toHaveBeenCalled();
+  const input = { elementIds: [101, 202] };
+  pane().verbs.capture(input);
+  input.elementIds.push(303);
+  expect(acquire.mock.calls[0]![0].key.sortedKeyInput).toBe('{"query":"101,202"}');
+  t.frames[0]!(ready("first"));
+  expect(pane().readings.notes.value).toBe("first");
+  pane().verbs.capture({ elementIds: [404] });
+  expect(t.releases).toHaveBeenCalledTimes(1);
+  expect(acquire.mock.calls[1]![0].key.sortedKeyInput).toBe('{"query":"404"}');
+  t.frames[1]!(ready("second"));
+  t.frames[0]!(ready("late"));
+  expect(pane().readings.notes.value).toBe("second");
+  pane().verbs.capture({ elementIds: [404] });
+  expect(acquire).toHaveBeenCalledTimes(3);
+  expect(t.releases).toHaveBeenCalledTimes(2);
+  expect(m.page.read()).toEqual(page);
+  m.controls.query("query", "changed");
+  t.frames[2]!(ready("departed"));
+  expect(pane().readings.notes.current).toBe(false);
+  expect(acquire).toHaveBeenCalledTimes(3);
 });

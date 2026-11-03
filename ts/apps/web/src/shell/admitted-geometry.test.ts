@@ -49,6 +49,8 @@ async function admit(
     subject?: string;
     input?: unknown;
     reachFt?: number;
+    query?: boolean;
+    queryTarget?: string | null;
   } = {},
 ) {
   const kind = options.kind ?? "element";
@@ -58,6 +60,26 @@ async function admit(
     data: {
       ...readOnlyModule.data,
       capabilities: ["geometry"] as const,
+      ...(options.query
+        ? {
+            verbs: {
+              capture: {
+                kind: "query" as const,
+                entry: "scene",
+                ...(options.queryTarget === null
+                  ? {}
+                  : { reading: options.queryTarget ?? "detail" }),
+                args: "captureArgs",
+                input: "ids",
+                label: "Capture",
+                review: "none" as const,
+                cancellation: "scope" as const,
+                deps: { page: [], work: [], readings: [] },
+                captures: [],
+              },
+            },
+          }
+        : {}),
       seeds: { sample: { title: "Geometry", load: "geometrySeed" } },
       identities: {
         system: { kind, codec: kind },
@@ -78,10 +100,17 @@ async function admit(
           },
         },
       },
-      panes: { main: { ...readOnlyModule.data.panes.main, draws: ["overview", "detail"] } },
+      panes: {
+        main: {
+          ...readOnlyModule.data.panes.main,
+          draws: ["overview", "detail"],
+          ...(options.query ? { verbs: ["capture"] } : {}),
+        },
+      },
     },
     schemas: {
       ...readOnlyModule.schemas,
+      ids: z.object({ elementIds: z.array(z.number()) }),
       subjectOne: z.custom(
         (value) =>
           value === null || (typeof value === "string" && identityCodecs[kind].decode(value).ok),
@@ -94,6 +123,17 @@ async function admit(
         ...(options.input === undefined
           ? {}
           : { input: z.object({}).transform(() => options.input) }),
+        ...(options.query
+          ? {
+              input: z
+                .object({
+                  elementIds: z.array(z.number()).optional(),
+                  region: z.unknown().optional(),
+                  contextRepresentation: z.literal("meshes").optional(),
+                })
+                .passthrough(),
+            }
+          : {}),
         axes: { ...podEntries.scene.axes, cap: 50000 },
       },
     },
@@ -106,6 +146,20 @@ async function admit(
     },
     bodies: {
       ...readOnlyModule.bodies,
+      ...(options.query
+        ? {
+            captureArgs: {
+              slot: "verbs.capture.args",
+              kind: "args",
+              source: { module: "bodies.js", export: "captureArgs" },
+              run: (_ctx: unknown, input: { elementIds: number[] }) => ({
+                ...regionInput,
+                elementIds: input.elementIds,
+                contextRepresentation: "meshes",
+              }),
+            },
+          }
+        : {}),
       geometrySeed: {
         slot: "seeds.sample.load",
         kind: "seed",
@@ -400,3 +454,54 @@ test("subject changes retire overview and detail before replacement", async () =
   expect(d.requests.map((r) => r.representation)).toEqual(["overview", "meshes", "overview"]);
   m.close();
 });
+
+test("query detail input retains mount-owned region reach, exact join and supersession", async () => {
+  const d = door();
+  const m = mount(
+    await admit({ kind: "local", subject: regionId, query: true, reachFt: 15 }),
+    d.geometry,
+  );
+  try {
+    const pane = () => m.read("main") as any;
+    const page = m.page.read();
+    expect(() => pane().verbs.capture({ elementIds: ["bad"] })).toThrow();
+    expect(d.requests).toHaveLength(1);
+    pane().verbs.capture({ elementIds: [101, 202] });
+    expect(d.requests[1]).toMatchObject({
+      representation: "meshes",
+      native: { input: { elementIds: [101, 202] } },
+      reach: { subject: { kind: "region", id: regionId }, reachFt: 15 },
+    });
+    expect(d.requests[1].reach.explicit.token.scope).toBe(d.requests[0].scope);
+    expect(d.joins[1]).toBe(d.descriptors[1]);
+    const late = d.late();
+    pane().verbs.capture({ elementIds: [303] });
+    expect(d.requests).toHaveLength(3);
+    expect(d.releases).toHaveBeenCalledTimes(1);
+    late?.({ kind: "retiring" });
+    expect(pane().readings.detail.current).toBe(true);
+    expect(d.joins[2]).toBe(d.descriptors[2]);
+    expect(m.page.read()).toEqual(page);
+  } finally {
+    m.close();
+  }
+});
+
+test.each([null, "missing"])(
+  "query refuses ambiguous or foreign reading selector %s",
+  async (queryTarget) => {
+    const d = door();
+    const m = mount(
+      await admit({ kind: "local", subject: regionId, query: true, queryTarget }),
+      d.geometry,
+    );
+    try {
+      expect(() => (m.read("main") as any).verbs.capture({ elementIds: [1] })).toThrow(
+        /exactly one/,
+      );
+      expect(d.requests).toHaveLength(1);
+    } finally {
+      m.close();
+    }
+  },
+);

@@ -254,6 +254,14 @@ export function createRouteShell(services: KernelServices) {
         read.handle?.release();
       };
       const demanded = new Set<string>();
+      // Invocation arguments belong to the attempt, never to Page or selection.
+      const queryInputs = new Map<
+        string,
+        {
+          input: unknown;
+          invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
+        }
+      >();
       const subjectField = route.data.subject.field;
       let readings: Record<string, ReadingSnapshot<unknown>> = {};
       let scheduling = false;
@@ -271,6 +279,13 @@ export function createRouteShell(services: KernelServices) {
             resolve();
             work.sync();
             geometry.syncSubject();
+            for (const [id, query] of queryInputs) {
+              if (owner.current(query.invocation)) continue;
+              queryInputs.delete(id);
+              demanded.delete(id);
+              retire(id);
+              geometry.cancel(id);
+            }
             const used = new Set<string>();
             const next: typeof readings = {};
             for (const id of Object.keys(route.data.readings)) {
@@ -360,6 +375,7 @@ export function createRouteShell(services: KernelServices) {
                   return read.snapshot;
                 },
                 geometry.read,
+                (key) => queryInputs.get(key),
               );
             }
             for (const id of active.keys()) if (!used.has(id)) retire(id);
@@ -459,7 +475,34 @@ export function createRouteShell(services: KernelServices) {
           preview = patch;
           send = () =>
             owner.acceptPage(invocation, patch as Parameters<typeof owner.acceptPage>[1]);
-        } else throw Error("Query verb composition unavailable");
+        } else {
+          const entry = bindings.entries[declaration.entry]!;
+          const args = freezePage(
+            structuredClone(
+              entry.input.parse(bindings.bodies[declaration.args]!.run(context(), parsed)),
+            ),
+          );
+          const targets = Object.entries(route.data.readings).filter(
+            ([id, reading]) =>
+              reading.kind !== "derive" &&
+              reading.entry === declaration.entry &&
+              (declaration.reading === undefined || declaration.reading === id),
+          );
+          if (targets.length !== 1)
+            throw Error("Query entry must identify exactly one declared reading");
+          const [readingId, reading] = targets[0]!;
+          preview = args;
+          send = () => {
+            const previous = queryInputs.get(readingId);
+            if (previous) owner.retire(previous.invocation.token);
+            queryInputs.set(readingId, { input: args, invocation });
+            demanded.add(readingId);
+            generations.set(readingId, (generations.get(readingId) ?? 0) + 1);
+            retire(readingId);
+            if (reading.kind === "use" && reading.geometry) geometry.refresh(readingId);
+            else schedule();
+          };
+        }
         const dispatch = () => {
           if (!owner.current(invocation)) throw Error("Review is stale; prepare it again");
           return send();

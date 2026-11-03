@@ -93,6 +93,8 @@ export const routeVerbJsonSchema = z.discriminatedUnion("kind", [
     kind: z.literal("query"),
     ...verb,
     entry: ref,
+    /** Required when multiple declared readings use the same entry. */
+    reading: ref.optional(),
     args: ref,
     cancellation: z.literal("scope"),
   }),

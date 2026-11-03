@@ -266,6 +266,10 @@ export function createAdmittedGeometry(options: {
   return {
     read,
     syncSubject,
+    cancel(id: string) {
+      retire(id);
+      demanded.delete(id);
+    },
     costs,
     refresh,
     actions: Object.fromEntries(

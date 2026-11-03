@@ -55,15 +55,19 @@ export function createAdmittedReadingPlan(options: {
   };
   const project = (keys: readonly string[], value: Readonly<Record<string, unknown>>) =>
     freeze(structuredClone(Object.fromEntries(keys.map((key) => [key, value[key]]))));
-  const request = (id: string, context: unknown): ResolvedRead<unknown> | null => {
+  const request = (
+    id: string,
+    context: unknown,
+    invocation?: { readonly input: unknown },
+  ): ResolvedRead<unknown> | null => {
     const reading = declaration(id);
     if (reading.kind === "derive") throw Error(`Derived reading has no source: ${id}`);
     if (reading.kind === "use" && reading.geometry)
       throw Error("Geometry requires its prepared descriptor");
     const linked = bindings();
     const body = reading.kind === "use" ? reading.args : reading.adapter;
-    const input = body ? linked.bodies[body]!.run(context) : {};
-    if (input === null) return null;
+    const input = invocation ? invocation.input : body ? linked.bodies[body]!.run(context) : {};
+    if (input === null && !invocation) return null;
     const entry = linked.entries[reading.entry]!;
     const args = entry.input.parse(input);
     const descriptor = options.issuer.mintRead(
@@ -118,6 +122,7 @@ export function createAdmittedReadingPlan(options: {
       state: ReadingPlanContext,
       acquire: (request: ResolvedRead<unknown>) => ReadingSnapshot<unknown>,
       geometry?: (id: string, context: unknown, input: unknown) => ReadingSnapshot<unknown>,
+      invocationFor?: (id: string) => { readonly input: unknown } | undefined,
     ): ReadingSnapshot<unknown> {
       const cache = new Map<string, ReadingSnapshot<unknown>>();
       const evaluate = (id: string): ReadingSnapshot<unknown> => {
@@ -150,8 +155,13 @@ export function createAdmittedReadingPlan(options: {
           } else {
             if (reading.kind === "use" && reading.geometry) {
               const linked = bindings();
+              const invocation = invocationFor?.(id);
               const input = linked.entries[reading.entry]!.input.parse(
-                reading.args ? linked.bodies[reading.args]!.run(context) : {},
+                invocation
+                  ? invocation.input
+                  : reading.args
+                    ? linked.bodies[reading.args]!.run(context)
+                    : {},
               );
               result = geometry
                 ? geometry(id, context, input)
@@ -159,7 +169,7 @@ export function createAdmittedReadingPlan(options: {
               cache.set(id, result);
               return result;
             }
-            const descriptor = request(id, context);
+            const descriptor = request(id, context, invocationFor?.(id));
             result = descriptor
               ? acquire(descriptor)
               : unavailable(`Reading arguments unavailable: ${id}`);
