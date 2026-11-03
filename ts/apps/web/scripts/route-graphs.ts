@@ -27,6 +27,7 @@ const jiti = createJiti(import.meta.url, {
 });
 const { projectRouteGraph } =
   await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
+await import("./captures-artifact.ts");
 const check = process.argv.includes("--check");
 const stale: string[] = [];
 async function emit(destination: URL, text: string) {

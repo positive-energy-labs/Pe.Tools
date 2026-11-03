@@ -14,7 +14,7 @@ export const capturesData = {
       cardinality: "one", identity: "capture", picker: { reading: "captures", options: "pick" },
       url: "push", share: true, agent: "set" },
     selected: { role: "selection", kinds: ["capture"] },
-    open: { role: "pose", schema: "open", codec: "json", initial: [], url: "replace", share: true, agent: "set" },
+    open: { role: "pose", schema: "open", codec: "json", initial: { kind: "ids", ids: [] }, url: "replace", share: true, agent: "set" },
   },
   subject: { field: "sha", noun: "capture", roster: "captures", detail: "captures", pane: "captures" },
   readings: { captures: { kind: "use", entry: "captures.list", deps: { page: [], work: [], readings: [] },
@@ -24,7 +24,7 @@ export const capturesData = {
   stageOrder: ["main"], predicates: {}, cells: {}, workFields: {}, seeds: {}, needs: "nothing", resetOnTarget: [], observe: [],
 } as const satisfies RouteGraphJson;
 const local = z.custom<IdentityId<"local">>((v) => typeof v === "string" && identityCodecs.local.decode(v).ok);
-export const schemas = { subject: local.nullable(), open: z.array(z.string()) };
+export const schemas = { subject: local.nullable(), open: z.discriminatedUnion("kind", [z.object({ kind: z.literal("ids"), ids: z.array(z.string()) }), z.object({ kind: z.literal("all") })] ) };
 export const entries = { "captures.list": { input: z.object({}), output: z.array(captureReceiptSchema),
   axes: { subject: "None", touches: ["Metadata"], effect: "Read", cost: "Cheap", cardinality: "One" } } } as const;
 export const captureId = (sha: string) => {
@@ -46,7 +46,7 @@ export const module = { data: capturesData, schemas, entries, bodies,
       try { const value = schemas.subject.parse(JSON.parse(text)); return { ok: true as const, value }; }
       catch { return { ok: false as const, reason: "Invalid capture subject" }; }
     } },
-    json: { encode: (value: string[]) => JSON.stringify(value), decode: (text: string) => {
+    json: { encode: (value: z.output<typeof schemas.open>) => JSON.stringify(value), decode: (text: string) => {
       try { return { ok: true as const, value: schemas.open.parse(JSON.parse(text)) }; }
       catch { return { ok: false as const, reason: "Invalid open captures" }; }
     } },
