@@ -33,8 +33,11 @@ const stale: string[] = [];
 async function emit(destination: URL, text: string) {
   if (check) {
     let current: string | undefined;
-    try { current = await readFile(destination, "utf8"); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    try {
+      current = await readFile(destination, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
     if (current?.replaceAll("\r\n", "\n") !== text) stale.push(fileURLToPath(destination));
   } else {
     await mkdir(new URL(".", destination), { recursive: true });
@@ -47,6 +50,24 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
   .sort((a, b) => a.name.localeCompare(b.name))) {
   const files = await readdir(new URL(`../src/${folder.name}/`, import.meta.url));
   if (!files.includes("graph.ts")) continue;
+  if (folder.name === "captures") {
+    const { capturesGraph, capturesDirectory } = await jiti.import<
+      typeof import("../src/captures/graph.ts")
+    >("../src/captures/graph.ts");
+    const artifact = JSON.parse(
+      await readFile(new URL("../src/captures/artifact.generated.json", import.meta.url), "utf8"),
+    );
+    directory.push({
+      key: capturesGraph.key,
+      directory: capturesDirectory,
+      moduleHash: artifact.fingerprint,
+    });
+    await emit(
+      new URL("../../../packages/mcps/src/pea/generated/captures-graph.json", import.meta.url),
+      `${JSON.stringify(capturesGraph, null, 2)}\n`,
+    );
+    continue;
+  }
   const module = await jiti.import<Record<string, unknown>>(`../src/${folder.name}/graph.ts`);
   const graphs = Object.entries(module).filter(([name]) => name.endsWith("Graph"));
   for (const [name, exported] of graphs) {
@@ -55,11 +76,15 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
     ) as Parameters<typeof projectRouteGraph>[0];
     if (!graph || typeof graph !== "object" || !graph.key) continue;
     if (!graph.directory) throw Error(`${graph.key} has no directory declaration`);
-    graph.moduleHash = routeSourceHash(await readFile(new URL(`../src/${folder.name}/graph.ts`, import.meta.url)));
+    graph.moduleHash = routeSourceHash(
+      await readFile(new URL(`../src/${folder.name}/graph.ts`, import.meta.url)),
+    );
     directory.push({
       key: graph.key,
       directory: graph.directory,
-      moduleHash: routeSourceHash(await readFile(new URL(`../src/${folder.name}/graph.ts`, import.meta.url))),
+      moduleHash: routeSourceHash(
+        await readFile(new URL(`../src/${folder.name}/graph.ts`, import.meta.url)),
+      ),
     });
     const destination = new URL(
       `../../../packages/mcps/src/pea/generated/${graph.key}-graph.json`,
@@ -74,4 +99,5 @@ await emit(
 );
 console.log(`Projected ${directory.length} route graphs`);
 
-if (stale.length) throw Error(`Generated route artifacts drifted; regenerate codegen:routes:\n${stale.join("\n")}`);
+if (stale.length)
+  throw Error(`Generated route artifacts drifted; regenerate codegen:routes:\n${stale.join("\n")}`);

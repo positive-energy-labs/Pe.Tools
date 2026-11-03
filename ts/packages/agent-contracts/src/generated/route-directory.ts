@@ -24,7 +24,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       }
     },
-    "moduleHash": "b63b1db5fa53b5ce7bcdd2d23c3445ac455fcb9a2282736f21df63cfc3623fa5"
+    "moduleHash": "360b977634f204679dcfa2ac3ebefd47fb8586e4fb9175c36f433a2d38c94a4f"
   },
   {
     "key": "chat",

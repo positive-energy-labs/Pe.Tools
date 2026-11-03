@@ -1,262 +1,115 @@
 {
-  "address": "captures",
+  "version": 1,
+  "key": "captures",
+  "address": "/captures",
+  "name": "Captures",
   "directory": {
-    "aliases": [
-      "Revit",
-      "data"
-    ],
-    "blurb": "Every picture taken of a Revit view, newest first — who took it, which view, the receipt, and the URL a page or a chat links.",
-    "category": "Coordinate model data",
-    "exposure": "Preview",
-    "icon": "Image",
-    "label": "Revit data",
-    "listed": true,
-    "path": "/captures",
-    "runtimeNeed": "Host retained view images",
-    "satellites": [],
-    "surfaces": {
-      "pwa": "full",
-      "tray": false,
-      "web": "full"
-    },
-    "title": "Captures"
+    "group": "Coordinate model data",
+    "summary": "Inspect retained view pictures and receipts"
+  },
+  "identities": {
+    "capture": {
+      "kind": "local",
+      "codec": "local"
+    }
   },
   "fields": {
-    "open": {
-      "agent": "set",
-      "cardinality": "many",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "keyKind": "name",
-      "role": "pose",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "anyOf": [
-          {
-            "items": {
-              "minLength": 1,
-              "type": "string"
-            },
-            "maxItems": 50000,
-            "type": "array"
-          },
-          {
-            "const": "all",
-            "type": "string"
-          }
-        ],
-        "default": []
-      },
-      "share": true,
-      "url": "replace"
-    },
-    "selection": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "selection",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "type": "string"
-      },
-      "share": true,
-      "url": "replace"
-    },
     "sha": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
       "role": "subject",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "maxLength": 64,
-        "type": "string"
+      "schema": "subject",
+      "codec": "subject",
+      "initial": null,
+      "cardinality": "one",
+      "identity": "capture",
+      "picker": {
+        "reading": "captures",
+        "options": "pick"
       },
+      "url": "push",
       "share": true,
-      "url": "push"
+      "agent": "set"
     },
-    "threadSearch": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": {
-          "keywords": "",
-          "pills": [
-            {
-              "field": "scope",
-              "op": "=",
-              "value": "all"
-            }
-          ],
-          "v": 1
-        },
-        "description": "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal keywords and equality pills. Fields: target, provider, state, unread, scope. Scope values: attention, all, archived.",
-        "properties": {
-          "keywords": {
-            "maxLength": 4000,
-            "type": "string"
-          },
-          "pills": {
-            "items": {
-              "properties": {
-                "field": {
-                  "type": "string"
-                },
-                "op": {
-                  "type": "string"
-                },
-                "value": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "field",
-                "op",
-                "value"
-              ],
-              "type": "object"
-            },
-            "maxItems": 32,
-            "type": "array"
-          },
-          "v": {
-            "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "v",
-          "keywords",
-          "pills"
-        ],
-        "type": "object"
-      },
-      "share": true,
-      "url": "replace"
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "capture"
+      ]
     },
-    "threadSort": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
+    "open": {
+      "role": "pose",
+      "schema": "open",
+      "codec": "json",
+      "initial": {
+        "kind": "ids",
+        "ids": []
       },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "enum": [
-          "",
-          "recent",
-          "title"
-        ],
-        "type": "string"
-      },
+      "url": "replace",
       "share": true,
-      "url": "replace"
+      "agent": "set"
     }
   },
-  "key": "captures",
-  "layout": {
-    "id": "captures",
-    "kind": "pane"
-  },
-  "moduleHash": "b63b1db5fa53b5ce7bcdd2d23c3445ac455fcb9a2282736f21df63cfc3623fa5",
-  "name": "Captures",
-  "panes": {
-    "captures": {
-      "draws": [
-        "captures"
-      ],
-      "label": "Captures",
-      "purpose": "Inspect retained pictures and their takings",
-      "verbs": []
-    }
+  "subject": {
+    "field": "sha",
+    "noun": "capture",
+    "roster": "captures",
+    "detail": "captures",
+    "pane": "captures"
   },
   "readings": {
     "captures": {
       "kind": "use",
-      "query": "captures.list",
-      "retire": "never",
-      "source": "captures.list"
+      "entry": "captures.list",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "explicit"
     }
   },
-  "seeds": {
-    "browse": {
-      "title": "browse"
+  "verbs": {},
+  "panes": {
+    "captures": {
+      "label": "Captures",
+      "purpose": "Inspect retained pictures",
+      "draws": [
+        "captures"
+      ],
+      "verbs": [],
+      "body": "main"
+    }
+  },
+  "layout": {
+    "kind": "pane",
+    "id": "captures"
+  },
+  "stages": {
+    "main": {
+      "word": "Captures",
+      "panes": [
+        "captures"
+      ],
+      "verbs": []
     }
   },
   "stageOrder": [
     "main"
   ],
-  "stages": {
-    "main": {
-      "panes": [
-        "captures"
-      ],
-      "verbs": [
-        "refresh"
-      ],
-      "word": "Captures"
+  "predicates": {},
+  "cells": {},
+  "workFields": {},
+  "seeds": {
+    "browse": {
+      "title": "Retained view picture",
+      "load": "browse"
     }
   },
-  "subjectField": {
-    "cardinality": "one",
-    "detail": "captures",
-    "field": "sha",
-    "keyKind": "name",
-    "noun": "capture",
-    "pane": "captures",
-    "roster": "captures",
-    "show": {
-      "runtime": true
-    }
-  },
-  "verbs": {
-    "refresh": {
-      "does": "captures.list",
-      "effect": "query",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {},
-        "type": "object"
-      },
-      "kind": "query",
-      "label": "refresh",
-      "review": "none",
-      "says": "Re-read the kept captures from the host"
-    }
-  }
+  "needs": "nothing",
+  "resetOnTarget": [],
+  "observe": []
 }

@@ -14,7 +14,6 @@ import { parameterLinksGraph } from "../parameter-links/graph";
 import { dataTablesGraph } from "../data-tables/graph";
 import { grillesGraph } from "../grilles/graph";
 import { bindGraph } from "../pages-bind/graph";
-import { capturesGraph } from "../captures/graph";
 // TODO: repeat browser fixture renders after triage refreshes the shared generated module hashes.
 for (const graph of [
   openGraph,
@@ -30,7 +29,6 @@ for (const graph of [
   dataTablesGraph,
   grillesGraph,
   bindGraph,
-  capturesGraph,
 ])
   test(`${graph.key} declares one subject and one selection`, () => {
     expect(validateRouteGraph(graph as typeof openGraph)).toEqual([]);

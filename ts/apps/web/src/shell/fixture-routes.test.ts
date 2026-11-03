@@ -22,7 +22,6 @@ import { takeoffGraph } from "../takeoff/graph";
 import { settingsGraph } from "../settings/graph";
 import { chatGraph } from "../chat/graph";
 
-import { capturesGraph } from "../captures/graph";
 
 import { dataTablesGraph } from "../data-tables/graph";
 
@@ -50,7 +49,6 @@ const routes = [
   rhvacSyncGraph,
   zoneAuditGraph,
 
-  capturesGraph,
   dataTablesGraph,
   designSystemGraph,
   ductLossGraph,

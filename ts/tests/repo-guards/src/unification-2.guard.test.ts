@@ -147,3 +147,13 @@ it("the private legacy route roster can only shrink", () => {
       ).toEqual([]);
   }
 });
+
+it("captures cannot return to a legacy registration or mount", () => {
+  const route = readFileSync(resolve(root, "ts/apps/web/src/captures/route.tsx"), "utf8");
+  expect(route).not.toMatch(/routeFromGraph|mountRoute|legacy-route-door/);
+  const declaration = readFileSync(resolve(root, "ts/apps/web/src/captures/graph.ts"), "utf8");
+  expect(declaration).not.toMatch(/RouteGraph[< ]|queryVerb|field\(/);
+  expect(legacyBuiltinRoutes).not.toContain("captures");
+  const legacy = readFileSync(resolve(root, "ts/apps/web/src/shell/legacy-route-door.ts"), "utf8");
+  expect(legacy).not.toMatch(/"captures"/);
+});

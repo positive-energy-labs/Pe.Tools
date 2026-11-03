@@ -1,82 +1,21 @@
-import { field, manyField } from "../../../../packages/agent-contracts/src/route-field";
-import { z } from "zod";
-import { pane, routeAddress, type RouteGraph } from "@pe/agent-contracts";
-import { capturesAddress } from "../../../../packages/agent-contracts/src/routes/captures";
-import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
-import { queryVerb } from "#/shell/verbs";
-import { captureQueries } from "./host";
-export type CapturesPage = Omit<
-  z.output<ReturnType<typeof routeAddress<"captures">>["schema"]>,
-  "open"
-> & {
-  selection: string;
-  open: import("../../../../packages/agent-contracts/src/route-field").Many;
-};
-export const capturesGraph: RouteGraph<CapturesPage, never> = {
-  seeds: {
-    browse: {
-      title: "browse",
-      load: () => import("#/shell/fixture-examples").then((m) => m.routeExamples["captures"]),
-    },
+import type { RouteDirectory } from "@pe/agent-contracts";
+export { capturesData as capturesGraph } from "./kernel";
+export const capturesDirectory = {
+  path: "/captures",
+  title: "Captures",
+  label: "Revit data",
+  exposure: "Preview",
+  runtimeNeed: "Host retained view images",
+  icon: "Image",
+  category: "Coordinate model data",
+  blurb:
+    "Every picture taken of a Revit view, newest first — who took it, which view, the receipt, and the URL a page or a chat links.",
+  aliases: ["Revit", "data"],
+  listed: true,
+  satellites: [],
+  surfaces: {
+    web: "full",
+    pwa: "full",
+    tray: false,
   },
-  directory: {
-    path: "/captures",
-    title: "Captures",
-    label: "Revit data",
-    exposure: "Preview",
-    runtimeNeed: "Host retained view images",
-    icon: "Image",
-    category: "Coordinate model data",
-    blurb:
-      "Every picture taken of a Revit view, newest first — who took it, which view, the receipt, and the URL a page or a chat links.",
-    aliases: ["Revit", "data"],
-    listed: true,
-    satellites: [],
-    surfaces: {
-      web: "full",
-      pwa: "full",
-      tray: false,
-    },
-  },
-  key: "captures",
-  address: "captures",
-  name: "Captures",
-  subjectField: {
-    field: "sha",
-    noun: "capture",
-    keyKind: "name",
-    cardinality: "one",
-    roster: "captures",
-    detail: "captures",
-    pane: "captures",
-    show: (id) => id,
-  },
-  fields: {
-    selection: { ...field(z.string().default(""), {}), role: "selection" },
-    threadSearch: { ...threadListFields.threadSearch, role: "query" },
-    threadSort: { ...threadListFields.threadSort, role: "query" },
-    sha: { ...capturesAddress.fields.sha, role: "subject" },
-    open: { ...manyField("name", { url: "replace", agent: "set" }), role: "pose" },
-  },
-  readings: {
-    captures: { kind: "use", source: "captures.list", query: "captures.list", retire: "never" },
-  },
-  verbs: {
-    refresh: queryVerb(captureQueries["captures.list"], {
-      label: "refresh",
-      says: "Re-read the kept captures from the host",
-      input: z.object({}),
-      review: "none",
-    }),
-  },
-  panes: {
-    captures: {
-      label: "Captures",
-      purpose: "Inspect retained pictures and their takings",
-      draws: ["captures"],
-      verbs: [],
-    },
-  },
-  layout: pane("captures"),
-  stages: { main: { word: "Captures", panes: ["captures"], verbs: ["refresh"] } },
-};
+} satisfies RouteDirectory;

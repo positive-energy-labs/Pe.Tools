@@ -17,7 +17,6 @@ import { schedulesGraph } from "../schedules/graph";
 import { takeoffGraph } from "../takeoff/graph";
 import { settingsGraph } from "../settings/graph";
 import { chatGraph } from "../chat/graph";
-import { capturesGraph } from "../captures/graph";
 import { dataTablesGraph } from "../data-tables/graph";
 import { designSystemGraph } from "../design-system/graph";
 import { ductLossGraph } from "../duct-loss/graph";
@@ -45,7 +44,7 @@ import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
 afterEach(() => vi.unstubAllGlobals());
 const routes = [
   ductsGraph, fansGraph, familiesGraph, indexGraph, podAdminGraph, sessionsGraph, scheduleSpecsGraph,
-  rhvacSyncGraph, zoneAuditGraph, capturesGraph, dataTablesGraph, designSystemGraph, ductLossGraph,
+  rhvacSyncGraph, zoneAuditGraph, dataTablesGraph, designSystemGraph, ductLossGraph,
   grillesGraph, opsGraph, bindGraph, parameterLinksGraph, openGraph, podsGraph, roomsGraph, spaceGraph,
   familyGraph, schedulesGraph, takeoffGraph, settingsGraph, chatGraph(() => ({ thread: "" })),
 ] as unknown as RouteGraph<any, any>[];
