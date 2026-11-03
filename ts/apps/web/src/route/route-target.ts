@@ -1,6 +1,6 @@
 /** Where a route acts: its `?target` pin, else the machine's sole user document as a fallback. */
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
-import { useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import {
   addressSchema,
   machineInventory,
@@ -98,7 +98,10 @@ export function retainSoleDocument(
   const busy =
     inventory.kind !== "ready" ||
     Object.values(inventory.sessions).some((s) => s.kind !== "ready") ||
-    (machine?.revit.sessions?.some((s) => "process" in s.row && s.row.process != null && s.attachment === null) ?? false);
+    (machine?.revit.sessions?.some(
+      (s) => "process" in s.row && s.row.process != null && s.attachment === null,
+    ) ??
+      false);
   // The sole document is a default, not a binding that is recomputed on every census.
   // Once observed, tab memory wins until a complete inventory confirms its lifetime ended.
   const observed = live?.kind === "ready" ? live : inventory;
@@ -284,7 +287,7 @@ export function useRouteTarget(
   // named request pinned or held by the fallback) so a closed document's Work stays readable. Never a
   // remembered title, and never an open/session ref reread as a new lifetime. Nothing native,
   // no action and no binding reads this; they stay on `resolution`.
-  const workAddress = useMemo((): Address | null => {
+  const selectedAddress = useMemo((): Address | null => {
     if (resolvedAddress || seed) return resolvedAddress;
     const chosen = parseTarget(target);
     const request =
@@ -295,7 +298,7 @@ export function useRouteTarget(
         : request?.kind === "named" && (chosen || fallback.length === 1)
           ? request.address
           : null;
-    return addressSchema.safeParse(raw).data ?? null;
+    return raw;
   }, [resolvedAddress, seed, target, fallback]);
   // The same rule for an exact open request (a `?target` pin, or the sole fallback): it names
   // its own lifetime's saved Work, read-only, while native resolution says choose. The ref is
@@ -315,6 +318,19 @@ export function useRouteTarget(
             : null;
     return request?.kind === "open" ? request.ref : null;
   }, [seed, resolution, target, fallback]);
+  const openRef =
+    resolution.kind === "resolved" && resolution.target.kind === "document"
+      ? resolution.target.ref
+      : workOpen;
+  const openKey = openRef && JSON.stringify([openRef.session, openRef.openId]);
+  const retained = useRef({ openKey, address: selectedAddress });
+  // Retain Work identity for this exact lifetime, never native authority.
+  const workAddress =
+    selectedAddress ??
+    (openKey && retained.current.openKey === openKey ? retained.current.address : null);
+  useLayoutEffect(() => {
+    retained.current = { openKey, address: workAddress };
+  }, [openKey, workAddress]);
   const targetProvenance: TargetProvenance = seed
     ? { source: "seed" }
     : target

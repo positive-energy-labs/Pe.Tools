@@ -1,3 +1,4 @@
+import { placeInput } from "../shell/admitted-place.test-fixture";
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
@@ -170,11 +171,17 @@ async function fixture(unreadable = false) {
   );
   const web = await loadBuiltinRoute("families", builtinRouteStamp("families"));
   if (!web.ok) throw Error(JSON.stringify(web.diagnostics));
-  const mount = createRouteShell({ ...services, work: door }).mount(web.route, {
-    read: () => new URLSearchParams(),
-    write() {},
-    subscribe: () => () => {},
-  });
+  const mount = createRouteShell({ ...services, work: door }).mount(
+    web.route,
+    placeInput(
+      {
+        read: () => new URLSearchParams(),
+        write() {},
+        subscribe: () => () => {},
+      },
+      { target: { kind: "document", ref: document } },
+    ),
+  );
   close.push(mount.close);
   await vi.waitFor(() =>
     expect(unreadable ? mount.workProblem() : mount.workBasis()).not.toBeNull(),

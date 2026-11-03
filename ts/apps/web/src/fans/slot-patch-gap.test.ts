@@ -1,3 +1,4 @@
+import { placeInput } from "../shell/admitted-place.test-fixture";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { ductsDocumentSchema } from "@pe/agent-contracts";
@@ -119,11 +120,14 @@ test("the real admitted mount accepts the typed finite-key slot", async () => {
     readings: { lifetime: "subscription", subscribe: () => () => {} },
     clock: { lifetime: "read", now: Date.now },
     availability: {},
-  }).mount(result.route, {
-    read: () => new URLSearchParams(),
-    write() {},
-    subscribe: () => () => {},
-  });
+  }).mount(
+    result.route,
+    placeInput({
+      read: () => new URLSearchParams(),
+      write() {},
+      subscribe: () => () => {},
+    }),
+  );
   try {
     const observation = mount.invoke("slot", {}) as Observation<WorkWriteOutcome>;
     const outcome = await new Promise<WorkWriteOutcome>((resolve) =>

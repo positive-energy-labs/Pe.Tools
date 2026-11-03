@@ -21,15 +21,13 @@ import {
   workHandleSchema,
   writePreviewSchema,
   commands,
-  type Address,
-  type DocumentRef,
   type SemanticActionKey,
 } from "@pe/agent-contracts";
 import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
 import { createWorkFeedClient } from "./work-feed-client";
 import { createAdmittedWork } from "./admitted-work";
 import { createAdmittedGeometry } from "./admitted-geometry";
-import { fixtureName } from "./fixture-lane";
+import type { PlaceInput } from "./admitted-place";
 import { fixtureGeometryDoor } from "./fixture-geometry-door";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import {
@@ -75,7 +73,7 @@ import {
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
 import { createPagePolicy, createPagePorts, freezePage } from "./page-port";
-import { createAdmittedAddress, type AdmittedAddressPort } from "./admitted-address";
+import { createAdmittedAddress } from "./admitted-address";
 import {
   createAdmittedReadingPlan,
   readingClosure,
@@ -84,7 +82,7 @@ import {
 } from "./admitted-reading-plan";
 import { sourceReadingEvidence } from "./source-route-services";
 import { createRouteEnvironment, type EnvironmentValidation } from "./route-environment";
-import { createNamedFixtureRouteEnvironment, selectRouteEnvironment } from "./fixture-lane";
+import { createNamedFixtureRouteEnvironment } from "./fixture-lane";
 
 /** Closed slot census. Other kinds refuse before resource acquisition. */
 export const admittedMountBodyKinds: readonly string[] = Object.freeze([
@@ -144,10 +142,7 @@ const sourceTimeline = new WeakMap<
   import("../../../../packages/runtime/src/work-journal").TimelineEntry[]
 >();
 const registriesByDoor = new WeakMap<object, ReturnType<typeof createApplicationWorkRegistry>>();
-export function createRouteShell(
-  services: KernelServices,
-  workBinding: { workAddress?: Address | null; workOpen?: DocumentRef | null } = {},
-) {
+export function createRouteShell(services: Omit<KernelServices, "target">) {
   const liveDoor = services.work ?? applicationWorkDoor;
   let scopedRegistry = registriesByDoor.get(liveDoor);
   if (!scopedRegistry) {
@@ -158,9 +153,9 @@ export function createRouteShell(
   return {
     mount<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, Render>(
       admitted: AdmittedRoute<G, S, E, Render>,
-      address: AdmittedAddressPort,
-      memory: () => unknown = () => ({}),
+      input: PlaceInput,
     ) {
+      const { address, fixture, target, memory } = input;
       const route: AdmittedRoute = admitted;
       const registry = createAdmittedRouteRegistry();
       const registration = registry.register(route);
@@ -236,24 +231,20 @@ export function createRouteShell(
         registration.deactivate();
         throw Error(initial.reason);
       }
-      const target = services.target?.() ?? null;
       const identityForPage = (page: Readonly<Record<string, unknown>>) => ({
         target,
         work: route.data.work
           ? bindWork(
               route.data.work.route,
-              workBinding.workAddress ?? null,
+              input.work.address,
               routeWorkSubject(route.data, bindings, page) ??
                 address.read().get("work") ??
                 undefined,
-              target?.kind === "document" ? target.ref : (workBinding.workOpen ?? undefined),
+              input.work.open ?? undefined,
             )
           : null,
       });
-      const registryForWork =
-        fixtureName(Object.fromEntries(address.read())) === null
-          ? workRegistry
-          : createApplicationWorkRegistry();
+      const registryForWork = fixture === null ? workRegistry : createApplicationWorkRegistry();
       const leases = new Map<
         string,
         ReturnType<typeof registryForWork.acquire> & { released?: boolean }
@@ -334,8 +325,7 @@ export function createRouteShell(
         }),
       });
       let closed = false;
-      let visible = true;
-      let writable = true;
+      let resources: "held" | "released" = "held";
       const listeners = new Set<() => void>();
       let revision = 0;
       const notify = () => {
@@ -417,13 +407,13 @@ export function createRouteShell(
       const wantedReadings = () => {
         const roots = new Set<string>(route.data.observe);
         for (const [id, pane] of Object.entries(route.data.panes))
-          if (visible && paneDemand.get(id) !== false && observers.visible(id))
+          if (input.custody.current() && paneDemand.get(id) !== false && observers.visible(id))
             pane.draws.forEach((reading) => roots.add(reading));
         // Picker/observers and active invocations are consumers too.
         for (const field of Object.values(route.data.fields))
           if (
             field.role === "subject" &&
-            visible &&
+            input.custody.current() &&
             paneDemand.get(route.data.subject.pane) !== false &&
             observers.visible(route.data.subject.pane)
           )
@@ -433,10 +423,8 @@ export function createRouteShell(
       };
       const environment = (() => {
         try {
-          return selectRouteEnvironment({
-            search: Object.fromEntries(address.read()),
-            live: () =>
-              createRouteEnvironment({
+          return fixture === null
+            ? createRouteEnvironment({
                 issuer: environmentIssuer,
                 validate,
                 ports: {
@@ -448,17 +436,15 @@ export function createRouteShell(
                       : (services.nativeWrite ?? liveDoor).submit(command),
                   geometry: undefined,
                 },
-              }),
-            fixture: (name) =>
-              createNamedFixtureRouteEnvironment({
+              })
+            : createNamedFixtureRouteEnvironment({
                 issuer: environmentIssuer,
                 validate,
                 plan,
-                name,
+                name: fixture,
                 workSpec,
                 now: () => services.clock.now(),
-              }),
-          });
+              });
         } catch (error) {
           owner.close();
           plan.close();
@@ -466,7 +452,6 @@ export function createRouteShell(
           throw error;
         }
       })();
-      const fixture = fixtureName(Object.fromEntries(address.read()));
       const door =
         fixture === null
           ? liveDoor
@@ -601,7 +586,7 @@ export function createRouteShell(
       let again = false;
       const schedule = () => {
         if (drawing) throw Error("Admitted observers cannot run during render");
-        if (closed || !visible) return;
+        if (closed || resources === "released" || !input.custody.current()) return;
         if (scheduling) {
           again = true;
           return;
@@ -951,7 +936,7 @@ export function createRouteShell(
         if (drawing) throw Error("Admitted action cannot run during render");
         if (presenting) throw Error("Admitted action cannot run during presentation");
         if (closed) throw Error("Mount closed");
-        if (!visible || !writable) throw new PlaceWriteRefusal();
+        if (!input.custody.current() || input.target === null) throw new PlaceWriteRefusal();
       };
       const place = (
         pane: string,
@@ -1520,22 +1505,21 @@ export function createRouteShell(
         controls: ports.controls as FieldControls<G, S>,
         subscribe: (listener: () => void) => {
           if (closed) return () => {};
+          if (resources === "released" && input.custody.current()) {
+            resources = "held";
+            schedule();
+          }
           listeners.add(listener);
           return () => {
             listeners.delete(listener);
           };
         },
         revision: () => revision,
-        setWritable(next: boolean) {
-          writable = next;
-        },
-        setVisible(next: boolean) {
-          if (closed || visible === next) return;
-          visible = next;
-          if (!visible) {
-            for (const id of active.keys()) retire(id);
-            for (const id of Object.keys(route.data.readings)) geometry.suspend(id);
-          } else schedule();
+        release() {
+          if (closed) return;
+          resources = "released";
+          for (const id of active.keys()) retire(id);
+          for (const id of Object.keys(route.data.readings)) geometry.suspend(id);
         },
         dispose: close,
         invoke,
@@ -1700,7 +1684,7 @@ export function createRouteShell(
               reason: "Not read",
             },
             previous: previous.get(id),
-            demanded: visible && wantedReadings().has(id),
+            demanded: input.custody.current() && wantedReadings().has(id),
             leased: !!active.get(id)?.handle || geometry.leased(id),
           });
         },

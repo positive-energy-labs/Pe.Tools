@@ -1,3 +1,4 @@
+import { placeInput } from "../shell/admitted-place.test-fixture";
 // @vitest-environment jsdom
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
@@ -111,11 +112,14 @@ test("drive-7 S8a labels cannot retain the edited row and value at the admitted 
     availability: {},
     work: door,
   };
-  const mount = createRouteShell(services).mount(route, {
-    read: () => new URLSearchParams(),
-    write() {},
-    subscribe: () => () => {},
-  });
+  const mount = createRouteShell(services).mount(
+    route,
+    placeInput({
+      read: () => new URLSearchParams(),
+      write() {},
+      subscribe: () => () => {},
+    }),
+  );
   try {
     expect(
       await settle(

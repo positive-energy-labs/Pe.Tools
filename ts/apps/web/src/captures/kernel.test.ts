@@ -1,3 +1,4 @@
+import { placeInput } from "../shell/admitted-place.test-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { admitCaptures } from "./admission";
 import { createRouteShell } from "../shell/admitted-mount";
@@ -51,7 +52,7 @@ test("the source-imported builtin mounts, restores subject and selection togethe
   });
   const mounted = createRouteShell(sourceRouteServices({ "captures.list": source })).mount(
     route,
-    address,
+    placeInput(address),
   );
   cleanups.push(() => mounted.close());
   expect(mounted.page.read()).toMatchObject({
@@ -84,7 +85,7 @@ test("admitted tables cannot replace bodies or schemas after source admission", 
   const route = await admitCaptures();
   const mounted = createRouteShell(sourceRouteServices({ "captures.list": source })).mount(
     route,
-    location(),
+    placeInput(location()),
   );
   const registry = createAdmittedRouteRegistry();
   const registration = registry.register(route);
@@ -107,7 +108,7 @@ test.each(["browse", "", "unknown"])("fixture %s never reaches the host", async 
   });
   const mounted = createRouteShell(
     sourceRouteServices({ "captures.list": { kind: "use", open } }),
-  ).mount(route, location({ fixture }));
+  ).mount(route, placeInput(location({ fixture })));
   cleanups.push(() => mounted.close());
   const html = renderToStaticMarkup(mounted.read("captures") as ReactNode);
   expect(html.includes("Ground plan")).toBe(fixture === "browse");

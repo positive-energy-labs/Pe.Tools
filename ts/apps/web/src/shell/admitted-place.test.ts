@@ -65,7 +65,7 @@ function fixture() {
     const place = createAdmittedPlace<ReturnType<typeof makeState>>({
       scope,
       address,
-      search: new URLSearchParams({ fan: id }),
+      search: new URLSearchParams({ fan: id, fixture: id }),
       visible: true,
     });
     return { place, remove: () => owners.forEach((owner) => owner.dispose()) };
@@ -141,12 +141,13 @@ test("two Places retain independent Page selection/pose and accepted values acro
 test("inactive callbacks cannot read another Place's URL or write it, including target", () => {
   const f = fixture();
   const a = f.place("a");
-  a.place.address.write(new URLSearchParams("fan=a&target=one"), "push");
+  a.place.address.write(new URLSearchParams("fan=a&target=one&fixture=changed"), "push");
   f.activate("b");
   f.address.write(new URLSearchParams("fan=b&target=two"));
   const b = f.place("b");
   f.write.mockClear();
   a.place.address.write(new URLSearchParams("target=wrong"), "replace");
+  expect(a.place.fixture).toBe("a");
   expect(f.write).not.toHaveBeenCalled();
   expect(a.place.address.read().get("fan")).toBe("a");
   expect(b.place.address.read().get("target")).toBe("two");

@@ -1,6 +1,6 @@
 import { useContext, useRef } from "react";
 import { RouteVisibility, useRouteActivity } from "../route/activity";
-import { createAdmittedPlace, type AdmittedPlace } from "./admitted-place";
+import { createAdmittedPlace, type AdmittedPlace, type PlaceInput } from "./admitted-place";
 import { AdmittedChrome } from "./admitted-chrome";
 import { useRouter } from "@tanstack/react-router";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -97,12 +97,12 @@ export interface AdmittedPaneProps {
   route: AdmittedRoute;
   address: AdmittedAddressPort;
   pane: string;
-  writable?: boolean;
 }
 
 type PlaceMount = {
   shell: ReturnType<typeof createRouteShell>;
   mount: AdmittedMount;
+  input: PlaceInput;
   dispose(): void;
 };
 export type PanePlace = AdmittedPlace<PlaceMount>;
@@ -173,47 +173,40 @@ export function AdmittedPlacePane({
   shell,
   route,
   place,
-  writable = true,
-}: Omit<AdmittedPaneProps, "address"> & {
+  input,
+}: Omit<AdmittedPaneProps, "address" | "pane"> & {
   place: PanePlace;
+  input: PlaceInput;
 }) {
   const visible = useContext(RouteVisibility);
   const [mounted, setMounted] = useState<PlaceMount | null>(null);
   useEffect(() => {
     const state = place.state(() => ({
       shell,
-      mount: shell.mount(route, place.address, () => place.memory()),
+      input,
+      mount: shell.mount(route, input),
       dispose() {
         this.mount.dispose();
       },
     }));
-    if (state.shell !== shell) {
+    if (state.shell !== shell || state.input !== input) {
       state.mount.dispose();
       place.remember({});
       state.shell = shell;
-      state.mount = shell.mount(route, place.address, () => place.memory());
+      state.input = input;
+      state.mount = shell.mount(route, input);
     }
     const { mount } = state;
-    mount.setVisible(visible);
-    mount.setWritable(writable);
     const publish = () => place.remember(mount.page.read());
     publish();
     const unsubscribe = mount.subscribe(publish);
     setMounted({ ...state });
     return () => {
       unsubscribe();
-      mount.setVisible(false);
+      mount.release();
     };
-  }, [shell, route, place, visible, writable]);
+  }, [shell, route, place, visible, input]);
   return mounted?.shell === shell ? createElement(Pane, { mount: mounted.mount, route }) : null;
-}
-
-export function AdmittedPane({ address, ...props }: AdmittedPaneProps) {
-  return createElement(AdmittedPlaceBoundary, {
-    route: props.route,
-    address,
-    children: (place) => createElement(AdmittedPlacePane, { ...props, place }),
-  });
 }
 
 /** Router search stays codec text; field names and types come from the admitted declaration. */
@@ -235,7 +228,7 @@ export function AdmittedRouteView({
   load,
   pane,
 }: {
-  shell: ReturnType<typeof createRouteShell> | ComponentType<Omit<AdmittedPaneProps, "shell">>;
+  shell: ComponentType<Omit<AdmittedPaneProps, "shell">>;
   load: () => Promise<AdmittedRoute>;
   pane: string;
 }) {
@@ -261,8 +254,6 @@ export function AdmittedRouteView({
   if (error)
     return createElement(OutcomeLine, { kind: "error", label: "route refused", says: error });
   return route
-    ? typeof shell === "function"
-      ? createElement(shell, { route, address, pane })
-      : createElement(AdmittedPane, { shell, route, address, pane })
+    ? createElement(shell, { route, address, pane })
     : createElement("p", null, "Reading route...");
 }

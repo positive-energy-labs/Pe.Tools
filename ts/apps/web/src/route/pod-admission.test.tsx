@@ -25,7 +25,7 @@ import { admitPodArtifact } from "./pod-artifact";
 import { podRoutes } from "./pod-registry";
 import { createPodRouteLoader } from "./pod-loader";
 import { createRouteShell } from "../shell/admitted-mount";
-import { AdmittedPane } from "../shell/admitted-pane";
+import { AdmittedPane } from "../shell/admitted-place.test-fixture";
 import { admittedSources } from "../shell/admitted-sources";
 import { sourceRouteServices } from "../shell/source-route-services";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";

@@ -1,3 +1,4 @@
+import { placeInput } from "./admitted-place.test-fixture";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import {
@@ -276,11 +277,17 @@ function mount(
         target: () => ({ kind: "document", ref: { session: "geometry-test", openId: "doc" } }),
       },
     ),
-  ).mount(route, {
-    read: () => new URLSearchParams(search),
-    write: () => {},
-    subscribe: () => () => {},
-  });
+  ).mount(
+    route,
+    placeInput(
+      {
+        read: () => new URLSearchParams(search),
+        write: () => {},
+        subscribe: () => () => {},
+      },
+      { target: { kind: "document", ref: { session: "geometry-test", openId: "doc" } } },
+    ),
+  );
 }
 test("mount composes default overview and declared explicit detail with cost metadata", async () => {
   const d = door();
@@ -668,11 +675,11 @@ test("K4 hidden geometry keeps its accepted value and only rejoins on host gener
   try {
     const original = m.readingStatus("overview").snapshot;
     expect(d.joins).toHaveLength(1);
-    m.setVisible(false);
+    m.release();
     expect(d.releases).toHaveBeenCalledOnce();
     expect(m.readingStatus("overview").snapshot).toBe(original);
     expect(m.readingStatus("overview").leased).toBe(false);
-    m.setVisible(true);
+    m.subscribe(() => {})();
     expect(d.joins).toHaveLength(1);
     generation = "host-2";
     await vi.advanceTimersByTimeAsync(5000);

@@ -1,3 +1,4 @@
+import { placeInput } from "./admitted-place.test-fixture";
 import { expect, test, vi } from "vite-plus/test";
 import { familiesModule } from "../families/kernel";
 import { familiesScopeId } from "../families/neutral";
@@ -104,7 +105,6 @@ test("Families admission preserves axes and the mount journals preview with capt
   };
   const mount = createRouteShell({
     ...source,
-    target: () => target,
     work: store,
     reads: {
       lifetime: "read",
@@ -122,11 +122,17 @@ test("Families admission preserves axes and the mount journals preview with capt
         return () => {};
       },
     },
-  }).mount(admitted.route, {
-    read: () => new URLSearchParams(),
-    write() {},
-    subscribe: () => () => {},
-  });
+  }).mount(
+    admitted.route,
+    placeInput(
+      {
+        read: () => new URLSearchParams(),
+        write() {},
+        subscribe: () => () => {},
+      },
+      { target: target },
+    ),
+  );
   try {
     mount.invoke("read", { filter, readId: "00000000-0000-4000-8000-000000000001" });
     const basis = mount.workBasis()!;

@@ -2,7 +2,7 @@
 import { createElement } from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { AdmittedPane } from "./admitted-pane";
+import { AdmittedPane } from "./admitted-place.test-fixture";
 afterEach(cleanup);
 test("declared split and predicate gates render over one mount", () => {
   let shown = true,
@@ -11,8 +11,7 @@ test("declared split and predicate gates render over one mount", () => {
   const close = vi.fn();
   const mount = {
     page: { read: () => ({ subject: null }) },
-    setVisible: vi.fn(),
-    setWritable: vi.fn(),
+    release: vi.fn(),
     setPaneDemand: vi.fn(),
     dispose: close,
     recovery: () => ({}),
