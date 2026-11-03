@@ -15,6 +15,14 @@ export const capturesData = {
   directory: {
     group: "Coordinate model data",
     summary: "Inspect retained view pictures and receipts",
+    label: "Revit data",
+    exposure: "Preview",
+    runtimeNeed: "Host retained view images",
+    icon: "Image",
+    aliases: ["Revit", "data"],
+    listed: true,
+    satellites: [],
+    surfaces: { web: "full", pwa: "full", tray: false },
   },
   identities: { capture: { kind: "local", codec: "local" } },
   fields: {

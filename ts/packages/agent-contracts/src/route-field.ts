@@ -178,3 +178,17 @@ export function keyedSetField<const A extends Access>(access: A) {
   const schema = z.record(z.string().min(1).max(512), z.literal(true)).default({});
   return { ...access, schema, codec: jsonCodec(schema) };
 }
+
+/** Ordered non-subject Page data, e.g. /captures' open-picture list. Unlike Many,
+ * it preserves duplicates and has no `all`. The wrapper keeps bare arrays refused.
+ * /captures keeps its current ids/all behavior until U9 rules on its migration. */
+export function orderedListField<S extends z.ZodType, const A extends Access>(
+  itemSchema: S,
+  access: A & { cap: number },
+) {
+  const { cap, ...projection } = access;
+  if (!Number.isSafeInteger(cap) || cap < 0)
+    throw Error("Ordered list cap must be a nonnegative integer");
+  const schema = z.strictObject({ items: z.array(itemSchema).max(cap) }).default({ items: [] });
+  return { ...projection, schema, codec: jsonCodec(schema) };
+}

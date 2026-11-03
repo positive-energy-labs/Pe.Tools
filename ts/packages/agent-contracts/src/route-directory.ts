@@ -1,3 +1,12 @@
+import type { RouteGraphJson } from "./route-kernel-data.ts";
+import type { RouteDirectory } from "./route-graph.ts";
+
+/** Shared directory input for web, Pea and the generated C# route table. */
+export function projectKernelDirectory(data: RouteGraphJson): RouteDirectory {
+  const { group, summary, ...metadata } = data.directory;
+  return { ...metadata, path: data.address, title: data.name, category: group, blurb: summary };
+}
+
 import { routeDirectory } from "./generated/route-directory.ts";
 export const APP_TASKS = [
   "Start / open work",
@@ -45,7 +54,18 @@ export interface AppRoute {
   resume?: "document";
 }
 
-export const ROUTE_DIRECTORY: readonly AppRoute[] = routeDirectory.map(({ directory: d, key, moduleHash }) => ({ ...d, key, moduleHash, iconKey: d.icon as AppRoute["iconKey"], task: d.category as AppTask, description: d.blurb, aliases: d.aliases.join(" "), directory: d.listed }));
+export const ROUTE_DIRECTORY: readonly AppRoute[] = routeDirectory.map(
+  ({ directory: d, key, moduleHash }) => ({
+    ...d,
+    key,
+    moduleHash,
+    iconKey: d.icon as AppRoute["iconKey"],
+    task: d.category as AppTask,
+    description: d.blurb,
+    aliases: d.aliases.join(" "),
+    directory: d.listed,
+  }),
+);
 
 export function appRouteByPath(path: string): AppRoute | undefined {
   return ROUTE_DIRECTORY.find(

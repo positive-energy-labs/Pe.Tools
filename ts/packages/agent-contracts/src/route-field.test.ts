@@ -1,7 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import { INVALID } from "./page-keys.ts";
 import { z } from "zod";
-import { field, manyField, manyCodec, decodePageField, sortField, keyedSetField } from "./route-field.ts";
+import { field, manyField, manyCodec, decodePageField, sortField, keyedSetField, orderedListField } from "./route-field.ts";
 import { routeAddress } from "./route-address.ts";
 
 const typeProof = () => {
@@ -67,4 +67,29 @@ test("every many address field round trips ids, all and empty through a URL", as
       }
     }
   }
+});
+
+test("open-picture ordered lists preserve order, repeats and explicit empty through URLs", () => {
+  const list = orderedListField(z.string().min(1), { cap: 3, url: "replace", agent: "set" });
+  for (const items of [[], ["second,picture", "first%picture", "second,picture"]]) {
+    const value = { items };
+    const url = new URL("/captures", "http://test.invalid");
+    url.searchParams.set("open", list.codec.encode(value));
+    expect(decodePageField(list, Object.fromEntries(url.searchParams), "open")).toMatchObject({
+      present: true,
+      decoded: { success: true, data: value },
+    });
+  }
+  for (const value of [
+    [],
+    "all",
+    { items: "all" },
+    { items: ["a", "b", "c", "d"] },
+    { items: [1] },
+    { items: [], extra: true },
+  ])
+    expect(list.schema.safeParse(value).success).toBe(false);
+  expect(list.codec.decode("invalid")).toBe(INVALID);
+  expect(list.codec.decode('{"items":[1]}')).toBe(INVALID);
+  expect(() => orderedListField(z.string(), { cap: -1 })).toThrow();
 });

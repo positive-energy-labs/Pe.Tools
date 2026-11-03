@@ -79,6 +79,8 @@ it("finds arrays structurally through wrappers, unions, aliases and tuples", () 
     expect(contains(text), text).toBe(true);
   expect(contains("z.object({ x: z.string() })")).toBe(false);
   expect(contains("sortField({})")).toBe(false);
+  expect(contains("orderedListField(z.string(), { cap: 3 })")).toBe(false);
+  expect(contains("field(z.array(z.string()), {})")).toBe(true);
 });
 
 it("resolved Zod AST follows an imported schema alias and factory despite a runtime mock", () => {

@@ -188,7 +188,7 @@ export function linkRouteBodies(
       fail(
         `${path}.schema`,
         field.schema,
-        "scalar or kernel Many",
+        "scalar or named kernel collection",
         "Bare arrays are not Page fields",
         "schema",
       );

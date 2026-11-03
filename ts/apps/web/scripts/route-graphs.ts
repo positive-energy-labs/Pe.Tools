@@ -16,6 +16,9 @@ const jiti = createJiti(import.meta.url, {
   fsCache: false,
   jsx: { runtime: "automatic" },
   alias: {
+    "./generated/route-directory.ts": fileURLToPath(
+      new URL("./route-projection-runtime.ts", import.meta.url),
+    ),
     "./builtin-routes": fileURLToPath(new URL("./route-projection-runtime.ts", import.meta.url)),
     "#/route/builtin-routes": fileURLToPath(
       new URL("./route-projection-runtime.ts", import.meta.url),
@@ -27,7 +30,7 @@ const jiti = createJiti(import.meta.url, {
 });
 const { projectRouteGraph } =
   await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
-const { canonicalRouteJson } =
+const { canonicalRouteJson, projectKernelDirectory } =
   await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
 const check = process.argv.includes("--check");
 // A bounded producer probe can emit/check one builtin without rewriting projections.
@@ -59,9 +62,9 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
   const files = await readdir(new URL(`../src/${folder.name}/`, import.meta.url));
   if (!files.includes("graph.ts")) continue;
   if (folder.name === "captures") {
-    const { capturesGraph, capturesDirectory } = await jiti.import<
-      typeof import("../src/captures/graph.ts")
-    >("../src/captures/graph.ts");
+    const { capturesGraph } = await jiti.import<typeof import("../src/captures/graph.ts")>(
+      "../src/captures/graph.ts",
+    );
     const root = fileURLToPath(new URL("../", import.meta.url));
     const host = JSON.parse(
       await readFile(new URL("../../host/package.json", import.meta.url), "utf8"),
@@ -103,7 +106,7 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
     if (closureOnly) continue;
     directory.push({
       key: capturesGraph.key,
-      directory: capturesDirectory,
+      directory: projectKernelDirectory(capturesGraph),
       moduleHash: closure.fingerprint,
     });
     await emit(

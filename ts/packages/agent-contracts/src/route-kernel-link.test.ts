@@ -10,6 +10,8 @@ import {
   schemas,
   entries,
 } from "./route-kernel.fixtures.ts";
+import { projectKernelDirectory } from "./route-directory.ts";
+import { INVALID } from "./page-keys.ts";
 import { canonicalRouteJson } from "./route-graph.ts";
 import { decodeRouteGraph, linkRouteBodies, routeBindingSchema } from "./route-bodies.ts";
 import {
@@ -24,7 +26,7 @@ import type { RouteGraphJson } from "./route-kernel-data.ts";
 import type { RouteFingerprintInput } from "./route-kernel-admission.ts";
 import type { BodyBindings } from "./route-kernel-bodies.ts";
 import type { CatalogLink } from "./catalog.ts";
-import { manyField, manyCodec, sortField, keyedSetField } from "./route-field.ts";
+import { manyField, manyCodec, sortField, keyedSetField, orderedListField } from "./route-field.ts";
 const bytes = new TextEncoder().encode("export const bodies = {};\n");
 const contracts = new TextEncoder().encode("kernel, schemas and codecs v1\n");
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -570,4 +572,104 @@ it("requires geometry and native-write for transitive catalog dependencies", () 
       );
     }
   }
+});
+
+it("round trips complete directory metadata without duplicate addresses or titles", () => {
+  const decoded = decodeRouteGraph(JSON.parse(canonicalRouteJson(builtinData)));
+  if (!decoded.ok) throw Error(JSON.stringify(decoded.diagnostics));
+  expect(decoded.data).toEqual(builtinData);
+  const { group, summary, ...metadata } = builtinData.directory;
+  expect(projectKernelDirectory(decoded.data)).toEqual({
+    ...metadata,
+    path: builtinData.address,
+    title: builtinData.name,
+    category: group,
+    blurb: summary,
+  });
+  for (const key of ["title", "path", "category", "blurb"])
+    expect(
+      decodeRouteGraph({
+        ...builtinData,
+        directory: { ...builtinData.directory, [key]: "duplicate" },
+      }).ok,
+    ).toBe(false);
+  expect(
+    projectKernelDirectory({ ...decoded.data, address: "/renamed", name: "Renamed" }),
+  ).toMatchObject({ path: "/renamed", title: "Renamed" });
+});
+
+it("admits ordered pose data while refusing bare arrays, list subjects and selection schemas", () => {
+  const list = orderedListField(z.string(), { cap: 3 });
+  const data = {
+    ...builtinData,
+    fields: {
+      ...builtinData.fields,
+      open: {
+        role: "pose",
+        schema: "open",
+        codec: "open",
+        initial: { items: [] },
+        url: "replace",
+        share: true,
+        agent: "set",
+      },
+    },
+  } as const;
+  const codec = {
+    encode: list.codec.encode,
+    decode: (text: string) => {
+      const value = list.codec.decode(text);
+      return value === INVALID
+        ? { ok: false as const, reason: "Invalid ordered list" }
+        : { ok: true as const, value };
+    },
+  };
+  const bindings = routeBindingSchema.parse({
+    ...builtinModule,
+    schemas: { ...builtinModule.schemas, open: list.schema },
+    codecs: { ...builtinModule.codecs, open: codec },
+  });
+  expect(linkRouteBodies(data, bindings, baseCatalog)).toEqual([]);
+  expect(
+    linkRouteBodies(
+      { ...data, fields: { ...data.fields, open: { ...data.fields.open, initial: [] } } },
+      { ...bindings, schemas: { ...bindings.schemas, open: z.array(z.string()).default([]) } },
+      baseCatalog,
+    ),
+  ).toContainEqual(
+    expect.objectContaining({
+      path: "fields.open.schema",
+      message: "Bare arrays are not Page fields",
+    }),
+  );
+  expect(
+    linkRouteBodies(
+      {
+        ...data,
+        fields: {
+          ...data.fields,
+          system: {
+            ...data.fields.system,
+            schema: "open",
+            codec: "open",
+            initial: { items: [] },
+            cardinality: "many",
+          },
+        },
+      },
+      bindings,
+      baseCatalog,
+    ),
+  ).toContainEqual(
+    expect.objectContaining({ path: "fields.system.schema", expected: "kernel Many" }),
+  );
+  expect(
+    decodeRouteGraph({
+      ...data,
+      fields: {
+        ...data.fields,
+        selected: { role: "selection", kinds: ["system"], schema: "open" },
+      },
+    }).ok,
+  ).toBe(false);
 });
