@@ -1,4 +1,4 @@
-import { createElement, useMemo, useRef, useSyncExternalStore } from "react";
+import { createElement, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { createRouteShell } from "./admitted-mount";
 import { AdmittedPane, type AdmittedPaneProps } from "./admitted-pane";
@@ -25,15 +25,26 @@ function ApplicationRouteShell({ route, address, pane }: Omit<AdmittedPaneProps,
     params.get("target"),
   );
   const resolved = selected.resolution.kind === "resolved" ? selected.resolution.target : null;
-  const retained = useRef(resolved);
-  if (resolved) retained.current = resolved;
-  const target = resolved ?? retained.current;
-  const targetKey = JSON.stringify(target);
+  const workOpen = resolved?.kind === "document" ? resolved.ref : selected.workOpen;
+  const openKey = workOpen && JSON.stringify([workOpen.session, workOpen.openId]);
+  const retained = useRef({ openKey, address: selected.workAddress });
+  // Retain the Address only for this exact lifetime, never native execution authority.
+  const workAddress =
+    selected.workAddress ??
+    (openKey && retained.current.openKey === openKey ? retained.current.address : null);
+  useLayoutEffect(() => {
+    retained.current = { openKey, address: workAddress };
+  }, [openKey, workAddress]);
+  const targetKey = JSON.stringify([resolved, workAddress, workOpen]);
   const shell = useMemo(
-    () => createRouteShell(sourceRouteServices(admittedSources(route), { target: () => target })),
+    () =>
+      createRouteShell(sourceRouteServices(admittedSources(route), { target: () => resolved }), {
+        workAddress,
+        workOpen,
+      }),
     [targetKey, route],
   );
-  if (!target)
+  if (!resolved && !workAddress && !workOpen)
     return createElement(OutcomeLine, {
       kind: "error",
       label: "Choose a document",

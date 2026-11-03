@@ -1,7 +1,13 @@
+// @vitest-environment jsdom
+import { createElement } from "react";
+import { cleanup as cleanupView, render, screen } from "@testing-library/react";
 import { z } from "zod";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   ductsDocumentSchema,
+  bindWork,
+  workKey,
+  address,
   ductsRouteState,
   salvageDuctsWork,
   type WorkWriteAck,
@@ -11,7 +17,10 @@ import {
   builtinClosureFingerprint,
   createBuiltinRouteInventory,
 } from "../../../../packages/agent-contracts/src/route-module";
-import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type {
+  BodyBindings,
+  PaneContext,
+} from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type {
   Observation,
   WorkWriteOutcome,
@@ -21,6 +30,13 @@ import { createRouteShell } from "../shell/admitted-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { sourceRouteServices } from "../shell/source-route-services";
 import * as recoveryHost from "../route/host";
+import * as sourceServices from "../shell/source-route-services";
+import { applicationRouteShell } from "../shell/application-route-shell";
+import { useRouteTarget } from "../route/route-target";
+vi.mock("../route/route-target", async (original) => ({
+  ...(await original<typeof import("../route/route-target")>()),
+  useRouteTarget: vi.fn(),
+}));
 
 const source = { module: "fans/recovery-bootstrap-gap.test.ts", export: "witness" };
 const data = {
@@ -69,7 +85,11 @@ const schemas = {
 // The witness edits one real Ducts slot through the generic mount.
 const bodies = {
   ...captures.bodies,
-  main: { ...captures.bodies.main, run: () => null },
+  main: {
+    ...captures.bodies.main,
+    run: (ctx: PaneContext<typeof data, typeof schemas, typeof captures.entries, "captures">) =>
+      ctx.work?.parameters.fanFlow?.edit?.value ?? "No authored fan slot",
+  },
   slot: {
     slot: "verbs.slot.patches",
     kind: "work",
@@ -123,6 +143,7 @@ const neutral = {
 };
 const cleanup: (() => void)[] = [];
 afterEach(() => {
+  cleanupView();
   cleanup
     .splice(0)
     .reverse()
@@ -271,6 +292,9 @@ async function witness(
   cleanup.push(mount.close);
   return {
     mount,
+    route: web.route,
+    services,
+    address,
     ws,
     saved,
     states,
@@ -472,3 +496,90 @@ test.each([true, false])(
     else expect(f.saved.get("ducts")).toEqual(before);
   },
 );
+
+test.each([
+  ["retained", null],
+  ["retained", address("C:/Models/ManualD.rvt")],
+  ["cold", null],
+  ["cold", address("C:/Models/ManualD.rvt")],
+] as const)("D4: %s closed Work at %s remains inspectable", async (start, workAddress) => {
+  const f = await witness();
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  await settle(f.mount.invoke("slot", "PE_M_Fan_AirFlow") as Observation<WorkWriteOutcome>);
+  f.mount.close();
+  const before = structuredClone(f.saved.get("ducts"));
+  const closed = {
+    resolution: { kind: "choose", reason: "document-closed" },
+    workOpen: { session: "fixture", openId: "w1f" },
+    workAddress: start === "cold" ? workAddress : null,
+    resolvedAddress: null,
+  } as ReturnType<typeof useRouteTarget>;
+  const selected = vi.mocked(useRouteTarget);
+  selected.mockReturnValue(
+    start === "cold"
+      ? closed
+      : {
+          ...closed,
+          workAddress,
+          resolvedAddress: workAddress,
+          resolution: { kind: "resolved", target: { kind: "document", ref: closed.workOpen! } },
+        },
+  );
+  vi.spyOn(sourceServices, "sourceRouteServices").mockImplementation((_sources, composition) => ({
+    ...f.services,
+    target: composition?.target,
+  }));
+  const open = vi.spyOn(f.services.work, "open");
+  const view = render(
+    createElement(applicationRouteShell, {
+      route: f.route,
+      address: f.address,
+      pane: "captures",
+    }),
+  );
+  if (start === "retained") {
+    await screen.findByText("PE_M_Fan_AirFlow");
+    selected.mockReturnValue(closed);
+    view.rerender(
+      createElement(applicationRouteShell, {
+        route: f.route,
+        address: f.address,
+        pane: "captures",
+      }),
+    );
+  }
+  await screen.findByText("PE_M_Fan_AirFlow");
+  expect(open.mock.lastCall![0].target).toBeNull();
+  expect(workKey(open.mock.lastCall![0].key)).toBe(
+    workKey(bindWork("ducts", workAddress, undefined, closed.workOpen!)),
+  );
+  expect(f.saved.get("ducts")).toEqual(before);
+});
+
+test("P02/P04: the application opens saved Ducts Work by document Address", async () => {
+  const f = await witness();
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  f.mount.close();
+  const workAddress = address("C:/Models/ManualD.rvt");
+  vi.mocked(useRouteTarget).mockReturnValue({
+    resolution: {
+      kind: "resolved",
+      target: { kind: "document", ref: { session: "fixture", openId: "w1f" } },
+    },
+    workAddress,
+    resolvedAddress: workAddress,
+    workOpen: null,
+  } as ReturnType<typeof useRouteTarget>);
+  vi.spyOn(sourceServices, "sourceRouteServices").mockReturnValue(f.services);
+  const open = vi.spyOn(f.services.work, "open");
+  render(
+    createElement(applicationRouteShell, { route: f.route, address: f.address, pane: "captures" }),
+  );
+  await vi.waitFor(() => expect(open).toHaveBeenCalled());
+  const acquired = open.mock.calls[0]![0].key;
+  expect(workKey(acquired)).toBe(workKey(bindWork("ducts", workAddress)));
+  // Save As promotion keeps its source lifetime without creating another persisted key.
+  expect(acquired).toEqual(
+    bindWork("ducts", workAddress, undefined, { session: "fixture", openId: "w1f" }),
+  );
+});
