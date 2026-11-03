@@ -120,3 +120,10 @@ test("fan loss preparation reads both sides and carries authored drops into prev
   );
   expect(request.components).toContainEqual(expect.objectContaining({ id: node.id, inWg: 0.026 }));
 });
+
+
+test("unscoped losses do not fire a healing read", async () => {
+  const read = vi.fn();
+  await expect(lossSnapshot(undefined, read)).rejects.toThrow("stage a scope before previewing losses");
+  expect(read).not.toHaveBeenCalled();
+});

@@ -7,6 +7,9 @@ import {
   familyReads,
   instancesReading,
   workKeySchema,
+  workKey,
+  workHandleSchema,
+  ductsDocumentSchema,
   type ActionControlKey,
   type ScheduleReadKey,
   type FamilyReadKey,
@@ -27,6 +30,7 @@ import {
   recoverAction,
   readFamilyCapture,
 } from "./takeoff-action-client.ts";
+import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { contextFetch as fetch } from "@pe/runtime/context";
 
 export interface AdmissionContext {
@@ -171,6 +175,19 @@ export async function runCapability(
     return context.receipt
       ? host.callOperation(key, input)
       : host.call(key as never, (Object.keys(input).length ? input : undefined) as never);
+  }
+  // Prerequisites are checked before submission, so an unscoped probe is not a journal attempt.
+  if (key === "ducts.preview-losses") {
+    const handle = workHandleSchema.parse(input.work);
+    const response = await createPeClient(context.hostBaseUrl, fetch).response("work.get", {
+      params: { route: "ducts" }, query: { work: workKey(handle.key) },
+    });
+    if (!response.ok) throw Error(`Read Ducts Work before preview (${response.status})`);
+    const saved = await response.json() as { revision: number; doc: unknown };
+    if (saved.revision !== handle.revision) throw Error("Ducts Work changed; read its current revision before preview");
+    const scope = ductsDocumentSchema.parse(saved.doc).writeIntent.edit?.value;
+    if (!scope?.walk && !scope?.groups?.length)
+      throw Error('Preview needs a scope. Read route:ducts.roster, then stage writeIntent.edit = {"value":{"walk":{"unitId":<unitId>,"portIndex":<portIndex>},"cells":[["equipmentFlows","<unitId>"]]}} for a fan-flow write. Retry with the accepted Work revision. No preview was submitted.');
   }
   const id = context.actionId ?? crypto.randomUUID();
   await context.beforeAdmission?.(id);

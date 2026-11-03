@@ -365,3 +365,28 @@ test("a direct RPC caller recovers its original command before consulting a miss
   expect(posts).toEqual([]);
   expect(reads).toEqual(["/actions"]);
 });
+
+
+import { runCapability } from "../src/shared/admission.ts";
+import { ductsDocumentSchema } from "@pe/agent-contracts";
+test.each([false, true])("loss preview preflight requires Work scope before a journal POST (scoped=%s)", async scoped => {
+  const posts: unknown[] = [];
+  const work = { key: {route: "ducts", binding: "open", target: null, open: target.ref}, revision: 3 };
+  vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/pe/route-state/ducts") return Response.json({revision: 3, doc: ductsDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {walk: {unitId: 14577391, portIndex: 2}, cells: [["equipmentFlows", "14577391"]]}}}} : {})});
+    if (url.pathname === "/actions" && init?.method === "POST") {
+      const body = JSON.parse(String(init.body)); posts.push(body);
+      return Response.json(receipt(body));
+    }
+    throw Error(`Unexpected ${url.pathname}`);
+  });
+  const run = () => runCapability("ducts.preview-losses", {work}, {hostBaseUrl: "http://preflight.test", receipt: true, bridgeSessionId: "A", openDocumentId: "open-A"}, {door: "command", mutates: false, needs: "project-document"});
+  if (scoped) {
+    expect(await run()).toMatchObject({state: "succeeded"});
+    expect(posts).toHaveLength(1);
+  } else {
+    await expect(run()).rejects.toThrow("No preview was submitted");
+    expect(posts).toEqual([]);
+  }
+});

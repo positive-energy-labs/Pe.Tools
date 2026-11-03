@@ -61,6 +61,8 @@ export async function lossSnapshot(
   intent: { walk?: { unitId: number; portIndex: number }; groups?: string[] } | undefined,
   read: (selector: Record<string, unknown>) => Promise<DuctSnapshot>,
 ): Promise<DuctSnapshot> {
+  if (!intent?.walk && !intent?.groups?.length)
+    throw refused("Preview needs writeIntent.walk from the fan roster or writeIntent.groups; stage a scope before previewing losses");
   const snapshot = await (intent?.walk
     ? read({ kind: "from", unitId: intent.walk.unitId })
     : healSnapshot(intent?.groups ?? [], read));
