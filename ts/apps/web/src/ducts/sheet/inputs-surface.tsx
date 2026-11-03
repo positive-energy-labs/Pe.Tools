@@ -45,8 +45,6 @@ export interface InputsHistory {
   undoLabel: string | null;
   redoLabel: string | null;
   /** Another writer changed the step's paths; the kernel refuses it in these words. */
-  undoSuperseded: string | null;
-  redoSuperseded: string | null;
   last: { label: string; words: string; refusal?: string } | null;
   /** The last edit when it was a clear: its row offers "restore" until the next edit. */
   cleared: { press: string; rowKey: string | null; was: string; row?: EditMeta["row"] } | null;
@@ -262,7 +260,6 @@ function HistoryLine({ history, refusal }: { history: InputsHistory; refusal: st
         label={history.undoLabel ? `Undo ${history.undoLabel}` : "Undo"}
         refusal={
           refusal ??
-          history.undoSuperseded ??
           (history.undoLabel ? null : "Nothing to undo: this page has made no edit since it loaded")
         }
         onPress={history.undo}
@@ -274,7 +271,7 @@ function HistoryLine({ history, refusal }: { history: InputsHistory; refusal: st
         icon={Redo2}
         label={history.redoLabel ? `Redo ${history.redoLabel}` : "Redo"}
         refusal={
-          refusal ?? history.redoSuperseded ?? (history.redoLabel ? null : "Nothing to redo")
+          refusal ?? (history.redoLabel ? null : "Nothing to redo")
         }
         onPress={history.redo}
       >

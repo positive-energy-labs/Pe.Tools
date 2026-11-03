@@ -18,7 +18,7 @@ import type {
   PluginHooks,
   WorkHandle,
 } from "@pe/agent-contracts";
-import { HARNESS_EVENT_MAX_BYTES } from "@pe/agent-contracts";
+import { HARNESS_EVENT_MAX_BYTES, tools, bindWork, stagedDucts, workKey, address as documentAddress } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
 import {
@@ -47,10 +47,8 @@ import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
-import { tools, bindWork, stagedDucts, workKey, address as documentAddress } from "@pe/agent-contracts";
 import type { RevitBridge } from "../src/bridge.ts";
-import { peFind, peRead } from "../../../packages/mcps/src/pea/capability-tools.ts";
-import { buildCapabilities } from "@pe/mcps";
+import { buildCapabilities, peFind, peRead } from "@pe/mcps";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 
 let root = "";

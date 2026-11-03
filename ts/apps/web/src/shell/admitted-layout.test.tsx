@@ -70,7 +70,6 @@ test("declared split and predicate gates render over one mount", () => {
       shell,
       route,
       address: { read: () => new URLSearchParams(), subscribe: () => () => {}, write: vi.fn() },
-      pane: "picture",
     } as any),
   );
   expect(screen.getByText("picture")).toBeTruthy();

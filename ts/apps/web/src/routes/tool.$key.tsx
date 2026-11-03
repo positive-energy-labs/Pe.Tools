@@ -25,7 +25,6 @@ function PodTool() {
         <ApplicationRouteShell
           route={route}
           address={address}
-          pane={Object.keys(route.data.panes)[0]!}
         />
       </PaneErrorBoundary>
     );

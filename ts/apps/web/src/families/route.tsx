@@ -14,6 +14,6 @@ export const familiesRoute = createRoute({
   path: "/families",
   validateSearch: admittedRouteSearch(familiesData),
   component: () => (
-    <AdmittedRouteView shell={applicationRouteShell} load={admitFamilies} pane="main" />
+    <AdmittedRouteView shell={applicationRouteShell} load={admitFamilies} />
   ),
 });

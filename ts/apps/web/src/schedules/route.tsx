@@ -14,6 +14,6 @@ export const schedulesRoute = createRoute({
   path: "/schedules",
   validateSearch: admittedRouteSearch(schedulesData),
   component: () => (
-    <AdmittedRouteView shell={applicationRouteShell} load={admitSchedules} pane="grid" />
+    <AdmittedRouteView shell={applicationRouteShell} load={admitSchedules} />
   ),
 });

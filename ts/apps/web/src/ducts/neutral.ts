@@ -872,77 +872,49 @@ export const ductsData = {
       label: "Systems",
       purpose: "Choose a system to inspect",
       draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
-      verbs: {
-        choose: "placeESystems",
-        allowed: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
-        row: "placementRow",
-      },
+      verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-systems",
     },
     "e-sidebar": {
       label: "System tree",
       purpose: "Inspect the opened systems and their runs",
       draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
-      verbs: {
-        choose: "placeESidebar",
-        allowed: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
-        row: "placementRow",
-      },
+      verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-sidebar",
     },
     "e-inputs": {
       label: "Inputs",
       purpose: "Edit flow, ESP, role and drop",
       draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
-      verbs: {
-        choose: "placeEInputs",
-        allowed: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
-        row: "placementRow",
-      },
+      verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-inputs",
     },
     "e-rules-all": {
       label: "All-systems rules",
       purpose: "Price every read fitting type",
       draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
-      verbs: {
-        choose: "placeERulesAll",
-        allowed: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
-        row: "placementRow",
-      },
+      verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-rules-all",
     },
     "e-rules": {
       label: "This system's rules",
       purpose: "Review fitting rules for the opened systems",
       draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
-      verbs: {
-        choose: "placeERules",
-        allowed: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
-        row: "placementRow",
-      },
+      verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-rules",
     },
     "e-picture": {
       label: "Picture",
       purpose: "Inspect the model or schematic",
       draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
-      verbs: {
-        choose: "placeEPicture",
-        allowed: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
-        row: "placementRow",
-      },
+      verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-picture",
     },
     "e-inbox": {
       label: "Rulings",
       purpose: "Review assumptions and planned writes",
       draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
-      verbs: {
-        choose: "placeEInbox",
-        allowed: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
-        row: "placementRow",
-      },
+      verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-inbox",
     },
   },
@@ -1349,7 +1321,6 @@ export function authoredPatches(
     return value === undefined ? { path, op: "delete" } : { path, value };
   }) as unknown as readonly WorkPatch<typeof ductsDocumentSchema>[];
 }
-const noRowCommands = () => [] as const;
 export const neutralBodies = {
   browse: { slot: "verbs.browse.patch", kind: "page", source, run: (_ctx, input) => input },
   labelcalculation: {
@@ -1404,48 +1375,6 @@ export const neutralBodies = {
     run: () => "parameter slots",
   },
   labelkinds: { slot: "cells.kinds.label", kind: "label", source, run: () => "unit kinds" },
-  placeESystems: {
-    slot: "panes.e-systems.verbs.choose",
-    kind: "placement",
-    source,
-    run: noRowCommands,
-  },
-  placeESidebar: {
-    slot: "panes.e-sidebar.verbs.choose",
-    kind: "placement",
-    source,
-    run: noRowCommands,
-  },
-  placeEInputs: {
-    slot: "panes.e-inputs.verbs.choose",
-    kind: "placement",
-    source,
-    run: noRowCommands,
-  },
-  placeERulesAll: {
-    slot: "panes.e-rules-all.verbs.choose",
-    kind: "placement",
-    source,
-    run: noRowCommands,
-  },
-  placeERules: {
-    slot: "panes.e-rules.verbs.choose",
-    kind: "placement",
-    source,
-    run: noRowCommands,
-  },
-  placeEPicture: {
-    slot: "panes.e-picture.verbs.choose",
-    kind: "placement",
-    source,
-    run: noRowCommands,
-  },
-  placeEInbox: {
-    slot: "panes.e-inbox.verbs.choose",
-    kind: "placement",
-    source,
-    run: noRowCommands,
-  },
   groupcalculation: {
     slot: "cells.calculation.groupOf",
     kind: "group",

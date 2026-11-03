@@ -83,7 +83,7 @@ it("puts the model/walked conflict in the fan airflow cell without changing its 
   );
   const view = render(createElement(InputsSurface, {
     ctx, busy: false, elementName: null, onSlot: vi.fn(), apply: vi.fn(), nameOf: () => "FC-23",
-    history: { undoLabel: null, redoLabel: null, undoSuperseded: null, redoSuperseded: null,
+    history: { undoLabel: null, redoLabel: null,
       last: null, cleared: null, undo: vi.fn(), redo: vi.fn(), restore: vi.fn() },
   }));
   const source = view.getByText(row.source);
@@ -189,8 +189,6 @@ it.each(["terminal:7:cfm", "join:1:0|2:0"])(
     const history: InputsHistory = {
       undoLabel: "clear",
       redoLabel: null,
-      undoSuperseded: null,
-      redoSuperseded: null,
       last: null,
       cleared: { press: "clear-1", rowKey, was: "100 cfm" },
       undo: vi.fn(),
@@ -229,7 +227,7 @@ it("labels the undoable row action Revert and records the same History name", ()
   const apply = vi.fn();
   const { getAllByRole } = render(createElement(InputsSurface, {
     ctx, apply, busy: false, elementName: null, onSlot: vi.fn(), nameOf: () => "Terminal",
-    history: { undoLabel: null, redoLabel: null, undoSuperseded: null, redoSuperseded: null, last: null, cleared: null,
+    history: { undoLabel: null, redoLabel: null, last: null, cleared: null,
       undo: vi.fn(), redo: vi.fn(), restore: vi.fn() },
   }));
   const button = getAllByRole("button").find(b => b.textContent === "Revert");

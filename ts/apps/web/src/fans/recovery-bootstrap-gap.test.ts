@@ -590,7 +590,6 @@ test.each([
     createElement(applicationRouteShell, {
       route: f.route,
       address: f.address,
-      pane: "captures",
     }),
   );
   if (start === "retained") {
@@ -600,7 +599,6 @@ test.each([
       createElement(applicationRouteShell, {
         route: f.route,
         address: f.address,
-        pane: "captures",
       }),
     );
   }
@@ -629,7 +627,7 @@ test("P02/P04: the application opens saved Ducts Work by document Address", asyn
   vi.spyOn(sourceServices, "sourceRouteServices").mockReturnValue(f.services);
   const open = vi.spyOn(f.services.work, "open");
   render(
-    createElement(applicationRouteShell, { route: f.route, address: f.address, pane: "captures" }),
+    createElement(applicationRouteShell, { route: f.route, address: f.address }),
   );
   await vi.waitFor(() => expect(open).toHaveBeenCalled());
   const acquired = open.mock.calls[0]![0].key;
@@ -700,7 +698,7 @@ test.each(["w1f", "other-document"])(
         createElement(
           RouteVisibility,
           { value: visible },
-          createElement(applicationRouteShell, { route: f.route, address, pane: "captures" }),
+          createElement(applicationRouteShell, { route: f.route, address }),
         ),
       );
     const view = render(tree());
@@ -767,7 +765,6 @@ test.each(["current", "departed"] as const)(
         createElement(applicationRouteShell, {
           route: f.route,
           address: f.address,
-          pane: "captures",
         }),
       ),
     );

@@ -6,21 +6,14 @@ import { paintOf } from "#/scene/grounds";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import {
   activeSystem,
-  uniqueSystems,
   DUCTS_MULTI,
   paintOfDucts,
-  toggleSystem,
-  withSystem,
 } from "./selection";
 import { ductsFocus } from "./page";
 import { captureRequest } from "#/scene/picture/picture";
 afterEach(() => resetKnob());
 
-test("selection opens in order, closes membership, and preserves every authored subject", () => {
-  expect(uniqueSystems(["A", "B", "C", "D", "E", "A"])).toEqual(["A", "B", "C", "D", "E"]);
-  expect(toggleSystem(["A", "B"], "A")).toEqual(["B"]);
-  expect(toggleSystem(["A", "B"], "C")).toEqual(["A", "B", "C"]);
-  expect(withSystem(["A", "B"], "A")).toEqual(["A", "B"]);
+test("active system is the last opened subject or empty", () => {
   expect(activeSystem({ system: ["A", "B"] })).toBe("B");
   expect(activeSystem({ system: [] })).toBe("");
 });

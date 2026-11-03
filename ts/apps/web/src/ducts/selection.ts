@@ -31,17 +31,6 @@ export const DUCTS_MULTI = defineKnobs("ducts", "ts/apps/web/src/ducts/selection
 export const activeSystem = (page: { readonly system: readonly string[] | "all" }) =>
   page.system === "all" ? "" : (page.system.at(-1) ?? "");
 
-/** Keep every authored subject, in pick order, without duplicates. */
-export const uniqueSystems = (open: readonly string[]) => [...new Set(open)];
-
-/** The open list with `name` opened (it becomes active) or, when it is open, closed. */
-export const toggleSystem = (open: readonly string[], name: string) =>
-  open.includes(name) ? open.filter((n) => n !== name) : uniqueSystems([...open, name]);
-
-/** The open list with `name` open: as it is when it already is, else with `name` active. */
-export const withSystem = (open: readonly string[], name: string) =>
-  open.includes(name) ? [...open] : uniqueSystems([...open, name]);
-
 /** The neighbours' stub elements that are not already open. */
 export const stubIdsOf = (neighbours: readonly Neighbour[], open: ReadonlySet<number>) =>
   new Set(neighbours.flatMap((n) => n.stub).filter((id) => !open.has(id)));

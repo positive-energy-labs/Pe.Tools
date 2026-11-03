@@ -46,44 +46,28 @@ export const fansData = {
       label: "Fans",
       purpose: "Open fan ports",
       draws: ["fans", "sheet", "sheetSnapshot", "meshes"],
-      verbs: {
-        choose: "placeSheetRoster",
-        allowed: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
-        row: "placementRow",
-      },
+      verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "sheet-roster",
     },
     "sheet-inputs": {
       label: "Inputs",
       purpose: "Edit fan inputs",
       draws: ["fans", "sheet", "sheetSnapshot", "meshes"],
-      verbs: {
-        choose: "placeSheetInputs",
-        allowed: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
-        row: "placementRow",
-      },
+      verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "sheet-inputs",
     },
     "sheet-picture": {
       label: "Picture",
       purpose: "Inspect fan paths",
       draws: ["fans", "sheet", "sheetSnapshot", "meshes"],
-      verbs: {
-        choose: "placeSheetPicture",
-        allowed: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
-        row: "placementRow",
-      },
+      verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "sheet-picture",
     },
     "sheet-ledger": {
       label: "Ledger",
       purpose: "Inspect ESP and provenance",
       draws: ["fans", "sheet", "sheetSnapshot", "meshes"],
-      verbs: {
-        choose: "placeSheetLedger",
-        allowed: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
-        row: "placementRow",
-      },
+      verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "sheet-ledger",
     },
   },
@@ -133,40 +117,9 @@ export const fansData = {
 export const schemas = withWorkOwner(ownerSchemas, { data: ductsData, schemas: ownerSchemas });
 const {
   pickSystems: _pickSystems,
-  placeESystems: _placeESystems,
-  placeESidebar: _placeESidebar,
-  placeEInputs: _placeEInputs,
-  placeERulesAll: _placeERulesAll,
-  placeERules: _placeERules,
-  placeEPicture: _placeEPicture,
-  placeEInbox: _placeEInbox,
   ...shared
 } = neutralBodies;
 export const fansNeutralBodies = {
-  placeSheetRoster: {
-    slot: "panes.sheet-roster.verbs.choose",
-    kind: "placement",
-    source: { module: "fans/neutral.ts", export: "fansNeutralBodies" },
-    run: () => [],
-  },
-  placeSheetInputs: {
-    slot: "panes.sheet-inputs.verbs.choose",
-    kind: "placement",
-    source: { module: "fans/neutral.ts", export: "fansNeutralBodies" },
-    run: () => [],
-  },
-  placeSheetPicture: {
-    slot: "panes.sheet-picture.verbs.choose",
-    kind: "placement",
-    source: { module: "fans/neutral.ts", export: "fansNeutralBodies" },
-    run: () => [],
-  },
-  placeSheetLedger: {
-    slot: "panes.sheet-ledger.verbs.choose",
-    kind: "placement",
-    source: { module: "fans/neutral.ts", export: "fansNeutralBodies" },
-    run: () => [],
-  },
   ...shared,
   pickFans: {
     slot: "fields.fan.picker.options",

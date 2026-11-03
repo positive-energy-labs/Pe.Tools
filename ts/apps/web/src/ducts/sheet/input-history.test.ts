@@ -31,7 +31,7 @@ test("staging the write scope is named in History and never shown in Inputs", ()
   const read = journal.read();
   expect(read.undo.at(-1)).toMatchObject({ label: "Edit write scope", internal: true });
   expect(read.moves.at(-1)).toMatchObject({ label: "Edit write scope", internal: true });
-  expect(presentInputHistory(entries(), null).last?.words).toBe("");
+  expect(presentInputHistory(entries(), null).last).toBeNull();
 });
 
 test("a criteria edit is named in words, never by its key", () => {

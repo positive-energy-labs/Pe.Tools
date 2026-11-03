@@ -96,7 +96,6 @@ export interface AdmittedPaneProps {
   shell: ReturnType<typeof createRouteShell>;
   route: AdmittedRoute;
   address: AdmittedAddressPort;
-  pane: string;
 }
 
 type PlaceMount = {
@@ -174,7 +173,7 @@ export function AdmittedPlacePane({
   route,
   place,
   input,
-}: Omit<AdmittedPaneProps, "address" | "pane"> & {
+}: Omit<AdmittedPaneProps, "address"> & {
   place: PanePlace;
   input: PlaceInput;
 }) {
@@ -222,15 +221,13 @@ export function admittedRouteSearch<
     ) as { [K in keyof G["fields"]]?: string } & { fixture?: string };
 }
 
-/** Shared async admission/router boundary. Domain routes supply only a loader and pane id. */
+/** Shared async admission/router boundary. Domain routes supply only a loader. */
 export function AdmittedRouteView({
   shell,
   load,
-  pane,
 }: {
   shell: ComponentType<Omit<AdmittedPaneProps, "shell">>;
   load: () => Promise<AdmittedRoute>;
-  pane: string;
 }) {
   const router = useRouter();
   const address = useMemo(() => admittedRouterAddress(router.history), [router]);
@@ -254,6 +251,6 @@ export function AdmittedRouteView({
   if (error)
     return createElement(OutcomeLine, { kind: "error", label: "route refused", says: error });
   return route
-    ? createElement(shell, { route, address, pane })
+    ? createElement(shell, { route, address })
     : createElement("p", null, "Reading route...");
 }
