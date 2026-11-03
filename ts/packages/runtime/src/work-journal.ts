@@ -542,7 +542,8 @@ export function createWorkJournal(key: WorkKey) {
           )
             continue;
           if (receipt.state === "succeeded") delete step.notWritten;
-          else if (receipt.state === "cancelled" && receipt.error.includes("rejected by"))
+          else if (receipt.state === "cancelled" && receipt.error.includes("rejected by") &&
+            step.by === receipt.caller.kind)
             step.notWritten = { invocation: receipt.id, reason: receipt.error };
         }
       }
