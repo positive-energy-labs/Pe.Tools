@@ -11,7 +11,6 @@ import { familyGraph } from "../family/graph";
 import { takeoffGraph } from "../takeoff/graph";
 import { settingsGraph } from "../settings/graph";
 import { chatGraph } from "../chat/graph";
-import { dataTablesGraph } from "../data-tables/graph";
 import { designSystemGraph } from "../design-system/graph";
 import { ductLossGraph } from "../duct-loss/graph";
 import { grillesGraph } from "../grilles/graph";
@@ -41,7 +40,6 @@ const routes = [
   sessionsGraph,
   rhvacSyncGraph,
   zoneAuditGraph,
-  dataTablesGraph,
   designSystemGraph,
   ductLossGraph,
   grillesGraph,

@@ -11,7 +11,6 @@ import {
 } from "@pe/agent-contracts";
 
 export const legacyBuiltinKeys: readonly string[] = [
-  "data-tables",
   "family",
   "instances",
   "pod-admin",

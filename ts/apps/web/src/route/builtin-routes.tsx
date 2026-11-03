@@ -12,7 +12,6 @@ import { takeoffGraph } from "#/takeoff/graph";
 import { roomsGraph } from "#/rooms/graph";
 import { familyGraph } from "#/family/graph";
 import { settingsGraph } from "#/settings/graph";
-import { dataTablesGraph } from "#/data-tables/graph";
 import { mountRoute, type MountRouteProps } from "#/shell/mount";
 
 /** A route body stays out of the shell chunk until a pane mounts it. */
@@ -31,8 +30,6 @@ const FamilyRoute = lazy(async () => ({
   default: mountRoute(familyGraph, (await import("#/family/route")).familyAdapters),
 }));
 
-const DataTablesRoute = lazy(async () => ({
-  default: mountRoute(dataTablesGraph, (await import("#/data-tables/route")).dataTablesAdapters),
 }));
 
 const SettingsRoute = lazy(async () => ({
@@ -74,7 +71,6 @@ function hosted(Body: ComponentType<MountRouteProps>) {
 registerLegacyGraph(roomsGraph, hosted(RoomsRoute));
 registerLegacyGraph(familyGraph, hosted(FamilyRoute));
 registerLegacyGraph(podsGraph, hosted(PodsRoute));
-registerLegacyGraph(dataTablesGraph, hosted(DataTablesRoute));
 
 const PodAdminRoute = named(() => import("#/pod-admin/route"), "PodAdminRoute");
 registerLegacyGraph(podAdminGraph, hosted(PodAdminRoute));

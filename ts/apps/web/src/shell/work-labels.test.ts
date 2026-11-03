@@ -1,7 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import type { RouteGraph } from "@pe/agent-contracts";
-import { dataTablesGraph } from "../data-tables/graph";
 import { familyGraph } from "../family/graph";
 import { podsGraph } from "../pods/graph";
 import { roomsGraph } from "../rooms/graph";
@@ -9,7 +8,6 @@ import { takeoffGraph } from "../takeoff/graph";
 import { workPathName } from "./work-writes";
 
 const graphs = [
-  dataTablesGraph,
   familyGraph,
   podsGraph,
   roomsGraph,
