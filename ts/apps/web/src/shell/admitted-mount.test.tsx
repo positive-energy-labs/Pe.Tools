@@ -14,7 +14,10 @@ import {
 } from "../../../../packages/agent-contracts/src/route-module";
 
 import { identityCodecs } from "./page-port";
-import { createRouteShell, admittedMountBodyKinds } from "./admitted-mount";
+import { createRouteShell, admittedMountBodyKinds, PlaceWriteRefusal } from "./admitted-mount";
+import { createAdmittedWork } from "./admitted-work";
+import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
+import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
 import { AdmittedPane, admittedRouterAddress } from "./admitted-pane";
 const data = {
   version: 1,
@@ -740,6 +743,60 @@ const settle = (observation: Observation<WorkWriteOutcome>) =>
       () => {},
     ),
   );
+
+test("D4: a new writer at either shared Work submission path cannot bypass Place authority", async () => {
+  const route = await workRoute();
+  const key = { binding: "workspace", route: "note", target: null, work: "default" } as const;
+  const owner = createRouteScopeGate({
+    dependencies: () => ({}),
+    preparePage: (page) => ({
+      ok: true,
+      value: { page, changed: false, membership: "verified" },
+    }),
+    workSchema: z.object({ amount: z.number() }),
+    hashWork: JSON.stringify,
+    journal: createWorkJournal,
+  });
+  owner.enter({ target: null, work: key }, { note: null, selected: [], query: "", pose: { x: 0 } });
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  const submitted = vi.spyOn(store, "submitWork");
+  let authority: "writable" | "read-only" = "writable";
+  const work = createAdmittedWork(
+    route,
+    owner,
+    store,
+    () => {
+      if (authority === "read-only") throw new PlaceWriteRefusal();
+    },
+    () => {},
+    () => {},
+  );
+  closes.push(work.close, owner.close);
+  work.sync();
+  const issued = owner.invocation(owner.capture("new-writer"), {});
+  if (!issued.ok) throw Error(issued.reason);
+  const request: Parameters<typeof work.submit>[0] = {
+    kind: "apply",
+    expectedRevision: 0,
+    press: "new-writer",
+    patches: [{ path: ["amount"], value: 4 }],
+  };
+  const write = () => work.write(() => request.patches, issued.value, "new", "New writer");
+  authority = "read-only";
+  expect(write).toThrow(PlaceWriteRefusal);
+  await expect(work.submit(request, issued.value)).rejects.toMatchObject({
+    reason: "place-read-only",
+  });
+  expect(submitted).not.toHaveBeenCalled();
+  expect(owner.read()?.work).toEqual({ revision: 0, value: { amount: 0 } });
+  authority = "writable";
+  expect(await settle(write())).toMatchObject({ kind: "accepted" });
+  expect(submitted).toHaveBeenCalledTimes(1);
+  expect(owner.read()?.work).toEqual({ revision: 1, value: { amount: 4 } });
+});
 
 test.each(["ack-first", "stream-first"])(
   "Work mount composes B with %s and recovers after departure",

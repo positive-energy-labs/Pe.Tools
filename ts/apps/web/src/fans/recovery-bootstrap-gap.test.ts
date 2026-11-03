@@ -435,3 +435,40 @@ test("H8: a gap reacquires real host history and resets the view", async () => {
     "A",
   );
 });
+
+test.each([true, false])("D4: Revert respects Place write eligibility (%s)", async (writable) => {
+  const f = await witness();
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  await settle(f.mount.invoke("slot", "A") as Observation<WorkWriteOutcome>);
+  const before = structuredClone(f.saved.get("ducts"));
+  f.mount.setWritable(writable);
+  if (!writable) {
+    expect(() => f.mount.invoke("slot", "B")).toThrow("Place is not writable");
+    await expect(f.mount.history!.undo()).rejects.toThrow("Place is not writable");
+    await expect(f.mount.history!.redo()).rejects.toMatchObject({ reason: "place-read-only" });
+  }
+  if (writable) await f.mount.history!.revert();
+  else await expect(f.mount.history!.revert()).rejects.toMatchObject({ reason: "place-read-only" });
+  if (writable) expect(f.saved.get("ducts")).not.toEqual(before);
+  else expect(f.saved.get("ducts")).toEqual(before);
+});
+
+test.each([true, false])(
+  "D4: a prepared recovery review respects Place write eligibility (%s)",
+  async (writable) => {
+    const f = await witness(unreadable);
+    recovery(f);
+    await vi.waitFor(() => expect(f.mount.recovery().startFresh).toBe(true));
+    await f.mount.startFresh();
+    expect(f.mount.review("work.salvage")?.stale).toBe(false);
+    const before = structuredClone(f.saved.get("ducts"));
+    f.mount.setWritable(writable);
+    if (writable) await settle(f.mount.confirm("work.salvage") as Observation<WorkWriteOutcome>);
+    else
+      expect(() => f.mount.confirm("work.salvage")).toThrow(
+        expect.objectContaining({ reason: "place-read-only" }),
+      );
+    if (writable) expect(f.saved.get("ducts")).not.toEqual(before);
+    else expect(f.saved.get("ducts")).toEqual(before);
+  },
+);
