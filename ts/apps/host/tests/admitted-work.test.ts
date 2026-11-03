@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -7,6 +8,8 @@ import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { bindWork, workKey, type ReadingFrame, type ReadingRequest } from "@pe/agent-contracts";
 import { builtinModule } from "../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
 import {
+  createRouteAdmission,
+  routeFingerprint,
   builtinClosureFingerprint,
   createBuiltinRouteInventory,
   type BuiltinClosure,
@@ -21,7 +24,11 @@ afterEach(() => {
   releases.splice(0).forEach((release) => release());
   roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true }));
 });
-async function route(migrate?: (doc: unknown) => unknown) {
+async function route(
+  migrate?: (doc: unknown) => unknown,
+  source: "builtin-closure" | "pod-bytes" = "builtin-closure",
+  hostVersion = "test",
+) {
   const migrations: Record<string, string> = migrate ? { "1": "upgrade" } : {};
   const data = {
     ...builtinModule.data,
@@ -56,12 +63,50 @@ async function route(migrate?: (doc: unknown) => unknown) {
     source: "builtin-closure",
     version: 1,
     data,
-    hostVersion: "test",
+    hostVersion,
     variants: [{ client: "web", entry: "bodies.js" }],
     modules: [{ id: "bodies.js", sha256: "a".repeat(64) }],
     inputs: [],
     externals: [],
   };
+  if (source === "pod-bytes") {
+    const bytes = new TextEncoder().encode("export const source = 'verified pod witness';");
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    const artifact = {
+      version: 1 as const,
+      data,
+      contracts: [{ id: "contracts", sha256: digest }],
+      executables: [
+        {
+          client: "shared" as const,
+          entry: "bodies.js",
+          members: [{ path: "bodies.js", sha256: digest }],
+        },
+      ],
+    };
+    const port = await createRouteAdmission({
+      loadedBindings: module,
+      artifact,
+      expectedFingerprint: await routeFingerprint(artifact),
+      contracts: [{ id: "contracts", bytes }],
+      executables: [
+        {
+          client: "shared",
+          entry: "bodies.js",
+          resolved: true,
+          members: [{ path: "bodies.js", bytes }],
+        },
+      ],
+      catalog: Object.entries(module.entries).map(([key, entry]) => ({
+        key,
+        ...entry.axes,
+        uses: [],
+      })),
+    });
+    const admitted = port.admitUnknown({ ...module, artifact });
+    if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
+    return admitted.route;
+  }
   const fingerprint = await builtinClosureFingerprint(envelope);
   const inventory = createBuiltinRouteInventory({
     tiny: {
@@ -78,10 +123,21 @@ async function route(migrate?: (doc: unknown) => unknown) {
   if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
   return admitted.route;
 }
-async function setup(migrate?: (doc: unknown) => unknown) {
+async function setup(
+  migrate?: (doc: unknown) => unknown,
+  gate?: Promise<void>,
+  source: "builtin-closure" | "pod-bytes" = "builtin-closure",
+) {
   const root = mkdtempSync(join(tmpdir(), "pe-u8m-"));
   roots.push(root);
-  const store = fileRouteDocumentStore(root);
+  const disk = fileRouteDocumentStore(root);
+  const store = {
+    ...disk,
+    listState: async () => {
+      await gate;
+      return disk.listState!();
+    },
+  };
   const key = bindWork("tiny", null);
   const saved = {
     version: 1,
@@ -94,7 +150,7 @@ async function setup(migrate?: (doc: unknown) => unknown) {
   const path = join(root, readdirSync(root)[0]!);
   const bytes = readFileSync(path, "utf8");
   const workspace = new RouteWorkspace({ registrations: [], store });
-  const admitted = await route(migrate);
+  const admitted = await route(migrate, source);
   const registration = registerAdmittedHostRoute(admitted, workspace);
   releases.push(registration.close);
   const admission = { routeKey: admitted.data.key, fingerprint: admitted.workFingerprint };
@@ -224,4 +280,52 @@ test("missing fingerprint cannot bypass admission on an admitted Work route", as
   expect(frames).toMatchObject([
     { kind: "failure", failure: { kind: "failed", code: "WorkAdmissionRequired" } },
   ]);
+});
+test("neither snapshot nor ack acquisition passes the host migration barrier", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const migrate = vi.fn(() => ({ amount: 4, note: "done" }));
+  const f = await setup(migrate, gate);
+  const frames = f.feed(),
+    acks = f.feed("work-acks");
+  expect(frames).toEqual([]);
+  expect(acks).toEqual([]);
+  expect(migrate).not.toHaveBeenCalled();
+  release();
+  await vi.waitFor(() => expect(frames).toHaveLength(1));
+  expect(frames[0]).toMatchObject({ kind: "snapshot", value: { schemaVersion: 2, revision: 8 } });
+  expect(migrate).toHaveBeenCalledOnce();
+});
+test("verified Pod-byte admission installs its exact migration bodies in the same host workspace", async () => {
+  const f = await setup(() => ({ amount: 5, note: "Pod" }), undefined, "pod-bytes");
+  expect(f.admitted.workFingerprint).toMatch(/^pod-bytes:/);
+  const frames = f.feed();
+  await vi.waitFor(() => expect(frames).toHaveLength(1));
+  expect(frames[0]).toMatchObject({
+    kind: "snapshot",
+    value: { schemaVersion: 2, revision: 8, doc: { amount: 5, note: "Pod" } },
+  });
+});
+test("retirement during a disk census never runs the retired migration bodies", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const oldMigration = vi.fn(() => ({ amount: 1, note: "old" }));
+  const f = await setup(oldMigration, gate);
+  const nextMigration = vi.fn(() => ({ amount: 2, note: "new" }));
+  const next = await route(nextMigration, "builtin-closure", "next-build");
+  const registration = registerAdmittedHostRoute(next, f.workspace);
+  releases.push(registration.close);
+  release();
+  expect(await f.registration.ready).toMatchObject({
+    kind: "failed",
+    code: "WorkRegistrationRetired",
+  });
+  expect(await registration.ready).toBeNull();
+  expect(oldMigration).not.toHaveBeenCalled();
+  expect(nextMigration).toHaveBeenCalledOnce();
+  expect(JSON.parse(readFileSync(f.path, "utf8")).value.doc).toEqual({ amount: 2, note: "new" });
 });

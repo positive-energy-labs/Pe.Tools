@@ -205,3 +205,21 @@ test.each([
     h.stops.forEach((stop) => expect(stop).toHaveBeenCalledOnce());
   },
 );
+test("registration mismatch survives client and shell recreation on the same tab transport", () => {
+  const h = harness();
+  const failure = {
+    kind: "registration-mismatch" as const,
+    routeKey: "note",
+    expected: scope.fingerprint,
+    received: scope.fingerprint,
+  };
+  h.emit("work", { kind: "failure", key: "work", error: "reload", failure });
+  const afterRemount: WorkFeedState[] = [];
+  const end = vi.fn();
+  createWorkFeedClient(h.source)
+    .open(scope)
+    .subscribe((state) => afterRemount.push(state), end)();
+  expect(afterRemount).toEqual([{ kind: "pending" }, { kind: "failed", failure }]);
+  expect(h.order).toEqual(["work-acks", "work"]);
+  expect(end).toHaveBeenCalledOnce();
+});

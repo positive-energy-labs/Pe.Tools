@@ -17,6 +17,10 @@ import type { CausalParentId } from "../../../../packages/agent-contracts/src/ro
 
 const snapshotSchema = z.object({ revision: z.number().int().nonnegative(), doc: z.unknown() });
 import { completion, workOutcome, failedWrite } from "./work-door-observation";
+// The shared Reading transport outlives shell/target remounts in this tab. A registration
+// mismatch latches until reload; recreating a client must never retry against other bytes.
+const reloadFailures = new WeakMap<Readings, Map<string, WorkFeedFailure>>();
+
 /** Complete Work and native journal client over the existing host doors. */
 export function createWorkFeedClient(
   source: Readings = peReadings,
@@ -24,6 +28,8 @@ export function createWorkFeedClient(
   replayLimit = 256,
 ): WorkJournalDoor {
   const replay = new Map<string, AcceptedResult>();
+  const reload = reloadFailures.get(source) ?? new Map<string, WorkFeedFailure>();
+  reloadFailures.set(source, reload);
   const accepted = (id: JournalCommandId): AcceptedResult =>
     replay.get(id) ?? {
       kind: "rejected",
@@ -108,6 +114,7 @@ export function createWorkFeedClient(
           };
           const fail = (message: string, failure: WorkFeedFailure = { kind: "failed", code: "WorkFeedFailed", message }) => {
             if (closed) return;
+            if (failure.kind === "registration-mismatch") reload.set(scope.route, failure);
             emit({ kind: "failed", failure });
             stop();
             end();
@@ -151,6 +158,8 @@ export function createWorkFeedClient(
             }
           };
           emit({ kind: "pending" });
+          const mismatch = reload.get(scope.route);
+          if (mismatch) { fail(workFeedFailureMessage(mismatch), mismatch); return stop; }
           try {
             // A synchronous replay is buffered before the snapshot subscription even exists.
             stopAcks = source.subscribe({ kind: "work-acks", work: scope.key, admission }, (frame) => {

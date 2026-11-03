@@ -140,18 +140,17 @@ export class RouteWorkspace {
         return [Number(age), (doc: unknown) => body.run(doc)];
       }),
     );
+    const spec: RouteStateSpec<z.ZodType> = {
+      route: work.route,
+      title: route.data.name,
+      description: route.data.directory.summary,
+      schema: bindings.schemas[work.schema]!,
+      schemaVersion: work.version,
+      migrations,
+    };
     let remove: () => void;
     try {
-      remove = this.register({
-        spec: {
-          route: work.route,
-          title: route.data.name,
-          description: route.data.directory.summary,
-          schema: bindings.schemas[work.schema]!,
-          schemaVersion: work.version,
-          migrations,
-        },
-      });
+      remove = this.register({ spec });
     } catch (error) {
       receipt.deactivate();
       throw error;
@@ -167,10 +166,17 @@ export class RouteWorkspace {
           const saved = await this.options.store.listState();
           if (saved.truncated || saved.unreadable || saved.unindexed)
             throw Error("Work census is incomplete; migration admission cannot open feeds");
-          const spec = this.#registry.get(work.route)!.spec;
-          for (const record of saved.records) {
-            if (record.route !== work.route) continue;
-            const key = storedWorkKey(record.targetKey, record.route);
+          // A replacement may arrive while the census awaits disk. Never execute newer
+          // bindings through the older admission's barrier, or migrate after retirement.
+          if (this.#admissions.get(route.data.key) !== record)
+            return {
+              kind: "failed",
+              code: "WorkRegistrationRetired",
+              message: "Host route admission retired",
+            };
+          for (const savedRecord of saved.records) {
+            if (savedRecord.route !== work.route) continue;
+            const key = storedWorkKey(savedRecord.targetKey, savedRecord.route);
             if (!key) throw Error("Stored Work has an invalid identity");
             await this.#load(key, spec, false);
           }
