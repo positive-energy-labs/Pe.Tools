@@ -940,6 +940,14 @@ function admitHostProjection(
     )
       fail(`bodies.${id}`, "Body differs from captured exports");
   }
+  if (
+    Object.hasOwn(module, "admit") !== Object.hasOwn(captured, "admit") ||
+    module.admit !== captured.admit ||
+    (module.admit !== undefined && typeof module.admit !== "function")
+  )
+    fail("admit", "Host write admission differs from captured exports");
+  if (module.admit && (!data.work?.schema || data.work.route !== data.key))
+    fail("admit", "Only a Work owner declares write admission");
   const state = module.workState;
   const originalState = captured.workState;
   // Whole neutral exports have the same captured-function authority as named migration bodies.

@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { RouteStateSpec } from "./route-state.ts";
+import type { RouteStateSpec, RouteWriteAdmission } from "./route-state.ts";
 import type { RouteDiagnostic, RouteGraphJson } from "./route-kernel-data.ts";
 import type { RouteFingerprint } from "./route-kernel-admission.ts";
 
@@ -19,7 +19,11 @@ export interface HostAdmittedRoute {
  * Recovery reads raw persisted Work; the web salvage body derives patches from its output.
  * Dependencies (including codecs) are ordinary imports of these neutral bodies.
  * Browser slots remain in data and the closure but are never loaded or fabricated here. */
-export interface HostRouteModule {
+export interface HostWorkRegistration {
+  spec: RouteStateSpec<z.ZodType>;
+  admit?: RouteWriteAdmission;
+}
+export interface HostRouteModule extends Omit<HostWorkRegistration, "spec"> {
   readonly data: RouteGraphJson;
   readonly schemas: Readonly<Record<string, z.ZodType>>;
   /** Complete neutral owner export. No hook is reconstructed from a field allowlist. */
@@ -78,6 +82,7 @@ const hostModuleSchema = hostZ.strictObject({
     hostZ.string(),
     hostZ.custom<z.ZodType>((v) => v instanceof hostZ.ZodType),
   ),
+  admit: hostZ.custom<RouteWriteAdmission>((v) => typeof v === "function").optional(),
   workState: hostZ
     .custom<RouteStateSpec<z.ZodType>>((v) => workStateSchema.safeParse(v).success)
     .optional(),
@@ -97,6 +102,7 @@ export function captureHostModule(input: unknown): HostRouteModule {
   return Object.freeze({
     data: structuredClone(value.data),
     schemas: Object.freeze({ ...value.schemas }),
+    ...(Object.hasOwn(value, "admit") ? { admit: value.admit } : {}),
     ...(value.workState
       ? {
           workState: Object.freeze(

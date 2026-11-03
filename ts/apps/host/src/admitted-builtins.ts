@@ -1,3 +1,6 @@
+import { createRouteRegistrations } from "../../../packages/mcps/src/pea/routes.ts";
+import { composeHostRouteRegistration } from "./host-route-registration.ts";
+import type { HostWorkRegistration } from "../../../packages/agent-contracts/src/host-route-admission.ts";
 import { Context, Effect, Layer, Schema } from "effect";
 import type { RouteWorkspace } from "@pe/runtime";
 import { admittedBuiltinKeys } from "../../../packages/agent-contracts/src/admitted-builtin-keys.ts";
@@ -33,6 +36,7 @@ export class AdmittedBuiltins extends Context.Service<
 export function admittedBuiltinsLayer(
   workspace: RouteWorkspace,
   inventory: readonly BuiltinEnrollment[] = builtinEnrollments,
+  registrations: readonly HostWorkRegistration[] = createRouteRegistrations({ admittedKeys: [] }),
 ) {
   return Layer.effect(
     AdmittedBuiltins,
@@ -69,7 +73,7 @@ export function admittedBuiltinsLayer(
         });
         if (closed) return yield* Effect.fail(failed(key, "Enrollment retired"));
         const module = yield* Effect.try({
-          try: () => captureHostModule(loaded),
+          try: () => captureHostModule(composeHostRouteRegistration(loaded, registrations)),
           catch: (reason) => failed(key, reason),
         });
         const ownerKey = module.data.work?.route;

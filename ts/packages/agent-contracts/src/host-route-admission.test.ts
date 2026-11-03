@@ -171,3 +171,26 @@ test("complete Work spec is required and every host-run export is captured", asy
       captureHostModule({ ...module, workState: { ...workState, [key]: "not executable" } }),
     ).toThrow();
 });
+
+test("host write admission is callable, owner-only and captured before prepare yields", async () => {
+  const admit = async () => null;
+  const module = { ...neutral, admit };
+  const port = await prepare(module);
+  expect(port.admitHost(module).ok).toBe(true);
+  for (const candidate of [
+    { ...neutral },
+    { ...module, admit: undefined },
+    { ...module, admit: async () => null },
+    { ...module, admit: "browser callback" as never },
+  ])
+    expect(port.admitHost(candidate).ok).toBe(false);
+  expect(() => captureHostModule({ ...neutral, admit: "not callable" })).toThrow();
+  const { work: _work, ...data } = neutral.data;
+  const noWork = {
+    ...module,
+    data: { ...data, capabilities: [] },
+    workState: undefined,
+    bodies: {},
+  };
+  expect((await prepare(noWork)).admitHost(noWork).ok).toBe(false);
+});

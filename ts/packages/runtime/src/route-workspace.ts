@@ -2,7 +2,10 @@ import {
   captureAdmittedHostBindings,
   type AdmittedRoute,
 } from "../../agent-contracts/src/route-module.ts";
-import type { HostAdmittedRoute } from "../../agent-contracts/src/host-route-admission.ts";
+import type {
+  HostAdmittedRoute,
+  HostWorkRegistration,
+} from "../../agent-contracts/src/host-route-admission.ts";
 import type { RouteFingerprint } from "../../agent-contracts/src/route-kernel-admission.ts";
 import type {
   WorkAdmission,
@@ -33,12 +36,9 @@ import {
   type WorkWriteAck,
   workWriteAckSchema,
 } from "@pe/agent-contracts";
-import type { RouteStateSpec, RouteWriteAdmission } from "@pe/agent-contracts";
+import type { RouteStateSpec } from "@pe/agent-contracts";
 
-export interface RouteWorkspaceRegistration {
-  spec: RouteStateSpec<z.ZodType>;
-  admit?: RouteWriteAdmission;
-}
+export interface RouteWorkspaceRegistration extends HostWorkRegistration {}
 
 export type RouteWorkspaceEvent = {
   type: "route_workspace";
@@ -164,7 +164,10 @@ export class RouteWorkspace {
           };
     let remove: () => void;
     try {
-      remove = this.register({ spec });
+      remove = this.register({
+        spec,
+        ...("admit" in bindings ? { admit: bindings.admit } : {}),
+      });
     } catch (error) {
       receipt.deactivate();
       throw error;

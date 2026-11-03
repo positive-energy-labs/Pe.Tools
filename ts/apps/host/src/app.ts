@@ -1,3 +1,4 @@
+import { admittedBuiltinKeys } from "../../../packages/agent-contracts/src/admitted-builtin-keys.ts";
 import { Spawner } from "./harness/spawner.ts";
 import { currentMachine } from "./machine.ts";
 import { sdkSession } from "./sdk-session.ts";
@@ -255,9 +256,11 @@ export function makeHttpLive(options: HttpLiveOptions) {
     const address = nodeServer.address();
     return address && typeof address !== "string" ? address.port : options.port;
   };
-  const registrations = (options.routeRegistrations ?? createRouteRegistrations)({
+  const allRegistrations = (options.routeRegistrations ?? createRouteRegistrations)({
+    admittedKeys: [],
     loadedFamilies: (...args) => hostLoadedFamilies(`http://127.0.0.1:${port()}`)(...args),
   });
+  const registrations = allRegistrations.filter((r) => !admittedBuiltinKeys.includes(r.spec.route));
   const work: HostWork = {
     registrations,
     workspace: new RouteWorkspace({
@@ -346,7 +349,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       Layer.provide(ReceiptsLive),
       Layer.provide(NodeServices.layer),
       Layer.provide(ReceiptLifetime),
-      Layer.provide(admittedBuiltinsLayer(work.workspace)),
+      Layer.provide(admittedBuiltinsLayer(work.workspace, undefined, allRegistrations)),
     );
   }
 
@@ -378,6 +381,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provide(ReceiptsLive),
     Layer.provide(NodeServices.layer),
     Layer.provide(ReceiptLifetime),
-    Layer.provide(admittedBuiltinsLayer(work.workspace)),
+    Layer.provide(admittedBuiltinsLayer(work.workspace, undefined, allRegistrations)),
   );
 }
