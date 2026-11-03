@@ -1,3 +1,4 @@
+import { createWorkScopeAcceptance, type WorkScopeAcceptance } from "./work-scope-acceptance";
 import { reviewChanges } from "./review-value";
 import { z } from "zod";
 import {
@@ -73,6 +74,7 @@ export interface VerbSnapshot {
   readonly salvage?: readonly RouteStatePatch[] | null;
 }
 export interface VerbContext<C extends Caller = Caller> {
+  readonly acceptance?: WorkScopeAcceptance;
   readonly fixture?: { name: string; queries: Readonly<Record<string, unknown>> };
   readonly caller: C;
   readonly receipt?: (receipt: Exclude<HostReceipt, { state: "detached" }>, press: string) => void;
@@ -713,6 +715,7 @@ async function invokeCore<C extends Caller>(
   const finish = (result: Terminal) => {
     if (terminal) return "refusal" in terminal ? terminal.refusal : null;
     terminal = result;
+    localAcceptance?.close();
     if (session) session.active = false;
     if (press) reviews.get(ctx)?.delete(press);
     ctx.changed?.(result.state, result.press);
@@ -722,14 +725,24 @@ async function invokeCore<C extends Caller>(
   // The write acknowledgement is authoritative before its Reading reaches React.
   // TODO: docs/features/routes/LEDGER.md#s10-families-live-drive Verify Families preview, consent and Revit readback in the fresh detached-local drive.
   // TODO: F3a: close browser review/commit proof after transient preparation-basis refusals and shared-tree HMR; .artifacts/accept/u2-f3a/RESULTS.md records the boundary.
+  const localAcceptance = ctx.acceptance
+    ? null
+    : createWorkScopeAcceptance(() => {
+        const seen = ctx.snapshot();
+        return {
+          target: seen.target,
+          work: seen.work?.handle.key ?? null,
+          generation: seen.generation,
+        };
+      });
+  const acceptance = ctx.acceptance ?? localAcceptance!;
+  const started = acceptance.capture();
   let acknowledged: VerbSnapshot | null = null;
   const snapshotNow = (): VerbSnapshot => {
     const seen = ctx.snapshot();
     return acknowledged?.work &&
       seen.work &&
-      seen.generation === acknowledged.generation &&
-      equal(seen.target, acknowledged.target) &&
-      equal(seen.work.handle.key, acknowledged.work.handle.key) &&
+      acceptance.current(started) &&
       seen.work.handle.revision < acknowledged.work.handle.revision
       ? { ...seen, work: acknowledged.work }
       : seen;
@@ -753,11 +766,7 @@ async function invokeCore<C extends Caller>(
           for (let step = 0; step < (steps?.length ?? 1); step++) {
             if (terminal) return "refusal" in terminal ? terminal.refusal : null;
             let snapshot = copy(snapshotNow());
-            if (
-              snapshot.generation !== initialSnapshot.generation ||
-              !equal(snapshot.target, initialSnapshot.target) ||
-              !equal(snapshot.work?.handle.key, initialSnapshot.work?.handle.key)
-            )
+            if (!acceptance.current(started))
               return finish(
                 failure("stale", "The Target or Work changed during the sequence", press),
               );
@@ -799,7 +808,7 @@ async function invokeCore<C extends Caller>(
                   doc: {
                     ...(snapshot.work.doc as Record<string, unknown>),
                     writeIntent: {
-                      ...((snapshot.work.doc as { writeIntent?: object }).writeIntent ?? {}),
+                      ...(snapshot.work.doc as { writeIntent?: object }).writeIntent,
                       [binding.command]: { edit: { value } },
                     },
                   },
@@ -851,11 +860,7 @@ async function invokeCore<C extends Caller>(
               if (page && ctx.landReview) {
                 ctx.landReview(copy(page));
                 const landed = copy(snapshotNow());
-                if (
-                  snapshot.generation !== landed.generation ||
-                  !equal(snapshot.target, landed.target) ||
-                  !equal(snapshot.work, landed.work)
-                )
+                if (!acceptance.current(started) || !equal(snapshot.work, landed.work))
                   return finish(
                     failure(
                       "stale",
@@ -987,13 +992,7 @@ async function invokeCore<C extends Caller>(
                 );
               }
               // A result for a Target or Work the person has left must not select anything now.
-              const after = snapshotNow();
-              if (
-                current.generation !== after.generation ||
-                !equal(current.target, after.target) ||
-                (current.work ? workKey(current.work.handle.key) : null) !==
-                  (after.work ? workKey(after.work.handle.key) : null)
-              )
+              if (!acceptance.current(started))
                 return finish(
                   failure("stale", "The Target or Work changed while the read ran", press),
                 );
@@ -1007,10 +1006,10 @@ async function invokeCore<C extends Caller>(
               });
               const patches = binding.queryPatches?.(fresh, value) ?? [];
               if (!patches.length) return finish({ state: "done", kind: "query", press, receipt });
-              // The generation fence above already holds, so the Work is the one the read started on.
+              // The scope token above is still current, so the Work is the one the read started on.
               // The write carries the revision the read OBSERVED: a human edit that landed while the
               // read ran makes this a stale refusal, never an overwrite (S0a envelope boundary).
-              const written = await ctx.write(after.work!.handle.key, {
+              const written = await ctx.write(current.work!.handle.key, {
                 patches: structuredClone(patches) as RouteStatePatch[],
                 expectedRevision:
                   binding.queryRevision?.(fresh, value) ?? current.work!.handle.revision,
@@ -1061,11 +1060,8 @@ async function invokeCore<C extends Caller>(
               const receipt =
                 (await recoverAction(press, raw.key, raw.input, current.target, "", wait)) ??
                 (await submitAction({ id: press, ...raw, target: current.target }, "", wait));
-              const after = snapshotNow();
               const page =
-                binding.receiptPage &&
-                current.generation === after.generation &&
-                equal(current.target, after.target)
+                binding.receiptPage && acceptance.current(started)
                   ? binding.receiptPage(receipt)
                   : undefined;
               if (receipt.state !== "succeeded")
@@ -1091,11 +1087,7 @@ async function invokeCore<C extends Caller>(
                 binding.intent(fresh, input, ticket),
               ) as Record<string, unknown>;
               const value = await runQuery(binding.rpc, request, current);
-              const after = snapshotNow();
-              const sameScope =
-                current.generation === after.generation &&
-                equal(current.target, after.target) &&
-                equal(current.work?.handle.key, after.work?.handle.key);
+              const sameScope = acceptance.current(started);
               return finish({
                 state: "done",
                 kind: "rpc",
@@ -1131,11 +1123,7 @@ async function invokeCore<C extends Caller>(
                 ctx.receipt?.(receipt, press);
                 continue;
               }
-              const after = snapshotNow();
-              const sameScope =
-                current.generation === after.generation &&
-                equal(current.target, after.target) &&
-                equal(current.work?.handle.key, after.work?.handle.key);
+              const sameScope = acceptance.current(started);
               return finish({
                 state: "done",
                 kind: "command",

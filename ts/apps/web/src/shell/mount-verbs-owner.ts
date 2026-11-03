@@ -1,24 +1,60 @@
-import { canonicalRouteInput, commands, SALVAGE_VERB, salvageVerb, START_FRESH_VERB, startFreshVerb, workKey, type RouteGraph, type WorkKey, type VerbDecl } from "@pe/agent-contracts";
+import {
+  canonicalRouteInput,
+  commands,
+  SALVAGE_VERB,
+  salvageVerb,
+  START_FRESH_VERB,
+  startFreshVerb,
+  workKey,
+  type RouteGraph,
+  type WorkKey,
+  type VerbDecl,
+} from "@pe/agent-contracts";
 
 import { causeRefusal, refuse, writeRefusal } from "../route/refusal";
 import { type ReadingAttempt } from "./readings";
 
 import { kernelCellVerbs } from "./verbs-cells";
-import { bind, commit, invoke, recoveryOffered, recoveryVerb, type VerbCompletion, type VerbDelivery, completeVerb, type ReviewTicket, type VerbContext, type VerbSubject } from "./verbs";
-import { CONFLICT_REFUSAL, type MountAdapters, type MountBinding, type BindingScope } from "./mount-contracts";
+import {
+  bind,
+  commit,
+  invoke,
+  recoveryOffered,
+  recoveryVerb,
+  type VerbCompletion,
+  type VerbDelivery,
+  completeVerb,
+  type ReviewTicket,
+  type VerbContext,
+  type VerbSubject,
+} from "./verbs";
+import {
+  CONFLICT_REFUSAL,
+  type MountAdapters,
+  type MountBinding,
+  type BindingScope,
+} from "./mount-contracts";
 import type { MountPage } from "./mount-page-owner";
 import type { MountTarget } from "./mount-target-owner";
 import type { MountReadings } from "./mount-readings-owner";
 import type { MountWork } from "./mount-work-owner";
 import type { MountTimeline } from "./mount-timeline-owner";
 /** Owns verb binding, dispatch, reviews, controls and completion delivery. */
-export function createMountVerbs<P,W>(graph: RouteGraph<P,W>, adapters: MountAdapters<P,W>, target: MountTarget<W>, page: MountPage<P,W>, readings: MountReadings<P,W>, work: MountWork<P,W>, history: MountTimeline<W>) {
+export function createMountVerbs<P, W>(
+  graph: RouteGraph<P, W>,
+  adapters: MountAdapters<P, W>,
+  target: MountTarget<W>,
+  page: MountPage<P, W>,
+  readings: MountReadings<P, W>,
+  work: MountWork<P, W>,
+  history: MountTimeline<W>,
+) {
   const { timeline } = history;
-// One executable recovery for every mount; its declaration is the contract's, so Pea reads the same verb.
-const { kind: _kind, review: _review, ...freshDeclaration } = startFreshVerb;
-const startFresh = recoveryVerb("start-fresh", freshDeclaration);
-const { kind: _salvageKind, review: _salvageReview, ...salvageDeclaration } = salvageVerb;
-const salvage = recoveryVerb("salvage", salvageDeclaration);
+  // One executable recovery for every mount; its declaration is the contract's, so Pea reads the same verb.
+  const { kind: _kind, review: _review, ...freshDeclaration } = startFreshVerb;
+  const startFresh = recoveryVerb("start-fresh", freshDeclaration);
+  const { kind: _salvageKind, review: _salvageReview, ...salvageDeclaration } = salvageVerb;
+  const salvage = recoveryVerb("salvage", salvageDeclaration);
   // Validation ran above: cell verb ids cannot collide with graph verbs, so a plain spread is safe.
   const kernel = kernelCellVerbs(graph);
   const verbs: Readonly<Record<string, VerbDecl>> = {
@@ -47,9 +83,13 @@ const salvage = recoveryVerb("salvage", salvageDeclaration);
   const context: VerbContext<"human"> = {
     fixture: adapters.fixture,
     caller: "human",
+    acceptance: target.acceptance,
     receipt: (receipt, press) => {
       history.acceptReceipt(receipt, dispatches.get(press)?.key ?? null, press, false);
-      history.sequenceReceipts.set(press, [...(history.sequenceReceipts.get(press) ?? []), receipt]);
+      history.sequenceReceipts.set(press, [
+        ...(history.sequenceReceipts.get(press) ?? []),
+        receipt,
+      ]);
     },
     page: () => page.view.read().page as Record<string, unknown>,
     landReview: (patch) => page.view.setPage(patch as Partial<P>),
@@ -63,7 +103,6 @@ const salvage = recoveryVerb("salvage", salvageDeclaration);
       work: work.scope.work,
       unreadable: work.scope.unreadable ?? null,
       salvage: work.salvagePatches(),
-      generation: target.generation,
       basis: {
         pageEpoch: page.view.read().epoch,
         // Only the readings this verb declares; see VerbContext.snapshot.
@@ -174,7 +213,8 @@ const salvage = recoveryVerb("salvage", salvageDeclaration);
       reviews.delete(id);
       if (result.press) {
         const dispatch = dispatches.get(result.press);
-        if (dispatch && "page" in result && result.page) page.view.setPage(result.page as Partial<P>);
+        if (dispatch && "page" in result && result.page)
+          page.view.setPage(result.page as Partial<P>);
         if (
           dispatch &&
           result.state === "done" &&
@@ -316,7 +356,7 @@ const salvage = recoveryVerb("salvage", salvageDeclaration);
       if (staged.state !== "done") return staged;
       if (staged.kind !== "work") throw Error("Staging returned no Work acknowledgement");
       const acknowledgement = staged.acknowledgement;
-      const started = target.generation;
+      const started = target.acceptance.capture();
       // The host acknowledgement can beat the Work subscription. Never bind the next command to
       // the old revision, or invent a second local Work document from the submitted patches.
       const observed = await new Promise<boolean>((resolve) => {
@@ -326,7 +366,7 @@ const salvage = recoveryVerb("salvage", salvageDeclaration);
           resolve(ok);
         };
         const check = () => {
-          if (target.disposed || target.generation !== started) return finish(false);
+          if (target.disposed || !target.acceptance.current(started)) return finish(false);
           if (
             work.scope.work &&
             workKey(work.scope.work.handle.key) === workKey(acknowledgement.key) &&
@@ -376,7 +416,9 @@ const salvage = recoveryVerb("salvage", salvageDeclaration);
       if (review?.ticket !== ticket) return Promise.resolve(undefined);
       return run(id, { subject: ticket.subject, args: ticket.input }, review.origin);
     },
-    context, dispatches, cancelReviews,
+    context,
+    dispatches,
+    cancelReviews,
     busy: () => page.registry.get(page.base.busy),
 
     paneRows,
@@ -420,7 +462,8 @@ const salvage = recoveryVerb("salvage", salvageDeclaration);
             press,
           });
           if (result.ok) {
-            if (edit.request.press) work.writers.get(workKey(edit.key))?.discard(edit.request.press);
+            if (edit.request.press)
+              work.writers.get(workKey(edit.key))?.discard(edit.request.press);
             if (work.rejected === edit) work.rejected = null;
             consume(edit.verb, {
               state: "done",
@@ -450,9 +493,6 @@ const salvage = recoveryVerb("salvage", salvageDeclaration);
       if (Object.is(paneRows.get(pane), row)) return;
       paneRows.set(pane, row);
       target.notify();
-    },
-    setAvailable(check: () => boolean) {
-      target.setAvailable(check);
     },
     binding,
     control(id: string, row?: unknown, place = "stage") {
@@ -500,10 +540,14 @@ const salvage = recoveryVerb("salvage", salvageDeclaration);
     },
     async checkpoint() {
       if (!adapters.checkpoint || target.disposed || !target.available()) return;
-      const frozen = structuredClone({ scope: work.scope, page: page.view.read().page, readings: readings.basis() });
+      const frozen = structuredClone({
+        scope: work.scope,
+        page: page.view.read().page,
+        readings: readings.basis(),
+      });
       const fact = await adapters.checkpoint(frozen);
       if (!target.disposed) timeline.append({ ...fact, kind: "checkpoint" });
     },
   };
 }
-export type MountVerbs<P,W> = ReturnType<typeof createMountVerbs<P,W>>;
+export type MountVerbs<P, W> = ReturnType<typeof createMountVerbs<P, W>>;

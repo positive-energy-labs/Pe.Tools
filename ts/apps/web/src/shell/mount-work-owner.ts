@@ -1,4 +1,12 @@
-import { workKey, type RouteGraph, type RouteStatePatch, type WorkKey, type WorkWrite, type WorkWriteAck } from "@pe/agent-contracts";
+import type { ScopeToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
+import {
+  workKey,
+  type RouteGraph,
+  type RouteStatePatch,
+  type WorkKey,
+  type WorkWrite,
+  type WorkWriteAck,
+} from "@pe/agent-contracts";
 
 import type { WorkJournal } from "./journal";
 import { acquireWorkWriter, writeLabel, type WorkWriter } from "./work-writes";
@@ -9,10 +17,17 @@ import type { MountPage } from "./mount-page-owner";
 import type { MountTarget } from "./mount-target-owner";
 import type { MountReadings } from "./mount-readings-owner";
 /** Owns Work writers, conflicts, rejected edits and revision-bound journal descriptions. */
-export function createMountWork<P,W>(graph: RouteGraph<P,W>, adapters: MountAdapters<P,W>, target: MountTarget<W>, page: MountPage<P,W>, readings: MountReadings<P,W>, ports: {
-  snapshot(): ReturnType<VerbContext["snapshot"]>;
-  dispatch(press: string): { verb: string; input: MountBinding | null } | undefined;
-}) {
+export function createMountWork<P, W>(
+  graph: RouteGraph<P, W>,
+  adapters: MountAdapters<P, W>,
+  target: MountTarget<W>,
+  page: MountPage<P, W>,
+  readings: MountReadings<P, W>,
+  ports: {
+    snapshot(): ReturnType<VerbContext["snapshot"]>;
+    dispatch(press: string): { verb: string; input: MountBinding | null } | undefined;
+  },
+) {
   // One Work per mount at a time: the stale write's key and the revision it was refused against.
   let conflict: { work: string; revision: number } | null = null;
   let rejected: { key: WorkKey; request: WorkWrite; verb: string; input: MountBinding } | null =
@@ -99,7 +114,7 @@ export function createMountWork<P,W>(graph: RouteGraph<P,W>, adapters: MountAdap
             readings: history.readings ?? [],
             complete: (after) => history.describe(before, input, after),
           };
-          const started = target.generation;
+          const started = target.acceptance.capture();
           const epoch = page.view.read().epoch;
           return {
             entry: pending.entry,
@@ -110,7 +125,9 @@ export function createMountWork<P,W>(graph: RouteGraph<P,W>, adapters: MountAdap
         }),
         writer.subscribe(() => {
           if (target.raw.work && workKey(target.raw.work.handle.key) === id)
-            flag(writer.conflict() ? { work: id, revision: target.raw.work.handle.revision } : null);
+            flag(
+              writer.conflict() ? { work: id, revision: target.raw.work.handle.revision } : null,
+            );
           target.notify();
         }),
       );
@@ -133,7 +150,7 @@ export function createMountWork<P,W>(graph: RouteGraph<P,W>, adapters: MountAdap
     {
       key: WorkKey;
       revision: number;
-      generation: number;
+      token: ScopeToken;
       epoch: number;
       history: PendingWorkHistory;
     }
@@ -141,7 +158,7 @@ export function createMountWork<P,W>(graph: RouteGraph<P,W>, adapters: MountAdap
   const completeHistory = () => {
     for (const [press, pending] of historyCompletions) {
       if (
-        pending.generation !== target.generation ||
+        !target.acceptance.current(pending.token) ||
         pending.epoch !== page.view.read().epoch ||
         (scope.work && scope.work.handle.revision > pending.revision)
       ) {
@@ -170,7 +187,7 @@ export function createMountWork<P,W>(graph: RouteGraph<P,W>, adapters: MountAdap
     key: WorkKey,
     ack: WorkWriteAck,
     history: PendingWorkHistory,
-    started: number,
+    started: ScopeToken,
     epoch: number,
   ) => {
     if (!ack.press) return;
@@ -180,7 +197,7 @@ export function createMountWork<P,W>(graph: RouteGraph<P,W>, adapters: MountAdap
       historyCompletions.set(ack.press, {
         key,
         revision: ack.revision,
-        generation: started,
+        token: started,
         epoch,
         history,
       });
@@ -194,7 +211,7 @@ export function createMountWork<P,W>(graph: RouteGraph<P,W>, adapters: MountAdap
     history?: PendingWorkHistory,
     sequential = false,
   ) => {
-    const started = target.generation;
+    const started = target.acceptance.capture();
     const epoch = page.view.read().epoch;
     const invocation = request.press ? ports.dispatch(request.press) : undefined;
     journalFor(key);
@@ -223,29 +240,60 @@ export function createMountWork<P,W>(graph: RouteGraph<P,W>, adapters: MountAdap
     return result;
   };
   return {
-    get scope() { return scope; }, get conflict() { return conflict; },
-    get rejected() { return rejected; }, set rejected(value) { rejected = value; },
-    journals, writers, journalFor, write, salvagePatches, completeHistory,
+    get scope() {
+      return scope;
+    },
+    get conflict() {
+      return conflict;
+    },
+    get rejected() {
+      return rejected;
+    },
+    set rejected(value) {
+      rejected = value;
+    },
+    journals,
+    writers,
+    journalFor,
+    write,
+    salvagePatches,
+    completeHistory,
     journalRefusal: () => journalRefusal,
-    clearRefusal() { journalRefusal = null; },
     present,
     update() {
       const seen = target.raw.work;
-      if (conflict && (!seen || workKey(seen.handle.key) !== conflict.work || seen.handle.revision !== conflict.revision)) flag(null);
+      if (
+        conflict &&
+        (!seen ||
+          workKey(seen.handle.key) !== conflict.work ||
+          seen.handle.revision !== conflict.revision)
+      )
+        flag(null);
       else present();
-      if (scope.work) { journalFor(scope.work.handle.key); writers.get(workKey(scope.work.handle.key))!.observe(scope); }
+      if (scope.work) {
+        journalFor(scope.work.handle.key);
+        writers.get(workKey(scope.work.handle.key))!.observe(scope);
+      }
     },
-    connect() { for (const journal of journals.values()) journalFor(journal.key); },
-    disconnect() { for (const release of deltas.values()) release(); deltas.clear(); },
+    connect() {
+      for (const journal of journals.values()) journalFor(journal.key);
+    },
+    disconnect() {
+      for (const release of deltas.values()) release();
+      deltas.clear();
+    },
     async restore(this: void, direction: "undo" | "redo", press?: string) {
       if (!scope.work || target.disposed || !target.available()) return null;
       const key = structuredClone(scope.work.handle.key);
       const result = await journalFor(key)[direction]((request) => write(key, request), press);
       journalRefusal = result.ok ? null : result.message;
-      target.notify(); return result;
+      target.notify();
+      return result;
     },
-    dispose() { historyCompletions.clear(); for (const release of releaseJournals.reverse()) release(); },
+    dispose() {
+      historyCompletions.clear();
+      for (const release of releaseJournals.reverse()) release();
+    },
   };
 }
-export type MountWork<P,W> = ReturnType<typeof createMountWork<P,W>>;
-
+export type MountWork<P, W> = ReturnType<typeof createMountWork<P, W>>;
