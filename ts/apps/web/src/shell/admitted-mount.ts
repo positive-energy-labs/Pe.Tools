@@ -99,6 +99,19 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "migration",
 ]);
 
+export class ReviewRefusal extends Error {
+  readonly kind = "refused";
+  constructor(readonly reason: "review-stale" | "present-threw" | "present-invalid") {
+    super(reason === "review-stale" ? "Review is stale; prepare it again" : `Review refused: ${reason}`);
+    this.name = "ReviewRefusal";
+  }
+}
+type PresentationEvidence = Readonly<{
+  page: Readonly<Record<string, unknown>>;
+  work: Readonly<Record<string, unknown>>;
+  readings: Readonly<Record<string, ReadingSnapshot<unknown>>>;
+}>;
+
 /** Application services are installed once. Routes supply only admission and location. */
 export function createRouteShell(services: KernelServices) {
   const liveDoor = services.work ?? createWorkFeedClient();
@@ -559,6 +572,7 @@ export function createRouteShell(services: KernelServices) {
             for (const [id, pending] of preparing) {
               if (!owner.current(pending.invocation)) {
                 preparing.delete(id);
+                reviewRefusals.set(id, new ReviewRefusal("review-stale"));
                 continue;
               }
               const result = readings[pending.reading];
@@ -570,7 +584,11 @@ export function createRouteShell(services: KernelServices) {
               );
               if (canonicalEnvironmentInput(handle) !== pending.handle)
                 throw Error("Preview sealed a different Work handle");
-              const presentation = present(id, sealed);
+              const presentation = present(id, sealed, pending.evidence);
+              if (!owner.current(pending.invocation)) {
+                reviewRefusals.set(id, new ReviewRefusal("review-stale"));
+                continue;
+              }
               reviews.set(id, {
                 presentation,
                 invocation: pending.invocation,
@@ -590,6 +608,7 @@ export function createRouteShell(services: KernelServices) {
           invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
           reading: string;
           handle: string;
+          evidence: PresentationEvidence;
           send(): unknown;
         }
       >();
@@ -602,18 +621,37 @@ export function createRouteShell(services: KernelServices) {
           presentation?: { sentence: string; rows: readonly string[] };
         }
       >();
-      const present = (id: string, result: unknown) => {
+      const reviewRefusals = new Map<string, ReviewRefusal>();
+      let presenting = false;
+      const present = (id: string, result: unknown, evidence: PresentationEvidence) => {
         const declaration = route.data.verbs[id]!;
         if (!declaration.present) return undefined;
+        let value: unknown;
+        presenting = true;
+        try {
+          value = bindings.bodies[declaration.present]!.run(freezePage(result), evidence);
+        } catch {
+          const refusal = new ReviewRefusal("present-threw");
+          reviewRefusals.set(id, refusal);
+          throw refusal;
+        } finally {
+          presenting = false;
+        }
         const parsed = z
           .union([z.string(), z.strictObject({ sentence: z.string(), rows: z.array(z.string()) })])
-          .parse(bindings.bodies[declaration.present]!.run(freezePage(result)));
-        return freezePage(typeof parsed === "string" ? { sentence: parsed, rows: [] } : parsed);
+          .safeParse(value);
+        if (!parsed.success) {
+          const refusal = new ReviewRefusal("present-invalid");
+          reviewRefusals.set(id, refusal);
+          throw refusal;
+        }
+        return freezePage(typeof parsed.data === "string" ? { sentence: parsed.data, rows: [] } : parsed.data);
       };
       const project = (keys: readonly string[], value: Readonly<Record<string, unknown>>) =>
         freezePage(Object.fromEntries(keys.map((key) => [key, value[key]])));
       const action = () => {
         if (drawing) throw Error("Admitted action cannot run during render");
+        if (presenting) throw Error("Admitted action cannot run during presentation");
         if (closed) throw Error("Mount closed");
       };
       const place = (
@@ -651,6 +689,7 @@ export function createRouteShell(services: KernelServices) {
       const invoke = (id: string, input: unknown, basis?: InvocationToken) => {
         action();
         resolve();
+        reviewRefusals.delete(id);
         const declaration = route.data.verbs[id];
         if (!declaration) throw Error(`Unknown verb: ${id}`);
         const parsed = bindings.schemas[declaration.input]!.parse(input);
@@ -831,13 +870,19 @@ export function createRouteShell(services: KernelServices) {
             previewEntry.input.parse(intent);
             const readingId = candidates[0]![0];
             reviews.delete(id);
+            const captured = context();
+            // Display evidence labels only. owner.current enforces freshness; the host seal binds the write.
+            const evidence = freezePage(structuredClone({
+              page: captured.page, work: captured.work, readings: captured.readings,
+            }));
             preparing.set(id, {
+              evidence,
               invocation,
               reading: readingId,
               handle: canonicalEnvironmentInput(intent.work),
               send: () => {
                 if (!work.ready() || !owner.current(invocation))
-                  throw Error("Review is stale; prepare it again");
+                  throw new ReviewRefusal("review-stale");
                 return send();
               },
             });
@@ -910,7 +955,7 @@ export function createRouteShell(services: KernelServices) {
           };
         }
         const dispatch = () => {
-          if (!owner.current(invocation)) throw Error("Review is stale; prepare it again");
+          if (!owner.current(invocation)) throw new ReviewRefusal("review-stale");
           return send();
         };
         if (declaration.review === "shown") {
@@ -1145,14 +1190,20 @@ export function createRouteShell(services: KernelServices) {
         initialRestore: transport.initial,
         review: (id: string) => {
           const review = reviews.get(id);
-          return review
-            ? {
-                preview: review.preview,
-                sentence: review.presentation?.sentence ?? null,
-                rows: review.presentation?.rows ?? reviewChanges(review.preview),
-                stale: (!!route.data.work && !work.ready()) || !owner.current(review.invocation),
-              }
-            : null;
+          if (!review) return null;
+          const stale = (!!route.data.work && !work.ready()) || !owner.current(review.invocation);
+          return {
+            preview: stale ? undefined : review.preview,
+            sentence: stale ? null : review.presentation?.sentence ?? null,
+            rows: stale ? [] : review.presentation?.rows ?? reviewChanges(review.preview),
+            stale,
+          };
+        },
+        reviewRefusal: (id: string) => {
+          const review = reviews.get(id);
+          return review && ((!!route.data.work && !work.ready()) || !owner.current(review.invocation))
+            ? new ReviewRefusal("review-stale")
+            : reviewRefusals.get(id) ?? null;
         },
         reviewIds: () => Array.from(reviews.keys()),
         cancelReview: (id: string) => {
@@ -1160,11 +1211,12 @@ export function createRouteShell(services: KernelServices) {
           if (invocation) owner.retire(invocation.token);
           preparing.delete(id);
           reviews.delete(id);
+          reviewRefusals.delete(id);
           schedule();
         },
         confirm: (id: string) => {
           const review = reviews.get(id);
-          if (!review) throw Error("No review to confirm");
+          if (!review) throw reviewRefusals.get(id) ?? Error("No review to confirm");
           const result = review.send();
           reviews.delete(id);
           notify();
