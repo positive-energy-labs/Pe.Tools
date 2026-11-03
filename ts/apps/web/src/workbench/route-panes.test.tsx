@@ -739,3 +739,11 @@ test("after first-Send promotion and a chat pick, a Pea open keeps one lease and
     threads.pop();
   }
 });
+
+test("an explicit picture link opens tools ahead of remembered conversation layout", async () => {
+  await mount("/ducts?system=S1&picture=model");
+  await waitFor(() => expect(tools().closest(".hidden")).toBeNull());
+  expect(screen.queryByRole("button", { name: "Expand tools" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Expand pea" })).toBeTruthy();
+  expect(bodyCurrent?.()).toBe(true);
+});
