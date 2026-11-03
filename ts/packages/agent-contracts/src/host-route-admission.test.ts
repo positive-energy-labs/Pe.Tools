@@ -8,8 +8,9 @@ import {
   createHostAdmittedRouteRegistry,
 } from "./route-module.ts";
 import type { BuiltinClosure } from "./route-module.ts";
+import { captureHostModule } from "./host-route-admission.ts";
 import type { HostRouteModule } from "./host-route-admission.ts";
-const neutral: HostRouteModule = {
+const base: HostRouteModule = {
   data: {
     ...builtinData,
     work: { route: builtinData.key, schema: "work", version: 2, migrations: { "1": "upgrade" } },
@@ -22,6 +23,17 @@ const neutral: HostRouteModule = {
       source: { module: "neutral.ts", export: "upgrade" },
       run: () => ({ amount: 1 }),
     },
+  },
+};
+const neutral: HostRouteModule = {
+  ...base,
+  workState: {
+    route: base.data.key,
+    title: base.data.name,
+    description: base.data.directory.summary,
+    schema: base.schemas.work!,
+    schemaVersion: 2,
+    migrations: { 1: base.bodies.upgrade!.run },
   },
 };
 async function prepare(module = neutral, data = module.data) {
@@ -97,8 +109,12 @@ test("host recovery requires the declared slot and exact captured extraction", a
       },
     },
   };
-  const port = await prepare(recovery);
-  expect(port.admitHost(recovery).ok).toBe(true);
+  const complete = {
+    ...recovery,
+    workState: { ...neutral.workState!, salvage: recovery.bodies.carry!.run },
+  };
+  const port = await prepare(complete);
+  expect(port.admitHost(complete).ok).toBe(true);
   const candidates: HostRouteModule[] = [
     { ...recovery, bodies: neutral.bodies },
     {
@@ -115,8 +131,43 @@ test("host recovery requires the declared slot and exact captured extraction", a
     expect((await prepare(candidate)).admitHost(candidate).ok).toBe(false);
   expect(
     port.admitHost({
-      ...recovery,
+      ...complete,
       bodies: { ...recovery.bodies, carry: { ...recovery.bodies.carry!, run: () => null } },
     }).ok,
   ).toBe(false);
+});
+
+test("complete Work spec is required and every host-run export is captured", async () => {
+  const workState = {
+    ...neutral.workState!,
+    finds: ["search"],
+    editable: [["amount"]],
+    reconcileEdit: (next: unknown, patches: readonly unknown[]) => ({ next, patches }),
+    salvage: (raw: unknown) => raw,
+  };
+  const module = { ...neutral, workState };
+  const port = await prepare(module);
+  expect(port.admitHost(module).ok).toBe(true);
+  for (const candidate of [
+    { ...module, workState: undefined },
+    { ...module, workState: { ...workState, route: "wrong" } },
+    { ...module, workState: { ...workState, schemaVersion: 3 } },
+    { ...module, workState: { ...workState, schema: z.object({}) } },
+    { ...module, workState: { ...workState, reconcileEdit: () => null } },
+    { ...module, workState: { ...workState, salvage: () => null } },
+    { ...module, workState: { ...workState, finds: [] } },
+    { ...module, workState: { ...workState, editable: [] } },
+    { ...module, workState: { ...workState, migrations: { 1: () => null } } },
+  ])
+    expect(port.admitHost(candidate).ok).toBe(false);
+  expect(
+    (await prepare({ ...module, workState: undefined })).admitHost({
+      ...module,
+      workState: undefined,
+    }).ok,
+  ).toBe(false);
+  for (const key of ["reconcileEdit", "salvage"] as const)
+    expect(() =>
+      captureHostModule({ ...module, workState: { ...workState, [key]: "not executable" } }),
+    ).toThrow();
 });

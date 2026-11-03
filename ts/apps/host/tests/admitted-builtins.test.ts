@@ -152,6 +152,7 @@ test("owner precedes presenter with an unchanged pinned fingerprint and one migr
   const owner = await entry({
     ...fixture,
     bodies: { upgrade: { ...fixture.bodies.upgrade!, run: migrate } },
+    workState: { ...fixture.workState!, migrations: { 1: migrate } },
   });
   f.saved.set(workKey(bindWork("u8b", null)), {
     version: 1,

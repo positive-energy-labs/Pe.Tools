@@ -914,6 +914,41 @@ function admitHostProjection(
     )
       fail(`bodies.${id}`, "Body differs from captured exports");
   }
+  const state = module.workState;
+  const originalState = captured.workState;
+  // Whole neutral exports have the same captured-function authority as named migration bodies.
+  if (
+    Object.keys(state ?? {})
+      .sort()
+      .join() !==
+    Object.keys(originalState ?? {})
+      .sort()
+      .join()
+  )
+    fail("workState", "Work spec field set changed after capture");
+  for (const [key, value] of Object.entries(state ?? {})) {
+    const original = originalState?.[key as keyof NonNullable<typeof originalState>];
+    if (key === "schema" || typeof value === "function") {
+      if (value !== original) fail(`workState.${key}`, "Work spec export changed after capture");
+    } else if (key === "migrations") {
+      const migrations = value as NonNullable<NonNullable<typeof state>["migrations"]>;
+      if (
+        Object.keys(migrations).sort().join() !==
+          Object.keys(originalState?.migrations ?? {})
+            .sort()
+            .join() ||
+        Object.entries(migrations).some(
+          ([age, run]) => originalState?.migrations?.[Number(age)] !== run,
+        )
+      )
+        fail("workState.migrations", "Work migrations changed after capture");
+    } else if (
+      value === undefined || original === undefined
+        ? value !== original
+        : canonicalRouteJson(value) !== canonicalRouteJson(original)
+    )
+      fail(`workState.${key}`, "Work spec data changed after capture");
+  }
   const work = data.work;
   let resolvedWork: HostAdmittedRoute["resolvedWork"];
   let workFingerprint = `builtin-closure:${fingerprint}` as RouteFingerprint;
@@ -962,6 +997,28 @@ function admitHostProjection(
       }
     }
   }
+  if (work?.schema && work.route === data.key) {
+    if (!state) fail("workState", "Host Work owner requires its complete RouteStateSpec");
+    else {
+      if (
+        state.route !== work.route ||
+        state.schema !== module.schemas[work.schema] ||
+        (state.schemaVersion ?? 1) !== work.version
+      )
+        fail("workState", "Work spec differs from the declared owner/schema/version");
+      if (
+        Object.keys(state.migrations ?? {})
+          .sort()
+          .join() !== Object.keys(work.migrations).sort().join()
+      )
+        fail("workState.migrations", "Work spec migration chain differs from declaration");
+      for (const [age, id] of Object.entries(work.migrations))
+        if (state.migrations?.[Number(age)] !== module.bodies[id]?.run)
+          fail(`workState.migrations.${age}`, "Work migration differs from captured body");
+      if (data.salvage && state.salvage !== module.bodies[data.salvage]?.run)
+        fail("workState.salvage", "Work recovery differs from captured body");
+    }
+  } else if (state) fail("workState", "Only a Work owner declares a Work spec");
   if (data.salvage && work?.schema) {
     const body = module.bodies[data.salvage];
     if (!body || body.kind !== "recovery" || body.slot !== "salvage")
@@ -993,6 +1050,14 @@ function admitHostProjection(
     route,
     Object.freeze({
       ...captured,
+      ...(captured.workState
+        ? {
+            workState: Object.freeze({
+              ...captured.workState,
+              schema: captured.workState.schema.clone(),
+            }),
+          }
+        : {}),
       schemas: Object.freeze(
         Object.fromEntries(
           Object.entries(captured.schemas).map(([id, schema]) => [id, schema.clone()]),

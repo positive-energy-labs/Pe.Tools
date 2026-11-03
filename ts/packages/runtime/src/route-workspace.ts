@@ -146,19 +146,22 @@ export class RouteWorkspace {
         return [Number(age), (doc: unknown) => body.run(doc)];
       }),
     );
-    const spec: RouteStateSpec<z.ZodType> = {
-      route: work.route,
-      title: route.data.name,
-      description: route.data.directory.summary,
-      schema: bindings.schemas[work.schema]!,
-      schemaVersion: work.version,
-      migrations,
-      // A web salvage body consumes recovery data and must never read persisted Work here.
-      salvage:
-        route.data.salvage && bindings.bodies[route.data.salvage]?.kind === "recovery"
-          ? bindings.bodies[route.data.salvage]!.run
-          : undefined,
-    };
+    const spec: RouteStateSpec<z.ZodType> =
+      "workState" in bindings && bindings.workState
+        ? bindings.workState
+        : {
+            route: work.route,
+            title: route.data.name,
+            description: route.data.directory.summary,
+            schema: bindings.schemas[work.schema]!,
+            schemaVersion: work.version,
+            migrations,
+            // A web salvage body consumes recovery data and must never read persisted Work here.
+            salvage:
+              route.data.salvage && bindings.bodies[route.data.salvage]?.kind === "recovery"
+                ? bindings.bodies[route.data.salvage]!.run
+                : undefined,
+          };
     let remove: () => void;
     try {
       remove = this.register({ spec });
