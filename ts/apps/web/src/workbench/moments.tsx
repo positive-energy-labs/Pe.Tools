@@ -1,3 +1,4 @@
+import { deepEqual } from "@tanstack/react-router";
 import { EndpointError } from "./endpoint-error";
 import { Component, memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
@@ -74,40 +75,6 @@ function callRecords(call: ToolCall) {
   };
 }
 
-/**
- * What a part shows, as a cheap string. Every state change refolds the event log into fresh
- * message objects, so identity cannot tell a moment changed. A settled call is final; only a
- * call still moving pays for a stringify of its args and result.
- */
-function partKey(part: ChatPart): string {
-  switch (part.type) {
-    case "text":
-    case "reasoning":
-      return `${part.type[0]}${part.text.length}`;
-    case "image":
-      return `i${part.image.length}:${part.name ?? ""}`;
-    case "file":
-      return `f${part.name}:${part.size}`;
-    case "tool-call": {
-      const { call, approval } = part;
-      const moving = call.status === "in_progress";
-      return [
-        "c",
-        call.id,
-        call.status,
-        call.title,
-        call.caption ?? "",
-        call.target ?? "",
-        call.images.length,
-        approval?.requestId ?? "",
-        moving ? JSON.stringify(call.args)?.length : "",
-        moving ? JSON.stringify(call.result)?.length : "",
-        call.status === "failed" ? String(call.error).length : "",
-      ].join("|");
-    }
-  }
-}
-
 /** Everything one section draws that its own message does not hold: the head it wears. */
 interface MomentProps {
   message: ChatMessage;
@@ -118,44 +85,10 @@ interface MomentProps {
   register: RegisterMoment;
   /** The turn's linked element ids; they freeze once read, so their count keys the memo. */
   subjects?: TurnSubjects;
-  /** Equal keys draw equal pixels: the memo boundary compares this, not object identity. */
-  contentKey: string;
-}
-
-function contentKey(
-  message: ChatMessage,
-  segments: Segment[],
-  continues: boolean,
-  turn: number,
-  harness: string,
-  subjects: TurnSubjects | undefined,
-): string {
-  // An assistant row draws its segments, which carry runs continued from later messages.
-  const parts =
-    message.role === "assistant"
-      ? segments.flatMap((segment) =>
-          "run" in segment
-            ? segment.run.map(partKey)
-            : [`${segment.index}:${partKey(segment.part)}`],
-        )
-      : message.parts.map(partKey);
-  return [
-    message.role,
-    message.running,
-    message.createdAt?.getTime() ?? "",
-    message.target ?? "",
-    message.mentions?.map((mention) => mention.key).join(",") ?? "",
-    message.failure?.message ?? "",
-    continues,
-    message.role === "user" ? turn : "",
-    harness,
-    subjects?.size ?? "",
-    parts.join(";"),
-  ].join("#");
 }
 
 /** The transcript: one memoized section per message, drawn from the same array the lens measures.
- *  A moment re-renders only when its own content key changes. */
+ *  Stable ids retain sections; exact content comparison skips unchanged refolded entries. */
 export const Moments = memo(function Moments({
   messages,
   register,
@@ -192,7 +125,6 @@ export const Moments = memo(function Moments({
         harness={harness}
         register={register}
         subjects={subjects}
-        contentKey={contentKey(message, segments, continues, shownTurn, harness, subjects)}
       />,
     ];
   });
@@ -239,7 +171,15 @@ const Moment = memo(
       </MomentSection>
     );
   },
-  (prev, next) => prev.contentKey === next.contentKey && prev.register === next.register,
+  (prev, next) =>
+    prev.message.id === next.message.id &&
+    prev.register === next.register &&
+    prev.subjects === next.subjects &&
+    prev.continues === next.continues &&
+    prev.turn === next.turn &&
+    prev.harness === next.harness &&
+    deepEqual(prev.message, next.message) &&
+    deepEqual(prev.segments, next.segments),
 );
 
 function MomentSection({
@@ -441,30 +381,33 @@ function RecordsStack({ parts }: { parts: CallPart[] }) {
  * Fold machinery (calls and the thoughts between them), never the records it produced. An opened
  * call opens its containing run. A run with no call yet is just its thoughts.
  */
-function ToolGroup({ run }: { run: RunPart[] }) {
-  const view = useCurrentThreadView();
-  const openKey = useAtomValue(view.atoms.openCallKey);
-  const parts = run.filter((part): part is CallPart => part.type === "tool-call");
-  const holdsOpenCall = parts.some((part) => openKey === `tool:${part.call.id}`);
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (holdsOpenCall) setOpen(true);
-  }, [holdsOpenCall]);
-  if (parts.length === 0) return <RunStack run={run} />;
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <ToolRunFold
-        calls={parts.map((part) => part.call)}
-        thoughts={run.length - parts.length}
-        open={open}
-        onToggle={setOpen}
-      >
-        <RunStack run={run} />
-      </ToolRunFold>
-      <RecordsStack parts={parts} />
-    </div>
-  );
-}
+const ToolGroup = memo(
+  function ToolGroup({ run }: { run: RunPart[] }) {
+    const view = useCurrentThreadView();
+    const openKey = useAtomValue(view.atoms.openCallKey);
+    const parts = run.filter((part): part is CallPart => part.type === "tool-call");
+    const holdsOpenCall = parts.some((part) => openKey === `tool:${part.call.id}`);
+    const [open, setOpen] = useState(false);
+    useEffect(() => {
+      if (holdsOpenCall) setOpen(true);
+    }, [holdsOpenCall]);
+    if (parts.length === 0) return <RunStack run={run} />;
+    return (
+      <div className="flex min-w-0 flex-col gap-1">
+        <ToolRunFold
+          calls={parts.map((part) => part.call)}
+          thoughts={run.length - parts.length}
+          open={open}
+          onToggle={setOpen}
+        >
+          <RunStack run={run} />
+        </ToolRunFold>
+        <RecordsStack parts={parts} />
+      </div>
+    );
+  },
+  (prev, next) => deepEqual(prev.run, next.run),
+);
 
 /** Latest activity stays readable while the sequence grows; failures never disappear in a count. */
 function ToolRunFold({
@@ -524,22 +467,25 @@ function ToolRunFold({
   );
 }
 
-function Part({
-  part,
-  subjects,
-}: {
-  part: Exclude<ChatPart, CallPart>;
-  subjects?: TurnSubjects;
-}): ReactNode {
-  switch (part.type) {
-    case "text":
-      // Bare element ids link only through the turn's frozen, host-pinned names (turn-names.tsx).
-      return <Markdown text={part.text} subjects={subjects} />;
-    case "image":
-    case "file":
-      return <Attachment part={part} />;
-  }
-}
+const Part = memo(
+  function Part({
+    part,
+    subjects,
+  }: {
+    part: Exclude<ChatPart, CallPart>;
+    subjects?: TurnSubjects;
+  }): ReactNode {
+    switch (part.type) {
+      case "text":
+        // Bare element ids link only through the turn's frozen, host-pinned names (turn-names.tsx).
+        return <Markdown text={part.text} subjects={subjects} />;
+      case "image":
+      case "file":
+        return <Attachment part={part} />;
+    }
+  },
+  (prev, next) => prev.subjects === next.subjects && deepEqual(prev.part, next.part),
+);
 
 type AttachmentPart = Extract<ChatPart, { type: "image" | "file" }>;
 
@@ -610,134 +556,137 @@ function succeededDiagram(call: ToolCall): DiagramSpec | undefined {
 const OPEN_TIP = "open this call's input and output";
 const CLOSE_TIP = "close this call";
 
-function ToolCallPart({
-  call,
-  approval,
-  recordsOnly,
-}: {
-  call: ToolCall;
-  approval?: Approval;
-  recordsOnly: boolean;
-}) {
-  const view = useCurrentThreadView();
-  const openKey = useAtomValue(view.atoms.openCallKey);
-  // One call is open at a time: clicking a marker opens its I/O in place, and opening another
-  // closes it.
-  const key = `tool:${call.id}`;
-  const open = openKey === key;
-  const running = call.status === "in_progress";
-  const failed = call.status === "failed";
-  // Only a host restart expires an ask (`permission_resolved by:"expired"`).
-  const expired = call.status === "expired";
-  // The runtime's cancel record rides the same record path: a word, no tag, nothing to press.
-  const cancelled = call.status === "cancelled";
-  const record = expired
-    ? " — expired, unanswered; the host restarted"
-    : cancelled
-      ? " — cancelled"
-      : null;
-  const denied = call.status === "denied";
-  // TODO: Manual D drive-7 verdict E (S9): "The Pea transcript shows its tool rows' paths" to raw-id tool-result files. Present inspectable names here.
-  const title = toolTitle(call.title);
-  const detail = toolDetail(call);
-  const tone = failed ? "failed" : running && !approval ? "active" : "";
-  const { result, proposed, action, diagram } = callRecords(call);
-  // What the run actually touched: the Scope revision it was admitted under and the session and
-  // document the host resolved to. Read from the result, so it is evidence, not intent.
-  const ran = readRecord(result);
-  const ranTarget = readRecord(ran?.target);
-  const revision = typeof ran?.revision === "number" ? ran.revision : undefined;
-  return (
-    // An opened call is one object: its row is the head and its I/O the body, inside one artifact edge.
-    <div
-      className="flex min-w-0 flex-col gap-0.5"
-      data-tool-id={recordsOnly ? undefined : call.id}
-      data-surface={!recordsOnly && open ? "artifact" : undefined}
-    >
-      {(recordsOnly ? approval : !approval) ? (
-        <TooltipHint content={`${call.title} · ${open ? CLOSE_TIP : OPEN_TIP}`}>
-          <div
-            {...annotation("tool-marker")}
-            data-kind="tool"
-            data-open={open ? "" : undefined}
-            role="button"
-            tabIndex={0}
-            onClick={() => view.actions.setOpenCallKey(open ? null : key)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                view.actions.setOpenCallKey(open ? null : key);
-              }
-            }}
-            className={tone}
-          >
-            <span>⌗ {title}</span>
-            {detail?.emitted ? (
-              <code>{detail.text}</code>
-            ) : detail ? (
-              <span>{detail.text}</span>
-            ) : null}
-            {record ? <span>{record}</span> : null}
-            {revision !== undefined ? (
-              <span className="face-mono" data-testid="tool-revision">
-                r{revision}
-              </span>
-            ) : null}
-            {ranTarget && (ranTarget.session || ranTarget.document) ? (
-              <span data-testid="tool-target">
-                {[ranTarget.session, ranTarget.document].filter(Boolean).join(" · ")}
-              </span>
-            ) : null}
-
-            {record ? null : (
-              <ToolStatus
-                state={
-                  failed
-                    ? "failed"
-                    : denied
-                      ? "denied"
-                      : approval
-                        ? "waiting"
-                        : running
-                          ? "working"
-                          : "done"
+const ToolCallPart = memo(
+  function ToolCallPart({
+    call,
+    approval,
+    recordsOnly,
+  }: {
+    call: ToolCall;
+    approval?: Approval;
+    recordsOnly: boolean;
+  }) {
+    const view = useCurrentThreadView();
+    const openKey = useAtomValue(view.atoms.openCallKey);
+    // One call is open at a time: clicking a marker opens its I/O in place, and opening another
+    // closes it.
+    const key = `tool:${call.id}`;
+    const open = openKey === key;
+    const running = call.status === "in_progress";
+    const failed = call.status === "failed";
+    // Only a host restart expires an ask (`permission_resolved by:"expired"`).
+    const expired = call.status === "expired";
+    // The runtime's cancel record rides the same record path: a word, no tag, nothing to press.
+    const cancelled = call.status === "cancelled";
+    const record = expired
+      ? " — expired, unanswered; the host restarted"
+      : cancelled
+        ? " — cancelled"
+        : null;
+    const denied = call.status === "denied";
+    // TODO: Manual D drive-7 verdict E (S9): "The Pea transcript shows its tool rows' paths" to raw-id tool-result files. Present inspectable names here.
+    const title = toolTitle(call.title);
+    const detail = toolDetail(call);
+    const tone = failed ? "failed" : running && !approval ? "active" : "";
+    const { result, proposed, action, diagram } = callRecords(call);
+    // What the run actually touched: the Scope revision it was admitted under and the session and
+    // document the host resolved to. Read from the result, so it is evidence, not intent.
+    const ran = readRecord(result);
+    const ranTarget = readRecord(ran?.target);
+    const revision = typeof ran?.revision === "number" ? ran.revision : undefined;
+    return (
+      // An opened call is one object: its row is the head and its I/O the body, inside one artifact edge.
+      <div
+        className="flex min-w-0 flex-col gap-0.5"
+        data-tool-id={recordsOnly ? undefined : call.id}
+        data-surface={!recordsOnly && open ? "artifact" : undefined}
+      >
+        {(recordsOnly ? approval : !approval) ? (
+          <TooltipHint content={`${call.title} · ${open ? CLOSE_TIP : OPEN_TIP}`}>
+            <div
+              {...annotation("tool-marker")}
+              data-kind="tool"
+              data-open={open ? "" : undefined}
+              role="button"
+              tabIndex={0}
+              onClick={() => view.actions.setOpenCallKey(open ? null : key)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  view.actions.setOpenCallKey(open ? null : key);
                 }
+              }}
+              className={tone}
+            >
+              <span>⌗ {title}</span>
+              {detail?.emitted ? (
+                <code>{detail.text}</code>
+              ) : detail ? (
+                <span>{detail.text}</span>
+              ) : null}
+              {record ? <span>{record}</span> : null}
+              {revision !== undefined ? (
+                <span className="face-mono" data-testid="tool-revision">
+                  r{revision}
+                </span>
+              ) : null}
+              {ranTarget && (ranTarget.session || ranTarget.document) ? (
+                <span data-testid="tool-target">
+                  {[ranTarget.session, ranTarget.document].filter(Boolean).join(" · ")}
+                </span>
+              ) : null}
+
+              {record ? null : (
+                <ToolStatus
+                  state={
+                    failed
+                      ? "failed"
+                      : denied
+                        ? "denied"
+                        : approval
+                          ? "waiting"
+                          : running
+                            ? "working"
+                            : "done"
+                  }
+                />
+              )}
+            </div>
+          </TooltipHint>
+        ) : null}
+        {/* A diagram call draws its own args once the host accepted them (agent ledger). */}
+        {recordsOnly && diagram ? (
+          <Code code={toMermaid(diagram)} lang="mermaid" title={diagram.title ?? "diagram"} />
+        ) : null}
+        {!recordsOnly && open ? (
+          <div {...annotation("tool-body")}>
+            {call.status === "completed" ? <NativeReadingReferences result={result} /> : null}
+            <Code code={stringify(call.args)} lang="json" title="in" copyLabel="Copy input" />
+            {result === undefined ? null : failed ? (
+              <Code
+                code={stringify(toolOutputForDisplay(result))}
+                lang="json"
+                title="out"
+                copyLabel="Copy output"
+                tone="alarm"
+                wrap
+              />
+            ) : (
+              <Code
+                code={stringify(toolOutputForDisplay(result))}
+                lang="json"
+                title="out"
+                copyLabel="Copy output"
               />
             )}
           </div>
-        </TooltipHint>
-      ) : null}
-      {/* A diagram call draws its own args once the host accepted them (agent ledger). */}
-      {recordsOnly && diagram ? (
-        <Code code={toMermaid(diagram)} lang="mermaid" title={diagram.title ?? "diagram"} />
-      ) : null}
-      {!recordsOnly && open ? (
-        <div {...annotation("tool-body")}>
-          {call.status === "completed" ? <NativeReadingReferences result={result} /> : null}
-          <Code code={stringify(call.args)} lang="json" title="in" copyLabel="Copy input" />
-          {result === undefined ? null : failed ? (
-            <Code
-              code={stringify(toolOutputForDisplay(result))}
-              lang="json"
-              title="out"
-              copyLabel="Copy output"
-              tone="alarm"
-              wrap
-            />
-          ) : (
-            <Code
-              code={stringify(toolOutputForDisplay(result))}
-              lang="json"
-              title="out"
-              copyLabel="Copy output"
-            />
-          )}
-        </div>
-      ) : null}
-      {recordsOnly && proposed ? <ProposedLine record={proposed} /> : null}
-      {recordsOnly && action ? <ActionLine call={action} /> : null}
-      {/* A live ask answers in the Chat head (`chat/composer-head.tsx`), never here: the
+        ) : null}
+        {recordsOnly && proposed ? <ProposedLine record={proposed} /> : null}
+        {recordsOnly && action ? <ActionLine call={action} /> : null}
+        {/* A live ask answers in the Chat head (`chat/composer-head.tsx`), never here: the
           transcript holds its record (F-J1-9). */}
-    </div>
-  );
-}
+      </div>
+    );
+  },
+  (prev, next) => deepEqual(prev, next),
+);

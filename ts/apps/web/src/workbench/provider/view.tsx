@@ -1,7 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { RegistryContext } from "@effect/atom-react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { deepEqual, useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
 import {
+  emptyChatState,
   selectApprovals,
   selectRunStatus,
   selectTurnFailure,
@@ -140,6 +151,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   });
   const missingThread = notFound(stream.error);
   const chat = demo ?? stream.chat;
+  const registry = useContext(RegistryContext);
+  // Selection owns the atom identity; chunks only publish its value.
+  const transcript = useMemo(() => Atom.make(emptyChatState()), [currentThreadId, selected.key]);
+  useLayoutEffect(() => {
+    registry.set(transcript, chat);
+  }, [registry, transcript, chat]);
   const bodyAtom = useMemo(
     () => (demo ? Atom.make(AsyncResult.success(demo)) : stream.bodyAtom),
     [demo, stream.bodyAtom],
@@ -465,7 +482,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   return (
     <WorkbenchContext.Provider value={context}>
-      <TranscriptContext.Provider value={chat}>{children}</TranscriptContext.Provider>
+      <TranscriptContext.Provider value={transcript}>{children}</TranscriptContext.Provider>
     </WorkbenchContext.Provider>
   );
 }

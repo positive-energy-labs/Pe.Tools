@@ -158,13 +158,22 @@ test("first Send from /ducts?target=… creates one chat with no targets and kee
 test("a streamed chat chunk updates the transcript without rendering a route pane", async () => {
   let paneRenders = 0;
   let transcriptRenders = 0;
+  let composerRenders = 0;
+  function ComposerConsumer() {
+    const head = useTranscript(({ providerId, promptCapabilities }) => ({
+      providerId,
+      promptCapabilities,
+    }));
+    composerRenders++;
+    return <span>{head.providerId}</span>;
+  }
   function PaneConsumer() {
     const context = useContext(WorkbenchContext)!;
     paneRenders++;
     return <p>pane {context.currentThreadId}</p>;
   }
   function TranscriptConsumer() {
-    const chat = useTranscript();
+    const chat = useTranscript((state) => state);
     transcriptRenders++;
     return <output>events {chat.events.length}</output>;
   }
@@ -173,6 +182,7 @@ test("a streamed chat chunk updates the transcript without rendering a route pan
       <WorkbenchProvider>
         <PaneConsumer />
         <TranscriptConsumer />
+        <ComposerConsumer />
         <Outlet />
       </WorkbenchProvider>
     ),
@@ -191,6 +201,7 @@ test("a streamed chat chunk updates the transcript without rendering a route pan
   await act(async () => {});
   const paneBefore = paneRenders;
   const transcriptBefore = transcriptRenders;
+  const composerBefore = composerRenders;
   const chunk = harnessEventSchema.parse({
     kind: "update",
     turnId: "turn-1",
@@ -202,4 +213,5 @@ test("a streamed chat chunk updates the transcript without rendering a route pan
   expect(screen.getByText("events 1")).toBeTruthy();
   expect(transcriptRenders).toBeGreaterThan(transcriptBefore);
   expect(paneRenders).toBe(paneBefore);
+  expect(composerRenders).toBe(composerBefore);
 });

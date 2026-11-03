@@ -30,7 +30,7 @@ import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { MentionChip } from "@pe/kit/lang/chip";
 import { previousOf } from "#/shell/readings-hooks";
-import { AssetReel, referModel } from "./asset-reel";
+import { AssetReel, referModel, threadAssets } from "./asset-reel";
 import { AttachmentChip } from "./attachment-chip";
 import { useAttachments } from "./use-attachments";
 import { useSlashMenu, type SlashCommand } from "./use-slash-menu";
@@ -84,24 +84,27 @@ export function ThreadComposer({
     draft: head,
     answerQuestion,
   } = useWorkbench();
-  const chat = useTranscript();
+  const { providerId, isRunning, commands, assets, asking } = useTranscript((state) => ({
+    providerId: state.providerId,
+    isRunning: selectRunStatus(state) !== "idle",
+    commands: selectSkillCommands(state),
+    assets: threadAssets(selectMessages(state)),
+    asking: selectQuestions(state)[0],
+  }));
   // Loaded and none ready: the composer carries the first-open doors and Send says why it waits.
   const noneReady = providers.list !== undefined && !providers.list.some(isReady);
   // Some ready, but not the one this head runs on: that provider carries its own repair.
   const headId = currentThreadId
-    ? chat.providerId || threads.find((item) => item.id === currentThreadId)?.providerId
+    ? providerId || threads.find((item) => item.id === currentThreadId)?.providerId
     : head.providerId;
   const unready = noneReady ? undefined : providers.list?.find((item) => item.id === headId);
   const repairing = unready && !isReady(unready) ? unready : undefined;
-  const isRunning = selectRunStatus(chat) !== "idle";
   const send = useSend(handle, draft, (sent) => {
     setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current));
   });
   const files = useAttachments(draft, setDraft);
   const sendResult = handle.results.get("send");
   const refusedSend = sendResult && "refusal" in sendResult ? sendResult.refusal.message : null;
-  const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat), [chat]);
-  const messages = useMemo(() => selectMessages(chat), [chat]);
   const slash = useSlashMenu(draft.text, commands);
   const [area, setArea] = useState<HTMLTextAreaElement | null>(null);
   const form = area?.form ?? null;
@@ -113,7 +116,6 @@ export function ThreadComposer({
   const setText = (text: string) => setDraft((previous) => withText(previous, text));
   // A question Pea is waiting on takes the composer's text as its answer (its "Other" box), so
   // typing while Pea waits is never silently dropped behind a stop button.
-  const asking = selectQuestions(chat)[0];
   const answer = asking && composerAnswer(asking, draft.text.trim());
   const answerCurrent = async () => {
     if (!asking || !answer || !draft.text.trim()) return;
@@ -360,7 +362,7 @@ export function ThreadComposer({
           onPaste={files.pasteHandler}
         />
         <AssetReel
-          messages={messages}
+          assets={assets}
           onMention={(mention) => {
             setDraft((previous) => referModel(previous, mention));
             area?.focus();

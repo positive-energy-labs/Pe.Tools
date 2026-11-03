@@ -141,7 +141,7 @@ function useThreadHead(handle: ChatHandle) {
  *  health. Called ONCE per surface (ChatSurface) and handed to both. */
 export function useChatSituation(handle: ChatHandle) {
   const { currentThreadId, threads, missingThread } = useWorkbench();
-  const chat = useTranscript();
+  const title = useTranscript(selectTitle);
   const head = useThreadHead(handle);
   const machine = previousOf(chatReading<Machine>(handle, "machine"));
   const inventory = machineInventory(machine);
@@ -184,9 +184,7 @@ export function useChatSituation(handle: ChatHandle) {
   // A thread the host does not know names nothing: the transcript says "no such thread".
   const threadLabel = missingThread
     ? ""
-    : selectTitle(chat) ||
-      threads.find((item) => item.id === currentThreadId)?.title ||
-      currentThreadId;
+    : title || threads.find((item) => item.id === currentThreadId)?.title || currentThreadId;
   return {
     head,
     inventory,
@@ -304,8 +302,7 @@ export function ComposerPickers({
   situation: ChatSituation;
 }) {
   const { currentThreadId } = useWorkbench();
-  const chat = useTranscript();
-  const isRunning = selectRunStatus(chat) !== "idle";
+  const isRunning = useTranscript((state) => selectRunStatus(state) !== "idle");
   const { head, inventory, ladder, health, closedWord } = situation;
   // A new thread under a `?target` address pin binds to the one open document at that address,
   // once per thread: "new" keeps the URL's document. A later clear in the picker stands.
@@ -391,8 +388,8 @@ export function ComposerPickers({
 
 /** Pea's plan beside the pickers. Send owns run state. */
 export function ComposerState(_: { situation: ChatSituation }) {
-  const chat = useTranscript();
-  return <PlanChip tasks={selectPlan(chat)} />;
+  const tasks = useTranscript(selectPlan);
+  return <PlanChip tasks={tasks} />;
 }
 
 export type ComposerStatus = { text: string; caution: boolean; detail?: string };
@@ -401,11 +398,19 @@ export type ComposerStatus = { text: string; caution: boolean; detail?: string }
  *  approve and reject have one location and the draft sits under what is edit. */
 export function ComposerWork({ situation }: { situation: ChatSituation }) {
   const { resolveApproval, answerQuestion, store, cancel, currentThreadId } = useWorkbench();
-  const chat = useTranscript();
+  const { approvals, questions, calls } = useTranscript((state) => {
+    const approvals = selectApprovals(state);
+    const ids = new Set(approvals.map((ask) => ask.toolCallId));
+    return {
+      approvals,
+      questions: selectQuestions(state),
+      calls: selectToolCalls(state)
+        .filter((call) => ids.has(call.id))
+        .map(({ id, caption }) => ({ id, caption })),
+    };
+  });
   const { inventory, bound, ladder } = situation;
   // Live asks only: an expired ask is a transcript record, never a head row.
-  const approvals = selectApprovals(chat);
-  const questions = selectQuestions(chat);
   const works = useHeadWorks(
     documentAddress(inventory, bound),
     ladder.docWord ?? "document",
@@ -422,7 +427,7 @@ export function ComposerWork({ situation }: { situation: ChatSituation }) {
       <ComposerPending
         approvals={approvals}
         questions={questions}
-        calls={selectToolCalls(chat)}
+        calls={calls}
         resolveApproval={resolveApproval}
         answerQuestion={answerQuestion}
       />

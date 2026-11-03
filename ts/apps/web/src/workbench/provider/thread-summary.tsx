@@ -68,4 +68,4 @@ export interface WorkbenchContextValue {
 
 export const WorkbenchContext = createContext<WorkbenchContextValue | undefined>(undefined);
 
-export const TranscriptContext = createContext<ChatState | undefined>(undefined);
+export const TranscriptContext = createContext<Atom.Atom<ChatState> | undefined>(undefined);

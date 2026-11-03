@@ -49,7 +49,13 @@ function traitRung(trait: TraitOption, pick: (id: string, value: string | boolea
 function useHead() {
   const { currentThreadId, threads, providers, draft, setDraft, setModel, setTrait } =
     useWorkbench();
-  const chat = useTranscript();
+  const chat = useTranscript(({ providerId, providerName, models, modelId, traits }) => ({
+    providerId,
+    providerName,
+    models,
+    modelId,
+    traits,
+  }));
   const list = providers.list ?? [];
   const fallback = list.find(isReady) ?? null;
   if (currentThreadId) {

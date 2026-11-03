@@ -15,7 +15,7 @@ import {
 import { useRouteSearchSlice } from "#/route/activity";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { NewThreadButton, ThreadsSidebar, ThreadPane } from "#/chat/thread-palette";
-import { useTranscript, useWorkbench } from "#/workbench/provider";
+import { useTranscript, useTranscriptAtom, useWorkbench } from "#/workbench/provider";
 import { type Mode } from "#/workbench/depth";
 import { useCacheView } from "#/workbench/world";
 import { SessionStrip } from "#/workbench/world";
@@ -152,7 +152,18 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     deleteThread,
     updateThread,
   } = useWorkbench();
-  const chat = useTranscript();
+  const chatAtom = useTranscriptAtom();
+  const chat = useTranscript((state) => ({
+    id: state.id,
+    promptCapabilities: state.promptCapabilities,
+    providerName: state.providerName,
+    title: selectTitle(state),
+    breakdown: selectBreakdown(state),
+    userTurns: state.events.filter((event) => event.kind === "prompt").length,
+    runStatus: selectRunStatus(state),
+    silentFor: selectWaitingSeconds(state),
+    starting: selectStarting(state),
+  }));
   useThreadPresence(activity ? null : currentThreadId);
   const newThread = useCallback(
     (target?: Parameters<typeof startThread>[0]) => {
@@ -243,24 +254,20 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
   // until the next body reads. The boundary turns over with the body it shows, so an old failure
   // still cannot mask the new thread.
   const body = useAtomValue(bodyAtom);
-  const shownRef = useRef({ thread: currentThreadId, bodyAtom, chat });
+  const shownRef = useRef({ thread: currentThreadId, bodyAtom, chatAtom });
   if (body._tag !== "Initial" || shownRef.current.thread === currentThreadId)
-    shownRef.current = { thread: currentThreadId, bodyAtom, chat };
+    shownRef.current = { thread: currentThreadId, bodyAtom, chatAtom };
   const shown = shownRef.current;
   const switching = shown.thread !== currentThreadId;
 
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
   // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).
-  const breakdown = useMemo(() => selectBreakdown(chat), [chat]);
-  const userTurns = useMemo(
-    () => chat.events.filter((event) => event.kind === "prompt").length,
-    [chat.events],
-  );
+  const { breakdown, userTurns } = chat;
   const cache = useCacheView(breakdown, userTurns);
   const retryBody = useAtomRefresh(bodyAtom);
 
-  const runStatus = selectRunStatus(chat);
-  const silentFor = selectWaitingSeconds(chat);
+  const runStatus = chat.runStatus;
+  const silentFor = chat.silentFor;
   const status = {
     text: turnFailure
       ? "failed"
@@ -268,7 +275,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
         ? "loading thread state"
         : runStatus === "waiting"
           ? "waiting for you"
-          : selectStarting(chat)
+          : chat.starting
             ? "starting the harness"
             : silentFor !== undefined
               ? `waiting on the model for ${silentFor} s`
@@ -294,7 +301,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
           titleAlign="center"
           meta={handle.fixture ? "Fixture" : switching ? "reading" : undefined}
           title={
-            selectTitle(chat) ||
+            chat.title ||
             threads.find((thread) => thread.id === currentThreadId)?.title ||
             // I1: no thread yet is the draft the first send creates.
             (currentThreadId ? "thread" : "New thread")
@@ -314,7 +321,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
             </div>
           ) : (
             <div inert={switching} className="contents">
-              <ThreadBody bodyAtom={shown.bodyAtom} state={shown.chat} />
+              <ThreadBody bodyAtom={shown.bodyAtom} stateAtom={shown.chatAtom} />
             </div>
           )}
         </Pane>
