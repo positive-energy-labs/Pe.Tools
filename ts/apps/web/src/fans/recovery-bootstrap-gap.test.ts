@@ -6,6 +6,7 @@ import { z } from "zod";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   ductsDocumentSchema,
+  ductsSheetOverviewSchema,
   bindWork,
   workKey,
   address,
@@ -30,7 +31,12 @@ import type {
 import { module as captures } from "../captures/kernel";
 import { createRouteShell } from "../shell/admitted-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import { describeInputHistory, inputHistoryMetaSchema } from "../ducts/sheet/input-history";
+import {
+  describeInputHistory,
+  inputHistoryMetaSchema,
+  presentInputHistory,
+} from "../ducts/sheet/input-history";
+import sheetFixture from "../ducts/sheet/sheet.fixture.json";
 import { sourceRouteServices } from "../shell/source-route-services";
 import * as recoveryHost from "../route/host";
 import * as sourceServices from "../shell/source-route-services";
@@ -851,3 +857,45 @@ test.each(["invalid_meta", "meta_too_large"] as const)(
     expect(f.mount.history!.entries).toEqual([]);
   },
 );
+
+// TODO: W04 ESP-effect direction needs the last accepted move, not only each step's state.
+test("W04: pane history distinguishes equal Work reached by Undo and Redo", async () => {
+  const before = ductsSheetOverviewSchema.parse(sheetFixture.overview).totals!;
+  const description = {
+    label: "Fan flow",
+    meta: {
+      kind: "ducts-input" as const,
+      effect: {
+        before,
+        after: { ...before, requiredEspInWg: (before.requiredEspInWg ?? 0) + 0.1 },
+      },
+    },
+  };
+  let undoHistory: Parameters<typeof bodies.main.run>[0]["history"];
+  let redoHistory: Parameters<typeof bodies.main.run>[0]["history"];
+  const a = await witness(undefined, undefined, undefined, description, (history) => {
+    undoHistory = history;
+  });
+  await vi.waitFor(() => expect(a.mount.workBasis()).not.toBeNull());
+  await settle(a.mount.invoke("slot", "A") as Observation<WorkWriteOutcome>);
+  await settle(a.mount.invoke("slot", "B") as Observation<WorkWriteOutcome>);
+  const initial = structuredClone(a.saved.get("ducts"));
+  for (const move of ["undo", "redo", "undo"] as const)
+    expect(await a.mount.history![move]()).toMatchObject({ ok: true });
+  a.mount.read("captures");
+  const b = await witness(initial, undefined, undefined, description, (history) => {
+    redoHistory = history;
+  });
+  await vi.waitFor(() => expect(b.mount.workBasis()).not.toBeNull());
+  for (const move of ["undo", "undo", "redo"] as const)
+    expect(await b.mount.history![move]()).toMatchObject({ ok: true });
+  b.mount.read("captures");
+  expect(a.mount.work()).toEqual(b.mount.work());
+  const undoEffect = presentInputHistory(a.mount.journal(), null).last!;
+  const redoEffect = presentInputHistory(b.mount.journal(), null).last!;
+  expect(undoEffect.label).toMatch(/^undid /);
+  expect(redoEffect.label).toMatch(/^redid /);
+  expect(undoEffect.words).not.toBe(redoEffect.words);
+  // Same Work/revision but different required ESP effects must remain distinguishable to the pane.
+  expect(undoHistory!.entries).not.toEqual(redoHistory!.entries);
+});
