@@ -331,12 +331,14 @@ export function makeHttpLive(options: HttpLiveOptions) {
         ),
       ),
       Layer.provide(NodeHttpClient.layerUndici),
+      // Inside the bridge's provision, so the reader's finalizer (cancel, then join its reads)
+      // runs while the bridge it cancels through is still alive.
+      Layer.provide(FamiliesReader.layer),
       Layer.provide(revitComposition.provider),
       Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
       Layer.provide(UpdateLive),
       Layer.provide(RunConsents.layer),
       Layer.provide(Spawner.live),
-      Layer.provide(FamiliesReader.layer),
       Layer.provide(CaptureStore.layer()),
       Layer.provide(ReceiptsLive),
       Layer.provide(NodeServices.layer),

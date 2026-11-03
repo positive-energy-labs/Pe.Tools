@@ -136,14 +136,18 @@ export const harnessThreads = async (
 };
 
 /** {@link FamiliesReader} for Promise tests, built over the node services in a scope the test closes. */
-export const familiesReader = async (): Promise<FamiliesReader["Service"]> => {
-  const scope = Scope.makeUnsafe();
-  try {
-    // effect-edge: test-runner
-    onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-  } catch {
-    // Outside a running test: a module fixture, closed with its worker.
-  }
+/** Pass `owned` to close the reader yourself; otherwise the running test closes it. */
+export const familiesReader = async (
+  owned?: Scope.Closeable,
+): Promise<FamiliesReader["Service"]> => {
+  const scope = owned ?? Scope.makeUnsafe();
+  if (!owned)
+    try {
+      // effect-edge: test-runner
+      onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+    } catch {
+      // Outside a running test: a module fixture, closed with its worker.
+    }
   // effect-edge: test-runner
   const context = await Effect.runPromise(
     Layer.buildWithScope(FamiliesReader.layer.pipe(Layer.provide(NodeServices.layer)), scope),

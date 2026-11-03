@@ -61,11 +61,7 @@ type Reader = {
   sleep: (ms: number) => Promise<void>;
 };
 
-async function cancelFamiliesRead(
-  { runs }: Reader,
-  id: string,
-  document: DocumentRef,
-) {
+async function cancelFamiliesRead({ runs }: Reader, id: string, document: DocumentRef) {
   const run = runs.get(id);
   if (!run || canonicalRouteInput(run.document) !== canonicalRouteInput(document))
     throw Error("This document has no running Families read with that id.");
@@ -74,15 +70,18 @@ async function cancelFamiliesRead(
 }
 
 /** Host orchestration over the document-owned native reader. No Revit process is launched outside the SDK. */
-async function readFamiliesProgressively(reader: Reader, options: {
-  bridge: RevitBridge["Service"];
-  captures: TakeoffCaptures;
-  readId: string;
-  work: WorkKey;
-  document: DocumentRef;
-  documentTitle?: string;
-  filter: AppliedFilter;
-}): Promise<FamiliesObservation> {
+async function readFamiliesProgressively(
+  reader: Reader,
+  options: {
+    bridge: RevitBridge["Service"];
+    captures: TakeoffCaptures;
+    readId: string;
+    work: WorkKey;
+    document: DocumentRef;
+    documentTitle?: string;
+    filter: AppliedFilter;
+  },
+): Promise<FamiliesObservation> {
   const { bridge, captures, readId, work, document, filter, documentTitle } = options;
   const { runs, run: runEffect, lifecycle, sdk, now, sleep } = reader;
   if (
@@ -418,17 +417,33 @@ const makeFamiliesReader = Effect.gen(function* () {
     now: () => clock.currentTimeMillisUnsafe(),
     sleep: (ms) => run(Effect.sleep(ms)),
   };
+  // Every admitted read, start to cleanup (SDK stops, publication, scratch, costs file).
+  const reads = new Set<Promise<unknown>>();
+  let closed = false;
+  // Stop admission, cancel, then JOIN: a read finishes its own cleanup (publishing `cancelled`, its
+  // typed outcome) before this scope's dependencies close. A read starting an SDK worker has no
+  // native request to cancel yet; its `cancelled` flag stops it at the next checkpoint.
   yield* Effect.addFinalizer(() =>
     Effect.promise(async () => {
+      closed = true;
       const open = [...reader.runs.values()];
-      reader.runs.clear();
       for (const r of open) r.cancelled = true;
       await Promise.allSettled(open.map((r) => r.cancelNative()));
+      while (reads.size) await Promise.allSettled([...reads]);
+      reader.runs.clear();
     }),
   );
   return {
-    read: (options: Parameters<typeof readFamiliesProgressively>[1]) =>
-      readFamiliesProgressively(reader, options),
+    read: (options: Parameters<typeof readFamiliesProgressively>[1]) => {
+      if (closed) return Promise.reject(Error("The Families reader closed with its host."));
+      const read = readFamiliesProgressively(reader, options);
+      reads.add(read);
+      void read.then(
+        () => reads.delete(read),
+        () => reads.delete(read),
+      );
+      return read;
+    },
     cancel: (id: string, document: DocumentRef) => cancelFamiliesRead(reader, id, document),
     /** Serialized with every SDK start and stop this reader makes; exposed for the one test of that. */
     lifecycle: reader.lifecycle,
