@@ -382,3 +382,88 @@ test("progressive publications stay inspectable but only fresh completion is cur
     read.release();
   }
 });
+
+import { sourceReadingEvidence } from "./source-route-services";
+
+test("K4 resolve generation observations use host descriptors and dispose polling transport", async () => {
+  vi.useFakeTimers();
+  const target = { kind: "document" as const, ref: { session: "s", openId: "d" } };
+  const issuer = createRouteTokenIssuer();
+  const attempt = issuer.attempt(issuer.scope({ target, work: null }), "status", 1);
+  if (!attempt.ok) throw Error(attempt.reason);
+  const services = sourceRouteServices({});
+  const request = {
+    key: { op: "revit.detail.space-status", sortedKeyInput: "{}", freshnessGeneration: 1 },
+  } as ResolvedRead<unknown>;
+  let generation = "first";
+  const fetch = vi.spyOn(host, "hostFetch").mockImplementation(
+    async () =>
+      new Response(
+        JSON.stringify({
+          operationKey: request.key.op,
+          processIncarnation: { pid: 1, startedAt: 1 },
+          openDocumentLifetime: { openId: "d" },
+          normalizedInput: "{}",
+          freshnessGeneration: generation,
+          representation: "overview",
+        }),
+      ),
+  );
+  const deliver = vi.fn();
+  const release = sourceReadingEvidence(services)!.observe(request, attempt.value, deliver);
+  try {
+    await vi.advanceTimersByTimeAsync(1);
+    expect(deliver).toHaveBeenLastCalledWith({ kind: "generation", value: "first" });
+    generation = "second";
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(deliver).toHaveBeenLastCalledWith({ kind: "generation", value: "second" });
+    const count = fetch.mock.calls.length;
+    release();
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(fetch).toHaveBeenCalledTimes(count);
+    expect((fetch.mock.calls[0]![1]!.signal as AbortSignal).aborted).toBe(true);
+  } finally {
+    release();
+    fetch.mockRestore();
+    vi.useRealTimers();
+  }
+});
+
+test.each(["worker", "port"] as const)(
+  "K4 %s resources release without native cancellation",
+  async (kind) => {
+    const dispose = vi.fn();
+    const services = sourceRouteServices({
+      resource:
+        kind === "worker"
+          ? {
+              kind,
+              algorithmVersion: "1",
+              connect: () => ({
+                update: (_context, deliver) =>
+                  deliver({ kind: "complete", value: "value", revision: 0 }),
+                stop: dispose,
+              }),
+            }
+          : { kind, open: () => ({ value: "value", close: dispose }) },
+    });
+    const issuer = createRouteTokenIssuer();
+    const attempt = issuer.attempt(
+      issuer.scope({ target: { kind: "host" }, work: null }),
+      "resource",
+      1,
+    );
+    if (!attempt.ok) throw Error(attempt.reason);
+    const request = {
+      key: { op: "resource", sortedKeyInput: "{}", freshnessGeneration: 1 },
+    } as ResolvedRead<unknown>;
+    const handle = services.reads.acquire(request, attempt.value);
+    const release = services.readings.subscribe(request, attempt.value, () => {});
+    await Promise.resolve();
+    expect(handle.read()).toMatchObject({ current: true, value: "value" });
+    release();
+    handle.release();
+    await Promise.resolve();
+    expect(dispose).toHaveBeenCalledOnce();
+  },
+);
