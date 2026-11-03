@@ -260,3 +260,13 @@ test("a stale presenter refusal does not poison an up-to-date owner on the same 
   expect(h.order).toEqual(["work-acks", "work", "work-acks", "work"]);
   stop();
 });
+
+test("atomic ack-feed acquisition wins the redundant snapshot and delivers the racing write once", () => {
+  const h = harness();
+  h.emit("work-acks", snapshot(0));
+  h.emit("work-acks", ack(1));
+  h.emit("work", snapshot(1));
+  h.emit("work-acks", ack(1));
+  expect(h.values.map((value) => value.kind)).toEqual(["pending", "ready", "ack"]);
+  h.unsubscribe();
+});

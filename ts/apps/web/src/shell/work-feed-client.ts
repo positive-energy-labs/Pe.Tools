@@ -76,7 +76,8 @@ export function createWorkFeedClient(
             kind: "receipts" as const,
             scope: { key: scope.key, target: scope.target },
           };
-          const stop = source.subscribe(request, (frame) => {
+          let stop = () => {};
+          stop = source.subscribe(request, (frame) => {
             if (closed || ("stale" in frame && frame.stale)) return;
             if (frame.kind === "failure") {
               deliver({
@@ -88,6 +89,7 @@ export function createWorkFeedClient(
                 },
               });
               closed = true;
+              stop();
               end();
               return;
             }
@@ -104,6 +106,7 @@ export function createWorkFeedClient(
                 },
               });
               closed = true;
+              stop();
               end();
               return;
             }
@@ -129,9 +132,11 @@ export function createWorkFeedClient(
             deliver(state);
             if (state.kind === "failed") {
               closed = true;
+              stop();
               end();
             }
           });
+          if (closed) stop();
           return () => {
             closed = true;
             stop();
