@@ -728,7 +728,9 @@ test("an endpoint provider is checked before save, and every thread carries its 
     server.close();
     await rm(productProvidersPath(), { force: true });
   }
-}, 30_000);
+  // Every probe child now dies by tree kill (two awaited taskkill.exe runs on win32): 11.6 s -> 47 s
+  // measured 2026-11-02. The cost is the Spawner closing a live leader, not this test.
+}, 90_000);
 
 test("both harnesses retain journal-safe modes", async () => {
   const threads = await host();

@@ -386,7 +386,7 @@ export function peaMcpServer(
   };
 }
 
-/** Closing the child's scope ends its stdin, waits `CHILD_EXIT_GRACE`, and kills its whole tree. */
+/** Closing the child's scope kills its whole tree (see `CHILD_EXIT_GRACE`). */
 export function stopChild(child: ChildProcess | null): Effect.Effect<void> {
   return child instanceof AdapterChild ? child.close : Effect.void;
 }

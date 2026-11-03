@@ -1,5 +1,5 @@
 import { NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Scope, Stream } from "effect";
+import { Context, Duration, Effect, Layer, Scope } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
 /**
@@ -7,11 +7,17 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
  * unstable`) owns the process; `@effect/platform-node`'s `NodeChildProcessSpawner` is the Node
  * backend, and on win32 its release runs `taskkill /pid <leader> /T /F` (proven by
  * `tests/spawner.test.ts` with a `cmd /c` grandchild). Node exposes no Windows Job Object, so the
- * tree is walked from the leader's pid: a child that already exited normally has no leader left to
- * walk from, and its orphans are not reached. Nothing here shells out to `taskkill` by hand.
+ * tree is walked from the LEADER's pid, and the walk needs a live leader. So the scope kills the
+ * tree first: ending stdin first let a leader that honours EOF exit 0, and the backend walks only
+ * after a non-zero exit, so its grandchildren (claude.exe, codex.exe) were orphaned (Fable finding
+ * 2, 2026-11-02). A leader that exits on its own before its scope closes still orphans its tree;
+ * that ceiling is the missing Job Object. Nothing here shells out to `taskkill` by hand.
  */
 
-/** How long a child gets to exit on its own after its stdin ends, before its scope kills the tree. */
+/**
+ * POSIX: SIGTERM to the process group, then SIGKILL after this grace (backend timer, not `Clock`).
+ * Windows has no graceful signal for a console tree: `taskkill /T /F` is immediate.
+ */
 export const CHILD_EXIT_GRACE = Duration.seconds(2);
 
 /** Exactly what the child receives: `env` is the whole environment, never merged with the host's. */
@@ -27,8 +33,8 @@ const make = Effect.gen(function* () {
   const owner = yield* Scope.Scope;
 
   /**
-   * The handle's lifetime is the caller's scope AND the Spawner's: closing either ends stdin, waits
-   * {@link CHILD_EXIT_GRACE}, then kills the process tree. Closing is idempotent.
+   * The handle's lifetime is the caller's scope AND the Spawner's: closing either kills the process
+   * tree while its leader is alive (see {@link CHILD_EXIT_GRACE}). Closing is idempotent.
    */
   const spawn = Effect.fn("Spawner.spawn")(function* (launch: ChildLaunch) {
     const caller = yield* Scope.Scope;
@@ -43,14 +49,11 @@ const make = Effect.gen(function* () {
         }),
       )
       .pipe(Scope.provide(lifetime));
-    // Finalizers run last-in first: this one precedes the module's tree kill.
+    // Finalizers run last-in first: this kill precedes the backend's release, so the leader is
+    // still alive to walk from. A leader that already exited makes it a no-op.
     yield* Scope.addFinalizer(
       lifetime,
-      Stream.run(Stream.empty, handle.stdin).pipe(
-        Effect.andThen(handle.exitCode),
-        Effect.timeout(CHILD_EXIT_GRACE),
-        Effect.ignore,
-      ),
+      handle.kill({ forceKillAfter: CHILD_EXIT_GRACE }).pipe(Effect.ignore),
     );
     return handle;
   });

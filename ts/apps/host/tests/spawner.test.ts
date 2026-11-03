@@ -2,14 +2,13 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect";
-import { TestClock } from "effect/testing";
 import { afterAll, expect, test, vi } from "vite-plus/test";
 import { adapterCommand, stopChild } from "../src/harness/adapter.ts";
-import { CHILD_EXIT_GRACE, Spawner, type ChildLaunch } from "../src/harness/spawner.ts";
+import { Spawner, type ChildLaunch } from "../src/harness/spawner.ts";
 import { testAdapter, settle, effectTest } from "./effect-test.ts";
 
-// ADR 0029 phase 4. The children here are real processes (the tree kill is the thing proven); the
-// grace window runs on TestClock. A fixture that ignores stdin EOF stays up until its scope kills it.
+// ADR 0029 phase 4. The children here are real processes (the tree kill is the thing proven). The
+// scope kills the tree while the leader lives; stdin EOF is never the stop signal.
 const dir = mkdtempSync(join(tmpdir(), "pe-spawner-"));
 const script = (name: string, body: string) => {
   const file = join(dir, name);
@@ -27,6 +26,17 @@ const parent = script(
   `const g = require("node:child_process").spawn(process.execPath, [${JSON.stringify(stubborn)}], { stdio: "ignore" });
 console.log(JSON.stringify({ node: process.pid, grandchild: g.pid }));
 setInterval(() => {}, 1000);
+`,
+);
+// A leader that honours stdin EOF and exits 0, leaving a grandchild. Detached on purpose: libuv puts
+// a node parent's ordinary children in a kill-on-close job, so only a detached (job-escaping)
+// grandchild outlives a leader that exits 0. Probed 2026-11-02: the ends-stdin-first finalizer
+// orphaned it; killing the tree while the leader lives does not.
+const cooperating = script(
+  "cooperating.js",
+  `const g = require("node:child_process").spawn(process.execPath, [${JSON.stringify(stubborn)}], { stdio: "ignore", detached: true });
+console.log(JSON.stringify({ grandchild: g.pid }));
+process.stdin.resume(); process.stdin.on("end", () => process.exit(0));
 `,
 );
 const report = script(
@@ -85,48 +95,26 @@ effectTest(
       const pids = [handle.pid, nodePid, grandchild];
       expect(new Set(pids).size).toBe(3);
       expect(pids.map(alive)).toEqual([true, true, true]);
-      // The fixture ignores stdin EOF, so the close waits out the grace window: TestClock owns it.
-      const closing = yield* Effect.forkChild(Scope.close(scope, Exit.void));
-      yield* real(200);
-      expect(yield* Effect.sync(() => closing.pollUnsafe())).toBeUndefined();
-      yield* TestClock.adjust(CHILD_EXIT_GRACE);
-      yield* Fiber.join(closing);
+      yield* Scope.close(scope, Exit.void);
       yield* eventually("the tree is gone", () => !pids.some(alive));
     }),
   60_000,
 );
 
 effectTest(
-  "scope close: a child that ignores stdin is killed exactly at the grace window",
+  "scope close: a leader that would exit 0 on stdin EOF still has its grandchild killed",
   () =>
     Effect.gen(function* () {
       const { spawn } = yield* spawner;
       const scope = yield* Scope.make();
-      const handle = yield* spawn(node(stubborn)).pipe(Scope.provide(scope));
-      const closing = yield* Effect.forkChild(Scope.close(scope, Exit.void));
-      yield* real(200);
-      yield* TestClock.adjust("1999 millis");
-      yield* real(200);
-      expect(alive(handle.pid)).toBe(true);
-      expect(closing.pollUnsafe()).toBeUndefined();
-      yield* TestClock.adjust("1 millis");
-      yield* Fiber.join(closing);
-      yield* eventually("the child is gone", () => !alive(handle.pid));
-    }),
-  60_000,
-);
-
-effectTest(
-  "scope close: a child that honours stdin EOF exits inside the grace window, clock untouched",
-  () =>
-    Effect.gen(function* () {
-      const { spawn } = yield* spawner;
-      const scope = yield* Scope.make();
-      const handle = yield* spawn(node(obedient)).pipe(Scope.provide(scope));
-      const exited = yield* Effect.forkChild(handle.exitCode);
+      const handle = yield* spawn(node(cooperating)).pipe(Scope.provide(scope));
+      const { grandchild } = JSON.parse(yield* firstLine(handle.stdout));
+      expect([alive(handle.pid), alive(grandchild)]).toEqual([true, true]);
       yield* Scope.close(scope, Exit.void);
-      expect(yield* Fiber.join(exited)).toBe(0);
-      expect(alive(handle.pid)).toBe(false);
+      yield* eventually(
+        "leader and grandchild are gone",
+        () => !alive(handle.pid) && !alive(grandchild),
+      );
     }),
   60_000,
 );
@@ -140,10 +128,7 @@ effectTest(
       const open = yield* Scope.make();
       const handle = yield* spawn(node(stubborn)).pipe(Scope.provide(open));
       expect(alive(handle.pid)).toBe(true);
-      const closing = yield* Effect.forkChild(Scope.close(owner, Exit.void));
-      yield* real(200);
-      yield* TestClock.adjust(CHILD_EXIT_GRACE);
-      yield* Fiber.join(closing);
+      yield* Scope.close(owner, Exit.void);
       yield* eventually("the child is gone", () => !alive(handle.pid));
     }),
   60_000,
@@ -198,14 +183,14 @@ const adapterFixture = async (file: string) => {
 const exits = (child: { once: (e: "exit", f: (...a: unknown[]) => void) => unknown }) =>
   new Promise<unknown[]>((resolve) => child.once("exit", (...a) => resolve(a)));
 
-test("openAdapter: stopChild ends stdin, the child exits, and the exit event follows", async () => {
+test("openAdapter: stopChild kills the child, and the exit event follows", async () => {
   const opened = await adapterFixture(obedient);
   const exit = exits(opened.child);
   await vi.waitFor(() => expect(opened.child.pid).toBeGreaterThan(0));
   const pid = opened.child.pid!;
   expect(alive(pid)).toBe(true);
   await settle(stopChild(opened.child));
-  expect(await exit).toEqual([0, null]);
+  await exit;
   expect(alive(pid)).toBe(false);
   vi.unstubAllEnvs();
 }, 30_000);
