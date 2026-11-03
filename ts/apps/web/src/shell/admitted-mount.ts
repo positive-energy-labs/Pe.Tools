@@ -379,12 +379,12 @@ export function createRouteShell(
           ...Object.fromEntries(
             [...stale].map((key) => [
               key,
-              {
+              Object.freeze({
                 status: "unavailable" as const,
                 current: false as const,
                 value: previous.get(key),
                 reason: "Host evidence changed",
-              },
+              }),
             ]),
           ),
         });
@@ -690,7 +690,11 @@ export function createRouteShell(
                       (target?.kind === "document" ? [{ kind: "document", ref: target.ref }] : []),
                   );
                   const saved = retained.get(readingId);
-                  if (saved?.signature === signature && !active.has(readingId)) {
+                  if (
+                    saved?.signature === signature &&
+                    !active.has(readingId) &&
+                    route.data.readings[readingId]!.kind === "use"
+                  ) {
                     const record: Active = {
                       signature,
                       key: request.key,

@@ -237,7 +237,8 @@ async function admitted(
         ...data.readings,
         ...((amendment.data?.readings ?? {}) as typeof data.readings),
         notes: {
-          ...data.readings.notes,
+          ...((amendment.data?.readings as typeof data.readings | undefined)?.notes ??
+            data.readings.notes),
           demand: explicit ? ("explicit" as const) : ("visible" as const),
         },
       },
@@ -1109,7 +1110,7 @@ test("shared preview transport renders before-to-after review and commits identi
     expect(screen.getByText("Review table")).toBeTruthy();
     expect(previewCall).toHaveBeenCalledTimes(1);
     expect(submit).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Commit native" }));
+    fireEvent.click(screen.getByRole("button", { name: "Commit Native" }));
     expect(submit).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         key: "native.write",
@@ -2897,3 +2898,26 @@ test("K4 pane refresh leaves an independent visible reading alone", async () => 
   expect(mount.readingStatus("other").snapshot).toBe(independent);
   expect(mount.readingStatus("other").leased).toBe(true);
 });
+
+test.each(["feed", "worker", "port"] as const)(
+  "K4 reveal resumes only the declared %s lease while retaining evidence",
+  async (kind) => {
+    const { args: _args, ...policy } = data.readings.notes;
+    const route = await admitted(false, false, {
+      data: { readings: { notes: { ...policy, kind, adapter: "args" } } },
+      bodies: { args: { ...bodies.args, kind: "adapter", slot: "readings.notes.adapter" } },
+    });
+    const t = transports();
+    const m = createRouteShell(t.services).mount(route, locationPort().address);
+    closes.push(m.close);
+    t.frames[0]!(ready("kept"));
+    m.setVisible(false);
+    expect(t.releases).toHaveBeenCalledOnce();
+    expect(m.readingStatus("notes").snapshot.value).toBe("kept");
+    m.setVisible(true);
+    expect(t.keys).toEqual([0, 0]);
+    expect(m.readingStatus("notes").previous).toBe("kept");
+    t.frames[1]!(ready("resumed"));
+    expect(m.readingStatus("notes").snapshot.value).toBe("resumed");
+  },
+);
