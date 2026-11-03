@@ -59,8 +59,7 @@ async function sha256(bytes: Uint8Array): Promise<string> {
 
 /** Verify BEFORE evaluation, then give A the exports from those exact bytes. A loader is
  * trusted code, not a sandbox. This door never publishes or registers a refused module. */
-// TODO: S1c2 wire builtin-routes.tsx and pod-routes.tsx to this verifier after the legacy
-// adapter supplies real kernel data. Their existing registration/mount doors are not cut over.
+// Pod discovery uses this byte verifier; builtin routes use build-owned source closures.
 export async function loadRouteArtifact(
   input: RouteArtifactBytes,
   catalog: readonly CatalogLink[],
