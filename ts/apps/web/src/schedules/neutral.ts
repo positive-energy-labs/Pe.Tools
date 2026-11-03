@@ -11,10 +11,10 @@ import {
   actionReceiptListDecoder,
   workKeySchema,
 } from "@pe/agent-contracts";
-import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
-import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import type { IdentityId } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import { commandCatalogAxes } from "../../../../packages/agent-contracts/src/command-axes";
+import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
+import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
+import type { IdentityId } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
+import { commandCatalogAxes } from "../../../../packages/agent-contracts/src/command-axes.ts";
 export const scheduleFixtureReading = scheduleReadingSchema.parse({
   id: "a".repeat(64),
   workspaceId: "schedule:fixture",

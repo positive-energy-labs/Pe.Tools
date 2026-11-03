@@ -1,4 +1,4 @@
-import { commandCatalogAxes } from "../../../../packages/agent-contracts/src/command-axes";
+import { commandCatalogAxes } from "../../../../packages/agent-contracts/src/command-axes.ts";
 import { z } from "zod";
 import {
   commands,
@@ -19,16 +19,16 @@ import {
 import type {
   BodyBindings,
   BodyContext,
-} from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
-import { familiesReads } from "../../../../packages/mcps/src/shared/families-client";
+} from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
+import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
+import { familiesReads } from "../../../../packages/mcps/src/shared/families-client.ts";
 
 // Host admission consumes this module without loading the browser pane or sources.
 // TODO: W2 cutover requires admitted host registration to preserve familiesAdmission.
 // host-admission-gap.test.ts proves unknown family/type writes lose their refusal.
 // RouteStateSpec parity does not carry RouteWorkspaceRegistration.admit.
 const scopeSchema = z.custom<
-  import("../../../../packages/agent-contracts/src/route-kernel-page").IdentityId<"local">
+  import("../../../../packages/agent-contracts/src/route-kernel-page.ts").IdentityId<"local">
 >((value) => value === '["families","draft"]');
 export const familiesScopeId = scopeSchema.parse('["families","draft"]');
 const empty = { page: [], work: [], readings: [] } as const;

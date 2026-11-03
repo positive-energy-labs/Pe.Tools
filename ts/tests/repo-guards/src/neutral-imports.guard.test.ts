@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { expect, test } from "vite-plus/test";
 import ts from "typescript";
 const root = resolve(import.meta.dirname, "../../..");
@@ -37,4 +37,28 @@ function forbidden(file: string, seen = new Set<string>()): string[] {
 }
 test("neutral modules never import web UI, React, web aliases or styles", () => {
   expect(files(join(root, "apps")).flatMap((file) => forbidden(file))).toEqual([]);
+});
+
+const extensionlessImports = (source: string) =>
+  ts
+    .preProcessFile(source, true, true)
+    .importedFiles.map(({ fileName }) => fileName)
+    .filter((fileName) => fileName.startsWith(".") && !extname(fileName));
+
+test("neutral modules use explicit extensions for relative imports", () => {
+  expect(
+    files(join(root, "apps")).flatMap((file) =>
+      extensionlessImports(readFileSync(file, "utf8")).map((specifier) => `${file}: ${specifier}`),
+    ),
+  ).toEqual([]);
+});
+
+test.each([
+  'import { value } from "./value";',
+  'import type { Value } from "../value";',
+  'export * from "./value";',
+  'const value = import("./value");',
+])("rejects extensionless neutral dependency: %s", (source) => {
+  expect(extensionlessImports(source)).toHaveLength(1);
+  expect(extensionlessImports(source.replace('value"', 'value.ts"'))).toEqual([]);
 });
