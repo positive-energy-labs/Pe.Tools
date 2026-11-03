@@ -157,3 +157,57 @@ test("a failed acquisition retires its feed and later subscribers reacquire", as
   releaseThird();
   expect(stop).toHaveBeenCalledTimes(2);
 });
+
+test("byte trimming counts UTF-8, array overhead and replacement sizes exactly", async () => {
+  let deliver!: (value: Receipt) => void;
+  const a = row("a?"),
+    b = row("b?"),
+    c = row("c?");
+  const body = (value: Receipt) => {
+    if (value.body.kind !== "action") throw Error("expected action");
+    return value.body.value;
+  };
+  const maxBytes = new TextEncoder().encode(JSON.stringify([body(b), body(c)])).byteLength;
+  const journal = {
+    subscribe: (_query: unknown, listener: (value: Receipt) => void) => {
+      deliver = listener;
+      return () => {};
+    },
+    read: async () => [a, b, c],
+  };
+  const releases: (() => void)[] = [];
+  const snapshot = () => {
+    let latest: ReceiptFeedState | undefined;
+    releases.push(
+      observeWorkReceipts(
+        journal,
+        { key, target: null },
+        (v) => {
+          latest = v;
+        },
+        { maxCount: 100, maxBytes },
+      ),
+    );
+    return latest;
+  };
+  snapshot();
+  await Promise.resolve();
+  expect(snapshot()).toMatchObject({
+    kind: "ready",
+    receipts: { from: 2, through: 3, rows: [{ id: "b?" }, { id: "c?" }] },
+  });
+  const oversized = row("c?", "running", 2);
+  body(oversized).input = { text: "?".repeat(maxBytes) };
+  deliver(oversized);
+  expect(snapshot()).toMatchObject({
+    kind: "ready",
+    receipts: { from: 3, rows: [{ id: "c?", state: "running" }] },
+  });
+  deliver(row("c?", "succeeded", 3));
+  deliver(row("d?"));
+  expect(snapshot()).toMatchObject({
+    kind: "ready",
+    receipts: { from: 3, through: 6, rows: [{ id: "c?" }, { id: "d?" }] },
+  });
+  releases.forEach((release) => release());
+});

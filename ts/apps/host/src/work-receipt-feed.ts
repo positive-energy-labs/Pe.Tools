@@ -34,7 +34,18 @@ export function observeWorkReceipts(
   let failure: Extract<ReceiptFeedState, { kind: "failed" }> | undefined;
   let through = 0;
   let from = 0;
-  const rows = new Map<string, { cursor: number; revision: number; receipt: ActionReceipt }>();
+  const rows = new Map<
+    string,
+    { cursor: number; revision: number; receipt: ActionReceipt; bytes: number }
+  >();
+  const encoder = new TextEncoder();
+  let totalBytes = 2; // JSON array brackets; each additional row also contributes a comma.
+  const removeRow = (id: string) => {
+    const previous = rows.get(id);
+    if (!previous) return;
+    totalBytes -= previous.bytes + (rows.size > 1 ? 1 : 0);
+    rows.delete(id);
+  };
   const pending: Receipt[] = [];
   // A bounded duplicate window also covers terminal rows already trimmed from ready.
   const versions = new Map<string, number>();
@@ -51,16 +62,15 @@ export function observeWorkReceipts(
     while (versions.size > Math.max(256, limits.maxCount))
       versions.delete(versions.keys().next().value!);
     through++;
-    rows.delete(receipt.id);
-    rows.set(receipt.id, { cursor: through, revision: value.revision, receipt });
+    removeRow(receipt.id);
+    const bytes = encoder.encode(JSON.stringify(receipt)).byteLength;
+    totalBytes += bytes + (rows.size ? 1 : 0);
+    rows.set(receipt.id, { cursor: through, revision: value.revision, receipt, bytes });
     // Non-terminal rows survive both bounds, even if they alone exceed the budget.
-    const bytes = () =>
-      new TextEncoder().encode(JSON.stringify([...rows.values()].map((row) => row.receipt)))
-        .byteLength;
     for (const [id, row] of rows) {
-      if (rows.size <= limits.maxCount && bytes() <= limits.maxBytes) break;
+      if (rows.size <= limits.maxCount && totalBytes <= limits.maxBytes) break;
       if (["waiting", "running", "unknown"].includes(row.receipt.state)) continue;
-      rows.delete(id);
+      removeRow(id);
       from = Math.max(from, row.cursor + 1);
     }
     if (!acquiring) publish({ kind: "receipt", cursor: through as ReceiptCursor, receipt });
