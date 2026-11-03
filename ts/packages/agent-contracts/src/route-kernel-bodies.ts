@@ -135,7 +135,7 @@ export type WorkDescriptionRefusal = {
   readonly reason: "describe-threw" | "describe-not-string";
 };
 /** Preserve the mount's existing outcome, including review preparation before dispatch. */
-type VerbOutcome<V> = V extends { kind: "work" }
+type VerbOutcome<V> = V extends { kind: "work"; describe: string }
   ? WorkDescriptionRefusal | WorkVerbOutcome<V>
   : WorkVerbOutcome<V>;
 type WorkVerbOutcome<V> = V extends { review: "none" }
