@@ -113,6 +113,14 @@ const applyInputSchema = z
     "Choose one source, source batch, preview, or the reviewed Work",
   );
 export const familyActions = {
+  "families.cancel-read": {
+    says: "Cancel this exact running Families read in the selected document.",
+    dirties: [],
+    needs: "project-document",
+    effect: "command",
+    input: z.strictObject({ readId: z.uuid() }),
+    result: z.strictObject({ cancelled: z.literal(true) }),
+  },
   "family.attach-spec": {
     says: "Attach a PDF specification and its parsed assets to the reviewed family member.",
     needs: "nothing",

@@ -75,6 +75,13 @@ const declaredAxes = {
     cost: "Mutation",
     cardinality: "One",
   },
+  "families.cancel-read": {
+    subject: "Elements",
+    touches: ["Metadata"],
+    effect: "SessionWrite",
+    cost: "Cheap",
+    cardinality: "One",
+  },
   "families.capture": {
     subject: "Elements",
     touches: ["Geometry"],
@@ -424,5 +431,7 @@ for (const [key, action] of Object.entries(hostActions)) {
   const phase = "writeBoundary" in action ? action.writeBoundary.phase : undefined;
   const effect = commandCatalogAxes[key as HostActionKey].effect;
   if (phase && effect !== (phase === "apply" ? "ModelWrite" : "TransactRead"))
-    throw Error(`${key}: a ${phase} write boundary needs Effect ${phase === "apply" ? "ModelWrite" : "TransactRead"}, not ${effect}`);
+    throw Error(
+      `${key}: a ${phase} write boundary needs Effect ${phase === "apply" ? "ModelWrite" : "TransactRead"}, not ${effect}`,
+    );
 }

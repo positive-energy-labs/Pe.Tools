@@ -96,6 +96,7 @@ import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import { familiesApplyRun, isFamiliesApplyResponse } from "./family-run-recovery.ts";
 import { familySpecExecutor } from "./family-spec.ts";
+import type { FamiliesReader } from "./families-reader.ts";
 import { nativeInputSchema } from "./native-input.ts";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -120,6 +121,7 @@ export type PodDependencies = {
 };
 export type FamilyActionDependencies = TakeoffActionDependencies &
   PodDependencies & {
+    families?: Pick<FamiliesReader["Service"], "cancel">;
     /** The demo owner keeps native reads inside its own root; a build has no output path to place. */
     nativePaths?: (
       input: { modelDirectory?: string },
@@ -1613,6 +1615,22 @@ export function familyExecutors(
     "settings.write": settingsWrite,
     "family.observe": familyObserve,
     "family.capture": familyCapture,
+    "families.cancel-read": command(
+      commands["families.cancel-read"],
+      z.strictObject({ readId: z.uuid(), document: documentRefSchema }),
+      {
+        bind: async (ctx) => {
+          if (!deps.families) throw refused("Families reader is unavailable");
+          const prepared = { readId: ctx.admission.input.readId, document: targetOf(ctx) };
+          return { effects: [], prepare: async () => prepared };
+        },
+        run: async (_ctx, { prepared }) => {
+          if (!deps.families) throw refused("Families reader is unavailable");
+          await deps.families.cancel(prepared.readId, prepared.document);
+          return { cancelled: true as const };
+        },
+      },
+    ),
     "families.capture": familiesCapture,
     "family.plan": familyPlan,
     "families.plan": familiesPlan,

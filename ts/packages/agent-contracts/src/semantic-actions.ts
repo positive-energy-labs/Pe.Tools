@@ -261,13 +261,10 @@ export const tools = {
       editable: [["writeIntent", "*"], ["cells", "*"], ["patch"], ["scope"]],
     },
     commands: {
+      "families.cancel-read": familyActions["families.cancel-read"],
       ...workIntent("families", "families.capture", familyActions["families.capture"]),
       "families.plan": workCommand("families", familyActions["families.plan"]),
-      ...workWriteCommands(
-        "families",
-        "families.apply",
-        familyActions["families.apply"],
-      ),
+      ...workWriteCommands("families", "families.apply", familyActions["families.apply"]),
       "families.save-draft": workCommand("families", familyActions["families.save-draft"]),
     },
   },
@@ -302,11 +299,7 @@ export const tools = {
         { workspace: true },
       ),
       ...workIntent("schedules", "schedule.capture", scheduleActions["schedule.capture"]),
-      ...workWriteCommands(
-        "schedules",
-        "schedule.apply",
-        scheduleActions["schedule.apply"],
-      ),
+      ...workWriteCommands("schedules", "schedule.apply", scheduleActions["schedule.apply"]),
     },
   },
   takeoffs: {
@@ -322,16 +315,8 @@ export const tools = {
     },
     commands: {
       ...workIntent("takeoffs", "takeoffs.initialize", definitions["takeoffs.initialize"]),
-      ...workWriteCommands(
-        "takeoffs",
-        "takeoffs.adopt",
-        definitions["takeoffs.adopt"],
-      ),
-      ...workWriteCommands(
-        "takeoffs",
-        "takeoffs.partition",
-        definitions["takeoffs.partition"],
-      ),
+      ...workWriteCommands("takeoffs", "takeoffs.adopt", definitions["takeoffs.adopt"]),
+      ...workWriteCommands("takeoffs", "takeoffs.partition", definitions["takeoffs.partition"]),
       ...workIntent("takeoffs", "takeoffs.sync", definitions["takeoffs.sync"]),
     },
   },
@@ -347,11 +332,7 @@ export const tools = {
       ],
     },
     commands: {
-      ...workWriteCommands(
-        "rooms",
-        "rooms.partition",
-        definitions["rooms.partition"],
-      ),
+      ...workWriteCommands("rooms", "rooms.partition", definitions["rooms.partition"]),
       ...workWriteCommands("rooms", "rooms.draw", definitions["rooms.draw"]),
       ...workWriteCommands(
         "rooms",
@@ -405,10 +386,18 @@ export const tools = {
         derive: ductsDerive,
         preview: { key: "ducts.preview-heal", definition: ductsActions["ducts.preview-heal"] },
       }),
-      ...workWriteCommands("ducts", "ducts.apply-assign-fan", ductsActions["ducts.apply-assign-fan"], {
-        derive: ductsDerive,
-        preview: { key: "ducts.preview-assign-fan", definition: ductsActions["ducts.preview-assign-fan"] },
-      }),
+      ...workWriteCommands(
+        "ducts",
+        "ducts.apply-assign-fan",
+        ductsActions["ducts.apply-assign-fan"],
+        {
+          derive: ductsDerive,
+          preview: {
+            key: "ducts.preview-assign-fan",
+            definition: ductsActions["ducts.preview-assign-fan"],
+          },
+        },
+      ),
     },
   },
   instances: {
@@ -520,7 +509,9 @@ export type HostActionKey = keyof typeof hostActions;
 export type SemanticActionKey = keyof typeof commands;
 /** The TransactRead half of a Work write: its receipt is review evidence, never a commit. */
 export function isWritePreviewKey(key: string): boolean {
-  const command = commands[key as SemanticActionKey] as { writeBoundary?: { phase: string } } | undefined;
+  const command = commands[key as SemanticActionKey] as
+    | { writeBoundary?: { phase: string } }
+    | undefined;
   return command?.writeBoundary?.phase === "preview";
 }
 /** The preview entry a Work write seals at. */

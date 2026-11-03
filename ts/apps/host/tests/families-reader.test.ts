@@ -9,6 +9,11 @@ import { address, bindWork } from "@pe/agent-contracts";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 import { CANCEL_OPERATION_KEY, type RevitBridge } from "../src/bridge.ts";
 import { familiesReader } from "./effect-test.ts";
+import { commandRegistry } from "../src/command-registry.ts";
+import type { CommandContext } from "../src/command-executor.ts";
+import type { ActionExecution } from "../src/action-journal.ts";
+import { commands } from "@pe/agent-contracts";
+import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 
 type Matrix = RevitMatrixLoadedFamilies.Res.Response;
@@ -96,7 +101,17 @@ test("a row is available before the next family finishes; exact cancellation ret
     await expect(f.reader.cancel(f.readId, { ...f.document, openId: "foreign" })).rejects.toThrow(
       "no running",
     );
-    await f.reader.cancel(f.readId, f.document);
+    const stop = commandRegistry(f.bridge, f.captures, { families: f.reader }, async () => {
+      throw Error("Stop must not use the local gateway");
+    })("families.cancel-read");
+    expect(stop.definition).toBe(commands["families.cancel-read"]);
+    expect(commandCatalogAxes["families.cancel-read"].effect).toBe("SessionWrite");
+    const context = {
+      admission: { input: { readId: f.readId }, target: { kind: "document", ref: f.document } },
+    } as unknown as CommandContext;
+    const bound = await stop.bind(context);
+    const prepared = stop.prepared.parse(await bound.prepare!());
+    expect(await stop.run(context, { prepared } as ActionExecution)).toEqual({ cancelled: true });
     const cancel = f.calls.find((c) => c.key === CANCEL_OPERATION_KEY);
     expect(cancel?.input).toEqual({
       requestId: f.calls.find((c) => c.input.familyId === 2)?.requestId,

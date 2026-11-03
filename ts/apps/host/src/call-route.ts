@@ -996,7 +996,7 @@ export function makeCallRoute(
             resolve: commandRegistry(
               bridge,
               observations(),
-              actionDeps,
+              { ...actionDeps, families: composition?.families },
               composition?.local ??
                 ((key, input) =>
                   executeGatewayLocal(key, input, bridge, observations(), actionDeps.launchShell)),
