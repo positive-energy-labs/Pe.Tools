@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
 import { module, scheduleIdentity } from "./kernel";
@@ -156,7 +156,7 @@ test("G3: top-level cells replacement loses untouched stale marks at the authori
   expect(direct.ok).toBe(true);
   if (!direct.ok) throw Error("Domain edit refused");
   expect(direct.envelope.doc.basis?.stale).toEqual([{ key: "1::2", was: "b" }]);
-  // This is the strongest patch the current typed WorkPatches contract permits.
+  // A root replacement remains lossy; the admitted route must preserve keyed paths.
   const root = applyPatches(
     scheduleGridRouteState,
     envelope,
@@ -195,7 +195,7 @@ test("accepted edits undo and redo through the mount's Work history", async () =
 
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 
-test("G3 mount witness: the typed root adapter clears an untouched stale cell on the real domain Work door", async () => {
+test("keyed mount edit preserves an untouched stale cell on the real domain Work door", async () => {
   const store = createFixtureWorkDoor(scheduleGridRouteState, {
     basis: {
       captureId: "a".repeat(64),
@@ -226,5 +226,80 @@ test("G3 mount witness: the typed root adapter clears an untouched stale cell on
     ),
   );
   expect(outcome.kind).toBe("accepted");
-  expect(scheduleGridRouteState.schema.parse(mount.work()?.value).basis?.stale).toBeUndefined();
+  expect(scheduleGridRouteState.schema.parse(mount.work()?.value).basis?.stale).toEqual([
+    { key: "1::2", was: "b" },
+  ]);
+  expect(mount.journal()?.moves.at(-1)?.label).toContain("Cell 1::1");
+});
+
+import { scheduleFixtureReading } from "./neutral";
+import type { ReadingSource } from "../shell/readings";
+import { createWorkFeedClient } from "../shell/work-feed-client";
+import { testConsents } from "../../../host/tests/effect-test";
+import * as actions from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { actionReceiptSchema } from "@pe/agent-contracts";
+import type { JournalSubmission } from "../../../../packages/agent-contracts/src/work-journal-door";
+
+const settle = (o: Observation<WorkWriteOutcome>) => new Promise<WorkWriteOutcome>(resolve => o.subscribe(v => {if(v.kind !== "pending") resolve(v)}, () => {}));
+async function interactive() {
+  const reading = structuredClone(scheduleFixtureReading);
+  reading.snapshot.rows[0]!.bindings = [{columnNumber: 1, targetElementIds: [101], parameterName: "Model", storageType: "String", displayValue: "FXMQ15", isEditable: true, blocker: "None", targets: [{elementId: 101, parameterId: 1, parameterName: "Model", storageType: "String", isReadOnly: false, hasValue: true, rawValue: "FXMQ15"}]}];
+  const values: Record<string, unknown> = {"schedules.catalog": {schedules: []}, "schedules.retained": reading, "schedules.saved": reading, "schedules.receipts": []};
+  const sources: Record<string, ReadingSource> = Object.fromEntries(Object.entries(values).map(([key,value]) => [key, {kind: "use", open(_, deliver) {deliver({kind: "complete", value, revision: 0})}}]));
+  const store = createFixtureWorkDoor(scheduleGridRouteState, {basis: {captureId: reading.id}, cells: {}});
+  const services = sourceRouteServices(sources, {target: () => ({kind: "document", ref: reading.target})});
+  const mount = createRouteShell({...services, work: store}).mount(await admit(), {read: () => new URLSearchParams({workspaceId: scheduleIdentity(reading.workspaceId)}), write() {}, subscribe: () => () => {}});
+  close.push(mount.close);
+  return {mount, store, services, reading};
+}
+test("stale rendered cell refuses visibly in the actual grid", async () => {
+  vi.stubGlobal("localStorage", {getItem: () => null, setItem() {}});
+  const {mount} = await interactive();
+  const view = render(mount.read("grid") as ReactNode);
+  const editor = [...view.container.querySelectorAll<HTMLInputElement>("tbody input")].find(i => i.value === "FXMQ15")!;
+  expect(editor).toBeTruthy();
+  await settle(mount.invoke("edit", {patches: [{path: ["cells", "1::1", "edit"], value: {value: "other"}}]}, mount.workBasis()!) as Observation<WorkWriteOutcome>);
+  editor.focus();
+  fireEvent.change(editor, {target: {value: "late"}});
+  await act(async () => fireEvent.keyDown(editor, {key: "Enter"}));
+  await screen.findByText(/document moved to r1/i);
+  expect(scheduleGridRouteState.schema.parse(mount.work()?.value).cells["1::1"]?.edit?.value).toBe("other");
+});
+test("push traverses U8s preview, review, real consent owner, commit and retained readback", async () => {
+  const f = await interactive();
+  await settle(f.mount.invoke("edit", {patches: [{path: ["cells", "1::1", "edit"], value: {value: "new"}}]}, f.mount.workBasis()!) as Observation<WorkWriteOutcome>);
+  const submit = vi.spyOn(actions, "submitAction").mockImplementation(async admission => actionReceiptSchema.parse({...admission, state: "succeeded", caller: {kind: "human", via: "local"}, basis: null, steps: [], prepared: {state: "unprepared"}, recovery: [], startedAt: "2026-11-03T00:00:00Z", result: {previewOnly: true, derivedRequest: {edits: [{key: "1::1", before: "FXMQ15", after: "new"}]}, seal: {requestHash: "sealed", work: {handle: admission.input.work}, incarnation: {}, dependencies: "deps"}, takenAt: "2026-11-03T00:00:00Z"}}));
+  try {
+    expect(f.mount.invoke("push", {})).toEqual({kind: "preview"});
+    await vi.waitFor(() => expect(f.mount.review("push")).not.toBeNull());
+    expect(submit.mock.calls[0]![0].key).toBe("schedule.grid.push.preview");
+    expect(f.mount.review("push")?.rows.join(" ")).toContain("FXMQ15");
+    // Consent is host-owned; re-open the same admitted route with a connected submission port.
+    const events: import("../../../host/src/run-consent").ConsentEvent[] = [];
+    const runs = testConsents((_,e) => events.push(e));
+    const run = {thread: "w3c", turn: "push"}; runs.open(run);
+    let committed = false;
+    const client = createWorkFeedClient(undefined, {write: async () => {throw Error("unused")}, submit: async admission => {
+      await runs.authorize({caller: {kind: "pea", context: "fixture", thread: run.thread, run, root: run}, run, root: run}, admission.id, [{kind: "file", path: "C:/fixture/schedule"}]);
+      committed = true;
+      return actionReceiptSchema.parse({...admission, state: "succeeded", caller: {kind: "human", via: "local"}, basis: null, steps: [], prepared: {state: "ready", value: null}, recovery: [], startedAt: "2026-11-03T00:00:00Z", result: {value: {failures: [], reading: f.reading}}});
+    }});
+    const connected = createRouteShell({...f.services, work: {...f.store, submit: c => client.submit(c)}}).mount(await admit(), {read: () => new URLSearchParams({workspaceId: scheduleIdentity(f.reading.workspaceId)}), write() {}, subscribe: () => () => {}});
+    close.push(connected.close);
+    vi.useFakeTimers();
+    try {
+      connected.invoke("push", {});
+      await vi.advanceTimersByTimeAsync(0);
+      expect(connected.review("push")).not.toBeNull();
+      const command = connected.confirm("push") as JournalSubmission;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(events.some(e => e.kind === "permission_request")).toBe(true);
+      expect(committed).toBe(false);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(committed).toBe(true);
+      let outcome: unknown; command.accepted.subscribe(v => {outcome = v}, () => {});
+      expect(outcome).toMatchObject({kind: "accepted-native", outcome: "committed"});
+      expect(connected.read("grid")).toBeTruthy();
+    } finally {runs.closeAll(); vi.useRealTimers()}
+  } finally {submit.mockRestore()}
 });
