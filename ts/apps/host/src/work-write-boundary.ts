@@ -61,10 +61,11 @@ const preparedSchema = z.object({
   takenAt: z.string(),
 });
 
-
 type WorkSpec = NonNullable<Tool["work"]> & { schema: z.ZodType<Record<string, unknown>> };
-const workSpec = (route: string, registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>) =>
-  (registeredWork ?? (tools[route as keyof typeof tools] as Tool)?.work)! as WorkSpec;
+const workSpec = (
+  route: string,
+  registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
+) => (registeredWork ?? (tools[route as keyof typeof tools] as Tool)?.work)! as WorkSpec;
 
 /** Primitive 1 on the host: admit the Work to its document, read the authored cells, derive the input. */
 async function deriveFromWork(
@@ -114,7 +115,8 @@ export function workIntentBoundary(
     workIntent: WorkIntentBinding;
   };
   const hooks = definition.workIntent;
-  if (typeof hooks?.derive !== "function") throw Error("Work command requires a typed derive binding");
+  if (typeof hooks?.derive !== "function")
+    throw Error("Work command requires a typed derive binding");
   const spec = workSpec(hooks.route);
   return {
     ...executor,
@@ -133,7 +135,8 @@ export function workIntentBoundary(
       return executor.run(withInput(ctx, p.input), { ...execution, prepared: p.value });
     },
     recover: executor.recover
-      ? (step, prepared, target) => executor.recover!(step, intentPrepared.parse(prepared).value, target)
+      ? (step, prepared, target) =>
+          executor.recover!(step, intentPrepared.parse(prepared).value, target)
       : undefined,
   };
 }
@@ -161,7 +164,6 @@ export function workWriteBoundary(
   const project = executor.seal;
   const { route } = hooks;
   const spec = workSpec(route, registeredWork);
-  const internal = withInput;
   return {
     ...executor,
     boundary: "work",
@@ -188,7 +190,7 @@ export function workWriteBoundary(
             canonicalRouteInput(row.target) === canonicalRouteInput(ctx.admission.target),
         )
         .at(-1);
-      const derivedContext = internal(ctx, input);
+      const derivedContext = withInput(ctx, input);
       // Reproduce generated paths and plan references from this exact preview, never a new caller payload.
       derivedContext.admission.id = !previewOnly && preview ? preview.id : ctx.admission.id;
       const bound = await executor.bind(derivedContext);
@@ -233,11 +235,16 @@ export function workWriteBoundary(
             dependencies,
             projection.evidence,
           );
-          const previousSeal = preview?.state === "succeeded"
-            ? (preview.result as { seal?: Record<string, unknown> }).seal : undefined;
+          const previousSeal =
+            preview?.state === "succeeded"
+              ? (preview.result as { seal?: Record<string, unknown> }).seal
+              : undefined;
           if (!previewOnly && canonicalRouteInput(previousSeal) !== canonicalRouteInput(seal)) {
-            const changed = Object.keys(seal).filter((key) =>
-              canonicalRouteInput(previousSeal?.[key]) !== canonicalRouteInput(seal[key as keyof typeof seal]));
+            const changed = Object.keys(seal).filter(
+              (key) =>
+                canonicalRouteInput(previousSeal?.[key]) !==
+                canonicalRouteInput(seal[key as keyof typeof seal]),
+            );
             throw refused(
               `Preview changed; preview the current Work and dependencies again (${changed.join(", ")})`,
               "preview.stale",
@@ -257,7 +264,7 @@ export function workWriteBoundary(
           seal: p.seal,
           takenAt: p.takenAt,
         };
-      const result = await executor.run(internal(ctx, p.input), {
+      const result = await executor.run(withInput(ctx, p.input), {
         ...execution,
         prepared: p.value,
       });

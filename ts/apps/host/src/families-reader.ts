@@ -21,7 +21,7 @@ import {
   type DocOpResult,
 } from "@pe/host-contracts/pe-revit-contract";
 import { adaptiveWork, type WorkExecutor } from "./adaptive-work.ts";
-import { BridgeError, CANCEL_OPERATION_KEY, type RevitBridge } from "./bridge.ts";
+import { CANCEL_OPERATION_KEY, type RevitBridge } from "./bridge.ts";
 import { assertFresh, documentMarks } from "./document-marks.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
@@ -41,8 +41,7 @@ type Run = {
   cancelNative: () => Promise<void>;
 };
 const OP = "revit.matrix.loaded-families";
-const detail = (error: unknown) =>
-  error instanceof Error || error instanceof BridgeError ? error.message : String(error);
+const detail = (error: unknown) => (error instanceof Error ? error.message : String(error));
 /** What the reader runs Effects with: the CLI runner's services, captured once by the layer. */
 type Needs = Effect.Services<ReturnType<typeof runPeRevitCli>>;
 

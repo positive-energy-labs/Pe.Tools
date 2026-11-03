@@ -689,9 +689,7 @@ export function makeCallRoute(
           const session = await Effect.runPromise(
             SdkSession.resolve(bridge, { session: target.session }),
           );
-          const document = session.state?.openDocuments.find(
-            (row) => row.openId === target.openId,
-          );
+          const document = session.state?.openDocuments.find((row) => row.openId === target.openId);
           if (body.work.binding === "address") {
             if (
               !document?.address ||
@@ -996,7 +994,8 @@ export function makeCallRoute(
               observations(),
               actionDeps,
               composition?.local ??
-                ((key, input) => executeGatewayLocal(key, input, bridge, observations(), actionDeps.launchShell)),
+                ((key, input) =>
+                  executeGatewayLocal(key, input, bridge, observations(), actionDeps.launchShell)),
               composition?.origin,
             ),
           });
@@ -1339,16 +1338,13 @@ function toProblem(error: unknown): {
     !(
       error instanceof BridgeError ||
       error instanceof InvalidHostRequest ||
-      error instanceof LocalOpError ||
-      error instanceof NoRevitSession
+      error instanceof LocalOpError
     )
   )
     return { kind: "HostFailure", message: String(error), status: 500 };
   switch (error._tag) {
     case "InvalidHostRequest":
       return { kind: "InvalidRequest", message: error.message, status: 400 };
-    case "NoRevitSession":
-      return { kind: "Disconnected", message: error.message, status: 503 };
     case "BridgeError":
       if (error.message.startsWith("Unsupported bridge operation '"))
         return {
