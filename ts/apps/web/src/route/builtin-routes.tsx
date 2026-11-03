@@ -1,7 +1,6 @@
 import { createRouteDiscovery, admittedWork, type DiscoveredRoute } from "./route-discovery";
 import { builtinRouteKeys, builtinRouteStamp, loadBuiltinRoute } from "./builtin-inventory";
 import { sessionsGraph } from "#/sessions/graph";
-import { podAdminGraph } from "#/pod-admin/graph";
 import { lazy, type ComponentType } from "react";
 import { registerLegacyGraph } from "#/shell/legacy-route-door";
 import { openGraph } from "#/open/graph";
@@ -70,8 +69,6 @@ registerLegacyGraph(roomsGraph, hosted(RoomsRoute));
 registerLegacyGraph(familyGraph, hosted(FamilyRoute));
 registerLegacyGraph(podsGraph, hosted(PodsRoute));
 
-const PodAdminRoute = named(() => import("#/pod-admin/route"), "PodAdminRoute");
-registerLegacyGraph(podAdminGraph, hosted(PodAdminRoute));
 
 const sessionsRoute = lazy(async () => ({
   default: (await import("#/sessions/route")).SessionsRoute,

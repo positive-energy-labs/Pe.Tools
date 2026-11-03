@@ -13,7 +13,6 @@ import {
 export const legacyBuiltinKeys: readonly string[] = [
   "family",
   "instances",
-  "pod-admin",
   "pods",
   "rooms",
   "session-admin",

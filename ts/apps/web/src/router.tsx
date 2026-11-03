@@ -16,7 +16,6 @@ import { familiesRoute } from "./families/route";
 import { familyRoute } from "./family/route";
 import { roomsRoute } from "./rooms/route";
 import { takeoffsRoute } from "./takeoff/route";
-import { podAdminRoute } from "./pod-admin/route";
 import { podsRoute } from "./pods/route";
 import { bindRoute } from "./pages-bind/route";
 import { capturesRoute } from "./captures/route";
@@ -40,7 +39,6 @@ const codeRoutes: AnyRoute[] = [
   roomsRoute,
   takeoffsRoute,
   podsRoute,
-  podAdminRoute,
   bindRoute,
   capturesRoute,
 ];
