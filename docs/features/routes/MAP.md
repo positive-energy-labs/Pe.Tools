@@ -75,7 +75,7 @@ Two first-principles critics (`.artifacts/tmp/unification-2/big-picture-1/`) fou
 ## Open questions for kaitpw
 
 - Q27-Q32 (adversarial review): session writes exempt from Work derivation; TransactRead declared; scripts and `pod.member.compose` under consent as the escape hatch; generated Pea catalog + live availability; split `electrical-circuits`; C# owns the axis enums. Recommendations given in thread.
-- Route splits above (open, takeoff, pods, schedules) and the `/space` region subject: applications of ADR 0027 rule 1, awaiting confirmation.
+- Route splits above (open, takeoff, pods, schedules) and the `/space` region subject: **answered in part, 2026-11-03, kaitpw**: freeze at `u2/families-done` and archive `takeoff`, `takeoffs`, `space`, `rhvac-sync`, `zone-audit`, `schedule-specs`, `pod-admin` and `session-admin` rather than continue their cutover in this wave ([archive ruling](LEDGER.md#decided)); the remaining split details await confirmation.
 - Q33-Q37 (big-picture critics 1): adopt the seven nouns; Pods as route authors in this wave; engine home (host `compose` entry, browser worker only where marked local-ok, C# pricing deleted); stable subject keys (codec refuses `ElementId`); content-hashed readings now as snapshot groundwork.
 
 ## Cutover (ADR 0027 rule 15; reviewers' order)
