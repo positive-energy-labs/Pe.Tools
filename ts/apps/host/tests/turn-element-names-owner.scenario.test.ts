@@ -1,4 +1,4 @@
-import { consentService, harnessThreads } from "./effect-test.ts";
+import { consentService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -42,7 +42,11 @@ async function host(home: string, observeDocument?: ObserveDocument) {
     observeDocument,
     worldRoot: tmpdir(),
     mcpServer: () => ({ name: "pea", command: "unused", args: [], env: [] }),
-    providers: createProviders({ shellPath: async () => "", probeOnStart: false }),
+    providers: createProviders({
+      spawner: testSpawner(),
+      shellPath: async () => "",
+      probeOnStart: false,
+    }),
   });
   owners.push(threads);
   const call = async (method: string, path: string, body?: unknown) => {

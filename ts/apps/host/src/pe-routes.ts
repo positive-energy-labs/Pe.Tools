@@ -90,6 +90,7 @@ import { documentMarks } from "./document-marks.ts";
 import { createProviders } from "./harness/providers.ts";
 import { peaMcpServer } from "./harness/adapter.ts";
 import { makeHarnessThreads } from "./harness/threads.ts";
+import { Spawner } from "./harness/spawner.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import {
   productDuctsAnalysesPath,
@@ -1150,7 +1151,7 @@ function* hostPeRoutes(
       return captured;
     });
   // Every provider is probed once in the background; the list says `unknown` until then.
-  const providers = createProviders({ shellPath });
+  const providers = createProviders({ shellPath, spawner: yield* Spawner });
   const stopOperationHooks = observePluginOperations(telemetry.journal, content.lifecycle.emit);
   const receiptThreads = createThreadReceiptAdapter(
     telemetry,

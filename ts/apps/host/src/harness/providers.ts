@@ -367,6 +367,7 @@ async function checkEndpoint(
 type AuthStatus = { kind?: string; label?: string };
 
 function acpProbe(
+  spawner: Spawner["Service"],
   record: ProviderRecord,
   env: Record<string, string | undefined>,
   stop: ProbeStop,
@@ -502,7 +503,7 @@ function acpProbe(
           }
         });
       }),
-    ).pipe(Effect.provide(Spawner.live)),
+    ).pipe(Effect.provideService(Spawner, spawner)),
   );
 }
 
@@ -534,6 +535,8 @@ const slug = (name: string) =>
 type ConsoleResult = Omit<NonNullable<ProviderRefusal["console"]>, "outputTail">;
 
 export type ProvidersOptions = {
+  /** The host's one Spawner (its scope owns every probe child); never a per-probe backend. */
+  spawner: Spawner["Service"];
   /** The user's shell PATH, read per spawn; null keeps the host's. */
   shellPath?: () => Promise<string | null>;
   /** Probe every provider in the background now. */
@@ -816,6 +819,7 @@ export function createProviders(options: ProvidersOptions) {
     };
     const finish = (probed: Probed) => finishProbe(record, probed, detail);
     const running = acpProbe(
+      options.spawner,
       record,
       { ...cleanHarnessEnv(process.env), ...(await userPath()), ...authEnv(record) },
       stop,

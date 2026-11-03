@@ -213,6 +213,20 @@ export const machineOwner = (
   return machineOwnerPromise(Context.get(context, MachineOwner));
 };
 
+/** The live {@link Spawner} for Promise tests, owned like {@link captureStore}'s scope. */
+export const testSpawner = (): Spawner["Service"] => {
+  const scope = Scope.makeUnsafe();
+  // effect-edge: test-runner
+  const context = Effect.runSync(Layer.buildWithScope(Spawner.live, scope));
+  try {
+    // effect-edge: test-runner
+    onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  } catch {
+    // Outside a running test: a module fixture, closed with its worker.
+  }
+  return Context.get(context, Spawner);
+};
+
 /**
  * {@link CaptureStore} for Promise tests: the live layer over `directory`, built in a scope the
  * running test closes. Two calls over one directory are two layers over the same files.

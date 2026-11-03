@@ -1,4 +1,4 @@
-import { testAdapter as openAdapter, settle } from "./effect-test.ts";
+import { testAdapter as openAdapter, settle, testSpawner } from "./effect-test.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -55,7 +55,7 @@ test.skipIf(!process.env.PE_TEST_HARNESS_AUTH)(
     const baseUrl = live
       ? "https://api.openai.com/v1"
       : `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-    const providers = createProviders({ probeOnStart: false });
+    const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
     let opened: Awaited<ReturnType<typeof openAdapter>> | undefined;
     try {
       expect(existsSync(join(loginHome, "auth.json"))).toBe(false);

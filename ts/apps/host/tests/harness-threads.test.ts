@@ -1,4 +1,4 @@
-import { consentService, harnessThreads } from "./effect-test.ts";
+import { consentService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
@@ -63,6 +63,7 @@ const host = async (
 ): Promise<Host> => {
   const consoles: string[] = [];
   const providers = createProviders({
+    spawner: testSpawner(),
     shellPath: async () => "C:\\canary-bin;C:\\also",
     probeOnStart: false,
     openConsole: async (command, _env, opened) => {
