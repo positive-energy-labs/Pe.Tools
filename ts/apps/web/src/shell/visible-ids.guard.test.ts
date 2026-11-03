@@ -1,6 +1,5 @@
 import { zoneAuditGraph } from "../zone-audit/graph";
 import { rhvacSyncGraph } from "../rhvac-sync/graph";
-import { scheduleSpecsGraph } from "../schedule-specs/graph";
 import { sessionsGraph } from "../sessions/graph";
 import { podAdminGraph } from "../pod-admin/graph";
 import { indexGraph } from "../index/graph";
@@ -13,7 +12,6 @@ import { podsGraph } from "../pods/graph";
 import { roomsGraph } from "../rooms/graph";
 import { spaceGraph } from "../space/graph";
 import { familyGraph } from "../family/graph";
-import { schedulesGraph } from "../schedules/graph";
 import { takeoffGraph } from "../takeoff/graph";
 import { settingsGraph } from "../settings/graph";
 import { chatGraph } from "../chat/graph";
@@ -43,17 +41,43 @@ import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
  */
 afterEach(() => vi.unstubAllGlobals());
 const routes = [
-  ductsGraph, fansGraph, familiesGraph, indexGraph, podAdminGraph, sessionsGraph, scheduleSpecsGraph,
-  rhvacSyncGraph, zoneAuditGraph, dataTablesGraph, designSystemGraph, ductLossGraph,
-  grillesGraph, opsGraph, bindGraph, parameterLinksGraph, openGraph, podsGraph, roomsGraph, spaceGraph,
-  familyGraph, schedulesGraph, takeoffGraph, settingsGraph, chatGraph(() => ({ thread: "" })),
+  ductsGraph,
+  fansGraph,
+  familiesGraph,
+  indexGraph,
+  podAdminGraph,
+  sessionsGraph,
+  rhvacSyncGraph,
+  zoneAuditGraph,
+  dataTablesGraph,
+  designSystemGraph,
+  ductLossGraph,
+  grillesGraph,
+  opsGraph,
+  bindGraph,
+  parameterLinksGraph,
+  openGraph,
+  podsGraph,
+  roomsGraph,
+  spaceGraph,
+  familyGraph,
+  takeoffGraph,
+  settingsGraph,
+  chatGraph(() => ({ thread: "" })),
 ] as unknown as RouteGraph<any, any>[];
 
 test.each(routes.map((graph) => [graph.address, graph] as const))(
   "/%s renders no internal identity in its subject, verb, pane or stage words",
   async (_, graph) => {
-    vi.stubGlobal("fetch", vi.fn(() => { throw Error("Real host called"); }));
-    const internal = [...Object.keys(graph.verbs), ...Object.keys(graph.panes ?? {})].filter((id) => id.includes("-"));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        throw Error("Real host called");
+      }),
+    );
+    const internal = [...Object.keys(graph.verbs), ...Object.keys(graph.panes ?? {})].filter((id) =>
+      id.includes("-"),
+    );
     const words = [
       ...Object.values(graph.verbs).map((verb) => verb.label),
       ...Object.values(graph.panes ?? {}).map((pane) => (pane as { label?: string }).label ?? ""),
@@ -72,9 +96,14 @@ test.each(routes.map((graph) => [graph.address, graph] as const))(
           const search = { fixture: name };
           registerSubject(graph.address, graph);
           for (const option of options.slice(0, 5)) {
-            const page = { ...search, [subject.field]: subject.cardinality === "many" ? [option.id] : option.id };
+            const page = {
+              ...search,
+              [subject.field]: subject.cardinality === "many" ? [option.id] : option.id,
+            };
             // Before the roster lands, then after: neither may fall back to the raw key.
-            words.push(subjectState(graph.address, { ...page, fixture: `${name}:unpublished` }).label);
+            words.push(
+              subjectState(graph.address, { ...page, fixture: `${name}:unpublished` }).label,
+            );
             publishSubjectRoster(graph.address, search, options);
             words.push(subjectState(graph.address, page).label);
           }
@@ -85,7 +114,8 @@ test.each(routes.map((graph) => [graph.address, graph] as const))(
         owner.dispose();
       }
     }
-    for (const text of words) expect(leaks(text, internal), `${graph.address}: "${text}"`).toEqual([]);
+    for (const text of words)
+      expect(leaks(text, internal), `${graph.address}: "${text}"`).toEqual([]);
   },
 );
 
@@ -145,7 +175,13 @@ test("one element label: mark, else type/family/category, else size and kind; ne
   const label = elementLabeler({
     nodes: [
       { id: 8775469, kind: "equipment", label: null, facts: [], type: "MUAS 10", connectors: [] },
-      { id: 2, kind: "equipment", label: null, facts: [{ key: "mark", text: "MUAS-1" }], connectors: [] },
+      {
+        id: 2,
+        kind: "equipment",
+        label: null,
+        facts: [{ key: "mark", text: "MUAS-1" }],
+        connectors: [],
+      },
     ],
     segments: [{ id: 3, kind: "duct", size: '10"ø', connectors: [] }],
   } as never);
@@ -158,12 +194,27 @@ test("one element label: mark, else type/family/category, else size and kind; ne
 });
 
 test("a duplicate fan mark is told apart by level, then system, then order; never by its UniqueId", () => {
-  const a = { mark: "FC-23", uniqueId: "00000000-0000-0000-0000-00d1f963-1", portIndex: 0, level: "Level 2", system: "SA 1" };
-  const b = { mark: "FC-23", uniqueId: "00000000-0000-0000-0000-00d1f963-2", portIndex: 0, level: "Level 3", system: "SA 1" };
+  const a = {
+    mark: "FC-23",
+    uniqueId: "00000000-0000-0000-0000-00d1f963-1",
+    portIndex: 0,
+    level: "Level 2",
+    system: "SA 1",
+  };
+  const b = {
+    mark: "FC-23",
+    uniqueId: "00000000-0000-0000-0000-00d1f963-2",
+    portIndex: 0,
+    level: "Level 3",
+    system: "SA 1",
+  };
   expect(fanLabel(a, [a, b])).toBe("FC-23 · Level 2 / port 0");
   const c = { ...b, level: "Level 2", system: "SA 2" };
   expect(fanLabel(c, [a, c])).toBe("FC-23 · SA 2 / port 0");
   const d = { ...c, system: "SA 1" };
-  expect([fanLabel(a, [a, d]), fanLabel(d, [a, d])]).toEqual(["FC-23 (1 of 2) / port 0", "FC-23 (2 of 2) / port 0"]);
+  expect([fanLabel(a, [a, d]), fanLabel(d, [a, d])]).toEqual([
+    "FC-23 (1 of 2) / port 0",
+    "FC-23 (2 of 2) / port 0",
+  ]);
   expect(fanLabel({ ...a, mark: "MUAS-1" }, [a, b])).toBe("MUAS-1 / port 0");
 });

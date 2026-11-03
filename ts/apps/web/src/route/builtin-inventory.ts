@@ -2,6 +2,8 @@ import { z } from "zod";
 import { createBuiltinRouteInventory } from "../../../../packages/agent-contracts/src/route-module";
 import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { module } from "../captures/kernel";
+import { module as schedulesModule } from "../schedules/kernel";
+import schedulesGenerated from "../schedules/source-closure.generated.json";
 import generated from "../captures/source-closure.generated.json";
 
 // Build/deploy owns this table. Route authors cannot provide a receipt to loadBuiltinRoute.
@@ -18,7 +20,29 @@ const closure = {
     })),
   },
 };
+const schedulesClosure = {
+  fingerprint: schedulesGenerated.fingerprint,
+  envelope: {
+    ...schedulesGenerated.envelope,
+    source: z.literal("builtin-closure").parse(schedulesGenerated.envelope.source),
+    version: z.literal(1).parse(schedulesGenerated.envelope.version),
+    data: RouteGraphJson.parse(schedulesGenerated.envelope.data),
+    variants: schedulesGenerated.envelope.variants.map((v) => ({
+      ...v,
+      client: z.enum(["web", "pea"]).parse(v.client),
+    })),
+  },
+};
 const inventory = createBuiltinRouteInventory({
+  schedules: {
+    module: schedulesModule,
+    closure: schedulesClosure,
+    catalog: Object.entries(schedulesModule.entries).map(([key, entry]) => ({
+      key,
+      ...entry.axes,
+      uses: [],
+    })),
+  },
   captures: {
     module,
     closure,
@@ -29,7 +53,11 @@ const inventory = createBuiltinRouteInventory({
     })),
   },
 });
-export const builtinRouteStamp = (_key: "captures") => closure.fingerprint;
-export async function loadBuiltinRoute(key: "captures", expectedFingerprint: string) {
-  return (await inventory.prepare(key, expectedFingerprint)).admit(module);
+export const builtinRouteStamp = (key: "captures" | "schedules") =>
+  key === "schedules" ? schedulesClosure.fingerprint : closure.fingerprint;
+export async function loadBuiltinRoute(key: "captures" | "schedules", expectedFingerprint: string) {
+  const prepared = await inventory.prepare(key, expectedFingerprint);
+  return key === "schedules"
+    ? prepared.admitUnknown(schedulesModule)
+    : prepared.admitUnknown(module);
 }

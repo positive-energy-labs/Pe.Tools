@@ -1,4 +1,3 @@
-import { route as scheduleSpecsRoute } from "./schedule-specs/route";
 import { route as rhvacSyncRoute } from "./rhvac-sync/route";
 import { route as zoneAuditRoute } from "./zone-audit/route";
 import { sessionsRoute } from "./sessions/route";
@@ -41,7 +40,6 @@ const codeRoutes: AnyRoute[] = [
   sessionsRoute,
   zoneAuditRoute,
   rhvacSyncRoute,
-  scheduleSpecsRoute,
   settingsRoute,
   opsRoute,
   openRoute,

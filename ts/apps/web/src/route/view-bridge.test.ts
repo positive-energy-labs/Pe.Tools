@@ -4,7 +4,6 @@ import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
 import { graphUrlPage } from "#/shell/mount-page";
 import { familiesGraph, familiesPageSchema } from "#/families/graph";
 import { familyGraph, familyPageSchema } from "#/family/graph";
-import { schedulesGraph, schedulesPageSchema } from "#/schedules/graph";
 import { podsGraph } from "#/pods/graph";
 import { podsPageSchema } from "#/pods/page";
 
@@ -31,13 +30,7 @@ describe("route addresses match their manifests", () => {
       expect.arrayContaining([...routeAddress("ducts").agent.keys]),
     );
   });
-  it("Schedules projects URL and agent keys from its graph", () => {
-    expect(graphUrlPage(schedulesGraph).keys).toEqual(routeAddress("schedules").keys);
-    const page = schedulesPageSchema.parse({});
-    const { agent, defaults } = routeAddress("schedules");
-    for (const key of agent.keys)
-      expect(key in page || (defaults as Record<string, unknown>)[key] === undefined).toBe(true);
-  });
+
   it("Pods projects URL and agent keys from its graph", () => {
     const page = podsPageSchema.parse({});
     const { keys, agent, defaults } = routeAddress("pods");
@@ -46,34 +39,6 @@ describe("route addresses match their manifests", () => {
       expect(key in page || (defaults as Record<string, unknown>)[key] === undefined).toBe(true);
     expect(graphUrlPage(podsGraph).keys).toEqual(keys);
     expect(Object.keys(agent.write(page))).toEqual(agent.keys);
-  });
-
-  it("an entity route's deep link reopens its view, and its own write is that link", () => {
-    const url = graphUrlPage(schedulesGraph);
-    const page = url.read({
-      stage: "history",
-      workspaceId: "w1",
-      query: "Model~Mill",
-      sort: JSON.stringify({ columns: [{ key: "c2", dir: "desc" }] }),
-      hidden: JSON.stringify({ c3: true }),
-      cell: "3::1",
-    });
-    expect(page).toMatchObject({
-      stage: "history",
-      workspaceId: "w1",
-      query: "Model~Mill",
-      sort: { columns: [{ key: "c2", dir: "desc" }] },
-      hidden: { c3: true },
-      cell: "3::1",
-    });
-    expect(url.write(page)).toMatchObject({
-      sort: JSON.stringify({ columns: [{ key: "c2", dir: "desc" }] }),
-      hidden: JSON.stringify({ c3: true }),
-      cell: "3::1",
-    });
-    // A typed query is a gesture (the store marks it replace); a stage is a step.
-    expect(url.history({ stage: "audit" }, { stage: "history" })).toBe("push");
-    expect(url.history({ cell: "" }, { cell: "3::1" })).toBe("replace");
   });
 
   it("a patch carries no defaults and refuses a bad mode, viewport or a read-only key", () => {

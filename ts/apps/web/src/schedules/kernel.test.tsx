@@ -4,10 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
 import { module, scheduleIdentity } from "./kernel";
-import {
-  builtinClosureFingerprint,
-  createBuiltinRouteInventory,
-} from "../../../../packages/agent-contracts/src/route-module";
+import { createBuiltinRouteInventory } from "../../../../packages/agent-contracts/src/route-module";
 import { createRouteShell } from "../shell/admitted-mount";
 import { sourceRouteServices } from "../shell/source-route-services";
 import type {
@@ -21,32 +18,11 @@ afterEach(() => {
   close.splice(0).forEach((fn) => fn());
 });
 async function admit() {
-  const envelope = {
-    source: "builtin-closure" as const,
-    version: 1 as const,
-    data: module.data,
-    hostVersion: "fixture",
-    variants: [{ client: "web" as const, entry: "schedules/kernel.tsx" }],
-    modules: [{ id: "schedules/kernel.tsx", sha256: "a".repeat(64) }],
-    inputs: [],
-    externals: [],
-  };
-  const fingerprint = await builtinClosureFingerprint(envelope);
-  const inventory = createBuiltinRouteInventory({
-    schedules: {
-      module,
-      closure: { envelope, fingerprint },
-      catalog: Object.entries(module.entries).map(([key, entry]) => ({
-        key,
-        ...entry.axes,
-        uses: [],
-      })),
-    },
-  });
-  const result = (await inventory.prepare("schedules", fingerprint)).admit(module);
+  const result = await loadBuiltinRoute("schedules", builtinRouteStamp("schedules"));
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   return result.route;
 }
+
 async function fixture(name = "read") {
   const open = vi.fn(() => {
     throw Error("Fixture reached transport");
@@ -194,10 +170,60 @@ test("accepted edits undo and redo through the mount's Work history", async () =
   expect(mount.work()?.value).toEqual(edited);
 });
 
-import { createFixtureWorkDoor } from "../shell/fixture-work-door";
+import { RouteWorkspace, observeResources } from "@pe/runtime";
+import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
+import { createRouteRegistrations } from "../../../../packages/mcps/src/pea/routes";
+import { builtinRouteStamp, loadBuiltinRoute } from "../route/builtin-inventory";
+
+async function hostWorkDoor(seed: unknown) {
+  const entry = builtinEnrollments.find((e) => e.routeKey === "schedules")!;
+  const hostModule = await entry.load();
+  const inventory = createBuiltinRouteInventory({
+    schedules: { host: true, module: hostModule, closure: entry.closure, catalog: [] },
+  });
+  const admitted = (await inventory.prepare("schedules", entry.closure.fingerprint)).admitHost(
+    hostModule,
+  );
+  if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
+  let saved: unknown = {
+    version: 1,
+    schemaVersion: 1,
+    revision: 0,
+    doc: scheduleGridRouteState.schema.parse(seed),
+    history: [],
+  };
+  const registrations = createRouteRegistrations();
+  expect(registrations.some((r) => r.spec.route === "schedules")).toBe(false);
+  const ws = new RouteWorkspace({
+    registrations,
+    store: {
+      getState: async () => saved,
+      setState: async ({ value }) => {
+        saved = value;
+      },
+    },
+  });
+  const registration = ws.registerAdmitted(admitted.route);
+  expect(await registration.ready).toBeNull();
+  close.push(() => registration.close());
+  const observe = observeResources(ws, { observe: () => () => {} });
+  const door = createWorkFeedClient(
+    {
+      subscribe: (request, deliver) => observe(request, deliver),
+      dirty() {},
+    },
+    {
+      write: (key, write) => ws.write(key, "schedules", "human", write),
+      submit: async () => {
+        throw Error("Use the consent fixture for native writes");
+      },
+    },
+  );
+  return door;
+}
 
 test("keyed mount edit preserves an untouched stale cell on the real domain Work door", async () => {
-  const store = createFixtureWorkDoor(scheduleGridRouteState, {
+  const store = await hostWorkDoor({
     basis: {
       captureId: "a".repeat(64),
       stale: [
@@ -226,6 +252,7 @@ test("keyed mount edit preserves an untouched stale cell on the real domain Work
     subscribe: () => () => {},
   });
   close.push(mount.close);
+  await vi.waitFor(() => expect(mount.workBasis()).not.toBeNull());
   const result = mount.invoke(
     "edit",
     { patches: [{ path: ["cells", "1::1", "edit"], value: { value: "reviewed" } }] },
@@ -244,6 +271,13 @@ test("keyed mount edit preserves an untouched stale cell on the real domain Work
     { key: "1::2", was: "b" },
   ]);
   expect(mount.journal()?.moves.at(-1)?.label).toContain("Cell 1::1");
+  const edited = mount.work()?.value;
+  expect((await mount.history!.undo()).ok).toBe(true);
+  expect(scheduleGridRouteState.schema.parse(mount.work()?.value).cells["1::1"]?.edit?.value).toBe(
+    "a",
+  );
+  expect((await mount.history!.redo()).ok).toBe(true);
+  expect(mount.work()?.value).toEqual(edited);
 });
 
 import { scheduleFixtureReading } from "./neutral";
@@ -313,7 +347,7 @@ async function interactive(measured = false, native = true) {
       },
     ]),
   );
-  const store = createFixtureWorkDoor(scheduleGridRouteState, {
+  const store = await hostWorkDoor({
     basis: { captureId: reading.id },
     cells: {},
   });
@@ -330,6 +364,7 @@ async function interactive(measured = false, native = true) {
     subscribe: () => () => {},
   });
   close.push(mount.close);
+  await vi.waitFor(() => expect(mount.workBasis()).not.toBeNull());
   return {
     mount,
     store,
@@ -445,6 +480,7 @@ test("push traverses U8s preview, review, real consent owner, commit and retaine
       subscribe: () => () => {},
     });
     close.push(connected.close);
+    await vi.waitFor(() => expect(connected.workBasis()).not.toBeNull());
     vi.useFakeTimers();
     try {
       connected.invoke("push", {});

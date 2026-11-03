@@ -13,7 +13,6 @@ import type { Column } from "@pe/kit/table/model";
 import { parseConditionNumber } from "@pe/kit/table/view";
 import type { ScheduleGridSnapshot as Snapshot } from "@pe/agent-contracts";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { useScheduleTransitions } from "#/schedules/context";
 
 type ScheduleRow = Snapshot["rows"][number];
 
@@ -205,7 +204,6 @@ export function useScheduleGridColumns(
   /** The last push's refusals, by key: each draws on its own cell. */
   refused: Readonly<Record<string, string>> = {},
 ) {
-  const transitions = useScheduleTransitions();
   return useMemo<Column<ScheduleRow>[]>(() => {
     if (!snapshot) return [];
     return [
@@ -260,7 +258,7 @@ export function useScheduleGridColumns(
           condition: { kind: numeric ? "number" : "text", read },
           state: (row) =>
             scheduleCellState(
-              { cells, wire, stale, refused, stageEdit, parseMeasured, transitions },
+              { cells, wire, stale, refused, stageEdit, parseMeasured },
               row,
               column.columnNumber,
               columnIndex,

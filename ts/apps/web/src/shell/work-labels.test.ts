@@ -9,7 +9,6 @@ import { familyGraph } from "../family/graph";
 import { parameterLinksGraph } from "../parameter-links/graph";
 import { podsGraph } from "../pods/graph";
 import { roomsGraph } from "../rooms/graph";
-import { schedulesGraph } from "../schedules/graph";
 import { takeoffGraph } from "../takeoff/graph";
 import { workPathName, writeLabel } from "./work-writes";
 
@@ -22,7 +21,6 @@ const graphs = [
   parameterLinksGraph,
   podsGraph,
   roomsGraph,
-  schedulesGraph,
   takeoffGraph,
 ] as RouteGraph<unknown, unknown>[];
 
@@ -30,7 +28,9 @@ const fieldsOf = (schema: z.ZodType): string[] => {
   let inner: z.ZodType = schema;
   // Unwrap pipes, defaults and optionals down to the object the Work document is.
   for (let i = 0; i < 8 && !(inner instanceof z.ZodObject); i++) {
-    const def = (inner as unknown as { def: { in?: z.ZodType; innerType?: z.ZodType; schema?: z.ZodType } }).def;
+    const def = (
+      inner as unknown as { def: { in?: z.ZodType; innerType?: z.ZodType; schema?: z.ZodType } }
+    ).def;
     inner = def.in ?? def.innerType ?? def.schema ?? inner;
   }
   return inner instanceof z.ZodObject ? Object.keys(inner.shape) : [];

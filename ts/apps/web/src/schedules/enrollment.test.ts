@@ -1,37 +1,24 @@
 import { expect, test, vi } from "vite-plus/test";
-import { schedulesHostModule, schedulesData } from "./neutral";
-import {
-  createBuiltinRouteInventory,
-  builtinClosureFingerprint,
-} from "../../../../packages/agent-contracts/src/route-module";
+import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
+import { createRouteRegistrations } from "../../../../packages/mcps/src/pea/routes";
+import { createBuiltinRouteInventory } from "../../../../packages/agent-contracts/src/route-module";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { applyPatches, scheduleGridRouteState, type ReadingFrame } from "@pe/agent-contracts";
 
 test("G4: admitted host opens existing schedule Work but preserves domain edit reconciliation", async () => {
-  const completeHostModule = { ...schedulesHostModule, workState: scheduleGridRouteState };
-  const envelope = {
-    source: "builtin-closure" as const,
-    version: 1 as const,
-    data: schedulesData,
-    hostVersion: "fixture",
-    variants: [{ client: "web" as const, entry: "schedules/neutral.ts" }],
-    modules: [{ id: "schedules/neutral.ts", sha256: "a".repeat(64) }],
-    inputs: [],
-    externals: [],
-  };
-  const fingerprint = await builtinClosureFingerprint(envelope);
+  const entry = builtinEnrollments.find((e) => e.routeKey === "schedules")!;
+  expect(entry).toBeDefined();
+  const completeHostModule = await entry.load();
+  expect(completeHostModule.workState).toBe(scheduleGridRouteState);
   const inventory = createBuiltinRouteInventory({
-    schedules: {
-      host: true,
-      module: completeHostModule,
-      closure: { envelope, fingerprint },
-      catalog: [],
-    },
+    schedules: { host: true, module: completeHostModule, closure: entry.closure, catalog: [] },
   });
-  const admitted = (await inventory.prepare("schedules", fingerprint)).admitHost(
+  const admitted = (await inventory.prepare("schedules", entry.closure.fingerprint)).admitHost(
     completeHostModule,
   );
   if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
+  const registrations = createRouteRegistrations();
+  expect(registrations.some((r) => r.spec.route === "schedules")).toBe(false);
   const key = {
     binding: "workspace" as const,
     route: "schedules",
@@ -55,7 +42,7 @@ test("G4: admitted host opens existing schedule Work but preserves domain edit r
     history: [],
   };
   const ws = new RouteWorkspace({
-    registrations: [],
+    registrations,
     store: {
       getState: async () => saved,
       setState: async ({ value }) => {

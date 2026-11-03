@@ -571,5 +571,9 @@ export const neutralBodies = {
     }),
   },
 } satisfies Omit<BodyBindings<typeof schedulesData, typeof schemas, typeof entries>, "grid">;
-// TODO: W3c G4: host admission must preserve scheduleGridRouteState.reconcileEdit before cutover.
-export const schedulesHostModule = { data: schedulesData, schemas, bodies: {} };
+export const schedulesHostModule = {
+  data: schedulesData,
+  schemas,
+  bodies: {},
+  workState: scheduleGridRouteState,
+};

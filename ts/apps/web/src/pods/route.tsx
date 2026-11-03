@@ -16,7 +16,6 @@ import { isSpecOf } from "#/route/workflow";
 import type { PodRow, Run } from "#/route/pods";
 import { familyGraph, FAMILY_MODEL_SCHEMA } from "#/family/graph";
 import { familiesGraph, FAMILIES_SPEC_SCHEMAS } from "#/families/graph";
-import { schedulesGraph, SCHEDULE_SPEC_SCHEMA } from "#/schedules/graph";
 import { podsGraph } from "./graph";
 import { podsBinding, podsCell, editRefusal } from "./actions";
 import { podsSources } from "./sources";
@@ -33,7 +32,6 @@ import type { PodsPage } from "./page";
 
 type Body = MountBody<PodsPage, SettingsRouteDocument>;
 const PRODUCTS = [
-  { route: "schedules", graph: schedulesGraph, schema: SCHEDULE_SPEC_SCHEMA },
   { route: "family", graph: familyGraph, schema: FAMILY_MODEL_SCHEMA },
   { route: "families", graph: familiesGraph, schema: FAMILIES_SPEC_SCHEMAS },
 ] as const;

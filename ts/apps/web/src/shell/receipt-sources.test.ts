@@ -2,7 +2,8 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { actionReceiptSchema, bindWork } from "@pe/agent-contracts";
 import { peReadings } from "../readings";
 import { familiesSources } from "../families/sources";
-import { schedulesSources, scheduleOutcome } from "../schedules/sources";
+import { schedulesKernelSources as schedulesSources } from "../schedules/kernel-sources";
+import { scheduleOutcome } from "../schedules/neutral";
 import { createReadingGraph } from "./readings";
 
 afterEach(() => vi.restoreAllMocks());
@@ -32,7 +33,16 @@ test.each(["families", "schedules"])(
     });
     const sources = route === "families" ? familiesSources() : schedulesSources();
     const graph = createReadingGraph(
-      { readings: { receipts: { kind: "use", source: `${route}.receipts`, retire: "target" } } },
+      {
+        readings: {
+          receipts: {
+            kind: "use",
+            source: `${route}.receipts`,
+            args: () => work,
+            retire: "target",
+          },
+        },
+      },
       {
         sources,
         scope: { target: { kind: "host" }, workKey: work, workRevision: 0, page: {}, work: null },

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { schedulesHostModule } from "../../web/src/schedules/neutral.ts";
+import schedulesGenerated from "../../web/src/schedules/source-closure.generated.json" with { type: "json" };
 import generated from "../../web/src/captures/source-closure.generated.json" with { type: "json" };
 import { RouteGraphJson } from "../../../packages/agent-contracts/src/route-kernel-data.ts";
 import type { BuiltinClosure } from "../../../packages/agent-contracts/src/route-module.ts";
@@ -21,6 +23,23 @@ const envelope: BuiltinClosure = {
 };
 /** Captures is registry-only. Its generated declaration imports no UI or browser code. */
 export const builtinEnrollments: readonly BuiltinEnrollment[] = [
+  {
+    routeKey: "schedules",
+    load: async () => schedulesHostModule,
+    closure: {
+      fingerprint: schedulesGenerated.fingerprint,
+      envelope: {
+        ...schedulesGenerated.envelope,
+        source: "builtin-closure",
+        version: 1,
+        data: RouteGraphJson.parse(schedulesGenerated.envelope.data),
+        variants: schedulesGenerated.envelope.variants.map((v) => ({
+          ...v,
+          client: z.enum(["web", "pea"]).parse(v.client),
+        })),
+      },
+    },
+  },
   {
     routeKey: "captures",
     closure: { envelope, fingerprint: generated.fingerprint },

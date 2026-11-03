@@ -1,4 +1,3 @@
-import { scheduleSpecsGraph } from "#/schedule-specs/graph";
 import { rhvacSyncGraph } from "#/rhvac-sync/graph";
 import { zoneAuditGraph } from "#/zone-audit/graph";
 import { sessionsGraph } from "#/sessions/graph";
@@ -12,7 +11,6 @@ import { takeoffGraph } from "#/takeoff/graph";
 import { roomsGraph } from "#/rooms/graph";
 import { familyGraph } from "#/family/graph";
 import { familiesGraph } from "#/families/graph";
-import { schedulesGraph } from "#/schedules/graph";
 import { settingsGraph } from "#/settings/graph";
 import { fansGraph } from "#/fans/graph";
 import { ductsGraph } from "#/ducts/graph";
@@ -35,9 +33,7 @@ const FamilyRoute = lazy(async () => ({
 const FamiliesRoute = lazy(async () => ({
   default: mountRoute(familiesGraph, (await import("#/families/route")).familiesAdapters),
 }));
-const SchedulesRoute = lazy(async () => ({
-  default: mountRoute(schedulesGraph, (await import("#/schedules/route")).schedulesAdapters),
-}));
+
 const DuctsRoute = lazy(async () => ({
   default: mountRoute(ductsGraph, (await import("#/ducts/route")).ductsAdapters),
 }));
@@ -69,7 +65,6 @@ function hosted(Body: ComponentType<MountRouteProps>) {
 registerLegacyGraph(roomsGraph, hosted(RoomsRoute));
 registerLegacyGraph(familyGraph, hosted(FamilyRoute));
 registerLegacyGraph(familiesGraph, hosted(FamiliesRoute));
-registerLegacyGraph(schedulesGraph, hosted(SchedulesRoute));
 registerLegacyGraph(ductsGraph, hosted(DuctsRoute));
 registerLegacyGraph(parameterLinksGraph, hosted(ParameterLinksRoute));
 registerLegacyGraph(podsGraph, hosted(PodsRoute));
@@ -88,11 +83,6 @@ registerLegacyGraph(zoneAuditGraph, hosted(zoneAuditRoute));
 
 const rhvacSyncRoute = lazy(async () => ({ default: (await import("#/rhvac-sync/route")).Body }));
 registerLegacyGraph(rhvacSyncGraph, hosted(rhvacSyncRoute));
-
-const scheduleSpecsRoute = lazy(async () => ({
-  default: (await import("#/schedule-specs/route")).Body,
-}));
-registerLegacyGraph(scheduleSpecsGraph, hosted(scheduleSpecsRoute));
 
 const FansRoute = lazy(async () => ({
   default: mountRoute(fansGraph, (await import("#/ducts/route")).ductsAdapters),

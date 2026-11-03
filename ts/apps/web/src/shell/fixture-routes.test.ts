@@ -4,7 +4,7 @@ import { admitCaptures } from "../captures/admission";
 import { createRouteShell } from "./admitted-mount";
 import { sourceRouteServices } from "./source-route-services";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ReactNode } from "react";
+import { isValidElement, type ReactNode } from "react";
 import { createFixtureMount } from "./fixture";
 import { legacyGraphs as routes } from "../legacy-test-inventory.test-support";
 import { builtinAdmission, legacyBuiltinKeys } from "./legacy-route-door";
@@ -38,6 +38,39 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
         expect(open).not.toHaveBeenCalled();
       } finally {
         mounted.close();
+      }
+      return;
+    }
+    if (key === "schedules") {
+      const { admitSchedules } = await import("../schedules/route");
+      const { scheduleIdentity } = await import("../schedules/neutral");
+      const mount = createRouteShell(
+        sourceRouteServices(
+          {},
+          {
+            target: () => ({ kind: "document", ref: { session: "fixture", openId: "schedules" } }),
+          },
+        ),
+      ).mount(await admitSchedules(), {
+        read: () =>
+          new URLSearchParams({
+            fixture: "read",
+            workspaceId: scheduleIdentity("schedule:fixture"),
+          }),
+        write() {},
+        subscribe: () => () => {},
+      });
+      try {
+        // The grid owns DOM portals; schedules/kernel.test.tsx renders it under jsdom.
+        expect(isValidElement(mount.read("grid"))).toBe(true);
+        expect(mount.workBasis()?.token.scope.identity.work).toMatchObject({
+          binding: "workspace", work: "schedule:fixture",
+        });
+        expect(mount.picker("workspaceId")).toEqual([
+          { id: scheduleIdentity("schedule:fixture"), label: "Mechanical equipment" },
+        ]);
+      } finally {
+        mount.close();
       }
       return;
     }
