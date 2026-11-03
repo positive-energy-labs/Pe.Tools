@@ -96,6 +96,24 @@ async function setup(fail = false) {
         },
       },
     });
+    const releasedSnapshots = vi.fn(),
+      releasedAcks = vi.fn();
+    const observeWork = workspace.observe.bind(workspace),
+      observeAcks = workspace.observeAccepted.bind(workspace);
+    const snapshotOpens = vi.spyOn(workspace, "observe").mockImplementation((...args) => {
+      const release = observeWork(...args);
+      return () => {
+        releasedSnapshots();
+        release();
+      };
+    });
+    const ackOpens = vi.spyOn(workspace, "observeAccepted").mockImplementation((...args) => {
+      const release = observeAcks(...args);
+      return () => {
+        releasedAcks();
+        release();
+      };
+    });
     const routes = createPodRoutes(lifecycle, { workspace, trustPath: join(root, "trust.json") });
     const releases: (() => void)[] = [];
     const observe = observeResources(workspace, { observe: () => () => {} });
@@ -121,6 +139,10 @@ async function setup(fail = false) {
       unblock,
       savedPath,
       original,
+      snapshotOpens,
+      ackOpens,
+      releasedSnapshots,
+      releasedAcks,
       close: async () => {
         unblock();
         releases.forEach((release) => release());
@@ -172,6 +194,8 @@ test("trusted Pod transports complete evidence and opens fingerprint-bound feeds
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(snapshot).toEqual([]);
     expect(acks).toEqual([]);
+    expect(f.snapshotOpens).not.toHaveBeenCalled();
+    expect(f.ackOpens).not.toHaveBeenCalled();
     expect(await readFile(f.savedPath, "utf8")).toBe(f.original);
     f.unblock();
     await vi.waitFor(() => expect(snapshot).toHaveLength(1));
@@ -180,6 +204,8 @@ test("trusted Pod transports complete evidence and opens fingerprint-bound feeds
       value: { schemaVersion: 2, revision: 8, doc: { amount: 4, note: "first" } },
     });
     expect(JSON.parse(await readFile(f.savedPath, "utf8")).value.schemaVersion).toBe(2);
+    expect(f.snapshotOpens).toHaveBeenCalledOnce();
+    expect(f.ackOpens).toHaveBeenCalledOnce();
     const stale = f.feed("work", workFingerprintSchema.parse(`pod-bytes:${"0".repeat(64)}`));
     await vi.waitFor(() =>
       expect(stale[0]).toMatchObject({
@@ -197,6 +223,8 @@ test("trusted Pod transports complete evidence and opens fingerprint-bound feeds
       }),
     );
     expect(acks[0]).toMatchObject({ kind: "failure", failure: { code: "WorkRouteUnregistered" } });
+    expect(f.releasedSnapshots).toHaveBeenCalledOnce();
+    expect(f.releasedAcks).toHaveBeenCalledOnce();
   } finally {
     await f.close();
   }
