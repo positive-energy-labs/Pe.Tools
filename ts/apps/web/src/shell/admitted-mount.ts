@@ -1,3 +1,5 @@
+import { commandResultDecoder, type CommandResultDecode } from "./admitted-command-result";
+import type { InvocationToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { salvageRouteWork } from "../route/host";
 import { admittedWorkPatches } from "./admitted-cells";
 import { createAdmittedCells } from "./admitted-cells";
@@ -70,6 +72,7 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "ready",
   "work",
   "intent",
+  "lands",
   "page",
   "pane",
   "seed",
@@ -123,9 +126,14 @@ export function createRouteShell(services: KernelServices) {
       // TODO: Register admitted migrations with the host RouteWorkspace before admitting migration.
       // Result landing owns presentation for verbs without a sealed ModelWrite preview.
       for (const [id, verb] of Object.entries(route.data.verbs)) {
-        if (verb.present && (verb.kind !== "command" || bindings.entries[verb.entry]?.axes.effect !== "ModelWrite")) {
+        if (
+          verb.present &&
+          (verb.kind !== "command" || bindings.entries[verb.entry]?.axes.effect !== "ModelWrite")
+        ) {
           registration.deactivate();
-          throw Error(`Unsupported admitted presentation phase: verbs.${id}.present requires a sealed preview`);
+          throw Error(
+            `Unsupported admitted presentation phase: verbs.${id}.present requires a sealed preview`,
+          );
         }
       }
       const observers = createAdmittedObservers(route.data, bindings.bodies);
@@ -535,7 +543,12 @@ export function createRouteShell(services: KernelServices) {
         if (drawing) throw Error("Admitted action cannot run during render");
         if (closed) throw Error("Mount closed");
       };
-      const place = (pane: string, row: unknown, input: unknown) => {
+      const place = (
+        pane: string,
+        row: unknown,
+        input: unknown,
+        basis?: InvocationToken | null,
+      ) => {
         action();
         resolve();
         const declaration = route.data.panes[pane];
@@ -546,15 +559,31 @@ export function createRouteShell(services: KernelServices) {
           bindings.bodies,
           row,
           input,
-          invoke,
+          (id, input) => invoke(id, input, basis ?? undefined),
         );
       };
-      const invoke = (id: string, input: unknown) => {
+      const editBases = new WeakMap<InvocationToken, NonNullable<ReturnType<typeof owner.read>>>();
+      let renderedBasis: InvocationToken | null = null;
+      const workBasis = () => {
+        const snapshot = owner.read();
+        if (!snapshot?.work || !work.ready()) return null;
+        if (renderedBasis && editBases.get(renderedBasis) === snapshot) return renderedBasis;
+        const issued = owner.invocation(owner.capture(`rendered-work:${crypto.randomUUID()}`), {});
+        if (!issued.ok) throw Error(issued.reason);
+        renderedBasis = issued.value;
+        editBases.set(renderedBasis, snapshot);
+        return renderedBasis;
+      };
+      const landings = new Map<string, CommandResultDecode>();
+      const invoke = (id: string, input: unknown, basis?: InvocationToken) => {
         action();
         resolve();
         const declaration = route.data.verbs[id];
         if (!declaration) throw Error(`Unknown verb: ${id}`);
         const parsed = bindings.schemas[declaration.input]!.parse(input);
+        const edit = basis === undefined ? undefined : editBases.get(basis);
+        if (basis !== undefined && (!edit || edit.scope !== owner.read()?.scope))
+          throw Error("Stale or foreign accepted Work basis");
         if (declaration.deps.work.length && (!work.ready() || !owner.read()!.work))
           throw Error("Work unavailable");
         const dependencies: Record<string, string> = {};
@@ -567,10 +596,11 @@ export function createRouteShell(services: KernelServices) {
         if (!issued.ok) throw Error(issued.reason);
         const invocation = issued.value;
         const context = () => ({
+          workBasis: basis ?? (owner.read()?.work ? invocation : null),
           page: project(declaration.deps.page, owner.read()!.page),
           work: project(
             declaration.deps.work,
-            (owner.read()!.work?.value as Record<string, unknown>) ?? {},
+            ((edit?.work ?? owner.read()!.work)?.value as Record<string, unknown>) ?? {},
           ),
           readings: freezePage(
             Object.fromEntries(declaration.deps.readings.map((key) => [key, readings[key]])),
@@ -593,7 +623,13 @@ export function createRouteShell(services: KernelServices) {
             ) as import("@pe/agent-contracts").WorkWrite["patches"];
           preview = freezePage(patches());
           send = () => {
-            const observation = work.write(patches, invocation, invocation.id, declaration.label);
+            const observation = work.write(
+              () => preview as import("@pe/agent-contracts").WorkWrite["patches"],
+              invocation,
+              invocation.id,
+              declaration.label,
+              basis,
+            );
             observation.subscribe(
               (outcome) => {
                 if (outcome.kind === "accepted") {
@@ -639,7 +675,7 @@ export function createRouteShell(services: KernelServices) {
           // ActionJournal owns the existing Reject? consent window after this admission.
           send = () => {
             if (!door) throw Error("Native commands unavailable");
-            return (
+            const submission = (
               fixture === null
                 ? (command: Parameters<NonNullable<KernelServices["submitNative"]>>[0]) =>
                     services.submitNative
@@ -653,6 +689,24 @@ export function createRouteShell(services: KernelServices) {
               target: target ?? { kind: "host" },
               input: intent,
             });
+            if (declaration.lands) {
+              const decode = commandResultDecoder(submission, bindings.entries);
+              const land = bindings.bodies[declaration.lands]!.run;
+              submission.accepted.subscribe(
+                (outcome) => {
+                  if (outcome.kind === "pending") return;
+                  const result = decode(outcome);
+                  landings.set(submission.handle.id, result);
+                  if (result.kind === "decoded" && owner.current(invocation)) {
+                    const patch = land(freezePage(result.value), owner.read()!.page);
+                    owner.acceptPage(invocation, patch as Parameters<typeof owner.acceptPage>[1]);
+                  }
+                  notify();
+                },
+                () => {},
+              );
+            }
+            return submission;
           };
           if (modelWrite) {
             const previewKey = `${declaration.entry}.preview`;
@@ -984,6 +1038,10 @@ export function createRouteShell(services: KernelServices) {
           return result;
         },
         work: () => owner.read()?.work ?? null,
+        workBasis,
+        commandLanding: (id: string) => landings.get(id) ?? null,
+        commandProblems: () =>
+          [...landings.values()].filter((result) => result.kind === "result-undecodable"),
         workProblem: work.problem,
         history,
         journal: () => journal()?.read() ?? null,
@@ -1029,12 +1087,14 @@ export function createRouteShell(services: KernelServices) {
           if (!Object.hasOwn(route.data.panes, pane)) throw Error(`Unknown pane: ${pane}`);
           const declaration = route.data.panes[pane]!;
           if (!observers.visible(pane) || !declaration.body) return null;
+          const basis = workBasis();
           drawing = true;
           try {
             return current.bodies[declaration.body]!.run({
-              place: (row: unknown, input: unknown) => place(pane, row, input),
+              place: (row: unknown, input: unknown) => place(pane, row, input, basis),
               page: ports.page,
               work: owner.read()!.work?.value ?? null,
+              workBasis: basis,
               history,
               readings: Object.freeze(
                 Object.fromEntries(declaration.draws.map((id) => [id, readings[id]])),
@@ -1050,7 +1110,14 @@ export function createRouteShell(services: KernelServices) {
                 ("allowed" in declaration.verbs
                   ? declaration.verbs.allowed
                   : declaration.verbs
-                ).map((id: string) => [id, (input: unknown) => invoke(id, input)]),
+                ).map((id: string) => [
+                  id,
+                  (input: unknown, editBasis?: InvocationToken) => {
+                    if (route.data.verbs[id]?.kind === "work" && !editBasis)
+                      throw Error("Work edit requires its rendered accepted basis");
+                    return invoke(id, input, editBasis);
+                  },
+                ]),
               ),
             });
           } finally {

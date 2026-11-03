@@ -10,7 +10,10 @@ import { appAtomRegistry } from "./owner";
 import { fixtureName } from "./fixture-lane";
 
 // One application inventory. Domain sources own transport; routes only name admitted entries.
-export const applicationSources = { ...capturesSources(), ...dataTablesSources() };
+export const applicationSources: Parameters<typeof sourceRouteServices>[0] = {
+  ...capturesSources(),
+  ...dataTablesSources(),
+};
 
 /** Reuse the selected-document owner. A new target replaces the shell through AdmittedPane's
  * effect cleanup/remount boundary, so old reads, Work and reviews retire together. */

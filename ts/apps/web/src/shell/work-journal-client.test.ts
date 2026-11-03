@@ -74,7 +74,11 @@ test("Work submits authentic ack, refusal and current stale revision without jou
 test("native command survives observer departure and expires outside bounded replay", async () => {
   const submit = vi
     .fn()
-    .mockImplementation(async (command) => ({ state: "succeeded", id: command.id }));
+    .mockImplementation(async (command) => ({
+      state: "succeeded",
+      id: command.id,
+      result: { saved: command.id },
+    }));
   const door = createWorkFeedClient(
     { subscribe: () => () => {}, dirty: () => {} },
     { write: vi.fn(), submit },
@@ -95,7 +99,10 @@ test("native command survives observer departure and expires outside bounded rep
   expect(door.accepted(first.handle.id)).toMatchObject({
     kind: "accepted-native",
     receiptId: "first",
+    outcome: "committed",
+    result: { saved: "first" },
   });
+  expect(first.key).toBe("test");
   await finish(door.submit(command("second")).accepted);
   expect(door.accepted("first" as JournalCommandId)).toMatchObject({
     kind: "rejected",

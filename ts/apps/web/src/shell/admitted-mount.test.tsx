@@ -441,6 +441,12 @@ async function workRoute(
   needs: "nothing" | "document" = "nothing",
   presenter?: (result: unknown) => unknown,
   cellBodies = false,
+  landing?: {
+    run: (result: unknown, page: unknown) => unknown;
+    output: z.ZodType;
+    pane?: (ctx: unknown) => unknown;
+    row?: boolean;
+  },
 ) {
   const workData = {
     ...data,
@@ -485,6 +491,7 @@ async function workRoute(
         kind: "command" as const,
         entry: "native.write",
         intent: "native",
+        ...(landing ? { lands: "landNative" } : {}),
         ...(presenter ? { present: "nativePresent" as const } : {}),
         input: "number",
         label: "Native",
@@ -502,7 +509,15 @@ async function workRoute(
         patches: "change",
       },
     },
-    panes: { ...data.panes, main: { ...data.panes.main, verbs: ["change"] } },
+    panes: {
+      ...data.panes,
+      main: {
+        ...data.panes.main,
+        verbs: landing?.row
+          ? { choose: "chooseChange", allowed: ["change"], row: "number" }
+          : ["change"],
+      },
+    },
   } as const;
   const workModule = {
     ...module,
@@ -511,7 +526,7 @@ async function workRoute(
       ...entries,
       "native.write": {
         input: z.object({ amount: z.number() }),
-        output: z.unknown(),
+        output: landing?.output ?? z.unknown(),
         axes: {
           ...entries["notes.read"].axes,
           effect: modelWrite ? ("ModelWrite" as const) : ("SessionWrite" as const),
@@ -535,6 +550,19 @@ async function workRoute(
     schemas: { ...schemas, work: z.object({ amount: z.number() }), number: z.number() },
     bodies: {
       ...bodies,
+      ...(landing?.row
+        ? {
+            chooseChange: {
+              slot: "panes.main.verbs.choose",
+              kind: "placement",
+              source,
+              run: () => ["change"],
+            },
+          }
+        : {}),
+      ...(landing
+        ? { landNative: { slot: "verbs.native.lands", kind: "lands", source, run: landing.run } }
+        : {}),
       ...(cellBodies
         ? {
             salvage: {
@@ -612,9 +640,11 @@ async function workRoute(
         : {}),
       main: {
         ...bodies.main,
-        run: (ctx: {
-          history?: import("../../../../packages/agent-contracts/src/route-kernel-bodies").WorkHistoryPort;
-        }) => createElement("button", { onClick: () => ctx.history!.undo() }, "Pane undo"),
+        run:
+          landing?.pane ??
+          ((ctx: {
+            history?: import("../../../../packages/agent-contracts/src/route-kernel-bodies").WorkHistoryPort;
+          }) => createElement("button", { onClick: () => ctx.history!.undo() }, "Pane undo")),
       },
       native: {
         slot: "verbs.native.intent",
@@ -807,7 +837,7 @@ test("mount native review submits accepted Work through the command door", async
   );
 });
 
-test("stale-base recomputes a Work verb once over the accepted revision", async () => {
+test("stale-base refuses without recomputing or retrying the Work edit", async () => {
   const t = transports();
   const store = createFixtureWorkDoor(
     { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
@@ -848,8 +878,11 @@ test("stale-base recomputes a Work verb once over the accepted revision", async 
   );
   closes.push(mount.close);
   const outcome = await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
-  expect(outcome).toMatchObject({ kind: "accepted", ack: { base: 1, revision: 2 } });
-  expect(mount.work()?.value).toEqual({ amount: 12 });
+  expect(outcome).toMatchObject({
+    kind: "refused",
+    refusal: { code: "stale_revision", revision: 1 },
+  });
+  expect(mount.work()?.value).toEqual({ amount: 10 });
 });
 
 test("query validates and delivers invocation input without changing Page; new runs supersede", async () => {
@@ -1404,6 +1437,7 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
     "ready",
     "work",
     "intent",
+    "lands",
     "page",
     "pane",
     "seed",
@@ -1871,4 +1905,250 @@ test("presentation without sealed preview stays explicitly refused until result 
     "requires a sealed preview",
   );
   expect(t.keys).toEqual([]);
+});
+
+test("rendered Work basis refuses old, copied and foreign edits; current basis accepts", async () => {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  let pane: {
+    workBasis: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
+    work: unknown;
+    place(row: number, input: number): { change(): unknown };
+    verbs: { change(input: number, basis?: unknown): unknown };
+  };
+  const route = await workRoute("none", false, "nothing", undefined, false, {
+    output: z.string(),
+    row: true,
+    run: () => ({}),
+    pane: (ctx) => {
+      pane = ctx as typeof pane;
+      return null;
+    },
+  });
+  const submitWork = vi.fn(store.submitWork);
+  const shell = createRouteShell({ ...t.services, work: { ...store, submitWork } });
+  const mount = shell.mount(route, locationPort().address);
+  closes.push(mount.close);
+  mount.read("main");
+  const old = pane!.workBasis;
+  expect(old.workRevision).toBe(0);
+  expect(old.token.scope.identity.work).toBeTruthy();
+  expect(pane!.work).toEqual({ amount: 0 });
+  expect(() => pane!.verbs.change(2)).toThrow("rendered accepted basis");
+  expect(() => pane!.verbs.change(2, { ...old })).toThrow("foreign");
+  await settle(mount.invoke("change", 5) as Observation<WorkWriteOutcome>);
+  const refusal = await settle(pane!.verbs.change(2, old) as Observation<WorkWriteOutcome>);
+  expect(refusal).toMatchObject({
+    kind: "refused",
+    refusal: { code: "stale_revision", revision: 1 },
+  });
+  expect(mount.work()?.value).toEqual({ amount: 5 });
+  expect(await settle(pane!.place(1, 2).change() as Observation<WorkWriteOutcome>)).toMatchObject({
+    kind: "refused",
+    refusal: { code: "stale_revision", revision: 1 },
+  });
+  expect(submitWork.mock.calls.at(-1)![2]).toBe(old);
+  expect(submitWork.mock.calls.at(-1)![1].expectedRevision).toBe(old.workRevision);
+  mount.read("main");
+  expect(pane!.workBasis).not.toBe(old);
+  expect(
+    (await settle(pane!.verbs.change(2, pane!.workBasis) as Observation<WorkWriteOutcome>)).kind,
+  ).toBe("accepted");
+  expect(mount.work()?.value).toEqual({ amount: 7 });
+  const replacement = shell.mount(route, locationPort().address);
+  closes.push(replacement.close);
+  expect(() => replacement.invoke("change", 9, old)).toThrow("foreign");
+});
+
+test("a delayed submit keeps its captured expectedRevision across a newer accepted edit", async () => {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  let release: () => void = () => {};
+  let delayed = true;
+  const writes: number[] = [];
+  const door: WorkJournalDoor = {
+    ...store,
+    submitWork(scope, write, invocation) {
+      writes.push(write.expectedRevision!);
+      if (!delayed) return store.submitWork(scope, write, invocation);
+      delayed = false;
+      return {
+        subscribe(deliver, end) {
+          release = () => {
+            store.submitWork(scope, write, invocation).subscribe(deliver, end);
+          };
+          return () => {};
+        },
+      };
+    },
+  };
+  const mount = createRouteShell({ ...t.services, work: door }).mount(
+    await workRoute(),
+    locationPort().address,
+  );
+  closes.push(mount.close);
+  const pending = settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
+  await Promise.resolve();
+  await settle(mount.invoke("change", 10) as Observation<WorkWriteOutcome>);
+  release();
+  expect(await pending).toMatchObject({
+    kind: "refused",
+    refusal: { code: "stale_revision", revision: 1 },
+  });
+  expect(writes).toEqual([0, 0]);
+  expect(mount.work()).toEqual({ revision: 1, value: { amount: 10 } });
+});
+
+async function landingFixture(
+  output: z.ZodType = z.object({ name: z.string() }),
+  submissionKey?: string,
+) {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  let deliver: (
+    result: import("../../../../packages/agent-contracts/src/work-journal-door").AcceptedResult,
+  ) => void = () => {};
+  let kept: import("../../../../packages/agent-contracts/src/work-journal-door").AcceptedResult = {
+    kind: "pending",
+  };
+  const land = vi.fn((result: unknown, current: unknown) => ({
+    query: `${(current as { query: string }).query}${result === undefined ? "outputless" : (result as { name: string }).name}`,
+  }));
+  const door: WorkJournalDoor = {
+    ...store,
+    submit: (command) => ({
+      key: submissionKey ?? command.key,
+      lifetime: "command",
+      handle: {
+        id: command.id as import("../../../../packages/agent-contracts/src/work-journal-door").JournalCommandId,
+        lifetime: "command",
+        causalParent:
+          command.id as import("../../../../packages/agent-contracts/src/route-kernel-page").CausalParentId,
+      },
+      accepted: {
+        subscribe(listener) {
+          deliver = (result) => {
+            kept = result;
+            listener(result);
+          };
+          return () => {};
+        },
+      },
+    }),
+    accepted: () => kept,
+  };
+  const route = await workRoute("none", false, "nothing", undefined, false, { run: land, output });
+  const shell = createRouteShell({ ...t.services, work: door });
+  const location = locationPort();
+  const mount = shell.mount(route, location.address);
+  closes.push(mount.close);
+  mount.invoke("native", 0);
+  const submission = mount.confirm("native") as ReturnType<WorkJournalDoor["submit"]>;
+  return {
+    shell,
+    location,
+    route,
+    mount,
+    submission,
+    land,
+    deliver: (result: Parameters<typeof deliver>[0]) => deliver(result),
+    door,
+  };
+}
+
+test("lands accepts an authoritative successful result through Page policy", async () => {
+  const f = await landingFixture();
+  f.deliver({
+    kind: "accepted-native",
+    outcome: "committed",
+    receiptId: "receipt",
+    result: { name: "saved table" },
+  });
+  expect(f.mount.page.read().query).toBe("saved table");
+  expect(f.land).toHaveBeenCalledTimes(1);
+  expect(f.mount.commandLanding(f.submission.handle.id)).toMatchObject({ kind: "decoded" });
+});
+
+test.each(["departure", "replacement", "superseded"] as const)(
+  "lands leaves Page unchanged after %s and keeps receipt",
+  async (mode) => {
+    const f = await landingFixture();
+    let page = f.mount;
+    if (mode === "superseded") f.location.navigate("/note?query=replacement");
+    else {
+      f.mount.close();
+      if (mode === "replacement") {
+        page = f.shell.mount(f.route, locationPort("?query=replacement").address);
+        closes.push(page.close);
+      }
+    }
+    const before = mode === "departure" ? null : page.page.read();
+    const result = {
+      kind: "accepted-native",
+      outcome: "committed",
+      receiptId: "receipt",
+      result: { name: "late" },
+    } as const;
+    f.deliver(result);
+    expect(f.land).not.toHaveBeenCalled();
+    if (mode !== "departure") expect(page.page.read()).toEqual(before);
+    expect(f.door.accepted(f.submission.handle.id)).toEqual(result);
+  },
+);
+
+test.each(["failed", "absent", "malformed"] as const)(
+  "%s native output does not land",
+  async (mode) => {
+    const f = await landingFixture();
+    f.deliver(
+      mode === "failed"
+        ? { kind: "rejected", failure: "failed", problem: "failed native write" }
+        : {
+            kind: "accepted-native",
+            outcome: "committed",
+            receiptId: "r",
+            ...(mode === "malformed" ? { result: { name: 12 } } : {}),
+          },
+    );
+    expect(f.land).not.toHaveBeenCalled();
+    expect(f.mount.page.read().query).toBe("");
+    if (mode !== "failed") {
+      expect(f.mount.commandLanding(f.submission.handle.id)).toMatchObject({
+        kind: "result-undecodable",
+        key: "native.write",
+      });
+      expect(f.mount.commandProblems()).toHaveLength(1);
+    }
+  },
+);
+
+test("mount decodes by JournalSubmission.key rather than the current verb entry", async () => {
+  const f = await landingFixture(undefined, "notes.read");
+  f.deliver({
+    kind: "accepted-native",
+    outcome: "committed",
+    receiptId: "r",
+    result: { name: "would fit native.write" },
+  });
+  expect(f.land).not.toHaveBeenCalled();
+  expect(f.mount.commandLanding(f.submission.handle.id)).toMatchObject({
+    kind: "result-undecodable",
+    key: "notes.read",
+  });
+});
+
+test("mount admits absent output only when the submitted schema permits undefined", async () => {
+  const f = await landingFixture(z.undefined());
+  f.deliver({ kind: "accepted-native", outcome: "committed", receiptId: "r" });
+  expect(f.mount.page.read().query).toBe("outputless");
+  expect(f.land.mock.calls[0]![0]).toBeUndefined();
 });

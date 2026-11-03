@@ -467,6 +467,7 @@ export function linkRouteBodies(
       case "command":
         entryRef(verb.entry, `${path}.entry`, false);
         body(verb.intent, `${path}.intent`, "intent");
+        body(verb.lands, `${path}.lands`, "lands");
         break;
       case "query":
         entryRef(verb.entry, `${path}.entry`, true);

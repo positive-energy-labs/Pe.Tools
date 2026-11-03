@@ -44,6 +44,14 @@ function Pane({ mount, pane }: { mount: AdmittedMount; pane: string }) {
       createElement(Button, { label: "refresh", onClick: () => mount.refresh() }, "refresh"),
     mount.history && createElement(JournalButtons, { owner: mount, words: true }),
     mount.read(pane) as ReactNode,
+    ...mount.commandProblems().map((problem) =>
+      createElement(OutcomeLine, {
+        key: problem.receiptId,
+        kind: "error",
+        label: "result-undecodable",
+        says: `${problem.key}: ${problem.problem}`,
+      }),
+    ),
     ...mount.reviewIds().map((id) => {
       const review = mount.review(id)!;
       return createElement(

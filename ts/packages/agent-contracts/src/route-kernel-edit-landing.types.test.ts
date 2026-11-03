@@ -61,3 +61,16 @@ export function committedResultTypes(result: import("./work-journal-door.ts").Ac
   // @ts-expect-error Uncommitted native outcomes have no catalog result.
   return result.result;
 }
+
+export function uncommittedResultRefusal(
+  outcome: Exclude<import("./work-journal-door.ts").NativeOutcome, "committed">,
+) {
+  const invalid: import("./work-journal-door.ts").AcceptedResult = {
+    kind: "accepted-native",
+    outcome,
+    receiptId: "r",
+    // @ts-expect-error None of the four noncommitted native outcomes may carry a result.
+    result: {},
+  };
+  return invalid;
+}

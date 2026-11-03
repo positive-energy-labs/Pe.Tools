@@ -1,7 +1,5 @@
-import {
-  submitAction,
-  actionResult,
-} from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { callOp } from "./readings-api";
 import { createGeometryReadDoor } from "./geometry-read-door";
 import type {
   KernelServices,
@@ -16,6 +14,7 @@ export function sourceRouteServices(
   sources: Record<string, ReadingSource>,
   composition: Pick<KernelServices, "target" | "geometry"> = {},
 ): KernelServices {
+  const queries = new Set(hostOpCatalog.filter((entry) => entry.effect === "Read").map((entry) => entry.key));
   const reads = new WeakMap<
     object,
     {
@@ -56,10 +55,10 @@ export function sourceRouteServices(
         deliver: (value: ReadingSnapshot<T>) => void,
       ) {
         const state = reads.get(request);
-        // Native previews are catalog queries, shared by every admitted ModelWrite route.
+        // Native catalog queries share the same scoped read door.
         const source =
           sources[request.key.op] ??
-          (request.key.op.endsWith(".preview")
+          (queries.has(request.key.op as never)
             ? {
                 kind: "use" as const,
                 async open(
@@ -67,13 +66,11 @@ export function sourceRouteServices(
                   deliver: Parameters<UseSource["open"]>[1],
                 ) {
                   try {
-                    const receipt = await submitAction({
-                      id: crypto.randomUUID(),
-                      key: request.key.op,
-                      target: state!.target,
-                      input: JSON.parse(request.key.sortedKeyInput),
-                    });
-                    const result = actionResult(receipt);
+                    const result = await callOp(
+                      context,
+                      request.key.op as import("@pe/host-contracts/operation-types").OpKey,
+                      context.args as never,
+                    );
                     if (!context.signal.aborted)
                       deliver({ kind: "complete", value: result, revision: 0 });
                   } catch (error) {
@@ -114,8 +111,8 @@ export function sourceRouteServices(
               if (state.controller.signal.aborted) return;
               if (frame.kind === "complete")
                 deliver({
-                  status: "ready",
-                  current: true,
+                  status: frame.fresh === false ? "stale" : "ready",
+                  current: frame.fresh !== false,
                   value:
                     frame.value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
                   hash: JSON.stringify(frame.value),
@@ -135,3 +132,4 @@ export function sourceRouteServices(
     availability: {},
   };
 }
+

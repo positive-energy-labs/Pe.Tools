@@ -23,23 +23,10 @@ export function createAdmittedWork(
   let scope: WorkScope | undefined;
   let ready = false;
   let problem: string | null = null;
-  const rebases = new Set<{ revision: number; resume(): void; abandon(): void }>();
-  const resumeRebase = () => {
-    for (const pending of rebases) {
-      if ((owner.read()?.work?.revision ?? -1) < pending.revision) continue;
-      rebases.delete(pending);
-      pending.resume();
-    }
-  };
-  const abandonRebases = () => {
-    for (const pending of rebases) pending.abandon();
-    rebases.clear();
-  };
   const sync = () => {
     const snapshot = owner.read();
     if (!snapshot || snapshot.scope === scopeToken) return;
     stop();
-    abandonRebases();
     problem = null;
     ready = false;
     scopeToken = snapshot.scope;
@@ -76,7 +63,6 @@ export function createAdmittedWork(
           });
           problem = null;
           ready = result.kind === "published" || result.kind === "duplicate";
-          resumeRebase();
           notify();
         }
         if (state.kind === "ack") {
@@ -85,7 +71,6 @@ export function createAdmittedWork(
             ready = false;
             problem = `Work ${result.reason}`;
           }
-          resumeRebase();
         }
       },
       () => {},
@@ -96,75 +81,32 @@ export function createAdmittedWork(
     invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken,
     press: string,
     label: string,
+    basis: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken = invocation,
   ): Observation<WorkWriteOutcome> => {
-    if (!scope || !door || !ready) throw Error("Work unavailable");
+    if (!scope || !door || !ready || basis.workRevision === null) throw Error("Work unavailable");
     const original = scope;
-    let request = {
+    const request = Object.freeze({
       kind: "apply" as const,
-      expectedRevision: owner.read()!.work!.revision,
-      patches: patches(),
+      expectedRevision: basis.workRevision,
+      patches: structuredClone(patches()),
       press,
       label,
-    };
+    });
     return completion<WorkWriteOutcome>(
       { kind: "pending" },
       () =>
         new Promise((resolve) => {
-          let attempts = 0;
-          const submit = () => {
-            const observation = door!.submitWork(original, request, invocation);
-            observation.subscribe(
-              (value) => {
-                if (value.kind === "pending") return;
-                if (value.kind === "accepted")
-                  owner.acceptWork(invocation, { kind: "ack", write: value.ack });
-                if (
-                  value.kind === "refused" &&
-                  value.refusal.code === "stale_revision" &&
-                  attempts++ === 0 &&
-                  owner.current(invocation.token) &&
-                  owner.read()?.pageEpoch === invocation.pageEpoch &&
-                  owner.read()?.pageRevision === invocation.pageRevision
-                ) {
-                  const retry = () => {
-                    if (
-                      !owner.current(invocation.token) ||
-                      owner.read()?.pageEpoch !== invocation.pageEpoch ||
-                      owner.read()?.pageRevision !== invocation.pageRevision
-                    ) {
-                      resolve(value);
-                      return;
-                    }
-                    const basis = owner.invocation(
-                      owner.capture(`rebase:${press}`),
-                      invocation.dependencies,
-                      invocation.causalParent,
-                    );
-                    if (!basis.ok) {
-                      resolve(value);
-                      return;
-                    }
-                    invocation = basis.value;
-                    request = {
-                      ...request,
-                      expectedRevision: owner.read()!.work!.revision,
-                      patches: patches(),
-                    };
-                    submit();
-                  };
-                  if ((owner.read()?.work?.revision ?? -1) >= value.refusal.revision) retry();
-                  else
-                    rebases.add({
-                      revision: value.refusal.revision,
-                      resume: retry,
-                      abandon: () => resolve(value),
-                    });
-                } else resolve(value);
-              },
-              () => {},
-            );
-          };
-          submit();
+          door.submitWork(original, request, basis).subscribe(
+            (value) => {
+              if (value.kind === "pending") return;
+              if (value.kind === "accepted")
+                owner.acceptWork(invocation, { kind: "ack", write: value.ack });
+              else problem = value.refusal.error;
+              notify();
+              resolve(value);
+            },
+            () => {},
+          );
         }),
     );
   };
@@ -208,7 +150,6 @@ export function createAdmittedWork(
     close() {
       ready = false;
       stop();
-      abandonRebases();
       if (feedToken) owner.retire(feedToken);
     },
   };
