@@ -74,7 +74,8 @@ export function legacyVerbEnvironment(
       lifetime: "read",
       async query(read, input, snapshot) {
         if (queries) {
-          if (!Object.hasOwn(queries, read.key)) throw Error(`Missing fixture seed: ${read.key}`);
+          if (!Object.hasOwn(queries, read.key))
+            throw Object.assign(Error(`Missing fixture seed: ${read.key}`), { status: 404 });
           return structuredClone(queries[read.key]);
         }
         return read.run(read.input.parse(input), {

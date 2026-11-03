@@ -284,3 +284,29 @@ test("separate instances of the same fixture have separate Work keys and edits",
   expect(a.ports.getSnapshot().work?.doc.value).toBe(7);
   expect(b.ports.getSnapshot().work?.doc.value).toBe(1);
 });
+
+test("a missing query seed refuses without falling through to its real read", async () => {
+  const fetch = vi.fn(() => {
+    throw Error("Real host reached");
+  });
+  vi.stubGlobal("fetch", fetch);
+  const missing = {
+    ...graph,
+    seeds: {
+      missing: {
+        title: "Missing query",
+        load: async () => ({ work: { value: 1 }, readings: {}, queries: {} }),
+      },
+    },
+  };
+  const owner = await createFixtureMount(missing, "missing");
+  try {
+    expect(await owner.control("query").run()).toMatchObject({
+      state: "refused",
+      refusal: { message: expect.stringContaining("Missing fixture seed") },
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    owner.dispose();
+  }
+});
