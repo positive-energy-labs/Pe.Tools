@@ -16,9 +16,9 @@ import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/ro
 import { familiesReads } from "../../../../packages/mcps/src/shared/families-client";
 
 // Host admission consumes this module without loading the browser pane or sources.
-// TODO: W2 cutover is blocked: the host takenAt publication retires the explicit read
-// before completion (kernel.test.ts host completion baseline witness). Do not add a
-// route-owned Work snapshot or baseline writer to bypass the shared acceptance owner.
+// TODO: W2 cutover is blocked: admitted host Work has no salvage reader, so scope
+// and excluded names/ids disappear from carry-over (host-salvage.test.ts). Preserve
+// the host recovery boundary; do not add a route-owned raw Work reader.
 const scopeSchema = z.custom<
   import("../../../../packages/agent-contracts/src/route-kernel-page").IdentityId<"local">
 >((value) => value === '["families","draft"]');
