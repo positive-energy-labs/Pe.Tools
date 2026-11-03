@@ -183,6 +183,7 @@ export function GraphTarget({ status, disabled }: { status: WorkScopeStatus; dis
   return (
     <>
       <LadderPicker ladder={ladder} disabled={disabled} />
+      {/* TODO: Manual D drive-7 verdict G: "every page head reads inventory busy; keeping the last known target through the whole drive." Prove why status.busy never settles. */}
       {status.busy && resolution.kind === "resolved" ? (
         <span role="status" className="text-ink-2">
           inventory busy; keeping the last known target
