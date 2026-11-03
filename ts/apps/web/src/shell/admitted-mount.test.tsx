@@ -1321,6 +1321,7 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
     "predicate",
     "show",
     "subject",
+    "placement",
   ]);
   for (const [slot, kind, dataPatch] of [
     ["salvage", "salvage", { salvage: "unsupported" }],
@@ -1429,16 +1430,6 @@ test("remaining slot census refuses cells, placement, presentation and migration
           : { unsupported: { slot: `cells.test.${key}`, kind: key, source, run: () => [] } }),
       },
     })),
-    {
-      data: {
-        panes: {
-          main: { ...data.panes.main, verbs: { choose: "unsupported", row: "text", allowed: [] } },
-        },
-      },
-      bodies: {
-        unsupported: { slot: "panes.main.verbs.choose", kind: "placement", source, run: () => [] },
-      },
-    },
     {
       data: {
         verbs: {
@@ -1676,4 +1667,15 @@ test("subject text observes global publications with validated cached output", a
  const route = await admitted(false, false, {data: {subjectText: "text"}, bodies: {text: {slot: "subjectText", kind: "subject", source, run: text}}});
  const mount = createRouteShell(transports().services).mount(route, locationPort().address); closes.push(mount.close);
  mount.controls.query("query", "changed"); expect(mount.subjectText()).toBe("changed"); const calls = text.mock.calls.length; mount.read("main"); mount.subjectText(); expect(text).toHaveBeenCalledTimes(calls);
+});
+
+test("row placement uses shared query dispatch with captured input and refuses outside allowed union", async () => {
+ const choose = vi.fn(row => [row]);
+ const route = await admitted(true, true);
+ // amend the query witness's placement through a fresh admission below
+ const rowRoute = await admitted(false, false, { data: {...route.data, panes: {main: {...route.data.panes.main, verbs: {row: "text", allowed: ["capture"], choose: "choose"}}}}, bodies: {main: {...bodies.main, run: ctx => ctx.place("capture", {elementIds:[1]})}, queryArgs: {slot: "verbs.capture.args", kind: "args", source, run: (_ctx, input) => ({query: input.elementIds.join(",")})}, choose: {slot: "panes.main.verbs.choose", kind: "placement", source, run: choose}} });
+ const t=transports(); const acquire=vi.spyOn(t.services.reads,"acquire"); const mount=createRouteShell(t.services).mount(rowRoute,locationPort().address); closes.push(mount.close);
+ const input={elementIds:[42]}, verbs=mount.place("main","capture",input); input.elementIds[0]=99; verbs.capture!(); expect(acquire.mock.calls.at(-1)![0].key.sortedKeyInput).toBe(JSON.stringify({query:"42"}));
+ expect(()=>mount.place("main","outside",input)).toThrow("Undeclared pane verb");
+ const calls=choose.mock.calls.length; expect(()=>mount.read("main")).toThrow("during render"); expect(choose).toHaveBeenCalledTimes(calls);
 });

@@ -1,3 +1,4 @@
+import { placeAdmittedVerbs } from "./admitted-placement";
 import { createAdmittedObservers } from "./admitted-observers";
 import { reviewChanges } from "./review-value";
 import { bindWork, workKey, workHandleSchema, writePreviewSchema } from "@pe/agent-contracts";
@@ -72,6 +73,7 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "predicate",
   "show",
   "subject",
+  "placement",
 ]);
 
 /** Application services are installed once. Routes supply only admission and location. */
@@ -496,7 +498,16 @@ export function createRouteShell(services: KernelServices) {
       >();
       const project = (keys: readonly string[], value: Readonly<Record<string, unknown>>) =>
         freezePage(Object.fromEntries(keys.map((key) => [key, value[key]])));
+      let drawing = false;
+      const action = () => { if (drawing) throw Error("Admitted action cannot run during render"); if (closed) throw Error("Mount closed"); };
+      const place = (pane: string, row: unknown, input: unknown) => {
+        action(); resolve();
+        const declaration = route.data.panes[pane];
+        if (!declaration) throw Error(`Unknown pane: ${pane}`);
+        return placeAdmittedVerbs(declaration, bindings.schemas, bindings.bodies, row, input, invoke);
+      };
       const invoke = (id: string, input: unknown) => {
+        action();
         resolve();
         const declaration = route.data.verbs[id];
         if (!declaration) throw Error(`Unknown verb: ${id}`);
@@ -804,6 +815,7 @@ export function createRouteShell(services: KernelServices) {
         },
         revision: () => revision,
         invoke,
+        place,
         picker: (field: string) => pickerOptions[field],
         subjectDisplay: observers.subject,
         subjectText: observers.text,
@@ -882,7 +894,9 @@ export function createRouteShell(services: KernelServices) {
           if (!Object.hasOwn(route.data.panes, pane)) throw Error(`Unknown pane: ${pane}`);
           const declaration = route.data.panes[pane]!;
           if (!observers.visible(pane) || !declaration.body) return null;
-          return current.bodies[declaration.body]!.run({
+          drawing = true;
+          try { return current.bodies[declaration.body]!.run({
+            place: (row: unknown, input: unknown) => place(pane, row, input),
             page: ports.page,
             work: owner.read()!.work?.value ?? null,
             history,
@@ -901,7 +915,7 @@ export function createRouteShell(services: KernelServices) {
                 (id: string) => [id, (input: unknown) => invoke(id, input)],
               ),
             ),
-          });
+          }); } finally { drawing = false; }
         },
         close,
       };

@@ -147,6 +147,10 @@ export type PaneContext<
       refresh(): void;
     };
   };
+  /** Event-only row placement; the mount refuses dispatch during pane draw. */
+  readonly place?: G["panes"][P]["verbs"] extends { row: infer R; allowed: readonly (infer V)[] }
+    ? (row: Immutable<SchemaValue<S, R>>, input: unknown) => Readonly<Partial<Record<Extract<V, string>, () => unknown>>>
+    : never;
   readonly readCosts?: Readonly<Record<string, import("./native-read-door.ts").ReadCost>>;
   readonly visible: boolean;
   readonly verbs: {
