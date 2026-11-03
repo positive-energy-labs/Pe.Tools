@@ -648,7 +648,7 @@ test("opening the Timeline cannot silently dismiss a pending write review", asyn
   expect(view.queryByLabelText("Apply review")).not.toBeNull();
 });
 
-test("shown review keeps its control armed; its portal commits one receipt and its barrier blocks undo", async () => {
+test('shown review keeps its control armed: "unconsumed edits remain undoable; an undo that would cross a committed native write is blocked by its receipt barrier"', async () => {
   const f = await fixture();
   const { view } = await mounted(f);
   fireEvent.click(view.getByRole("button", { name: "Edit" }));
@@ -671,12 +671,25 @@ test("shown review keeps its control armed; its portal commits one receipt and i
       .timeline.read()
       .map((e) => e.kind),
   ).toEqual(["invocation", "invocation", "receipt"]);
+  expect(f.owner().timeline.read().at(-1)?.basis).toEqual({
+    workKey: workKey(key), receipt: receipt(), receiptId: "native-1",
+  });
+  expect(f.owner().journal(key).read().undo).toMatchObject([
+    { transitions: [{ revision: 1 }], barrier: { receiptId: "native-1" } },
+    { transitions: [{ revision: 2, forward: [{ path: ["writeIntent", "takeoffs.initialize"] }] }] },
+  ]);
+  expect(f.owner().journal(key).read().undo[1]!.barrier).toBeUndefined();
   const before = f.writes.length;
   apply.focus();
   chord(apply, "z");
   await act(async () => {});
-  expect(f.writes).toHaveLength(before);
-  expect(await f.owner().restore("undo")).toMatchObject({ ok: false, code: "barrier" });
+  expect(f.writes).toHaveLength(before + 1);
+  expect(f.writes.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2, expectedRevision: 2 });
+  expect(f.scope().work).toMatchObject({ handle: { revision: 3 }, doc: { rows: { slot: { n: 2 } }, writeIntent: {} } });
+  expect(await f.owner().restore("undo")).toMatchObject({
+    ok: false, code: "barrier", barrier: { receiptId: "native-1" },
+  });
+  expect(f.writes).toHaveLength(before + 1);
   expect(transport.run.mock.calls[0]![5]).toBe(f.owner().timeline.read()[1]!.press);
 });
 
@@ -727,7 +740,7 @@ test("stage changes replace key registration and pane bindings stay inside kit P
   await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(10));
 });
 
-test("late command receipt remains associated with dispatch Work after switching to another Work", async () => {
+test('late receipt stays on dispatch Work: "unconsumed edits remain undoable; an undo that would cross a committed native write is blocked by its receipt barrier"', async () => {
   const f = await fixture();
   const owner = createGraphMount(f.graph, f.adapters);
   const disconnect = owner.connect();
@@ -759,10 +772,25 @@ test("late command receipt remains associated with dispatch Work after switching
   expect(owner.journal(second).read().undo).toHaveLength(0);
   resolve(receipt());
   await pending;
-  expect(owner.timeline.read().at(-1)?.basis).toMatchObject({ workKey: workKey(key) });
-  expect(await owner.journal(key).undo((write) => f.adapters.write(key, write))).toMatchObject({
-    code: "barrier",
+  expect(owner.timeline.read().at(-1)?.basis).toEqual({
+    workKey: workKey(key), receipt: receipt(), receiptId: "native-1",
   });
+  expect(owner.journal(key).read().undo).toMatchObject([
+    { transitions: [{ revision: 1 }], barrier: { receiptId: "native-1" } },
+    { transitions: [{ revision: 2, forward: [{ path: ["writeIntent", "takeoffs.initialize"] }] }] },
+  ]);
+  expect(await owner.journal(key).undo((write) => f.adapters.write(key, write))).toMatchObject({
+    ok: true, revision: 3,
+  });
+  expect(f.writes.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2, expectedRevision: 2 });
+  const before = f.writes.length;
+  expect(await owner.journal(key).undo((write) => f.adapters.write(key, write))).toMatchObject({
+    ok: false, code: "barrier", barrier: { receiptId: "native-1" },
+  });
+  expect(f.writes).toHaveLength(before);
+  expect((await f.workspace.read(key, key.route))!.doc).toMatchObject({ rows: { slot: { n: 2 } }, writeIntent: {} });
+  // The fixture writer refreshes its written Work; return to the second Work for its own edit.
+  await f.refresh(second);
   await owner.control("edit").run();
   expect(await owner.restore("undo")).toMatchObject({ ok: true });
 });
@@ -924,7 +952,7 @@ test("settled partial and late command receipts invalidate their aliases; docume
   });
 });
 
-test("a detached command's later receipt uses its frozen Work even when the adapter currently shows another Work", async () => {
+test('detached receipt stays on frozen Work: "unconsumed edits remain undoable; an undo that would cross a committed native write is blocked by its receipt barrier"', async () => {
   const f = await fixture();
   const owner = createGraphMount(f.graph, f.adapters);
   owner.connect();
@@ -947,11 +975,25 @@ test("a detached command's later receipt uses its frozen Work even when the adap
   await f.refresh(second);
   await owner.control("edit").run();
   f.late()!(receipt(), second);
-  expect(owner.timeline.read().at(-1)?.basis).toMatchObject({ workKey: workKey(key) });
-  expect(await owner.restore("undo")).toMatchObject({ ok: true });
-  expect(await owner.journal(key).undo((request) => f.adapters.write(key, request))).toMatchObject({
-    code: "barrier",
+  expect(owner.timeline.read().at(-1)?.basis).toEqual({
+    workKey: workKey(key), receipt: receipt(), receiptId: "native-1",
   });
+  expect(owner.journal(key).read().undo).toMatchObject([
+    { transitions: [{ revision: 1 }], barrier: { receiptId: "native-1" } },
+    { transitions: [{ revision: 2, forward: [{ path: ["writeIntent", "takeoffs.initialize"] }] }] },
+  ]);
+  expect(await owner.restore("undo")).toMatchObject({ ok: true, revision: 2 });
+  expect(f.scope().work).toMatchObject({ handle: { key: second }, doc: { rows: { slot: { n: 1 } } } });
+  expect(await owner.journal(key).undo((request) => f.adapters.write(key, request))).toMatchObject({
+    ok: true, revision: 3,
+  });
+  expect(f.writes.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2, expectedRevision: 2 });
+  const before = f.writes.length;
+  expect(await owner.journal(key).undo((request) => f.adapters.write(key, request))).toMatchObject({
+    ok: false, code: "barrier", barrier: { receiptId: "native-1" },
+  });
+  expect(f.writes).toHaveLength(before);
+  expect((await f.workspace.read(key, key.route))!.doc).toMatchObject({ rows: { slot: { n: 2 } }, writeIntent: {} });
 });
 
 test("graph field policies project Page to URL and Back restores its stage without replaying Work", async () => {
