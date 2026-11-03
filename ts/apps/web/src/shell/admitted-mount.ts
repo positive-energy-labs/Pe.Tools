@@ -78,6 +78,7 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "derive",
   "picker",
   "ready",
+  "describe",
   "work",
   "intent",
   "lands",
@@ -674,6 +675,26 @@ export function createRouteShell(services: KernelServices) {
         let preview: unknown;
         let send: () => unknown;
         if (declaration.kind === "work") {
+          let label = declaration.label;
+          if (declaration.describe) {
+            const evidence = context();
+            let described: unknown;
+            try {
+              described = bindings.bodies[declaration.describe]!.run(
+                freezePage(parsed),
+                freezePage({
+                  page: evidence.page,
+                  work: evidence.work,
+                  readings: evidence.readings,
+                }),
+              );
+            } catch {
+              return { kind: "refused", reason: "describe-threw" } as const;
+            }
+            if (typeof described !== "string")
+              return { kind: "refused", reason: "describe-not-string" } as const;
+            label = described;
+          }
           const patches = () =>
             bindings.bodies[declaration.patches]!.run(
               context(),
@@ -685,7 +706,7 @@ export function createRouteShell(services: KernelServices) {
               () => preview as import("@pe/agent-contracts").WorkWrite["patches"],
               invocation,
               invocation.id,
-              declaration.label,
+              label,
               basis,
             );
             observation.subscribe(
@@ -693,7 +714,7 @@ export function createRouteShell(services: KernelServices) {
                 if (outcome.kind === "accepted") {
                   const key = outcome.ack.key;
                   mountJournal(key).describe(outcome.ack.press ?? invocation.id, {
-                    label: declaration.label,
+                    label,
                   });
                 }
                 if (owner.read()?.scope === invocation.token.scope) notify();

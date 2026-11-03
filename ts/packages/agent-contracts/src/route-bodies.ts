@@ -478,6 +478,7 @@ export function linkRouteBodies(
       case "work":
         if (!data.work) fail(path, key, "Work", "Work verb requires Work");
         body(verb.patches, `${path}.patches`, "work");
+        body(verb.describe, `${path}.describe`, "describe");
         break;
       case "page":
         body(verb.patch, `${path}.patch`, "page");

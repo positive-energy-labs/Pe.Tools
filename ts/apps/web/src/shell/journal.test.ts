@@ -95,8 +95,22 @@ test("two accepted writes in one press are one step; undo and redo chain real ho
   expect(f.journal.read().undo[0]!.transitions).toHaveLength(2);
   expect(await f.journal.undo(f.writer)).toEqual({ ok: true, press: "cap-1", revision: 4 });
   expect(f.requests).toEqual([
-    { kind: "restore", restoreOf: 2, patches: second.inverse, expectedRevision: 2, press: null },
-    { kind: "restore", restoreOf: 1, patches: first.inverse, expectedRevision: 3, press: null },
+    {
+      kind: "restore",
+      restoreOf: 2,
+      label: "undid cap-1",
+      patches: second.inverse,
+      expectedRevision: 2,
+      press: null,
+    },
+    {
+      kind: "restore",
+      restoreOf: 1,
+      label: "undid cap-1",
+      patches: first.inverse,
+      expectedRevision: 3,
+      press: null,
+    },
   ]);
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
   expect(f.journal.read().undo).toEqual([]);
@@ -478,14 +492,26 @@ test("an older reread cannot roll back the journal revision or discard history",
   expect(f.journal.read()).toMatchObject({ revision: 2, undo: [{}, {}], redo: [] });
 });
 
-
 test("explicit verb labels survive move, late describe and repeated namer registration", () => {
   const key = { route: "labels", binding: "host" as const, target: null };
   const journal = createWorkJournal(key);
   journal.name(() => ({ label: "Edit Work" }));
-  journal.accept({ key, kind: "apply", by: "human", base: 0, revision: 1, press: "verb", undoable: true, patches: [{path: ["flow"], value: 950}], inverse: [{path: ["flow"], value: 900}] }, {label: "Set fan flow"});
+  journal.accept(
+    {
+      key,
+      kind: "apply",
+      by: "human",
+      base: 0,
+      revision: 1,
+      press: "verb",
+      undoable: true,
+      patches: [{ path: ["flow"], value: 950 }],
+      inverse: [{ path: ["flow"], value: 900 }],
+    },
+    { label: "Set fan flow" },
+  );
   expect(journal.read().moves[0]?.label).toBe("Set fan flow");
-  journal.describe("verb", {label: "Set MUAS-1 flow"});
+  journal.describe("verb", { label: "Set MUAS-1 flow" });
   journal.name(() => ({ label: "Edit Work" }));
   expect(journal.read().undo[0]?.label).toBe("Set MUAS-1 flow");
   expect(journal.read().moves[0]?.label).toBe("Set MUAS-1 flow");

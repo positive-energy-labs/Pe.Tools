@@ -417,6 +417,7 @@ export function createWorkJournal(key: WorkKey) {
         sending = {
           kind: "restore",
           restoreOf: transition.revision,
+          label: `${direction === "undo" ? "undid" : "redid"} ${step.label}`,
           patches: structuredClone(direction === "undo" ? transition.inverse : transition.forward),
           expectedRevision: revision,
           press: null,

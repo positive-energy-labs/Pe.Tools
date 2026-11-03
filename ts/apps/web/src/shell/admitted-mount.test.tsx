@@ -1444,6 +1444,7 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
     "derive",
     "picker",
     "ready",
+    "describe",
     "work",
     "intent",
     "lands",
