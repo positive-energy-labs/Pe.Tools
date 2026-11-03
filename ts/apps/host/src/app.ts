@@ -23,6 +23,7 @@ import { join } from "node:path";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { RouteWorkspace, type PeaRuntimeCapabilities } from "@pe/runtime";
 import { createRouteRegistrations } from "@pe/mcps";
+import { admittedBuiltinsLayer } from "./admitted-builtins.ts";
 import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { productRouteWorkPath } from "./product-paths.ts";
@@ -345,6 +346,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       Layer.provide(ReceiptsLive),
       Layer.provide(NodeServices.layer),
       Layer.provide(ReceiptLifetime),
+      Layer.provide(admittedBuiltinsLayer(work.workspace)),
     );
   }
 
@@ -376,5 +378,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provide(ReceiptsLive),
     Layer.provide(NodeServices.layer),
     Layer.provide(ReceiptLifetime),
+    Layer.provide(admittedBuiltinsLayer(work.workspace)),
   );
 }
