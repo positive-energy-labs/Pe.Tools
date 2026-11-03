@@ -17,7 +17,18 @@ public static class SpaceWorld {
                     .Any(id => state.LinkIds.Contains(id.Value()))) state.Generation = Guid.NewGuid().ToString("N");
             }
         };
-        documents.Closed += key => { lock (Sync) States.Remove(key.Value); GeometryLedger.Closed(key.Value); };
+        documents.Closed += key => {
+            lock (Sync) States.Remove(key.Value);
+            // An open host can keep a shared link loaded even before its first Space read.
+            foreach (var tracked in documents.Open) {
+                var host = tracked.Resolve();
+                using var links = new FilteredElementCollector(host).OfClass(typeof(RevitLinkInstance));
+                GeometryLedger.Sources(tracked.Key.Value, links.Cast<RevitLinkInstance>()
+                    .Select(link => link.GetLinkDocument()).OfType<Document>().Select(doc => doc.GetDocumentKey()));
+            }
+            GeometryLedger.Closed(key.Value);
+        };
+        documents.KeyChanged += (tracked, oldKey) => GeometryLedger.Renamed(oldKey.Value, tracked.Key.Value);
     }
 
     /// <summary>Explicit whole-model geometry door for scripts and Pods. Cold Chadds costs 220 s and +9.4 GiB;
@@ -131,6 +142,10 @@ public sealed class World {
             var kind = linked.Title.IndexOf(".ifc", StringComparison.OrdinalIgnoreCase) >= 0 ? SourceKind.IfcLink : SourceKind.RevitLink;
             this._partitions.Add(new Partition(source++, linked, kind, link.Id.Value(), link.GetTotalTransform(), generation));
         }
+        // Unsaved tracker keys use the SDK open id, not GetDocumentKey's wrapper hash.
+        var ledgerHost = PeDocumentIdentity.TryGetOpenId(host, out var openId)
+            ? DocumentKey.For(host, openId).Value : this.HostDocumentKey;
+        GeometryLedger.Sources(ledgerHost, this._partitions.Select(p => p.DocumentKey));
         this.BuiltUtc = DateTime.UtcNow;
     }
 
