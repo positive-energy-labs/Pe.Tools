@@ -21,6 +21,8 @@ import {
   createRouteEnvironmentIssuer,
 } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src/route-kernel-page";
+import { spaceBinding, spacePageSchema } from "../space/graph";
+import { spaceReads } from "../space/reads";
 const nativeId = '["doc",null,"unique-element"]';
 const outcome = {
   kind: "ready" as const,
@@ -41,25 +43,40 @@ const once = <A>(value: A) => ({
     return () => {};
   },
 });
-async function admit() {
+async function admit(
+  options: {
+    kind?: "element" | "local" | "document";
+    subject?: string;
+    input?: unknown;
+    reachFt?: number;
+  } = {},
+) {
+  const kind = options.kind ?? "element";
   const module = {
     ...readOnlyModule,
+    identities: identityCodecs,
     data: {
       ...readOnlyModule.data,
       capabilities: ["geometry"] as const,
       seeds: { sample: { title: "Geometry", load: "geometrySeed" } },
       identities: {
-        system: { kind: "element" as const, codec: "element" },
+        system: { kind, codec: kind },
         element: { kind: "element" as const, codec: "element" },
       },
       fields: {
         ...readOnlyModule.data.fields,
-        system: { ...readOnlyModule.data.fields.system, initial: nativeId },
+        system: { ...readOnlyModule.data.fields.system, initial: options.subject ?? nativeId },
       },
       readings: {
         ...readOnlyModule.data.readings,
         overview: podData.readings.overview,
-        detail: podData.readings.detail,
+        detail: {
+          ...podData.readings.detail,
+          geometry: {
+            ...podData.readings.detail.geometry,
+            reachFt: options.reachFt ?? 5,
+          },
+        },
       },
       panes: { main: { ...readOnlyModule.data.panes.main, draws: ["overview", "detail"] } },
     },
@@ -67,12 +84,18 @@ async function admit() {
       ...readOnlyModule.schemas,
       subjectOne: z.custom(
         (value) =>
-          value === null || (typeof value === "string" && identityCodecs.element.decode(value).ok),
+          value === null || (typeof value === "string" && identityCodecs[kind].decode(value).ok),
       ),
     },
     entries: {
       ...readOnlyModule.entries,
-      scene: { ...podEntries.scene, axes: { ...podEntries.scene.axes, cap: 50000 } },
+      scene: {
+        ...podEntries.scene,
+        ...(options.input === undefined
+          ? {}
+          : { input: z.object({}).transform(() => options.input) }),
+        axes: { ...podEntries.scene.axes, cap: 50000 },
+      },
     },
     codecs: {
       ...readOnlyModule.codecs,
@@ -125,22 +148,27 @@ async function admit() {
 }
 function door(result?: "retiring" | "refused") {
   const requests: any[] = [];
+  const descriptors: ResolvedReadDescriptor[] = [];
+  const joins: ResolvedReadDescriptor[] = [];
   const releases = vi.fn();
   let late: ((value: any) => void) | undefined;
   const geometry: GeometryReadDoor<unknown> = {
     lifetime: "read",
     resolve(request) {
       requests.push(request);
-      return once({
+      const descriptor = {
         operationKey: "scene",
         processIncarnation: { pid: 1, startedAt: 2 },
         openDocumentLifetime: { openId: "doc" },
         normalizedInput: canonicalEnvironmentInput(request.native?.input ?? {}),
         freshnessGeneration: null,
         representation: request.representation === "overview" ? "overview" : "detail",
-      } as ResolvedReadDescriptor);
+      } as ResolvedReadDescriptor;
+      descriptors.push(descriptor);
+      return once(descriptor);
     },
     join(descriptor) {
+      joins.push(descriptor);
       return {
         subscribe(next) {
           late = next;
@@ -156,14 +184,22 @@ function door(result?: "retiring" | "refused") {
       };
     },
   };
-  return { geometry, requests, releases, late: () => late };
+  return { geometry, requests, descriptors, joins, releases, late: () => late };
 }
 function mount(
   route: Awaited<ReturnType<typeof admit>>,
   geometry: GeometryReadDoor<unknown>,
   search = "",
 ) {
-  return createRouteShell(sourceRouteServices({}, { geometry })).mount(route, {
+  return createRouteShell(
+    sourceRouteServices(
+      {},
+      {
+        geometry,
+        target: () => ({ kind: "document", ref: { session: "geometry-test", openId: "doc" } }),
+      },
+    ),
+  ).mount(route, {
     read: () => new URLSearchParams(search),
     write: () => {},
     subscribe: () => () => {},
@@ -181,12 +217,108 @@ test("mount composes default overview and declared explicit detail with cost met
     pane.readingActions.detail.readDetailed();
     expect(d.requests[1].representation).toBe("meshes");
     expect(d.requests[1].reach.reachFt).toBeGreaterThanOrEqual(5);
+    expect(d.requests[1].reach.subject).toEqual({ kind: "subjects", ids: [nativeId] });
     expect(d.requests[1].reach.explicit.token.channel).toBe("detail");
     (m.read("main") as any).readingActions.detail.refresh();
     expect(d.releases).toHaveBeenCalledTimes(1);
   } finally {
     m.close();
   }
+});
+
+const regionId = '["space.region","room-uid"]';
+const regionInput = spaceReads["revit.detail.space-scene"].input.parse(
+  spaceBinding("detailed", undefined, {
+    page: spacePageSchema.parse({ region: { kind: "room", uniqueId: "room-uid" } }),
+  }).args,
+);
+test.each([5, 15])(
+  "region detail prepares %s-ft reach and joins the exact host descriptor",
+  async (reachFt) => {
+    const d = door();
+    const m = mount(
+      await admit({ kind: "local", subject: regionId, input: regionInput, reachFt }),
+      d.geometry,
+    );
+    try {
+      const pane = m.read("main") as any;
+      expect(d.requests).toHaveLength(1);
+      expect(d.requests[0]).toMatchObject({
+        representation: "overview",
+        subjects: { kind: "ids", ids: [] },
+      });
+      expect(pane.readings.detail.current).toBe(false);
+      expect(identityCodecs.element.decode(regionId).ok).toBe(false);
+      pane.readingActions.detail.readDetailed();
+      expect(d.requests).toHaveLength(2);
+      const detail = d.requests[1];
+      expect(detail).toMatchObject({
+        representation: "meshes",
+        native: {
+          input: {
+            region: { kind: "room", uniqueId: "room-uid" },
+            elementIds: [],
+            contextPaddingFt: 15,
+          },
+        },
+        reach: { subject: { kind: "region", id: regionId }, reachFt },
+      });
+      expect(detail.reach.explicit.token.channel).toBe("detail");
+      expect(detail.reach.explicit.token.scope).toBe(d.requests[0].scope);
+      expect(detail.reach.explicit.token.scope.identity.target).toEqual({
+        kind: "document",
+        ref: { session: "geometry-test", openId: "doc" },
+      });
+      expect(d.joins[1]).toBe(d.descriptors[1]);
+      expect((m.read("main") as any).readings.detail).toMatchObject({
+        status: "ready",
+        current: true,
+      });
+      const late = d.late();
+      m.controls.subject('["space.region","another-room"]');
+      expect(d.releases).toHaveBeenCalledTimes(2);
+      late?.({ kind: "retiring" });
+      expect((m.read("main") as any).readings.detail.current).toBe(false);
+      expect(d.requests.map((r) => r.representation)).toEqual(["overview", "meshes", "overview"]);
+    } finally {
+      m.close();
+    }
+  },
+);
+
+test("a local subject without a native region never falls back to element detail", async () => {
+  const d = door();
+  const m = mount(await admit({ kind: "local", subject: regionId }), d.geometry);
+  try {
+    (m.read("main") as any).readingActions.detail.readDetailed();
+    expect(d.requests).toHaveLength(1);
+    expect((m.read("main") as any).readings.detail).toMatchObject({
+      status: "unavailable",
+      current: false,
+    });
+    expect(m.controls.subject(nativeId).kind).toBe("refused");
+    expect(d.requests[0].subjects.ids).toEqual([]);
+  } finally {
+    m.close();
+  }
+});
+
+test("document identity alone cannot authorize whole-project detail", async () => {
+  const d = door();
+  const m = mount(await admit({ kind: "document", subject: '["doc"]' }), d.geometry);
+  try {
+    (m.read("main") as any).readingActions.detail.readDetailed();
+    expect(d.requests).toHaveLength(1);
+    expect((m.read("main") as any).readings.detail.current).toBe(false);
+  } finally {
+    m.close();
+  }
+});
+
+test("admission refuses detail reach below the 5-ft law", async () => {
+  await expect(
+    admit({ kind: "local", subject: regionId, input: regionInput, reachFt: 4 }),
+  ).rejects.toThrow();
 });
 test.each(["retiring", "refused"] as const)("%s remains unavailable", async (result) => {
   const d = door(result);

@@ -6,6 +6,7 @@ import type { IdentityId } from "../../../../packages/agent-contracts/src/route-
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type {
   GeometryRequest,
+  GeometryScope,
   GeometryOutcome,
   RouteEnvironmentIssuer,
 } from "../../../../packages/agent-contracts/src/route-kernel-environment";
@@ -119,6 +120,15 @@ export function createAdmittedGeometry(options: {
     };
     const page = owner.read()!.page;
     const subject = page[route.data.subject.field];
+    const field = route.data.fields[route.data.subject.field]!;
+    const identity =
+      field.role === "subject"
+        ? typeof field.identity === "string"
+          ? route.data.identities[field.identity]
+          : subject && typeof subject === "object" && "kind" in subject
+            ? route.data.identities[String(subject.kind)]
+            : undefined
+        : undefined;
     const candidates =
       typeof subject === "string"
         ? [subject]
@@ -127,7 +137,8 @@ export function createAdmittedGeometry(options: {
           : subject && typeof subject === "object" && "id" in subject
             ? [(subject as { id: string }).id]
             : [];
-    const ids = candidates.filter(
+    // Identity meaning comes from admission, never from trying element syntax on a region.
+    const ids = (identity?.kind === "element" ? candidates : []).filter(
       (id): id is IdentityId<"element"> => identityCodecs.element.decode(id).ok,
     );
     let request: GeometryRequest<
@@ -142,9 +153,24 @@ export function createAdmittedGeometry(options: {
         native,
       };
     else {
-      // TODO: Prepare region/family-document detail from admitted identities before claiming those scopes.
-      if (!ids.length) {
-        record.snapshot = unavailable("Explicit detail requires native subjects");
+      const regionId = candidates[0];
+      const region = input && typeof input === "object" && "region" in input ? input.region : null;
+      const preparedSubject: GeometryScope | undefined = ids.length
+        ? { kind: "subjects", ids: [ids[0]!, ...ids.slice(1)] }
+        : identity?.kind === "local" &&
+            candidates.length === 1 &&
+            typeof regionId === "string" &&
+            identityCodecs.local.decode(regionId).ok &&
+            region &&
+            typeof region === "object"
+          ? { kind: "region", id: regionId as IdentityId<"local"> }
+          : undefined;
+      // TODO: Prepare family-document detail only once the host door can establish family-document
+      // evidence for the exact openId; a document identity alone also names unbounded projects.
+      if (!preparedSubject) {
+        record.snapshot = unavailable(
+          "Explicit detail requires native subjects or an admitted region input",
+        );
         return record.snapshot;
       }
       const invocation = owner.invocation(token, {});
@@ -154,11 +180,7 @@ export function createAdmittedGeometry(options: {
       }
       record.current = () => owner.current(invocation.value);
       const explicit = issuer.mintExplicit(invocation.value.token);
-      const reach = issuer.mintReach(
-        { kind: "subjects", ids: [ids[0]!, ...ids.slice(1)] },
-        geometry.reachFt,
-        explicit,
-      );
+      const reach = issuer.mintReach(preparedSubject, geometry.reachFt, explicit);
       const mode = (
         input as {
           contextRepresentation?: import("../../../../packages/agent-contracts/src/route-kernel-environment").SceneContextRepresentation;
