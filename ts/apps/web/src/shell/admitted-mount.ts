@@ -21,6 +21,8 @@ import {
   workHandleSchema,
   writePreviewSchema,
   commands,
+  type Address,
+  type DocumentRef,
   type SemanticActionKey,
 } from "@pe/agent-contracts";
 import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
@@ -142,7 +144,10 @@ const sourceTimeline = new WeakMap<
   import("../../../../packages/runtime/src/work-journal").TimelineEntry[]
 >();
 const registriesByDoor = new WeakMap<object, ReturnType<typeof createApplicationWorkRegistry>>();
-export function createRouteShell(services: KernelServices) {
+export function createRouteShell(
+  services: KernelServices,
+  workBinding: { workAddress?: Address | null; workOpen?: DocumentRef | null } = {},
+) {
   const liveDoor = services.work ?? applicationWorkDoor;
   let scopedRegistry = registriesByDoor.get(liveDoor);
   if (!scopedRegistry) {
@@ -237,11 +242,11 @@ export function createRouteShell(services: KernelServices) {
         work: route.data.work
           ? bindWork(
               route.data.work.route,
-              null,
+              workBinding.workAddress ?? null,
               routeWorkSubject(route.data, bindings, page) ??
                 address.read().get("work") ??
                 undefined,
-              target?.kind === "document" ? target.ref : undefined,
+              target?.kind === "document" ? target.ref : (workBinding.workOpen ?? undefined),
             )
           : null,
       });

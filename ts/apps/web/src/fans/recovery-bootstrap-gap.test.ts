@@ -6,6 +6,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   ductsDocumentSchema,
   bindWork,
+  workKey,
   address,
   ductsRouteState,
   salvageDuctsWork,
@@ -496,55 +497,65 @@ test.each([true, false])(
   },
 );
 
-// TODO: D4 restore closed Work by its retained identity even on a cold page.
-test.each(["retained", "cold"] as const)(
-  "D4: %s closed Work remains inspectable",
-  async (start) => {
-    const f = await witness();
-    await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
-    await settle(f.mount.invoke("slot", "PE_M_Fan_AirFlow") as Observation<WorkWriteOutcome>);
-    f.mount.close();
-    const before = structuredClone(f.saved.get("ducts"));
-    const closed = {
-      resolution: { kind: "choose", reason: "document-closed" },
-      workOpen: { session: "fixture", openId: "w1f" },
-      workAddress: null,
-      resolvedAddress: null,
-    } as ReturnType<typeof useRouteTarget>;
-    const selected = vi.mocked(useRouteTarget);
-    selected.mockReturnValue(
-      start === "cold"
-        ? closed
-        : {
-            ...closed,
-            resolution: { kind: "resolved", target: { kind: "document", ref: closed.workOpen! } },
-          },
-    );
-    vi.spyOn(sourceServices, "sourceRouteServices").mockReturnValue(f.services);
-    const view = render(
+test.each([
+  ["retained", null],
+  ["retained", address("C:/Models/ManualD.rvt")],
+  ["cold", null],
+  ["cold", address("C:/Models/ManualD.rvt")],
+] as const)("D4: %s closed Work at %s remains inspectable", async (start, workAddress) => {
+  const f = await witness();
+  await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
+  await settle(f.mount.invoke("slot", "PE_M_Fan_AirFlow") as Observation<WorkWriteOutcome>);
+  f.mount.close();
+  const before = structuredClone(f.saved.get("ducts"));
+  const closed = {
+    resolution: { kind: "choose", reason: "document-closed" },
+    workOpen: { session: "fixture", openId: "w1f" },
+    workAddress: start === "cold" ? workAddress : null,
+    resolvedAddress: null,
+  } as ReturnType<typeof useRouteTarget>;
+  const selected = vi.mocked(useRouteTarget);
+  selected.mockReturnValue(
+    start === "cold"
+      ? closed
+      : {
+          ...closed,
+          workAddress,
+          resolvedAddress: workAddress,
+          resolution: { kind: "resolved", target: { kind: "document", ref: closed.workOpen! } },
+        },
+  );
+  vi.spyOn(sourceServices, "sourceRouteServices").mockImplementation((_sources, composition) => ({
+    ...f.services,
+    target: composition?.target,
+  }));
+  const open = vi.spyOn(f.services.work, "open");
+  const view = render(
+    createElement(applicationRouteShell, {
+      route: f.route,
+      address: f.address,
+      pane: "captures",
+    }),
+  );
+  if (start === "retained") {
+    await screen.findByText("PE_M_Fan_AirFlow");
+    selected.mockReturnValue(closed);
+    view.rerender(
       createElement(applicationRouteShell, {
         route: f.route,
         address: f.address,
         pane: "captures",
       }),
     );
-    if (start === "retained") {
-      await screen.findByText("PE_M_Fan_AirFlow");
-      selected.mockReturnValue(closed);
-      view.rerender(
-        createElement(applicationRouteShell, {
-          route: f.route,
-          address: f.address,
-          pane: "captures",
-        }),
-      );
-    }
-    await screen.findByText("PE_M_Fan_AirFlow");
-    expect(f.saved.get("ducts")).toEqual(before);
-  },
-);
+  }
+  await screen.findByText("PE_M_Fan_AirFlow");
+  expect(open.mock.lastCall![0].target).toBeNull();
+  expect(workKey(open.mock.lastCall![0].key)).toBe(
+    workKey(bindWork("ducts", workAddress, undefined, closed.workOpen!)),
+  );
+  expect(f.saved.get("ducts")).toEqual(before);
+});
 
-// TODO: admitted Work acquisition must preserve the hook's canonical document Address.
 test("P02/P04: the application opens saved Ducts Work by document Address", async () => {
   const f = await witness();
   await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
@@ -565,5 +576,10 @@ test("P02/P04: the application opens saved Ducts Work by document Address", asyn
     createElement(applicationRouteShell, { route: f.route, address: f.address, pane: "captures" }),
   );
   await vi.waitFor(() => expect(open).toHaveBeenCalled());
-  expect(open.mock.calls[0]![0].key).toEqual(bindWork("ducts", workAddress));
+  const acquired = open.mock.calls[0]![0].key;
+  expect(workKey(acquired)).toBe(workKey(bindWork("ducts", workAddress)));
+  // Save As promotion keeps its source lifetime without creating another persisted key.
+  expect(acquired).toEqual(
+    bindWork("ducts", workAddress, undefined, { session: "fixture", openId: "w1f" }),
+  );
 });
