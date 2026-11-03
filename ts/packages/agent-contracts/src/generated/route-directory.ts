@@ -4,14 +4,10 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
   {
     "key": "captures",
     "directory": {
-      "path": "/captures",
-      "title": "Captures",
       "label": "Revit data",
       "exposure": "Preview",
       "runtimeNeed": "Host retained view images",
       "icon": "Image",
-      "category": "Coordinate model data",
-      "blurb": "Every picture taken of a Revit view, newest first — who took it, which view, the receipt, and the URL a page or a chat links.",
       "aliases": [
         "Revit",
         "data"
@@ -22,9 +18,13 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "web": "full",
         "pwa": "full",
         "tray": false
-      }
+      },
+      "path": "/captures",
+      "title": "Captures",
+      "category": "Coordinate model data",
+      "blurb": "Inspect retained view pictures and receipts"
     },
-    "moduleHash": "360b977634f204679dcfa2ac3ebefd47fb8586e4fb9175c36f433a2d38c94a4f"
+    "moduleHash": "37fd09b32982b0b4135137a12e0e93ebde0f1a78619b62eed8ccfd4f8f99bc16"
   },
   {
     "key": "chat",

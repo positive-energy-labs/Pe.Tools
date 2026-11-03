@@ -1,11 +1,27 @@
 {
   "version": 1,
+  "capabilities": [],
   "key": "captures",
   "address": "/captures",
   "name": "Captures",
   "directory": {
     "group": "Coordinate model data",
-    "summary": "Inspect retained view pictures and receipts"
+    "summary": "Inspect retained view pictures and receipts",
+    "label": "Revit data",
+    "exposure": "Preview",
+    "runtimeNeed": "Host retained view images",
+    "icon": "Image",
+    "aliases": [
+      "Revit",
+      "data"
+    ],
+    "listed": true,
+    "satellites": [],
+    "surfaces": {
+      "web": "full",
+      "pwa": "full",
+      "tray": false
+    }
   },
   "identities": {
     "capture": {
