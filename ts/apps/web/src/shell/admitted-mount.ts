@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { placeAdmittedVerbs } from "./admitted-placement";
 import { createAdmittedObservers } from "./admitted-observers";
 import { reviewChanges } from "./review-value";
@@ -74,6 +75,7 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "show",
   "subject",
   "placement",
+  "present",
 ]);
 
 /** Application services are installed once. Routes supply only admission and location. */
@@ -467,7 +469,9 @@ export function createRouteShell(services: KernelServices) {
               );
               if (canonicalEnvironmentInput(handle) !== pending.handle)
                 throw Error("Preview sealed a different Work handle");
+              const presentation = present(id, sealed);
               reviews.set(id, {
+                presentation,
                 invocation: pending.invocation,
                 preview: result.value,
                 send: () => pending.send(),
@@ -494,17 +498,37 @@ export function createRouteShell(services: KernelServices) {
           invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
           send(): unknown;
           preview: unknown;
+          presentation?: { sentence: string; rows: readonly string[] };
         }
       >();
+      const present = (id: string, result: unknown) => {
+        const declaration = route.data.verbs[id]!;
+        if (!declaration.present) return undefined;
+        const parsed = z
+          .union([z.string(), z.strictObject({ sentence: z.string(), rows: z.array(z.string()) })])
+          .parse(bindings.bodies[declaration.present]!.run(freezePage(result)));
+        return freezePage(typeof parsed === "string" ? { sentence: parsed, rows: [] } : parsed);
+      };
       const project = (keys: readonly string[], value: Readonly<Record<string, unknown>>) =>
         freezePage(Object.fromEntries(keys.map((key) => [key, value[key]])));
       let drawing = false;
-      const action = () => { if (drawing) throw Error("Admitted action cannot run during render"); if (closed) throw Error("Mount closed"); };
+      const action = () => {
+        if (drawing) throw Error("Admitted action cannot run during render");
+        if (closed) throw Error("Mount closed");
+      };
       const place = (pane: string, row: unknown, input: unknown) => {
-        action(); resolve();
+        action();
+        resolve();
         const declaration = route.data.panes[pane];
         if (!declaration) throw Error(`Unknown pane: ${pane}`);
-        return placeAdmittedVerbs(declaration, bindings.schemas, bindings.bodies, row, input, invoke);
+        return placeAdmittedVerbs(
+          declaration,
+          bindings.schemas,
+          bindings.bodies,
+          row,
+          input,
+          invoke,
+        );
       };
       const invoke = (id: string, input: unknown) => {
         action();
@@ -827,7 +851,8 @@ export function createRouteShell(services: KernelServices) {
           return review
             ? {
                 preview: review.preview,
-                rows: reviewChanges(review.preview),
+                sentence: review.presentation?.sentence ?? null,
+                rows: review.presentation?.rows ?? reviewChanges(review.preview),
                 stale: (!!route.data.work && !work.ready()) || !owner.current(review.invocation),
               }
             : null;
@@ -895,27 +920,32 @@ export function createRouteShell(services: KernelServices) {
           const declaration = route.data.panes[pane]!;
           if (!observers.visible(pane) || !declaration.body) return null;
           drawing = true;
-          try { return current.bodies[declaration.body]!.run({
-            place: (row: unknown, input: unknown) => place(pane, row, input),
-            page: ports.page,
-            work: owner.read()!.work?.value ?? null,
-            history,
-            readings: Object.freeze(
-              Object.fromEntries(declaration.draws.map((id) => [id, readings[id]])),
-            ),
-            readingActions: Object.fromEntries(
-              declaration.draws
-                .filter((id) => geometry.actions[id])
-                .map((id) => [id, geometry.actions[id]]),
-            ),
-            readCosts: Object.freeze({ ...geometry.costs }),
-            visible: true,
-            verbs: Object.fromEntries(
-              ("allowed" in declaration.verbs ? declaration.verbs.allowed : declaration.verbs).map(
-                (id: string) => [id, (input: unknown) => invoke(id, input)],
+          try {
+            return current.bodies[declaration.body]!.run({
+              place: (row: unknown, input: unknown) => place(pane, row, input),
+              page: ports.page,
+              work: owner.read()!.work?.value ?? null,
+              history,
+              readings: Object.freeze(
+                Object.fromEntries(declaration.draws.map((id) => [id, readings[id]])),
               ),
-            ),
-          }); } finally { drawing = false; }
+              readingActions: Object.fromEntries(
+                declaration.draws
+                  .filter((id) => geometry.actions[id])
+                  .map((id) => [id, geometry.actions[id]]),
+              ),
+              readCosts: Object.freeze({ ...geometry.costs }),
+              visible: true,
+              verbs: Object.fromEntries(
+                ("allowed" in declaration.verbs
+                  ? declaration.verbs.allowed
+                  : declaration.verbs
+                ).map((id: string) => [id, (input: unknown) => invoke(id, input)]),
+              ),
+            });
+          } finally {
+            drawing = false;
+          }
         },
         close,
       };

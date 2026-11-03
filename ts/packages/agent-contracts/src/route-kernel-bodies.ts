@@ -149,7 +149,10 @@ export type PaneContext<
   };
   /** Event-only row placement; the mount refuses dispatch during pane draw. */
   readonly place?: G["panes"][P]["verbs"] extends { row: infer R; allowed: readonly (infer V)[] }
-    ? (row: Immutable<SchemaValue<S, R>>, input: unknown) => Readonly<Partial<Record<Extract<V, string>, () => unknown>>>
+    ? (
+        row: Immutable<SchemaValue<S, R>>,
+        input: unknown,
+      ) => Readonly<Partial<Record<Extract<V, string>, () => unknown>>>
     : never;
   readonly readCosts?: Readonly<Record<string, import("./native-read-door.ts").ReadCost>>;
   readonly visible: boolean;
@@ -259,7 +262,12 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         At<G["verbs"][K], "present">,
         `verbs.${K}.present`,
         "present",
-        (result: Output<E, At<G["verbs"][K], "entry">>) => string
+        /** ModelWrite presentation consumes the validated, sealed catalog preview. */
+        (
+          result:
+            | Output<E, `${Extract<At<G["verbs"][K], "entry">, string>}.preview`>
+            | Output<E, At<G["verbs"][K], "entry">>,
+        ) => string | { readonly sentence: string; readonly rows: readonly string[] }
       >;
 }[keyof G["verbs"] & string];
 type PaneSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, Render> = {

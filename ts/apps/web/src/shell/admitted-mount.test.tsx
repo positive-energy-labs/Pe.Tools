@@ -439,6 +439,7 @@ async function workRoute(
   review: "none" | "shown" = "none",
   modelWrite = false,
   needs: "nothing" | "document" = "nothing",
+  presenter?: (result: unknown) => unknown,
 ) {
   const workData = {
     ...data,
@@ -465,6 +466,7 @@ async function workRoute(
         kind: "command" as const,
         entry: "native.write",
         intent: "native",
+        ...(presenter ? { present: "nativePresent" } : {}),
         input: "number",
         label: "Native",
         review: "shown" as const,
@@ -514,6 +516,16 @@ async function workRoute(
     schemas: { ...schemas, work: z.object({ amount: z.number() }), number: z.number() },
     bodies: {
       ...bodies,
+      ...(presenter
+        ? {
+            nativePresent: {
+              slot: "verbs.native.present",
+              kind: "present",
+              source,
+              run: presenter,
+            },
+          }
+        : {}),
       ...(modelWrite
         ? {
             previewArgs: {
@@ -805,7 +817,7 @@ const sealedPreview = (handle: WorkHandle) => ({
   takenAt: "2026-11-03T00:00:00Z",
   response: { changes: [{ kind: "Parameter", key: "amount", before: 6, after: 7 }] },
 });
-async function nativeFixture() {
+async function nativeFixture(presenter?: (result: unknown) => unknown) {
   const t = transports();
   const store = createFixtureWorkDoor(
     { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
@@ -816,7 +828,7 @@ async function nativeFixture() {
   );
   const acquire = vi.spyOn(t.services.reads, "acquire");
   const mount = createRouteShell({ ...t.services, work: { ...store, submit } }).mount(
-    await workRoute("none", true),
+    await workRoute("none", true, "nothing", presenter),
     locationPort().address,
   );
   closes.push(mount.close);
@@ -928,7 +940,7 @@ test("shared preview transport renders before-to-after review and commits identi
     render(
       createElement(AdmittedPane, {
         shell,
-        route: await workRoute("none", true),
+        route: await workRoute("none", true, "nothing", () => ({sentence: "Review table", rows: ["Parameter amount: 6 \u2192 7"]})),
         address: locationPort().address,
         pane: "main",
       }),
@@ -938,6 +950,7 @@ test("shared preview transport renders before-to-after review and commits identi
       mount.invoke("native", 1234);
     });
     await screen.findByText("Parameter amount: 6 \u2192 7");
+    expect(screen.getByText("Review table")).toBeTruthy();
     expect(previewCall).toHaveBeenCalledTimes(1);
     expect(submit).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Commit native" }));
@@ -1322,6 +1335,7 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
     "show",
     "subject",
     "placement",
+    "present",
   ]);
   for (const [slot, kind, dataPatch] of [
     ["salvage", "salvage", { salvage: "unsupported" }],
@@ -1430,27 +1444,6 @@ test("remaining slot census refuses cells, placement, presentation and migration
           : { unsupported: { slot: `cells.test.${key}`, kind: key, source, run: () => [] } }),
       },
     })),
-    {
-      data: {
-        verbs: {
-          edit: {
-            kind: "page",
-            input: "text",
-            label: "Edit",
-            review: "none",
-            deps: empty,
-            captures: [],
-            fields: ["query"],
-            patch: "edit",
-            present: "unsupported",
-          },
-        },
-      },
-      bodies: {
-        edit: { slot: "verbs.edit.patch", kind: "page", source, run: () => ({}) },
-        unsupported: { slot: "verbs.edit.present", kind: "present", source, run: () => "" },
-      },
-    },
     {
       data: {
         capabilities: ["work"],
@@ -1655,27 +1648,108 @@ test("global predicates drive layout gates on publication and never run during d
 });
 
 test("subject display receives only subject and is cached outside draw", async () => {
- const show = vi.fn(value => value === null ? "No note" : String(value));
- const route = await admitted(false, false, {data: {subject: {...data.subject, show: "show"}}, bodies: {show: {slot: "subject.show", kind: "show", source, run: show}}});
- const mount = createRouteShell(transports().services).mount(route, locationPort().address); closes.push(mount.close);
- expect(mount.subjectDisplay()).toBe("No note"); const calls = show.mock.calls.length; mount.read("main"); mount.subjectDisplay(); expect(show).toHaveBeenCalledTimes(calls);
- expect(show.mock.calls.every(call => call.length === 1)).toBe(true);
+  const show = vi.fn((value) => (value === null ? "No note" : String(value)));
+  const route = await admitted(false, false, {
+    data: { subject: { ...data.subject, show: "show" } },
+    bodies: { show: { slot: "subject.show", kind: "show", source, run: show } },
+  });
+  const mount = createRouteShell(transports().services).mount(route, locationPort().address);
+  closes.push(mount.close);
+  expect(mount.subjectDisplay()).toBe("No note");
+  const calls = show.mock.calls.length;
+  mount.read("main");
+  mount.subjectDisplay();
+  expect(show).toHaveBeenCalledTimes(calls);
+  expect(show.mock.calls.every((call) => call.length === 1)).toBe(true);
 });
 
 test("subject text observes global publications with validated cached output", async () => {
- const text = vi.fn(ctx => {expect(Object.keys(ctx)).toEqual(["page", "work", "readings"]); return ctx.page.query;});
- const route = await admitted(false, false, {data: {subjectText: "text"}, bodies: {text: {slot: "subjectText", kind: "subject", source, run: text}}});
- const mount = createRouteShell(transports().services).mount(route, locationPort().address); closes.push(mount.close);
- mount.controls.query("query", "changed"); expect(mount.subjectText()).toBe("changed"); const calls = text.mock.calls.length; mount.read("main"); mount.subjectText(); expect(text).toHaveBeenCalledTimes(calls);
+  const text = vi.fn((ctx) => {
+    expect(Object.keys(ctx)).toEqual(["page", "work", "readings"]);
+    return ctx.page.query;
+  });
+  const route = await admitted(false, false, {
+    data: { subjectText: "text" },
+    bodies: { text: { slot: "subjectText", kind: "subject", source, run: text } },
+  });
+  const mount = createRouteShell(transports().services).mount(route, locationPort().address);
+  closes.push(mount.close);
+  mount.controls.query("query", "changed");
+  expect(mount.subjectText()).toBe("changed");
+  const calls = text.mock.calls.length;
+  mount.read("main");
+  mount.subjectText();
+  expect(text).toHaveBeenCalledTimes(calls);
 });
 
 test("row placement uses shared query dispatch with captured input and refuses outside allowed union", async () => {
- const choose = vi.fn(row => [row]);
- const route = await admitted(true, true);
- // amend the query witness's placement through a fresh admission below
- const rowRoute = await admitted(false, false, { data: {...route.data, panes: {main: {...route.data.panes.main, verbs: {row: "text", allowed: ["capture"], choose: "choose"}}}}, bodies: {main: {...bodies.main, run: ctx => ctx.place("capture", {elementIds:[1]})}, queryArgs: {slot: "verbs.capture.args", kind: "args", source, run: (_ctx, input) => ({query: input.elementIds.join(",")})}, choose: {slot: "panes.main.verbs.choose", kind: "placement", source, run: choose}} });
- const t=transports(); const acquire=vi.spyOn(t.services.reads,"acquire"); const mount=createRouteShell(t.services).mount(rowRoute,locationPort().address); closes.push(mount.close);
- const input={elementIds:[42]}, verbs=mount.place("main","capture",input); input.elementIds[0]=99; verbs.capture!(); expect(acquire.mock.calls.at(-1)![0].key.sortedKeyInput).toBe(JSON.stringify({query:"42"}));
- expect(()=>mount.place("main","outside",input)).toThrow("Undeclared pane verb");
- const calls=choose.mock.calls.length; expect(()=>mount.read("main")).toThrow("during render"); expect(choose).toHaveBeenCalledTimes(calls);
+  const choose = vi.fn((row) => [row]);
+  const route = await admitted(true, true);
+  // amend the query witness's placement through a fresh admission below
+  const rowRoute = await admitted(false, false, {
+    data: {
+      ...route.data,
+      panes: {
+        main: {
+          ...route.data.panes.main,
+          verbs: { row: "text", allowed: ["capture"], choose: "choose" },
+        },
+      },
+    },
+    bodies: {
+      main: { ...bodies.main, run: (ctx) => ctx.place("capture", { elementIds: [1] }) },
+      queryArgs: {
+        slot: "verbs.capture.args",
+        kind: "args",
+        source,
+        run: (_ctx, input) => ({ query: input.elementIds.join(",") }),
+      },
+      choose: { slot: "panes.main.verbs.choose", kind: "placement", source, run: choose },
+    },
+  });
+  const t = transports();
+  const acquire = vi.spyOn(t.services.reads, "acquire");
+  const mount = createRouteShell(t.services).mount(rowRoute, locationPort().address);
+  closes.push(mount.close);
+  const input = { elementIds: [42] },
+    verbs = mount.place("main", "capture", input);
+  input.elementIds[0] = 99;
+  verbs.capture!();
+  expect(acquire.mock.calls.at(-1)![0].key.sortedKeyInput).toBe(JSON.stringify({ query: "42" }));
+  expect(() => mount.place("main", "outside", input)).toThrow("Undeclared pane verb");
+  const calls = choose.mock.calls.length;
+  expect(() => mount.read("main")).toThrow("during render");
+  expect(choose).toHaveBeenCalledTimes(calls);
+});
+
+test("presenter runs once on the sealed current preview and publishes sentence/rows outside render", async () => {
+  const presenter = vi.fn((result) => {
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.keys(result)).toContain("seal");
+    return { sentence: "Review table", rows: ["Remove column"] };
+  });
+  const f = await nativeFixture(presenter);
+  f.mount.invoke("native", 0);
+  expect(presenter).not.toHaveBeenCalled();
+  f.preview().deliver();
+  expect(presenter).toHaveBeenCalledOnce();
+  expect(f.mount.review("native")).toMatchObject({
+    sentence: "Review table",
+    rows: ["Remove column"],
+    stale: false,
+  });
+  f.mount.read("main");
+  f.mount.review("native");
+  expect(presenter).toHaveBeenCalledOnce();
+  await settle(f.mount.invoke("change", 1) as Observation<WorkWriteOutcome>);
+  expect(f.mount.review("native")?.stale).toBe(true);
+  expect(() => f.mount.confirm("native")).toThrow("stale");
+  expect(presenter).toHaveBeenCalledOnce();
+});
+test("invalid presenter output cannot become a review", async () => {
+  const f = await nativeFixture(() => ({ sentence: 12, rows: ["bad"] }));
+  f.mount.invoke("native", 0);
+  expect(() => f.preview().deliver()).toThrow();
+  expect(f.mount.review("native")).toBeNull();
+  expect(f.submit).not.toHaveBeenCalled();
 });

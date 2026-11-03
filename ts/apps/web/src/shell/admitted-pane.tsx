@@ -49,6 +49,7 @@ function Pane({ mount, pane }: { mount: AdmittedMount; pane: string }) {
       return createElement(
         "section",
         { key: id, "aria-label": `${id} review` },
+        review.sentence && createElement("p", null, review.sentence),
         createElement("output", null, review.rows.join("\n")),
         createElement(
           Button,
