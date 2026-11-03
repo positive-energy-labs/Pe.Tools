@@ -1320,10 +1320,10 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
     "transition",
     "predicate",
     "show",
+    "subject",
   ]);
   for (const [slot, kind, dataPatch] of [
     ["salvage", "salvage", { salvage: "unsupported" }],
-    ["subjectText", "subject", { subjectText: "unsupported" }],
   ] as const) {
     const t = transports();
     const run = vi.fn();
@@ -1669,4 +1669,11 @@ test("subject display receives only subject and is cached outside draw", async (
  const mount = createRouteShell(transports().services).mount(route, locationPort().address); closes.push(mount.close);
  expect(mount.subjectDisplay()).toBe("No note"); const calls = show.mock.calls.length; mount.read("main"); mount.subjectDisplay(); expect(show).toHaveBeenCalledTimes(calls);
  expect(show.mock.calls.every(call => call.length === 1)).toBe(true);
+});
+
+test("subject text observes global publications with validated cached output", async () => {
+ const text = vi.fn(ctx => {expect(Object.keys(ctx)).toEqual(["page", "work", "readings"]); return ctx.page.query;});
+ const route = await admitted(false, false, {data: {subjectText: "text"}, bodies: {text: {slot: "subjectText", kind: "subject", source, run: text}}});
+ const mount = createRouteShell(transports().services).mount(route, locationPort().address); closes.push(mount.close);
+ mount.controls.query("query", "changed"); expect(mount.subjectText()).toBe("changed"); const calls = text.mock.calls.length; mount.read("main"); mount.subjectText(); expect(text).toHaveBeenCalledTimes(calls);
 });

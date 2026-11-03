@@ -71,6 +71,7 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "transition",
   "predicate",
   "show",
+  "subject",
 ]);
 
 /** Application services are installed once. Routes supply only admission and location. */
@@ -805,6 +806,7 @@ export function createRouteShell(services: KernelServices) {
         invoke,
         picker: (field: string) => pickerOptions[field],
         subjectDisplay: observers.subject,
+        subjectText: observers.text,
         predicates: observers.predicates,
         visible: observers.visible,
         initialRestore: transport.initial,
