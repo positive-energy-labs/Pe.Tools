@@ -6,6 +6,7 @@ import type { Immutable } from "../../../../packages/agent-contracts/src/route-k
 import type { ScopeToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import {
   workKey,
+  workWriteAckSchema,
   type RouteGraph,
   type RouteStatePatch,
   type WorkKey,
@@ -144,7 +145,7 @@ export function createMountWork<P, W>(
       deltas.set(
         id,
         adapters.subscribeAcceptedDeltas(key, (ack) => {
-          writers.get(id)!.accept(ack);
+          writers.get(id)!.accept(workWriteAckSchema.parse(ack));
         }),
       );
     return journal;

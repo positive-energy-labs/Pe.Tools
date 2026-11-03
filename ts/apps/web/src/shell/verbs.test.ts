@@ -103,7 +103,8 @@ beforeEach(() => {
   transport.run.mockResolvedValue(succeededReceipt());
 });
 
-function environment<C extends Caller>(caller: C) {
+function environment<C extends Caller>(caller: C, identity: WorkKey = key) {
+  const key = identity;
   const registry = makeAtomRegistry();
   const owner = createRouteOwner("verb-proof", registry);
   cleanups.push(() => {
@@ -265,7 +266,7 @@ test("Work acknowledges forward and inverse paths, and two patches share the own
 
 test("shown review can be skipped by agent, and cannot be skipped by human at type or runtime boundary", async () => {
   const human = environment("human");
-  const agent = environment("agent");
+  const agent = environment("agent", { ...key, work: "agent" });
   const verb = command("shown");
   // @ts-expect-error A human phase has no skip alternative.
   const illegal: InvocationPhase<"human"> = { kind: "skip" };
@@ -352,7 +353,7 @@ test.each(["reading", "revision", "target"] as const)(
 
 test("tickets cannot be forged or moved between callers, and explicit cancellation releases the owner", async () => {
   const human = environment("human");
-  const agent = environment("agent");
+  const agent = environment("agent", { ...key, work: "agent" });
   const verb = command("shown");
   const review = reviewed(await invoke(human.ctx, verb, null, { stage: "sheet" }));
   expect((await commit(agent.ctx, verb, review.ticket)).state).toBe("refused");
@@ -631,7 +632,7 @@ test("K1.2: a human-only RPC refuses agent binding and direct invocation before 
     { label: "Bind", input: z.object({}), review: "none", caller: "human" },
     { intent: () => ({}) },
   );
-  const agent = environment("agent");
+  const agent = environment("agent", { ...key, work: "agent" });
   expect(bind(verb, { ctx: agent.ctx, subject: null, args: {} }).refusal).toContain(
     "Only a person",
   );
@@ -853,8 +854,20 @@ test("kernel reviews always project exact changes even when a presenter omits th
     },
   );
   const result = reviewed(await invoke(env.ctx, verb, null, { stage: "sheet" }));
-  expect(result.ticket.presentation.rows).toContain(
-    'Update Amperage: 1.01 A \u2192 1.1 Amperes',
-  );
+  expect(result.ticket.presentation.rows).toContain("Update Amperage: 1.01 A \u2192 1.1 Amperes");
   await invoke(env.ctx, verb, null, { stage: "sheet" }, { kind: "cancel", ticket: result.ticket });
+});
+
+test("copying a verb declaration retains its explicit executable binding", async () => {
+  const env = environment("human");
+  const declaration = pageVerb(
+    { label: "Close", input: z.object({}) },
+    { page: () => ({ inspector: "" }) },
+  );
+  const copy = { ...declaration };
+  expect(await invoke(env.ctx, copy, null, {})).toMatchObject({
+    state: "done",
+    kind: "page",
+    page: { inspector: "" },
+  });
 });

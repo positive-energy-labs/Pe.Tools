@@ -96,21 +96,24 @@ export function createMountVerbs<P, W>(
     readings: () =>
       Object.fromEntries(Object.keys(graph.readings).map((id) => [id, readings.get(id)])),
     subjects: { ...adapters.subjects, ...kernel.subjects },
-    snapshot: (verb) => ({
-      failure: work.scope.failure,
-      closed: work.scope.closed,
-      target: work.scope.target,
-      work: work.scope.work,
-      unreadable: work.scope.unreadable ?? null,
-      salvage: work.salvagePatches(),
-      basis: {
-        pageEpoch: page.view.read().epoch,
-        // Only the readings this verb declares; see VerbContext.snapshot.
-        readings: verb ? readings.basisFor(adapters.verbDepends?.[verb] ?? []) : readings.basis(),
-        unreadable: work.scope.unreadable ? workKey(work.scope.unreadable) : null,
+    snapshot: (verb) => {
+      target.acceptance.observe(work.scope.work);
+      return {
+        failure: work.scope.failure,
+        closed: work.scope.closed,
+        target: work.scope.target,
+        work: target.acceptance.readWork(),
+        unreadable: work.scope.unreadable ?? null,
         salvage: work.salvagePatches(),
-      },
-    }),
+        basis: {
+          pageEpoch: page.view.read().epoch,
+          // Only the readings this verb declares; see VerbContext.snapshot.
+          readings: verb ? readings.basisFor(adapters.verbDepends?.[verb] ?? []) : readings.basis(),
+          unreadable: work.scope.unreadable ? workKey(work.scope.unreadable) : null,
+          salvage: work.salvagePatches(),
+        },
+      };
+    },
     write: (key, envelope, history, sequential) =>
       work.write(key, { ...envelope, kind: "apply" }, history, sequential),
     recover: async (key) => {

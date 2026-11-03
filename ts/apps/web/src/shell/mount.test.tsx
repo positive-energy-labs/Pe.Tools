@@ -737,7 +737,7 @@ test("late command receipt remains associated with dispatch Work after switching
   });
   await owner.control("edit").run();
   const review = await owner.control("apply").run();
-  expect(review.state).toBe("review");
+  expect(review, JSON.stringify(review)).toMatchObject({ state: "review" });
   let resolve!: (receipt: ActionReceipt) => void;
   transport.run.mockImplementation(
     () =>

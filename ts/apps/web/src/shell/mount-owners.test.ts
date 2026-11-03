@@ -98,3 +98,44 @@ test("mounted role ports use the existing Page transition and retain the legacy 
     mount.dispose();
   }
 });
+
+test("B publishes exact ack patches while the external snapshot lags and retires departed delivery", () => {
+  const key: WorkKey = { binding: "workspace", route: "ack-owner", target: null, work: "a" };
+  let current = key;
+  const owner = createWorkScopeAcceptance(() => ({ target: { kind: "host" }, work: current }));
+  const snapshot = { handle: { key, revision: 0 }, doc: { value: "old", server: "" } };
+  owner.observe(snapshot);
+  const writing = owner.begin();
+  const ack = {
+    key,
+    kind: "apply" as const,
+    by: "human" as const,
+    press: "ack-owner",
+    base: 0,
+    revision: 1,
+    undoable: true,
+    patches: [
+      { path: ["value"], value: "normalized" },
+      { path: ["server"], value: "stamp" },
+    ],
+    inverse: [
+      { path: ["value"], value: "old" },
+      { path: ["server"], value: "" },
+    ],
+  };
+  expect(owner.accept(writing, ack).kind).toBe("published");
+  owner.observe(snapshot);
+  expect(owner.readWork()).toEqual({
+    handle: { key, revision: 1 },
+    doc: { value: "normalized", server: "stamp" },
+  });
+  const late = owner.begin();
+  current = { ...key, work: "b" };
+  owner.capture();
+  expect(owner.readWork()).toBeNull();
+  expect(owner.accept(late, { ...ack, base: 1, revision: 2, press: "late" }).kind).toBe(
+    "receipt-only",
+  );
+  expect(owner.readWork()).toBeNull();
+  owner.close();
+});

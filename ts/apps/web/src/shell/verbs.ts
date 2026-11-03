@@ -259,7 +259,7 @@ const offeredWhen: Record<Recovery, (snapshot: VerbSnapshot) => string | null> =
 };
 /** Whether a kernel recovery verb belongs on the stage now. */
 export const recoveryOffered = (verb: VerbDecl, snapshot: VerbSnapshot): boolean => {
-  const recovery = bindings.get(verb)?.recover;
+  const recovery = implementationOf(verb)?.recover;
   return recovery !== undefined && offeredWhen[recovery](snapshot) === null;
 };
 type Terminal = Exclude<VerbDelivery, { state: "review" }>;
@@ -305,14 +305,30 @@ interface Binding {
   subject?: (value: unknown) => string | null;
   recover?: Recovery;
 }
-const bindings = new WeakMap<VerbDecl, Binding>();
+const implementation = Symbol("verb implementation");
+class VerbImplementation {
+  constructor(readonly binding: Binding) {}
+}
+function bindImplementation(verb: VerbDecl, binding: Binding): void {
+  Object.defineProperty(verb, implementation, {
+    value: new VerbImplementation(binding),
+    enumerable: true,
+  });
+}
+function implementationOf(verb: VerbDecl): Binding | undefined {
+  return implementation in verb && verb[implementation] instanceof VerbImplementation
+    ? verb[implementation].binding
+    : undefined;
+}
 
 export function pageVerb<S extends z.ZodType>(
   declaration: Declaration<S>,
   implementation: { page: (scope: VerbScope, input: z.output<S>) => Record<string, unknown> },
 ): VerbDecl<S> {
   const verb = { ...declaration, kind: "page" as const, review: "none" as const };
-  bindings.set(verb, { page: (scope, input) => implementation.page(scope, input as z.output<S>) });
+  bindImplementation(verb, {
+    page: (scope, input) => implementation.page(scope, input as z.output<S>),
+  });
   return verb;
 }
 
@@ -330,7 +346,7 @@ export function rpcVerb<R extends z.ZodType, S extends z.ZodType>(
   },
 ): VerbDecl<S> {
   const verb = { ...declaration, kind: "command" as const, does: rpc.key };
-  bindings.set(verb, {
+  bindImplementation(verb, {
     rpc,
     lands: implementation.lands,
     ready: (scope, input) => implementation.ready?.(scope, input as z.output<S>) ?? null,
@@ -354,7 +370,7 @@ export function operationVerb<R extends z.ZodType, S extends z.ZodType>(
   },
 ): VerbDecl<S> {
   const verb = rpcVerb(read, { ...declaration, caller: "human", review: "shown" }, implementation);
-  const binding = bindings.get(verb)!;
+  const binding = implementationOf(verb)!;
   binding.raw = (scope, input) => implementation.raw(scope, input as z.output<S>);
   binding.prepare = (scope, input) => ({
     ...binding.raw!(scope, input),
@@ -373,7 +389,7 @@ export function workVerb<S extends z.ZodType>(
   },
 ): VerbDecl<S> {
   const verb = { ...declaration, kind: "work" as const, review: "none" as const };
-  bindings.set(verb, {
+  bindImplementation(verb, {
     ready:
       implementation.ready &&
       ((scope, input) => implementation.ready!(scope, input as z.output<S>)),
@@ -411,7 +427,7 @@ export function commandVerb<K extends SemanticActionKey, S extends z.ZodType>(
   },
 ): VerbDecl<S> {
   const verb = { does: command, ...declaration, kind: "command" as const };
-  bindings.set(verb, {
+  bindImplementation(verb, {
     command,
     stage:
       implementation.stage &&
@@ -446,9 +462,9 @@ export function sequenceVerb<K extends SemanticActionKey, S extends z.ZodType>(
     intent: (scope, input) => implementation.intent(scope, input)[0]!,
   });
   if (implementation.stage)
-    bindings.get(verb)!.stageSequence = (scope, input) =>
+    implementationOf(verb)!.stageSequence = (scope, input) =>
       implementation.stage!(scope, input as z.output<S>);
-  bindings.get(verb)!.sequence = (scope, input) =>
+  implementationOf(verb)!.sequence = (scope, input) =>
     implementation.intent(scope, input as z.output<S>) as readonly Record<string, unknown>[];
   return verb;
 }
@@ -485,7 +501,7 @@ export function queryVerb<R extends z.ZodType, S extends z.ZodType>(
     effect: implementation.patches ? "command" : "query",
     ...(implementation.subject && { selects: "work" as const }),
   };
-  bindings.set(verb, {
+  bindImplementation(verb, {
     query: read,
     subject: implementation.subject,
     queryPatches: implementation.patches,
@@ -509,7 +525,7 @@ export function recoveryVerb<S extends z.ZodType>(
   declaration: Omit<VerbDecl<S>, "kind" | "review">,
 ): VerbDecl<S> {
   const verb: VerbDecl<S> = { ...declaration, kind: "recovery", review: "shown" };
-  bindings.set(verb, {
+  bindImplementation(verb, {
     recover: recovery,
     ready: (scope) => offeredWhen[recovery](scope.snapshot),
     prepare: (scope) =>
@@ -661,7 +677,7 @@ async function invokeCore<C extends Caller>(
   const environment = ctx.environment ?? legacyLiveVerbs;
   if (verb.kind === "command" && environment.commands.refusal)
     return failure("refused", environment.commands.refusal);
-  const binding = bindings.get(verb);
+  const binding = implementationOf(verb);
   if (!binding) return failure("refused", "This verb has no executable binding");
   if (phase.kind === "commit" || phase.kind === "cancel") {
     const session = reviews.get(ctx)?.get(phase.ticket.press);
@@ -728,15 +744,10 @@ async function invokeCore<C extends Caller>(
       });
   const acceptance = ctx.acceptance ?? localAcceptance!;
   const started = acceptance.capture();
-  let acknowledged: VerbSnapshot | null = null;
   const snapshotNow = (): VerbSnapshot => {
     const seen = ctx.snapshot();
-    return acknowledged?.work &&
-      seen.work &&
-      acceptance.current(started) &&
-      seen.work.handle.revision < acknowledged.work.handle.revision
-      ? { ...seen, work: acknowledged.work }
-      : seen;
+    acceptance.observe(seen.work);
+    return { ...seen, work: acceptance.readWork() };
   };
   void ctx.owner
     .runAction(
@@ -786,25 +797,16 @@ async function invokeCore<C extends Caller>(
               const value = definition.authoredInput.parse(
                 binding.stageSequence?.(initialScope, input)[step] ?? binding.stage(scope, input),
               );
+              const writing = acceptance.begin();
               const written = await ctx.write(snapshot.work.handle.key, {
                 patches: [{ path: ["writeIntent", binding.command], value: { edit: { value } } }],
                 expectedRevision: snapshot.work.handle.revision,
                 press,
               });
               if (!written.ok) return finish(resultOf(writeRefusal(written)!, press));
-              acknowledged = {
-                ...snapshot,
-                work: {
-                  handle: { ...snapshot.work.handle, revision: written.revision },
-                  doc: {
-                    ...(snapshot.work.doc as Record<string, unknown>),
-                    writeIntent: {
-                      ...(snapshot.work.doc as { writeIntent?: object }).writeIntent,
-                      [binding.command]: { edit: { value } },
-                    },
-                  },
-                },
-              };
+              const accepted = acceptance.accept(writing, written.write);
+              if (accepted.kind !== "published" && accepted.kind !== "duplicate")
+                return finish(failure("stale", "Work acceptance requires a fresh read", press));
               snapshot = copy(snapshotNow());
               scope = resolve(ctx, verb, boundSubject, snapshot);
               if (isRefusal(scope)) return finish(resultOf(scope, press));
@@ -1156,10 +1158,12 @@ async function invokeCore<C extends Caller>(
           session?.decide({ stop: stopped });
           finish(stopped);
         }
+        localAcceptance?.close();
         answer(terminal!);
       },
       (cause: unknown) => {
         finish(failure("failed", cause instanceof Error ? cause.message : String(cause), press));
+        localAcceptance?.close();
         answer(terminal!);
       },
     );
@@ -1201,7 +1205,7 @@ export function bind<C extends Caller, S extends z.ZodType>(
       const environment = ctx.environment ?? legacyLiveVerbs;
       if (verb.kind === "command" && environment.commands.refusal)
         return environment.commands.refusal;
-      const implementation = bindings.get(verb);
+      const implementation = implementationOf(verb);
       if (!implementation) return "This verb has no executable binding";
       const current = copy(ctx.snapshot());
       if (!equal(rendered.target, current.target) || !equal(basisOf(rendered), basisOf(current)))
