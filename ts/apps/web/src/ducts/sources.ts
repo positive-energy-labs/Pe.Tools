@@ -203,7 +203,6 @@ function sheets(): UseSource<SheetReading> {
       let chosen: FanPort[];
       try {
         chosen = selectedFans(keys, fans?.rows ?? []);
-        if (chosen.length > 32) throw Error("Pick at most 32 fans for one combined picture");
       } catch (error) {
         return deliver({ kind: "failure", error });
       }

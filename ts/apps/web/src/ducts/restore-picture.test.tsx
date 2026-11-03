@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
+import { SceneMeshes } from "#/scene/types";
 import { useSyncExternalStore } from "react";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { bindWork, ductsRouteState, routeAddress } from "@pe/agent-contracts";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 import { createGraphMount } from "#/shell/mount-owner";
+import { fansGraph } from "#/fans/graph";
 import { ductsGraph } from "./graph";
 import { ductsAdapters } from "./route";
 import { snapshot as fixtureSnapshot } from "./test-fixture";
@@ -25,7 +27,12 @@ const snapshot = {
 const io = vi.hoisted(() => ({ call: vi.fn() }));
 vi.mock("#/host/build-stamp", () => ({ webBuildStamp: { version: "test", build: "restore" } }));
 vi.mock("#/host/client", () => ({ callHostRpc: io.call }));
-vi.mock("#/scene/scene3d", () => ({ Scene3D: () => <div /> }));
+vi.mock("#/scene/scene3d", () => ({ Scene3D: ({ meshes }: { meshes: unknown }) => <div data-drawn={!!meshes} /> }));
+vi.mock("#/scene/artifact", () => ({ fetchSceneArtifact: async () => new ArrayBuffer(0) }));
+vi.mock("#/scene/psc1", () => ({ SCENE_FORMAT: "space-scene-v2", decodeScene: () => ({
+  meshes: new SceneMeshes(new Float32Array(), { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 }, []),
+  metadata: { elements: [], stamp: { sources: [] }, omittedElements: 0, unavailableElements: [], completeness: { complete: true } },
+}) }));
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -150,3 +157,42 @@ async function restore(binding: boolean) {
 
 test("exact URL restore after document binding", () => restore(false));
 test("exact URL restore survives an absent roster while binding", () => restore(true));
+
+// A failed optional sheet snapshot must not hold a completed overview in pending forever.
+test.each([3, "all"] as const)("fan %s overview survives a failed sheet", async (pick) => {
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(private callback: ResizeObserverCallback) {}
+    observe(target: Element) {
+      this.callback([{ target, contentRect: { width: 640, height: 480 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+    }
+    disconnect() {}
+  });
+  const rows = Array.from({ length: 111 }, (_, i) => ({ unitId: i + 1, uniqueId: `fan-${i}`, portIndex: 1, mark: `F-${i}` }));
+  const doc = ductsRouteState.schema.parse({});
+  const ref = { session: `fans-failed-${pick}`, openId: "doc" };
+  const sources = {
+    ...ductsAdapters.sources,
+    "ducts.fans": { kind: "use" as const, open: (_ctx: unknown, emit: (event: ReadingPublication) => void) => { emit({ kind: "complete", value: { rows }, revision: 1 }); } },
+    "ducts.sheet": { kind: "use" as const, open: (_ctx: unknown, emit: (event: ReadingPublication) => void) => { emit({ kind: "failure", error: Error("terminated") }); } },
+  };
+  const owner = createGraphMount(fansGraph, {
+    ...ductsAdapters, sources,
+    getSnapshot: () => ({ target: { kind: "document", ref }, workKey: bindWork("fans", null, undefined, ref), work: { handle: { key: bindWork("fans", null, undefined, ref), revision: 1 }, doc } }),
+    subscribe: () => () => {}, write: vi.fn(), subscribeAcceptedDeltas: () => () => {},
+  }, { fan: pick === "all" ? "all" : rows.slice(0, pick).map(row => `${row.uniqueId}@1`) });
+  const disconnect = owner.connect();
+  const release = owner.readings.mount(["fans", "sheetSnapshot"]);
+  function View() {
+    useSyncExternalStore(owner.subscribe, owner.version, owner.version);
+    return ductsAdapters.wrap!(owner, ductsAdapters.bodies["sheet-picture"]!({ owner, page: owner.view.read().page, visible: true, verbs: () => null, focusRow: () => {} }));
+  }
+  io.call.mockResolvedValue({ id: `fan-completed-${pick}` });
+  const view = render(<View />);
+  try {
+    await waitFor(() => expect(io.call).toHaveBeenCalledTimes(1));
+    expect(io.call.mock.calls[0]![1].elementIds).toHaveLength(pick === "all" ? 111 : pick);
+    expect(owner.readings.get("sheetSnapshot").status).toBe("failed");
+    await waitFor(() => expect(view.container.querySelector('[data-drawn="true"]')).not.toBeNull());
+    expect(view.container.querySelector('[data-picture]')!.getAttribute("aria-busy")).toBeNull();
+  } finally { view.unmount(); release(); disconnect(); owner.dispose(); }
+});

@@ -44,7 +44,7 @@ vi.mock("#/scene/picture/model", async (original) => {
     ...module,
     ModelPicture: (props: Parameters<typeof ModelPicture>[0]) => {
       seen.model = props;
-      return null;
+      return <div data-drawn={!!props.read.meshes && !props.read.pending} />;
     },
   };
 });
@@ -209,7 +209,7 @@ it.each([1, 3, "all"] as const)(
   "fan = %s requests exactly one overview before sheet details",
   async (pick) => {
     io.call.mockResolvedValue({ id: `fan-overview-${pick}` });
-    const rows = [1, 2, 3].map((n) => ({
+    const rows = Array.from({ length: 111 }, (_, i) => i + 1).map((n) => ({
       unitId: 999100 + n,
       uniqueId: `fan-${n}`,
       portIndex: 1,
@@ -229,6 +229,8 @@ it.each([1, 3, "all"] as const)(
     mount(null, ["meshes", "halo"], fans);
     await waitFor(() => expect(io.call).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(seen.model!.read.meshes).toBeTruthy());
+    expect(document.querySelector('[data-drawn="true"]')).not.toBeNull();
+    expect(seen.model!.read.pending).toBe(false);
     expect(io.call.mock.calls[0]![1]).toMatchObject({
       elementIds: fans.map((fan) => fan.unitId),
       contextRepresentation: "overview",

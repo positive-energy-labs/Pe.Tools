@@ -190,7 +190,7 @@ function DuctsProvider({
           : null) ??
         null,
       refreshing:
-        (!read.current ||
+        (!(page.stage === "sheet" ? pictureRead.current : read.current) ||
           (page.stage === "network" && pricing.status !== "failed" && !pricing.current)) &&
         !!snapshot,
     },
