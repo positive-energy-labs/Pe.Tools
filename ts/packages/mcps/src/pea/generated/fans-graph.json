@@ -525,7 +525,8 @@
       "draws": [
         "fans",
         "sheet",
-        "sheetSnapshot"
+        "sheetSnapshot",
+        "sheetView"
       ],
       "verbs": [
         "browse",
@@ -701,9 +702,21 @@
     }
   },
   "seeds": {
-    "sheet": {
-      "title": "Fan sheet",
-      "load": "seedSheet"
+    "scene": {
+      "title": "scene",
+      "load": "seedScene"
+    },
+    "layout": {
+      "title": "layout",
+      "load": "seedLayout"
+    },
+    "colours": {
+      "title": "colours",
+      "load": "seedColours"
+    },
+    "navigation": {
+      "title": "navigation",
+      "load": "seedNavigation"
     }
   },
   "needs": "project",
