@@ -828,19 +828,15 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeESystems",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "e-systems"
     },
     "e-sidebar": {
@@ -855,19 +851,15 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeESidebar",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "e-sidebar"
     },
     "e-inputs": {
@@ -882,19 +874,15 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeEInputs",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "e-inputs"
     },
     "e-rules-all": {
@@ -909,19 +897,15 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeERulesAll",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "e-rules-all"
     },
     "e-rules": {
@@ -936,19 +920,15 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeERules",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "e-rules"
     },
     "e-picture": {
@@ -963,19 +943,15 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeEPicture",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "e-picture"
     },
     "e-inbox": {
@@ -990,19 +966,15 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeEInbox",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "e-inbox"
     }
   },
