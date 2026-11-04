@@ -136,6 +136,9 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
           // Every fixture supports the All subject, including fixtures with no matching fan rows.
           expect(mount.controls.subject({ kind: "all" }).kind).toBe("accepted");
           for (const [id, pane] of Object.entries(route.data.panes)) {
+            // U4 ruling: drawn explicit-demand readings compute only after a kernel request.
+            for (const reading of pane.draws)
+              if (route.data.readings[reading]?.demand === "explicit") mount.refresh(reading);
             const rendered = mount.read(id);
             expect(isValidElement(rendered), `${key}/${name}/${id}`).toBe(true);
             if (
