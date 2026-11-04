@@ -7,6 +7,10 @@ import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { AttentionRoot } from "#/attention";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { DuctsOwner } from "../pane-context";
+import { localId } from "../neutral.ts";
+import { systemScope } from "@pe/ducts-domain/system-scope";
+import { useAdmittedSubject } from "#/shell/subject";
+import { PaneActions } from "#/shell/pane-actions";
 import type { ProtoProps } from "../proto/props";
 import { subjectNamer } from "../subject-text";
 import { rosterOrder, stableFanKey, withComputed } from "./model";
@@ -54,6 +58,8 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     }),
     [props.attentionDoc, nameOf, props.onSelect, refProps],
   );
+  const subject = useAdmittedSubject();
+  const fanId = (row: import("./model").FanPort) => localId("ducts-fan", stableFanKey(row));
   const busy = ["pending", "partial"].includes(reading.status);
   const changeInputs = async (
     edits: DuctsSheetEdits,
@@ -175,6 +181,7 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     snapshot,
     roster,
     picked: props.page.fan === "all" ? roster.map(stableFanKey) : props.page.fan,
+    open: (row) => subject?.toggle(fanId(row)),
     sheet,
     slots: fanReading?.slots ?? [],
     activeSlot: fanReading?.activeSlot ?? "",
@@ -209,6 +216,11 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
           (row) => props.page.fan === "all" || props.page.fan.includes(stableFanKey(row)),
         )}
         blockers={state.blockers}
+        systemFans={(system) => {
+          // A system's fans: the units on the runs that price it, or the roster's own word.
+          const units = systemScope(snapshot, system).units;
+          return roster.filter((row) => row.system === system || units.has(row.unitId)).map(fanId);
+        }}
         renderPane={renderPane}
         jump={jump}
       />
@@ -268,7 +280,12 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
       </>
     ),
     "sheet-inputs": spine.inputsSurface,
-    "sheet-picture": spine.picture((body) => body),
+    "sheet-picture": spine.picture((body, furniture) => (
+      <>
+        {body}
+        <PaneActions>{furniture?.actions}</PaneActions>
+      </>
+    )),
     "sheet-ledger": <Ledger props={spine} />,
   };
   return (

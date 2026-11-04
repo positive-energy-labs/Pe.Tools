@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { createContext, useContext, useSyncExternalStore } from "react";
 import { canonicalRouteInput, decodePageField, type RouteGraph } from "@pe/agent-contracts";
 
 type Option = { id: string; label: string };
@@ -79,16 +79,21 @@ export function subjectState(route: string, search: Record<string, unknown>) {
 }
 
 /** A refused subject never becomes input to the next roster pick. Wait for a current roster. */
-export function admittedSubject(graph: Declaration, page: Record<string, unknown>, roster?: unknown) {
+export function admittedSubject(
+  graph: Declaration,
+  page: Record<string, unknown>,
+  roster?: unknown,
+) {
   const subject = graph.subjectField;
   if (!subject) return null;
   const field = graph.fields[subject.field]!;
   const raw = page[subject.field];
   const { decoded } = decodePageField(field, page, subject.field);
-  if (!decoded.success) return {
-    patch: { [subject.field]: field.schema.parse(undefined) },
-    refusal: `${subject.noun} ${JSON.stringify(raw)} is malformed`,
-  };
+  if (!decoded.success)
+    return {
+      patch: { [subject.field]: field.schema.parse(undefined) },
+      refusal: `${subject.noun} ${JSON.stringify(raw)} is malformed`,
+    };
   if (!field.picker || roster === undefined || decoded.data === "all") return null;
   const options = field.picker.options(roster);
   const ids = Array.isArray(decoded.data) ? decoded.data : decoded.data ? [decoded.data] : [];
@@ -96,10 +101,24 @@ export function admittedSubject(graph: Declaration, page: Record<string, unknown
   if (!refused.length) return null;
   const kept = ids.filter((id) => !refused.includes(id));
   return {
-    patch: { [subject.field]: field.cardinality === "many" ? kept : kept[0] ?? field.schema.parse(undefined) },
+    patch: {
+      [subject.field]:
+        field.cardinality === "many" ? kept : (kept[0] ?? field.schema.parse(undefined)),
+    },
     refusal:
       subject.keyKind === "UniqueId"
         ? `Dropped ${refused.length} ${subject.noun} link${refused.length === 1 ? "" : "s"} not in this model`
         : `${subject.noun} ${refused.join(", ")} not in this model`,
   };
 }
+
+/** What a pane body may do to the subject: open, close and add, through the one subject field the
+ * header writes. Exception to "panes receive PagePort and declared verbs" (`FieldControls`,
+ * route-kernel-page.ts): kaitpw 2026-11-03 ruled a subject's list rows and go-to open subjects.
+ * The boundary that holds: no pane keeps its own selection; every move lands in the subject field. */
+export interface AdmittedSubject {
+  toggle(id: unknown): void;
+  add(ids: readonly unknown[]): void;
+}
+export const SubjectDoor = createContext<AdmittedSubject | null>(null);
+export const useAdmittedSubject = () => useContext(SubjectDoor);

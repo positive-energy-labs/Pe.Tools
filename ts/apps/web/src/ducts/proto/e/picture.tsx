@@ -38,6 +38,9 @@ import { ductsFocus } from "../../page";
 import { activeSystem, paintOfDucts, stubIdsOf } from "../../selection";
 import { healReviewLayers, findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import { RunDetail, runOf } from "./run-detail";
+import { GoToSubject } from "./go-to";
+import { localId } from "../../neutral";
+import { useAdmittedSubject } from "#/shell/subject";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { ProvisionalNote } from "../../provisional";
 import { indexOf, sceneOf, subjectScene } from "../../scene";
@@ -142,6 +145,7 @@ function Content({
   onPose,
 }: ProtoProps & DuctsPictureExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
+  const door = useAdmittedSubject();
   const scope = useMemo(() => scopeOf(snapshot, page.system), [snapshot, page.system]);
   const labelOf = useMemo(() => labelOfNode(snapshot), [snapshot]);
   const scene = useMemo(
@@ -553,6 +557,17 @@ function Content({
           facts,
         },
         flat: { ...DUCTS_FLAT, render: schematic },
+        goTo: (jumpTo) => (
+          <GoToSubject
+            snapshot={snapshot}
+            here={scope?.members ?? new Set()}
+            opens={(system) => !page.system.includes(system)}
+            nameOf={nameOf}
+            onGo={({ system, id }) =>
+              id == null ? door?.add([localId("ducts-system", system)]) : jumpTo(elementKey(id))
+            }
+          />
+        ),
         furniture: {
           title: "Systems",
           actions: (

@@ -45,11 +45,13 @@ export function Roster({ props }: { props: SheetViewProps }) {
     items: props.roster,
     keyOf: fanKey,
     search: rosterSearch,
+    select: "multi",
     state: {
       ...listState,
       selected: props.roster.filter((row) => props.picked?.includes(stableFanKey(row))).map(fanKey),
     },
     onState: (next) => setListState({ ...next, selected: [] }),
+    onPick: (row) => props.open(row),
     refusalOf: () => wait,
   });
   // A blank firm tag falls back to the unit's Mark or family; a name shared by two units (Chadds
@@ -72,7 +74,7 @@ export function Roster({ props }: { props: SheetViewProps }) {
       </span>
     ),
     revit: [fan.unitId],
-    title: labelOf(fan),
+    title: `Open ${labelOf(fan)}`,
   });
   // The roster pane clips; the list scrolls in its own Scroll, as the /ducts systems pane does.
   return (

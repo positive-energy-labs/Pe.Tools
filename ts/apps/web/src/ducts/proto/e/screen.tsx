@@ -74,6 +74,9 @@ import { useGroupEncoding } from "../encoding/use-encoding";
 import { EMPTY_SNAPSHOT } from "../../sheet/scoped-snapshot";
 import { LoadingContext } from "#/route/loading-context";
 import { activeSystem, DUCTS_MULTI } from "../../selection";
+import { localId } from "../../neutral";
+import { useAdmittedSubject } from "#/shell/subject";
+import { PaneActions } from "#/shell/pane-actions";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 
 const NO_GROUPS: readonly string[] = [];
@@ -834,7 +837,12 @@ function LoadedScreenBody({
       )}
       <div className="relative min-h-0 flex-1">
         <DuctsPicture
-          renderPane={(body) => body}
+          renderPane={(body, furniture) => (
+            <>
+              {body}
+              <PaneActions>{furniture?.actions}</PaneActions>
+            </>
+          )}
           {...props}
           membership={membership}
           issueScope={issueScope}
@@ -941,6 +949,8 @@ const SystemsList = memo(function SystemsList({
   setPage: ProtoProps["setPage"];
   coverage: ProtoProps["coverage"];
 }) {
+  const door = useAdmittedSubject();
+  const systemId = (name: string) => localId("ducts-system", name);
   const searchable = useMemo(() => (drawn ? systemSearch(drawn) : null), [drawn]);
   const search = useCallback(
     (system: ReturnType<typeof systemList>[number]) => ({
@@ -1009,6 +1019,8 @@ const SystemsList = memo(function SystemsList({
       if (next.search !== page.systemSearch || next.sort !== page.systemSort)
         setPage({ systemSearch: next.search, systemSort: next.sort }, { history: "replace" });
     },
+    // A pick opens the system beside the others, or closes it when it is open.
+    onPick: (system) => door?.toggle(systemId(system.key)),
   });
   const active = activeSystem(page);
   useEffect(() => {
@@ -1025,7 +1037,7 @@ const SystemsList = memo(function SystemsList({
         const fans = fansOf(system);
         return systemRowParts(
           system,
-          undefined,
+          () => door?.add([systemId(system.key)]),
           notes.get(system.key),
           fans.map((f) => `${nameOf(f.unit)} ${f.role}: ${f.says}`),
           () => <FanFacts facts={fans} nameOf={nameOf} />,

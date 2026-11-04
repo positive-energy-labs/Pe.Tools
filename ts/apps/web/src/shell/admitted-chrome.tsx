@@ -1,7 +1,8 @@
 import { HostedChrome } from "../route/hosted-chrome";
-import { useRef, useState, useEffect, useContext, type ReactNode } from "react";
+import { useMemo, useRef, useState, useEffect, useContext, type ReactNode } from "react";
 import { z } from "zod";
 import { Button } from "@pe/kit/lang/button";
+import { NarrowChip } from "@pe/kit/lang/chip";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { KeyScope, ScopeKeys, actionScopeKeys, useScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import {
@@ -28,6 +29,8 @@ import { worksharingOf } from "./verbs";
 import type { TimelineEntry } from "./timeline";
 
 import { RouteVisibility } from "../route/activity";
+import { PaneActionsSlot } from "./pane-actions";
+import { SubjectDoor, type AdmittedSubject } from "./subject";
 
 /** K4 owns reading state and deduplicated pane closure refresh. */
 const rosterSchema = z.array(z.object({ id: z.unknown(), label: z.string() }));
@@ -62,13 +65,8 @@ function DocumentKeys({ keys }: { keys: readonly ScopeKey[] }) {
   useScopeKeys(keys, typeof document === "undefined" ? null : document.documentElement);
   return null;
 }
-export function AdmittedSubjectPicker({
-  mount,
-  data,
-}: {
-  mount: AdmittedMount;
-  data: RouteGraphJson;
-}) {
+/** The subject field as one read: its roster, what is open, and the moves every door shares. */
+function subjectOf(mount: AdmittedMount, data: RouteGraphJson) {
   const field = data.fields[data.subject.field];
   if (field?.role !== "subject") return null;
   const options = rosterSchema.parse(mount.picker(data.subject.field) ?? []);
@@ -84,63 +82,87 @@ export function AdmittedSubjectPicker({
     options.some((o) => identity(o.id) === identity(id)),
   );
   const selected = available.map(identity);
-  const unknown = !all && available.length < ids.length;
+  const set = (next: readonly unknown[]) =>
+    mount.controls.subject(many ? { kind: "ids", ids: [...next] } : next.at(-1));
+  return {
+    options,
+    many,
+    all,
+    selected,
+    unknown: !all && available.length < ids.length,
+    set,
+    toggle: (id: unknown) =>
+      set(
+        !many
+          ? [id]
+          : selected.includes(identity(id))
+            ? available.filter((open) => identity(open) !== identity(id))
+            : [...available, id],
+      ),
+    add: (more: readonly unknown[]) =>
+      set([...available, ...more.filter((id) => !selected.includes(identity(id)))]),
+  };
+}
+export function AdmittedSubjectPicker({
+  mount,
+  data,
+}: {
+  mount: AdmittedMount;
+  data: RouteGraphJson;
+}) {
+  const subject = subjectOf(mount, data);
+  if (!subject) return null;
+  const { options, many, all, selected, unknown } = subject;
+  const noun = data.subject.noun;
+  const open = options.filter((o) => selected.includes(identity(o.id)));
   return (
     <>
+      {/* Many: every open subject is its own chip with its own ×; the trigger only adds. */}
+      {many &&
+        (all ? (
+          <NarrowChip
+            label={`All ${noun}`}
+            title={`Every ${noun} is open`}
+            onRemove={() => subject.set([])}
+          />
+        ) : (
+          open.map((o) => (
+            <NarrowChip
+              key={identity(o.id)}
+              label={o.label}
+              title={`Close this ${noun}; the others stay open`}
+              onRemove={() => subject.toggle(o.id)}
+            />
+          ))
+        ))}
       <ListPopup
         anchor="trigger"
         face="control"
-        triggerLabel={`Choose ${data.subject.noun}`}
-        trigger={
-          all
-            ? `All ${data.subject.noun}`
-            : options
-                .filter((o) => selected.includes(identity(o.id)))
-                .map((o) => o.label)
-                .join(", ") || `Choose ${data.subject.noun}`
-        }
-        aria-label={data.subject.noun}
+        triggerLabel={`Choose ${noun}`}
+        trigger={many ? `Choose ${noun}` : open.map((o) => o.label).join(", ") || `Choose ${noun}`}
+        aria-label={noun}
         items={options}
         keyOf={(o) => identity(o.id)}
         labelOf={(o) => o.label}
         filter="substring"
         select={many ? "multi" : "single"}
         selected={selected}
-        empty={`No ${data.subject.noun} available`}
+        empty={`No ${noun} available`}
         row={(o) => ({ label: o.label })}
-        onPick={(option) =>
-          mount.controls.subject(
-            many
-              ? {
-                  kind: "ids",
-                  ids: selected.includes(identity(option.id))
-                    ? available.filter((id) => identity(id) !== identity(option.id))
-                    : [...available, option.id],
-                }
-              : option.id,
-          )
-        }
+        onPick={(option) => subject.toggle(option.id)}
       />
       {many && (
         <>
-          <Button
-            label={`All ${data.subject.noun}`}
-            onClick={() => mount.controls.subject({ kind: "all" })}
-          >
+          <Button label={`All ${noun}`} onClick={() => mount.controls.subject({ kind: "all" })}>
             All
           </Button>
-          <Button
-            label={`No ${data.subject.noun}`}
-            onClick={() => mount.controls.subject({ kind: "ids", ids: [] })}
-          >
+          <Button label={`No ${noun}`} onClick={() => subject.set([])}>
             None
           </Button>
         </>
       )}
       {unknown && (
-        <span role="alert">
-          Some selected {data.subject.noun} are outside the current roster. Choose again.
-        </span>
+        <span role="alert">Some selected {noun} are outside the current roster. Choose again.</span>
       )}
     </>
   );
@@ -302,6 +324,14 @@ function Chrome({
           : [];
       }),
     );
+  // Read at call time, so the door never holds a stale subject.
+  const door = useMemo<AdmittedSubject>(
+    () => ({
+      toggle: (id) => subjectOf(mount, data)?.toggle(id),
+      add: (ids) => subjectOf(mount, data)?.add(ids),
+    }),
+    [mount, data],
+  );
   const demand = JSON.stringify(
     Object.keys(data.panes).map((id) => [
       id,
@@ -314,129 +344,145 @@ function Chrome({
   }, [mount, demand]);
   return (
     <KeyScope id={data.key} hidden={!visible}>
-      <DocumentKeys keys={keys} />
-      <div
-        ref={element}
-        data-route-mount={data.key}
-        data-route-journal={mount.work() ? "" : undefined}
-        className="flex h-full min-h-0 flex-col"
-      >
-        <ScopeKeys keys={actionKeys(stage?.verbs ?? [])} />
-        <SituationPortal route={data.key} portal={portal}>
-          <SituationBand
-            name={data.name}
-            context={
-              <>
-                {data.stageOrder.length > 1 && (
-                  <ListPopup
-                    anchor="trigger"
-                    face="control"
-                    trigger={stage?.word ?? "Choose stage"}
-                    triggerLabel="Choose stage"
-                    aria-label="Stage"
-                    empty="No stages"
-                    items={data.stageOrder}
-                    keyOf={(id) => id}
-                    labelOf={(id) => data.stages[id]!.word}
-                    row={(id) => ({ label: data.stages[id]!.word })}
-                    select="single"
-                    selected={[stageId]}
-                    onPick={(id) => mount.controls.stage(id)}
-                  />
-                )}
-                <span>{mount.subjectDisplay()}</span>
-              </>
-            }
-            alerts={children}
-            verbs={(stage?.verbs ?? []).map((id) => (
-              <AdmittedActions key={id} mount={mount} data={data} ids={[id]} />
-            ))}
-            timeline={
-              <TimelineHead
-                owner={mount}
-                verbs={verbs}
-                history={<History mount={mount} data={data} />}
-              />
-            }
-          />
-        </SituationPortal>
-        {layout && (
-          <GraphLayoutView
-            layout={layout}
-            panes={Object.fromEntries(
-              Object.entries(data.panes).map(([id, pane]) => [
-                id,
-                { ...pane, verbs: [], draws: [] },
-              ]),
-            )}
-            active={() => true}
-            state={{
-              panes,
-              onChange: (next) => {
-                setPanes(next);
-                writeLayoutState(storage, next);
-              },
-            }}
-            bodies={Object.fromEntries(
-              Object.entries(data.panes).map(([id, declaration]) => [
-                id,
-                (pane) =>
-                  pane(
-                    <>
-                      <ScopeKeys
-                        keys={actionKeys(Array.isArray(declaration.verbs) ? declaration.verbs : [])}
-                      />
-                      {declaration.history ? (
-                        <History mount={mount} data={data} />
-                      ) : (
-                        (mount.read(id) as ReactNode)
-                      )}
-                    </>,
-                    {
-                      actions: (
-                        <>
-                          {id === data.subject.pane && (
-                            <AdmittedSubjectPicker mount={mount} data={data} />
-                          )}
-                          <PaneStatus mount={mount} draws={declaration.draws} />
-                          {declaration.draws.length > 0 && (
-                            <Button
-                              label={`Refresh ${declaration.label}`}
-                              onClick={() => {
-                                mount.refreshPane(id);
-                              }}
-                            >
-                              Refresh
-                            </Button>
-                          )}
-                          {Array.isArray(declaration.verbs) && (
-                            <AdmittedActions mount={mount} data={data} ids={declaration.verbs} />
-                          )}
-                        </>
-                      ),
-                    },
-                  ),
-              ]),
-            )}
-          />
-        )}
-        {mount.reviewIds().map((id) => {
-          const review = mount.review(id)!;
-          return (
-            <ReviewSurface
-              key={id}
-              label={data.verbs[id]?.label ?? "Carry over"}
-              sentence={review.sentence}
-              rows={review.rows}
-              worksharing={worksharingOf(review.preview)}
-              enabled
-              refusal={review.stale ? "Review is stale; prepare it again" : null}
-              confirm={() => void mount.confirm(id)}
-              cancel={() => mount.cancelReview(id)}
+      <SubjectDoor.Provider value={door}>
+        <DocumentKeys keys={keys} />
+        <div
+          ref={element}
+          data-route-mount={data.key}
+          data-route-journal={mount.work() ? "" : undefined}
+          className="flex h-full min-h-0 flex-col"
+        >
+          <ScopeKeys keys={actionKeys(stage?.verbs ?? [])} />
+          <SituationPortal route={data.key} portal={portal}>
+            <SituationBand
+              name={data.name}
+              context={
+                <>
+                  {data.stageOrder.length > 1 && (
+                    <ListPopup
+                      anchor="trigger"
+                      face="control"
+                      trigger={stage?.word ?? "Choose stage"}
+                      triggerLabel="Choose stage"
+                      aria-label="Stage"
+                      empty="No stages"
+                      items={data.stageOrder}
+                      keyOf={(id) => id}
+                      labelOf={(id) => data.stages[id]!.word}
+                      row={(id) => ({ label: data.stages[id]!.word })}
+                      select="single"
+                      selected={[stageId]}
+                      onPick={(id) => mount.controls.stage(id)}
+                    />
+                  )}
+                  <span>{mount.subjectDisplay()}</span>
+                </>
+              }
+              alerts={children}
+              verbs={(stage?.verbs ?? []).map((id) => (
+                <AdmittedActions key={id} mount={mount} data={data} ids={[id]} />
+              ))}
+              timeline={
+                <TimelineHead
+                  owner={mount}
+                  verbs={verbs}
+                  history={<History mount={mount} data={data} />}
+                />
+              }
             />
-          );
-        })}
-      </div>
+          </SituationPortal>
+          {layout && (
+            <GraphLayoutView
+              layout={layout}
+              panes={Object.fromEntries(
+                Object.entries(data.panes).map(([id, pane]) => [
+                  id,
+                  { ...pane, verbs: [], draws: [] },
+                ]),
+              )}
+              active={() => true}
+              state={{
+                panes,
+                onChange: (next) => {
+                  setPanes(next);
+                  writeLayoutState(storage, next);
+                },
+              }}
+              bodies={Object.fromEntries(
+                Object.entries(data.panes).map(([id, declaration]) => [
+                  id,
+                  (pane) => (
+                    <PaneActionsSlot key={id}>
+                      {(slot, provide) =>
+                        pane(
+                          provide(
+                            <>
+                              <ScopeKeys
+                                keys={actionKeys(
+                                  Array.isArray(declaration.verbs) ? declaration.verbs : [],
+                                )}
+                              />
+                              {declaration.history ? (
+                                <History mount={mount} data={data} />
+                              ) : (
+                                (mount.read(id) as ReactNode)
+                              )}
+                            </>,
+                          ),
+                          {
+                            actions: (
+                              <>
+                                {id === data.subject.pane && (
+                                  <AdmittedSubjectPicker mount={mount} data={data} />
+                                )}
+                                {slot}
+                                <PaneStatus mount={mount} draws={declaration.draws} />
+                                {declaration.draws.length > 0 && (
+                                  <Button
+                                    label={`Refresh ${declaration.label}`}
+                                    onClick={() => {
+                                      mount.refreshPane(id);
+                                    }}
+                                  >
+                                    Refresh
+                                  </Button>
+                                )}
+                                {Array.isArray(declaration.verbs) && (
+                                  <AdmittedActions
+                                    mount={mount}
+                                    data={data}
+                                    ids={declaration.verbs}
+                                  />
+                                )}
+                              </>
+                            ),
+                          },
+                        )
+                      }
+                    </PaneActionsSlot>
+                  ),
+                ]),
+              )}
+            />
+          )}
+          {mount.reviewIds().map((id) => {
+            const review = mount.review(id)!;
+            return (
+              <ReviewSurface
+                key={id}
+                label={data.verbs[id]?.label ?? "Carry over"}
+                sentence={review.sentence}
+                rows={review.rows}
+                worksharing={worksharingOf(review.preview)}
+                enabled
+                refusal={review.stale ? "Review is stale; prepare it again" : null}
+                confirm={() => void mount.confirm(id)}
+                cancel={() => mount.cancelReview(id)}
+              />
+            );
+          })}
+        </div>
+      </SubjectDoor.Provider>
     </KeyScope>
   );
 }
