@@ -43,5 +43,6 @@ test("fan links carry the destination identity and binding without ducts Page fi
   expect(url.pathname).toBe("/fans");
   expect([...url.searchParams.keys()].sort()).toEqual(["fan", "fixture", "target", "thread"]);
   const subject = JSON.parse(url.searchParams.get("fan") ?? "null");
+  expect(fans.codecs.fan.decode(url.searchParams.get("fan") ?? "")).toEqual({ ok: true, value: subject });
   expect(selectedFans(subject.ids.map(localSubject), sheet.roster.rows)).toEqual([row]);
 });

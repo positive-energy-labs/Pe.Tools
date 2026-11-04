@@ -862,29 +862,6 @@
       ],
       "body": "e-sidebar"
     },
-    "e-inputs": {
-      "label": "Inputs",
-      "purpose": "Edit flow, ESP, role and drop",
-      "draws": [
-        "fans",
-        "roster",
-        "ducts",
-        "tables",
-        "catalogs",
-        "pricing",
-        "meshes"
-      ],
-      "verbs": [
-        "browse",
-        "edit",
-        "sheetEdit",
-        "scope",
-        "losses",
-        "heal",
-        "assign"
-      ],
-      "body": "e-inputs"
-    },
     "e-rules-all": {
       "label": "All-systems rules",
       "purpose": "Price every read fitting type",
@@ -1004,21 +981,8 @@
                 "kind": "gate",
                 "when": "system",
                 "child": {
-                  "kind": "split",
-                  "id": "inputs",
-                  "axis": "v",
-                  "size": 220,
-                  "children": [
-                    {
-                      "kind": "pane",
-                      "id": "e-sidebar"
-                    },
-                    {
-                      "kind": "pane",
-                      "id": "e-inputs"
-                    }
-                  ],
-                  "sized": "end"
+                  "kind": "pane",
+                  "id": "e-sidebar"
                 }
               }
             ],
@@ -1090,7 +1054,6 @@
       "panes": [
         "e-systems",
         "e-sidebar",
-        "e-inputs",
         "e-rules-all",
         "e-rules",
         "e-picture",
