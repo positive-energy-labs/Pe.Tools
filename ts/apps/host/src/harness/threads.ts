@@ -439,6 +439,10 @@ class ThreadPersistFailed extends Schema.TaggedError<ThreadPersistFailed>()("Thr
   message: Schema.String,
 }) {}
 
+class ThreadRetireFailed extends Schema.TaggedError<ThreadRetireFailed>()("ThreadRetireFailed", {
+  message: Schema.String,
+}) {}
+
 class ThreadCloseFailed extends Schema.TaggedError<ThreadCloseFailed>()("ThreadCloseFailed", {
   message: Schema.String,
 }) {}
@@ -1813,7 +1817,12 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
             catch: (error) => new ThreadPersistFailed({ message: String(error) }),
           }).pipe(
             Effect.onExit(() =>
-              t.child === child ? Effect.promise(() => retire(t)) : Effect.void,
+              t.child === child
+                ? Effect.tryPromise({
+                    try: () => retire(t),
+                    catch: (error) => new ThreadRetireFailed({ message: String(error) }),
+                  }).pipe(Effect.catchTag("ThreadRetireFailed", (error) => Effect.logError(error)))
+                : Effect.void,
             ),
           ),
         )

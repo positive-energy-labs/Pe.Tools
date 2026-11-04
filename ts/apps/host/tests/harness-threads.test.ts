@@ -1757,3 +1757,31 @@ test("Stop escalation kills the child even when the transcript disk append fails
     await h.close();
   }
 });
+
+test("Stop escalation logs a retiring failure as ThreadRetireFailed", async () => {
+  const h = await host(undefined, undefined, undefined, undefined, { stopGraceMs: 50 });
+  const call = caller(h);
+  const read = reader(h);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id: string = created.json.id;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "stubborn" });
+  await until(read, id, (b) => lastEcho(b) === "echo: stubborn");
+  const stopChild = adapter.stopChild;
+  let detached: Parameters<typeof stopChild>[0] = null;
+  const stop = vi.spyOn(adapter, "stopChild").mockImplementationOnce((child) => {
+    detached = child;
+    throw Error("retire rejected");
+  });
+  const log = vi.spyOn(console, "log");
+  try {
+    await call("POST", `/pe/threads/${id}/cancel`);
+    await expect.poll(() => log.mock.calls.flat().join(" ")).toContain("ThreadRetireFailed");
+    expect(log.mock.calls.flat().join(" ")).toContain("retire rejected");
+  } finally {
+    stop.mockRestore();
+    log.mockRestore();
+    // effect-edge: test-runner
+    await Effect.runPromise(stopChild(detached));
+    await h.close();
+  }
+});
