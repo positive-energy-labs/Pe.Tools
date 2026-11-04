@@ -90,14 +90,15 @@ test("Captures admits only a registry receipt using its generated full web closu
   expect(run.service!.registry.resolve(route)).toBeNull();
 });
 
-test("Ducts owns the exclusive host Work and Fans presents the same canonical registration", async () => {
+test("Ducts and Fans own independent canonical host Work registrations", async () => {
   const f = workspace();
   const run = await open(f.workspace);
   try {
     if (!run.service) throw Error(JSON.stringify(run.result));
     const owner = run.service.routes.get("ducts")!;
     const presenter = run.service.routes.get("fans")!;
-    expect(presenter.workFingerprint).toBe(owner.workFingerprint);
+    // Q2: each admitted route owns its Work fingerprint.
+    expect(presenter.workFingerprint).not.toBe(owner.workFingerprint);
     const view = await f.workspace.view(bindWork("ducts", null), "ducts");
     expect(view!.doc).toEqual(ductsRouteState.schema.parse({}));
     expect(
@@ -111,7 +112,8 @@ test("Ducts owns the exclusive host Work and Fans presents the same canonical re
         ],
       }),
     ).toMatchObject({ ok: true });
-    expect(presenter.resolvedWork!.spec).toEqual(owner.resolvedWork!.spec);
+    expect(presenter.resolvedWork!.spec.route).toBe("fans");
+    expect(owner.resolvedWork!.spec.route).toBe("ducts");
     expect(createRouteRegistrations().some((row) => row.spec.route === "ducts")).toBe(false);
   } finally {
     await close(run.scope);
@@ -180,7 +182,7 @@ test("fans enrolls alone with its own Work registration", async () => {
     expect(run.service?.routes.get("fans")?.resolvedWork?.spec.route).toBe("fans");
     expect(run.service?.routes.has("ducts")).toBe(false);
     const key = bindWork("fans", null);
-    expect(await f.workspace.admitFeed(key, { routeKey: "fans", fingerprint: workFingerprintSchema.parse(`builtin-closure:${fan.closure.fingerprint}`) })).not.toHaveProperty("code");
+    expect(await f.workspace.admitFeed(key, { routeKey: "fans", fingerprint: workFingerprintSchema.parse(`builtin-closure:${fan.closure.fingerprint}`) })).toBeUndefined();
   } finally { await close(run.scope); }
 });
 test("partial startup failure unwinds prior Work registration with a typed failure", async () => {

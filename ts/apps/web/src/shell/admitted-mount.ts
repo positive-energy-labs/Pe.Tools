@@ -151,10 +151,13 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
   }
   const workRegistry = scopedRegistry;
   return {
-    mount<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, Render, W extends Record<string, unknown>>(
-      admitted: AdmittedRoute<G, S, E, Render, W>,
-      input: PlaceInput,
-    ) {
+    mount<
+      G extends RouteGraphJson,
+      S extends SchemaTable,
+      E extends EntryTable,
+      Render,
+      W extends Record<string, unknown>,
+    >(admitted: AdmittedRoute<G, S, E, Render, W>, input: PlaceInput) {
       const { address, fixture, target, memory } = input;
       const route: AdmittedRoute<RouteGraphJson, SchemaTable, EntryTable, unknown, W> = admitted;
       const registry = createAdmittedRouteRegistry();
@@ -792,7 +795,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
               again = true;
               continue;
             }
-            cells.update((owner.read()!.work?.value ?? null));
+            cells.update(owner.read()!.work?.value ?? null);
             observers.update({
               page: owner.read()!.page,
               work: owner.read()!.work?.value ?? null,
@@ -992,10 +995,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         const context = () => ({
           workBasis: basis ?? (owner.read()?.work ? invocation : null),
           page: project(declaration.deps.page, owner.read()!.page),
-          work: project(
-            declaration.deps.work,
-            ((edit?.work ?? owner.read()!.work)?.value) ?? {},
-          ),
+          work: project(declaration.deps.work, (edit?.work ?? owner.read()!.work)?.value ?? {}),
           readings: freezePage(
             Object.fromEntries(declaration.deps.readings.map((key) => [key, readings[key]])),
           ),
@@ -1072,21 +1072,25 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           if (modelWrite && (!work.ready() || !accepted.work || !accepted.scope.identity.work))
             throw Error("Accepted Work unavailable");
           // ModelWrite has one input authority: B's accepted key and revision, never draft intent.
-          const declaredIntent = z.record(z.string(), z.unknown()).parse(bindings.bodies[declaration.intent]!.run(context(), parsed));
+          const declaredIntent = z
+            .record(z.string(), z.unknown())
+            .parse(bindings.bodies[declaration.intent]!.run(context(), parsed));
           if (modelWrite && Object.hasOwn(declaredIntent, "work"))
             throw Error("ModelWrite intent cannot supply Work identity");
           const intent = freezePage(
-            z.record(z.string(), z.unknown()).parse(entry.input.parse(
-              modelWrite
-                ? {
-                    ...declaredIntent,
-                    work: workHandleSchema.parse({
-                      key: accepted.scope.identity.work,
-                      revision: accepted.work!.revision,
-                    }),
-                  }
-                : declaredIntent,
-            )),
+            z.record(z.string(), z.unknown()).parse(
+              entry.input.parse(
+                modelWrite
+                  ? {
+                      ...declaredIntent,
+                      work: workHandleSchema.parse({
+                        key: accepted.scope.identity.work,
+                        revision: accepted.work!.revision,
+                      }),
+                    }
+                  : declaredIntent,
+              ),
+            ),
           );
           entry.input.parse(intent);
           preview = freezePage({ work: accepted.work, input: intent });
@@ -1210,10 +1214,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
                     bindings.bodies[declaration.args]!.run(
                       {
                         ...context(),
-                        work: project(
-                          declaration.deps.work,
-                          (owner.read()!.work?.value) ?? {},
-                        ),
+                        work: project(declaration.deps.work, owner.read()!.work?.value ?? {}),
                       },
                       parsed,
                     ),
@@ -1495,45 +1496,44 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         throw error;
       }
       const transitionCell = (kind: "take" | "unsuggest" | "clear", id: string, key: unknown) => {
-          action();
-          resolve();
-          const declaration = route.data.cells[id];
-          if (!declaration) throw Error(`Unknown cell: ${id}`);
-          const context = () => {
-            const snapshot = owner.read();
-            if (!work.ready() || !snapshot?.work) throw Error("Work unavailable");
-            for (const reading of declaration.deps.readings)
-              if (!readings[reading]?.current) throw Error(`Reading unavailable: ${reading}`);
-            return freezePage({
-              page: project(declaration.deps.page, snapshot.page),
-              work: project(
-                declaration.deps.work,
-                snapshot.work.value,
-              ),
-              readings: Object.fromEntries(
-                declaration.deps.readings.map((key) => [key, readings[key]]),
-              ),
-            });
-          };
-          context();
-          const issued = owner.invocation(
-            owner.capture(`cell-${kind}:${id}`),
-            Object.fromEntries(
-              declaration.deps.readings.map((key) => [
-                key,
-                (readings[key] as { hash: string }).hash,
-              ]),
+        action();
+        resolve();
+        const declaration = route.data.cells[id];
+        if (!declaration) throw Error(`Unknown cell: ${id}`);
+        const context = () => {
+          const snapshot = owner.read();
+          if (!work.ready() || !snapshot?.work) throw Error("Work unavailable");
+          for (const reading of declaration.deps.readings)
+            if (!readings[reading]?.current) throw Error(`Reading unavailable: ${reading}`);
+          return freezePage({
+            page: project(declaration.deps.page, snapshot.page),
+            work: project(declaration.deps.work, snapshot.work.value),
+            readings: Object.fromEntries(
+              declaration.deps.readings.map((key) => [key, readings[key]]),
             ),
-          );
-          if (!issued.ok) throw Error(issued.reason);
-          return work.write(() => {
+          });
+        };
+        context();
+        const issued = owner.invocation(
+          owner.capture(`cell-${kind}:${id}`),
+          Object.fromEntries(
+            declaration.deps.readings.map((key) => [key, (readings[key] as { hash: string }).hash]),
+          ),
+        );
+        if (!issued.ok) throw Error(issued.reason);
+        return work.write(
+          () => {
             const snapshot = owner.read();
             if (!snapshot?.work) throw Error("Work unavailable");
             return cells.transition(kind, id, key, context(), snapshot.work.value);
-          }, issued.value, issued.value.id, {
+          },
+          issued.value,
+          issued.value.id,
+          {
             label: `${kind === "take" ? "Take" : kind === "unsuggest" ? "Unsuggest" : "Clear"} ${id}`,
-          });
-        };
+          },
+        );
+      };
       return {
         // The exact admission supplies both these schemas and field roles.
         page: ports.page as PagePort<G, S>,

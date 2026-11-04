@@ -174,3 +174,13 @@ test("W07/X01: a new workspace reacquires Pea history and never replays an old v
   expect(await next.fans.history!.undo()).toMatchObject({ ok: true });
   expect(fansDocumentSchema.parse(next.fans.work()!.value).componentDrops).toEqual({});
 });
+
+test("Fans starts with empty inputs and undo after the ducts Work split", async () => {
+  const f = await witness();
+  await vi.waitFor(() => expect(f.owner.workBasis()).not.toBeNull());
+  await settle(f.owner.invoke("edit", { patches: [{ path: ["rules", "elbow"], value: { edit: { value: { table: "CD3-1" } } } }] }) as Observation<WorkWriteOutcome>);
+  expect(fansDocumentSchema.parse(f.fans.work()?.value)).toEqual(fansDocumentSchema.parse({}));
+  expect(f.fans.history?.entries).toEqual([]);
+  expect(f.fans.work()?.revision).toBe(0);
+  expect(ductsDocumentSchema.parse(f.owner.work()?.value).rules.elbow?.edit?.value.table).toBe("CD3-1");
+});

@@ -212,3 +212,12 @@ test("a duplicate fan mark is told apart by level, then system, then order; neve
   ]);
   expect(fanLabel({ ...a, mark: "MUAS-1" }, [a, b])).toBe("MUAS-1 / port 0");
 });
+
+test("admitted ducts and fans render declared subject and pane words without internal ids", async () => {
+  const { admit } = await import("../fans/admission.fixture.ts");
+  const { owner, presenter } = await admit();
+  for (const route of [owner, presenter]) {
+    const words = [route.data.name, route.data.subject.noun, ...Object.values(route.data.panes).flatMap(pane => [pane.label, pane.purpose]), ...Object.values(route.data.verbs).map(verb => verb.label)];
+    expect(words.flatMap(word => leaks(word)), route.data.key).toEqual([]);
+  }
+});

@@ -7,7 +7,6 @@ import type {
   Observation,
   WorkWriteOutcome,
 } from "../../../../../packages/agent-contracts/src/work-journal-door";
-import fixture from "./sheet.fixture.json";
 const closes: (() => void)[] = [];
 afterEach(() =>
   closes
@@ -27,10 +26,10 @@ const settle = (value: Observation<WorkWriteOutcome>) =>
 test("the admitted criteria editor resolves Work, and host Undo resolves the firm layer again", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.owner.workBasis()).not.toBeNull());
+  // Q2: criteria belongs to the ducts Work, through its own edit door.
   const changed = await settle(
-    f.owner.invoke("sheetEdit", {
-      edits: { criteria: { allowanceInWg: { return: 0.35 } } },
-      basis: fixture.overview.basis,
+    f.owner.invoke("edit", {
+      patches: [{ path: ["criteria"], value: { edit: { value: { allowanceInWg: { return: 0.35 } } } } }],
       history: { label: "Return allowance" },
     }) as Observation<WorkWriteOutcome>,
   );

@@ -395,7 +395,9 @@ export class AdmittedRoute<
   S extends SchemaTable = SchemaTable,
   E extends EntryTable = EntryTable,
   Render = unknown,
-  W extends Record<string, unknown> = unknown extends WorkOf<G, S> ? Record<string, unknown> : Extract<WorkOf<G, S>, Record<string, unknown>>,
+  W extends Record<string, unknown> = unknown extends WorkOf<G, S>
+    ? Record<string, unknown>
+    : Extract<Immutable<WorkOf<G, S>>, Record<string, unknown>>,
 > {
   // Type witness only; executable bindings remain in the private exact-object table.
   declare readonly [admittedTypes]: { schemas: S; entries: E; render: Render };
@@ -419,16 +421,15 @@ export class AdmittedRoute<
     this.data = freezeData(structuredClone(data));
     this.fingerprint = fingerprint;
     // The loader stamp is a digest; Work carries the source-discriminated envelope.
-    this.workFingerprint =
-      `${source}:${fingerprint}` as RouteFingerprint;
-    this.resolvedWork =
-      (data.work?.schema
-        ? Object.freeze({
-            spec: data.work,
-            // Admission links this exact schema before constructing the nominal receipt.
-            schema: bindings.schemas[data.work.schema] as z.ZodType<W>,
-          })
-        : undefined);
+    this.workFingerprint = `${source}:${fingerprint}` as RouteFingerprint;
+    const workSpec = this.data.work;
+    this.resolvedWork = workSpec?.schema
+      ? Object.freeze({
+          spec: workSpec,
+          // Admission links this exact schema before constructing the nominal receipt.
+          schema: bindings.schemas[workSpec.schema] as z.ZodType<W>,
+        })
+      : undefined;
     admittedBindings.set(this, snapshotBindings(bindings));
     Object.freeze(this);
   }
@@ -630,12 +631,7 @@ export class AdmittedRoute<
             ],
           };
         try {
-          return admitHostProjection(
-            captureHostModule(module),
-            hostModule,
-            source,
-            fingerprint,
-          );
+          return admitHostProjection(captureHostModule(module), hostModule, source, fingerprint);
         } catch (error) {
           return {
             ok: false,

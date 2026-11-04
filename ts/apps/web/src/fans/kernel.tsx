@@ -1,3 +1,7 @@
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { LAYOUT_FIXTURE } from "../ducts/layout.fixture.ts";
+import { COLOURS_FIXTURE } from "../ducts/colours.fixture.ts";
+import { NAVIGATION_FIXTURE } from "../ducts/navigation.fixture.ts";
 import sheetFixture from "../ducts/sheet/sheet.fixture.json";
 import { SCENE_FIXTURE } from "../ducts/scene.fixture.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
@@ -10,21 +14,39 @@ import { ductsSources } from "../ducts/sources.ts";
 import { identityCodecs } from "../shell/page-port.ts";
 import { entries, fansData, fansNeutralBodies, schemas } from "./neutral.ts";
 const source = { module: "fans/kernel.tsx", export: "bodies" };
+const seed = <const K extends string>(name: K, snapshot: DuctSnapshot) => ({
+  slot: `seeds.${name}.load` as const,
+  kind: "seed" as const,
+  source,
+  run: () => ({
+    work: fansDocumentSchema.parse({}),
+    readings: {
+      fans: entries["ducts.fans"].output.parse(sheetFixture.roster),
+      sheet: schemas.sheet.parse({
+        rows: sheetFixture.roster.rows,
+        progress: null,
+        opened: [],
+        open: {
+          overview: sheetFixture.overview,
+          inputs: sheetFixture.inputs,
+          elements: sheetFixture.elements,
+          legs: sheetFixture.legs,
+          worstLegs: [],
+          worksheet: null,
+        },
+      }),
+      sheetSnapshot: snapshot,
+      meshes: null,
+      pricing: null,
+    },
+  }),
+});
 export const bodies = {
   ...fansNeutralBodies,
-  seedSheet: {
-    slot: "seeds.sheet.load", kind: "seed", source,
-    run: () => ({
-      work: fansDocumentSchema.parse({}),
-      readings: {
-        fans: entries["ducts.fans"].output.parse(sheetFixture.roster),
-        sheet: schemas.sheet.parse({ rows: sheetFixture.roster.rows, progress: null, opened: [], open: { overview: sheetFixture.overview, inputs: sheetFixture.inputs, elements: sheetFixture.elements, legs: sheetFixture.legs, worstLegs: [], worksheet: null } }),
-        sheetSnapshot: SCENE_FIXTURE.snapshot,
-        meshes: null,
-        pricing: null,
-      },
-    }),
-  },
+  seedScene: seed("scene", SCENE_FIXTURE.snapshot),
+  seedLayout: seed("layout", LAYOUT_FIXTURE.snapshot),
+  seedColours: seed("colours", COLOURS_FIXTURE.snapshot),
+  seedNavigation: seed("navigation", NAVIGATION_FIXTURE.snapshot),
   // SHIM: U4 replaces this dormant derive with pricing that reads both Works.
   price: { slot: "readings.pricing.derive", kind: "derive", source, run: () => null },
   sheetView: {
