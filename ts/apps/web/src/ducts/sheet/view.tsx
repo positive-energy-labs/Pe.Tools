@@ -11,7 +11,6 @@ import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
 import { Fragment, useMemo, useState } from "react";
-import { subjectNamer } from "../subject-text";
 import { BlockerRow } from "./blocker-row";
 import type { Closer } from "./closer";
 import { fanKey, fanLabel, pressure, stableFanKey, type FanPort } from "./model";
@@ -58,7 +57,7 @@ export function Roster({ props }: { props: RosterProps }) {
   });
   // A blank firm tag falls back to the unit's Mark or family; a name shared by two units (Chadds
   // has two FC-23s) is told apart by level, system or order (fanLabel), never by an id.
-  const nameOf = useMemo(() => subjectNamer(props.snapshot), [props.snapshot]);
+  const nameOf = props.nameOf;
   const unitName = (fan: FanPort) => fan.mark || nameOf(fan.unitId);
   const named = useMemo(
     () => props.roster.map((fan) => ({ ...fan, mark: unitName(fan) })),

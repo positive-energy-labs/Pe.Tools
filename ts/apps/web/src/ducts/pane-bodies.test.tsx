@@ -149,3 +149,22 @@ test("a restored semantic cell selection lands on that fitting cell through the 
     `componentDrops:${fitting.id}`,
   );
 });
+
+
+test("no open fan is absence and every sheet pane renders without a native decode error", async () => {
+  const f = await createWitness(closes, new Map(), {
+    "ducts.sheet-snapshot": { kind: "use", open(_ctx, deliver) {
+      deliver({ kind: "complete", value: { kind: "absent" }, revision: 0 });
+    } },
+  });
+  for (const pane of ["sheet-roster", "sheet-inputs", "sheet-picture", "sheet-ledger"]) {
+    f.fans.setPaneDemand(pane, true);
+    await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
+    const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, pane)}</RegistryContext>);
+    if (pane === "sheet-roster") expect(view.container.textContent).toContain("FC-23");
+    else expect(screen.getByText("Open a fan from the roster.")).toBeTruthy();
+    expect(view.container.textContent).not.toContain("readAt");
+    view.unmount();
+  }
+});
+

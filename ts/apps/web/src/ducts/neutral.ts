@@ -193,6 +193,7 @@ export const schemas = {
   }),
   scope: ductsDocumentSchema.shape.writeIntent.unwrap().shape.edit.unwrap().unwrap().shape.value,
   snapshot: snapshotReadingSchema.nullable(),
+  sheetSnapshot: z.union([z.object({ kind: z.literal("absent") }), snapshotReadingSchema]),
   sheet: sheetReadingSchema.nullable(),
   fansWork: fansDocumentSchema,
   pricing: z.unknown().nullable(),
@@ -240,7 +241,7 @@ export const entries = {
   "ducts.sheet-snapshot": {
     input: z.object({ work: schemas.work.nullable(),
       fanWork: fanInput.optional(), sheet: schemas.sheet }),
-    output: schemas.snapshot,
+    output: schemas.sheetSnapshot,
     axes,
   },
   "ducts.preview-losses": {
