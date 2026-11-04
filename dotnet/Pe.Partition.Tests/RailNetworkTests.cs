@@ -266,7 +266,7 @@ public sealed class RailNetworkTests {
         RoomProposal[] proposals = lockedWidth == 0 ? [] :
             [new(RoomProposal.LockedPrefix + "west", "Person's room", "", [Box(0, 0, lockedWidth, 10)])];
         var walls = new[] { Slab(9.75, 0, 10.25, 10), Slab(19.75, 0, 20.25, 10) };
-        if (reverseCapture) walls = walls.Reverse().Select(w => w.Reverse().ToArray()).ToArray();
+        if (reverseCapture) walls = Enumerable.Reverse(walls).Select(w => Enumerable.Reverse(w).ToArray()).ToArray();
         var answer = RunRails(Box(0, 0, 30, 10), proposals, walls);
         var factory = new GeometryFactory();
         Polygon Polygon(double[] loop) => factory.CreatePolygon([
