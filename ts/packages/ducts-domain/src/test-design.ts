@@ -1,15 +1,15 @@
 /** Test support: one Work literal cut into the ducts and fans Works by segment, then joined (`ductsDesign`). */
 import {
-  ductsDesign,
   ductsDocumentSchema,
   fansDocumentSchema,
-  type DuctsDesign,
+  type DuctsRouteDocument,
+  type FansRouteDocument,
 } from "@pe/agent-contracts";
 
 const fanSegment = (key: string) => key !== "writeIntent" && key in fansDocumentSchema.shape;
 
-export function designOf(raw: Record<string, unknown> = {}): DuctsDesign {
+export function designOf(raw: Record<string, unknown> = {}): DuctsRouteDocument & Omit<FansRouteDocument, "writeIntent"> {
   const part = (fans: boolean) =>
     Object.fromEntries(Object.entries(raw).filter(([key]) => fanSegment(key) === fans));
-  return ductsDesign(ductsDocumentSchema.parse(part(false)), fansDocumentSchema.parse(part(true)));
+  return { ...fansDocumentSchema.parse(part(true)), ...ductsDocumentSchema.parse(part(false)) };
 }

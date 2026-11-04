@@ -130,38 +130,13 @@ test("computed imports refuse, external content integrity affects the envelope",
   );
 });
 
-test("all builtin envelopes are generated owner-first with the current owner Work pin", async () => {
+test("builtin closures hash independently in declaration order", async () => {
   const f = fixture();
-  const owner = {
-    ...builtinData,
-    key: "owner",
-    address: "/owner",
-    work: { ...builtinData.work, route: "owner" },
-  };
-  const presenter = {
-    ...builtinData,
-    key: "presenter",
-    address: "/presenter",
-    capabilities: ["work"],
-    work: { route: "owner" },
-  };
-  const options = [presenter, owner].map((data) => ({ ...f.options, data }));
+  const options = ["fans", "ducts"].map(key => ({ ...f.options, data: { ...builtinData, key, address: `/${key}`, work: { ...builtinData.work, route: key } } }));
   const closures = await buildBuiltinClosures(options);
-  expect([...closures.keys()]).toEqual(["owner", "presenter"]);
-  expect(closures.get("presenter")!.envelope.workOwner).toEqual({
-    route: "owner",
-    fingerprint: `builtin-closure:${closures.get("owner")!.fingerprint}`,
-  });
-  writeFileSync(join(f.root, "body.ts"), "export const body = () => 99;");
-  const changed = await buildBuiltinClosures(options);
-  expect(changed.get("presenter")!.envelope.workOwner).toEqual({
-    route: "owner",
-    fingerprint: `builtin-closure:${changed.get("owner")!.fingerprint}`,
-  });
-  expect(changed.get("presenter")!.envelope.workOwner).not.toEqual(
-    closures.get("presenter")!.envelope.workOwner,
-  );
-  await expect(buildBuiltinClosures([options[0]!])).rejects.toThrow("Missing or cyclic");
+  expect([...closures.keys()]).toEqual(["fans", "ducts"]);
+  const alone = await buildBuiltinClosures([options[0]!]);
+  expect(alone.get("fans")).toEqual(closures.get("fans"));
 });
 
 test("dev repairs stale builtin pins in one step and leaves fresh pins untouched", async () => {

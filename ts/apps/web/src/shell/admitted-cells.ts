@@ -112,7 +112,6 @@ export function createAdmittedCells(
       const parsed = keyFor(id, key),
         cell = data.cells[id]!;
       const segment = cell.segment === null ? work : work[cell.segment];
-      // erased at route-module.ts:419 (resolvedWork.schema: z.ZodType); U3 types it as ZodType<W>
       const value = (segment as Readonly<Record<string, CellLike>> | undefined)?.[String(parsed)] ?? {};
       const transition = () => {
         const patches = transitionPatches(cell.segment === null ? [] : [cell.segment], String(parsed), value, { kind });

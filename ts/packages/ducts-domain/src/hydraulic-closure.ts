@@ -1,4 +1,6 @@
-import type { DuctHydraulics } from "@pe/agent-contracts";
+import type { Immutable } from "../../agent-contracts/src/route-kernel-data.ts";
+type DuctHydraulics = Immutable<Hydraulics>;
+import type { DuctHydraulics as Hydraulics } from "@pe/agent-contracts";
 import { ductArithmeticError, type ComponentFlow } from "./component-flows.ts";
 import type { physicalGraph, CircuitReason } from "./physical-graph.ts";
 import { friction, sectionOf } from "./loss-physics.ts";

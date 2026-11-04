@@ -8,7 +8,7 @@ import { module as schedules } from "../schedules/kernel";
 import { module as families } from "../families/kernel";
 import { module as ducts } from "../ducts/kernel";
 import { module as fans } from "../fans/kernel";
-import { builtins, isBuiltinKey, type BuiltinKey } from "./builtins.neutral";
+import { builtins, type BuiltinKey } from "./builtins.neutral";
 
 const modules = { captures, schedules, families, ducts, fans } satisfies Record<BuiltinKey, unknown>;
 type Admitted =
@@ -16,7 +16,7 @@ type Admitted =
   | { readonly ok: false; readonly diagnostics: readonly RouteDiagnostic[] };
 export const builtinRouteKeys = Object.keys(builtins) as BuiltinKey[];
 export const builtinRouteStamp = (key: BuiltinKey) => builtins[key].closure.fingerprint;
-// One admission per (key, stamp): a presenter reuses its owner's admitted route.
+// One admission per (key, stamp).
 const admissions = new Map<string, Promise<Admitted>>();
 export function loadBuiltinRoute(key: BuiltinKey, expectedFingerprint: string) {
   const id = `${key}\n${expectedFingerprint}`;
@@ -26,17 +26,11 @@ export function loadBuiltinRoute(key: BuiltinKey, expectedFingerprint: string) {
 }
 async function admit(key: BuiltinKey, expectedFingerprint: string): Promise<Admitted> {
   const { closure } = builtins[key];
-  const ownerKey = closure.envelope.workOwner?.route;
-  if (ownerKey !== undefined && (!isBuiltinKey(ownerKey) || builtins[ownerKey].closure.envelope.workOwner))
-    throw Error(`${ownerKey} cannot own ${key}'s presented Work`);
-  const owner = ownerKey && (await loadBuiltinRoute(ownerKey, builtinRouteStamp(ownerKey)));
-  if (owner && !owner.ok) return owner;
   const module = modules[key];
   const inventory = createBuiltinRouteInventory({
     [key]: {
       module,
       closure,
-      ...(owner && { workOwner: owner.route }),
       catalog: Object.entries(module.entries).map(([entry, contract]) => ({
         key: entry,
         ...contract.axes,

@@ -1444,3 +1444,12 @@ export const ductsHostModule = {
     dropFanCells: dropFanCellsBody,
   },
 };
+
+/** Carry only the destination subject and the document/fixture binding. */
+export function ductsLink(ids: readonly string[], search: Readonly<Record<string, unknown>>) {
+  const params = new URLSearchParams();
+  for (const key of ["target", "fixture", "thread"])
+    if (typeof search[key] === "string") params.set(key, search[key]);
+  params.set("system", JSON.stringify({ kind: "ids", ids: ids.map(id => localId("ducts-system", id)) }));
+  return `/ducts?${params}`;
+}

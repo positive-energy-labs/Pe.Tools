@@ -59,7 +59,7 @@ const FORBIDDEN_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
 
 export function applyPatches<S extends z.ZodType>(
   spec: RouteStateSpec<S>,
-  envelope: RouteEnvelope<z.infer<S>>,
+  envelope: RouteEnvelope<unknown>,
   by: WorkAuthor,
   patches: readonly RouteStatePatch[],
   expectedRevision: number,
@@ -156,7 +156,7 @@ export function canonicalRouteInput(input: unknown): string {
 
 export function commitDoc<S extends z.ZodType>(
   spec: RouteStateSpec<S>,
-  envelope: RouteEnvelope<z.infer<S>>,
+  envelope: RouteEnvelope<unknown>,
   next: unknown,
 ): RouteLanded<z.infer<S>> | RouteRefusal {
   const writeSchema = spec.schema instanceof z.ZodObject ? spec.schema.strict() : spec.schema;

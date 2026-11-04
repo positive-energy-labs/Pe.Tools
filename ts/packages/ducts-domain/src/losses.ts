@@ -1,3 +1,4 @@
+import type { Immutable } from "../../agent-contracts/src/route-kernel-data.ts";
 /**
  * Duct pressure drop per terminal path, pure and deterministic: `ducts.snapshot` + ASHRAE grids +
  * edit table choices (+ typed overrides) in, rows out. Nothing is stored.
@@ -402,7 +403,7 @@ export function computeLosses(
   grids: Grids,
   choices: Choices = {},
   overrides: Overrides = {},
-  evidence: Readonly<Record<string, DuctCalculation>> = {},
+  evidence: Readonly<Record<string, Immutable<DuctCalculation>>> = {},
   catalogs: Catalogs = EMPTY_CATALOGS,
   inferred: readonly InferredLink[] = [],
 ): LossResult {

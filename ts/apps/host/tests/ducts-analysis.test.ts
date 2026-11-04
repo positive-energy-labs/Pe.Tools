@@ -1,5 +1,5 @@
 // U4 wires the real fans Work for callers without one.
-import { neutralFansWork } from "@pe/agent-contracts";
+import { neutralFansWork, fansRouteState } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { createPeRoutes } from "../src/pe-routes.ts";
@@ -163,7 +163,7 @@ function fixture() {
         { headers: { "x-pe-native-request-id": `fixture-${nativeReads}` } },
       );
     },
-    // As pe-routes reads: ducts Work absent, fans Work absent reads as its empty document.
+    // The registered fans route supplies an empty Work; absent Work is a failure.
     readWork: async (key) => {
       workReads++;
       return key.route === "fans" ? { doc: {}, revision: 0 } : null;
@@ -248,12 +248,12 @@ test("the declared host route reads canonical Work and unreadable Work refuses b
   let unreadable = false;
   let writes = 0;
   const routes = createPeRoutes({
-    registrations: [{ spec: ductsRouteState }],
+    registrations: [{ spec: ductsRouteState }, { spec: fansRouteState }],
     heads: { observe: () => () => {} },
     store: {
-      getState: async () => {
+      getState: async ({ route }) => {
         if (unreadable) throw Error("Unreadable fixture Work");
-        return { version: 1, revision: 7, doc: ductsDocumentSchema.parse({}) };
+        return { version: 1, revision: 7, doc: route === "fans" ? fansDocumentSchema.parse({}) : ductsDocumentSchema.parse({}) };
       },
       setState: async () => {
         writes++;
@@ -1127,4 +1127,11 @@ test("apply-request refuses a terminal without an observed slot before dispatch"
   doc.parameters.terminalFlow = { edit: { value: "PE_M_Grd_AirFlow" } };
   expect(() => applyRequest(f.snapshot, price(f.snapshot, {}, ductsDesign(null, doc), (ductsDesign(null, doc)) ?? neutralFansWork), "fixed", []))
     .toThrow("PE_M_Grd_AirFlow");
+});
+
+// U3: once Fans is registered, missing Work must never silently price neutral.
+test("an absent fans Work refuses analysis instead of pricing neutral", async () => {
+  const f = await fixture();
+  f.sources.readWork = async () => null;
+  await expect(f.api.read(read({ kind: "fresh", target: f.target }))).rejects.toThrow("Fans Work is unreadable");
 });

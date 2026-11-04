@@ -15,7 +15,7 @@ import type {
   WorkOf,
 } from "./route-kernel-page.ts";
 import type { RouteStateSpec } from "./route-state.ts";
-import type { WorkSchema } from "./route-work-owner.ts";
+import type { WorkSchema } from "./route-kernel-page.ts";
 import type { ExecutionTarget } from "./target.ts";
 import type { JournalSubmission, Observation, WorkWriteOutcome } from "./work-journal-door.ts";
 

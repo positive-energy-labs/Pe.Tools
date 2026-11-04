@@ -11,7 +11,7 @@ DuctsSheetEdits,
 PicturePage,
 RouteStatePatch,
 } from "@pe/agent-contracts";
-import { ductsDesign,neutralFansWork,transitionPatches } from "@pe/agent-contracts";
+import { ductsDesign,transitionPatches } from "@pe/agent-contracts";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { elementKey,type SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
@@ -22,7 +22,7 @@ import type { PaneContext } from "../../../../../packages/agent-contracts/src/ro
 import { entries,fansData,schemas } from "../../fans/neutral";
 import { attentionSubjects } from "../cell-focus";
 import { localId,localSubject,namesOf } from "../neutral.ts";
-import { subjectLink } from "../subject-link";
+import { ductsLink } from "../neutral.ts";
 import { subjectNamer } from "../subject-text";
 import { describeCloser,type Closer } from "./closer";
 import { editLabel,presentInputHistory,type EditMeta } from "./input-history";
@@ -116,7 +116,7 @@ export function RosterBody({
             .filter((name): name is string => !!name),
         ),
       ].map((name) => (
-        <a key={name} href={subjectLink("ducts", [name], search)}>
+        <a key={name} href={ductsLink([name], search)}>
           {name}
         </a>
       ))}
@@ -166,9 +166,11 @@ export function InputsBody({
       void ctx.history?.undo(press);
     },
   };
+  const search = useRouteSearchSlice(search => search);
   const fanReading = fans.value;
   const ownPane = (
     <InputsSurface
+      ductsHref={ductsLink(snapshot.systems.map(system => system.name), search)}
       ctx={{
         snapshot,
         doc: workDoc,
@@ -197,18 +199,11 @@ export function InputsBody({
       history={history}
       nameOf={nameOf}
       act={async (path, cell, kind, label) => {
-        if (path.length === 1) {
-          // temporary: criteria writer moves to fans with its cells (U2/U3, Q2a)
-          return write(transitionPatches([], path[0], cell, { kind }), {
-            label: `${kind} Pea's ${label}`,
-          });
-        }
-        // U4 moves parameter cells and their writer to the fans Work.
-        if (path[0] === "parameters") return { code: "unavailable", message: "Fan parameter editing is unavailable" };
-        const result = await settleWork(ctx.cells[kind](path[0], path[1]));
-        return result.kind === "refused"
-          ? { code: "refused", message: result.refusal.error }
-          : null;
+        if (path.length === 1 || path[0] !== "parameters")
+          return { code: "unavailable", message: "Edit duct rules on /ducts" };
+        return write(transitionPatches(["parameters"], path[1], cell, { kind }), {
+          label: `${kind} Pea's ${label}`,
+        });
       }}
     />
   );
@@ -291,8 +286,8 @@ export function LedgerBody({
   const select = (selected: string) =>
     ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
   const state = ctx.readings.sheetView.value ?? EMPTY_SHEET_STATE;
-  const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null) =>
-    describeCloser(blocker, typed, {
+  const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null): Closer => {
+    const closer = describeCloser(blocker, typed, {
       terminalDrop: state.inputs?.criteria.terminalDropInWg ?? null,
       nameOf,
       wait: busy
@@ -320,24 +315,21 @@ export function LedgerBody({
       fittingOf: (key) => sheet?.inputs?.fittings.find((f) => f.key === key) ?? null,
       tableTitles: sheet?.inputs?.tableTitles ?? {},
     });
+    const owned = (action: Closer["action"]) => action?.kind === "drop" || action?.kind === "cfm" || action?.kind === "unitCfm";
+    return {
+      ...closer,
+      action: owned(closer.action) ? closer.action : null,
+      refusal: owned(closer.action) ? closer.refusal : "Edit duct rules on /ducts",
+      secondary: null,
+      crossing: null,
+      choices: null,
+    };
+  };
   const editsFor = (closers: readonly Closer[]) =>
     closers.reduce<DuctsSheetEdits>((edits, closer) => {
       if (closer.refusal || !closer.action) return edits;
       const action = closer.action;
       switch (action.kind) {
-        case "rule":
-          return {
-            ...edits,
-            joins: [
-              ...(edits.joins ?? []),
-              { pair: [action.pair[0], action.pair[1]], verdict: "accept" },
-            ],
-          };
-        case "cap":
-          return {
-            ...edits,
-            ends: [...(edits.ends ?? []), { end: action.end, verdict: "capped" }],
-          };
         case "drop":
           return action.terminal
             ? {
@@ -361,21 +353,8 @@ export function LedgerBody({
             ...edits,
             equipmentFlows: { ...edits.equipmentFlows, [action.unitId]: { cfm: action.value } },
           };
-        case "price":
-          return {
-            ...edits,
-            assignments: { ...edits.assignments, [action.family]: { rule: action.rule } },
-            ...(action.table
-              ? { tables: { ...edits.tables, [action.rule]: { table: action.table } } }
-              : {}),
-          };
-        case "table":
-          return { ...edits, tables: { ...edits.tables, [action.rule]: { table: action.table } } };
-        case "pathDrop":
-          return {
-            ...edits,
-            fittingDrops: { ...edits.fittingDrops, [action.key]: { inWg: action.value } },
-          };
+        case "rule": case "cap": case "price": case "table": case "pathDrop":
+          return edits;
       }
     }, {});
   const ownPane = (
@@ -412,8 +391,8 @@ function sheetSnapshot(reading: SheetContext["readings"]["sheetSnapshot"]) {
   return (reading.value ?? EMPTY_SNAPSHOT) as import("@pe/ducts-domain/types").DuctSnapshot;
 }
 function sheetWork(value: SheetContext["work"]) {
-  // U4 wires the real fans Work here.
-  return ductsDesign(value, neutralFansWork);
+  // SHIM: U4 supplies the ducts Work reading for fan sheet projections.
+  return value ? ductsDesign(null, value) : null;
 }
 function SheetFrame({
   ctx,

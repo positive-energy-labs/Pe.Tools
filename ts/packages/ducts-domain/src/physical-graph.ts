@@ -1,4 +1,7 @@
-import type { DuctCalculation, DuctPortPin } from "@pe/agent-contracts";
+import type { DuctCalculation as Calculation, DuctPortPin as PortPin } from "@pe/agent-contracts";
+import type { Immutable } from "../../agent-contracts/src/route-kernel-data.ts";
+type DuctCalculation = Immutable<Calculation>;
+type DuctPortPin = Immutable<PortPin>;
 import type { DuctSnapshot } from "./types.ts";
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];

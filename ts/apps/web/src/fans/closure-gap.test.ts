@@ -4,26 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildBuiltinClosure, fingerprintRouteSource } from "../../route-source-hash";
 import { module as captures } from "../captures/kernel";
-import { builtinClosureFingerprint } from "../../../../packages/agent-contracts/src/route-module";
 
-test("the builtin closure producer preserves supplied owner evidence", async () => {
+test("the builtin closure producer hashes fans without another route", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-w1c-closure-"));
   try {
     const entry = join(root, "module.ts");
     await writeFile(entry, "export const route = 'fans';\n");
-    const workOwner = {
-      route: "ducts",
-      fingerprint: await builtinClosureFingerprint({
-        source: "builtin-closure",
-        version: 1,
-        data: captures.data,
-        hostVersion: "w1c-owner-fixture",
-        variants: [{ client: "web", entry: "owner.ts" }],
-        modules: [{ id: "owner.ts", sha256: "a".repeat(64) }],
-        inputs: [],
-        externals: [],
-      }),
-    };
     const options = {
       root,
       identityRoot: root,
@@ -33,16 +19,14 @@ test("the builtin closure producer preserves supplied owner evidence", async () 
         key: "fans",
         address: "/fans",
         capabilities: ["work"],
-        work: { route: "ducts" },
+        work: { route: "fans", schema: "work", version: 1, migrations: {} },
       },
       hostVersion: "w1c-fixture",
       inputs: [],
-      workOwner,
     };
     const closure = await buildBuiltinClosure(options);
-    expect(closure.envelope.workOwner).toEqual(workOwner);
+    expect(closure.envelope.data.work?.route).toBe("fans");
     expect(closure.fingerprint).toBe(fingerprintRouteSource(closure.envelope));
-    expect(closure.fingerprint).toBe(fingerprintRouteSource({ ...closure.envelope, workOwner }));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

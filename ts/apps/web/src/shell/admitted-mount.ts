@@ -151,12 +151,12 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
   }
   const workRegistry = scopedRegistry;
   return {
-    mount<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, Render>(
-      admitted: AdmittedRoute<G, S, E, Render>,
+    mount<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, Render, W extends Record<string, unknown>>(
+      admitted: AdmittedRoute<G, S, E, Render, W>,
       input: PlaceInput,
     ) {
       const { address, fixture, target, memory } = input;
-      const route: AdmittedRoute = admitted;
+      const route: AdmittedRoute<RouteGraphJson, SchemaTable, EntryTable, unknown, W> = admitted;
       const registry = createAdmittedRouteRegistry();
       const registration = registry.register(route);
       const resolve = () => {
@@ -202,7 +202,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
               const deps = route.data.transitionDeps ?? { page: [], work: [], readings: [] };
               if (deps.readings.some((id) => !readings[id]?.current))
                 return { ok: false, reason: "Transition reading evidence unavailable or stale" };
-              const acceptedWork = owner.read()?.work?.value as Record<string, unknown> | undefined;
+              const acceptedWork = owner.read()?.work?.value;
               if (deps.work.length && !acceptedWork)
                 return { ok: false, reason: "Transition Work unavailable" };
               const evidence = Object.fromEntries(deps.readings.map((id) => [id, readings[id]]));
@@ -277,12 +277,12 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         return lease.entry;
       };
       const mountJournal = (key: import("@pe/agent-contracts").WorkKey) => entryFor(key).journal;
-      const workSpec = route.data.work
+      const workSpec = route.resolvedWork
         ? {
-            route: route.data.work.route,
+            route: route.resolvedWork.spec.route,
             title: route.data.name,
             description: "",
-            schema: route.resolvedWork!.schema,
+            schema: route.resolvedWork.schema,
           }
         : undefined;
       const issuer = createRouteTokenIssuer();
@@ -301,7 +301,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         preparePage: policy.prepare,
         issuer,
       };
-      const owner = createRouteScopeGate(
+      const owner = createRouteScopeGate<RouteGraphJson, SchemaTable, W>(
         workSpec
           ? {
               ...ownerOptions,
@@ -663,9 +663,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
                 id,
                 {
                   page: owner.read()!.page,
-                  work: (owner.read()!.work?.value ?? null) as Readonly<
-                    Record<string, unknown>
-                  > | null,
+                  work: owner.read()?.work?.value ?? null,
                 },
                 (request) => {
                   const readingId = plan.readingId(request)!;
@@ -794,7 +792,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
               again = true;
               continue;
             }
-            cells.update((owner.read()!.work?.value ?? null) as Record<string, unknown> | null);
+            cells.update((owner.read()!.work?.value ?? null));
             observers.update({
               page: owner.read()!.page,
               work: owner.read()!.work?.value ?? null,
@@ -996,7 +994,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           page: project(declaration.deps.page, owner.read()!.page),
           work: project(
             declaration.deps.work,
-            ((edit?.work ?? owner.read()!.work)?.value as Record<string, unknown>) ?? {},
+            ((edit?.work ?? owner.read()!.work)?.value) ?? {},
           ),
           readings: freezePage(
             Object.fromEntries(declaration.deps.readings.map((key) => [key, readings[key]])),
@@ -1074,14 +1072,11 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           if (modelWrite && (!work.ready() || !accepted.work || !accepted.scope.identity.work))
             throw Error("Accepted Work unavailable");
           // ModelWrite has one input authority: B's accepted key and revision, never draft intent.
-          const declaredIntent = bindings.bodies[declaration.intent]!.run(
-            context(),
-            parsed,
-          ) as Record<string, unknown>;
+          const declaredIntent = z.record(z.string(), z.unknown()).parse(bindings.bodies[declaration.intent]!.run(context(), parsed));
           if (modelWrite && Object.hasOwn(declaredIntent, "work"))
             throw Error("ModelWrite intent cannot supply Work identity");
-          const intent: Record<string, unknown> = freezePage(
-            entry.input.parse(
+          const intent = freezePage(
+            z.record(z.string(), z.unknown()).parse(entry.input.parse(
               modelWrite
                 ? {
                     ...declaredIntent,
@@ -1091,7 +1086,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
                     }),
                   }
                 : declaredIntent,
-            ) as Record<string, unknown>,
+            )),
           );
           entry.input.parse(intent);
           preview = freezePage({ work: accepted.work, input: intent });
@@ -1217,7 +1212,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
                         ...context(),
                         work: project(
                           declaration.deps.work,
-                          (owner.read()!.work?.value as Record<string, unknown>) ?? {},
+                          (owner.read()!.work?.value) ?? {},
                         ),
                       },
                       parsed,
@@ -1345,7 +1340,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         const evidence = freezePage(
           structuredClone({
             page: project(deps.page, owner.read()!.page),
-            work: project(deps.work, owner.read()!.work!.value as Record<string, unknown>),
+            work: project(deps.work, owner.read()!.work!.value),
             readings: Object.fromEntries(deps.readings.map((id) => [id, readings[id]])),
           }),
         );
@@ -1499,21 +1494,21 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         close();
         throw error;
       }
-      // erased at route-module.ts:419 (resolvedWork.schema: z.ZodType); U3 types it as ZodType<W>
       const transitionCell = (kind: "take" | "unsuggest" | "clear", id: string, key: unknown) => {
           action();
           resolve();
           const declaration = route.data.cells[id];
           if (!declaration) throw Error(`Unknown cell: ${id}`);
           const context = () => {
-            if (!work.ready()) throw Error("Work unavailable");
+            const snapshot = owner.read();
+            if (!work.ready() || !snapshot?.work) throw Error("Work unavailable");
             for (const reading of declaration.deps.readings)
               if (!readings[reading]?.current) throw Error(`Reading unavailable: ${reading}`);
             return freezePage({
-              page: project(declaration.deps.page, owner.read()!.page),
+              page: project(declaration.deps.page, snapshot.page),
               work: project(
                 declaration.deps.work,
-                owner.read()!.work!.value as Record<string, unknown>,
+                snapshot.work.value,
               ),
               readings: Object.fromEntries(
                 declaration.deps.readings.map((key) => [key, readings[key]]),
@@ -1531,7 +1526,11 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
             ),
           );
           if (!issued.ok) throw Error(issued.reason);
-          return work.write(() => cells.transition(kind, id, key, context(), owner.read()!.work!.value as Record<string, unknown>), issued.value, issued.value.id, {
+          return work.write(() => {
+            const snapshot = owner.read();
+            if (!snapshot?.work) throw Error("Work unavailable");
+            return cells.transition(kind, id, key, context(), snapshot.work.value);
+          }, issued.value, issued.value.id, {
             label: `${kind === "take" ? "Take" : kind === "unsuggest" ? "Unsuggest" : "Clear"} ${id}`,
           });
         };

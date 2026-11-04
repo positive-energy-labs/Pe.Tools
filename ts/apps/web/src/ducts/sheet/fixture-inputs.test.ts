@@ -26,9 +26,9 @@ const settle = (value: Observation<WorkWriteOutcome>) =>
   );
 test("the admitted criteria editor resolves Work, and host Undo resolves the firm layer again", async () => {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.workBasis()).not.toBeNull());
+  await vi.waitFor(() => expect(f.owner.workBasis()).not.toBeNull());
   const changed = await settle(
-    f.fans.invoke("sheetEdit", {
+    f.owner.invoke("sheetEdit", {
       edits: { criteria: { allowanceInWg: { return: 0.35 } } },
       basis: fixture.overview.basis,
       history: { label: "Return allowance" },
@@ -47,10 +47,10 @@ test("the admitted criteria editor resolves Work, and host Undo resolves the fir
     },
   };
   const current = () => {
-    const work = designOf(f.fans.work()!.value as Record<string, unknown>);
+    const work = designOf(f.owner.work()!.value as Record<string, unknown>);
     return resolveCriteria(stagedDucts(work, work), null, firm).allowanceInWg.return;
   };
   expect(current()).toMatchObject({ value: 0.35, source: "Work" });
-  expect(await f.fans.history!.undo()).toMatchObject({ ok: true });
+  expect(await f.owner.history!.undo()).toMatchObject({ ok: true });
   expect(current()).toMatchObject({ value: 0.2, source: "firm" });
 });

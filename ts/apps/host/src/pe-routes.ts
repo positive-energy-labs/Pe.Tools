@@ -18,7 +18,7 @@ import {
   ductsNativeRead,
   type DuctsAnalysisSources,
 } from "./ducts-analysis.ts";
-import { neutralFansWork, sdkSessionSelectionSchema } from "@pe/agent-contracts";
+import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import type { MachineShareAdapter } from "./machine.ts";
 import { Context, Effect, Layer, Option, Stream } from "effect";
 import {
@@ -269,10 +269,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
   const analysis = options.ductsAnalysis
     ? createDuctsAnalysis({
         ...options.ductsAnalysis,
-        readWork: async (key) =>
-          (await work.readRaw(key, key.route)) ??
-          // absent until U3 registers the fans route; U3 makes absence an error
-          (key.route === "fans" ? { doc: neutralFansWork, revision: 0 } : null),
+        readWork: async (key) => {
+          const saved = await work.readRaw(key, key.route);
+          if (!saved) throw Error(`Work is absent for ${key.route}`);
+          return saved;
+        },
       })
     : null;
   const sheets = options.ductsSheets

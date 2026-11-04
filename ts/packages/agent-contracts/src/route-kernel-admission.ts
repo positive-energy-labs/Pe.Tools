@@ -34,7 +34,6 @@ export interface ExecutableMember {
  * Web/Pea variants occupy separate client entries in the SAME envelope. Admission verifies
  * actual loaded bytes before publishing. A checks hashing; P supplies the Pod artifact. */
 export interface RouteFingerprintInput {
-  readonly workOwner?: { readonly route: string; readonly fingerprint: RouteFingerprint };
   readonly version: 1;
   readonly data: RouteGraphJson;
   readonly contracts: readonly { readonly id: string; readonly sha256: string }[];

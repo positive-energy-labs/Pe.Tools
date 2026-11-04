@@ -1,12 +1,12 @@
-import type { WorkSchema, workOwnerBinding, WorkOwnerSource } from "./route-work-owner.ts";
 import type { z } from "zod";
 import type { ExecutionTarget } from "./target.ts";
 import type { WorkKey, WorkWriteAck } from "./route-state.ts";
 import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
 
-export type SchemaTable = Readonly<Record<string, z.ZodType>> & {
-  readonly [workOwnerBinding]?: WorkOwnerSource;
-};
+export type SchemaTable = Readonly<Record<string, z.ZodType>>;
+export type WorkSchema<G extends RouteGraphJson, S extends SchemaTable> =
+  G extends { work: { schema: infer K } } ? S[Extract<K, keyof S>]
+    : RouteGraphJson extends G ? S[keyof S] : never;
 export type SchemaValue<S extends SchemaTable, K> = K extends keyof S ? z.output<S[K]> : never;
 declare const identity: unique symbol;
 export type IdentityKind = "document" | "link" | "element" | "local";
@@ -341,12 +341,12 @@ export type WorkReduction =
       readonly kind: "refused";
       readonly reason: "foreign-token" | "wrong-work" | "retired" | "closed";
     };
-export interface AcceptanceSnapshot<G extends RouteGraphJson, S extends SchemaTable> {
+export interface AcceptanceSnapshot<G extends RouteGraphJson, S extends SchemaTable, W = Immutable<WorkOf<G, S>>> {
   readonly scope: ScopeToken;
   readonly pageEpoch: PageEpoch;
   readonly pageRevision: number;
   readonly page: PageOf<G, S>;
-  readonly work: { readonly revision: number; readonly value: Immutable<WorkOf<G, S>> } | null;
+  readonly work: { readonly revision: number; readonly value: W } | null;
 }
 /** B implements this one owner below React. C's Page transactions use this owner, not a second store.
  * TODO: B proves A -> B -> A, remount, both ack/stream orders, contradiction, gap and late receipt schedules.
@@ -367,7 +367,7 @@ export interface AcceptanceSnapshot<G extends RouteGraphJson, S extends SchemaTa
  * acks still file to their ORIGINAL Work journal, including after close; late reads are refused.
  * close releases subscriptions and disables publication, not journal receipt delivery.
  */
-export interface AcceptanceOwner<G extends RouteGraphJson, S extends SchemaTable> extends PageOwner<
+export interface AcceptanceOwner<G extends RouteGraphJson, S extends SchemaTable, W = Immutable<WorkOf<G, S>>> extends PageOwner<
   G,
   S
 > {
@@ -385,18 +385,18 @@ export interface AcceptanceOwner<G extends RouteGraphJson, S extends SchemaTable
   ): DecodeResult<InvocationToken>;
   acceptWork(
     token: InvocationToken,
-    delivery: Extract<WorkDelivery<WorkOf<G, S>>, { kind: "ack" }>,
+    delivery: Extract<WorkDelivery<W>, { kind: "ack" }>,
   ): WorkReduction;
   acceptWork(
     token: AcceptanceToken,
-    delivery: Exclude<WorkDelivery<WorkOf<G, S>>, { kind: "ack" }>,
+    delivery: Exclude<WorkDelivery<W>, { kind: "ack" }>,
   ): WorkReduction;
   /** Rechecks scope, Page epoch/revision and dependency basis before the single publication. */
   acceptPage(token: InvocationToken | LeaseToken, patch: PagePatch<G, S>): MoveResult;
-  read(): AcceptanceSnapshot<G, S> | null;
+  read(): AcceptanceSnapshot<G, S, W> | null;
   /** Accepted Page moves carry their origin only to this publication, never persisted state. */
   subscribe(
-    listener: (snapshot: AcceptanceSnapshot<G, S>, origin?: MoveOrigin) => void,
+    listener: (snapshot: AcceptanceSnapshot<G, S, W>, origin?: MoveOrigin) => void,
   ): () => void;
   close(): void;
 }

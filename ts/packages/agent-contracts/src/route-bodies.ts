@@ -37,7 +37,6 @@ export const routeBindingSchema = z.object({
         .refine((source) => (source.kind === "use" ? !!source.open : !!source.derive)),
     )
     .default({}),
-  // Preserve symbol-keyed owner metadata after validating every schema entry.
   schemas: z
     .custom<SchemaTable>(
       (value) =>
@@ -111,7 +110,6 @@ export function linkRouteBodies(
   data: RouteGraphJson,
   bindings: RouteBindings,
   catalog: readonly CatalogLink[],
-  ownerSchema?: z.ZodType,
 ): RouteDiagnostic[] {
   const errors: RouteDiagnostic[] = [];
   const fail = (
@@ -163,7 +161,7 @@ export function linkRouteBodies(
   if (data.capabilities.includes("work") && !data.work)
     fail("capabilities", "work", "Work declaration", "Work capability requires Work", "policy");
   schemaRef(data.historyDetail, "historyDetail");
-  const workSchema = ownerSchema ?? (data.work?.schema && bindings.schemas[data.work.schema]);
+  const workSchema = data.work?.schema && bindings.schemas[data.work.schema];
   const workObject = workSchema && bare(workSchema);
   const workKeys = workObject instanceof z.ZodObject ? workObject.shape : {};
   const deps = (d: ReadingDependencies, path: string) => {
@@ -315,7 +313,7 @@ export function linkRouteBodies(
         "work.route",
         data.work.route,
         data.key,
-        "A referencing route cannot redeclare Work schema",
+        "Work belongs to its declaring route",
         "policy",
       );
     for (let version = 1; version < data.work.version; version++)

@@ -1,7 +1,7 @@
 import { useContext } from "react";
 import { DuctsOwner } from "../../pane-context";
 import { stableFanKey } from "../../sheet/model";
-import { subjectLink } from "../../subject-link";
+import { fansLink } from "../../../fans/neutral.ts";
 import { useRouteSearchSlice } from "#/route/activity";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
@@ -99,8 +99,7 @@ export function FanFacts({
                     <TooltipHint content={fact.says}>
                       <span>
                         <a
-                          href={subjectLink(
-                            "fans",
+                          href={fansLink(
                             roster.filter((row) => row.unitId === fact.unit).map(stableFanKey),
                             search,
                           )}

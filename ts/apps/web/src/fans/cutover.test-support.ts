@@ -31,7 +31,7 @@ export async function createWitness(
       listState: async () => ({ records: [], truncated: false, unreadable: 0, unindexed: 0 }),
     },
   });
-  for (const host of [admitted.hostOwner]) {
+  for (const host of [admitted.hostOwner, admitted.hostPresenter]) {
     const registration = ws.registerAdmitted(host);
     await registration.ready;
     closes.push(() => registration.close());
@@ -40,7 +40,7 @@ export async function createWitness(
   const connected = createWorkFeedClient(
     { subscribe: observe, dirty() {} },
     {
-      write: (key, write) => ws.write(key, "ducts", "human", write),
+      write: (key, write) => ws.write(key, key.route, "human", write),
       submit: async () => {
         throw Error("Native writes require the sealed-review fixture");
       },

@@ -177,9 +177,9 @@ export const parity = {
     "stale-base refuses without recomputing or retrying",
   ),
   C12: scenario("ducts/graph.test.ts", "native loss and repair scopes stay inside"),
-  W01: scenario("fans/cutover.test.ts", "exclusive admission has one Ducts owner"),
+  W01: scenario("fans/cutover.test.ts", "exclusive admission has independent Ducts and Fans Work"),
   W02: scenario("shell/work-feed-client.test.ts", "atomic ack-feed acquisition wins"),
-  W03: scenario("fans/cutover.test.ts", "human slot/drop/join edits"),
+  W03: scenario("fans/cutover.test.ts", "human slot/drop/flow edits"),
   W04: scenario(
     "fans/recovery-bootstrap-gap.test.ts",
     "equal-Work Undo/Redo paths render the same label-only history",
@@ -273,7 +273,8 @@ test("one builtin manifest enrolls Ducts and Fans exactly once and legacy owns n
   const fans = await loadBuiltinRoute("fans", builtinRouteStamp("fans"));
   expect(owner.ok && fans.ok).toBe(true);
   if (!owner.ok || !fans.ok) throw Error(JSON.stringify({ owner, fans }));
-  expect(fans.route.workFingerprint).toBe(owner.route.workFingerprint);
+  // Q2: each route owns its Work and admission fingerprint.
+  expect(fans.route.workFingerprint).not.toBe(owner.route.workFingerprint);
 });
 
 test("the legacy Ducts/Fans pane, reading and write census cannot shrink with the new declaration", () => {

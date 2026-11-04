@@ -14,6 +14,7 @@
  * - `designFriction`: the design friction rate in in-wg per 100 ft.
  */
 import { z } from "zod";
+import type { Immutable } from "./route-kernel-data.ts";
 import { DUCT_PARAMETER_KEYS, ductCalculationSchema } from "./ducts.ts";
 import { draftCellSchema } from "./draft.ts";
 import { salvageWork, type RouteStateSpec } from "./route-state.ts";
@@ -78,7 +79,7 @@ export const fansDocumentSchema = z.strictObject({
 });
 export type FansRouteDocument = z.infer<typeof fansDocumentSchema>;
 /** Fan cells read by domain pricing; each route retains its own writeIntent. */
-export type FansDocument = Omit<FansRouteDocument, "writeIntent">;
+export type FansDocument = Immutable<Omit<FansRouteDocument, "writeIntent">>;
 
 /** The fans Work no person has written: what a reader with no fans Work yet prices with. */
 export const neutralFansWork: FansRouteDocument = fansDocumentSchema.parse({});

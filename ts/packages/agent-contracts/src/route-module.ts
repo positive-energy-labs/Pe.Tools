@@ -1,4 +1,4 @@
-import { workOwnerBinding } from "./route-work-owner.ts";
+import type { WorkOf } from "./route-kernel-page.ts";
 import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
 import type { SchemaTable } from "./route-kernel-page.ts";
 import {
@@ -144,9 +144,6 @@ const packagePath = kernelZ
   );
 const envelopeSchema = kernelZ.strictObject({
   version: kernelZ.literal(1),
-  workOwner: kernelZ
-    .strictObject({ route: kernelZ.string(), fingerprint: kernelZ.string() })
-    .optional(),
   data: kernelZ.unknown(),
   contracts: kernelZ
     .array(kernelZ.strictObject({ id: kernelZ.string().min(1), sha256: sha }))
@@ -180,7 +177,6 @@ function fingerprintEnvelope(input: unknown): RouteFingerprintInput {
   }
   return {
     version: 1,
-    ...(parsed.workOwner && { workOwner: parsed.workOwner as RouteFingerprintInput["workOwner"] }),
     data: decoded.data,
     contracts: parsed.contracts.sort((a, b) => compare(a.id, b.id)),
     executables: parsed.executables
@@ -207,7 +203,6 @@ export async function routeFingerprint(input: RouteFingerprintInput): Promise<Ro
  * Contract bytes include catalog/schema/codec/kernel implementations or their pinned bundle.
  * This is loader evidence, not a sandbox for a malicious JavaScript loader. */
 export interface PackageRouteAdmissionEvidence {
-  readonly workOwner?: AdmittedRoute;
   /** Exact exports evaluated by the loader from the byte closure below. Admission
    * captures their references before hashing, so a replacement function cannot reuse a stamp. */
   readonly loadedBindings: unknown;
@@ -224,7 +219,6 @@ export interface PackageRouteAdmissionEvidence {
 }
 /** Build-owned source inventory. These are deployment consistency witnesses, not package bytes. */
 export interface BuiltinClosure {
-  readonly workOwner?: { readonly route: string; readonly fingerprint: RouteFingerprint };
   readonly source: "builtin-closure";
   readonly version: 1;
   readonly data: KernelGraph;
@@ -268,7 +262,6 @@ const sourceEvidence = new WeakMap<
   object,
   {
     module: unknown;
-    workOwner?: AdmittedRoute | HostAdmittedRoute;
     host?: boolean;
     closure: BuiltinClosure;
     fingerprint: string;
@@ -286,7 +279,6 @@ export function createBuiltinRouteInventory<
     string,
     {
       readonly module: unknown;
-      readonly workOwner?: AdmittedRoute | HostAdmittedRoute;
       readonly host?: boolean;
       readonly closure: { readonly envelope: BuiltinClosure; readonly fingerprint: string };
       readonly catalog: readonly CatalogLink[];
@@ -301,7 +293,6 @@ export function createBuiltinRouteInventory<
           ? captureHostModule(entry.module)
           : routeBindingSchema.parse(entry.module),
         host: entry.host,
-        workOwner: entry.workOwner,
         closure: structuredClone(entry.closure.envelope),
         fingerprint: entry.closure.fingerprint,
         catalog: entry.catalog,
@@ -362,9 +353,6 @@ function snapshotBindings(bindings: RouteBindings): RouteBindings {
       ...Object.fromEntries(
         Object.entries(bindings.schemas).map(([key, schema]) => [key, schema.clone()]),
       ),
-      ...(bindings.schemas[workOwnerBinding] && {
-        [workOwnerBinding]: bindings.schemas[workOwnerBinding],
-      }),
     }),
     codecs: Object.freeze(
       Object.fromEntries(
@@ -407,6 +395,7 @@ export class AdmittedRoute<
   S extends SchemaTable = SchemaTable,
   E extends EntryTable = EntryTable,
   Render = unknown,
+  W extends Record<string, unknown> = unknown extends WorkOf<G, S> ? Record<string, unknown> : Extract<WorkOf<G, S>, Record<string, unknown>>,
 > {
   // Type witness only; executable bindings remain in the private exact-object table.
   declare readonly [admittedTypes]: { schemas: S; entries: E; render: Render };
@@ -416,7 +405,7 @@ export class AdmittedRoute<
   readonly workFingerprint: RouteFingerprint;
   readonly resolvedWork?: {
     readonly spec: Extract<KernelGraph["work"], { schema: string }>;
-    readonly schema: z.ZodType;
+    readonly schema: z.ZodType<W>;
   };
   private constructor(
     key: symbol,
@@ -424,7 +413,6 @@ export class AdmittedRoute<
     fingerprint: RouteFingerprint,
     bindings: RouteBindings,
     source: "builtin-closure" | "pod-bytes",
-    workOwner?: AdmittedRoute,
   ) {
     if (!this.#admissionAuthority || key !== constructionKey)
       throw Error("Admission requires the checked factory");
@@ -432,13 +420,13 @@ export class AdmittedRoute<
     this.fingerprint = fingerprint;
     // The loader stamp is a digest; Work carries the source-discriminated envelope.
     this.workFingerprint =
-      workOwner?.workFingerprint ?? (`${source}:${fingerprint}` as RouteFingerprint);
+      `${source}:${fingerprint}` as RouteFingerprint;
     this.resolvedWork =
-      workOwner?.resolvedWork ??
       (data.work?.schema
         ? Object.freeze({
-            spec: this.data.work as Extract<KernelGraph["work"], { schema: string }>,
-            schema: bindings.schemas[data.work.schema]!,
+            spec: data.work,
+            // Admission links this exact schema before constructing the nominal receipt.
+            schema: bindings.schemas[data.work.schema] as z.ZodType<W>,
           })
         : undefined);
     admittedBindings.set(this, snapshotBindings(bindings));
@@ -453,9 +441,6 @@ export class AdmittedRoute<
     let envelope: RouteFingerprintInput | undefined;
     let fingerprint: RouteFingerprint | undefined;
     let loadedBindings: RouteBindings | undefined;
-    const linkedWorkOwner =
-      "source" in evidence ? sourceEvidence.get(evidence)?.workOwner : evidence.workOwner;
-    let workOwner = linkedWorkOwner instanceof AdmittedRoute ? linkedWorkOwner : undefined;
     let source: BuiltinClosure | undefined;
     let hostModule: ReturnType<typeof captureHostModule> | undefined;
     let catalog: readonly CatalogLink[] = [];
@@ -494,7 +479,6 @@ export class AdmittedRoute<
           throw Error("Unresolved executable dependency closure");
         const actual: RouteFingerprintInput = {
           version: 1,
-          ...(envelope.workOwner && { workOwner: envelope.workOwner }),
           data: envelope.data,
           contracts: await Promise.all(
             contracts.map(async (item) => ({ id: item.id, sha256: await hashBytes(item.bytes) })),
@@ -580,80 +564,7 @@ export class AdmittedRoute<
           canonicalRouteJson(decoded.data) !== canonicalRouteJson((source ?? envelope)?.data)
         )
           throw Error("Module and verified artifact data differ");
-        const dependency = (source ?? envelope)?.workOwner;
-        const work = decoded.data.work;
-        const errors: RouteDiagnostic[] = [];
-        if (work && work.route !== decoded.data.key) {
-          if (
-            !workOwner ||
-            !admittedBindings.has(workOwner) ||
-            !workOwner.resolvedWork ||
-            workOwner.data.key !== work.route ||
-            workOwner.resolvedWork.spec.route !== work.route
-          )
-            errors.push(
-              routeDiagnostic(
-                decoded.data,
-                "work.route",
-                work.route,
-                "admitted Work owner",
-                "Work owner is not admitted",
-                "missing",
-              ),
-            );
-          else if (
-            !dependency ||
-            dependency.route !== work.route ||
-            dependency.fingerprint !== workOwner.workFingerprint
-          )
-            errors.push(
-              routeDiagnostic(
-                decoded.data,
-                "work.route",
-                work.route,
-                "linked owner fingerprint",
-                "Work owner differs from the declaration's linked dependency",
-                "identity",
-              ),
-            );
-        } else {
-          workOwner = undefined;
-          if (work && !work.schema)
-            errors.push(
-              routeDiagnostic(
-                decoded.data,
-                "work.schema",
-                "",
-                "owned Work schema",
-                "Work owner must declare its schema",
-                "schema",
-              ),
-            );
-        }
-        const typedOwner = bindings.data.schemas[workOwnerBinding];
-        if (typedOwner) {
-          const owner = typedOwner;
-          const spec = owner.data.work;
-          if (
-            !workOwner ||
-            !spec?.schema ||
-            canonicalRouteJson(owner.data) !== canonicalRouteJson(workOwner.data) ||
-            owner.schemas[spec.schema] !== workOwner.resolvedWork?.schema
-          )
-            errors.push(
-              routeDiagnostic(
-                decoded.data,
-                "work.route",
-                work?.route ?? "",
-                "typed owner matching admitted owner",
-                "Typed Work owner differs from the runtime owner",
-                "identity",
-              ),
-            );
-        }
-        errors.push(
-          ...linkRouteBodies(decoded.data, bindings.data, catalog, workOwner?.resolvedWork?.schema),
-        );
+        const errors = linkRouteBodies(decoded.data, bindings.data, catalog);
         if (!loadedBindings || !sameLoadedBindings(bindings.data, loadedBindings))
           errors.push(
             routeDiagnostic(
@@ -724,7 +635,6 @@ export class AdmittedRoute<
             hostModule,
             source,
             fingerprint,
-            linkedWorkOwner,
           );
         } catch (error) {
           return {
@@ -761,7 +671,6 @@ export class AdmittedRoute<
               fingerprint,
               inspected.bindings,
               source ? "builtin-closure" : "pod-bytes",
-              workOwner,
             ),
           };
         } catch (error) {
@@ -785,7 +694,6 @@ export class AdmittedRoute<
             fingerprint,
             inspected.bindings,
             source ? "builtin-closure" : "pod-bytes",
-            workOwner,
           ),
         };
       },
@@ -857,7 +765,6 @@ export function resolveRouteBindings(registry: AdmittedRouteRegistry, candidate:
 function sameLoadedBindings(actual: RouteBindings, loaded: RouteBindings): boolean {
   const sameKeys = (a: object, b: object) =>
     canonicalRouteJson(Object.keys(a).sort()) === canonicalRouteJson(Object.keys(b).sort());
-  if (actual.schemas[workOwnerBinding] !== loaded.schemas[workOwnerBinding]) return false;
   for (const key of ["sources", "schemas", "codecs", "identities", "entries", "bodies"] as const)
     if (!sameKeys(actual[key], loaded[key])) return false;
   return (
@@ -907,7 +814,6 @@ function admitHostProjection(
   captured: HostRouteModule,
   closure: BuiltinClosure,
   fingerprint: RouteFingerprint,
-  owner?: AdmittedRoute | HostAdmittedRoute,
 ): HostRouteAdmission {
   const decoded = decodeRouteGraph(module.data);
   if (!decoded.ok) return decoded;
@@ -988,25 +894,8 @@ function admitHostProjection(
   let workFingerprint = `builtin-closure:${fingerprint}` as RouteFingerprint;
   if (work && !data.capabilities.includes("work")) fail("work", "Work capability is missing");
   if (!work && data.capabilities.includes("work")) fail("work", "Work declaration is missing");
-  if (work?.route !== undefined && work.route !== data.key) {
-    if (work.schema) fail("work.schema", "Presenter cannot redeclare owner schema");
-    if (
-      !owner ||
-      (!hostBindings.has(owner as HostAdmittedRoute) && !admittedBindings.has(owner)) ||
-      owner.data.key !== work.route ||
-      owner.resolvedWork?.spec.route !== work.route
-    )
-      fail("work.route", "Work owner is not admitted");
-    else if (
-      closure.workOwner?.route !== work.route ||
-      closure.workOwner.fingerprint !== owner.workFingerprint
-    )
-      fail("work.route", "Linked owner fingerprint differs");
-    else {
-      resolvedWork = owner.resolvedWork;
-      workFingerprint = owner.workFingerprint;
-    }
-  } else if (work) {
+  if (work) {
+    if (work.route !== data.key) fail("work.route", "Work belongs to its declaring route");
     if (!work.schema) fail("work.schema", "Owner must declare its Work schema");
     else {
       const schema = module.schemas[work.schema];

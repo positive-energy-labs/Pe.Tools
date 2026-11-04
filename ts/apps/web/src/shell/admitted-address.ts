@@ -32,7 +32,7 @@ const refused = (message: string): MoveResult => ({ kind: "refused", code: "addr
 
 /** One admitted transport; Page policy owns precedence and the owner owns the single commit. */
 export function createAdmittedAddress<G extends RouteGraphJson, S extends SchemaTable>(options: {
-  readonly route: AdmittedRoute<G>;
+  readonly route: AdmittedRoute<G, SchemaTable, import("../../../../packages/agent-contracts/src/route-kernel-bodies").EntryTable, unknown, Record<string, unknown>>;
   readonly registry: AdmittedRouteRegistry;
   readonly owner: AcceptanceOwner<G, S>;
   readonly policy: Pick<ReturnType<typeof createPagePolicy<G, S>>, "restoreState">;
