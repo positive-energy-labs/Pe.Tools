@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import * as Atom from "effect/reactivity/Atom";
+import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { createRouteOwner, useRouteOwner } from "#/shell/owner";
 import type { LensScrollIntent } from "./model";
 
@@ -28,7 +28,7 @@ function storedIntent(thread: string, urlTurn: number | null): LensScrollIntent 
       sessionStorage.getItem(intentKey(thread)) ?? "null",
     ) as StoredIntent | null;
     return stored?.fromUrl === urlTurn ? stored.intent : undefined;
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/workbench/thread-view.tsx: fallback after failure", error);
     return undefined;
   }
 }

@@ -1,3 +1,4 @@
+import type { SheetInputs } from "./model";
 /**
  * Every input this fan's walk reads, as rows that never vanish (kaitpw 2026-10-30: "whys that even
  * called an override"). A row is a value with its source: typed is a state of the row, not a list
@@ -6,18 +7,17 @@
  * per [family, type], naming the units it covers (it was one raw-key row per instance).
  */
 import {
-  DUCT_UNIT_KINDS,
-  type DuctUnitKind,
-  type DuctsInputs,
-  type DuctsRouteDocument,
-  type DuctsSheetEdits,
-  type Resolved,
+DUCT_UNIT_KINDS,
+type DuctUnitKind,
+type DuctsDesign,
+type DuctsSheetEdits,
+type Resolved,
 } from "@pe/agent-contracts";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
-import { END_KEY, FITTING_DROP_CELL, JOIN_KEY } from "@pe/ducts-domain/sheet/index";
+import { END_KEY,FITTING_DROP_CELL,JOIN_KEY } from "@pe/ducts-domain/sheet/index";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { SubjectPart } from "@pe/kit/lang/subject-text";
-import { kindDisabledReason, kindMeaning } from "./kind-meaning";
+import { kindDisabledReason,kindMeaning } from "./kind-meaning";
 import type { WorkCell } from "./sheet-cell";
 
 export type InputSection = "units" | "terminals" | "parts" | "rulings";
@@ -67,10 +67,11 @@ export type InputRow = {
 
 export interface RowContext {
   snapshot: Pick<DuctSnapshot, "nodes">;
-  doc: DuctsRouteDocument | null;
-  inputs: DuctsInputs | null;
+  doc: DuctsDesign | null;
+  inputs: SheetInputs | null;
   /** The open fan's unit: its ESP is an input of this sheet; another unit's is not. */
   fanUnitId: number | null;
+  flowConflict?: string;
   /** Proposed path keys to the subject that names them (from the fittings census). */
   pathSubject?: (key: string) => SubjectPart[] | null;
 }
@@ -111,9 +112,9 @@ export function inputRows(ctx: RowContext): InputRow[] {
       subject: [{ id }],
       ids: [id],
       source: sourceChip(resolved),
-      typed: resolved.source === "typed",
+      typed: resolved.source === "Work",
       control: { kind: "number", value: resolved.value, unit, digits, cell: cell ?? {}, edit },
-      clear: resolved.source === "typed" ? clear : null,
+      clear: resolved.source === "Work" ? clear : null,
     });
 
   // Unit kinds: one row per [family, type] over every unit of it on this walk.
@@ -135,7 +136,7 @@ export function inputRows(ctx: RowContext): InputRow[] {
       subject,
       ids,
       source: sourceChip(unit.kind),
-      typed: unit.kind.source === "typed",
+      typed: unit.kind.source === "Work",
       control: {
         kind: "kind",
         value: unit.kind.value,
@@ -149,7 +150,7 @@ export function inputRows(ctx: RowContext): InputRow[] {
         cell: node ? ctx.doc?.kinds[kindKey] : undefined,
         cellKey: node ? kindKey : null,
       },
-      clear: node && unit.kind.source === "typed" ? { kinds: { [kindKey]: null } } : null,
+      clear: node && unit.kind.source === "Work" ? { kinds: { [kindKey]: null } } : null,
     });
   }
   for (const [id, unit] of Object.entries(inputs.units)) {
@@ -166,7 +167,9 @@ export function inputRows(ctx: RowContext): InputRow[] {
       (cfm) => ({ equipmentFlows: { [id]: { cfm } } }),
       { equipmentFlows: { [id]: null } },
     );
-    if (n === ctx.fanUnitId || unit.esp.source === "typed")
+    if (n === ctx.fanUnitId && ctx.flowConflict)
+      rows[rows.length - 1]!.source = ctx.flowConflict.replace(/^fan \d+: /, "Conflict: ");
+    if (n === ctx.fanUnitId || unit.esp.source === "Work")
       number(
         `unit:${id}:esp`,
         "units",
@@ -179,7 +182,7 @@ export function inputRows(ctx: RowContext): InputRow[] {
         (inWg) => ({ esp: { [id]: { inWg } } }),
         { esp: { [id]: null } },
       );
-    if (unit.role.source === "typed")
+    if (unit.role.source === "Work")
       rows.push({
         key: `unit:${id}:role`,
         section: "units",
@@ -240,7 +243,7 @@ export function inputRows(ctx: RowContext): InputRow[] {
       subject,
       ids: subjectIds(subject),
       source: sourceChip(drop),
-      typed: drop.source === "typed",
+      typed: drop.source === "Work",
       control: {
         kind: "number",
         value: drop.value,
@@ -249,7 +252,7 @@ export function inputRows(ctx: RowContext): InputRow[] {
         cell: ctx.doc?.assumptions[FITTING_DROP_CELL(key)] ?? {},
         edit: (inWg) => ({ fittingDrops: { [key]: { inWg } } }),
       },
-      clear: drop.source === "typed" ? { fittingDrops: { [key]: null } } : null,
+      clear: drop.source === "Work" ? { fittingDrops: { [key]: null } } : null,
     });
   }
   for (const ruling of inputs.rulings.joins) {
@@ -264,7 +267,7 @@ export function inputRows(ctx: RowContext): InputRow[] {
       source: "typed",
       typed: true,
       control: { kind: "text", value: ruling.verdict },
-      clear: { joins: [{ pair: ruling.pair, verdict: "clear" }] },
+      clear: { joins: [{ pair: [ruling.pair[0], ruling.pair[1]], verdict: "clear" }] },
     });
   }
   for (const ruling of inputs.rulings.ends) {

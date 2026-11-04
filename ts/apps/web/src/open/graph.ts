@@ -1,3 +1,5 @@
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-open Declaration 117 > 60 after kernel defaults. Document launch/close, destination selection and machine/world readings remain distinct.
 import { z } from "zod";
 import { instancesActions, pane, split, type RouteGraph } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
@@ -24,6 +26,8 @@ const table = z
   .default(() => ({ query: "", sorts: [] }));
 export const openPageSchema = z.object({
   epoch: z.number().default(0),
+  session: z.string().default(""),
+  document: z.string().default(""),
   draft,
   table,
 });
@@ -38,7 +42,26 @@ const rowVerbs = Object.assign(
   { ids: ["open", "start", "stop", "restart", "close"] },
 );
 
-export const openGraph: RouteGraph<OpenPageState> = {
+export const openControls: RouteGraph<OpenPageState> = defineRouteGraph({
+  directory: {
+    path: "/open",
+    title: "Open",
+    label: "Revit",
+    exposure: "Main",
+    runtimeNeed: "Revit for model actions; browsing saved data is separate",
+    icon: "Server",
+    category: "Start / open work",
+    blurb:
+      "Start a Revit, open a model, and see which Revit holds it: the launcher, every recent document across installed years, and each running Revit with its shape, documents and verbs.",
+    aliases: ["launcher", "model", "session", "documents"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: "compact",
+    },
+  },
   key: "instances",
   address: "open",
   name: "Open",
@@ -96,7 +119,19 @@ export const openGraph: RouteGraph<OpenPageState> = {
       load: () => import("./graph-seeds").then((m) => m.openSeeds["no-revit"]!),
     },
   },
+  subjectField: {
+    field: "document",
+    noun: "document",
+    keyKind: "name",
+    roster: "recents",
+    detail: "machine",
+    pane: "bay",
+    // A path is the key; a cloud path carries project/model GUIDs, so the label is the file name.
+    show: (id: string) => id.replace(/^.*[\\/}]/, ""),
+  },
   fields: {
+    session: { ...field(z.string().default(""), {}), role: "selection" },
+    document: { ...field(z.string().default(""), {}) },
     epoch: {
       ...field(openPageSchema.shape.epoch, {}, { encode: String, decode: Number }),
       role: "transient",
@@ -117,25 +152,19 @@ export const openGraph: RouteGraph<OpenPageState> = {
   },
   readings: {
     machine: {
-      kind: "use",
       source: "open.machine",
-      retire: "page",
       args: (p) => p.epoch,
     },
     recents: {
-      kind: "use",
       source: "open.recents",
-      retire: "page",
       args: (p) => p.epoch,
     },
-    threads: { kind: "use", source: "open.threads", retire: "page", args: (p) => p.epoch },
+    threads: {  source: "open.threads", args: (p) => p.epoch },
     receipts: {
-      kind: "use",
       source: "open.receipts",
-      retire: "page",
       args: (p) => p.epoch,
     },
-    world: { kind: "feed", source: "open.world", retire: "page", args: (p) => p.epoch },
+    world: { kind: "feed", source: "open.world", args: (p) => p.epoch },
   },
   verbs: {
     refresh: pageVerb(
@@ -204,10 +233,55 @@ export const openGraph: RouteGraph<OpenPageState> = {
       label: "History",
       purpose: "Inspect lifecycle receipts and world events",
       draws: ["receipts"],
-      verbs: [],
       history: { receipts: "receipts" },
     },
   },
   layout: split("open-body", { axis: "v", sized: "end", size: 140 }, pane("bay"), pane("history")),
-  stages: { open: { word: "Opening", panes: ["bay", "history"], verbs: ["refresh"] } },
-};
+  stages: { open: { word: "Opening", verbs: ["refresh"] } },
+});
+
+export const openGraph: RouteGraph<OpenPageState> = defineRouteGraph({
+  ...openControls,
+  directory: {
+    ...openControls.directory!,
+    title: "Open document",
+    blurb: "Choose a document and its destination Revit.",
+    aliases: ["documents", "model", "launcher"],
+  },
+  subject: (p) => p.draft.doc ?? "Choose a document",
+  fields: {
+    ...openControls.fields,
+    document: {
+      ...openControls.fields.document,
+      role: "subject",
+      picker: {
+        reading: "recents",
+        placeholder: "Choose a document",
+        options: (value) =>
+          ((value as import("./sources").Recents)?.result?.recents ?? []).map((row) => ({
+            id: row.path,
+            label: row.title,
+          })),
+      },
+    },
+  },
+  transition: (current, patch) => ({
+    patch: {
+      ...patch,
+      ...(patch.document !== undefined
+        ? { draft: { ...current.draft, doc: patch.document } }
+        : patch.draft
+          ? { document: patch.draft.doc ?? "" }
+          : {}),
+    },
+  }),
+  verbs: {
+    refresh: openControls.verbs.refresh!,
+    open: openControls.verbs.open!,
+    close: openControls.verbs.close!,
+  },
+  panes: {
+    ...openControls.panes,
+    bay: { ...openControls.panes.bay!, label: "Documents", verbs: ["open", "close"] },
+  },
+});

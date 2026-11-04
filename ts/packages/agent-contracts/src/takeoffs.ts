@@ -1,3 +1,4 @@
+import { writeIntentSchema } from "./write-intent.ts";
 import { z } from "zod";
 
 import { type RouteStatePatch, type RouteStateSpec } from "./route-state.ts";
@@ -362,7 +363,7 @@ const tupleOf = (key: string, length: number): string[] | null => {
       tupleKey(parts) === key
       ? parts
       : null;
-  } catch {
+  } catch (error) { console.warn("ts/packages/agent-contracts/src/takeoffs.ts: fallback after failure", error);
     return null;
   }
 };
@@ -402,6 +403,7 @@ const verdictSchema = z.enum(["accept", "dismiss"]);
  */
 const takeoffsDocumentSchema = z
   .strictObject({
+    writeIntent: writeIntentSchema.optional(),
     edits: z.record(keyed(2, "edit"), editCellSchema).default({}),
     bases: z.record(z.string(), roomEditSchema).default({}),
     /** Keyed by candidate (`<view>:<elementId>`). */

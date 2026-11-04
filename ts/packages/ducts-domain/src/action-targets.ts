@@ -1,9 +1,11 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
 /**
  * What a heal or fan verb acts on, decided from plain data: the snapshot, the Work document, the
  * chosen system and the selected element. Each throws the sentence that says why there is no
  * target; the route's `ready` shows it and the verb refuses with it.
  */
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/agent-contracts";
 
 import { EMPTY_CATALOGS, type Catalogs } from "./catalog.ts";
 import { fanCandidates, fansOwedBase } from "./fan-assignment.ts";
@@ -24,7 +26,7 @@ const selectedId = (selected: string) => {
 /** The group's heal plan over the raw snapshot the route read; throws why there is none. */
 export const healOf = (
   snapshot: DuctSnapshot,
-  doc: DuctsRouteDocument | null,
+  doc: DuctsDesign | null,
   group: string | undefined,
 ) => {
   if (!group) throw Error("Name the duct network to heal");
@@ -36,13 +38,13 @@ export const healOf = (
 /** Pe's ESP of a group now (the largest path total with the edit cells), with what finds it again. */
 export const espBefore = (
   snapshot: DuctSnapshot,
-  doc: DuctsRouteDocument | null,
+  doc: DuctsDesign | null,
   grids: Grids | null,
   catalogs: Catalogs | null,
   group: string,
 ) => {
   const surveyed = grids
-    ? price(snapshot, grids, doc, catalogs ?? EMPTY_CATALOGS)
+    ? price(snapshot, grids, doc, (doc) ?? neutralFansWork, catalogs ?? EMPTY_CATALOGS)
     : survey(snapshot, doc);
   const g = surveyed.snapshot.groups.find((x) => x.id === group);
   const ids = [...surveyed.snapshot.nodes, ...surveyed.snapshot.segments]
@@ -61,7 +63,7 @@ export const espBefore = (
  */
 export const healTarget = (
   snapshot: DuctSnapshot,
-  doc: DuctsRouteDocument | null,
+  doc: DuctsDesign | null,
   system: string,
   selected: string,
   previewed: string | null,
@@ -101,7 +103,7 @@ export const healTarget = (
  */
 export const offeredFan = (
   snapshot: DuctSnapshot,
-  doc: DuctsRouteDocument | null,
+  doc: DuctsDesign | null,
   grids: Grids | null,
   catalogs: Catalogs | null,
   system: string,
@@ -110,7 +112,7 @@ export const offeredFan = (
   name: (id: number) => string | null,
 ) => {
   if (!system) throw Error("Choose a system to make its fan");
-  const priced = grids ? price(snapshot, grids, doc, catalogs ?? EMPTY_CATALOGS) : null;
+  const priced = grids ? price(snapshot, grids, doc, (doc) ?? neutralFansWork, catalogs ?? EMPTY_CATALOGS) : null;
   const owed = fansOwedBase(
     snapshot,
     (priced ?? survey(snapshot, doc)).roles,

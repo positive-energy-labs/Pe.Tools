@@ -1,3 +1,4 @@
+import { chatSeedChoices } from "./seed-choices";
 /**
  * Chat seed data — plain values, no provider, no behaviour. `?fixture=<action>` mounts one of these
  * through the kernel's fixture owner; nothing here renders or holds state. Each seed is a thread body
@@ -31,6 +32,7 @@ function log(
     | { kind: "prompt"; text: string; attachments?: PromptAttachment[]; mentions?: Mention[] }
     | { kind: "update"; update: { sessionUpdate: string; [key: string]: unknown } }
     | Omit<Extract<HarnessEvent, { kind: "permission_request" }>, "seq" | "at" | "turnId">
+    | Omit<Extract<HarnessEvent, { kind: "question_request" }>, "seq" | "at" | "turnId">
     | { kind: "turn_end"; stopReason: string }
   )[]
 ): HarnessEvent[] {
@@ -134,6 +136,44 @@ export const CHAT_SEED_STATE: ChatState = {
         { optionId: "always", name: "Always allow", kind: "allow_always" },
         { optionId: "reject", name: "Reject", kind: "reject_once" },
       ],
+    },
+  ),
+};
+
+/** Pea waiting on an AskUserQuestion, in the claude-agent-acp form shape: a pick plus its "Other" box. */
+const CHAT_ASK_STATE: ChatState = {
+  ...THREAD,
+  running: true,
+  events: log(
+    { kind: "prompt", text: "Stage one input for FC-4 supply and preview it." },
+    say("Neither FC-4 supply terminal has a design airflow, and no source supplies one."),
+    {
+      kind: "question_request",
+      requestId: "ask-input",
+      message: "Which single input should I stage and preview?",
+      requestedSchema: {
+        type: "object",
+        properties: {
+          question_0: {
+            type: "string",
+            title: "Input",
+            oneOf: [
+              {
+                const: "Terminal cfm (you give it)",
+                title: "Terminal cfm (you give it)",
+                description: "Type the terminal and the cfm in Other, e.g. 8781191 = 150 cfm.",
+              },
+              { const: "Stop at preview", title: "Stop at preview" },
+            ],
+          },
+          question_0_custom: {
+            type: "string",
+            title: "Other",
+            description:
+              "Type your own answer, or add a note to the option you chose above (optional).",
+          },
+        },
+      },
     },
   ),
 };
@@ -536,49 +576,49 @@ const READINGS = { head: HEAD, machine: CATALOG.machine, receipts: [], capabilit
 /** One seed per action. The map is total: every action key has a moment. */
 export const CHAT_SEEDS = {
   send: {
-    title: "an idle thread ready for a prompt",
+    title: chatSeedChoices.send,
     work: CHAT_SEED_STATE,
     readings: READINGS,
     page: {},
   },
   new: {
-    title: "a thread to leave for a fresh one",
+    title: chatSeedChoices.new,
     work: CHAT_SEED_STATE,
     readings: READINGS,
     page: {},
   },
   diagram: {
-    title: "pea drew a duct system, after one rejected diagram call",
+    title: chatSeedChoices.diagram,
     work: CHAT_DIAGRAM_STATE,
     readings: READINGS,
     page: {},
   },
   attach: {
-    title: "the user attached a photo, a CSV and a PDF; pea read all three",
+    title: chatSeedChoices.attach,
     work: CHAT_ATTACH_STATE,
     readings: READINGS,
     page: {},
   },
   skill: {
-    title: "the user ran a slash skill; the harness advertised its commands",
+    title: chatSeedChoices.skill,
     work: CHAT_SKILL_STATE,
     readings: READINGS,
     page: {},
   },
   mention: {
-    title: "the user mentioned a document and a skill with @; pea used their ids",
+    title: chatSeedChoices.mention,
     work: CHAT_MENTION_STATE,
     readings: READINGS,
     page: {},
   },
   closed: {
-    title: "a thread whose bound session has closed; send refuses until a live document is chosen",
+    title: chatSeedChoices.closed,
     work: CHAT_ATTACH_STATE,
     readings: { ...READINGS, head: CLOSED_HEAD },
     page: {},
   },
   granted: {
-    title: "a human added a second document to the thread; it targets two",
+    title: chatSeedChoices.granted,
     work: CHAT_SEED_STATE,
     readings: {
       ...READINGS,
@@ -600,13 +640,19 @@ export const CHAT_SEEDS = {
     },
     page: {},
   },
+  ask: {
+    title: chatSeedChoices.ask,
+    work: CHAT_ASK_STATE,
+    readings: READINGS,
+    page: {},
+  },
   stop: {
-    title: "pea mid-turn, with an approval owed",
+    title: chatSeedChoices.stop,
     work: CHAT_SEED_STATE,
     readings: READINGS,
     page: {},
   },
-} satisfies Record<string, Seed<ChatState, ChatReading, ChatPage>>;
+} satisfies Record<keyof typeof chatSeedChoices, Seed<ChatState, ChatReading, ChatPage>>;
 
 /** Chat's draft belongs to `createChatPageStore`; the route manifest owns no Page fields. */
 export type ChatPage = Record<string, never>;

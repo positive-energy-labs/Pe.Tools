@@ -54,9 +54,8 @@ test.each(["edits", null])(
         compact
       />,
     );
-    const revert = screen.getByRole("button", { name: "Revert 2 edit" });
-    fireEvent.click(revert);
-    expect(write).not.toHaveBeenCalled();
+    // One press is one undoable journal step; no arming.
+    const revert = screen.getByRole("button", { name: "Revert 2 edits" });
     fireEvent.click(revert);
     await waitFor(() => expect(done).toHaveBeenCalledOnce());
     expect(write).toHaveBeenCalledWith(
@@ -65,7 +64,6 @@ test.each(["edits", null])(
         { path: [...(segment === null ? [] : [segment]), "contested", "edit"] },
       ],
       8,
-      { press: expect.any(String) },
     );
     const remaining = { contested: { suggestion: { value: 3 } }, locked: { edit: { value: 4 } } };
     expect(envelope.doc).toEqual(segment === null ? remaining : { [segment]: remaining });

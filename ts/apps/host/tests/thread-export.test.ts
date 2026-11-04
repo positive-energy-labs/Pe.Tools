@@ -1,3 +1,4 @@
+import { consentService, harnessThreads } from "./effect-test.ts";
 import { createHash } from "node:crypto";
 import {
   mkdirSync,
@@ -14,7 +15,7 @@ import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { emptyThreadHead, emptyThreadLifecycle, type HarnessEvent } from "@pe/agent-contracts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
-import { createHarnessThreads } from "../src/harness/threads.ts";
+import type { HarnessThreads } from "../src/harness/threads.ts";
 import { exportThread } from "../src/thread-export.ts";
 import { HostLog } from "../src/host-log.ts";
 import type { Providers } from "../src/harness/providers.ts";
@@ -92,7 +93,8 @@ test("public export pins the full durable thread, including tool results, withou
   const durableLog = new HostLog(join(root, ".log"));
   for (const event of events) durableLog.append({ kind: "thread", thread: "thread-1", event });
   durableLog.append({ kind: "thread", thread: "unrelated", event: events[0]! });
-  const host = createHarnessThreads({
+  const host = await harnessThreads({
+    runs: consentService(),
     log: durableLog,
     root,
     worldRoot: root,

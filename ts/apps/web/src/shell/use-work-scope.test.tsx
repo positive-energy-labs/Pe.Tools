@@ -1,6 +1,8 @@
+import { testSources, testSubject, testFields, testReadings } from "../test-route-subject";
 import { scheduleQueries } from "../../../../packages/mcps/src/shared/query-client";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
+import { Suspense, startTransition, useLayoutEffect, useState } from "react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -57,14 +59,14 @@ vi.mock("../route/host", async (importOriginal) => ({
 
 const DOC = address("C:/Jobs/Level 1.rvt");
 const workSchema = z.object({ note: z.string().default("") });
-const graph = (
-  needs?: RouteGraph["needs"],
-): RouteGraph<Record<string, never>, { note: string }> => ({
+const graph = (needs?: RouteGraph["needs"]): RouteGraph<{}, { note: string }> => ({
+  ...testSubject,
+  subjectField: { ...testSubject.subjectField, pane: "only" },
   key: "scope-proof",
   address: "scope-proof",
   name: "Scope proof",
-  fields: {},
-  readings: {},
+  fields: { ...testFields },
+  readings: { ...testReadings },
   verbs: {},
   panes: { only: { label: "Only", purpose: "Proof", draws: [], verbs: [] } },
   layout: pane("only"),
@@ -170,6 +172,46 @@ async function probe(
   return () => ports!;
 }
 const pin = (target: unknown) => `?target=${encodeURIComponent(JSON.stringify(target))}`;
+
+test("aborted concurrent render cannot publish a different subject Work through committed ports", async () => {
+  const g: RouteGraph<{ subject: string }, { note: string }> = {
+    ...graph(), work: workSchema, workSubject: "subject",
+    fields: { ...testFields, subject: { ...field(z.string().default("A"), {}), role: "query" } },
+  };
+  let committed: WorkScopePorts<{ note: string }> | undefined;
+  let choose: (subject: string) => void = () => {};
+  let attempted = false;
+  const pending = new Promise<never>(() => {});
+  function Probe() {
+    const [subject, setSubject] = useState("A");
+    choose = setSubject;
+    const ports = useWorkScope(g, { subject }, { url: false });
+    useLayoutEffect(() => { committed = ports; });
+    if (subject === "B") { attempted = true; throw pending; }
+    return <span>{subject}</span>;
+  }
+  const root = createRootRoute();
+  const route = createRoute({
+    getParentRoute: () => root, path: "/abort",
+    component: () => <Suspense fallback="pending"><Probe /></Suspense>,
+  });
+  const router = createRouter({ routeTree: root.addChildren([route]),
+    history: createMemoryHistory({ initialEntries: ["/abort"] }) });
+  await router.load();
+  const rendered = render(<RouterProvider router={router} />);
+  await waitFor(() => expect(committed?.getSnapshot().workKey?.work).toBe("A"));
+  const before = committed!.getSnapshot();
+  const published = vi.fn();
+  const release = committed!.subscribe(published);
+  await act(async () => { startTransition(() => choose("B")); });
+  expect(attempted).toBe(true);
+  expect(committed!.getSnapshot()).toBe(before);
+  expect(published).not.toHaveBeenCalled();
+  act(() => choose("C"));
+  await waitFor(() => expect(committed!.getSnapshot().workKey?.work).toBe("C"));
+  expect(rendered.getByText("C")).toBeTruthy();
+  release();
+});
 
 test("a Work-free graph resolves the host Target and reads no document", async () => {
   const ports = await probe(graph());
@@ -364,7 +406,7 @@ test("a stale write raises conflict; writing verbs and undo refuse until an acce
   const ports = await probe(noted, pin({ kind: "open", ref }));
   await waitFor(() => expect(ports().getSnapshot().work).not.toBeNull());
   const key = ports().getSnapshot().work!.handle.key;
-  const owner = createGraphMount(noted, { sources: {}, ...ports() });
+  const owner = createGraphMount(noted, { sources: { ...testSources }, ...ports() });
   const release = owner.connect();
   host.write.mockResolvedValue(STALE);
   expect(await owner.control("note").run()).toMatchObject({ state: "stale" });
@@ -401,7 +443,7 @@ test("a stale write raises conflict; writing verbs and undo refuse until an acce
   owner.dispose();
 });
 
-test("unreadable Work offers the start-fresh verb; its required confirm commits once and drops history", async () => {
+test("unreadable Work offers the start-fresh verb; its shown review commits once and drops history", async () => {
   unreadable = true;
   world.sessions = { s1: [{ openId: "o2", title: "Level 2", address: address("C:/Jobs/L2.rvt") }] };
   const ref = { session: "s1", openId: "o2" };
@@ -409,16 +451,15 @@ test("unreadable Work offers the start-fresh verb; its required confirm commits 
   await waitFor(() => expect(ports().status.unreadable).toBe(true));
   const key = ports().getSnapshot().unreadable!;
   expect(ports().getSnapshot().work).toBeNull();
-  const owner = createGraphMount(noted, { sources: {}, ...ports() });
+  const owner = createGraphMount(noted, { sources: { ...testSources }, ...ports() });
   expect(owner.verbs[START_FRESH_VERB]).toMatchObject({
     kind: "recovery",
     label: "Start fresh",
-    review: "required",
+    review: "shown",
   });
   expect(owner.control(START_FRESH_VERB).refusal).toBeNull();
   const review = await owner.control(START_FRESH_VERB).run();
   expect(review).toMatchObject({ state: "review", ticket: { evidence: { work: workKey(key) } } });
-  expect(await owner.control(START_FRESH_VERB).run({})).toMatchObject({ state: "refused" });
   expect(owner.reviews.has(START_FRESH_VERB)).toBe(true);
   expect(host.fresh).not.toHaveBeenCalled();
   const accepted = ack({
@@ -432,7 +473,7 @@ test("unreadable Work offers the start-fresh verb; its required confirm commits 
     aside: "work.aside.json",
   });
   host.fresh.mockResolvedValue({ ok: true, revision: 4, write: accepted });
-  const done = await owner.control(START_FRESH_VERB).run({ confirm: true });
+  const done = await owner.control(START_FRESH_VERB).run();
   expect(done).toMatchObject({
     state: "done",
     kind: "recovery",
@@ -448,7 +489,7 @@ test("unreadable Work offers the start-fresh verb; its required confirm commits 
     basis: { workKey: workKey(key) },
   });
   // The review is spent: the next press opens a new one, it never commits.
-  expect(await owner.control(START_FRESH_VERB).run({ confirm: true })).toMatchObject({
+  expect(await owner.control(START_FRESH_VERB).run()).toMatchObject({
     state: "review",
   });
   expect(host.fresh).toHaveBeenCalledTimes(1);
@@ -460,7 +501,7 @@ test("readable Work has nothing to start fresh", async () => {
   const ports = await probe(noted, pin({ kind: "open", ref: { session: "s1", openId: "o1" } }));
   await waitFor(() => expect(ports().getSnapshot().work).not.toBeNull());
   expect(ports().status.unreadable).toBe(false);
-  const owner = createGraphMount(noted, { sources: {}, ...ports() });
+  const owner = createGraphMount(noted, { sources: { ...testSources }, ...ports() });
   expect(owner.control(START_FRESH_VERB).refusal).toBe(
     "This Work is readable; there is nothing to recover",
   );
@@ -473,14 +514,19 @@ test("readable Work has nothing to start fresh", async () => {
 type Subject = { ws: string };
 let latest: GraphMount<Subject, { note: string }> | null = null;
 const subjectGraph: RouteGraph<Subject, { note: string }> = {
+  ...testSubject,
   key: "subject-proof",
   address: "subject-proof",
   name: "Subject proof",
   needs: "document",
   work: workSchema,
   workSubject: "ws",
-  fields: { ws: { ...field(z.string().default(""), {}), role: "subject" } },
-  readings: {},
+  subjectField: { ...testSubject.subjectField, kind: undefined, field: "ws", pane: "only" },
+  fields: {
+    testSelected: testFields.testSelected,
+    ws: { ...field(z.string().default(""), {}), role: "subject" },
+  },
+  readings: { ...testReadings },
   verbs: {
     note: workVerb(
       { label: "note", input: z.strictObject({}).default({}) },
@@ -512,7 +558,7 @@ const subjectGraph: RouteGraph<Subject, { note: string }> = {
 const subjectRoute = routeFromGraph(
   subjectGraph,
   {
-    sources: {},
+    sources: { ...testSources },
     bodies: {
       only: ({ owner }) => {
         latest = owner;
@@ -633,8 +679,9 @@ test("unreadable Work puts start-fresh on the stage; its review commits once thr
   const id = crypto.randomUUID();
   const { view, owner } = await mountSubject(`${pin({ kind: "open", ref })}&ws=broken-${id}`);
   const situation = within(await view.findByLabelText("Situation"));
+  fireEvent.click(situation.getByRole("button", { name: /more Scope|more Subject/ }));
   const button = await waitFor(() => {
-    const fresh = situation.getByRole("button", { name: "Start fresh" });
+    const fresh = within(document.body).getByRole("button", { name: "Start fresh" });
     expect(fresh.getAttribute("aria-disabled")).not.toBe("true");
     return fresh;
   });
@@ -648,7 +695,7 @@ test("unreadable Work puts start-fresh on the stage; its review commits once thr
     revision: 4,
     write: ack({ key, kind: "start-fresh", by: "human", revision: 4, patches: [], inverse: [] }),
   });
-  fireEvent.click(situation.getByRole("button", { name: "Start fresh" }));
+  fireEvent.click(within(document.body).getByRole("button", { name: "Commit Start fresh" }));
   await waitFor(() => expect(host.fresh).toHaveBeenCalledWith(key));
   await waitFor(() =>
     expect(owner().results.get(START_FRESH_VERB)).toMatchObject({
@@ -674,7 +721,7 @@ const salvageGraph: RouteGraph<Subject, { note: string }> = {
 const salvageRoute = routeFromGraph(
   salvageGraph,
   {
-    sources: {},
+    sources: { ...testSources },
     bodies: {
       only: ({ owner }) => {
         latest = owner;
@@ -770,7 +817,8 @@ test("carry-over is one undoable Work write, offered only while readable Work la
     expect.objectContaining({ binding: "workspace", work: `a-${id}` }),
   );
   const key = owner().snapshot().work!.handle.key;
-  const button = situation.getByRole("button", { name: "Carry over" });
+  fireEvent.click(situation.getByRole("button", { name: /more Salvage/ }));
+  const button = within(document.body).getByRole("button", { name: "Carry over" });
   fireEvent.click(button);
   const review = await view.findByLabelText("Carry over review");
   expect(review.textContent).toContain("Carry over: review the proposed changes.");
@@ -793,7 +841,7 @@ test("carry-over is one undoable Work write, offered only while readable Work la
       }),
     };
   });
-  fireEvent.click(situation.getByRole("button", { name: "Carry over" }));
+  fireEvent.click(within(document.body).getByRole("button", { name: "Commit Carry over" }));
   await waitFor(() =>
     expect(owner().results.get("work.salvage")).toMatchObject({
       state: "done",

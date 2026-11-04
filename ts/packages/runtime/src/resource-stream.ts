@@ -1,5 +1,7 @@
 import {
   READING_MAX_FRAME_BYTES,
+  READING_MAX_KEYS,
+  readingRequestSchema,
   READING_MAX_REQUEST_BYTES,
   readingKey,
   readingRequestsSchema,
@@ -7,6 +9,10 @@ import {
   type ReadingRequest,
   type ThreadHead,
 } from "@pe/agent-contracts";
+import {
+  workFeedFailureMessage,
+  workFeedFailureSchema,
+} from "../../agent-contracts/src/work-journal-door.ts";
 import type { RouteWorkspace } from "./route-workspace.ts";
 import type { OwnerValue } from "./owner-read.ts";
 
@@ -34,16 +40,128 @@ export function observeResources(
   return (request, publish, after) => {
     const key = readingKey(request);
     const accept = (value: OwnerValue<unknown>) => publish(resourceSnapshot(key, value));
+    if ((request.kind === "work" || request.kind === "work-acks") && request.admission) {
+      let closed = false;
+      let release = () => {};
+      const scope = request.kind === "work" ? request : request.work;
+      const admission = request.admission;
+      let stopAdmission = () => {};
+      const refuse = (
+        failure: import("../../agent-contracts/src/work-journal-door.ts").WorkFeedFailure,
+      ) => {
+        if (closed) return;
+        closed = true;
+        release();
+        stopAdmission();
+        publish({ kind: "failure", key, error: workFeedFailureMessage(failure), failure });
+      };
+      stopAdmission = work.observeAdmission(admission.routeKey, () => {
+        void work.admitFeed(scope, admission).then((failure) => {
+          if (failure) refuse(failure);
+        });
+      });
+      void work.admitFeed(scope, admission).then(
+        (failure) => {
+          if (closed) return;
+          if (failure) return refuse(failure);
+          release =
+            request.kind === "work"
+              ? work.observe(
+                  scope,
+                  scope.route,
+                  (value) => {
+                    if (!closed) accept(value);
+                  },
+                  true,
+                  true,
+                )
+              : work.observeFeed(
+                  scope,
+                  (value) => {
+                    if (!closed) accept({ value });
+                  },
+                  (ack) => publish({ kind: "event", key, value: ack }),
+                  (error) => {
+                    const typed = workFeedFailureSchema.safeParse(error);
+                    if (typed.success) return refuse(typed.data);
+                    publish({
+                      kind: "failure",
+                      key,
+                      error: error instanceof Error ? error.message : String(error),
+                    });
+                  },
+                );
+        },
+        (error) => {
+          refuse({ kind: "failed", code: "WorkAdmissionFailed", message: String(error) });
+        },
+      );
+      return () => {
+        closed = true;
+        release();
+        stopAdmission();
+      };
+    }
+    if (
+      (request.kind === "work" || request.kind === "work-acks") &&
+      work.requiresAdmission(request.kind === "work" ? request.route : request.work.route)
+    ) {
+      const failure = {
+        kind: "failed" as const,
+        code: "WorkAdmissionRequired",
+        message: "Admitted Work requires the route fingerprint",
+      };
+      publish({ kind: "failure", key, error: failure.message, failure });
+      return () => {};
+    }
     if (request.kind === "work") return work.observe(request, request.route, accept);
     if (request.kind === "thread-head") return heads.observe(request.thread, accept);
     if (request.kind === "work-acks")
-      return work.observeAccepted(request.work, (ack) =>
-        publish({ kind: "event", key, value: ack }),
+      return work.observeAccepted(
+        request.work,
+        (ack) => publish({ kind: "event", key, value: ack }),
+        (error) =>
+          publish({
+            kind: "failure",
+            key,
+            error: error instanceof Error ? error.message : String(error),
+          }),
       );
     if (host) return host(request, publish, after);
     publish({ kind: "failure", key, error: `Resource '${request.kind}' is unavailable` });
     return () => {};
   };
+}
+
+// Subscription ownership is host-local and scoped to the same observer as the stream.
+const connections = new WeakMap<
+  ResourceObserver,
+  Map<string, (add: ReadingRequest[], remove: string[]) => void>
+>();
+export async function updateResourceSubscriptions(
+  request: Request,
+  observe: ResourceObserver,
+): Promise<Response> {
+  const id = new URL(request.url).searchParams.get("connection") ?? "";
+  const update = connections.get(observe)?.get(id);
+  if (!update) return Response.json({ error: "Reading connection retired" }, { status: 409 });
+  const raw = await request.text();
+  if (new TextEncoder().encode(raw).byteLength > READING_MAX_REQUEST_BYTES)
+    return Response.json({ error: "Resource request is too large" }, { status: 400 });
+  try {
+    const value = JSON.parse(raw);
+    const add = readingRequestSchema.array().max(READING_MAX_KEYS).parse(value.add);
+    if (
+      !Array.isArray(value.remove) ||
+      value.remove.length > READING_MAX_KEYS ||
+      value.remove.some((key: unknown) => typeof key !== "string")
+    )
+      throw Error("Invalid removals");
+    update(add, value.remove);
+    return Response.json({ ok: true });
+  } catch {
+    return Response.json({ error: "Invalid resource keys" }, { status: 400 });
+  }
 }
 
 /** The pseudo-key of the one host log lane in the ready set. */
@@ -61,8 +179,8 @@ export function resourceResponse(
   limits = {
     frameBytes: READING_MAX_FRAME_BYTES,
     worldEvents: 64,
-    // One Work's retained window is 100 writes (`RouteWorkspace.observeAccepted`); replay must fit.
-    workAckEvents: 128,
+    // Durable Work replay must not be truncated by the connection mailbox.
+    workAckEvents: Infinity,
     stallMs: 10_000,
     logFrames: 4096,
   },
@@ -94,7 +212,12 @@ export function resourceResponse(
   let closed = false;
   let demand: (() => void) | undefined;
   let stalled: ReturnType<typeof setTimeout> | undefined;
-  const releases: Array<() => void> = [];
+  const releases = new Map<string, () => void>();
+  const connection = url.searchParams.get("connection");
+  let registry = connections.get(observe);
+  if (!registry) connections.set(observe, (registry = new Map()));
+  if (connection && registry.has(connection))
+    return Response.json({ error: "Connection already exists" }, { status: 409 });
   let controller: ReadableStreamDefaultController<Uint8Array>;
   const encode = (frame: ReadingFrame) =>
     encoder.encode(
@@ -120,7 +243,9 @@ export function resourceResponse(
     closed = true;
     clearTimeout(stalled);
     request.signal.removeEventListener("abort", abort);
-    for (const release of releases.splice(0)) release();
+    if (connection) registry!.delete(connection);
+    for (const release of releases.values()) release();
+    releases.clear();
     pending.clear();
     ready.clear();
     tails.clear();
@@ -170,7 +295,8 @@ export function resourceResponse(
     try {
       const encoded = encode(frame);
       if (encoded.byteLength <= limits.frameBytes) bytes = encoded;
-    } catch {
+    } catch (error) {
+      console.warn("ts/packages/runtime/src/resource-stream.ts: fallback after failure", error);
       // A bad owner value fails only this key; healthy resources keep the same connection.
     }
     try {
@@ -209,17 +335,41 @@ export function resourceResponse(
           abort();
           return;
         }
-        for (const [key, value] of requested) {
-          if (closed) break;
-          if (value.kind === "world") publish({ kind: "gap", key, dropped: null });
-          try {
-            const release = observe(value, publish, after);
-            if (closed) release();
-            else releases.push(release);
-          } catch (error) {
-            publish({ kind: "failure", key, error: String(error) });
+        const update = (add: ReadingRequest[], remove: string[]) => {
+          if (closed) return;
+          for (const key of remove) {
+            requested.delete(key);
+            releases.get(key)?.();
+            releases.delete(key);
+            pending.delete(key);
+            ready.delete(key);
+            tails.delete(key);
+            rejected.delete(key);
           }
-        }
+          for (const value of add) {
+            const key = readingKey(value);
+            if (releases.has(key)) continue;
+            requested.set(key, value);
+            rejected.set(
+              key,
+              encode({
+                kind: "failure",
+                key,
+                error: "Resource value exceeds the frame limit or cannot be serialized.",
+              }),
+            );
+            if (value.kind === "world") publish({ kind: "gap", key, dropped: null });
+            try {
+              const release = observe(value, publish, after);
+              if (closed) release();
+              else releases.set(key, release);
+            } catch (error) {
+              publish({ kind: "failure", key, error: String(error) });
+            }
+          }
+        };
+        if (connection) registry!.set(connection, update);
+        update([...requested.values()], []);
       },
       pull() {
         clearTimeout(stalled);

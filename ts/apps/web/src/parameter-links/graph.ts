@@ -1,4 +1,7 @@
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-parameter-links Declaration 83 > 60 after kernel defaults. Parameter creation, preview/apply and link rules remain distinct.
 import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 import {
   familyCaptureSchema,
@@ -18,6 +21,8 @@ import type { BindingScope } from "#/shell/mount-owner";
 import { applyRefusal, profileSummary } from "./model";
 
 export const parameterLinksPageSchema = z.object({
+  profile: z.literal("document").default("document"),
+  selection: z.string().default(""),
   rail: parameterLinksAddress.fields.rail.schema,
 });
 export type ParameterLinksPage = z.output<typeof parameterLinksPageSchema>;
@@ -84,14 +89,56 @@ const read = (label: string, evaluate: boolean, subject: "edit" | "suggestion" =
     },
   );
 
-export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksDocument> = {
+export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksDocument> = defineRouteGraph({
+  seeds: {
+    links: {
+      title: "links",
+      load: () =>
+        import("#/shell/fixture-examples").then((m) => m.routeExamples["parameter-links"]),
+    },
+  },
+  directory: {
+    path: "/parameter-links",
+    title: "Parameter Links",
+    label: "Revit data",
+    exposure: "Preview",
+    runtimeNeed: "Revit for model actions; browsing saved data is separate",
+    icon: "Link2",
+    category: "Coordinate model data",
+    blurb:
+      "Cross-element parameter links â€” co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
+    aliases: ["Revit", "data"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+  },
   key: "parameter-links",
   address: "parameter-links",
   name: "Parameter Links",
   needs: "project",
   work: parameterLinksRouteState.schema,
+  subjectField: {
+    field: "profile",
+    noun: "parameter-link profile",
+    keyKind: "name",
+    roster: "links",
+    detail: "links",
+    pane: "profile",
+  },
   fields: {
-    rail: { ...parameterLinksAddress.fields.rail, role: "pose", agent: false },
+    profile: {
+      ...field(
+        parameterLinksPageSchema.shape.profile,
+        {},
+        { encode: String, decode: () => "document" as const },
+      ),
+    },
+    selection: { ...field(parameterLinksPageSchema.shape.selection, {}), role: "selection" },
+    rail: { ...parameterLinksAddress.fields.rail, agent: false },
   },
   cells: [
     {
@@ -103,12 +150,8 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
     },
   ],
   readings: {
-    links: { kind: "use", source: "parameter-links.links", retire: "target" },
-    receipts: { kind: "use", source: "parameter-links.receipts", retire: "target" },
+    receipts: {},
     options: {
-      kind: "use",
-      source: "parameter-links.options",
-      retire: "target",
     },
   },
   verbs: {
@@ -150,7 +193,8 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
       {
         ready: (_, input) =>
           input.refusal ?? (!input.readingId ? "Preview this draft before applying." : null),
-        intent: (_, input) => ({ readingId: input.readingId! }),
+        stage: (_, input) => ({ readingId: input.readingId! }),
+        intent: () => ({}),
       },
     ),
   },
@@ -159,13 +203,11 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
       label: "profile",
       purpose: "Edit and review the shared parameter linkage profile",
       draws: ["links", "receipts", "options"],
-      verbs: [],
     },
     evaluation: {
       label: "evaluation",
       purpose: "Inspect projected writes and native updater status",
       draws: ["links"],
-      verbs: [],
     },
   },
   layout: split(
@@ -178,9 +220,7 @@ export const parameterLinksGraph: RouteGraph<ParameterLinksPage, ParameterLinksD
   stages: {
     links: {
       word: "links",
-      panes: ["profile", "evaluation"],
       verbs: ["refresh", "preview", "previewProposal"],
     },
   },
-  pick: false,
-};
+});

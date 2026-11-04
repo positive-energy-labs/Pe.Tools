@@ -7,7 +7,9 @@ using Autodesk.Revit.DB.Plumbing;
 
 namespace Pe.Revit.Space;
 
+/// <summary>Overview acquires no native geometry. Every other choice is detailed and may retain substantial native memory.</summary>
 public enum SceneContextRepresentation {
+    [EnumMember(Value = "overview")] Overview,
     [EnumMember(Value = "none")] None,
     [EnumMember(Value = "oriented")] Oriented,
     [EnumMember(Value = "triangle-boxes")] TriangleBoxes,
@@ -25,6 +27,7 @@ public enum SceneRunShape {
     [EnumMember(Value = "oval")] Oval
 }
 public enum SceneBoxFrame {
+    [EnumMember(Value = "bounds")] Bounds,
     [EnumMember(Value = "symbol")] Symbol,
     [EnumMember(Value = "triangles")] Triangles,
     [EnumMember(Value = "link")] Link
@@ -36,7 +39,8 @@ public sealed record SceneRequest(
     int MaxTriangles = 1500000,
     Aabb? Bounds = null,
     bool FocusOnly = false,
-    SceneContextRepresentation ContextRepresentation = SceneContextRepresentation.LinkBoxes
+    SceneContextRepresentation ContextRepresentation = SceneContextRepresentation.Overview,
+    Region? Region = null
 );
 
 /// <summary>Straight physical run in host feet, including host insulation. Curved runs use native meshes.</summary>
@@ -79,6 +83,9 @@ public sealed record SceneMetadata(string Format, Stamp Stamp, Aabb Bounds, int 
     IReadOnlyList<SceneElement> Elements, IReadOnlyList<long> RequestedElementIds, int OmittedElements,
     IReadOnlyList<SceneSource> Sources, string Phase, IReadOnlyList<SceneUnavailableElement> UnavailableElements,
     SceneWork Work, SceneCompleteness Completeness, IReadOnlyList<long> DetachedElementIds, SceneLevels Levels) {
+    /// <summary>Detailed requests below 5 ft are raised; overview keeps the requested reach.</summary>
+    public double RequestedContextPaddingFt { get; init; }
+    public double EffectiveContextPaddingFt { get; init; }
     /// <summary>Counts by link placement. Bounding boxes alone cannot identify geometry rotated inside the source frame.</summary>
     public IReadOnlyDictionary<long, SceneLinkEnvelopeCount> LinkEnvelopes => this.Elements
         .Where(e => !e.Focus && e.Handle.LinkInstanceId.HasValue && e.OrientedBox?.Frame == SceneBoxFrame.Link)
@@ -120,12 +127,24 @@ public static class Scene {
             throw new ArgumentException("contextRepresentation must be none, oriented, triangle-boxes, link-boxes or meshes.");
         if (!Finite(request.ContextPaddingFt) || request.ContextPaddingFt is < 0 or > 1000)
             throw new ArgumentException("contextPaddingFt must be between 0 and 1000.");
+        // A region is admission, not capture bounds (spatial ledger, 2026-11-02): focus elements keep their own context reach
+        // and FocusOnly follows the caller. With no focus the region is the question, so its box is the bounds and the
+        // geometry cost is reported like any other read.
+        var declared = request.Region?.Resolve(document);
+        if (declared is { } admitted) {
+            if (request.Bounds is { } given && !admitted.Contains(given))
+                throw new ArgumentException("bounds must lie inside the region.");
+            if (request.ElementIds is not { Count: > 0 }) request = request with { Bounds = request.Bounds ?? admitted };
+        }
         if (request.Bounds is { } b && (!Finite(b.MinX, b.MinY, b.MinZ, b.MaxX, b.MaxY, b.MaxZ)
             || b.MinX >= b.MaxX || b.MinY >= b.MaxY || b.MinZ >= b.MaxZ))
             throw new ArgumentException("bounds must be finite ordered host-internal-ft bounds.");
         var ids = new HashSet<long>(request.ElementIds ?? []);
         if (request.FocusOnly && (ids.Count == 0 || request.Bounds is not null))
             throw new ArgumentException("focusOnly requires elementIds and cannot specify bounds.");
+        var overview = request.ContextRepresentation == SceneContextRepresentation.Overview;
+        var requestedPadding = request.ContextPaddingFt;
+        if (!overview) request = request with { ContextPaddingFt = Math.Max(5, request.ContextPaddingFt) };
         var context = request.FocusOnly ? SceneContextRepresentation.None : request.ContextRepresentation;
         if (context == SceneContextRepresentation.Meshes && ids.Count == 0 && request.Bounds is null)
             throw new ArgumentException("meshes context requires elementIds or explicit bounds.");
@@ -140,6 +159,33 @@ public static class Scene {
         }
         var levels = Timed("levels", () => Levels.Read(document, cancellationToken));
         var world = SpaceWorld.SceneSources(document);
+        // Admission needs no geometry: a host element's own bounding box, before anything is tessellated.
+        if (declared is { } inside)
+            foreach (var id in ids)
+                if (document.GetElement(id.ToElementId()) is { } candidate && world.Partitions[0].SceneBounds(candidate) is { } box && !inside.Contains(box))
+                    throw new ArgumentException($"Element {id} lies outside the region; a scene's focus elements must lie inside it.");
+        // Plan a conservative bounding-box reach before any focus capture (including mesh fallbacks).
+        var plannedMembers = new List<(long Id, Aabb Box, XYZ[] Corners)>();
+        foreach (var id in ids) {
+            if (document.GetElement(id.ToElementId()) is not { } element || world.Partitions[0].SceneBounds(element) is not { } box) continue;
+            var run = ReadRun(element, Transform.Identity);
+            if (run is not null) box = Oriented.Bounds(run);
+            plannedMembers.Add((id, box, run is null ? Corners(box.Expand(request.ContextPaddingFt)) : Corners(run, request.ContextPaddingFt)));
+        }
+        var plannedBound = request.Bounds ?? plannedMembers.Select(m => m.Box.Expand(request.ContextPaddingFt)).Aggregate(Aabb.Empty, Union);
+        var plannedReach = Reach(plannedMembers, request.ContextPaddingFt, out var plannedDetached);
+        if (request.Bounds is { } explicitPlan) plannedReach = [Corners(explicitPlan)];
+        var plans = world.Partitions.Select(p => context == SceneContextRepresentation.None
+            ? ReachPlan.Empty(p) : p.Plan(plannedReach, Corners(plannedBound))).ToList();
+        var hostPlan = plans[0];
+        var hostIds = hostPlan.Keep.Concat(ids.Select(id => id.ToElementId()).Where(id => document.GetElement(id) is not null)).Distinct().ToArray();
+        plans[0] = hostPlan with { Keep = hostIds, Counted = hostPlan.Counted + hostIds.Length - hostPlan.Keep.Count };
+        world.Acquisition = new GeometryLedger.Read(plans, overview);
+        static SceneOrientedBox OverviewBox(Aabb b) => new(
+            [(b.MinX + b.MaxX) / 2, (b.MinY + b.MaxY) / 2, (b.MinZ + b.MaxZ) / 2],
+            [1, 0, 0], [0, 1, 0], [0, 0, 1],
+            [(b.MaxX - b.MinX) / 2, (b.MaxY - b.MinY) / 2, (b.MaxZ - b.MinZ) / 2], SceneBoxFrame.Bounds);
+        var frames = new List<(Element Element, Aabb Bounds, SceneOrientedBox Box)>();
         foreach (var partition in world.Partitions) partition.BeginScene(world.CurrentEpoch);
         var oriented = new Oriented(budget);
         var focus = new List<(Partition Source, PrimRow Row, Tri[] Triangles)>();
@@ -162,7 +208,7 @@ public static class Scene {
             if (!classified.TryGetValue(partition, out var classes)) classified[partition] = classes = new Dictionary<string, int>();
             classes[kind] = classes.TryGetValue(kind, out var n) ? n + 1 : 1;
         }
-        IReadOnlyList<long> detached = [];
+        IReadOnlyList<long> detached = request.Bounds is null ? plannedDetached : [];
         var elements = new List<SceneElement>();
         var triangles = 0;
         var writtenBounds = Aabb.Empty;
@@ -197,6 +243,20 @@ public static class Scene {
                     focusBounds = Union(focusBounds, representedBounds);
                     continue;
                 }
+                if (bounds is { } frameBounds && (overview || request.ContextRepresentation != SceneContextRepresentation.Meshes)) {
+                    var frame = overview ? OverviewBox(frameBounds) : oriented.Family(element, world.Partitions[0].Transform);
+                    if (frame is not null) {
+                        frames.Add((element, frameBounds, frame));
+                        focusBounds = Union(focusBounds, frameBounds);
+                        if (overview) unavailable.Add(new SceneUnavailableElement(id, element.UniqueId, element.Category?.Name,
+                            "Overview uses bounding box; native family geometry is not acquired."));
+                        continue;
+                    }
+                }
+                if (overview) {
+                    unavailable.Add(new SceneUnavailableElement(id, element.UniqueId, element.Category?.Name, "Overview: no bounding box available."));
+                    continue;
+                }
                 LinkedGeometryStore.Geometry captured;
                 try { captured = Capture(world.Partitions[0], element, null); }
                 catch (SceneLimitException ex) {
@@ -214,7 +274,7 @@ public static class Scene {
                     focusBounds = Union(focusBounds, row.Box);
                 }
             }
-            if (ids.Count > 0 && focus.Count + runs.Count == 0 && crop is null)
+            if (ids.Count > 0 && focus.Count + runs.Count + frames.Count == 0 && crop is null)
                 throw new ArgumentException("None of the requested elementIds produced a visible host representation.");
             List<XYZ[]> reach = [];
             // Every point within reach of a focus element lies inside the focus bounds grown by reach (main's crop),
@@ -223,7 +283,7 @@ public static class Scene {
             if (context != SceneContextRepresentation.None) {
                 bound = Corners(request.Bounds ?? focusBounds.Expand(request.ContextPaddingFt));
                 reach = request.Bounds is { } explicitBounds ? [Corners(explicitBounds)]
-                    : Reach(focus, runs, request.ContextPaddingFt, out detached);
+                    : plannedReach;
                 // The crop is the host extent of the reach boxes, never the focus bounds grown: a diagonal run's
                 // reach box reaches past them, and what reach admits must not be clipped away unseen.
                 if (crop is null && reach.Count > 0) crop = reach.SelectMany(corners => corners)
@@ -231,7 +291,7 @@ public static class Scene {
             }
             phases["focus"] = clock.Elapsed.TotalMilliseconds - phases.GetValueOrDefault("levels");
             var focusGeometryCalls = budget.GeometryCalls;
-            var index = new SceneFocusIndex(focus.Select(row => row.Row.Box).Concat(runs.Select(row => row.Bounds)).ToArray());
+            var index = new SceneFocusIndex(focus.Select(row => row.Row.Box).Concat(runs.Select(row => row.Bounds)).Concat(frames.Select(row => row.Bounds)).ToArray());
             var runIndex = new SceneFocusIndex(runs.Select(row => row.Bounds).ToArray());
             var proximity = context == SceneContextRepresentation.Meshes && focus.Count > 0
                 ? Bvh.Build(focus.SelectMany(row => row.Triangles).ToArray()) : null;
@@ -276,11 +336,12 @@ public static class Scene {
                     return true;
                 }
             }
-            void Primitive(Partition partition, Element element, Aabb bounds, SceneRun? run, bool isFocus) {
+            void Primitive(Partition partition, Element element, Aabb bounds, SceneRun? run, bool isFocus, SceneOrientedBox? knownBox = null) {
                 if (crop is { } region && !bounds.Overlaps(region)) return;
                 if (!isFocus && limit == "acquisition-budget") { deferred++; Cut(partition); return; }
                 try {
-                    var box = run is null ? Timed("family-frames", () => oriented.Family(element, partition.Transform)) : null;
+                    var box = knownBox ?? (run is null ? overview ? OverviewBox(bounds) : Timed("family-frames", () => oriented.Family(element, partition.Transform)) : null);
+                    if (overview && run is null && knownBox is null) unavailable.Add(new SceneUnavailableElement(element.Id.Value(), element.UniqueId, element.Category?.Name, "Overview uses bounding box; native geometry is not acquired."));
                     if (!isFocus && run is null && box is null && context == SceneContextRepresentation.LinkBoxes
                         && partition.Kind != SourceKind.Host)
                         box = Timed("link-boxes", () => oriented.Link(element, partition.Transform));
@@ -316,12 +377,14 @@ public static class Scene {
                 }
             }
             foreach (var row in focus) Write(row.Source, row.Row, row.Triangles, true);
+            foreach (var row in frames) Primitive(world.Partitions[0], row.Element, row.Bounds, null, true, row.Box);
             foreach (var row in runs) Primitive(row.Source, row.Element, row.Bounds, row.Run, true);
             if (context != SceneContextRepresentation.None) {
                 var candidates = new List<(Partition Source, long Id, Aabb Bounds, double Distance)>();
-                foreach (var partition in world.Partitions) {
+                foreach (var plan in plans) {
+                    var partition = plan.Source;
                     budget.Check();
-                    var read = Timed("reach", () => partition.Reach(reach, bound,
+                    var read = Timed("reach", () => partition.Load(plan,
                         context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes or SceneContextRepresentation.LinkBoxes));
                     reads[partition] = (read, 0, 0);
                     broad += read.Counted;
@@ -333,7 +396,7 @@ public static class Scene {
                         reads[partition] = reads[partition] with { Kept = reads[partition].Kept + 1 };
                         // ETW showed Revit retains native tessellation allocations; bound what we ask it to tessellate.
                         // Runs and proven family frames avoid tessellation. Unknown frames retain native meshes.
-                        if (context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes or SceneContextRepresentation.LinkBoxes) {
+                        if (overview || context is SceneContextRepresentation.Oriented or SceneContextRepresentation.TriangleBoxes or SceneContextRepresentation.LinkBoxes) {
                             Primitive(partition, element, box.Value, Timed("runs", () => ReadRun(element, partition.Transform)), false);
                             continue;
                         }
@@ -379,7 +442,7 @@ public static class Scene {
                 new SceneWork(broad, extracted, extractedTriangles, clock.Elapsed.TotalMilliseconds,
                     budget.PeakRetainedTriangles, budget.NativeCalls, budget.Diagnostics(), budget.NativeTriangles,
                     budget.GeometryCalls - focusGeometryCalls, phases),
-                new SceneCompleteness(limit is null, deferred, limited, limit), detached, levels);
+                new SceneCompleteness(limit is null, deferred, limited, limit), detached, levels) { RequestedContextPaddingFt = requestedPadding, EffectiveContextPaddingFt = request.ContextPaddingFt };
         } finally {
             oriented.Meshes.Entries.Clear();
         }
@@ -399,14 +462,12 @@ public static class Scene {
 
     /// <summary>
     ///     One reach box per focus element, in host feet, as 8 corners: a run's own oriented box (location line and
-    ///     size), else its triangle bounds, grown by <paramref name="reachFt" />. Members whose reach meets no
+    ///     size), else its native bounding box, grown by <paramref name="reachFt" />. Members whose reach meets no
     ///     reach of the largest group are <paramref name="detached" />: still read, and disclosed (Cleremont SA 2
     ///     carries air terminals 1,500 ft from the rest of its system).
     /// </summary>
-    private static List<XYZ[]> Reach(List<(Partition Source, PrimRow Row, Tri[] Triangles)> focus,
-        List<(Partition Source, Element Element, Aabb Bounds, SceneRun Run)> runs, double reachFt, out IReadOnlyList<long> detached) {
-        var members = focus.Select(row => (Id: row.Row.ElementId, Box: row.Row.Box, Corners: Corners(row.Row.Box.Expand(reachFt))))
-            .Concat(runs.Select(row => (Id: row.Element.Id.Value(), Box: row.Bounds, Corners: Corners(row.Run, reachFt)))).ToList();
+    private static List<XYZ[]> Reach(List<(long Id, Aabb Box, XYZ[] Corners)> members,
+        double reachFt, out IReadOnlyList<long> detached) {
         // ponytail: O(n²) single linkage over the grown host boxes. n is one system's members (501 on Chadds SA 7);
         // sort-and-sweep when a request names thousands.
         var root = Enumerable.Range(0, members.Count).ToArray();

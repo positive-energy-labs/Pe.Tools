@@ -77,7 +77,7 @@ test("names use a grille's mark, fitting size and part, then type, without inven
   expect(named(1)).toBe("RV-28 grille");
   expect(named(2)).toBe("14×10 elbow");
   expect(named(3)).toBe("Supply 16×8 grille");
-  expect(named(99999999)).toBeNull();
+  expect(named(99999999)).toBe("an element outside this read");
 });
 
 test("block hover lights all references; token hover/focus narrows and exit restores; press goes; unmount clears", () => {

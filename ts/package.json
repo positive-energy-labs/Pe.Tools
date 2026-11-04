@@ -23,9 +23,12 @@
     "journey:conversation-work": "node --import jiti/register tests/e2e/conversation-work.launch.ts",
     "codegen": "pnpm --filter @pe/host-contracts codegen",
     "verify": "node scripts/verify.ts",
+    "gate": "node scripts/gate.ts",
     "test": "vp run -r test",
     "dev": "vp run --filter @pe/host dev",
-    "dev:no-revit": "vp run --filter @pe/host dev:no-revit"
+    "dev:no-revit": "vp run --filter @pe/host dev:no-revit",
+    "ratchets:tighten": "pnpm --filter @pe/repo-guards ratchets:tighten",
+    "test:unification-ratchets": "vp test run --config tests/repo-guards/vite.config.ts tests/repo-guards/src/unification-2.guard.test.ts"
   },
   "devDependencies": {
     "@pe/browser": "workspace:*",

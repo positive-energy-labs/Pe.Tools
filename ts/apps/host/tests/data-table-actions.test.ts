@@ -1,3 +1,4 @@
+import { captureStore } from "./effect-test.ts";
 import { afterEach, expect, test } from "vite-plus/test";
 import { Effect } from "effect";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -53,6 +54,7 @@ async function fixture(
   });
   const sent: { key: string; input: unknown; session?: string; document?: string }[] = [];
   const bridge = {
+    subscribe: () => () => {},
     list: Effect.succeed([
       {
         sessionId: "A",
@@ -84,14 +86,9 @@ async function fixture(
   const deps = { sdk: sdkSessions, workspace: work };
   owner.bindCommands({
     ...commandResources(bridge, deps, async (id) => (await owner.list(undefined, id))[0]),
-    resolve: commandRegistry(
-      bridge,
-      new TakeoffCaptures(join(directory, "captures")),
-      deps,
-      async () => {
-        throw Error("No local operation expected");
-      },
-    ),
+    resolve: commandRegistry(bridge, captureStore(join(directory, "captures")), deps, async () => {
+      throw Error("No local operation expected");
+    }),
   });
   await work.write(key, "data-tables", "human", {
     patches: [{ path: ["draft"], value: draft }],
@@ -99,26 +96,27 @@ async function fixture(
     press: "edit",
     kind: "apply",
   });
-  const invoke = async (
-    table = {
-      name: draft.name,
-      columns: draft.columns,
-      rows: draft.rows,
-      pruneMissingRows: true as const,
-    },
-  ) => {
-    const admitted = await owner.invoke(
-      actionAdmissionSchema.parse({
-        id: crypto.randomUUID(),
-        key: "data-table.apply",
-        target: { kind: "document", ref },
-        input: commands["data-table.apply"].work.bind({ table }, { key, revision: 1 }),
-      }),
-      crossingOf(),
+  const invoke = async (raw?: unknown) => {
+    const call = async (input: unknown, key = "data-table.apply") => {
+      const admitted = await owner.invoke(
+        actionAdmissionSchema.parse({
+          id: crypto.randomUUID(),
+          key,
+          target: { kind: "document", ref },
+          input,
+        }),
+        crossingOf(),
+      );
+      return owner.wait(admitted.id);
+    };
+    if (raw) return call(raw);
+    await call(
+      commands["data-table.apply.preview"].work.bind({}, { key, revision: 1 }),
+      "data-table.apply.preview",
     );
-    return owner.wait(admitted.id);
+    return call(commands["data-table.apply"].work.bind({}, { key, revision: 1 }));
   };
-  return { work, registrations, sent, invoke };
+  return { work, registrations, sent, invoke, owner };
 }
 
 test("host registry persists Data Tables Work per document and admits its shared schema", async () => {
@@ -135,7 +133,7 @@ test("host registry persists Data Tables Work per document and admits its shared
 test("Apply uses the exact document and settles Work through the command publication", async () => {
   const f = await fixture();
   const result = await f.invoke();
-  expect(result).toMatchObject({
+  expect(result, JSON.stringify(result)).toMatchObject({
     state: "succeeded",
     result: { name: "Loads", warnings: ["Native warning"] },
   });
@@ -157,15 +155,11 @@ test("Apply uses the exact document and settles Work through the command publica
   );
 });
 
-test("Apply refuses a draft mismatch before dispatch and retains Work after native failure", async () => {
+test("Apply refuses caller table payloads before dispatch and retains Work after native failure", async () => {
   const f = await fixture({ fail: true });
-  const mismatch = await f.invoke({
-    name: "Other",
-    columns: draft.columns,
-    rows: draft.rows,
-    pruneMissingRows: true,
-  });
-  expect(mismatch.state).not.toBe("succeeded");
+  await expect(
+    f.invoke({ name: "Other", columns: draft.columns, rows: draft.rows, pruneMissingRows: true }),
+  ).rejects.toThrow();
   expect(f.sent).toHaveLength(0);
   const failed = await f.invoke();
   expect(failed.state).not.toBe("succeeded");
@@ -186,11 +180,49 @@ test("settlement preserves a replacement draft written while native Apply runs",
     },
   });
   const result = await f.invoke();
-  expect(result).toMatchObject({
+  expect(result, JSON.stringify(result)).toMatchObject({
     state: "incomplete",
     steps: expect.arrayContaining([
       expect.objectContaining({ kind: "native", state: "succeeded" }),
     ]),
   });
   expect((await f.work.read(key, "data-tables"))?.doc).toEqual({ draft: replacement });
+});
+
+test("semantic preview seals accepted Work without dispatch or Work publication; stale revision refuses", async () => {
+  const f = await fixture();
+  const input = { work: { key, revision: 1 } };
+  const before = await f.work.read(key, "data-tables");
+  const preview = async (revision: number) => {
+    const admitted = await f.owner.invoke(
+      actionAdmissionSchema.parse({
+        id: crypto.randomUUID(),
+        key: "data-table.apply.preview",
+        target: { kind: "document", ref },
+        input: { work: { key, revision } },
+      }),
+      crossingOf(),
+    );
+    return f.owner.wait(admitted.id);
+  };
+  const receipt = await preview(1);
+  expect(receipt).toMatchObject({
+    state: "succeeded",
+    input,
+    target: { kind: "document", ref },
+    result: {
+      previewOnly: true,
+      derivedRequest: { table: { name: "Loads", rows: draft.rows } },
+      seal: { work: { handle: input.work } },
+    },
+  });
+  expect((await f.owner.list(undefined, receipt.id))[0]).toEqual(receipt);
+  expect(await f.work.read(key, "data-tables")).toEqual(before);
+  const stale = await preview(0);
+  expect(stale).toMatchObject({
+    state: "failed",
+    refusal: { kind: "stale_revision", handle: { key, revision: 0 }, live: 1 },
+  });
+  expect(f.sent).toEqual([]);
+  expect(await f.work.read(key, "data-tables")).toEqual(before);
 });

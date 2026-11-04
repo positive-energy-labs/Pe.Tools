@@ -1,3 +1,5 @@
+import { effectDecoder } from "@pe/host-contracts/decoders";
+import { hostOperationDefinitionSchema } from "@pe/host-contracts/contracts";
 import { z } from "zod";
 import { actionReceiptSchema, actionStatusSchema, type ReadEntry } from "@pe/agent-contracts";
 import {
@@ -6,14 +8,14 @@ import {
   HOST_RPC_ORIGIN_HEADER,
   isTsOnlyOperationKey,
 } from "@pe/host-contracts/operation-types";
-import { requestJson } from "#/shell/readings-api";
+import { callOp, callCompose } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingSource } from "#/shell/readings";
 import { runOp } from "./run";
 import type { HostOperationCatalogEntry } from "./manifest";
 export type OpsCatalog = { operations?: HostOperationCatalogEntry[]; bridgeCatalogError?: string };
 export const opReadInput = z.object({
-  op: z.custom<HostOperationCatalogEntry>(),
+  op: effectDecoder(hostOperationDefinitionSchema),
   request: z.unknown(),
 });
 export const opRead: ReadEntry<typeof opReadInput> = {
@@ -31,10 +33,10 @@ export const opRead: ReadEntry<typeof opReadInput> = {
       request,
       target,
       call: (key, ...args) =>
-        requestJson(
-          { path: "/call", body: { key, request: args[0] }, headers },
-          z.any(),
-          AbortSignal.timeout(30_000),
+        callOp(
+          { signal: AbortSignal.timeout(30_000), headers: headers },
+          key,
+          args[0] as import("@pe/host-contracts/operation-types").OpRequestOf<typeof key>,
         ),
     });
     return {
@@ -53,26 +55,25 @@ export const receiptControlRpc: ReadEntry<typeof receiptControlInput> = {
   key: "ops.receipt-control",
   input: receiptControlInput,
   async run({ key, id }) {
-    const { peRouteUrl } = await import("@pe/agent-contracts/pe-api");
+    const context = { signal: AbortSignal.timeout(30_000) };
     if (key === "action.read") {
-      const rows = await requestJson(
-        { path: peRouteUrl("actions.read", { query: { id } }) },
-        z.array(actionReceiptSchema),
-        AbortSignal.timeout(30_000),
-      );
+      const rows = await callCompose(context, "actions.read", { query: { id } });
       const row = rows.find((row) => row.id === id);
       if (!row) throw Error("Original action not found");
       return row;
     }
-    return requestJson(
-      { path: peRouteUrl(key, {}), body: { id } },
-      actionReceiptSchema,
-      AbortSignal.timeout(30_000),
-    );
+    return callCompose(context, key, { body: { id } });
   },
 };
 export function opsSources(): Readonly<Record<string, ReadingSource>> {
   return {
+    "ops.operation": {
+      kind: "derive",
+      derive: ({ args, inputs }) =>
+        (inputs.catalog?.value as OpsCatalog | undefined)?.operations?.find(
+          (op) => op.key === args,
+        ) ?? null,
+    },
     "ops.catalog": subscriptionSource({
       request: ({ target }) => ({
         kind: "ops-catalog",

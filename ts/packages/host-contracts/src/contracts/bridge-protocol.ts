@@ -1,7 +1,7 @@
 // Hand-authored wire contract. Keep aligned with Pe.Shared.HostContracts.Bridge (C#) — the codegen that
 // once produced this file is deleted; changes here are ordinary code review, not regeneration.
 
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type { SessionObservation } from "../vendor/generated/pe-revit-contract.ts";
 import type { HostLane } from "../service-identity.ts";
 
@@ -129,7 +129,41 @@ export type BridgeStateSnapshot = Schema.Schema.Type<typeof bridgeStateSnapshotS
 // `sandboxId` at SDK beta.121 — a wire rename, not an additive optional, and the version gate is
 // exact-match, so BRIDGE_CONTRACT_VERSION went 19 -> 20 with it.
 // `lane` is the SDK's: `dev` | `installed`, payload SOURCE only.
+/** Native evidence (additive; bridge version stays 25):
+ * Terminal frames carry `terminal: {requestId, outcome, startedAtUnixMs, completedAtUnixMs, receiptId?}`.
+ * requestId is EXACTLY the bridge Request.requestId, never a derived or receipt-only id.
+ * One terminal is created after an AbandonedStillRunning/TimedOut request really finishes.
+ * Duplicates are legal on reconnect: consumers settle once and ignore duplicates by requestId.
+ * Registration.inFlight tags requests and pending terminals with processId + processStartUtcUnixMs,
+ * captured together from one process handle. Re-adopt only for that exact incarnation.
+ * Missing inFlight means old bytes, NOT native idle evidence. requests are Running,
+ * AbandonedStillRunning or TimedOut; terminals are replayed as Terminal frames after registration.
+ * Successful socket writes retire pending terminals; failed writes survive connection replacement.
+ * Existing validation issue code/instancePath semantics are unchanged.
+ */
+export const bridgeTerminalSchema = Schema.Struct({
+  requestId: Schema.String,
+  outcome: Schema.Literals(["Succeeded", "Failed", "Cancelled"]),
+  startedAtUnixMs: Schema.Number,
+  completedAtUnixMs: Schema.Number,
+  receiptId: nullableString,
+});
+export type BridgeTerminal = Schema.Schema.Type<typeof bridgeTerminalSchema>;
+export const bridgeInFlightRequestSchema = Schema.Struct({
+  requestId: Schema.String,
+  state: Schema.Literals(["Running", "AbandonedStillRunning", "TimedOut"]),
+  startedAtUnixMs: Schema.Number,
+});
+export const bridgeInFlightSnapshotSchema = Schema.Struct({
+  processId: Schema.Number,
+  processStartUtcUnixMs: Schema.Number,
+  requests: Schema.optional(Schema.Array(bridgeInFlightRequestSchema)).pipe(Schema.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  terminals: Schema.optional(Schema.Array(bridgeTerminalSchema)).pipe(Schema.withDecodingDefaultTypeKey(Effect.succeed([]))),
+});
+export type BridgeInFlightSnapshot = Schema.Schema.Type<typeof bridgeInFlightSnapshotSchema>;
+
 export const bridgeRegistrationRequestSchema = Schema.Struct({
+  inFlight: Schema.optional(Schema.NullOr(bridgeInFlightSnapshotSchema)).pipe(Schema.withDecodingDefaultTypeKey(Effect.succeed(null))),
   buildStamp: nullableString,
   contractVersion: Schema.Number,
   lane: nullableString,
@@ -145,6 +179,7 @@ export const bridgeRegistrationRequestSchema = Schema.Struct({
 export type BridgeRegistrationRequest = Schema.Schema.Type<typeof bridgeRegistrationRequestSchema>;
 
 export const bridgeRequestSchema = Schema.Struct({
+  derivedCommand: nullableString,
   openDocumentId: nullableString,
   operationKey: Schema.String,
   payloadJson: Schema.String,
@@ -170,6 +205,7 @@ export const bridgeStateSyncSchema = Schema.Struct({
 export type BridgeStateSync = Schema.Schema.Type<typeof bridgeStateSyncSchema>;
 
 export const bridgeFrameSchema = Schema.Struct({
+  terminal: Schema.optional(Schema.NullOr(bridgeTerminalSchema)),
   disconnectReason: nullableString,
   event: Schema.optional(Schema.NullOr(bridgeEventSchema)),
   kind: Schema.Literals([
@@ -180,6 +216,7 @@ export const bridgeFrameSchema = Schema.Struct({
     "Response",
     "Event",
     "Disconnect",
+    "Terminal",
   ]),
   registration: Schema.optional(Schema.NullOr(bridgeRegistrationRequestSchema)),
   registrationAck: Schema.optional(Schema.NullOr(bridgeRegistrationAckSchema)),

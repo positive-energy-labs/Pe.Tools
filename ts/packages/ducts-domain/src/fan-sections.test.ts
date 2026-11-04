@@ -1,3 +1,10 @@
+// U4 wires the real fans Work for callers without one.
+import {
+  neutralFansWork,
+  fansDocumentSchema,
+  ductsDocumentSchema,
+  stagedDucts,
+} from "@pe/agent-contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { passThrough } from "./pass-through.ts";
@@ -154,7 +161,7 @@ describe("several fans", () => {
       ],
       segments: [...base.segments, { ...duct(20, [2, 33]), groupId: "g20" }],
     } as unknown as DuctSnapshot;
-    const priced = price(s, {}, null);
+    const priced = price(s, {}, null, neutralFansWork);
     // The per-unit reading is the largest over its groups; g10 is priced from g10's own grilles.
     expect(priced.equipmentFlows.get(2)).toEqual({ cfm: 900, source: "derived", grilles: 1 });
     for (const solve of [priced.now, priced.next]) {
@@ -309,4 +316,19 @@ describe("passThrough", () => {
     expect(sv.snapshot.groups.map((g) => g.id)).toEqual(["g10"]);
     expect(sv.findings.map((f) => f.id)).toContain("open-end:passive:3:3");
   });
+});
+
+// U2: pricing reads required fans Work independently of ducts Work, including its cache identity.
+it("reprices the same ducts Work when only the fans Work changes", () => {
+  const raw = snapshot();
+  const grids = {};
+  const ducts = ductsDocumentSchema.parse({});
+  const fans = fansDocumentSchema.parse({ flows: { "30": { edit: { value: { cfm: 450 } } } } });
+  expect(stagedDucts(ducts, fans).flows).toEqual({ "30": { cfm: 450 } });
+  const before = price(raw, grids, ducts, neutralFansWork);
+  const after = price(raw, grids, ducts, fans);
+  expect(before.flows.get(30)?.cfm).toBe(300);
+  expect(after.flows.get(30)?.cfm).toBe(450);
+  expect(price(raw, grids, ducts, fans)).toBe(after);
+  expect(price(raw, grids, ducts, neutralFansWork).flows.get(30)?.cfm).toBe(300);
 });

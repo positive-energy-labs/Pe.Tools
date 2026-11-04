@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { createGraphMount, GraphRouteView } from "#/shell/mount";
 import type { GraphLayoutState } from "../../../../packages/kit/src/components/lang/graph-layout";
+import { RouterContextProvider, createRouter, createMemoryHistory } from "@tanstack/react-router";
+import { Route as rootRoute } from "../routes/__root";
 import { chatGraph } from "./graph";
 const owners: { dispose(): void }[] = [];
 vi.mock("../routes/__root", async () => {
@@ -86,8 +88,17 @@ function Dock() {
   );
 }
 
-test("under both floors, threads and chat trade one rail while retaining the draft", () => {
-  render(<Dock />);
+test("under both floors, threads and chat trade one rail while retaining the draft", async () => {
+  const router = createRouter({
+    routeTree: rootRoute,
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
+  await router.load();
+  render(
+    <RouterContextProvider router={router}>
+      <Dock />
+    </RouterContextProvider>,
+  );
   const draft = screen.getByRole("textbox", { name: "draft" });
   fireEvent.change(draft, { target: { value: "unsent" } });
   fireEvent.click(screen.getByRole("button", { name: "Expand threads" }));

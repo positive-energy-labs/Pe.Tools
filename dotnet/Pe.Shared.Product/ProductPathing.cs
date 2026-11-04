@@ -2,20 +2,29 @@ namespace Pe.Shared.Product;
 
 internal static class ProductPathing {
     /// <summary>
-    ///     The machine-local product root: an explicit <c>%LOCALAPPDATA%</c>, else
-    ///     <c>&lt;product home&gt;\.local-state</c> when <see cref="ProductPathNames.ProductHomeVariable" /> is set
-    ///     (an isolated run shares no state with the owner's host), else <c>%LOCALAPPDATA%\Vendor\Product</c>.
-    ///     The host's <c>productRoot</c> resolves the same way.
+    ///     The state root for a runtime its shell was told about: <c>&lt;home&gt;\.local-state</c> under a
+    ///     product home override (an isolated run shares no state with the owner's host), else the dev
+    ///     checkout's <c>.artifacts\pe-tools</c>, else the SDK install root itself. Pure: the TS twin
+    ///     is <c>stateRoot</c> in service-identity.ts, and both assert runtime-ownership.fixture.json.
     /// </summary>
-    public static string ResolveRuntimeRoot(string? localAppData) {
-        if (string.IsNullOrWhiteSpace(localAppData) &&
-            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable)))
-            return Path.Combine(ResolveProductHome(null), ProductPathNames.LocalStateDirectoryName);
-        var local = string.IsNullOrWhiteSpace(localAppData)
-            ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
-            : Path.GetFullPath(localAppData);
-        return Path.Combine(local, ProductIdentity.VendorName, ProductIdentity.ProductName);
+    public static string StateRoot(ProductLane lane, string ownerRoot, string? productHome) {
+        if (!Path.IsPathRooted(ownerRoot))
+            throw new ArgumentException($"A {lane} runtime needs an absolute owner root.", nameof(ownerRoot));
+        // v0.7.30 refused an installed payload under a home override (its root check failed); kept unchanged.
+        if (lane == ProductLane.Installed && !string.IsNullOrWhiteSpace(productHome))
+            throw new ArgumentException($"An installed runtime does not run under {ProductPathNames.ProductHomeVariable}; unset it, or use a dev session.", nameof(productHome));
+        if (!string.IsNullOrWhiteSpace(productHome))
+            return Path.Combine(Path.GetFullPath(productHome!.Trim()), ProductPathNames.LocalStateDirectoryName);
+        // Installed is the SDK's install root verbatim: byte-identical to v0.7.30's LocalApplicationData formula.
+        return lane == ProductLane.Dev ? Path.Combine(Path.GetFullPath(ownerRoot), ".artifacts", "pe-tools") : ownerRoot;
     }
+
+    /// <summary>
+    ///     The machine's installed namespace by the SDK/MSI rule (InstalledProduct.AppBaseFor). Never an
+    ///     owner: Pe.App takes the installed root from the SDK. Read only to refuse dev state inside it.
+    /// </summary>
+    public static string InstalledNamespace => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ProductIdentity.VendorName, ProductIdentity.ProductName);
 
     public static string ResolveApplicationData(string? applicationData) =>
         string.IsNullOrWhiteSpace(applicationData)

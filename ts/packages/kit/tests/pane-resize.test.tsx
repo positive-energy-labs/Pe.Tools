@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Profiler, useEffect, useState } from "react";
+import { Profiler, Suspense, useEffect, useState } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
@@ -25,6 +25,73 @@ function measure(width: number, height = 600) {
     },
   );
 }
+
+test("a hidden split keeps its last fitted size through a zero ResizeObserver measurement", () => {
+  measure(900);
+  let resize!: (entries: { contentRect: DOMRect }[]) => void;
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: typeof resize) {
+        resize = callback;
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const { container } = render(
+    <PaneSplit
+      axis="horizontal"
+      start="subject"
+      end="drawing"
+      resize={{ target: "end", defaultSize: 500, minSize: 260, minOtherSize: 560 }}
+    />,
+  );
+  const split = container.firstElementChild as HTMLElement;
+  const size = split.style.getPropertyValue("--pane-size");
+  act(() => resize([{ contentRect: new DOMRect(0, 0, 0, 0) }]));
+  expect(split.style.getPropertyValue("--pane-size")).toBe(size);
+});
+
+test("a suspended split reserves its minimum until actual removal", async () => {
+  measure(1440);
+  const waiting = new Promise(() => {});
+  function Tool({ pending }: { pending: boolean }) {
+    if (pending) throw waiting;
+    return (
+      <PaneSplit
+        axis="horizontal"
+        start="roster"
+        end="picture"
+        resize={{ target: "start", defaultSize: 420, minSize: 280, minOtherSize: 400 }}
+      />
+    );
+  }
+  const tree = (pending: boolean, removed = false) => (
+    <PaneSplit
+      axis="horizontal"
+      start="chat"
+      end={
+        removed ? null : (
+          <Suspense fallback="Loading tool">
+            <Tool pending={pending} />
+          </Suspense>
+        )
+      }
+      resize={{ target: "end", defaultSize: 720, minSize: 420, minOtherSize: 280 }}
+    />
+  );
+  const view = render(tree(false));
+  const root = view.container.firstElementChild!;
+  const minimum = root.getAttribute("data-pane-min-size");
+  expect(Number(minimum)).toBeGreaterThan(420);
+  view.rerender(tree(true));
+  expect(root.getAttribute("data-pane-min-size")).toBe(minimum);
+  await act(async () => {
+    view.rerender(tree(false, true));
+  });
+  expect(root.getAttribute("data-pane-min-size")).toBe("420");
+});
 
 test("a folded pane releases effects, retains edits, and reveals only current action inputs", () => {
   measure(1200);

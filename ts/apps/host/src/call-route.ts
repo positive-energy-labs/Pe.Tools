@@ -1,11 +1,19 @@
-import { peRoutes } from "@pe/agent-contracts/pe-api";
+import { httpProblems, isDoorFailure } from "./http-problems.ts";
+import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { NativeReads, InvalidRead } from "./native-reads.ts";
+import { ReadFreshness, readSchemas, RequestIdentity } from "./request-services.ts";
+import { prepareRead } from "../../../packages/host-internal/src/read-admission.ts";
+import { ductsSnapshotReadingSchema, nativePrincipals } from "@pe/agent-contracts";
+import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
+import { peRoutes, catalogEntries } from "@pe/agent-contracts/pe-api";
 import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
 import {
   DUCTS_BODY_VERSION_HEADER,
   DUCTS_REFRESH_HEADER,
   type DuctsReadingRequest,
 } from "@pe/agent-contracts";
-import { sdkSession, readSessionScope } from "./sdk-session.ts";
+import { sdkSession, SdkSession, SdkDriverLive, SdkDriver } from "./sdk-session.ts";
 import { readSchedule } from "./schedule-actions.ts";
 import { actionControls, commandTool, receiptsForWork } from "@pe/agent-contracts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
@@ -25,15 +33,15 @@ import { readFamily, type FamilyActionDependencies } from "./family-actions.ts";
 import { actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
 import { z } from "zod";
 import { fileVersion } from "./takeoff-actions.ts";
-import { Effect, Exit, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import {
   addressSchema,
   sameAddress,
   documentRefSchema,
   actionStatusSchema,
 } from "@pe/agent-contracts";
-import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
-import { readFamiliesProgressively, cancelFamiliesRead } from "./families-reader.ts";
+import { CaptureStore as TakeoffCaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
+import type { FamiliesReader } from "./families-reader.ts";
 import {
   projectTakeoffSnapshot,
   projectTakeoffViews,
@@ -44,7 +52,6 @@ import { CommandRejected, StepFailure } from "./command-executor.ts";
 import { ActionJournal } from "./action-journal.ts";
 import { commandRegistry } from "./command-registry.ts";
 import { commandResources } from "./command-reads.ts";
-import { VIEW_IMAGE_KEY } from "@pe/agent-contracts";
 import {
   captureOrigin,
   hostCaptures,
@@ -53,8 +60,8 @@ import {
 } from "./captures-route.ts";
 import { randomUUID } from "node:crypto";
 import { recordHostFact } from "./receipt-export.ts";
-import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
-import { RevitBridge, BridgeError, CANCEL_OPERATION_KEY, NoRevitSession } from "./bridge.ts";
+import { HttpRouter, HttpServerResponse as Response } from "effect/http";
+import { RevitBridge, BridgeError, NoRevitSession } from "./bridge.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
 import {
   getBridgeSessionSummary,
@@ -95,6 +102,32 @@ import {
 } from "@pe/host-contracts/operation-types";
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
 
+const callEntries = new Map(catalogEntries.map((entry) => [entry.key, entry.call]));
+const readingSubjects: Record<
+  "roster" | "walk" | "tables",
+  (request: unknown, session: string, openId: string | null | undefined) => DuctsReadingRequest
+> = {
+  roster: (request, session, openId) => ({
+    ...(request as object),
+    kind: "ducts-snapshot",
+    selector: { kind: "roster" },
+    target: documentRefSchema.parse({ session, openId }),
+  }),
+  walk: (request, session, openId) => ({
+    ...(request as object),
+    kind: "ducts-snapshot",
+    selector: ductsSnapshotReadingSchema.shape.selector.parse(
+      (request as { selector?: unknown }).selector,
+    ),
+    target: documentRefSchema.parse({ session, openId }),
+  }),
+  tables: (request, session) => ({
+    ...(request as { ids: string[] }),
+    kind: "ducts-tables",
+    session,
+  }),
+};
+
 /** A door refusal: 403, named, and never dispatched. */
 const refusedResponse = (error: Refused) =>
   Response.jsonUnsafe(
@@ -110,9 +143,9 @@ const said = (error: unknown): string =>
 
 /**
  * The entire browser/CLI-facing wire: POST /call { key, request? } → JSON.
- * TS-only ops dispatch locally; every other key passes through to the bridge
- * untouched — the Revit side owns validation, so runtime-registered ops need
- * zero host changes. Errors are problem-JSON with a real HTTP status.
+ * TS-only ops dispatch locally. Native Reads require generated metadata, Schema admission,
+ * and an exact SDK target before sharing. Unadmitted Pod queries refuse at this door.
+ * Native failures use the typed problem mapper; remaining local handlers migrate with I.
  */
 
 export type CallRouteDispatch = (
@@ -132,11 +165,14 @@ export function makeCallRoute(
     captureStore?: CaptureStore;
   } = {},
   composition?: {
+    readonly sdkDriver?: Context.Service.Shape<typeof SdkDriver>;
     readonly forwardBase?: string | null;
     readonly dispatch?: CallRouteDispatch;
     readonly origin?: () => string;
     readonly captureHostOp?: typeof recordHostOp;
     readonly local?: (key: string, input: unknown) => Promise<unknown>;
+    /** The Families reader the host's layer built; absent where no Revit composition exists. */
+    readonly families?: FamiliesReader["Service"];
   },
 ) {
   const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
@@ -144,71 +180,20 @@ export function makeCallRoute(
     throw Error(
       "Host forwarding is disabled: execution requires this runtime's own host and Revit.",
     );
+  const families = () => {
+    if (!composition?.families) throw Error("Families reads need the FamiliesReader service.");
+    return composition.families;
+  };
   const recordOperation = composition?.captureHostOp ?? recordHostOp;
   const dispatch: CallRouteDispatch = (...args) =>
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
-  const observations = () => (captures ??= hostTakeoffCaptures());
-  const owner = () => operations;
-  type NativeAnswer = Effect.Success<ReturnType<RevitBridge["Service"]["invoke"]>>;
-  /**
-   * Native Reads in flight, by exact target and input. Revit runs one op at a time, so a twin of
-   * a running read (a browser resubscribe, a retry) joins it instead of queueing behind it, and a
-   * read every caller abandoned is cancelled (queued: dropped at the gate; running: `op.cancel`)
-   * instead of running to completion for nobody. On 2026-10-31 a 60 s scene read was aborted
-   * and re-asked every 31 s; each abandoned twin still ran, 18 in 10 minutes.
-   */
-  const nativeReads = new Map<
-    string,
-    { readonly requestId: string; readonly answer: Promise<NativeAnswer>; callers: number }
-  >();
-  const sharedRead = (
-    bridge: RevitBridge["Service"],
-    key: string,
-    input: unknown,
-    session: string | undefined,
-    openId: string | null | undefined,
-    requestId: string,
-  ) => {
-    const identity = JSON.stringify([session ?? null, openId ?? null, key, input]);
-    let read = nativeReads.get(identity);
-    if (!read) {
-      // Detached from the caller: a client abort interrupting the bridge turn would open the FIFO
-      // gate while Revit still runs it. The turn ends when Revit answers (or answers cancelled).
-      const created = {
-        requestId,
-        answer: Effect.runPromise(bridge.invoke(key, input, session, openId, requestId)),
-        callers: 0,
-      };
-      const forget = () => {
-        if (nativeReads.get(identity) === created) nativeReads.delete(identity);
-      };
-      created.answer.then(forget, forget);
-      nativeReads.set(identity, created);
-      read = created;
-    }
-    const joined = read;
-    joined.callers++;
-    return Effect.logInfo(
-      joined.requestId === requestId
-        ? `Native read dispatched op=${key} request=${requestId}`
-        : `Native read joined op=${key} request=${joined.requestId} callers=${joined.callers}`,
-    ).pipe(
-      Effect.andThen(Effect.tryPromise({ try: () => joined.answer, catch: (error) => error })),
-      Effect.map((answer) => ({ ...answer, nativeRequestId: joined.requestId })),
-      Effect.onExit((exit) => {
-        if (--joined.callers > 0 || !Exit.hasInterrupts(exit)) return Effect.void;
-        if (nativeReads.get(identity) === joined) nativeReads.delete(identity);
-        void Effect.runPromise(
-          Effect.ignore(
-            bridge.invoke(CANCEL_OPERATION_KEY, { requestId: joined.requestId }, session),
-          ),
-        );
-        return Effect.logInfo(
-          `Native read abandoned op=${key} request=${joined.requestId}: every caller left; cancel sent`,
-        );
-      }),
-    );
+  // The injected store, else the `CaptureStore` of the layer that builds these routes (set below,
+  // before any handler can run).
+  const observations = (): TakeoffCaptures => {
+    if (!captures) throw Error("Takeoff captures are read before the call route layer is built.");
+    return captures;
   };
+  const owner = () => operations;
   const admit = async (raw: unknown, _bridge: RevitBridge["Service"], caller: Caller) => {
     const input = actionAdmissionSchema.parse(raw);
     const crossing = {
@@ -217,9 +202,124 @@ export function makeCallRoute(
     };
     return owner().invoke(input, crossing);
   };
+  // ADR 0029 read admission resolves implicit targets before sharing. The command
+  // gateway still requires an exact id; no unresolved selector reaches dispatch.
+  const admittedOpenId = (session: SdkSession | undefined, explicit: string | null | undefined) => {
+    if (explicit !== undefined) return explicit;
+    const active = session?.state?.openDocuments.filter((document) => document.isActive) ?? [];
+    return active.length === 1 ? active[0]!.openId : undefined;
+  };
+  const prepareNativeRead = Effect.fn("NativeReadDoor.resolve")(function* (
+    key: string,
+    input: unknown,
+    session: SdkSession,
+    openId: string | null | undefined,
+  ) {
+    const schemas = yield* readSchemas(key);
+    const freshness = yield* ReadFreshness;
+    return yield* prepareRead(
+      {
+        operationKey: key,
+        operation: { key, intent: "Read" },
+        processIncarnation: { pid: session.processId, startedAt: session.processStartUtcUnixMs },
+        openDocumentLifetime: typeof openId === "string" ? { openId } : { kind: "session-only" },
+        freshnessGeneration: freshness.current(),
+        representation:
+          isRecord(input) &&
+          input.contextRepresentation !== undefined &&
+          input.contextRepresentation !== "overview"
+            ? "detail"
+            : "overview",
+        responseSchemaVersion: schemas.version,
+      },
+      input,
+      schemas.request,
+      schemas.response,
+    ).pipe(
+      Effect.mapError(
+        () =>
+          new InvalidRead({
+            message: "Native input violates its operation Schema",
+            status: 400,
+            problem: "read.input",
+          }),
+      ),
+    );
+  });
+  const resolveRead = HttpRouter.add(
+    nativeReadResolveEndpoint.method,
+    nativeReadResolveEndpoint.path,
+    (req) =>
+      Effect.gen(function* () {
+        const identity = yield* RequestIdentity;
+        const input = yield* req.json.pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(nativeReadResolveEndpoint.body)),
+          Effect.mapError(
+            () =>
+              new InvalidRead({
+                message: "Invalid native read resolution request",
+                status: 400,
+                problem: "read.input",
+              }),
+          ),
+        );
+        const definition = hostOpCatalog.find((entry) => entry.key === input.operationKey);
+        if (!definition || definition.intent !== "Read")
+          return yield* new InvalidRead({
+            message: "Only declared native Reads can be resolved",
+            status: 409,
+            problem: "read.intent",
+          });
+        yield* Effect.try({
+          try: () => {
+            admitAnonymousCall(identity.caller, input.operationKey);
+            requireEligibleCaller(
+              { ...definition, principal: nativePrincipals(definition.actor) },
+              identity.caller,
+              nativeReadResolveEndpoint.path,
+            );
+          },
+          catch: (error) => error,
+        });
+        const session = yield* (yield* SdkSession).resolve(identity.scope);
+        const target = yield* Effect.try({
+          try: () =>
+            gatewayTarget(
+              input.operationKey,
+              definition.needs,
+              session,
+              admittedOpenId(session, identity.scope.openDocumentId) ?? undefined,
+            ),
+          catch: (error) => error,
+        });
+        const read = yield* prepareNativeRead(
+          input.operationKey,
+          input.input,
+          session,
+          target.kind === "document" ? target.ref.openId : null,
+        );
+        const { operation: _, responseSchemaVersion: __, ...descriptor } = read.descriptor;
+        return Response.jsonUnsafe(descriptor);
+      }).pipe(
+        Effect.catch((error) => {
+          if (isDoorFailure(error)) return Effect.fail(error);
+          const problem = toProblem(error);
+          return Effect.succeed(
+            Response.jsonUnsafe(
+              {
+                kind: "refused",
+                failure: { code: "ReadResolutionRefused", message: problem.message },
+              },
+              { status: problem.status },
+            ),
+          );
+        }),
+      ),
+  );
   const callDoor = peRoutes["operation.call"];
   const post = HttpRouter.add(callDoor.method, callDoor.path, (req) => {
     let captureId: string | undefined;
+    let admissionRequestId: string = randomUUID();
     // Set once dispatch begins so the catch below can attribute failures to the op.
     let op:
       | {
@@ -231,9 +331,11 @@ export function makeCallRoute(
           requestId: string;
         }
       | undefined;
-    const caller = currentCaller();
-    const requestId = randomUUID();
     return Effect.gen(function* () {
+      const identity = yield* RequestIdentity;
+      const caller = identity.caller;
+      const requestId = identity.requestId;
+      admissionRequestId = requestId;
       // Lenient by ruling (queue-provenance §1): origin is attribution, not authorization —
       // a missing header is counted as "unknown", never rejected. No registry, no validation.
       const origin = req.headers[HOST_RPC_ORIGIN_HEADER]?.trim() || "unknown";
@@ -256,7 +358,16 @@ export function makeCallRoute(
       const unknownKey = Object.keys(body).find((k) => k !== "key" && k !== "request");
       if (unknownKey) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknownKey)));
       const key = body.key;
-      const humanDoor = key === "rhvac.launch";
+      if (key.startsWith("pod.") && !isAnyOperationKey(key))
+        return yield* Effect.fail(
+          new Refused({
+            code: "permission.undeclared",
+            door: "/call",
+            reason: `Pod query has no admitted route: ${key}`,
+          }),
+        );
+      const entry = callEntries.get(key) ?? {};
+      const humanDoor = entry.humanOnly;
       if (humanDoor && caller.kind !== "human")
         return Response.jsonUnsafe(
           { error: "Only a person can launch RHVAC", notDispatched: true },
@@ -264,11 +375,8 @@ export function makeCallRoute(
         );
       yield* Effect.try({ try: () => admitAnonymousCall(caller, key), catch: (error) => error });
       const request = "request" in body ? body.request : undefined;
-      let scope = yield* Effect.try({
-        try: () => readSessionScope(req.headers),
-        catch: (error) => invalidBody(String(error)),
-      });
-      if ((key === "ducts.snapshot" || key === "ducts.tables") && scope.bridgeSessionId) {
+      let scope: HostSessionScope = identity.scope;
+      if (entry.canonicalSession && scope.bridgeSessionId) {
         const bridgeForScope = yield* RevitBridge;
         const canonicalSession = yield* Effect.tryPromise({
           try: () => canonicalDuctsSession(bridgeForScope, scope.bridgeSessionId!),
@@ -279,18 +387,18 @@ export function makeCallRoute(
       let bridgeSessionId = scope.bridgeSessionId;
       let openDocumentId: string | null | undefined = scope.openDocumentId;
 
-      if (key === "takeoffs.saved") {
+      if (entry.saved) {
         op = { key, tsOnly: true, startedAt: Date.now(), origin, originClass, requestId };
         const value = yield* savedTakeoffs(request, observations());
         recordOperation(op, { ok: true });
         return Response.jsonUnsafe(value);
       }
 
-      if (key === "host.ops.catalog") openDocumentId = null;
+      if (entry.hostOnly) openDocumentId = null;
       const bridge = yield* RevitBridge;
       const resolvedSession =
-        !isTsOnlyOperationKey(key) && key !== CANCEL_OPERATION_KEY
-          ? yield* sdkSession(bridge, scope, actionDeps.sdk)
+        !isTsOnlyOperationKey(key) && !entry.cancel
+          ? yield* (yield* SdkSession).resolve(scope)
           : undefined;
       bridgeSessionId = resolvedSession?.sessionId ?? bridgeSessionId;
       op = {
@@ -302,15 +410,25 @@ export function makeCallRoute(
         requestId,
       };
       let intent: string | undefined;
-      if (
-        key !== "takeoffs.snapshot" &&
-        key !== "host.ops.catalog" &&
-        key !== CANCEL_OPERATION_KEY
-      ) {
-        const definition = yield* Effect.tryPromise({
-          try: () => operationDefinition(key, bridge, resolvedSession),
-          catch: (error) => error,
-        });
+      if (entry.admission !== "intrinsic") {
+        const definition = isTsOnlyOperationKey(key)
+          ? yield* Effect.tryPromise({
+              try: () => operationDefinition(key, bridge, resolvedSession),
+              catch: (error) => error,
+            })
+          : yield* Effect.try({
+              try: () => {
+                const definition = hostOpCatalog.find((entry) => entry.key === key);
+                if (!definition)
+                  throw new InvalidRead({
+                    message: "No generated native operation contract",
+                    status: 404,
+                    problem: "read.contract",
+                  });
+                return { ...definition, principal: nativePrincipals(definition.actor) };
+              },
+              catch: (error) => error,
+            });
         const ref =
           resolvedSession && typeof openDocumentId === "string"
             ? { session: resolvedSession.sessionId, openId: openDocumentId }
@@ -334,23 +452,24 @@ export function makeCallRoute(
           catch: (error) => error,
         });
         if (!isTsOnlyOperationKey(key)) {
-          const target = yield* Effect.tryPromise({
-            try: async () =>
-              gatewayTarget(key, definition.needs, resolvedSession, openDocumentId ?? undefined),
+          const target = yield* Effect.try({
+            try: () =>
+              gatewayTarget(
+                key,
+                definition.needs,
+                resolvedSession,
+                admittedOpenId(resolvedSession, openDocumentId) ?? undefined,
+              ),
             catch: (error) => error,
           });
           if (target.kind !== "host")
             bridgeSessionId = target.kind === "document" ? target.ref.session : target.session;
           openDocumentId = target.kind === "document" ? target.ref.openId : null;
-          if (key === "scripting.execute" && resolvedSession) {
-            const current = yield* sdkSession(
-              bridge,
-              {
-                bridgeSessionId: resolvedSession.sessionId,
-                openDocumentId: openDocumentId ?? undefined,
-              },
-              actionDeps.sdk,
-            );
+          if (entry.script && resolvedSession) {
+            const current = yield* (yield* SdkSession).resolve({
+              bridgeSessionId: resolvedSession.sessionId,
+              openDocumentId: openDocumentId ?? undefined,
+            });
             yield* Effect.try({
               try: () =>
                 admitScript(
@@ -367,25 +486,19 @@ export function makeCallRoute(
           }
         }
       }
-      if (key === "ducts.snapshot" || key === "ducts.tables") {
+      if (entry.reading) {
+        const subject = readingSubjects[entry.reading](request, bridgeSessionId!, openDocumentId);
         const target =
-          key === "ducts.snapshot"
-            ? documentRefSchema.parse({ session: bridgeSessionId, openId: openDocumentId })
-            : { session: bridgeSessionId!, openId: undefined };
-        const subject: DuctsReadingRequest =
-          key === "ducts.snapshot"
-            ? {
-                ...(request as object),
-                kind: "ducts-snapshot",
-                target: documentRefSchema.parse(target),
-              }
-            : { ...(request as { ids: string[] }), kind: "ducts-tables", session: target.session };
+          subject.kind === "ducts-snapshot"
+            ? subject.target
+            : { session: subject.session, openId: undefined };
         const owner = ductsReadings(bridge);
         const shared = yield* Effect.tryPromise({
           try: () =>
             owner.read(
               subject,
               async () => ({
+                // effect-edge: island, phase 5
                 ...(await Effect.runPromise(
                   bridge.invoke(key, request ?? {}, target.session, target.openId, requestId),
                 )),
@@ -416,10 +529,10 @@ export function makeCallRoute(
       }
       const result = isTsOnlyOperationKey(key)
         ? {
-            value: yield* dispatch(key, request, scope, bridge),
+            value: yield* dispatch(key, request, scope, bridge, observations()),
             target: null,
           }
-        : key === "takeoffs.snapshot"
+        : entry.snapshot
           ? yield* Effect.tryPromise({
               try: async () => {
                 const target = documentRefSchema.parse({
@@ -427,10 +540,10 @@ export function makeCallRoute(
                   openId: openDocumentId,
                 });
                 const selected = async () => {
-                  const sessions = await Effect.runPromise(bridge.list);
-                  return sessions
-                    .find((session) => session.sessionId === target.session)
-                    ?.state?.openDocuments.find((document) => document.openId === target.openId);
+                  const resolve = SdkSession.resolve(bridge, { session: target.session });
+                  // effect-edge: island, phase 5
+                  const session = await Effect.runPromise(resolve);
+                  return session.state?.openDocuments.find((doc) => doc.openId === target.openId);
                 };
                 const document = await selected();
                 if (!document?.address)
@@ -440,9 +553,11 @@ export function makeCallRoute(
                   target,
                   async () => {
                     const [result, index] = await Promise.all([
+                      // effect-edge: island, phase 5
                       Effect.runPromise(
                         bridge.invoke(key, request ?? {}, target.session, target.openId, requestId),
                       ),
+                      // effect-edge: island, phase 5
                       Effect.runPromise(
                         bridge.invoke(
                           "revit.catalog.project-index",
@@ -477,44 +592,68 @@ export function makeCallRoute(
                 error instanceof BridgeError ? error : new BridgeError(String(error), 409),
             })
           : intent === "Read"
-            ? yield* sharedRead(
-                bridge,
-                key,
-                request ?? {},
-                bridgeSessionId,
-                openDocumentId,
-                requestId,
-              )
+            ? yield* Effect.gen(function* () {
+                if (!resolvedSession || !bridgeSessionId)
+                  return yield* new InvalidRead({
+                    message: "Native read needs an exact SDK incarnation",
+                    status: 409,
+                    problem: "read.target",
+                  });
+                const prepared = yield* prepareNativeRead(
+                  key,
+                  request ?? {},
+                  resolvedSession,
+                  openDocumentId,
+                );
+                const reads = yield* NativeReads;
+                const answer = yield* reads.join(prepared, bridgeSessionId);
+                const actualOpen =
+                  "openId" in answer.actualTarget.openDocumentLifetime
+                    ? answer.actualTarget.openDocumentLifetime.openId
+                    : undefined;
+                return {
+                  value: answer.value,
+                  nativeRequestId: answer.nativeRequestId,
+                  target: {
+                    session: bridgeSessionId,
+                    document:
+                      resolvedSession.state?.openDocuments.find((doc) => doc.openId === actualOpen)
+                        ?.address ?? null,
+                    ...(actualOpen
+                      ? { documentRef: { session: bridgeSessionId, openId: actualOpen } }
+                      : {}),
+                  },
+                };
+              })
             : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId, requestId);
       // A joined Read names the dispatch that actually ran, never this caller's unsent id.
       const nativeRequestId =
         "nativeRequestId" in result && typeof result.nativeRequestId === "string"
           ? result.nativeRequestId
           : requestId;
-      const kept =
-        key === VIEW_IMAGE_KEY
-          ? yield* registerViewImage(
-              actionDeps.captureStore ?? hostCaptures(),
-              result.value,
-              request,
-              captureOrigin(origin, caller),
-              bridge,
-              { session: bridgeSessionId, openId: openDocumentId },
-            )
-          : null;
+      const kept = entry.capture
+        ? yield* registerViewImage(
+            actionDeps.captureStore ?? hostCaptures(),
+            result.value,
+            request,
+            captureOrigin(origin, caller),
+            bridge,
+            { session: bridgeSessionId, openId: openDocumentId },
+          )
+        : null;
       recordOperation(op, { ok: true });
       // Every /call response names the target it actually ran against, so a tool card can show
       // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
       // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
       const headers = result.target ? resolvedTargetHeaders(result.target) : {};
-      if (!op.tsOnly && key !== CANCEL_OPERATION_KEY)
-        headers["x-pe-native-request-id"] = nativeRequestId;
+      if (!op.tsOnly && !entry.cancel) headers["x-pe-native-request-id"] = nativeRequestId;
       if (captureId) headers["x-pe-takeoff-capture-id"] = captureId;
       if (kept)
         Object.assign(headers, { "x-pe-capture-id": kept.id, "x-pe-capture-url": kept.url });
       return Response.jsonUnsafe(result.value ?? null, { headers });
     }).pipe(
       Effect.catch((error) => {
+        if (isDoorFailure(error)) return Effect.fail(error);
         const problem = toProblem(error);
         if (op) recordOperation(op, { ok: false, problem });
         else if (problem.status >= 500)
@@ -524,7 +663,7 @@ export function makeCallRoute(
               event: "host_fault",
               counters: { routeCode: "call", faultCode: "host.failed", status: problem.status },
             },
-            { requestId },
+            { requestId: admissionRequestId },
           );
         return Effect.succeed(
           error instanceof Refused
@@ -572,18 +711,21 @@ export function makeCallRoute(
             }
             if (id) return Response.jsonUnsafe(await observations().families(id));
             if (!raw) return Response.jsonUnsafe(await observations().familiesReadings());
-            const work = workKeySchema.parse(JSON.parse(raw));
-            if (work.route !== "families") throw Error("Families Work required");
+            const work = workKeySchema
+              .and(z.object({ route: z.literal("families") }))
+              .parse(JSON.parse(raw));
             return Response.jsonUnsafe(await observations().displayedFamilies(work));
           }
           if (req.method === "DELETE") {
             const { readId } = z
               .strictObject({ readId: z.uuid() })
+              // effect-edge: island, phase 5
               .parse(await Effect.runPromise(req.json));
             const target = documentRefSchema.parse({
               session: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
               openId: req.headers[HOST_RPC_DOCUMENT_HEADER],
             });
+            // effect-edge: island, phase 5
             const session = await Effect.runPromise(
               sdkSession(
                 bridge,
@@ -596,13 +738,13 @@ export function makeCallRoute(
               caller,
               "/families/readings",
             );
-            await cancelFamiliesRead(readId, target);
+            await families().cancel(readId, target);
             return Response.jsonUnsafe({ cancelled: true });
           }
           if (req.method !== "POST") throw Error("Unsupported Families reading method");
           const body = z
             .strictObject({
-              work: workKeySchema,
+              work: workKeySchema.and(z.object({ route: z.literal("families") })),
               expectedRevision: z.number().int().nonnegative().optional(),
               readId: z.uuid(),
               filter: z.strictObject({
@@ -611,12 +753,13 @@ export function makeCallRoute(
                 placementScope: z.enum(["AllLoaded", "PlacedOnly", "UnplacedOnly"]),
               }),
             })
+            // effect-edge: island, phase 5
             .parse(await Effect.runPromise(req.json));
-          if (body.work.route !== "families") throw Error("Families Work required");
           const target = documentRefSchema.parse({
             session: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
             openId: req.headers[HOST_RPC_DOCUMENT_HEADER],
           });
+          // effect-edge: island, phase 5
           const resolvedSession = await Effect.runPromise(
             sdkSession(
               bridge,
@@ -646,12 +789,11 @@ export function makeCallRoute(
             resolved.ref.openId !== target.openId
           )
             throw Error("Families read requires the exact project document");
-          const session = (await Effect.runPromise(bridge.list)).find(
-            (row) => row.sessionId === target.session,
+          // effect-edge: island, phase 5
+          const session = await Effect.runPromise(
+            SdkSession.resolve(bridge, { session: target.session }),
           );
-          const document = session?.state?.openDocuments.find(
-            (row) => row.openId === target.openId,
-          );
+          const document = session.state?.openDocuments.find((row) => row.openId === target.openId);
           if (body.work.binding === "address") {
             if (
               !document?.address ||
@@ -664,7 +806,7 @@ export function makeCallRoute(
             body.work.open.openId !== target.openId
           )
             throw Error("Families Work belongs to another document");
-          const saved = await readFamiliesProgressively({
+          const saved = await families().read({
             bridge,
             captures: observations(),
             readId: body.readId,
@@ -832,9 +974,8 @@ export function makeCallRoute(
     );
   });
   // action.read is GET /actions; every other control is POST /actions/<verb>, the path the client builds.
-  const controlVerbs = Object.keys(actionControls).filter(
-    (key): key is Exclude<keyof typeof actionControls, "action.read"> => key !== "action.read",
-  );
+  const { "action.read": _readControl, ...writeControls } = actionControls;
+  const controlVerbs = Object.keys(writeControls) as (keyof typeof writeControls)[];
   const controls = controlVerbs.map((id) => {
     const choice = id.slice("action.".length);
     return HttpRouter.add(peRoutes[id].method, peRoutes[id].path, (req) => {
@@ -842,6 +983,7 @@ export function makeCallRoute(
       return RevitBridge.use((_bridge) =>
         Effect.tryPromise({
           try: async () => {
+            // effect-edge: island, phase 5
             const body = await Effect.runPromise(req.json);
             if (!isRecord(body) || typeof body.id !== "string")
               throw Error("An original action ID is required");
@@ -884,6 +1026,7 @@ export function makeCallRoute(
       Effect.tryPromise({
         try: async () => {
           if (req.method === "POST") {
+            // effect-edge: island, phase 5
             const body = await Effect.runPromise(req.json);
             if (!isRecord(body) || typeof body.key !== "string")
               throw Error("A Family read key is required");
@@ -914,6 +1057,7 @@ export function makeCallRoute(
     RevitBridge.use((bridge) =>
       Effect.tryPromise({
         try: async () => {
+          // effect-edge: island, phase 5
           const body = await Effect.runPromise(req.json);
           if (!isRecord(body) || typeof body.key !== "string")
             throw Error("Schedule read key required");
@@ -937,7 +1081,35 @@ export function makeCallRoute(
   return Layer.mergeAll(
     Layer.effectDiscard(
       RevitBridge.use((bridge) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          // The host provides one store for the whole app; a composition with none owns its own,
+          // closed with this layer's scope.
+          captures ??=
+            Option.getOrUndefined(yield* Effect.serviceOption(TakeoffCaptureStore)) ??
+            Context.get(yield* Layer.build(TakeoffCaptureStore.layer()), TakeoffCaptureStore);
+          const freshness = yield* ReadFreshness;
+          yield* Effect.acquireRelease(
+            // Queue/native-read telemetry must not invalidate an in-flight read's identity.
+            Effect.sync(() =>
+              operations.subscribe({ kinds: ["action"] }, () => freshness.advance()),
+            ),
+            (release) => Effect.sync(release),
+          );
+          yield* Effect.acquireRelease(
+            Effect.sync(() =>
+              bridge.subscribe((event) => {
+                // Queue/progress notifications and unchanged state snapshots are not writes.
+                if (
+                  event.kind === "connected" ||
+                  event.kind === "disconnected" ||
+                  (event.kind === "state-sync" && event.docChanged) ||
+                  (event.kind === "event" && event.eventName === "document-changed")
+                )
+                  freshness.advance();
+              }),
+            ),
+            (release) => Effect.sync(release),
+          );
           operations.bindCommands({
             ...commandResources(
               bridge,
@@ -947,16 +1119,18 @@ export function makeCallRoute(
             resolve: commandRegistry(
               bridge,
               observations(),
-              actionDeps,
+              { ...actionDeps, families: composition?.families },
               composition?.local ??
-                ((key, input) => executeGatewayLocal(key, input, bridge, actionDeps.launchShell)),
+                ((key, input) =>
+                  executeGatewayLocal(key, input, bridge, observations(), actionDeps.launchShell)),
               composition?.origin,
             ),
           });
         }),
       ),
     ),
-    post,
+    post.pipe(Layer.provide(httpProblems)),
+    resolveRead.pipe(Layer.provide(httpProblems)),
     familiesReadings,
     captured,
     actions,
@@ -964,6 +1138,17 @@ export function makeCallRoute(
     familyReadings,
     scheduleReadings,
     ...controls,
+  ).pipe(
+    HttpRouter.provideRequest(NativeReads.layer),
+    HttpRouter.provideRequest(
+      SdkSession.layer.pipe(
+        Layer.provide(
+          composition?.sdkDriver ? Layer.succeed(SdkDriver, composition.sdkDriver) : SdkDriverLive,
+        ),
+      ),
+    ),
+    HttpRouter.provideRequest(ReadFreshness.layer),
+    Layer.provide(ReadFreshness.layer),
   );
 }
 
@@ -1070,108 +1255,138 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   request: unknown,
   scope: HostSessionScope | undefined,
   bridge: RevitBridge["Service"],
+  captures: TakeoffCaptures,
 ) {
-  switch (key) {
-    case "takeoffs.saved":
-      return yield* savedTakeoffs(request, hostTakeoffCaptures());
-    case "host.status":
-      return yield* Effect.flatMap(
-        Effect.map(bridge.list, (sessions) => ({ connected: sessions.some((s) => s.connected) })),
-        (snapshot) => getHostStatus(snapshot),
-      );
-    case "host.topology": {
-      // The operator's map: host identity + all sessions in one snapshot (ADR 0003).
-      const host = yield* Effect.flatMap(
-        Effect.map(bridge.list, (sessions) => ({ connected: sessions.some((s) => s.connected) })),
-        (snapshot) => getHostStatus(snapshot),
-      );
-      const sessions = yield* listBridgeSessions(bridge.list);
-      return {
-        observedAtUtc: new Date().toISOString(),
-        host,
-        sessions: sessions.sessions,
-      };
-    }
-    case "bridge.sessions.summary":
-      return yield* Effect.flatMap(sdkSession(bridge, scope), getBridgeSessionSummary);
-    case "bridge.sessions.list":
-      return yield* listBridgeSessions(bridge.list);
-    case "logs.tail":
-      return yield* tailLogs(yield* decodeRequest(key, request));
-    case "host.shell.open":
-      return yield* openShellPath(yield* decodeRequest(key, request));
-    case "pod.list": {
-      const input = yield* decodeRequest(key, request);
-      return input.projection === "identity"
-        ? yield* resolvePodIdentity(input.folder)
-        : yield* listPods();
-    }
-    case "pod.capture": {
-      const { pod } = yield* decodeRequest(key, request);
-      return yield* Effect.tryPromise({
-        try: () => capturePackage(pod),
-        catch: (error) => packageError(key, error),
-      }).pipe(
-        Effect.map(
-          ({ id, folder, directory, entrypoints, contributions, memberBundle, sourceBundle }) => ({
-            id,
-            folder,
-            directory,
-            entrypoints,
-            contributions,
-            memberBundle,
-            sourceBundle,
-          }),
-        ),
-      );
-    }
-    case "pod.export": {
-      const input = yield* decodeRequest(key, request);
-      return yield* transfer(key, () => exportPod(input));
-    }
-    case "pod.import": {
-      const input = yield* decodeRequest(key, request);
-      return yield* transfer(key, () => importPod(input));
-    }
-    case "pod.promote": {
-      const input = yield* decodeRequest(key, request);
-      return yield* transfer(key, () => promotePage(input));
-    }
-    case "pod.runs":
-      return yield* listRuns(yield* decodeRequest(key, request));
-    case "pod.member.read":
-      return yield* readMember(yield* decodeRequest(key, request));
-    case "pod.member.write":
-      return yield* writeMember(yield* decodeRequest(key, request));
-    case "pod.member.save":
-      return yield* saveMember(yield* decodeRequest(key, request));
-    case "pod.member.compose":
-      return yield* composeMember(
-        yield* decodeRequest(key, request),
-        yield* podContext(bridge, scope),
-      );
-    case "rhvac.open":
-      return yield* rhvacOpen(yield* decodeRequest(key, request));
-    case "rhvac.assemblies":
-      return yield* rhvacAssemblies(yield* decodeRequest(key, request));
-    case "rhvac.sync":
-      return yield* rhvacSync(yield* decodeRequest(key, request));
-    case "rhvac.launch":
-      return yield* rhvacLaunch(yield* decodeRequest(key, request));
-    case "rhvac.takeoff":
-      return yield* rhvacTakeoff(yield* decodeRequest(key, request));
-    case "rhvac.list":
-      return yield* rhvacList(yield* decodeRequest(key, request));
-    case "aps.auth.status":
-      return yield* apsAuthStatus(yield* decodeRequest(key, request));
-    case "aps.auth.login":
-      return yield* apsAuthLogin(yield* decodeRequest(key, request));
-    case "aps.auth.logout":
-      return yield* apsAuthLogout();
-    case "aps.auth.token":
-      return yield* apsAuthToken(yield* decodeRequest(key, request));
-  }
+  return yield* localEntries[key]({ request, scope, bridge, captures });
 });
+
+type LocalCall = {
+  request: unknown;
+  scope: HostSessionScope | undefined;
+  bridge: RevitBridge["Service"];
+  captures: TakeoffCaptures;
+};
+const localEntries = {
+  "takeoffs.saved": Effect.fnUntraced(function* ({ request, captures }: LocalCall) {
+    return yield* savedTakeoffs(request, captures);
+  }),
+  "host.status": Effect.fnUntraced(function* ({ bridge }: LocalCall) {
+    return yield* Effect.flatMap(
+      Effect.map(bridge.list, (sessions) => ({ connected: sessions.some((s) => s.connected) })),
+      (snapshot) => getHostStatus(snapshot),
+    );
+  }),
+  "host.topology": Effect.fnUntraced(function* ({ bridge }: LocalCall) {
+    // The operator's map: host identity + all sessions in one snapshot (ADR 0003).
+    const host = yield* Effect.flatMap(
+      Effect.map(bridge.list, (sessions) => ({ connected: sessions.some((s) => s.connected) })),
+      (snapshot) => getHostStatus(snapshot),
+    );
+    const sessions = yield* listBridgeSessions(bridge.list);
+    return {
+      observedAtUtc: new Date().toISOString(),
+      host,
+      sessions: sessions.sessions,
+    };
+  }),
+  "bridge.sessions.summary": Effect.fnUntraced(function* ({ scope, bridge }: LocalCall) {
+    return yield* Effect.flatMap(sdkSession(bridge, scope), getBridgeSessionSummary);
+  }),
+  "bridge.sessions.list": Effect.fnUntraced(function* ({ bridge }: LocalCall) {
+    return yield* listBridgeSessions(bridge.list);
+  }),
+  "logs.tail": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* tailLogs(yield* decodeRequest("logs.tail", request));
+  }),
+  "host.shell.open": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* openShellPath(yield* decodeRequest("host.shell.open", request));
+  }),
+  "pod.list": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    const input = yield* decodeRequest("pod.list", request);
+    return input.projection === "identity"
+      ? yield* resolvePodIdentity(input.folder)
+      : yield* listPods();
+  }),
+  "pod.capture": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    const { pod } = yield* decodeRequest("pod.capture", request);
+    return yield* Effect.tryPromise({
+      try: () => capturePackage(pod),
+      catch: (error) => packageError("pod.capture", error),
+    }).pipe(
+      Effect.map(
+        ({ id, folder, directory, entrypoints, contributions, memberBundle, sourceBundle }) => ({
+          id,
+          folder,
+          directory,
+          entrypoints,
+          contributions,
+          memberBundle,
+          sourceBundle,
+        }),
+      ),
+    );
+  }),
+  "pod.export": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    const input = yield* decodeRequest("pod.export", request);
+    return yield* transfer("pod.export", () => exportPod(input));
+  }),
+  "pod.import": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    const input = yield* decodeRequest("pod.import", request);
+    return yield* transfer("pod.import", () => importPod(input));
+  }),
+  "pod.promote": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    const input = yield* decodeRequest("pod.promote", request);
+    return yield* transfer("pod.promote", () => promotePage(input));
+  }),
+  "pod.runs": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* listRuns(yield* decodeRequest("pod.runs", request));
+  }),
+  "pod.member.read": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* readMember(yield* decodeRequest("pod.member.read", request));
+  }),
+  "pod.member.write": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* writeMember(yield* decodeRequest("pod.member.write", request));
+  }),
+  "pod.member.save": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* saveMember(yield* decodeRequest("pod.member.save", request));
+  }),
+  "pod.member.compose": Effect.fnUntraced(function* ({ request, scope, bridge }: LocalCall) {
+    return yield* composeMember(
+      yield* decodeRequest("pod.member.compose", request),
+      yield* podContext(bridge, scope),
+    );
+  }),
+  "rhvac.open": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* rhvacOpen(yield* decodeRequest("rhvac.open", request));
+  }),
+  "rhvac.assemblies": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* rhvacAssemblies(yield* decodeRequest("rhvac.assemblies", request));
+  }),
+  "rhvac.sync": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* rhvacSync(yield* decodeRequest("rhvac.sync", request));
+  }),
+  "rhvac.launch": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* rhvacLaunch(yield* decodeRequest("rhvac.launch", request));
+  }),
+  "rhvac.takeoff": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* rhvacTakeoff(yield* decodeRequest("rhvac.takeoff", request));
+  }),
+  "rhvac.list": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* rhvacList(yield* decodeRequest("rhvac.list", request));
+  }),
+  "aps.auth.status": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* apsAuthStatus(yield* decodeRequest("aps.auth.status", request));
+  }),
+  "aps.auth.login": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* apsAuthLogin(yield* decodeRequest("aps.auth.login", request));
+  }),
+  "aps.auth.logout": Effect.fnUntraced(function* (_call: LocalCall) {
+    return yield* apsAuthLogout();
+  }),
+  "aps.auth.token": Effect.fnUntraced(function* ({ request }: LocalCall) {
+    return yield* apsAuthToken(yield* decodeRequest("aps.auth.token", request));
+  }),
+};
 
 /**
  * Archive transport is host-only. A refusal is a settled answer (the transfer is all-or-nothing, so
@@ -1239,8 +1454,22 @@ function toProblem(error: unknown): {
   result?: unknown;
   resolvedTarget?: BridgeError["evidence"]["resolvedTarget"];
 } {
+  if (
+    error &&
+    typeof error === "object" &&
+    "problem" in error &&
+    "status" in error &&
+    "message" in error
+  )
+    return {
+      kind: "InvalidRequest",
+      message: String(error.message),
+      status: Number(error.status),
+    };
   if (error instanceof CommandRejected)
     return { kind: "InvalidRequest", message: error.message, status: 409 };
+  if (error instanceof NoRevitSession)
+    return { kind: "Disconnected", message: error.message, status: 503 };
   if (error instanceof StepFailure)
     return {
       kind: "HostFailure",
@@ -1253,31 +1482,21 @@ function toProblem(error: unknown): {
     };
   if (error instanceof Refused)
     return { kind: "InvalidRequest", message: error.message, status: 403, notDispatched: true };
-  if (error instanceof Error) return { kind: "HostFailure", message: error.message, status: 500 };
+  // BridgeError is a Schema.TaggedError (an Error) since ADR 0029 phase 3b; its _tag branch below owns it.
+  if (error instanceof Error && !(error instanceof BridgeError))
+    return { kind: "HostFailure", message: error.message, status: 500 };
   if (
     !(
       error instanceof BridgeError ||
       error instanceof InvalidHostRequest ||
-      error instanceof LocalOpError ||
-      error instanceof NoRevitSession
+      error instanceof LocalOpError
     )
   )
     return { kind: "HostFailure", message: String(error), status: 500 };
   switch (error._tag) {
     case "InvalidHostRequest":
       return { kind: "InvalidRequest", message: error.message, status: 400 };
-    case "NoRevitSession":
-      return { kind: "Disconnected", message: error.message, status: 503 };
     case "BridgeError":
-      if (error.message.startsWith("Unsupported bridge operation '"))
-        return {
-          kind: "CatalogLookup",
-          message: `${error.message} Discover product operation keys with pe_find.`,
-          status: 404,
-          nativeOutcome: error.nativeOutcome,
-          issues: error.evidence.issues,
-          resolvedTarget: error.evidence.resolvedTarget,
-        };
       return {
         kind:
           error.statusCode === 423 &&
@@ -1292,7 +1511,7 @@ function toProblem(error: unknown): {
         status: error.statusCode,
         nativeOutcome: error.nativeOutcome,
         issues: error.evidence.issues,
-        notDispatched: error.evidence.notDispatched,
+        notDispatched: error.evidence.dispatched ? undefined : error.evidence.notDispatched,
         result: error.evidence.result,
         resolvedTarget: error.evidence.resolvedTarget,
       };
@@ -1309,17 +1528,20 @@ function executeGatewayLocal(
   key: string,
   input: unknown,
   bridge: RevitBridge["Service"],
+  captures: TakeoffCaptures,
   launch?: (path: string) => Promise<void>,
 ): Promise<unknown> {
   if (!isTsOnlyOperationKey(key))
     throw new BridgeError("Unknown host operation", 409, { notDispatched: true });
-  if (key !== "host.shell.open")
+  if (!callEntries.get(key)?.shell)
+    // effect-edge: island, phase 5
     return Effect.runPromise(
-      dispatchTsOnlyOperation(key, input, undefined, bridge).pipe(
+      dispatchTsOnlyOperation(key, input, undefined, bridge, captures).pipe(
         Effect.provide(NodeServices.layer),
         Effect.provide(NodeHttpClient.layerUndici),
       ),
     );
+  // effect-edge: island, phase 5
   return Effect.runPromise(
     Effect.flatMap(decodeRequest("host.shell.open", input), (input) =>
       openShellPath(input, launch),

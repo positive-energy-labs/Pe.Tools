@@ -74,7 +74,7 @@ export async function scratchPageDescriptors(
   for (const folder of folders) {
     const directory = join(pagesRoot, folder);
     const index = join(directory, "index.html");
-    const facts = await stat(index).catch(() => null);
+    const facts = await stat(index).catch((error) => { console.error("page-libraries: asynchronous operation failed", error); return null; });
     if (!facts?.isFile()) continue;
     const bytes = await readFile(index);
     const named = scratchPageKey(folder, collisions);

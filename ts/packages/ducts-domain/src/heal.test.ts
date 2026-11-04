@@ -1,9 +1,10 @@
 /** Deterministic heal proposals. Points are model feet. */
+import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
-import { ductsDocumentSchema } from "@pe/agent-contracts";
 
 import { HEAL_JOIN_GAP_IN, healPlan, healRequestGroup, proximityId } from "./heal.ts";
 import type { DuctSnapshot } from "./types.ts";
+import { TEST_SLOTS } from "./sheet/test-inputs.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
@@ -103,13 +104,7 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
     issues,
     layers: [],
     systems: [],
-    slots: {
-      fanStatic: "",
-      fanFlow: "",
-      componentDrop: "",
-      fittingCoefficient: "",
-      terminalFlow: "",
-    },
+    slots: { ...TEST_SLOTS },
   } as DuctSnapshot;
 };
 const items = (s: DuctSnapshot) => healPlan(s).groups.flatMap((g) => g.items);
@@ -211,7 +206,7 @@ it("leaves size changes, two systems, long or skewed gaps and terminals to a per
 it("caps a dangling fitting end, never one a person ignored", () => {
   const tee = node(50, "fitting", [conn(0, [0, 0, 0], [-1, 0, 0])]);
   expect(items(snap([], [tee]))).toMatchObject([{ kind: "cap", end: "50:0" }]);
-  const work = ductsDocumentSchema.parse({
+  const work = designOf({
     assumptions: {
       "open-end:50:0": { edit: { value: { kind: "verdict", verdict: "ignore" } } },
     },

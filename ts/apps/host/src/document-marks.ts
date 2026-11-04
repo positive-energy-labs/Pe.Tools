@@ -54,6 +54,7 @@ export function documentMarks(bridge?: RevitBridge["Service"]): DocumentMarks {
     const atMs = Date.now();
     tail = tail
       .then(async () => {
+        // effect-edge: island, phase 5
         const sessions = await Effect.runPromise(bridge.list);
         const ids = (session: (typeof sessions)[number]) =>
           [session.sessionId, session.sdkSessionId].filter((id): id is string => !!id);
@@ -78,7 +79,10 @@ export function documentMarks(bridge?: RevitBridge["Service"]): DocumentMarks {
         }
         if (changed) for (const listener of listeners) listener();
       })
-      .catch(() => undefined);
+      .catch((error) => {
+        console.error("document-marks: asynchronous operation failed", error);
+        return undefined;
+      });
   });
 
   const holder: DocumentMarks = {

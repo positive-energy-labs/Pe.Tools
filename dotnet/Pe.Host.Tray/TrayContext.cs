@@ -94,7 +94,7 @@ internal sealed class TrayContext : ApplicationContext {
     }
 
     /** Under the product's one machine-local root, which `PE_TOOLS_PRODUCT_HOME` moves. */
-    internal static string WebViewProfileRoot => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, "tray-webview");
+    internal static string WebViewProfileRoot => Path.Combine(ProductRuntimeLayout.Current.RootPath, "tray-webview");
 
     private async Task WatchParentAsync() {
         try {
@@ -106,9 +106,9 @@ internal sealed class TrayContext : ApplicationContext {
         } catch (OperationCanceledException) { }
     }
 
-    private string PinPath => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, $"tray-pin-{_launch.ProfileKey}.json");
+    private string PinPath => Path.Combine(ProductRuntimeLayout.Current.RootPath, $"tray-pin-{_launch.ProfileKey}.json");
 
-    private string ResumePath => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, $"tray-resume-{_launch.ProfileKey}.json");
+    private string ResumePath => Path.Combine(ProductRuntimeLayout.Current.RootPath, $"tray-resume-{_launch.ProfileKey}.json");
 
     private void RememberWhereTheWindowWas() {
         if (_quitRequested || !_ready || !_window.Visible || _window.WindowState == FormWindowState.Minimized
@@ -144,7 +144,7 @@ internal sealed class TrayContext : ApplicationContext {
             PostNoticeMessage(new { type = "notice", notice = (object?)null });
     }
 
-    private static string NoticeCursorPath(TrayLaunch launch) => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, $"tray-notices-{launch.ProfileKey}.cursor");
+    private static string NoticeCursorPath(TrayLaunch launch) => Path.Combine(ProductRuntimeLayout.Current.RootPath, $"tray-notices-{launch.ProfileKey}.cursor");
 
     /** The host's `notices` Reading (SSE) from the saved cursor: each `data:` line is one frame of the log. */
     private async Task ReadNoticesAsync() {

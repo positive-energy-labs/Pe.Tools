@@ -164,9 +164,18 @@ new AgentSideConnection(
       currentMode = modeId;
       return {};
     },
-    cancel: () => cancelled(),
+    cancel: () => {
+      cancelled();
+      if (process.env.FAKE_ACP_GATE)
+        writeFileSync(join(process.env.FAKE_ACP_GATE, "cancel.received"), "received");
+    },
     async prompt({ sessionId, prompt }) {
       const text = prompt.map((block) => block.text ?? "").join("");
+      // Cancellation can arrive while prompt output is backpressured.
+      const hanging =
+        text === "hang"
+          ? new Promise((resolve) => (cancelled = () => resolve({ stopReason: "cancelled" })))
+          : null;
       if (text === "auth-expired") throw RequestError.authRequired();
       if (text === "credit-refusal")
         throw new Error(
@@ -183,6 +192,7 @@ new AgentSideConnection(
           update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: chunk } },
         });
       await say(`echo: ${text}`);
+      if (text === "hang") await gate("hang");
       if (text === "route-cutover-pages") {
         const base = toolEnv.PE_TOOLS_HOST_BASE_URL;
         if (!base) throw Error("Page link proof needs the actual host origin");
@@ -240,6 +250,45 @@ new AgentSideConnection(
         if (applied.status !== 200 || applied.value.outcome !== "rendered")
           throw Error(`render ack refused: ${JSON.stringify(applied.value)}`);
         await say(`route-cutover-rendered ${opened.value.commandId}`);
+        return { stopReason: "end_turn" };
+      }
+      if (text.startsWith("chain ")) {
+        for (const phase of ["find", "stage", "locate", "preview", "apply"]) {
+          const tool = phase === "find" ? "pe_find" : phase === "locate" ? "pe_read" : "pe_do";
+          const codex = text.endsWith("codex");
+          const call = { toolCallId: `chain-${phase}`, kind: "other", status: "pending" };
+          const identity = codex
+            ? { rawInput: { server: "pea", tool, arguments: { phase } } }
+            : { _meta: { claudeCode: { toolName: `mcp__pea__${tool}` } } };
+          await conn.sessionUpdate({
+            sessionId,
+            update: {
+              sessionUpdate: "tool_call",
+              ...call,
+              title: codex ? `mcp.pea.${tool}` : `mcp__pea__${tool}`,
+              ...identity,
+            },
+          });
+          const answer = await conn.requestPermission({
+            sessionId,
+            toolCall: codex ? call : { ...call, ...identity, title: `mcp__pea__${tool}` },
+            options: [
+              { optionId: "yes", name: "Allow", kind: "allow_once" },
+              { optionId: "no", name: "Reject", kind: "reject_once" },
+            ],
+          });
+          if (answer.outcome.optionId !== "yes") throw Error(`chain ${phase} denied`);
+          const response = await fetch(`${process.env.FAKE_ACP_CHAIN}/${phase}`, {
+            method: "POST",
+            headers: { "x-pe-context": toolEnv.PE_CONTEXT ?? process.env.PE_CONTEXT },
+          });
+          const result = await response.text();
+          if (!response.ok) {
+            await say(`chain ${phase} refused: ${result}`);
+            throw Error(result);
+          }
+          await say(`chain ${phase}: ${result}`);
+        }
         return { stopReason: "end_turn" };
       }
       const blocks = prompt.flatMap((b) =>
@@ -300,8 +349,7 @@ new AgentSideConnection(
         });
         return { stopReason: "end_turn" };
       }
-      if (text === "hang")
-        return new Promise((resolve) => (cancelled = () => resolve({ stopReason: "cancelled" })));
+      if (hanging) return hanging;
       if (text === "stubborn")
         return new Promise(() => (cancelled = () => void say("ignoring cancel")));
       if (text === "question") {
@@ -373,12 +421,29 @@ new AgentSideConnection(
         title: text.includes("mcp") ? "mcp__pea__pe_find" : "fake tool",
         kind: text.includes("raw-write") ? "edit" : text.includes("mcp") ? "other" : "read",
         status: "pending",
+        ...(text.includes("mcp")
+          ? { _meta: { claudeCode: { toolName: "mcp__pea__pe_find" } } }
+          : {}),
+        ...(text.includes("codex")
+          ? {
+              title: "mcp.pea.pe_find",
+              kind: text.includes("edit") ? "edit" : "execute",
+              rawInput: text.includes("shell")
+                ? { command: "echo native" }
+                : text.includes("edit")
+                  ? { changes: [] }
+                  : { server: "pea", tool: "pe_find", arguments: {} },
+              _meta: { is_mcp_tool_call: true },
+            }
+          : {}),
       };
       await conn.sessionUpdate({ sessionId, update: { sessionUpdate: "tool_call", ...toolCall } });
       if (text.includes("permission")) {
         const answer = await conn.requestPermission({
           sessionId,
-          toolCall,
+          toolCall: text.includes("codex")
+            ? { toolCallId: toolCall.toolCallId, kind: toolCall.kind, status: "pending" }
+            : toolCall,
           options: [
             { optionId: "yes", name: "Allow", kind: "allow_once" },
             { optionId: "no", name: "Reject", kind: "reject_once" },

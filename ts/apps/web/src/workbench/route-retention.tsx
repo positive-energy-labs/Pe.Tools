@@ -11,7 +11,7 @@ import { useRouter, useRouterState } from "@tanstack/react-router";
 import { THREAD_TABS_MAX, routeAddress, type RouteKey, type ThreadTab } from "@pe/agent-contracts";
 import { RouteActivity, RouteVisibility, type RouteActivityScope } from "#/route/activity";
 import { currentLocation } from "#/route/url";
-import { PaneErrorBoundary } from "@pe/kit/lang/pane";
+import { PaneErrorBoundary, PaneLoading } from "@pe/kit/lang/pane";
 
 interface RetainedRoute {
   key: string;
@@ -58,7 +58,7 @@ const RetainedPane = memo(function RetainedPane({
             data-route-tab={id ?? "enrolling"}
           >
             <PaneErrorBoundary>
-              <Suspense fallback={null}>{renderRoute(<Component />)}</Suspense>
+              <Suspense fallback={<PaneLoading what="route" />}>{renderRoute(<Component />)}</Suspense>
             </PaneErrorBoundary>
           </div>
         </Activity>
@@ -135,9 +135,15 @@ export function RouteRetention({
             if (!next.visible) return false;
             const at = currentLocation(router);
             const tab = (at.state as { __peRouteTab?: { id: string } } | undefined)?.__peRouteTab;
+            // An untagged entry at this path belongs to the untabbed route by key: its own address
+            // push mints a new state object, and identity went stale until this bank re-rendered,
+            // dropping readings and moves (FANS-PICK review, 2026-11-03). A tab not yet tagged keeps
+            // the identity check.
             return (
               at.pathname === pathname &&
-              (tab ? tab.id === next.id : router.history.location.state === next.unmarkedEntry)
+              (tab
+                ? tab.id === next.id
+                : next.id === null || router.history.location.state === next.unmarkedEntry)
             );
           },
           retain: (owner) => {

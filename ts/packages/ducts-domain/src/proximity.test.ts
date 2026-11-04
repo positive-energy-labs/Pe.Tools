@@ -6,14 +6,16 @@
  * connect verdict, an end anywhere inside a duct's body taps it, and every inference is a finding
  * a person clears (kaitpw 2026-10-19). Points are model feet; the tolerance is inches.
  */
+import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
-import { ductsDocumentSchema, type DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/agent-contracts";
 
 import { axisOf, inferJoints, tolerate, MISSED_JOIN_MAX_IN } from "./proximity.ts";
 import { withHealth } from "./sheet/health.fixture.ts";
 import { survey } from "./survey.ts";
 import { groupTree } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
+import { TEST_SLOTS } from "./sheet/test-inputs.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 type Segment = DuctSnapshot["segments"][number];
@@ -109,17 +111,11 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
     issues,
     layers: [],
     systems: [],
-    slots: {
-      fanStatic: "",
-      fanFlow: "",
-      componentDrop: "",
-      fittingCoefficient: "",
-      terminalFlow: "",
-    },
+    slots: { ...TEST_SLOTS },
   };
 };
-const staging = (id: string, verdict: "ignore" | "connect"): DuctsRouteDocument =>
-  ductsDocumentSchema.parse({
+const staging = (id: string, verdict: "ignore" | "connect"): DuctsDesign =>
+  designOf({
     assumptions: { [id]: { edit: { value: { kind: "verdict", verdict } } } },
   });
 const ignoring = (id: string) => staging(id, "ignore");
@@ -390,7 +386,7 @@ it("open ends of different classifications 0.4 in apart warn and stay open; a co
   // Joined against the evidence by a person: anomalous, its note naming the repair.
   expect(joined.findings[0]).toMatchObject({ id, kind: "joined-by-proximity", grade: "anomalous" });
   expect(joined.findings[0]!.note).toBe(
-    "6ø duct 1 (SA 1) and 6ø duct 2 (RA 1) are joined across air classifications by a person's connect verdict. Fix: put both on one system in Revit.",
+    "6″ duct (SA 1) and 6″ duct (RA 1) are joined across air classifications by a person's connect verdict. Fix: put both on one system in Revit.",
   );
   // An ignore verdict on the warning silences it.
   expect(inferJoints(before, 1, ignoring(id)).findings).toEqual([]);
@@ -466,7 +462,7 @@ it("a damper C# finds inside a duct's body is spliced inline on it", () => {
         id,
         kind: "inline-by-inference",
         elementIds: [9, 1],
-        note: "accessory (Damper_Volume_Round) lies inside duct 1, 4.00 ft along it and aligned with it, with neither end connected; counted inline on it",
+        note: "accessory (Damper_Volume_Round) lies inside 6″ duct (SA 1), 4.00 ft along it and aligned with it, with neither end connected; counted inline on it",
         grade: "stretched",
       },
     ]);
@@ -540,7 +536,7 @@ it("a edit connect confirms an inference on its link; a suggestion does not", ()
     { id, between: [1, 2], grade: "stretched", ruled: false },
   ]);
   expect(tolerate(before, staging(id, "connect")).links[0]!.ruled).toBe(true);
-  const proposed = ductsDocumentSchema.parse({
+  const proposed = designOf({
     assumptions: { [id]: { suggestion: { value: { kind: "verdict", verdict: "connect" } } } },
   });
   expect(tolerate(before, proposed).links[0]!.ruled).toBe(false);

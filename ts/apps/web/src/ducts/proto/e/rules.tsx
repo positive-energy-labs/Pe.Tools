@@ -4,17 +4,15 @@
  * `StagedRules` is a reduced copy of `StagedLosses` that needs no ASHRAE grids.
  */
 import {
-  transitionPatches,
-  type DuctDrop,
-  type DuctsRouteDocument,
-  type RouteStatePatch,
+transitionPatches,
+type DuctsDesign,
+type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { useCellTransitions } from "../../pane-context";
-import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
+import { LOSS_RULES,ruleByKey } from "@pe/ducts-domain/loss-rules";
+import { tableOf,type Priced } from "@pe/ducts-domain/pricing";
 import { Button } from "@pe/kit/lang/button";
+import { cellFromDraft,StateCell } from "@pe/kit/lang/cell";
 import { ValueDiff } from "@pe/kit/lang/value-diff";
-import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
-import { tableOf, type Priced } from "@pe/ducts-domain/pricing";
 import type { LossesWork } from "../../work";
 import { PressureEquivalent } from "./pressure-equivalent";
 
@@ -22,7 +20,7 @@ import { PressureEquivalent } from "./pressure-equivalent";
 const fmt = (n: number | null | undefined) => (n == null ? "" : n.toFixed(4));
 /** Stage a rule's table; staging the table already edit takes it back. */
 const tablePatches = (
-  doc: DuctsRouteDocument | null,
+  doc: DuctsDesign | null,
   key: string,
   table: string,
 ): RouteStatePatch[] => {
@@ -37,7 +35,9 @@ export function DropCell({
   held,
   work,
   label,
+  land,
 }: {
+  land?: string;
   segment: "terminalDrops" | "componentDrops";
   id: number;
   held: number | null | undefined;
@@ -46,8 +46,7 @@ export function DropCell({
 }) {
   const key = String(id);
   const cell = work.doc?.[segment][key] ?? {};
-  const transitions = useCellTransitions(segment, key);
-  const authored = (cell.edit ?? cell.suggestion)?.value as DuctDrop | undefined;
+  const authored = (cell.edit ?? cell.suggestion)?.value;
   return (
     <span
       className="inline-flex items-baseline gap-1 whitespace-nowrap"
@@ -57,29 +56,15 @@ export function DropCell({
       <StateCell
         {...cellFromDraft(cell, {
           value: authored ? String(authored.inWg) : held == null ? "" : String(held),
-          cap: "editable",
+          cap: "locked", capReason: "Fan inputs are unavailable",
           note: authored && held != null ? `Revit holds ${held}` : undefined,
         })}
         scale="row"
+        land={land}
         unit={{ label: "in-wg", short: "wg" }}
         numeric={{ min: 0, digits: 4 }}
         placeholder="—"
-        onCommit={(text: string) =>
-          work
-            .write(
-              transitionPatches([segment], key, cell, {
-                kind: "set",
-                rung: {
-                  value: {
-                    inWg: Number(text),
-                    ...(authored?.source ? { source: authored.source } : {}),
-                  },
-                },
-              }),
-            )
-            .then((refusal) => refusal?.message)
-        }
-        transitions={transitions}
+        transitions={[]}
       />
       <PressureEquivalent inWg={authored?.inWg ?? held} />
     </span>

@@ -24,8 +24,8 @@ export function mergeThreadSummary(
   };
 }
 export function mergeThreadRoster(
-  current: HarnessThreadSummary[],
-  incoming: HarnessThreadSummary[],
+  current: readonly HarnessThreadSummary[],
+  incoming: readonly HarnessThreadSummary[],
 ) {
   const previous = new Map(current.map((thread) => [thread.id, thread]));
   return incoming.map((thread) =>

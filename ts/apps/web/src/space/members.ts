@@ -34,9 +34,9 @@ export function reconcileSpaceMembers(
   const members = scene.members;
   const patch: Partial<SpacePage> = {};
   if (page.selected !== null && !members.has(page.selected)) patch.selected = null;
-  const hidden = page.hidden.filter((key) => members.has(key));
+  const hidden = (page.hidden === "all" ? [...members] : page.hidden).filter((key) => members.has(key));
   if (hidden.length !== page.hidden.length) patch.hidden = hidden;
-  if (page.isolated !== null) {
+  if (page.isolated !== "all") {
     const isolated = page.isolated.filter((key) => members.has(key));
     if (isolated.length !== page.isolated.length) patch.isolated = isolated;
   }

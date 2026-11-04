@@ -1,6 +1,5 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { createPeaMcpServer } from "../src/server.ts";
 import { peDo, peRead } from "../src/pea/capability-tools.ts";
 import { bodyText } from "./body-text.ts";

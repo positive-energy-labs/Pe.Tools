@@ -8,7 +8,10 @@ import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { checkoutRoot } from "../../checkout-paths.ts";
 import { takeoffSeeds } from "#/takeoff/seeds";
-import { createDemoOwner } from "../../../host/src/demo-owner";
+import { RouteWorkspace } from "@pe/runtime";
+import { address, takeoffEditPatches } from "@pe/agent-contracts";
+import type { TakeoffCaptures } from "../../../host/src/takeoff-captures";
+import { captureStore } from "../../../host/tests/effect-test";
 import { takeoffExecutors, fileVersion } from "../../../host/src/takeoff-actions";
 import { sdkSessions, readRhvacFixture } from "../../../host/tests/native-receipt-fixture";
 import type { RevitBridge } from "../../../host/src/bridge";
@@ -27,7 +30,16 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       throw Error("PE_DEMO_RHVAC_FIXTURE must name an explicitly supplied integration fixture");
     const root = await mkdtemp(join(tmpdir(), "pe-native-rhvac-integration-"));
     const path = join(root, "integration.r10");
-    let owner: Awaited<ReturnType<typeof createDemoOwner>> | undefined;
+    let owner:
+      | {
+          id: string;
+          at: ReturnType<typeof address>;
+          target: { session: string; openId: string };
+          scope: { binding: "address"; route: string; target: ReturnType<typeof address> };
+          work: RouteWorkspace;
+          captures: TakeoffCaptures;
+        }
+      | undefined;
     let journal: ActionJournal | undefined;
     try {
       await copyFile(fixture, path);
@@ -42,13 +54,41 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
           >
         ).sync!,
       );
-      seed.readings.snapshot.world.zones[0]!.tags = [before.systems[0]!.name];
-      owner = await createDemoOwner(join(root, "owner"), seed);
+      seed.readings.snapshot.capture.snapshot.world.zones[0]!.tags = [before.systems[0]!.name];
+      const at = address("C:/Models/RhvacIntegration.rvt");
+      let state: unknown;
+      const work = new RouteWorkspace({
+        registrations: [{ spec: takeoffsRouteState }],
+        store: {
+          getState: async () => state,
+          setState: async ({ value }) => {
+            state = structuredClone(value);
+          },
+        },
+      });
+      owner = {
+        id: randomUUID(),
+        at,
+        target: { session: "integration", openId: "integration" },
+        scope: { binding: "address", route: "takeoffs", target: at },
+        work,
+        captures: captureStore(join(root, "captures")),
+      };
+      const room = seed.readings.snapshot.capture.snapshot.world.zones[0]!.rooms[0]!;
+      await work.apply(
+        owner.scope,
+        "takeoffs",
+        "human",
+        takeoffEditPatches(takeoffsRouteState.schema.parse({}), room.guid, room, {
+          name: "Reviewed demo room",
+        }),
+        0,
+      );
       const current = owner;
       const snapshot = {
-        ...seed.readings.snapshot,
-        reading: { ...seed.readings.snapshot.reading, at: owner.at },
-        world: { ...seed.readings.snapshot.world, r10Path: path },
+        ...seed.readings.snapshot.capture.snapshot,
+        reading: { ...seed.readings.snapshot.capture.snapshot.reading, at: owner.at },
+        world: { ...seed.readings.snapshot.capture.snapshot.world, r10Path: path },
       };
       const capture = await owner.captures.refresh(
         owner.target,
@@ -79,7 +119,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
             };
           }),
       } as unknown as RevitBridge["Service"];
-      const work = await owner.work.read(owner.scope, "takeoffs");
+      const currentWork = await owner.work.read(owner.scope, "takeoffs");
       const admission = actionAdmissionSchema.parse({
         id: `${owner.id}:jet`,
         key: "takeoffs.sync",
@@ -89,7 +129,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
           zones: seed.page.zones,
           captureId: capture.capture.id,
           fileVersion: beforeHash,
-          work: { key: owner.scope, revision: work!.revision },
+          work: { key: owner.scope, revision: currentWork!.revision },
         },
       });
       const deps = { workspace: owner.work, sdk: sdkSessions };
@@ -166,11 +206,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
           "utf8",
         );
       } finally {
-        try {
-          await owner?.dispose();
-        } finally {
-          await rm(root, { recursive: true, force: true });
-        }
+        await rm(root, { recursive: true, force: true });
       }
     }
   },

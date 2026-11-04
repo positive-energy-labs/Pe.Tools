@@ -19,15 +19,16 @@ import { useAtomValue } from "@effect/atom-react";
 
 import { Button } from "@pe/kit/lang/button";
 import { useCopy } from "@pe/kit/lib/use-copy";
-import { previousOf } from "#/readings";
+import { previousOf } from "#/shell/readings-hooks";
 import { Ladder } from "#/route/ladder";
-import { Ledger } from "#/route/situation-grids";
 import { useDocumentLadder } from "#/route/situation-ladder";
 import { parseTarget } from "#/route/route-target";
 import type { RouteHandle } from "#/route/handle";
 import { chatReading, type ChatHandle } from "./graph";
 export type { ChatHandle } from "./graph";
 import { GraphHistory } from "#/shell/mount";
+import { TimelineHead } from "#/shell/situation-band";
+import { SituationBand } from "#/shell/situation-band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
 import { RouteHelpButton } from "#/route/help";
 import { useThreadScope } from "#/chat/scope";
@@ -39,7 +40,7 @@ import {
   selectTitle,
   selectToolCalls,
 } from "@pe/agent-contracts/chat-state";
-import { useWorkbench } from "#/workbench/provider";
+import { useTranscript, useWorkbench } from "#/workbench/provider";
 
 import { useHeadWorks } from "./head-works";
 import { targetClosure, targetLabel } from "./thread-navigation";
@@ -139,7 +140,8 @@ function useThreadHead(handle: ChatHandle) {
 /** What both the composer head and the thread head's cluster read: the thread's target and its
  *  health. Called ONCE per surface (ChatSurface) and handed to both. */
 export function useChatSituation(handle: ChatHandle) {
-  const { currentThreadId, threads, chat, missingThread } = useWorkbench();
+  const { currentThreadId, threads, missingThread } = useWorkbench();
+  const title = useTranscript(selectTitle);
   const head = useThreadHead(handle);
   const machine = previousOf(chatReading<Machine>(handle, "machine"));
   const inventory = machineInventory(machine);
@@ -182,9 +184,7 @@ export function useChatSituation(handle: ChatHandle) {
   // A thread the host does not know names nothing: the transcript says "no such thread".
   const threadLabel = missingThread
     ? ""
-    : selectTitle(chat) ||
-      threads.find((item) => item.id === currentThreadId)?.title ||
-      currentThreadId;
+    : title || threads.find((item) => item.id === currentThreadId)?.title || currentThreadId;
   return {
     head,
     inventory,
@@ -246,53 +246,39 @@ export function ChatSituationHead({
     stamp: `${threadLabel}|${kind}|${head.revision}|${head.stale}|${status.detail ?? ""}`,
   });
   return (
-    <div data-surface="page" className="flex min-w-0 flex-col gap-2 p-3" aria-label="Pea Situation">
-      <Ledger
-        rows={[
-          [
-            "thread",
-            threadId && threadLabel === threadId ? "Untitled thread" : threadLabel || "New thread",
-          ],
-          ...(threadId
-            ? [["thread id", <ThreadIdentity key={threadId} id={threadId} />] as const]
-            : []),
-          [
-            "target",
-            head.targets.length ? (situation.ladder.docWord ?? targetLabel({ head })) : "none",
-          ],
-          // I6: a word, not a sentence; the composer's own controls show the wait.
-          ["state", head.stale ? `${status.text} · stale` : status.text],
-        ]}
-      />
-      {status.detail && <p data-tone="caution">{status.detail}</p>}
-    </div>
+    <SituationBand
+      label="Pea Situation"
+      name="Pea"
+      context={
+        <>
+          <span>
+            {threadId && threadLabel === threadId ? "Untitled thread" : threadLabel || "New thread"}
+          </span>
+          {threadId && <ThreadIdentity key={threadId} id={threadId} />}
+          <span>
+            {head.targets.length
+              ? (situation.ladder.docWord ?? targetLabel({ head }))
+              : "no target"}
+          </span>
+          {/* I6: a word, not a sentence; the composer's own controls show the wait. */}
+          <span>{head.stale ? `${status.text} · stale` : status.text}</span>
+        </>
+      }
+      alerts={status.detail && <span data-tone="caution">{status.detail}</span>}
+      verbs={[]}
+    />
   );
 }
 
 /** Lamp · gauge · help · theme for Chat — it rides the thread head, not the composer. */
-export function ChatCluster({
-  handle,
-  situation: { head, threadLabel },
-}: {
-  handle: ChatHandle;
-  situation: ChatSituation;
-}) {
+export function ChatCluster({ handle }: { handle: ChatHandle; situation: ChatSituation }) {
   return (
     <>
       <PrimaryRouteControls route="chat" slot="inspector">
-        <details>
-          <summary>History</summary>
-          <Ledger
-            rows={[
-              ["thread", threadLabel],
-              [
-                "target",
-                head.targets.length ? `r${head.revision}${head.stale ? " ? stale" : ""}` : "none",
-              ],
-            ]}
-          />
-          <GraphHistory owner={handle} />
-        </details>
+        {/* The one Timeline head, in a popover: an inline disclosure in this header slot spilled its
+            rows over the thread header (Manual D). The thread and target already lead the Situation;
+            the target's own "r0" read as the Work revision, so it is not repeated here. */}
+        <TimelineHead owner={handle} history={<GraphHistory owner={handle} />} />
       </PrimaryRouteControls>
       <PrimaryRouteControls route="chat">
         <RouteHelpButton
@@ -315,8 +301,8 @@ export function ComposerPickers({
   urlTarget?: string;
   situation: ChatSituation;
 }) {
-  const { currentThreadId, chat } = useWorkbench();
-  const isRunning = selectRunStatus(chat) !== "idle";
+  const { currentThreadId } = useWorkbench();
+  const isRunning = useTranscript((state) => selectRunStatus(state) !== "idle");
   const { head, inventory, ladder, health, closedWord } = situation;
   // A new thread under a `?target` address pin binds to the one open document at that address,
   // once per thread: "new" keeps the URL's document. A later clear in the picker stands.
@@ -402,8 +388,8 @@ export function ComposerPickers({
 
 /** Pea's plan beside the pickers. Send owns run state. */
 export function ComposerState(_: { situation: ChatSituation }) {
-  const { chat } = useWorkbench();
-  return <PlanChip tasks={selectPlan(chat)} />;
+  const tasks = useTranscript(selectPlan);
+  return <PlanChip tasks={tasks} />;
 }
 
 export type ComposerStatus = { text: string; caution: boolean; detail?: string };
@@ -411,11 +397,20 @@ export type ComposerStatus = { text: string; caution: boolean; detail?: string }
 /** Pea's live asks, then the Work the bound document holds: the top of the composer box, so
  *  approve and reject have one location and the draft sits under what is edit. */
 export function ComposerWork({ situation }: { situation: ChatSituation }) {
-  const { chat, resolveApproval, answerQuestion, store } = useWorkbench();
+  const { resolveApproval, answerQuestion, store, cancel, currentThreadId } = useWorkbench();
+  const { approvals, questions, calls } = useTranscript((state) => {
+    const approvals = selectApprovals(state);
+    const ids = new Set(approvals.map((ask) => ask.toolCallId));
+    return {
+      approvals,
+      questions: selectQuestions(state),
+      calls: selectToolCalls(state)
+        .filter((call) => ids.has(call.id))
+        .map(({ id, caption }) => ({ id, caption })),
+    };
+  });
   const { inventory, bound, ladder } = situation;
   // Live asks only: an expired ask is a transcript record, never a head row.
-  const approvals = selectApprovals(chat);
-  const questions = selectQuestions(chat);
   const works = useHeadWorks(
     documentAddress(inventory, bound),
     ladder.docWord ?? "document",
@@ -432,11 +427,16 @@ export function ComposerWork({ situation }: { situation: ChatSituation }) {
       <ComposerPending
         approvals={approvals}
         questions={questions}
-        calls={selectToolCalls(chat)}
+        calls={calls}
         resolveApproval={resolveApproval}
         answerQuestion={answerQuestion}
       />
       <ProposalHead asks={[]} works={works} />
+      {currentThreadId && (
+        <Button label="Revoke writes" onClick={() => void cancel()}>
+          Revoke writes
+        </Button>
+      )}
     </>
   );
 }

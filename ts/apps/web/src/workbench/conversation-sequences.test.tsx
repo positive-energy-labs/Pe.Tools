@@ -9,6 +9,7 @@ import { Moments } from "./moments";
 
 const wire = vi.hoisted(() => ({
   pin: null as string | null,
+  renders: [] as string[],
   setPin: vi.fn(),
   feedback: vi.fn(),
   copy: vi.fn(),
@@ -42,6 +43,23 @@ vi.mock("./record-lines", () => ({
   ProposedLine: () => <div data-proposed="schedules">2 changes · open suggestion</div>,
   ActionLine: () => <div data-action="receipt-1">action receipt · inspect</div>,
 }));
+vi.mock("./prose", async (original) => ({
+  ...(await original<typeof import("./prose")>()),
+  Markdown: ({ text }: { text: string }) => {
+    wire.renders.push("text");
+    return <p>{text}</p>;
+  },
+}));
+vi.mock("#/components/lang/conversation", async (original) => {
+  const actual = await original<typeof import("#/components/lang/conversation")>();
+  return {
+    ...actual,
+    ToolStatus: (props: Parameters<typeof actual.ToolStatus>[0]) => {
+      wire.renders.push("tool");
+      return <actual.ToolStatus {...props} />;
+    },
+  };
+});
 vi.mock("./thumbnail", () => ({
   Thumbnail: ({ src }: { src: string }) => <img src={src} alt="capture" />,
 }));
@@ -130,4 +148,37 @@ test("folding leaves images, diagrams, proposals, receipts and waiting records v
   const records = screen.container.querySelector("[data-tool-records]")!;
   expect(records.lastElementChild?.contains(screen.getByAltText("capture"))).toBe(true);
   expect(screen.container.querySelector(".dl-message-controls")).toBeNull();
+});
+
+test("one streamed entry renders once at N=10 and N=200, including equal-length text changes", () => {
+  const counts: number[] = [];
+  const register = () => {};
+  for (const n of [10, 200]) {
+    const messages = Array.from({ length: n }, (_, index) =>
+      message(`settled-${index}`, [{ type: "text", text: `settled ${index}` }], "user"),
+    );
+    const moving = message("streaming", [
+      ...Array.from({ length: n }, (_, index) => call(`call-${index}`)),
+      { type: "text", text: "alpha" },
+    ]);
+    moving.running = true;
+    messages.push(moving);
+    const view = render(<Moments messages={messages} register={register} harness="claude" />);
+    wire.renders.length = 0;
+    // Refolding recreates every entry; ids and settled content stay the same.
+    const next = messages.map((message) => ({
+      ...structuredClone(message),
+      createdAt: message.createdAt ? new Date(message.createdAt.getTime()) : undefined,
+    }));
+    expect(next[0].createdAt).not.toBe(messages[0].createdAt);
+    next.at(-1)!.parts[n] = { type: "text", text: "bravo" };
+    view.rerender(<Moments messages={next} register={register} harness="claude" />);
+    expect(view.getByText("bravo")).toBeTruthy();
+    expect(wire.renders).toEqual(["text"]);
+    counts.push(wire.renders.length);
+    fireEvent.click(view.getAllByRole("button", { name: "Copy message" }).at(-1)!);
+    expect(wire.copy).toHaveBeenLastCalledWith("bravo");
+    view.unmount();
+  }
+  expect(counts).toEqual([1, 1]);
 });

@@ -2,11 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
-import {
-  checkoutRootFrom,
-  sourceHostServiceName,
-  productRoot,
-} from "@pe/host-contracts/service-identity";
+import { checkoutRootFrom, sourceHostServiceName } from "@pe/host-contracts/service-identity";
 import { productInstallLayout } from "@pe/host-contracts/contracts";
 import { discoverHostBaseUrl, resolveLaneAndRoot } from "../src/shared/host-config.ts";
 import { serviceFilePath } from "@pe/host-contracts/pe-service";
@@ -24,7 +20,8 @@ const sourceRoot = checkoutRootFrom(import.meta.dirname)!;
 beforeEach(() => {
   appBase = mkdtempSync(join(tmpdir(), "pe-runtime-discovery-"));
   vi.stubEnv("LOCALAPPDATA", appBase);
-  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", ""); // the LOCALAPPDATA-rooted lane
+  // A dev checkout keeps its state in the checkout; an isolated home keeps this file's receipts in temp.
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", join(appBase, "home"));
   vi.stubEnv("PE_LANE", "dev");
   vi.stubEnv("PE_TOOLS_SOURCE_ROOT", "");
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "");
@@ -38,17 +35,30 @@ afterEach(() => {
   rmSync(appBase, { recursive: true, force: true });
 });
 
+/** An SDK install under the stubbed LOCALAPPDATA: its manifest names the root an installed SEA owns. */
+function sdkInstall(): string {
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", ""); // an installed runtime refuses a home override
+  const root = join(appBase, "Positive Energy", "Pe.Tools");
+  mkdirSync(root, { recursive: true });
+  writeFileSync(
+    join(root, "product.payloads.json"),
+    JSON.stringify({ product: "Pe.Tools", vendor: "Positive Energy" }),
+  );
+  return root;
+}
+
 test.each(["host", "pea"] as const)(
   "canonical installed %s SEA resolves the same installed owner",
   (role) => {
     sea.bundled = true;
     vi.stubEnv("PE_LANE", "installed");
-    process.execPath = join(productRoot(), productInstallLayout[`VersionedApp:${role}`]);
+    const installed = sdkInstall();
+    process.execPath = join(installed, productInstallLayout[`VersionedApp:${role}`]);
     expect(resolveLaneAndRoot()).toEqual({
       lane: "installed",
       sourceRoot: null,
       serviceName: "host",
-      installedRoot: productRoot(),
+      installedRoot: installed,
     });
   },
 );
@@ -65,21 +75,21 @@ test.each(["Pe.Host.exe", "pea.exe"])(
 
 test("non-SEA source cannot claim installed even with canonical host executable spelling", () => {
   vi.stubEnv("PE_LANE", "installed");
-  process.execPath = join(productRoot(), productInstallLayout["VersionedApp:host"]);
+  process.execPath = join(sdkInstall(), productInstallLayout["VersionedApp:host"]);
   expect(() => resolveLaneAndRoot()).toThrow(/Source CLI code/);
 });
 
 test("installed host contextFetch stamps its canonical installed owner", async () => {
   sea.bundled = true;
   vi.stubEnv("PE_LANE", "installed");
-  process.execPath = join(productRoot(), productInstallLayout["VersionedApp:host"]);
+  process.execPath = join(sdkInstall(), productInstallLayout["VersionedApp:host"]);
   const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
   await contextFetch("http://127.0.0.1:19999/host/status");
   expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).get("x-pe-runtime-service")).toBe("host");
 });
 function receipt(patch: Record<string, unknown> = {}) {
   const path = serviceFilePath(
-    join(appBase, "Positive Energy", "Pe.Tools"),
+    join(appBase, "home", ".local-state"),
     sourceHostServiceName(sourceRoot),
   );
   mkdirSync(join(path, ".."), { recursive: true });

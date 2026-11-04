@@ -7,6 +7,7 @@ import { replay, sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 /** Explicit real-Jet integration helper; the owning host supplies its existing platform layer. */
 export const readRhvacFixture = (path: string) =>
+  // effect-edge: island, phase 5
   Effect.runPromise(rhvacOpen({ path }).pipe(Effect.provide(NodeServices.layer)));
 
 export const originalProcess = {

@@ -9,9 +9,43 @@ import { rpcVerb } from "#/shell/verbs";
 export const bindPageSchema = routeAddress("bind").schema.extend({ epoch: z.number().default(0) });
 export type BindPage = z.output<typeof bindPageSchema>;
 export const bindGraph: RouteGraph<BindPage, never> = {
+  seeds: {
+    bind: {
+      title: "bind",
+      load: () => import("#/shell/fixture-examples").then((m) => m.routeExamples["pages-bind"]),
+    },
+  },
+  directory: {
+    path: "/bind",
+    title: "Bind",
+    label: "Document",
+    exposure: "Main",
+    runtimeNeed: "Host document bindings",
+    icon: "Link2",
+    category: "Start / open work",
+    blurb: "Bind a document",
+    aliases: ["document", "binding"],
+    listed: false,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+  },
   key: "bind",
   address: "bind",
   name: "Bind",
+  subjectField: {
+    field: "page",
+    noun: "Page",
+    keyKind: "name",
+    cardinality: "one",
+    roster: "inventory",
+    detail: "target",
+    pane: "page",
+    show: (id) => id,
+  },
   fields: {
     threadSearch: { ...threadListFields.threadSearch, role: "query", agent: false },
     threadSort: { ...threadListFields.threadSort, role: "query", agent: false },

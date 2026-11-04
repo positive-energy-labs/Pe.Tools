@@ -1,6 +1,6 @@
 import { Effect, Queue, Layer, Fiber } from "effect";
 import { NodeHttpServer, NodeServices } from "@effect/platform-node";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { createServer, request } from "node:http";
 import { once } from "node:events";
 import {
@@ -28,6 +28,7 @@ test.each([
   { processStartUtcUnixMs: null },
   { processId: 0 },
 ])("bridge refuses wrong or unknown owner %j before dispatch", (ownership) =>
+  // effect-edge: island, phase 5
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -45,6 +46,7 @@ test.each([
 );
 
 test("same checkout bridge exposes owner match separately from build freshness", () =>
+  // effect-edge: island, phase 5
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -65,7 +67,7 @@ test("real loopback HTTP and WebSocket refuse a foreign checkout before routing"
     ),
     requestIdentityLayer({
       port,
-      frontendOrigin: () => undefined,
+      frontendOrigin: Effect.succeed(undefined),
       share: {
         read: async () => {
           throw Error("No share in this loopback proof");
@@ -74,6 +76,7 @@ test("real loopback HTTP and WebSocket refuse a foreign checkout before routing"
       },
     }),
   );
+  // effect-edge: island, phase 5
   const fiber = Effect.runFork(
     Layer.launch(
       HttpRouter.serve(routes).pipe(
@@ -179,6 +182,7 @@ test("real loopback HTTP and WebSocket refuse a foreign checkout before routing"
       await closed;
     }
     server.closeAllConnections();
+    // effect-edge: island, phase 5
     await Effect.runPromise(Fiber.interrupt(fiber));
   }
 }, 10_000);

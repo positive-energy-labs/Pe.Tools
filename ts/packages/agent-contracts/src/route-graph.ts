@@ -1,5 +1,6 @@
+import type { AppExposure, AppRouteMount, AppSurface } from "./route-directory.ts";
 import { z } from "zod";
-import type { History, RouteField } from "./route-field.ts";
+import { stableKeyKinds, type History, type RouteField } from "./route-field.ts";
 import type { RouteStatePatch } from "./route-state.ts";
 import type { RouteViewRefusalCode } from "./route-view.ts";
 
@@ -37,8 +38,12 @@ export interface FieldPolicy {
 export type FieldDecl<S extends z.ZodType = z.ZodType> = Omit<RouteField<S>, keyof FieldPolicy> &
   Partial<FieldPolicy> & {
     label?: string;
-    control?: "color";
-    editor?: "pane" | "situation";
+    control?: "color" | "switch";
+    /**
+     * Where a person edits the field. A field with a picker or an enum draws a picker; free text is
+     * the exception the field declares (`text`), never the default for a bare string or number.
+     */
+    editor?: "pane" | "situation" | "text";
     picker?: {
       reading: string;
       placeholder: string;
@@ -99,15 +104,16 @@ export interface VerbDecl<S extends z.ZodType = z.ZodType> {
   does?: string;
   /** A query whose result names the subject Work the graph's `workSubject` field then selects. */
   selects?: "work";
-  /** The answer a required review needs, when the declaration states it for Pea. */
-  answers?: z.ZodType;
   subject?: string;
   input: S;
-  review: "none" | "shown" | "required";
+  /** At most `shown` (ADR 0027 rule 11): Pea may skip it; no review blocks on a person. */
+  review: "none" | "shown";
   chord?: Chord;
   label: string;
   says?: string;
   effect?: "query" | "command";
+  /** The Situation band's framed verb. Undeclared, the band frames the stage's first model write. */
+  primary?: true;
 }
 
 /** Dynamic placement declares its possible ids without executing a row callback at admission.
@@ -215,6 +221,11 @@ export interface CellsDecl<W = unknown> {
   admit?(doc: W, patches: readonly RouteStatePatch[]): { code: string; message: string } | null;
 }
 
+export interface WorkFieldDecl {
+  label: string;
+  internal?: true;
+}
+
 /** The subject type of a cell family's rows, and the reserved verb ids derived from it. */
 export const cellSubjectType = (family: Pick<CellsDecl, "segment" | "key">): string =>
   `cell:${family.segment ?? family.key}`;
@@ -227,9 +238,8 @@ export const startFreshVerb = {
   kind: "recovery",
   label: "Start fresh",
   says: "Set the unreadable Work aside and start it empty; its old bytes are kept beside it",
-  review: "required",
+  review: "shown",
   input: z.strictObject({}).default({}),
-  answers: z.strictObject({ confirm: z.literal(true) }),
 } as const satisfies VerbDecl;
 
 /**
@@ -241,24 +251,56 @@ export const salvageVerb = {
   kind: "recovery",
   label: "Carry over",
   says: "Carry what the set-aside Work held into this Work, as one undoable edit",
-  review: "required",
+  review: "shown",
   input: z.strictObject({}).default({}),
-  answers: z.strictObject({ confirm: z.literal(true) }),
 } as const satisfies VerbDecl;
+
+export interface RouteDirectory {
+  path: string;
+  title: string;
+  label: string;
+  icon: string;
+  category: string;
+  blurb: string;
+  aliases: readonly string[];
+  exposure: AppExposure;
+  listed: boolean;
+  runtimeNeed: string;
+  resume?: "document";
+  satellites: readonly { to: string; label: string }[];
+  surfaces: Readonly<Record<AppSurface, AppRouteMount | false>>;
+}
 
 export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   /** Browser-only states, selected uniformly by ?fixture=<name>. Payloads load only when selected; titles remain available to discovery. */
   seeds?: Readonly<Record<string, GraphSeed<P, W>>>;
+  directory?: RouteDirectory;
+  /** Injected from the source bytes by the build; never copied from the directory. */
+  moduleHash?: string;
   key: string;
   address: string;
   name: string;
   /** The Situation's sentence about the shareable subject; no reads or effects. */
   subject?: (page: Readonly<P>) => string;
+  subjectField: {
+    /** A route-wide catalogue or authored case with one fixed key. Still requires roster/detail. */
+    kind?: "singleton";
+    field: keyof P & string;
+    noun: string;
+    keyKind: import("./route-field.ts").StableKeyKind;
+    cardinality: "one" | "many";
+    roster: string;
+    detail: string;
+    pane: string;
+    show(id: string): string;
+  };
   fields: {
     readonly [K in keyof P]-?: FieldDecl<z.ZodType<P[K]>> & { role: FieldRole };
   } & Readonly<Record<string, FieldDecl & { role: FieldRole }>>;
   readings: Readonly<Record<string, ReadingDecl<P>>>;
   verbs: Readonly<Record<string, VerbDecl>>;
+  /** The verb every pane head's refresh runs (a host cache read again); absent, it re-reads the pane's draws. Never a stage verb. */
+  refresh?: string;
   panes: Readonly<Record<string, PaneDecl>>;
   layout: LayoutNode;
   stages: Readonly<Record<string, StageDecl>>;
@@ -274,6 +316,8 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   observe?: readonly string[];
   /** The Work document's schema; required to declare `cells`, whose segments it must contain. */
   work?: z.ZodType<W>;
+  /** Domain Work shared by multiple subject routes; defaults to the graph key. */
+  workRoute?: string;
   /**
    * The Page field whose value names the subject Work (`binding: "workspace"`), so Work follows
    * Page selection. Empty falls back to the `?work=` carry, then the resolved document's Work.
@@ -295,7 +339,12 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
   ) => readonly RouteStatePatch[];
   /** Authored segments of the Work; the kernel owns take, reject, reopen and delete for them. */
   cells?: readonly CellsDecl<W>[];
-  pick?: false;
+  /**
+   * A person's name for each other top-level Work field, declared once; History and Inputs never
+   * show a raw Work path. `internal` fields (staging, bookkeeping) stay out of Inputs. The kernel
+   * declares `writeIntent` itself.
+   */
+  workFields?: Readonly<Record<string, WorkFieldDecl>>;
   transition?: GraphTransition<P>;
   predicates?: Readonly<Record<string, (page: Readonly<P>, work: W | null) => boolean>>;
   /** Defaults to stage declaration order. The projection retains it despite sorting map keys. */
@@ -333,6 +382,7 @@ type GraphJsonObject = { readonly [key: string]: GraphJsonValue };
 export interface RouteGraphJson {
   readonly seeds?: Readonly<Record<string, { readonly title: string }>>;
   readonly key: string;
+  readonly directory?: RouteDirectory;
   readonly address: string;
   readonly name: string;
   readonly subject?: GraphJsonObject;
@@ -347,16 +397,26 @@ export interface RouteGraphJson {
   readonly observe?: readonly string[];
   readonly work?: GraphJsonObject;
   readonly workSubject?: string;
+  readonly workRoute?: string;
   readonly cells?: readonly GraphJsonObject[];
   readonly stageOrder: readonly string[];
-  readonly pick?: false;
   readonly transition?: GraphJsonObject;
   readonly predicates?: Readonly<Record<string, GraphJsonObject>>;
 }
 
 function sortedJson(value: unknown): GraphJsonValue {
   // Installed Zod 4 owns JSON Schema conversion. Input direction retains preprocessing inputs.
-  if (value instanceof z.ZodType) return sortedJson(z.toJSONSchema(value, { io: "input" }));
+  if (value instanceof z.ZodType)
+    return sortedJson(
+      z.toJSONSchema(value, {
+        io: "input",
+        unrepresentable: "any",
+        override: ({ zodSchema, jsonSchema }) => {
+          if (["custom", "transform"].includes(zodSchema._zod.def.type))
+            jsonSchema["x-runtime-validation"] = true;
+        },
+      }),
+    );
   if (typeof value === "function") {
     const ids = "ids" in value ? value.ids : undefined;
     return ids === undefined ? { runtime: true } : { ids: sortedJson(ids), runtime: true };
@@ -449,8 +509,18 @@ function unwrapSchema(schema: z.ZodType): ZodDef {
   return def;
 }
 
-/** Collects admission refusals without running route code. Malformed runtime data also refuses. */
-export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRefusal[] {
+/** The same dependency declaration governs admission, capture and review invalidation. */
+export interface VerbReadingEdges {
+  /** Captures started by a verb, not prerequisites of its binding. */
+  verbReadings?: Readonly<Record<string, readonly string[]>>;
+  /** Reading prerequisites of a verb's binding and review basis. */
+  verbDepends?: Readonly<Record<string, readonly string[]>>;
+}
+
+export function validateRouteGraph<P, W>(
+  graph: RouteGraph<P, W>,
+  edges: VerbReadingEdges = {},
+): RouteGraphRefusal[] {
   const refusals: RouteGraphRefusal[] = [];
   const refuse = (code: RouteGraphRefusal["code"], path: string, message: string) => {
     // A pane shared by several stages is checked once per stage; say each refusal once.
@@ -458,6 +528,54 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
       refusals.push({ code, path, message });
   };
   try {
+    // TODO: docs/features/routes/LEDGER.md#s7-dd18c610fe Supply genuine roster/detail bindings in graphs still missing subjectField; admission stays closed.
+    if (!graph.subjectField)
+      refuse(
+        "invalid-graph",
+        "subjectField",
+        "Every route must declare its subject field, noun, stable key, cardinality, roster and detail",
+      );
+    // TODO: docs/features/routes/LEDGER.md#s7-d234a3544a Consolidate remaining Page selection fields instead of relabeling competing copies.
+    const selections = Object.values(graph.fields).filter((field) => field.role === "selection");
+    if (selections.length !== 1)
+      refuse(
+        "invalid-graph",
+        "fields",
+        "Page must declare exactly one kernel-owned selection field",
+      );
+    if (graph.subjectField) {
+      const subject = graph.subjectField;
+      if (!subject.noun?.trim() || !["one", "many"].includes(subject.cardinality))
+        refuse("invalid-graph", "subjectField", "Subject requires a noun and explicit cardinality");
+      if (subject.kind === "singleton") {
+        const schema = graph.fields[subject.field]?.schema;
+        const definition = schema && unwrapSchema(schema);
+        const entries =
+          definition && (definition as unknown as { entries?: Record<string, string> }).entries;
+        if (
+          subject.cardinality !== "one" ||
+          definition?.type !== "enum" ||
+          Object.keys(entries ?? {}).length !== 1
+        )
+          refuse(
+            "invalid-graph",
+            "subjectField",
+            "A singleton subject requires one fixed named key",
+          );
+      }
+      const subjects = Object.entries(graph.fields).filter(([, f]) => f.role === "subject");
+      if (subjects.length !== 1 || subjects[0]?.[0] !== subject.field)
+        refuse("invalid-graph", "subjectField", "Declare exactly one subject field");
+      if (!stableKeyKinds.includes(subject.keyKind))
+        refuse(
+          "invalid-graph",
+          "subjectField.keyKind",
+          "Subject keys must be stable identity, never ElementId or display fields",
+        );
+      for (const id of [subject.roster, subject.detail])
+        if (!graph.readings[id])
+          refuse("missing-reading", "subjectField", `Unknown reading '${id}'`);
+    }
     for (const [id, field] of Object.entries(graph.fields))
       if (field.picker && !Object.hasOwn(graph.readings, field.picker.reading))
         refuse(
@@ -465,9 +583,39 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
           `fields.${id}.picker`,
           `Unknown reading '${field.picker.reading}'`,
         );
+    const closure = (roots: readonly string[], path: string) => {
+      const reached = new Set<string>(),
+        visiting = new Set<string>();
+      const visit = (id: string) => {
+        if (id === "page" && !graph.readings.page) return;
+        if (visiting.has(id)) {
+          refuse("invalid-graph", path, `Reading dependency cycle at '${id}'`);
+          return;
+        }
+        if (reached.has(id)) return;
+        const reading = graph.readings[id];
+        if (!reading) {
+          refuse("missing-reading", path, `Unknown reading '${id}'`);
+          return;
+        }
+        reached.add(id);
+        visiting.add(id);
+        for (const dep of reading.deps ?? []) visit(dep);
+        visiting.delete(id);
+      };
+      roots.forEach(visit);
+      return reached;
+    };
+    closure(Object.keys(graph.readings), "readings");
+    for (const [kind, declarations] of Object.entries(edges))
+      for (const [verb, ids] of Object.entries(declarations ?? {})) {
+        if (!graph.verbs[verb]) refuse("missing-verb", `${kind}.${verb}`, `Unknown verb '${verb}'`);
+        closure(ids as readonly string[], `${kind}.${verb}`);
+      }
     const checkVerb = (id: string, path: string) => {
       if (!Object.hasOwn(graph.verbs, id)) refuse("missing-verb", path, `Unknown verb '${id}'`);
     };
+    if (graph.refresh) checkVerb(graph.refresh, "refresh");
     for (const [id, declared] of Object.entries(graph.panes)) {
       for (const reading of declared.draws)
         if (!Object.hasOwn(graph.readings, reading))
@@ -481,6 +629,20 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
         if (!declared) refuse("missing-pane", `stages.${id}.panes`, `Unknown pane '${paneId}'`);
         else for (const verb of placedIds(declared.verbs)) verbs.add(verb);
       }
+      const demanded = closure(
+        stage.panes.flatMap((pane) => graph.panes[pane]?.draws ?? []),
+        `stages.${id}`,
+      );
+      if (graph.refresh) verbs.add(graph.refresh);
+      for (const verb of graph.observe ?? []) verbs.add(verb);
+      for (const verb of verbs)
+        for (const dep of closure(edges.verbDepends?.[verb] ?? [], `verbs.${verb}`))
+          if (!demanded.has(dep))
+            refuse(
+              "invalid-graph",
+              `stages.${id}.verbs`,
+              `Verb ${verb} depends on reading ${dep}, which stage ${id} never demands`,
+            );
       // A chord collides within its own scope path: stage chords, then stage chords plus one pane's.
       // Sibling panes are disjoint kit scopes, so they never see each other's chords.
       const checkChord = (scope: Map<string, string>, path: string, verb: string, chord: Chord) => {
@@ -491,6 +653,15 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
         scope.set(key, verb);
       };
       for (const verb of verbs) checkVerb(verb, `stages.${id}.verbs`);
+      // The pane head owns refresh; a stage verb that refreshes would draw it twice.
+      if (graph.refresh && stage.verbs.includes(graph.refresh))
+        refuse(
+          "invalid-graph",
+          `stages.${id}.verbs`,
+          `'${graph.refresh}' is the pane head's refresh`,
+        );
+      if (stage.verbs.filter((verb) => graph.verbs[verb]?.primary).length > 1)
+        refuse("invalid-graph", `stages.${id}.verbs`, "A stage frames at most one primary verb");
       const stageScope = new Map<string, string>();
       for (const verb of stage.verbs) {
         const chord = graph.verbs[verb]?.chord;
@@ -611,7 +782,7 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
     const stages = Object.keys(graph.stages);
     const order = graph.stageOrder ?? stages;
     if (
-      (graph.pick === false || graph.stageOrder !== undefined) &&
+      graph.stageOrder !== undefined &&
       (!order.length ||
         order.length !== stages.length ||
         new Set(order).size !== stages.length ||
@@ -630,4 +801,121 @@ export function validateRouteGraph<P, W>(graph: RouteGraph<P, W>): RouteGraphRef
     );
   }
   return refusals;
+}
+/** Author only deviations from the subject's ordinary read and presentation contract. */
+export type GraphDeclaration<P, W = unknown> = Omit<
+  RouteGraph<P, W>,
+  "subjectField" | "fields" | "readings" | "panes" | "stages"
+> & {
+  fields: {
+    readonly [K in keyof P]-?: FieldDecl<z.ZodType<P[K]>> & { role?: FieldRole };
+  } & Readonly<Record<string, FieldDecl & { role?: FieldRole }>>;
+  subjectField: Omit<RouteGraph<P, W>["subjectField"], "cardinality" | "show"> &
+    Partial<Pick<RouteGraph<P, W>["subjectField"], "cardinality" | "show">>;
+  readings: Readonly<Record<string, Partial<ReadingDecl<P>>>>;
+  panes: Readonly<
+    Record<string, Omit<PaneDecl, "draws" | "verbs"> & Partial<Pick<PaneDecl, "draws" | "verbs">>>
+  >;
+  stages: Readonly<
+    Record<string, Omit<StageDecl, "panes" | "verbs"> & Partial<Pick<StageDecl, "panes" | "verbs">>>
+  >;
+};
+
+/** Expand once, before admission, hashing or either client sees the graph. No route-key branches. */
+export function defineRouteGraph<P, W = unknown>(
+  declaration: GraphDeclaration<P, W>,
+): RouteGraph<P, W> {
+  const subject = {
+    cardinality: "one" as const,
+    show: (id: string) => id,
+    ...declaration.subjectField,
+  };
+  const readings: Record<string, ReadingDecl<P>> = {};
+  for (const [id, reading] of Object.entries(declaration.readings))
+    readings[id] = {
+      kind: "use",
+      source: `${declaration.key}.${id}`,
+      retire: reading.args ? "page" : "target",
+      ...reading,
+    };
+  // A shared roster/detail is a single target-scoped read, not a duplicate page read.
+  readings[subject.roster] ??= {
+    kind: "use",
+    source: `${declaration.key}.${subject.roster}`,
+    retire: "target",
+  };
+  readings[subject.detail] ??= {
+    kind: "use",
+    source: `${declaration.key}.${subject.detail}`,
+    retire: "page",
+    args: (page) => page[subject.field],
+  };
+  const panes = Object.fromEntries(
+    Object.entries(declaration.panes).map(([id, pane]) => [
+      id,
+      { draws: [], verbs: [], ...pane } satisfies PaneDecl,
+    ]),
+  );
+  return {
+    ...declaration,
+    subjectField: subject,
+    // Address codecs and policy already exist; only role exceptions belong in the graph.
+    fields: Object.fromEntries(
+      Object.entries(declaration.fields).map(([id, field]) => [
+        id,
+        { role: id === subject.field ? "subject" : id === "stage" ? "stage" : "pose", ...field },
+      ]),
+    ) as RouteGraph<P, W>["fields"],
+    readings,
+    panes,
+    stages: Object.fromEntries(
+      Object.entries(declaration.stages).map(([id, stage]) => [
+        id,
+        { panes: Object.keys(panes), verbs: [], ...stage } satisfies StageDecl,
+      ]),
+    ),
+  };
+}
+
+/** RFC 8785 serialization. Reject before hashing rather than silently erasing data. */
+export function canonicalRouteJson(value: unknown): string {
+  const active = new Set<object>();
+  function encode(value: unknown, path: string): string {
+    if (value === null) return "null";
+    if (typeof value === "string") {
+      if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value))
+        throw Error(`${path}: lone surrogate`);
+      return JSON.stringify(value);
+    }
+    if (typeof value === "boolean") return String(value);
+    if (typeof value === "number" && Number.isFinite(value)) return JSON.stringify(value);
+    if (typeof value !== "object") throw Error(`${path}: not a JSON value`);
+    if (active.has(value)) throw Error(`${path}: cyclic data`);
+    const array = Array.isArray(value);
+    if (
+      !array &&
+      Object.getPrototypeOf(value) !== Object.prototype &&
+      Object.getPrototypeOf(value) !== null
+    )
+      throw Error(`${path}: not a plain JSON object`);
+    active.add(value);
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    if (Object.getOwnPropertySymbols(value).length) throw Error(`${path}: symbol member`);
+    for (const [key, descriptor] of Object.entries(descriptors)) {
+      if (array && key === "length") continue;
+      if (!descriptor.enumerable || !Object.hasOwn(descriptor, "value"))
+        throw Error(`${path}.${key}: non-data member`);
+      if (array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= value.length))
+        throw Error(`${path}.${key}: extra array member`);
+    }
+    const result = array
+      ? `[${Array.from({ length: value.length }, (_, i) => encode(descriptors[String(i)]?.value, `${path}.${i}`)).join(",")}]`
+      : `{${Object.keys(descriptors)
+          .sort()
+          .map((key) => `${encode(key, path)}:${encode(descriptors[key]!.value, `${path}.${key}`)}`)
+          .join(",")}}`;
+    active.delete(value);
+    return result;
+  }
+  return encode(value, "data");
 }

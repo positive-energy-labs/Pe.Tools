@@ -25,7 +25,7 @@ import { CaptionBounds } from "./subject-labels";
 /** The scene's centrelines as the picture reads them: segments first, then node points. */
 export const linesOf = (scene: Scene): PictureLine[] => [
   ...scene.segments.map((f) => ({ key: elementKey(f.segment.id), points: f.segment.polyline })),
-  ...scene.nodes.map((f) => ({ key: elementKey(f.node.id), points: [f.node.point] })),
+  ...scene.nodes.flatMap((f) => f.node.point ? [{ key: elementKey(f.node.id), points: [f.node.point] }] : []),
 ];
 
 /** Equipment paint over the shown meshes, and the ports layer drawn from the same scene graph. */

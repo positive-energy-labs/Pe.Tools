@@ -4,12 +4,14 @@
  * warning a person rules on; with none, nothing changes. Snapshots are built in proximity.test.ts's
  * shape: model feet, one group per groupId.
  */
+import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
-import { ductsDocumentSchema, workingPhaseOf } from "@pe/agent-contracts";
+import { workingPhaseOf } from "@pe/agent-contracts";
 
 import { phased } from "./phases.ts";
 import { survey, tolerated } from "./survey.ts";
 import type { DuctSnapshot } from "./types.ts";
+import { TEST_SLOTS } from "./sheet/test-inputs.ts";
 
 type Segment = DuctSnapshot["segments"][number];
 type Connector = Segment["connectors"][number];
@@ -84,20 +86,14 @@ const snap = (segments: Segment[], order: string[] | null = ORDER): DuctSnapshot
     issues: [],
     layers: [],
     systems: [],
-    slots: {
-      fanStatic: "",
-      fanFlow: "",
-      componentDrop: "",
-      fittingCoefficient: "",
-      terminalFlow: "",
-    },
+    slots: { ...TEST_SLOTS },
     ...(order
       ? { phases: { order, views: [{ phase: "Existing", filter: "Show All", count: 12 }] } }
       : {}),
   };
 };
 const working = (phase: string | null, rung: "edit" | "suggestion" = "edit") =>
-  ductsDocumentSchema.parse({ workingPhase: { [rung]: { value: phase } } });
+  designOf({ workingPhase: { [rung]: { value: phase } } });
 
 /** Project A's shape: Existing run 1 -> 2; Future duct 3 joined to 2's end and lying inside duct 4. */
 const projectA = () => {
@@ -155,7 +151,7 @@ it("a demolished element, and one only proximity would join, warn too; one touch
 
 it("the route reads the edit working phase, else Pea's suggestion; a person's edit null reads every element", () => {
   expect(workingPhaseOf(working("Existing", "suggestion"))).toBe("Existing");
-  const both = ductsDocumentSchema.parse({
+  const both = designOf({
     workingPhase: { suggestion: { value: "Future" }, edit: { value: null } },
   });
   expect(workingPhaseOf(both)).toBeNull();

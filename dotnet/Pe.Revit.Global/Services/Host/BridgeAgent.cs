@@ -6,6 +6,7 @@ using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.HostContracts;
 using Pe.Shared.HostContracts.Transport;
+using Pe.Shared.Product;
 using Pe.Revit.Scripting.Transport;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
@@ -23,6 +24,10 @@ using System.Runtime.InteropServices;
 namespace Pe.Revit.Global.Services.Host;
 
 internal sealed class BridgeAgent : IDisposable {
+    // Process lifetime is deliberate: replacing a socket must not discard native execution evidence.
+    // TODO: Prove abandoned completion and reconnect replay in a controlled dev session; deterministic proof cannot certify native delivery.
+    private static readonly BridgeRequestEvidence RequestEvidence = new();
+
     private readonly BridgeDocumentNotifier _documentNotifier;
     private readonly RevitTaskQueue _revitTaskQueue;
     private readonly RevitDataRequestService _revitDataRequestService;
@@ -156,6 +161,7 @@ internal sealed class BridgeAgent : IDisposable {
         var disposeStopwatch = Stopwatch.StartNew();
         this._disposed = true;
         this.IsConnected = false;
+        RequestEvidence.Detach(this.SendTerminalAsync);
         if (RevitReceiptTransport.Sender == this.ForwardReceiptAsync)
             RevitReceiptTransport.Sender = null;
         Log.Information("Host bridge disconnecting: BridgeUri={BridgeUri}", this._bridgeOptions.BridgeUri);
@@ -232,6 +238,9 @@ internal sealed class BridgeAgent : IDisposable {
         // product op recoverable with `pe-revit op result <requestId>` when the caller dies mid-flight
         // (a bridge frame reaches exactly one live socket and is gone).
         var receipt = BeginOpReceipt(request);
+        RequestEvidence.Begin(request.RequestId);
+        var late = new TaskCompletionSource<RevitTaskResult<Task<object?>>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var deferred = false;
 
         try {
             Log.Information(
@@ -242,6 +251,7 @@ internal sealed class BridgeAgent : IDisposable {
             if (!OpRegistry.TryGet(request.OperationKey, out var op))
                 throw new InvalidOperationException($"Unsupported bridge operation '{request.OperationKey}'.");
 
+            OpCallGate.Require(op.Definition, request.DerivedCommand, request.PayloadJson);
             Task<object?> responseTask;
             if (op.Thread == OpThread.Revit) {
                 // The op gets the request's own token, never context.Cancellation: the queue disposes
@@ -251,13 +261,17 @@ internal sealed class BridgeAgent : IDisposable {
                     context => op.ExecuteAsync(
                         request.PayloadJson,
                         ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
-                        cancellationToken),
+                        cancellationToken, request.DerivedCommand),
                     new RevitRunOptions { Label = op.Key },
-                    cancellationToken
+                    cancellationToken,
+                    onLateCompletion: result => late.TrySetResult(result)
                 ).ConfigureAwait(false);
                 if (run.Outcome == RevitTaskOutcome.Faulted)
                     responseTask = run.GetValueOrThrow();
                 else if (!run.Ok) {
+                    deferred = run.Outcome is RevitTaskOutcome.AbandonedStillRunning or RevitTaskOutcome.TimedOut;
+                    if (deferred) RequestEvidence.Uncertain(request.RequestId, run.Outcome.ToString());
+                    if (run.Outcome == RevitTaskOutcome.TimedOut) late.TrySetResult(run);
                     await this.WriteRevitTaskOutcomeAsync(
                         request,
                         receipt,
@@ -271,7 +285,7 @@ internal sealed class BridgeAgent : IDisposable {
                 } else
                     responseTask = run.Value!;
             } else {
-                responseTask = op.ExecuteAsync(request.PayloadJson, null, cancellationToken);
+                responseTask = op.ExecuteAsync(request.PayloadJson, null, cancellationToken, request.DerivedCommand);
             }
 
             var responseEnvelope = await responseTask.ConfigureAwait(false);
@@ -402,7 +416,22 @@ internal sealed class BridgeAgent : IDisposable {
             CompleteOpReceipt(receipt, BridgeWire.Verdicts.Failed,
                 JsonConvert.SerializeObject(new { error = ex.Message }, this._serializerSettings));
             await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
+        } finally {
+            if (deferred)
+                _ = RequestEvidence.CompleteWhenFinishedAsync(request.RequestId, AwaitDeferredAsync(late.Task),
+                    receipt is null ? null : request.RequestId);
+            else
+                RequestEvidence.Forget(request.RequestId);
         }
+    }
+
+    private Task SendTerminalAsync(BridgeFrame frame) => this.WriteFrameAsync(frame, CancellationToken.None);
+
+    private static async Task AwaitDeferredAsync(Task<RevitTaskResult<Task<object?>>> completion) {
+        var result = await completion.ConfigureAwait(false);
+        if (result.Outcome is RevitTaskOutcome.CancelledCooperatively or RevitTaskOutcome.CancelledBeforeDispatch or RevitTaskOutcome.TimedOut)
+            throw new OperationCanceledException("The native delegate yielded after cancellation or timeout.");
+        await result.GetValueOrThrow().ConfigureAwait(false);
     }
 
     private async Task WriteRevitTaskOutcomeAsync(
@@ -557,23 +586,24 @@ internal sealed class BridgeAgent : IDisposable {
         Log.Information(
             "Host bridge session identity: ProcessStartUtcUnixMs={ProcessStartUtcUnixMs}, Lane={Lane}, SdkSessionId={SdkSessionId}, BuildStamp={BuildStamp}, SessionDescriptorPath={SessionDescriptorPath}",
             identity.ProcessStartUtcUnixMs,
-            HostEndpoint.ConfiguredLane,
+            ProductRuntimeLayout.Current.LaneName,
             identity.SdkSessionId,
             identity.BuildStamp,
             identity.SessionDescriptorPath
         );
         var registration = new BridgeRegistrationRequest(
             BridgeProtocol.ContractVersion,
-            this._bridgeOptions.ProcessId,
+            RequestEvidence.ProcessId,
             this.BuildStateSnapshot(),
-            identity.ProcessStartUtcUnixMs > 0 ? identity.ProcessStartUtcUnixMs : null,
+            RequestEvidence.ProcessStartUtcUnixMs,
             identity.SessionDescriptorPath,
-            HostEndpoint.ConfiguredLane,
+            ProductRuntimeLayout.Current.LaneName,
             identity.SdkSessionId,
             identity.BuildStamp,
-            HostEndpoint.ConfiguredSourceRoot,
-            HostEndpoint.ConfiguredServiceName,
-            HostEndpoint.ConfiguredInstalledRoot
+            ProductRuntimeLayout.Current.SourceRoot,
+            HostEndpoint.RuntimeServiceName,
+            ProductRuntimeLayout.Current.InstallRoot,
+            RequestEvidence.Snapshot()
         );
         this._transportSession.Write(new BridgeFrame(
             BridgeFrameKind.Registration,
@@ -588,6 +618,7 @@ internal sealed class BridgeAgent : IDisposable {
         if (!ack.Accepted)
             throw new InvalidOperationException(ack.ErrorMessage ?? "Host rejected Revit bridge registration.");
         this.SessionId = ack.SessionId;
+        _ = RequestEvidence.AttachAsync(this.SendTerminalAsync);
         Log.Information("Host bridge session registered: SessionId={SessionId}", ack.SessionId ?? "(none assigned)");
     }
 

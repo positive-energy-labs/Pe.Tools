@@ -65,6 +65,10 @@ describe("the route address", () => {
       ok: true,
       patch: { system: "RA 1,SA 2" },
     });
+    expect(at.agent!.resolve!({ system: "RA%201,SA%202" }, facts)).toEqual({
+      ok: true,
+      patch: { system: "RA 1,SA 2" },
+    });
     expect(at.agent!.resolve!({ system: "SA" }, facts).ok).toBe(false);
     const page = at.read({ system: "RA 1,SA 2" }).page;
     expect(page.system).toEqual(["RA 1", "SA 2"]);
@@ -247,7 +251,7 @@ describe("the thin routes adopt the contract", () => {
     });
     const home = routeAddress("home");
     expect(home.link({ query: "duct", folded: ["/ducts"], sort: "name" })).toBe(
-      "/?query=duct&folded=%2Fducts&sort=name",
+      "/?query=duct&folded=%252Fducts&sort=name",
     );
     expect(routeAddress("settings").link({ section: "none" })).toBe("/settings?section=none");
     expect(routeAddress("data-tables").link({ table: "Loads" })).toBe("/data-tables?table=Loads");

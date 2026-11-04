@@ -1,3 +1,4 @@
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { Caller } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human, pea } from "./callers.ts";
@@ -6,7 +7,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse } from "effect/http";
 import { afterEach, expect, test } from "vite-plus/test";
 import { captureListSchema } from "@pe/agent-contracts";
 import { RevitBridge } from "../src/bridge.ts";
@@ -58,7 +59,7 @@ async function host(
         if (key === "host.ops.catalog")
           return {
             value: {
-              operations: [{ key: "revit.context.view-image", intent: "Read", needs: "document" }],
+              operations: [hostOpCatalog.find((op) => op.key === "revit.context.view-image")!],
             },
             target: null,
           };

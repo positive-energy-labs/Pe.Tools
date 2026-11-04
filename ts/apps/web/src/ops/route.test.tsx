@@ -13,6 +13,11 @@ vi.mock("../routes/__root", async () => ({
 }));
 const sources = opsAdapters.sources;
 const op = {
+  subject: "None",
+  touches: "Metadata",
+  effect: "Read",
+  cardinality: "One",
+  costTier: "Cheap",
   key: "logs.tail",
   displayName: "Tail logs",
   intent: "Read",
@@ -41,10 +46,16 @@ const fixed = (value: unknown): ReadingSource => ({
 const releases: (() => void)[] = [];
 beforeEach(() => {
   opsAdapters.sources = {
+    ...sources,
     "ops.catalog": fixed({
       operations: [
         op,
-        { ...op, key: "document.temporary.status", displayName: "Native status", needs: "session" },
+        {
+          ...op,
+          key: "document.temporary.status",
+          displayName: "Native status",
+          needs: "document",
+        },
         { ...op, key: "settings.save", displayName: "Raw mutation", intent: "Mutate" },
       ],
     }),
@@ -94,7 +105,11 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) =>
       url.includes("/call")
-        ? Response.json({ lines: ["fixture-result"] })
+        ? Response.json(
+            JSON.parse(String(init?.body)).key === "document.temporary.status"
+              ? { acquisitionId: "a", status: "open", recoveryId: "r" }
+              : { files: [{ label: "host", filePath: "host.log", lines: ["fixture-result"] }] },
+          )
         : url.includes("/actions/recover")
           ? Response.json(receipt)
           : Promise.reject(Error(`Unexpected fetch ${url} ${init?.method}`)),
@@ -149,7 +164,7 @@ test("the real graph restores the operation URL, runs a read and lands its outpu
   await waitFor(() =>
     expect(owner().view.read().page.result).toMatchObject({
       op: "logs.tail",
-      value: { lines: ["fixture-result"] },
+      value: { files: [{ label: "host", filePath: "host.log", lines: ["fixture-result"] }] },
     }),
   );
   expect(JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string)).toEqual({

@@ -1,6 +1,8 @@
 import {
   workKey,
-  type CellsDecl,
+  type RouteGraph,
+  type RouteStatePatch,
+  type WorkFieldDecl,
   type RouteStateWriteResult,
   type WorkKey,
   type WorkWrite,
@@ -15,25 +17,42 @@ interface WriteHistory {
 }
 type DescribeWrite = (request: WorkWrite, label: string) => WriteHistory | undefined;
 
-function writeLabel<W>(request: WorkWrite, cells: readonly CellsDecl<W>[]) {
-  const names = [
-    ...new Set(
-      request.patches.map(({ path }) => {
-        const family = cells.find((cell) => path[0] === (cell.segment ?? cell.key));
-        const key = family?.segment === null ? path[0] : path[1];
-        return family && typeof key === "string"
-          ? (family.label?.(key) ?? key)
-          : path.join(".") || "Work";
-      }),
-    ),
-  ];
-  const deleting = request.patches.every((patch) => !Object.hasOwn(patch, "value"));
+/** What History and Inputs may call a Work path: route-declared, never the raw path. */
+export type WorkNames<W = unknown> = Pick<RouteGraph<unknown, W>, "cells" | "workFields">;
+/** Kernel Work fields every route schema may carry; declared once here, not per route. */
+const KERNEL_FIELDS: Readonly<Record<string, WorkFieldDecl>> = {
+  writeIntent: { label: "write scope", internal: true },
+};
+
+/** A Work path's declared name, or null when no route or kernel declaration names it. */
+export function workPathName<W>(
+  names: WorkNames<W>,
+  path: RouteStatePatch["path"],
+): { label: string; internal: boolean } | null {
+  const family = names.cells?.find((cell) => path[0] === (cell.segment ?? cell.key));
+  const key = family?.segment === null ? path[0] : path[1];
+  if (family && typeof key === "string")
+    return { label: family.label?.(key) ?? family.noun ?? key, internal: false };
+  const field = names.workFields?.[String(path[0])] ?? KERNEL_FIELDS[String(path[0])];
+  return field ? { label: field.label, internal: field.internal === true } : null;
+}
+
+/** One press's History name; `internal` when every path is staging the person never edits. */
+export function writeLabel<W>(
+  patches: readonly RouteStatePatch[],
+  names: WorkNames<W>,
+): JournalDetail & { internal?: true } {
+  const named = patches.map(({ path }) => workPathName(names, path));
+  // ponytail: an undeclared field reads "Work"; the work-labels guard test keeps every route declared.
+  const words = [...new Set(named.map((name) => name?.label ?? "Work"))];
+  const deleting = patches.every((patch) => !Object.hasOwn(patch, "value"));
   const verb = deleting
-    ? request.patches.every(({ path }) => path.at(-1) === "suggestion")
+    ? patches.every(({ path }) => path.at(-1) === "suggestion")
       ? "Reject"
       : "Revert"
     : "Edit";
-  return `${verb} ${names.join(", ") || "Work"}`;
+  const internal = named.length > 0 && named.every((name) => name?.internal);
+  return { label: `${verb} ${words.join(", ") || "Work"}`, ...(internal && { internal: true }) };
 }
 
 type WritePort = (key: WorkKey, request: WorkWrite) => Promise<RouteStateWriteResult>;
@@ -59,7 +78,10 @@ export function acquireWorkWriter(key: WorkKey) {
 function createWorkWriter(key: WorkKey, remove: () => void) {
   const identity = workKey(key);
   const held = acquireWorkJournal(key);
-  const pending = new Map<string, { request: WorkWrite; label: string; history?: WriteHistory }>();
+  const pending = new Map<
+    string,
+    { request: WorkWrite; label: JournalDetail & { internal?: true }; history?: WriteHistory }
+  >();
   const historians = new Set<DescribeWrite>();
   const listeners = new Set<() => void>();
   let readers = 0;
@@ -67,6 +89,9 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
   let retired = false;
   let conflict: number | null = null;
   let observedRevision = 0;
+  let tail = Promise.resolve();
+  // Only our acknowledged edits may advance a queued human intent. Foreign writes still refuse.
+  const acknowledged = new Map<number, { revision: number; doc?: unknown }>();
   const notify = () => {
     for (const listener of listeners) listener();
   };
@@ -83,10 +108,10 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
   const accept = (ack: WorkWriteAck) => {
     if (workKey(ack.key) !== identity) return;
     const intent = ack.press ? pending.get(ack.press) : undefined;
-    held.journal.accept(ack, intent && { label: intent.label, ...intent.history?.entry });
+    held.journal.accept(ack, intent && { ...intent.label, ...intent.history?.entry });
     if (ack.press) {
       if (intent) {
-        held.journal.describe(ack.press, { label: intent.label, ...intent.history?.entry });
+        held.journal.describe(ack.press, { ...intent.label, ...intent.history?.entry });
         intent.history?.accepted(ack);
       }
       pending.delete(ack.press);
@@ -114,13 +139,38 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
     scope: MountScope<W>,
     request: WorkWrite,
     port: WritePort,
-    cells: readonly CellsDecl<W>[] = [],
+    names: WorkNames<W> = {},
     history?: WriteHistory,
+    sequential = false,
   ): Promise<RouteStateWriteResult> => {
     request = structuredClone(request);
+    if (names.cells || names.workFields) held.journal.name((patches) => writeLabel(patches, names));
+    const cells = names.cells ?? [];
     if (request.kind === "apply" && request.press)
-      pending.set(request.press, { request, label: writeLabel(request, cells), history });
+      pending.set(request.press, { request, label: writeLabel(request.patches, names), history });
     running++;
+    const before = tail;
+    let release!: () => void;
+    tail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await before;
+    if (sequential && request.kind === "apply") {
+      let next = acknowledged.get(request.expectedRevision);
+      while (next) {
+        request.expectedRevision = next.revision;
+        if (scope.work)
+          scope = {
+            ...scope,
+            work: {
+              ...scope.work,
+              handle: { ...scope.work.handle, revision: next.revision },
+              doc: (next.doc ?? scope.work.doc) as W,
+            },
+          };
+        next = acknowledged.get(request.expectedRevision);
+      }
+    }
     observe(scope);
     let result: RouteStateWriteResult;
     try {
@@ -149,12 +199,12 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
         const intent = pending.get(request.press);
         if (intent && !intent.history)
           for (const describe of historians) {
-            intent.history = describe(request, intent.label);
+            intent.history = describe(request, intent.label.label);
             if (intent.history) break;
           }
       }
       result =
-        failure || domain ? refused(failure ?? domain!.message) : await port(current!, request);
+        failure || domain ? refused(failure ?? domain!.message) : await port(current!, { ...request, ...(request.press && pending.get(request.press) ? { label: pending.get(request.press)!.history?.entry.label ?? pending.get(request.press)!.label.label } : {}) });
       if (result.ok) {
         const ack = result.write;
         if (
@@ -167,6 +217,10 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
         else {
           if (Object.hasOwn(result, "doc"))
             held.journal.observe({ revision: ack.revision, doc: result.doc });
+          acknowledged.set(ack.base, {
+            revision: ack.revision,
+            ...(Object.hasOwn(result, "doc") ? { doc: result.doc } : {}),
+          });
           accept(ack);
         }
       } else if (
@@ -182,6 +236,7 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
       result = refused(cause instanceof Error ? cause.message : String(cause));
     } finally {
       running--;
+      release();
       notify();
       retire();
     }

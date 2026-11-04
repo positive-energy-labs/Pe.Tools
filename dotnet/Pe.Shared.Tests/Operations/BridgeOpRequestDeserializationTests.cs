@@ -9,16 +9,16 @@ public sealed class BridgeOpRequestDeserializationTests {
 
     private sealed record ProbeResponse(string Echo);
 
-    [Op("revit.detail.deserialization-probe", Does = "Exercise strict request deserialization.")]
+    [Op("revit.detail.deserialization-probe", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Exercise strict request deserialization.")]
     private static ProbeResponse Handle(ProbeRequest request) => new(request.ScriptContent);
 
-    [Op("revit.detail.schedule-source-probe", Does = "Bind the real schedule.apply request.")]
+    [Op("revit.detail.schedule-source-probe", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Bind the real schedule.apply request.")]
     private static ProbeResponse HandleSchedule(ScheduleSpecApplyRequest request) => new(request.Source.Root.Id ?? "unfiled");
 
-    [Op("revit.detail.family-source-probe", Does = "Bind the real family.apply request.")]
+    [Op("revit.detail.family-source-probe", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Bind the real family.apply request.")]
     private static ProbeResponse HandleFamily(FamilyApplyRequest request) => new(request.Source.Root.Id ?? "unfiled");
 
-    [Op("revit.detail.schedule-cells-probe", Does = "Bind the real schedule.cells.apply request.")]
+    [Op("revit.detail.schedule-cells-probe", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Bind the real schedule.cells.apply request.")]
     private static ProbeResponse HandleCells(ScheduleCellApplyRequest request) =>
         new(string.Join(",", request.Edits.SelectMany(edit => edit.ExpectedBinding.Targets).Select(target => $"{target.ParameterId}:{target.HasValue}:{target.RawValue ?? "null"}")));
 

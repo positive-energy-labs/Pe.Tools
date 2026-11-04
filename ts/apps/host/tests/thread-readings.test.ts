@@ -1,3 +1,4 @@
+import { consentService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -9,7 +10,7 @@ import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
 import { HostLog } from "../src/host-log.ts";
 import { createProviders } from "../src/harness/providers.ts";
-import { createHarnessThreads } from "../src/harness/threads.ts";
+import type { HarnessThreads } from "../src/harness/threads.ts";
 
 let root = "";
 let previousLocalAppData: string | undefined;
@@ -28,14 +29,19 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-function host(limits?: { segmentBytes: number; segments: number; entryBytes: number }) {
+async function host(limits?: { segmentBytes: number; segments: number; entryBytes: number }) {
   const log = new HostLog(join(root, "log", randomUUID()), limits);
-  const threads = createHarnessThreads({
+  const threads = await harnessThreads({
+    runs: consentService(),
     root: join(root, "threads"),
     log,
     worldRoot: tmpdir(),
     mcpServer: () => ({ name: "pea", command: "unused", args: [], env: [] }),
-    providers: createProviders({ shellPath: async () => "", probeOnStart: false }),
+    providers: createProviders({
+      spawner: testSpawner(),
+      shellPath: async () => "",
+      probeOnStart: false,
+    }),
   });
   closers.push(threads.close);
   const observe: ResourceObserver = (request, publish, after) =>
@@ -116,7 +122,7 @@ const ended = (body: HarnessThreadBody, count: number) =>
   body.events.filter((e) => e.kind === "turn_end").length === count && !body.running;
 
 test("a reconnect from the cursor after a dropped connection yields the identical thread", async () => {
-  const { call, connect } = host();
+  const { call, connect } = await host();
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).id as string;
   const read = () => call("GET", `/pe/threads/${id}`) as Promise<HarnessThreadBody>;
   await call("POST", `/pe/threads/${id}/prompt`, { id: randomUUID(), text: "hello" });
@@ -159,7 +165,7 @@ test("a reconnect from the cursor after a dropped connection yields the identica
 });
 
 test("a cursor older than retention reads as a gap, never a silent hole", async () => {
-  const { call, connect } = host({ segmentBytes: 300, segments: 2, entryBytes: 64 * 1024 });
+  const { call, connect } = await host({ segmentBytes: 300, segments: 2, entryBytes: 64 * 1024 });
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).id as string;
   const read = () => call("GET", `/pe/threads/${id}`) as Promise<HarnessThreadBody>;
   for (let turn = 1; turn <= 3; turn++) {

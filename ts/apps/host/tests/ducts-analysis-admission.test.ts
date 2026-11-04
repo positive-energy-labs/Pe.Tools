@@ -43,8 +43,8 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
             value: {
               operations: [
                 {
-                  key: "ducts.snapshot",
-                  intent: "Read",
+                  key: "ducts.snapshot.walk",
+                  intent: "Read", subject: "Elements", touches: "Geometry", effect: "Read", cardinality: "One", costTier: "Bounded",
                   needs: "project-document",
                   actor: "human",
                 },
@@ -77,7 +77,7 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
           [HOST_CONTEXT_HEADER]: mintContext({ kind: "pea", thread: "analysis-fixture" }),
         },
       },
-      () => call("ducts.snapshot", {}, target),
+      () => call("ducts.snapshot.walk", { selector: { kind: "ids", ids: [1] } }, target),
     );
     expect(pea.status, await pea.clone().text()).toBe(403);
     expect(pea.headers.get("x-pe-native-request-id")).toBeNull();
@@ -87,7 +87,7 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
         hostBaseUrl: server.base,
         headers: { [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }) },
       },
-      () => call("ducts.snapshot", {}, target),
+      () => call("ducts.snapshot.walk", { selector: { kind: "ids", ids: [1] } }, target),
     );
     expect(human.status, await human.clone().text()).toBe(200);
     expect(human.headers.get("x-pe-native-request-id")).toMatch(/^[0-9a-f-]{36}$/);

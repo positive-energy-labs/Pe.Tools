@@ -1,3 +1,4 @@
+import { consentService, harnessThreads } from "./effect-test.ts";
 import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -17,7 +18,7 @@ import {
 import { createRouteRegistrations } from "@pe/mcps";
 import { withInvocationContext } from "@pe/runtime/context";
 import { peRoutes } from "@pe/agent-contracts/pe-api";
-import { createHarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
+import type { HarnessThreads, HarnessThreadsOptions } from "../src/harness/threads.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { HostLog } from "../src/host-log.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
@@ -171,7 +172,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
     get: () => ({ id: "codex", harness: "codex", name: "Codex", auth: { kind: "subscription" } }),
     keys: () => [],
   } as unknown as HarnessThreadsOptions["providers"];
-  const options: HarnessThreadsOptions = {
+  const options: Omit<HarnessThreadsOptions, "runs"> = {
     root: join(root, "threads"),
     log: new HostLog(join(root, "log")),
     worldRoot: root,
@@ -192,7 +193,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
         : null;
     },
   };
-  let threads = createHarnessThreads(options);
+  let threads = await harnessThreads({ ...options, runs: consentService() });
   const store = fileRouteDocumentStore(join(root, "work"));
   const makeApp = () =>
     createPeRoutes({
@@ -373,7 +374,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
     expect(await fileBytes()).toEqual(saved);
     abort.abort();
     await threads.close();
-    threads = createHarnessThreads(options);
+    threads = await harnessThreads({ ...options, runs: consentService() });
     app = makeApp();
     expect((await read()).threads[0]).toMatchObject({
       documents: [{ ...doc, availability: "closed" }],
@@ -419,7 +420,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
     expect(scheduledPlace.knownOpenRefs).toEqual([]);
     documents = [];
     await threads.close();
-    threads = createHarnessThreads(options);
+    threads = await harnessThreads({ ...options, runs: consentService() });
     app = makeApp();
     expect(
       (await read()).threads[0]!.works.find((item) => item.id === workKey(schedule)),
@@ -551,7 +552,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
     threads.refreshWorkContexts();
     expect((await setTargets([])).status).toBe(200);
     await threads.close();
-    threads = createHarnessThreads(options);
+    threads = await harnessThreads({ ...options, runs: consentService() });
     app = makeApp();
     // Same name and session, different openId: it is a replacement, not a reconnection.
     const replacement = { ...unsavedRef, openId: "replacement-unsaved" };

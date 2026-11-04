@@ -23,7 +23,7 @@ internal sealed class LinkedGeometryStore(string directory) : IDisposable {
     private bool _unavailable;
     internal sealed record Geometry(PrimRow[] Rows, Tri[] Triangles);
     private string PackPath => Path.Combine(directory, "geometry.pack");
-    private static string Root => ProductRuntimeLayout.ForCurrentUser().Cache.ResolveModuleCachePath("space-linked-geometry");
+    private static string Root => ProductRuntimeLayout.Current.Cache.ResolveModuleCachePath("space-linked-geometry");
 
     internal static LinkedGeometryStore? For(Document doc, long? linkId, Transform transform, string generation) {
         try {

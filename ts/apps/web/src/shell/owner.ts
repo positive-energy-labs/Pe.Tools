@@ -1,9 +1,9 @@
 /** The route owner: one per route and registry; it holds the log, the runner and the page. */
 import type { InspectableRef } from "../route/inspect";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import * as Reactivity from "effect/unstable/reactivity/Reactivity";
-import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import * as Atom from "effect/reactivity/Atom";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import * as Reactivity from "effect/reactivity/Reactivity";
+import { useEffect, useInsertionEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { ExecutionTarget, CellLike } from "@pe/agent-contracts";
 import { Layer } from "effect";
 import { inspectAtomRegistry, type OwnerReferences } from "#/state/atom-inspect";
@@ -375,7 +375,7 @@ const outcomeSays = (refusal: Refusal) =>
     ? refusal.message
     : `${refusal.code === "failed" ? "failed" : "refused"} · ${refusal.message}`;
 
-/** Mount an owner for the life of a component; StrictMode's double-mount disposes once. */
+/** Mount an owner until actual removal; Activity hiding preserves the component's owner. */
 export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistry.AtomRegistry }>(
   create: () => T,
   identity?: unknown,
@@ -384,25 +384,24 @@ export function useRouteOwner<T extends { dispose(): void; registry: AtomRegistr
   const storeRef = useRef<T | null>(null);
   const identityRef = useRef(identity);
   const retiredRef = useRef<T[]>([]);
-  const disposeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   if (storeRef.current === null || !Object.is(identityRef.current, identity)) {
     if (storeRef.current !== null) retiredRef.current.push(storeRef.current);
     storeRef.current = create();
     identityRef.current = identity;
   }
   const store = storeRef.current;
+  useInsertionEffect(() => {
+    return () => {
+      // Activity disconnects passive effects but retains state. Only removal retires a
+      // standalone owner; defer registry disposal until subscribers leave this commit.
+      if (!activity) setTimeout(() => store.dispose(), 0);
+    };
+  }, [store, activity]);
   useEffect(() => {
-    if (disposeTimer.current) clearTimeout(disposeTimer.current);
     activity?.retain(store);
     for (const retired of retiredRef.current.splice(0)) {
-      if (activity) activity.retire(retired);
-      else retired.dispose();
+      activity?.retire(retired);
     }
-    return () => {
-      // Effect disconnection is not final release: an outer Activity can hide a still-current
-      // route. Its retained pane alone disposes registered owners; standalone owners retire here.
-      if (!activity) disposeTimer.current = setTimeout(() => store.dispose(), 0);
-    };
   }, [store, activity]);
   return store;
 }

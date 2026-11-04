@@ -145,7 +145,7 @@ async function reserveFolder(root: string, folder: string) {
   if (!inside || inside.startsWith("..") || isAbsolute(inside))
     throw refused(`${folder} is outside its acquisition root`);
   for (let at = resolve(folder); ; at = dirname(at)) {
-    const stat = await lstat(at).catch(() => null);
+    const stat = await lstat(at).catch((error) => { console.error("instances-actions: asynchronous operation failed", error); return null; });
     if (stat?.isSymbolicLink())
       throw refused(`${at} is a link, not the folder the acquisition planned`);
     if (at === resolve(root)) break;

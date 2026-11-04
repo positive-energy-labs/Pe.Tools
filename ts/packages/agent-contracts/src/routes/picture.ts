@@ -1,14 +1,14 @@
 import { z } from "zod";
-import { sceneViewSchema, sceneViewCodec } from "../scene-view.ts";
 import {
   fitViewportCodec,
-  layersKey,
   modeKey,
   viewportKey,
   viewportSchema,
   type Viewport,
 } from "../page-keys.ts";
-import { field, text } from "../route-field.ts";
+import { field, manyField, text } from "../route-field.ts";
+import type { Immutable } from "../route-kernel-data.ts";
+import { sceneViewCodec, sceneViewSchema } from "../scene-view.ts";
 
 /**
  * The Page keys a route's `Picture` (web `scene/picture`) reads and writes. A route's fields take
@@ -36,7 +36,7 @@ export const pictureFields = <
   /** The picture's encoding, a key of the web's `ENCODINGS`. */
   encoding: field(z.string().max(200).default(encoding), { url: "push", agent: "set" }),
   /** The layer keys the picture draws; empty = none. */
-  layers: field(layersKey(layers, on), { url: "push", agent: "set" }),
+  layers: manyField("name", { url: "push", agent: "set", initial: [...on], choices: layers }),
   /**
    * How the model picture draws context when the halo or context layer is on: `glass` surfaces or
    * `lines`. With neither layer on, context is off (nothing captured or drawn).
@@ -64,6 +64,8 @@ export const pictureFields = <
 
 type PictureFields = ReturnType<typeof pictureFields<[string, ...string[]], string>>;
 /** The page slice the picture reads and writes, over a route's own layer keys and flat picture. */
-export type PicturePage<L extends string = string, F extends string = string> = {
-  [K in Exclude<keyof PictureFields, "layers" | "picture">]: z.output<PictureFields[K]["schema"]>;
-} & { layers: L[]; picture: "model" | F };
+export type PicturePage<_L extends string = string, F extends string = string> = {
+  [K in Exclude<keyof PictureFields, "layers" | "picture">]: Immutable<
+    z.output<PictureFields[K]["schema"]>
+  >;
+} & { layers: readonly string[] | "all"; picture: "model" | F };

@@ -1,27 +1,17 @@
+import { subjectState, useSubjects } from "../shell/subject";
 import { Plus, X } from "lucide-react";
-import { routeAddress, type ThreadTab } from "@pe/agent-contracts";
+import { appRouteByKey, routeAddress, type ThreadTab } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import "./route-tabs.css";
 
-function tabTitle(tab: ThreadTab) {
+export function tabTitle(tab: ThreadTab) {
   const at = routeAddress(tab.route);
-  const { page } = at.read(
+  const subject = subjectState(
+    tab.route,
     Object.fromEntries(new URL(tab.link, "http://tab.invalid").searchParams),
-  );
-  const subject =
-    "system" in page
-      ? page.system.join(" + ")
-      : "path" in page
-        ? page.path
-        : "schedule" in page
-          ? page.schedule
-          : "query" in page
-            ? page.query
-            : "page" in page
-              ? page.page
-              : "";
-  return `${at.title}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
+  ).label;
+  return `${appRouteByKey(tab.route)?.title ?? at.title}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
 }
 
 const TAB_CH = 24;
@@ -40,6 +30,7 @@ export function RouteTabs({
   onSelect: (tab: ThreadTab) => void;
   onClose: (tab: ThreadTab) => void;
 }) {
+  useSubjects();
   return (
     <span
       role="group"

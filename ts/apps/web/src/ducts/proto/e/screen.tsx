@@ -1,118 +1,358 @@
-import { land } from "@pe/kit/lang/land";
-/**
- * THROWAWAY (protoui round 3): E2 ("C simplicity, B layout"). LEFT a resizable double sidebar: a
- * top pane (all systems | the chosen system, tree over Inputs) over a bottom pane (all-systems
- * rules | this system's rules), one shared width handle; duct settings live in the chrome Settings; CENTRE C's full-bleed drawing with
- * numbered ruling pins and click popovers; RIGHT the inbox of rows a person has a verb on,
- * collapsed when it holds none. Hovering a row anywhere lights its element set on the drawing.
- */
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ComponentProps,
-  type ReactNode,
-  createContext,
-  useContext,
-} from "react";
-
-import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
-import { healPlan } from "@pe/ducts-domain/heal";
-import { fansOwedBase, type OwedBase } from "@pe/ducts-domain/fan-assignment";
-import { sectionsOf, systemOfGroup } from "@pe/ducts-domain/system-scope";
-import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
-import { Button } from "@pe/kit/lang/button";
-import { systemSearch } from "@pe/ducts-domain/system-search";
-import { useList, emptyListState, type ListOptions } from "@pe/kit/lang/collection";
-import { ListView } from "@pe/kit/lang/list-view";
-import { Scroll } from "@pe/kit/lang/scroll";
-
-import { airflowOptions } from "../../airflow";
-import { noRunParts, subjectNamer } from "../../subject-text";
+import { useRouteSearchSlice } from "#/route/activity";
+import { fansLink } from "../../../fans/neutral.ts";
+import { AttentionRoot,useHoveredIssue } from "#/attention";
+import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
+import { NativeObservationScope,type NativeObservation } from "#/revit/observation";
+import { LoadingContext } from "#/route/loading-context";
+import { PaneActions } from "#/shell/pane-actions";
+import { useAdmittedSubject } from "#/shell/subject";
+import { settleWork } from "#/shell/work-door-observation";
+import { DUCT_UNIT_KINDS,ductsDesign,neutralFansWork,stagedDucts,transitionPatches,type RouteStatePatch } from "@pe/agent-contracts";
+import { catalogLinkKey } from "@pe/ducts-domain/catalog";
+import { suggestKind } from "@pe/ducts-domain/roster";
+import { ChoiceCell } from "../../sheet/choice-cell.tsx";
+import { kindMeaning, kindDisabledReason } from "../../sheet/kind-meaning.ts";
+import { healTarget,offeredFan } from "@pe/ducts-domain/action-targets";
+import { claimsForGroup } from "@pe/ducts-domain/claims";
+import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
+import { healPlan } from "@pe/ducts-domain/heal";
+import { neighboursOf,type Neighbour } from "@pe/ducts-domain/neighbours";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
-import { SubjectTextContext } from "@pe/kit/lang/reach";
-import { AttentionRoot, useIssueHover, useHoveredIssue } from "#/attention";
-import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
-import {
-  annotatedFindings,
-  stageIssues,
-  fanVerbs,
-  focusRow,
-  inboxRows,
-  type CellRef,
-  type InboxItem,
-} from "../../inbox-rows";
+import { withStoredRulings } from "@pe/ducts-domain/rulings";
+import { pendingCount,stagedEsp } from "@pe/ducts-domain/staged";
+import { survey,unitFlowsIn } from "@pe/ducts-domain/survey";
+import { scopeOf,sectionsOf,systemScope } from "@pe/ducts-domain/system-scope";
+import { systemSearch } from "@pe/ducts-domain/system-search";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { groupLabels } from "@pe/ducts-domain/words";
-import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
-import { stagedEsp } from "@pe/ducts-domain/staged";
-
-import type { LossesWork } from "../../work";
-
-import { buildTree, type TreeNode } from "../b/model";
+import { elementKey,type SubjectKey } from "@pe/kit/lang/attention";
+import { Button } from "@pe/kit/lang/button";
+import { emptyListState,useList,type ListOptions } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
+import { Scroll } from "@pe/kit/lang/scroll";
+import * as Atom from "effect/reactivity/Atom";
+import type { ReactNode } from "react";
+import {
+memo,
+useCallback,
+useEffect,
+useMemo,
+useRef,
+useSyncExternalStore,
+type ComponentProps,
+} from "react";
+import { z } from "zod";
+import type { PaneContext } from "../../../../../../packages/agent-contracts/src/route-kernel-bodies";
+import { airflowOptions } from "../../airflow";
+import { attentionSubjects,cellFocusOf,cellFocusSubject,focusedElement } from "../../cell-focus";
+import { elementNamer,verdictPatches } from "../../claims";
+import {
+annotatedFindings,
+focusRow,
+inboxRows,
+stageIssues,
+type InboxItem,
+} from "../../inbox-rows";
+import { claimsOf,type Claim } from "../../legs";
+import {
+activeName,
+ductsData,
+entries,
+localId,
+localSubject,
+namesOf,
+schemas,
+} from "../../neutral";
+import { DuctsOwner,commands } from "../../pane-context";
+import { type PricingResult } from "../../pricing-job";
+import { DUCTS_MULTI } from "../../selection";
+import type { EditMeta } from "../../sheet/input-history.neutral";
+import { EMPTY_SNAPSHOT } from "../../sheet/scoped-snapshot";
+import { noRunParts,subjectNamer } from "../../subject-text";
 import type { systemList } from "../../system-list";
 import type { SystemNote } from "../../system-list-search";
-import type { ProtoProps } from "../props";
-import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
-import { BarRules, systemNoteCount, systemRowParts } from "./bar";
-
-import { DesignFriction } from "./design-friction";
-import { ParameterSlots, SystemColours } from "./settings";
-import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
-import { DuctsPicture } from "./picture";
-import { grilleLabels } from "./labels";
-import { FanButton, Inbox, type FanVerbs } from "./inbox";
-import type { WriteVerbs } from "./inbox-write";
-import { InputsPane } from "./inputs-pane";
-import { RulesTree, ruleOfIds } from "./rules-pane";
-import { SystemTree } from "./tree-sidebar";
+import { systemReadCoverage } from "../../system-reads";
+import { buildTree,type TreeNode } from "../b/model";
 import { useGroupEncoding } from "../encoding/use-encoding";
-
-import { EMPTY_SNAPSHOT } from "../../sheet/scoped-snapshot";
-import { LoadingContext } from "#/route/loading-context";
-import { activeSystem, DUCTS_MULTI, toggleSystem, withSystem } from "../../selection";
-import { subscribe as knobsChanged } from "#/knobs/knobs";
-import { OpenSystems } from "./open-systems";
-
+import { BarRules,systemNoteCount,systemRowParts } from "./bar";
+import { FanFacts,fanFacts,type FanFact } from "./fan-sections";
+import { Inbox,type FanVerbs } from "./inbox";
+import { grilleLabels } from "./labels";
+import { DuctsPicture } from "./picture";
+import { RulesTree,ruleOfIds } from "./rules-pane";
+import { SystemColours } from "./settings";
+import { SystemTree } from "./tree-sidebar";
+type NetworkContext = PaneContext<
+  typeof ductsData,
+  typeof schemas,
+  typeof entries,
+  keyof typeof ductsData.panes
+>;
+function useNetworkData(ctx: NetworkContext) {
+  const workDoc = useMemo(() => ductsDesign(ctx.work, ctx.readings.fansWork.value ?? neutralFansWork), [ctx.work, ctx.readings.fansWork.value]);
+  const target = ctx.workBasis?.token.scope.identity.target ?? { kind: "host" as const };
+  const page = ctx.page.read();
+  const roster = ctx.readings.roster.value;
+  const system = namesOf(page.system);
+  const systems = useMemo(
+    () => (system === "all" ? (roster?.systems ?? []).map((row) => row.name) : system),
+    [page.system, roster],
+  );
+  const active = activeName(
+    page.system,
+    (roster?.systems ?? []).map((row) => row.name),
+  );
+  const selected = page.selected.map((item) => localSubject(item.id)).join(",");
+  const doc = target.kind === "document" ? target.ref : null;
+  const networkRead = ctx.readings.ducts;
+  // Domain readonly sweep reached 28 files; snapshot consumers still require mutable arrays.
+  const snapshot = (networkRead.value ?? null) as import("../../neutral").SnapshotReading | null;
+  const pricing = ctx.readings.pricing;
+  // Domain readonly owner: PricingResult/ducts-domain still exposes mutable arrays.
+  // Counsel permits this one cast rather than widening beyond the bounded U4 input scope.
+  const priced =
+    pricing.status !== "failed" ? (pricing.value as PricingResult | undefined) : undefined;
+  const edit = useMemo(() => stagedDucts(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);
+  const seen = useMemo(
+    () => withStoredRulings(workDoc ?? null, snapshot?.store),
+    [workDoc, snapshot],
+  );
+  const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "ducts:unbound";
+  const selection = useMemo(
+    () => Atom.make(attentionSubjects(page.selected.map(({ id }) => localSubject(id)))),
+    [page.selected],
+  );
+  const select = (selected: string) =>
+    ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
+  const write = useCallback(
+    async (patches: RouteStatePatch[], history?: EditMeta) => {
+      if (!ctx.workBasis)
+        return { code: "unavailable", message: "Read this document's Work before editing" };
+      const result = await settleWork(ctx.verbs.edit({ patches, history }, ctx.workBasis));
+      return result.kind === "refused" ? { code: "refused", message: result.refusal.error } : null;
+    },
+    [ctx],
+  );
+  const onVerdict = useCallback(
+    (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => {
+      void write(verdictPatches(workDoc, claim, verdict));
+    },
+    [workDoc, write],
+  );
+  const claimCells = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(workDoc?.claims ?? {}).flatMap(([id, cell]) => {
+          const value = cell.edit?.value ?? cell.suggestion?.value;
+          return value ? [[id, value]] : [];
+        }),
+      ),
+    [workDoc],
+  );
+  const scope = useMemo(() => (snapshot ? scopeOf(snapshot, systems) : null), [snapshot, systems]);
+  const claims = useMemo(
+    () => claimsOf(scope ? claimsForGroup(claimCells, [...scope.members]) : claimCells),
+    [scope, claimCells],
+  );
+  const subjectIds = scope?.groups
+    .map((group) => edit.subject[group] ?? workDoc?.subject[group]?.suggestion?.value)
+    .find((ids) => ids != null);
+  const current = networkRead.current;
+  const version = snapshot?.sourceVersion;
+  const observation = useMemo<NativeObservation>(
+    () => ({
+      scope: { document: current ? doc : null, source: "native" },
+      references: [...(snapshot?.nodes ?? []), ...(snapshot?.segments ?? [])].map((element) => ({
+        elementId: element.id,
+        uniqueId: element.uniqueId,
+      })),
+    }),
+    [current, doc?.session, doc?.openId, snapshot],
+  );
+  // Domain readonly sweep reached 28 files; coverage still accepts the mutable snapshot alias.
+  const coverage = roster
+    ? systemReadCoverage(snapshot, roster as import("@pe/ducts-domain/types").DuctSnapshot)
+    : null;
+  const stageScope = async (row: {
+    kind?: string;
+    group?: string;
+    unitId?: number;
+    systemId?: number;
+  }) => {
+    if (!ctx.workBasis || !snapshot) return;
+    switch (row.kind) {
+      case "price": {
+        const groups = active ? systemScope(snapshot, active).groups : [];
+        if (groups.length) return ctx.verbs.scope({ groups: [...groups] }, ctx.workBasis);
+        return;
+      }
+      case "heal":
+      case "heal-preview": {
+        const group = row.group ?? healTarget(snapshot, workDoc, active, selected, null);
+        if (active && systemScope(snapshot, active).groups.includes(group))
+          return ctx.verbs.scope({ groups: [group] }, ctx.workBasis);
+        return;
+      }
+      case "assign-fan": {
+        const fan =
+          row.unitId != null && row.systemId != null
+            ? { unitId: row.unitId, systemId: row.systemId }
+            : offeredFan(
+                snapshot,
+                workDoc,
+                ctx.readings.tables.value ?? {},
+                ctx.readings.catalogs.value?.tables ?? {},
+                active,
+                selected,
+                null,
+                elementNamer(snapshot, null),
+              );
+        if (snapshot.systems.find((system) => system.id === fan.systemId)?.name === active)
+          return ctx.verbs.scope({ fan }, ctx.workBasis);
+        return;
+      }
+    }
+  };
+  const scopeCommand = (row?: unknown) => {
+    const choice = scopeChoice.safeParse(row);
+    return choice.success ? (
+      <Button
+        label="Choose write scope"
+        onClick={() => {
+          void stageScope(choice.data);
+        }}
+      >
+        Choose write scope
+      </Button>
+    ) : null;
+  };
+  return {
+    page,
+    systems,
+    active,
+    selected,
+    select,
+    selectElement: (id: number | null) => select(id === null ? "" : String(id)),
+    document: doc,
+    attentionDoc,
+    selection,
+    snapshot: snapshot ?? EMPTY_SNAPSHOT,
+    snapshotRead: networkRead,
+    pricingRead: pricing,
+    priced: priced?.priced ?? null,
+    analysis: priced?.analysis ?? null,
+    claims,
+    onVerdict,
+    subject: subjectIds ? { ids: subjectIds, claims, work: workDoc, onVerdict } : null,
+    work: {
+      doc: seen,
+      revision: ctx.workBasis?.workRevision ?? null,
+      write: (patches: RouteStatePatch[]) => write(patches),
+    },
+    captureSource: networkRead.current && doc && version ? { document: doc, version } : null,
+    observation,
+    scopeCommand,
+    fanRoster: ctx.readings.fans.value?.rows ?? [],
+    edit: pendingCount(workDoc ?? null, snapshot?.store),
+    coverage: coverage
+      ? { ...coverage, reading: networkRead.status === "pending" ? systems : [] }
+      : null,
+  };
+}
+const scopeChoice = z.object({
+  kind: z.enum(["price", "heal", "heal-preview", "assign-fan"]),
+  group: z.string().optional(),
+  unitId: z.number().optional(),
+  systemId: z.number().optional(),
+});
+type NetworkData = ReturnType<typeof useNetworkData>;
+type Coverage =
+  | (Pick<NonNullable<NetworkData["coverage"]>, "read" | "of"> & {
+      reading: readonly string[];
+      report?: string;
+    })
+  | null
+  | undefined;
+type OwnContext<P extends keyof typeof ductsData.panes> = PaneContext<
+  typeof ductsData,
+  typeof schemas,
+  typeof entries,
+  P
+>;
+function NetworkFrame({
+  ctx,
+  data,
+  children,
+  jump,
+}: {
+  ctx: NetworkContext;
+  data: NetworkData;
+  children: ReactNode;
+  jump?: import("react").RefObject<((key: SubjectKey) => void) | null>;
+}) {
+  const subjectProps = useRevitSubjectProps();
+  const nameOf = useMemo(() => subjectNamer(data.snapshot), [data.snapshot]);
+  return (
+    <DuctsOwner
+      value={{
+        selected: data.selected,
+        select: data.select,
+        cells: ctx.cells,
+        commands: data.scopeCommand,
+        fanRoster: data.fanRoster,
+      }}
+    >
+      <NativeObservationScope value={data.observation}>
+        <AttentionRoot doc={data.attentionDoc}>
+          <SubjectTextContext.Provider
+            value={{
+              doc: data.attentionDoc,
+              nameOf,
+              go: (id: number) =>
+                jump?.current ? jump.current(elementKey(id)) : data.selectElement(id),
+              refProps: subjectProps,
+            }}
+          >
+            {!data.snapshotRead.value && (
+              <LoadingContext
+                name="Ducts"
+                says={data.document ? "Reading ducts..." : "No document bound"}
+                error={data.snapshotRead.status === "failed" ? data.snapshotRead.reason : null}
+                busy={data.snapshotRead.status === "pending"}
+              >
+                {null}
+              </LoadingContext>
+            )}
+            {children}
+          </SubjectTextContext.Provider>
+        </AttentionRoot>
+      </NativeObservationScope>
+    </DuctsOwner>
+  );
+}
 const NO_GROUPS: readonly string[] = [];
 const NO_NEIGHBOURS: readonly Neighbour[] = [];
 /** The open list as one string: what a hold, a side and a list scope key on. */
 const openKey = (open: readonly string[]) => open.join(", ");
 const NO_NOTES: ReadonlyMap<string, SystemNote> = new Map();
 const NO_SYSTEMS: ReturnType<typeof systemList> = [];
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
-const NetworkPanes = createContext<Readonly<Record<string, ReactNode>>>({});
-export function NetworkPane({ id }: { id: string }) {
-  return useContext(NetworkPanes)[id] ?? null;
-}
-
-export function NetworkProvider({ props, children }: { props: ProtoProps; children: ReactNode }) {
-  return (
-    <AttentionRoot doc={props.attentionDoc}>
-      <LoadedScreenBody
-        props={{ ...props, snapshot: props.snapshot ?? EMPTY_SNAPSHOT }}
-        loading={!props.snapshot || props.pricing}
-      >
-        {children}
-      </LoadedScreenBody>
-    </AttentionRoot>
-  );
-}
-
 /** "n of m systems read", or null when the snapshot holds every system. */
-const partialWord = (coverage: ProtoProps["coverage"]) =>
+const partialWord = (coverage: Coverage) =>
   coverage && coverage.read < coverage.of
     ? `${coverage.read} of ${coverage.of} systems read`
     : null;
-
-/** The scoped read's extent and its one verb: read every system, a few per read, into the panes. */
-function ReadCoverage({ coverage }: { coverage: ProtoProps["coverage"] }) {
+/**
+ * The systems list's empty state from the same coverage the read line counts: systems the
+ * document holds but this read has not reached are "not read", never "none in scope".
+ */
+export const systemsEmpty = (coverage: Coverage) =>
+  coverage && coverage.of > 0 && coverage.read === 0
+    ? { message: `None of ${coverage.of} systems read yet`, exit: "Choose systems in Open systems" }
+    : { message: "No duct systems in this scope", exit: "Read a model containing duct systems" };
+/** The scoped read's extent. */
+function ReadCoverage({ coverage }: { coverage: Coverage }) {
   const partial = partialWord(coverage);
   if (!coverage || (!partial && !coverage.report)) return null;
   return (
@@ -122,445 +362,20 @@ function ReadCoverage({ coverage }: { coverage: ProtoProps["coverage"] }) {
         {coverage.reading.length ? ` · reading ${coverage.reading.join(", ")}…` : ""}
         {coverage.report ? ` · ${coverage.report}` : ""}
       </span>
-      {coverage.readAll ? (
-        <Button
-          label="Read every system, a few systems per read, so the totals cover the document"
-          onClick={coverage.readAll}
-        >
-          Read every system
-        </Button>
-      ) : null}
     </p>
   );
 }
-
-/** Keep providers and graph demand mounted while the readings acquire or reprice. */
-// TODO: N6: rebuild only changed pane projections on pricing delivery. The worker removes solve
-// and triage CPU, but retained-display and result commits still exceed the interaction budget.
-function LoadedScreenBody({
-  props,
-  children,
-  loading,
-}: {
-  props: ProtoProps & { snapshot: NonNullable<ProtoProps["snapshot"]> };
-  children: ReactNode;
-  loading: boolean;
-}) {
-  const { snapshot, priced, page, setPage } = props;
-  const doc = props.work.doc;
-  const work = useMemo<LossesWork>(
-    () => ({
-      doc,
-      revision: props.work.revision,
-      write: props.work.write as unknown as LossesWork["write"],
-    }),
-    [doc, props.work.revision, props.work.write],
-  );
-  const inboxWork = useMemo(
-    () => ({
-      doc,
-      revision: props.work.revision,
-      write: work.write,
-      store: snapshot?.store ?? null,
-    }),
-    [doc, props.work.revision, work.write, snapshot],
-  );
-  const ruleOf = useMemo(() => ruleOfIds(priced), [priced]);
-  // The tree draws the topology that was priced (bridged joins, phase filter); the raw one left the
-  // fan-setting run out (g8745870: header 0.186, tree critical 0.109). Healing still plans on raw.
-  const drawn = priced?.snapshot ?? snapshot;
-  // The subject is a Revit system: every group it is in, over the snapshot that was priced.
-  // Several open systems are one scope: their groups in open order, a shared one once.
-  const scope = useMemo(() => (drawn ? scopeOf(drawn, page.system) : null), [drawn, page.system]);
-  const active = activeSystem(page);
-  const activeScope = useMemo(
-    () => (drawn && active ? systemScope(drawn, active) : null),
-    [drawn, active],
-  );
-  const groups = scope?.groups ?? NO_GROUPS;
-  const displayMembers = useMemo(
-    () =>
-      scope && snapshot
-        ? new Set([...scope.members, ...scopeOf(snapshot, page.system)!.members])
-        : undefined,
-    [scope, snapshot, page.system],
-  );
-  // The drawing indexes the raw snapshot: a group the survey merged away is drawn by its raw id too.
-  const drawGroups = useMemo(() => {
-    const raw = snapshot ? scopeOf(snapshot, page.system)?.groups : undefined;
-    if (!raw) return groups;
-    const merged = [...snapshot.nodes, ...snapshot.segments].flatMap((e) =>
-      e.groupId && scope?.members.has(e.id) ? [e.groupId] : [],
-    );
-    return [...new Set([...groups, ...raw, ...merged])];
-  }, [snapshot, page.system, groups, scope]);
-  // One hop: the networks a unit of a drawn group also roots, drawn as stubs near that unit.
-  const multi = useSyncExternalStore(knobsChanged, DUCTS_MULTI.read, DUCTS_MULTI.read).selection;
-  const neighbours = useMemo(
-    () => (snapshot && scope ? neighboursOf(snapshot, displayMembers!, multi) : NO_NEIGHBOURS),
-    [snapshot, scope, displayMembers, multi],
-  );
-  // A system a stub carries that no open network shows already, once, with the units joining it.
-  const connected = useMemo(() => {
-    const shown = new Set(page.system);
-    const via = new Map<string, number[]>();
-    for (const n of neighbours)
-      for (const system of n.systems)
-        if (!shown.has(system) && !via.get(system)?.includes(n.unit))
-          via.set(system, [...(via.get(system) ?? []), n.unit]);
-    return [...via].map(([system, units]) => ({ system, units }));
-  }, [neighbours, page.system]);
-  const systems = props.analysis?.systems ?? NO_SYSTEMS;
-  // Each group an open system is in is its own section, named by the system and its units; a group
-  // that carries other systems says so; only the open systems' members draw.
-  const sections = useMemo(
-    () => (drawn && scope ? sectionsOf(drawn, page.system) : new Map<string, string>()),
-    [drawn, scope, page.system],
-  );
-  const sectionOf = useCallback(
-    (g: string) => {
-      const others = scope?.shared.get(g);
-      const name = sections.get(g) ?? scope?.name ?? "";
-      return others?.length ? `${name} · shared with ${others.join(", ")}` : name;
-    },
-    [sections, scope],
-  );
-  const trees = useMemo(
-    () => (drawn && scope ? buildTree(drawn, priced, doc, groups, sectionOf, scope.members) : []),
-    [drawn, priced, doc, scope, groups, sectionOf],
-  );
-  const issueScope = useMemo(
-    () =>
-      drawn && scope
-        ? new Set(drawn.groups.filter((g) => groups.includes(g.id)).flatMap((g) => g.issueIds))
-        : null,
-    [drawn, scope, groups],
-  );
-  const labels = useMemo(
-    () =>
-      drawn && trees.length
-        ? grilleLabels(
-            drawn,
-            trees.flatMap((t) => t.children),
-          )
-        : new Map<number, string>(),
-    [drawn, trees],
-  );
-  const subjectName = useMemo(() => (snapshot ? subjectNamer(snapshot) : () => null), [snapshot]);
-  // One namer: a grille by its disambiguated label (the tree has no footnotes to tell twins apart),
-  // everything else as Subject text names it, so a title, a row and a sentence agree.
-  const nameOf = useCallback(
-    (id: number) => labels.get(id) ?? subjectName(id) ?? "element not in snapshot",
-    [labels, subjectName],
-  );
-  // A row names a group the way the system reads it, else by its systems and units; never its id.
-  const names = useMemo(() => (drawn ? groupLabels(drawn) : new Map<string, string>()), [drawn]);
-  const groupLabel = useCallback(
-    (g: string) => (sections.has(g) ? sectionOf(g) : (names.get(g) ?? "a duct network")),
-    [sections, sectionOf, names],
-  );
-  // The survey is the priced result's, or the unpriced one while the tables are unread; the
-  // manifest's apply gate reads the same rows (`triage`) over the same tolerated snapshot.
-  const surveyed = useMemo(
-    () => priced ?? (snapshot ? survey(snapshot, doc) : null),
-    [priced, snapshot, doc],
-  );
-
-  // What heals in Revit is planned over the raw snapshot (the tolerated one has bridged it already).
-  const heal = useMemo(() => (snapshot ? healPlan(snapshot, doc) : null), [snapshot, doc]);
-  const notes = props.analysis?.notes ?? NO_NOTES;
-  // The document at a glance: how many systems price clean, and how many a person must fix first;
-  // read by system, over the systems read so far, and it says so.
-  const partial = partialWord(props.coverage);
-  const census = useMemo(() => {
-    const issues = systems.map((s) => systemNoteCount(s, notes.get(s.key)).issues);
-    return {
-      systems: systems.length,
-      priced: systems.filter((s) => s.total != null).length,
-      fix: issues.filter((i) => i.some((x) => x.tone === "alarm")).length,
-      partial,
-    };
-  }, [systems, notes, partial]);
-  const chosenRow = useMemo(() => {
-    const row = systems.find((s) => s.key === activeSystem(page));
-    return row ? { ...row, note: notes.get(row.key) } : null;
-  }, [systems, page.system, notes]); // eslint-disable-line react-hooks/exhaustive-deps
-  const noRunRows = useMemo<InboxItem[]>(() => {
-    if (!priced || !scope) return [];
-    return [
-      ...new Set(noRunBranches(priced.snapshot, priced.next, scope, priced.flows).values()),
-    ].map((branch) => ({
-      key: `no-run:${branch.elements[0]}`,
-      group: "diagnostics",
-      kind: "no-run",
-      title: "Branch with no run",
-      status: "outside priced paths",
-      ids: branch.elements,
-      note: branch.reasons.map((r) => r.text).join("; "),
-      parts: [
-        "Branch ",
-        { id: branch.elements[0]! },
-        " has no run. ",
-        ...noRunParts(branch, priced.snapshot),
-        ...priced.findings
-          .filter(
-            (f) =>
-              f.kind === "missed-join" &&
-              f.elementIds.some((id) => branch.reasons.some((r) => r.at === id)),
-          )
-          .flatMap((f) => [". ", f.note]),
-      ],
-      verbs: [{ kind: "select", ids: branch.elements }],
-    }));
-  }, [priced, scope]);
-  // The subject is a system name, so a heal that renumbers its groups leaves the page where it was.
-  const baseInbox = useMemo(
-    () =>
-      surveyed
-        ? inboxRows({
-            snapshot: surveyed.snapshot,
-            scope,
-            findings: surveyed.findings,
-            flows: surveyed.flows,
-            // A unit's flow as this system's groups price it, the flow its Inputs row and fan row show.
-            equipmentFlows: unitFlowsIn(surveyed, scope?.groups ?? null),
-            doc,
-            nameOf,
-            groupLabel,
-            heal,
-            airflow: airflowOptions(surveyed.snapshot, scope),
-            unitAirflow: airflowOptions(surveyed.snapshot, scope, "unit"),
-            roles: surveyed.roles,
-            claims: props.claims,
-            write: {
-              edit: props.edit,
-              esp: stagedEsp(doc),
-            },
-          })
-        : null,
-    [
-      surveyed,
-      scope,
-      props.captureSource?.version ?? "",
-      doc,
-      nameOf,
-      groupLabel,
-      heal,
-      props.claims,
-      props.edit,
-      props.work.revision,
-    ],
-  );
-  const inbox = useMemo(() => {
-    if (!baseInbox) return null;
-    const run = page.heal;
-    const reviewed = (row: InboxItem) =>
-      run && row.key === `heal:${run.group}`
-        ? {
-            ...row,
-            status: run.sentence,
-            note: run.rows.join("; "),
-            ids: [...new Set([...row.ids, ...run.targets.flatMap((t) => t.ids)])],
-          }
-        : row;
-    return {
-      ...baseInbox,
-      fix: baseInbox.fix.map(reviewed),
-      diagnostics: [...baseInbox.diagnostics.map(reviewed), ...noRunRows],
-    };
-  }, [baseInbox, noRunRows, page.heal]);
-  // A unit whose role is fan while no Revit system names it base equipment offers to make it one.
-  const fanHandles: FanVerbs = { render: props.commands };
-  const owedBase = useMemo(
-    () =>
-      snapshot && surveyed
-        ? fansOwedBase(
-            snapshot,
-            surveyed.roles,
-            (g) => priced?.next.byGroup[g]?.fans[0]?.unit ?? null,
-          )
-        : (new Map() as OwedBase),
-    [snapshot, surveyed, priced],
-  );
-  const fanVerbsOf = useCallback(
-    (id: number) => {
-      // Only the open system is offered: the system comes from the page, the unit from the row.
-      const verbs = (owedBase.get(id) ?? [])
-        .filter((a) => a.system === active)
-        .flatMap((a) => fanVerbs(a, nameOf));
-      const split = [...(owedBase.split ?? [])].find(
-        ([system, units]) => system === active && units.includes(id),
-      );
-      if (!verbs.length && split)
-        return (
-          <span className="t-small text-ink-2" data-e-fan-split={split[0]}>
-            {`${split[0]} spans separate networks with their own fans (${split[1].map((u) => nameOf(u)).join(", ")}); Revit gives a system one fan, so split ${split[0]} in Revit first`}
-          </span>
-        );
-      if (!verbs.length) return null;
-
-      return (
-        <span
-          className="flex flex-wrap items-baseline gap-1"
-          data-e-fan-verbs={id}
-          onClick={(event) => event.stopPropagation()}
-        >
-          {verbs.map((v) => (
-            <FanButton
-              key={v.on.verb === "fan" ? v.on.systemId : v.label}
-              verb={v}
-              fan={fanHandles}
-            />
-          ))}
-        </span>
-      );
-    },
-    [owedBase, active, nameOf, fanHandles],
-  );
-  // A Set row's verb selects the element and focuses its cell once the tree has drawn it.
-  // `system` is the open list's `openKey`.
-  // A fitting's drop cell the inbox asked for, in the rules half that holds it.
-  const [landing, setLanding] = useState<{ id: number; half: "all" | "this" } | null>(null);
-  const [cellFocus, setCellFocus] = useState<CellRef | null>(null);
-  // The rules pane lands on the cell: scroll it in, focus its control, mark it once (`--motion-land`).
-  useEffect(() => {
-    if (!landing) return;
-    const half = document.querySelector(`[data-e-rules="${landing.half}"]`);
-    const row =
-      half?.querySelector<HTMLElement>(`[data-e-unruled-ids~="${landing.id}"]`) ??
-      half?.querySelector<HTMLElement>(`[data-e-cell="componentDrops:${landing.id}"]`);
-    if (!row) return;
-    land(row, { focus: true });
-    setLanding(null);
-  }, [landing, priced]);
-  useEffect(() => {
-    if (!cellFocus) return;
-    const input = document.querySelector<HTMLElement>(
-      `[data-e-cell="${cellFocus.segment}:${cellFocus.id}"] input`,
-    );
-    if (!input) return;
-    input.scrollIntoView?.({ block: "nearest" });
-    input.focus();
-    setCellFocus(null);
-  }, [cellFocus, trees, priced]);
-  const encoded = useGroupEncoding(snapshot, priced, drawGroups, page.encoding);
-  // The tree reads the drawing's quantity; a categorical reading (or none) keeps Pe's fan-to-here loss.
-  const reading = encoded.encoding.quantity ? encoded.encoding : null;
-  const subjectProps = useRevitSubjectProps();
-  const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
-  const jump = useRef<((key: SubjectKey) => void) | null>(null);
-  const setHoveredIssue = useIssueHover();
-  const { system, systemSearch, systemSort } = page;
-  const version = props.captureSource?.version ?? "";
-  const systemKeys = useMemo(
-    () => ({ version, system, systemSearch, systemSort }),
-    [version, system, systemSearch, systemSort],
-  );
-  const [ruleFocus, setRuleFocus] = useState<string | null>(null);
-  const membership = useMemo(() => {
-    const map = new Map<SubjectKey, readonly SubjectKey[]>();
-    for (const issue of issues) map.set(`issue:${issue.key}`, issue.ids.map(elementKey));
-    const walk = (node: TreeNode): number[] => {
-      const ids = [
-        ...new Set([...(node.id == null ? [] : [node.id]), ...node.children.flatMap(walk)]),
-      ];
-      if (node.kind !== "element")
-        map.set(`${node.kind}:${node.key}` as SubjectKey, ids.map(elementKey));
-      return ids;
-    };
-    trees.forEach(walk);
-    return map;
-  }, [issues, trees]);
-  // The picture annotates the Fix rows' findings, or the Diagnostics kind picked in its key.
-  const kindClause = page.rulingSearch.pills.find(
-    (pill) => pill.field === "kind" && pill.op === "=",
-  );
-  const diagnosticKind = kindClause?.value ?? "";
-  const annotated = useMemo(
-    () => (inbox ? annotatedFindings(inbox, heal, diagnosticKind) : new Set<string>()),
-    [inbox, heal, diagnosticKind],
-  );
-
-  // Stable, so the tree's memoized rows redraw only where a selection or cursor moved.
-  const grilleName = useCallback(
-    (n: TreeNode) => {
-      const id = n.kind === "run" ? n.terminal : n.id;
-      return (id != null ? labels.get(id) : undefined) ?? n.name;
-    },
-    [labels],
-  );
-  const jumpToRuleNow = useRef<(key: string) => void>(() => {});
-  const jumpToRule = useCallback((key: string) => jumpToRuleNow.current(key), []);
-
-  const tree = trees.length ? trees : null;
-  const chosen = tree != null && scope != null;
-  const select = props.onSelect;
-  // The critical run is the largest priced total over every section: the worst fan's run (B's
-  // model marks Pe's only when the group solve names one; a provisional solve can leave it
-  // unnamed, so the largest total stands in). Only the runs that price the system count: a shared
-  // group's other runs never lead. Header, tree and fan rows read one solve, `next`: the model
-  // plus the edit cells, what the person is looking at while staging.
-  const critical =
-    tree
-      ?.flatMap((t) => t.children)
-      .filter((r) => r.terminal == null || !scope || scope.terminals.has(r.terminal))
-      .reduce<TreeNode | null>(
-        (best, r) => (r.total != null && (best?.total == null || r.total > best.total) ? r : best),
-        null,
-      ) ?? null;
-  const scale = critical?.total ?? null;
-  const selected = page.selected && /^\d+$/.test(page.selected) ? Number(page.selected) : null;
-  const focusKey = inbox
-    ? focusRow(
-        page.issue,
-        new Set(
-          [...inbox.fix, ...inbox.set, ...inbox.check, ...inbox.diagnostics].map((i) => i.key),
-        ),
-      )
-    : null;
-  // A cell outside the system (a Set row on the whole document) moves the page to its system.
-  const focusCell = useCallback(
-    (cell: CellRef) => {
-      if (cell.segment === "componentDrops") {
-        // A fitting's drop lives in the bottom pane, in the half whose scope holds it. Nothing is
-        // selected and the page does not move: the picture and its orbit stay as they were.
-        const group = (drawn ?? snapshot).nodes.find((n) => n.id === cell.id)?.groupId;
-        const mine = chosen && group != null && groups.includes(group);
-        setLanding({ id: cell.id, half: mine ? "this" : "all" });
-        return;
-      }
-      const into =
-        scope && (scope.members.has(cell.id) || scope.units.has(cell.id))
-          ? page.system
-          : (() => {
-              const node = snapshot.nodes.find((n) => n.id === cell.id);
-              const g =
-                node?.groupId ?? snapshot.groups.find((x) => x.rootIds.includes(cell.id))?.id;
-              return g ? withSystem(page.system, systemOfGroup(drawn ?? snapshot, g)) : page.system;
-            })();
-      setPage({ system: into, selected: String(cell.id), issue: "" });
-      setCellFocus(cell);
-    },
-    [drawn, snapshot, chosen, groups, scope, page.system, setPage],
-  );
-  // The section whose run leads the system: its fan and TEL head the pane.
-  const activeCritical =
-    tree
-      ?.flatMap((t) => t.children)
-      .filter((r) => r.terminal != null && activeScope?.terminals.has(r.terminal))
-      .reduce<TreeNode | null>(
-        (best, r) => (r.total != null && (best?.total == null || r.total > best.total) ? r : best),
-        null,
-      ) ?? null;
-  const leadGroup =
-    activeScope?.groups.reduce<string | null>(
-      (best, g) =>
-        best == null ||
-        (priced?.next.byGroup[g]?.fan ?? -Infinity) > (priced?.next.byGroup[best]?.fan ?? -Infinity)
-          ? g
-          : best,
-      null,
-    ) ?? "";
+export function SystemsPane({ ctx }: { ctx: OwnContext<"e-systems"> }) {
+  const search = useRouteSearchSlice(search => search);
+  const data = useNetworkData(ctx);
+  const { snapshot, priced, page, systems, active, work, analysis, captureSource, coverage } = data;
+  const { drawn, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
+  const systemRows = analysis?.systems ?? NO_SYSTEMS;
+  const notes = analysis?.notes ?? NO_NOTES;
+  const { systemSearch, systemSort } = page;
+  const system = systems;
+  const version = captureSource?.version ?? "";
+  const systemKeys = { version, system, active, systemSearch, systemSort };
   const fansOf = useCallback(
     (system: ReturnType<typeof systemList>[number]) =>
       fanFacts(
@@ -571,375 +386,413 @@ function LoadedScreenBody({
       ),
     [priced, nameOf, drawn],
   );
-  jumpToRuleNow.current = (key) => {
-    setRuleFocus(key);
-  };
-  const designRate = priced?.edit.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
-  // The 2026-10-24 open-system chips supersede the 2026-10-23 no-header ruling. The header
-  // carries scope and exits only; selected element facts remain in the picture.
-  const treePane = useMemo(
-    () =>
-      tree ? (
-        <>
-          <OpenSystems
-            system={page.system}
-            onChange={(system) => setPage({ system })}
-            whole={!partialWord(props.coverage)}
-          />
-          <Scroll className="min-h-0 flex-1">
-            <div className="min-w-0 shrink-0">
-              <SystemTree
-                key={scope?.name}
-                address={{
-                  scope: `${openKey(page.system)}:${props.captureSource?.version ?? ""}`,
-                  search: page.treeSearch,
-                  sort: page.treeSort,
-                  onChange: (treeSearch, treeSort) =>
-                    setPage({ treeSearch, treeSort }, { history: "replace" }),
-                }}
-                ctx={{
-                  trees: tree,
-                  scale,
-                  criticalKey: critical?.key ?? null,
-                  grilleName,
-                  selected,
-                  ruleOf,
-                  select,
-                  jumpToRule,
-                  reading,
-                  designRate,
-                }}
-              />
-              {connected.length ? (
-                <div data-e-connected="" className="flex flex-col items-start py-1">
-                  <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">Connected</p>
-                  {connected.map(({ system, units }) => (
-                    <Button
-                      key={system}
-                      label={`open ${system}`}
-                      data-e-connected-system={system}
-                      onClick={() => setPage({ system: withSystem(page.system, system) })}
-                    >
-                      {`${system} · via ${units.map(nameOf).join(", ")}`}
-                    </Button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </Scroll>
-        </>
-      ) : null,
-    [
-      tree,
-      scope?.name,
-      page.system,
-      props.captureSource?.version ?? "",
-      page.treeSearch,
-      page.treeSort,
-      connected,
-      nameOf,
-      setPage,
-      scale,
-      critical?.key,
-      grilleName,
-      selected,
-      ruleOf,
-      select,
-      jumpToRule,
-      reading,
-      designRate,
-    ],
-  );
-  const systemsPane = useMemo(
-    () => (
-      <>
-        <OpenSystems system={page.system} onChange={(system) => setPage({ system })} />
-        <ReadCoverage coverage={props.coverage} />
-        {props.reading.error ? (
-          <p role="alert" data-tone="alarm">
-            {props.reading.error}
-          </p>
-        ) : null}
-        <Scroll className="min-h-0 flex-1">
-          <SystemsList
-            systems={systems}
-            fansOf={fansOf}
-            nameOf={nameOf}
-            notes={notes}
-            drawn={drawn}
-            page={systemKeys}
-            setPage={setPage}
-          />
-        </Scroll>
-      </>
-    ),
-    [
-      census.systems,
-      census.priced,
-      census.fix,
-      props.coverage,
-      props.reading.error,
-      systems,
-      fansOf,
-      nameOf,
-      notes,
-      drawn,
-      systemKeys,
-      page.system,
-      setPage,
-    ],
-  );
-  const rulesPanes = useMemo(
-    () =>
-      [false, true].map((wide) => (
-        <>
-          {priced ? (
-            <RulesTree
-              snapshot={drawn ?? snapshot}
-              priced={priced}
-              groups={groups}
-              wide={wide}
-              work={work}
-              focus={ruleFocus}
-              onFocus={setRuleFocus}
-              nameOf={nameOf}
-            />
-          ) : (
-            <p className="text-ink-2 p-2">Loading rules</p>
-          )}
-        </>
-      )),
-    [scope?.name, priced, drawn, snapshot, groups, work, ruleFocus, nameOf],
-  );
-  const inputsCount = scope
-    ? `${plural(scope.units.size, "unit")} · ${plural(scope.terminals.size, "grille")}`
-    : "";
-  const inputsPane = useMemo(
-    () =>
-      tree && scope ? (
-        <>
-          <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">flow · ESP · role · drop</p>
-          <InputsPane
-            address={{
-              scope: `${openKey(page.system)}:${props.captureSource?.version ?? ""}`,
-              search: page.inputSearch,
-              sort: page.inputSort,
-              onChange: (inputSearch, inputSort) =>
-                setPage({ inputSearch, inputSort }, { history: "replace" }),
-            }}
-            fanVerbs={fanVerbsOf}
-            snapshot={drawn ?? snapshot}
-            priced={priced}
-            work={work}
-            scope={scope}
-            nameOf={nameOf}
-            selected={selected}
-            select={select}
-          />
-        </>
-      ) : null,
-    [
-      tree,
-      scope,
-      inputsCount,
-      page.system,
-      props.captureSource?.version ?? "",
-      page.inputSearch,
-      page.inputSort,
-      setPage,
-      fanVerbsOf,
-      drawn,
-      snapshot,
-      priced,
-      work,
-      nameOf,
-      selected,
-      select,
-    ],
-  );
-  const writeVerbs: WriteVerbs | null = inbox
-    ? { control: props.commands({ kind: "price" }), row: inbox.write }
-    : null;
-  const healHandles: FanVerbs = { render: props.commands };
-  const inboxPane = useMemo(
-    () => (
-      <>
-        {inbox ? (
-          <ReachInbox
-            groups={inbox}
-            work={inboxWork}
-            nameOf={nameOf}
-            onVerdict={props.onVerdict}
-            onSelect={select}
-            onFocusCell={focusCell}
-            write={writeVerbs!}
-            heal={healHandles}
-            fan={fanHandles}
-            cells={props.cells}
-            selected={selected}
-            focused={focusKey}
-            onPick={(issue) => setPage({ selected: "", issue }, { history: "push" })}
-            address={{
-              scope: `${openKey(page.system)}:${props.captureSource?.version ?? ""}`,
-              search: page.rulingSearch,
-              sort: page.rulingSort,
-              onChange: (rulingSearch, rulingSort) =>
-                setPage({ rulingSearch, rulingSort }, { history: "replace" }),
-            }}
-          />
-        ) : null}
-        {page.heal && (
-          <section
-            aria-label={page.heal.mode === "preview" ? "Heal preview" : "Heal result"}
-            className="px-2 py-1"
-          >
-            <p>{page.heal.sentence}</p>
-            <ul>
-              {page.heal.rows.map((row, index) => (
-                <li key={index}>{row}</li>
-              ))}
-            </ul>
-          </section>
-        )}
-      </>
-    ),
-    [
-      page.heal,
-      inbox,
-      inboxWork,
-      nameOf,
-      props.onVerdict,
-      select,
-      focusCell,
-      writeVerbs,
-      healHandles,
-      fanHandles,
-      selected,
-      focusKey,
-      setHoveredIssue,
-      setPage,
-      page.system,
-      props.captureSource?.version ?? "",
-      page.rulingSearch,
-      page.rulingSort,
-    ],
-  );
-
-  const subjectContext = useMemo(
-    () => ({
-      doc: props.attentionDoc,
-      nameOf: subjectName,
-
-      go: (id: number) => (jump.current ? jump.current(elementKey(id)) : select(id)),
-      refProps: subjectProps,
-    }),
-    [props.attentionDoc, subjectName, select, subjectProps],
-  );
-
-  const picturePane = (
-    <div className="relative flex size-full min-w-0 flex-col">
-      {page.heal?.targets.some(
-        (target) => target.outcome === "planned" || target.outcome === "healed",
-      ) && (
-        <section aria-label="Heal targets" className="flex shrink-0 flex-col px-2 py-1 t-small">
-          {page.heal.targets
-            .filter((target) => target.outcome === "planned" || target.outcome === "healed")
-            .map((target) => (
-              <span key={target.key}>
-                {target.how} · {target.end.replace(":", " end ")}
-                {target.other ? ` to ${target.other.replace(":", " end ")}` : ""}
-              </span>
-            ))}
-        </section>
-      )}
-      <div className="relative min-h-0 flex-1">
-        <DuctsPicture
-          renderPane={(body) => body}
-          {...props}
-          membership={membership}
-          issueScope={issueScope}
-          annotated={annotated}
-          issues={issues}
-          scale={encoded}
+  const systemsPane = (
+    <>
+      <ReadCoverage coverage={coverage} />
+      <a href={fansLink([], search)}>Fan inputs</a>
+      <SystemColours work={work} />
+      {(ctx.readings.roster.status === "failed" ? ctx.readings.roster.reason : null) ? (
+        <p role="alert" data-tone="alarm">
+          {ctx.readings.roster.status === "failed" ? ctx.readings.roster.reason : null}
+        </p>
+      ) : null}
+      <Scroll className="min-h-0 flex-1">
+        <SystemsList
+          systems={systemRows}
+          fansOf={fansOf}
           nameOf={nameOf}
-          jump={jump}
-          groups={drawGroups}
-          members={displayMembers}
-          neighbours={neighbours}
-          lead={leadGroup}
-          identity={{
-            system: chosenRow,
-            census,
-            refreshing: props.reading.refreshing,
-            open: () => {},
-            breakdown:
-              activeCritical?.split && activeCritical.total
-                ? {
-                    split: activeCritical.split,
-                    scale: activeCritical.total,
-                    fans: () => (
-                      <FanFacts
-                        facts={fanFacts(
-                          priced,
-                          activeScope?.groups ?? [],
-                          nameOf,
-                          activeScope?.terminals,
-                        )}
-                        nameOf={nameOf}
-                      />
-                    ),
-                  }
-                : null,
-            allSystems: () => setPage({ system: [] }),
-          }}
+          notes={notes}
+          drawn={drawn}
+          page={systemKeys}
+          onQuery={(systemSearch, systemSort) => ctx.verbs.browse({ systemSearch, systemSort })}
+          coverage={coverage}
         />
-      </div>
-    </div>
+      </Scroll>
+    </>
   );
-  const loadingBody = (
-    <LoadingContext
-      name="Ducts"
-      says={props.empty?.says ?? "Pricing ducts..."}
-      error={props.reading.error}
-      busy={props.reading.pending || props.pricing}
-    >
-      <ReadCoverage coverage={props.coverage} />
-    </LoadingContext>
-  );
-  const panes = {
-    "e-systems": (
+  return (
+    <NetworkFrame ctx={ctx} data={data}>
       <BarRules snapshot={drawn} work={work} priced={priced}>
         {systemsPane}
       </BarRules>
-    ),
-    "e-sidebar": treePane,
-    "e-inputs": (
-      <>
-        <DesignFriction work={work} rate={designRate} />
-        <ParameterSlots work={work} snapshot={snapshot} scope={scope} />
-        <SystemColours work={work} />
-        {inputsPane}
-      </>
-    ),
-    "e-rules-all": rulesPanes[1],
-    "e-rules": rulesPanes[0],
-    "e-picture": picturePane,
-    "e-inbox": inboxPane,
-  };
-  return (
-    <SubjectTextContext.Provider value={subjectContext}>
-      <NetworkPanes value={loading ? { "e-picture": loadingBody } : panes}>{children}</NetworkPanes>
-    </SubjectTextContext.Provider>
+    </NetworkFrame>
   );
 }
-
+export function TreePane({ ctx }: { ctx: OwnContext<"e-sidebar"> }) {
+  const data = useNetworkData(ctx);
+  const { snapshot, priced, page, systems, work, captureSource, selectElement, select } = data;
+  const selectedElement = focusedElement(data.selected);
+  const ruleOf = ruleOfIds(priced);
+  const { scope, trees, labels, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
+  const { neighbours } = useNeighbours(snapshot, scope, systems);
+  const drawGroups = drawGroupsOf(snapshot, scope, systems);
+  const connected = (() => {
+    const shown = new Set(systems);
+    const via = new Map<string, number[]>();
+    for (const n of neighbours)
+      for (const system of n.systems)
+        if (!shown.has(system) && !via.get(system)?.includes(n.unit))
+          via.set(system, [...(via.get(system) ?? []), n.unit]);
+    return [...via].map(([system, units]) => ({ system, units }));
+  })();
+  const encoded = useGroupEncoding(snapshot, priced, drawGroups, page.encoding);
+  const reading = encoded.encoding.quantity ? encoded.encoding : null;
+  const grilleName = useCallback(
+    (n: TreeNode) => {
+      const id = n.kind === "run" ? n.terminal : n.id;
+      return (id != null ? labels.get(id) : undefined) ?? n.name;
+    },
+    [labels],
+  );
+  const jumpToRule = (key: string) => select(`rule:${key}`);
+  const tree = trees.length ? trees : null;
+  const critical =
+    tree
+      ?.flatMap((t) => t.children)
+      .filter((r) => r.terminal == null || !scope || scope.terminals.has(r.terminal))
+      .reduce<TreeNode | null>(
+        (best, r) => (r.total != null && (best?.total == null || r.total > best.total) ? r : best),
+        null,
+      ) ?? null;
+  const scale = critical?.total ?? null;
+  const designRate = priced?.edit.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
+  const treePane = tree ? (
+    <>
+      <Scroll className="min-h-0 flex-1">
+        <div className="min-w-0 shrink-0">
+          <SystemTree
+            key={scope?.name}
+            address={{
+              scope: `${openKey(systems)}:${captureSource?.version ?? ""}`,
+              search: page.treeSearch,
+              sort: page.treeSort,
+              onChange: (treeSearch, treeSort) => ctx.verbs.browse({ treeSearch, treeSort }),
+            }}
+            ctx={{
+              trees: tree,
+              scale,
+              criticalKey: critical?.key ?? null,
+              grilleName,
+              selected: selectedElement,
+              ruleOf,
+              select: selectElement,
+              jumpToRule,
+              reading,
+              designRate,
+            }}
+          />
+          {connected.length ? (
+            <div data-e-connected="" className="flex flex-col items-start py-1">
+              <p className="t-small text-ink-2 px-(--item-mark-pad-x) py-1">Connected</p>
+              {connected.map(({ system, units }) => (
+                <span key={system} data-e-connected-system={system}>
+                  {`${system} · via ${units.map(nameOf).join(", ")}`}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </Scroll>
+    </>
+  ) : null;
+  return (
+    <NetworkFrame ctx={ctx} data={data}>
+      {treePane}
+    </NetworkFrame>
+  );
+}
+export function InboxBody({ ctx }: { ctx: OwnContext<"e-inbox"> }) {
+  const data = useNetworkData(ctx);
+  const {
+    snapshot,
+    priced,
+    page,
+    systems,
+    work,
+    captureSource,
+    claims,
+    edit,
+    onVerdict,
+    selected,
+    select,
+    selectElement,
+  } = data;
+  const projection = useTreeProjection(snapshot, priced, work.doc, systems);
+  const { inbox } = useInboxProjection(snapshot, priced, work.doc, projection, claims, edit);
+  const inboxWork = useMemo(
+    () => ({ ...work, store: snapshot.store ?? null }),
+    [work.doc, work.revision, work.write, snapshot],
+  );
+  const focused = inbox
+    ? focusRow(
+        selected,
+        new Set(
+          [...inbox.fix, ...inbox.set, ...inbox.check, ...inbox.diagnostics].map((row) => row.key),
+        ),
+      )
+    : null;
+  const handles: FanVerbs = { render: commands };
+  return (
+    <NetworkFrame ctx={ctx} data={data}>
+      {inbox && (
+        <ReachInbox
+          groups={inbox}
+          work={inboxWork}
+          nameOf={projection.nameOf}
+          onVerdict={onVerdict}
+          onSelect={selectElement}
+          onFocusCell={(cell) => select(cellFocusSubject(snapshot, systems, cell))}
+          write={{ control: commands({ kind: "price" }), row: inbox.write }}
+          heal={handles}
+          fan={handles}
+          cells={commands}
+          selected={focusedElement(selected)}
+          focused={focused}
+          onPick={select}
+          address={{
+            scope: `${openKey(systems)}:${captureSource?.version ?? ""}`,
+            search: page.rulingSearch,
+            sort: page.rulingSort,
+            onChange: (rulingSearch, rulingSort) => ctx.verbs.browse({ rulingSearch, rulingSort }),
+          }}
+        />
+      )}
+    </NetworkFrame>
+  );
+}
+export function PictureBody({ ctx }: { ctx: OwnContext<"e-picture"> }) {
+  const data = useNetworkData(ctx);
+  const { snapshot, priced, page, systems, active, work, claims, edit, analysis, coverage } = data;
+  const projection = useTreeProjection(snapshot, priced, work.doc, systems);
+  const { drawn, scope, groups, trees, nameOf } = projection;
+  const { heal, inbox } = useInboxProjection(snapshot, priced, work.doc, projection, claims, edit);
+  const drawGroups = drawGroupsOf(snapshot, scope, systems);
+  const { displayMembers, neighbours } = useNeighbours(snapshot, scope, systems);
+  const activeScope = active ? systemScope(drawn, active) : null;
+  const issues = useMemo(() => (inbox ? stageIssues(inbox) : []), [inbox]);
+  const membership = useMemo(() => {
+    const members = new Map<SubjectKey, readonly SubjectKey[]>();
+    for (const issue of issues) members.set(`issue:${issue.key}`, issue.ids.map(elementKey));
+    const walk = (node: TreeNode): number[] => {
+      const ids = [
+        ...new Set([...(node.id == null ? [] : [node.id]), ...node.children.flatMap(walk)]),
+      ];
+      if (node.kind !== "element") members.set(`${node.kind}:${node.key}`, ids.map(elementKey));
+      return ids;
+    };
+    trees.forEach(walk);
+    return members;
+  }, [issues, trees]);
+  const issueScope = useMemo(
+    () =>
+      scope
+        ? new Set(
+            drawn.groups
+              .filter((group) => groups.includes(group.id))
+              .flatMap((group) => group.issueIds),
+          )
+        : null,
+    [scope, drawn, groups],
+  );
+  const diagnostic =
+    page.rulingSearch.pills.find((pill) => pill.field === "kind" && pill.op === "=")?.value ?? "";
+  const annotated = useMemo(
+    () => (inbox ? annotatedFindings(inbox, heal, diagnostic) : new Set<string>()),
+    [inbox, heal, diagnostic],
+  );
+  const encoded = useGroupEncoding(snapshot, priced, drawGroups, page.encoding);
+  const activeCritical = trees
+    .flatMap((tree) => tree.children)
+    .filter((run) => run.terminal != null && activeScope?.terminals.has(run.terminal))
+    .reduce<TreeNode | null>(
+      (best, run) =>
+        run.total != null && (best?.total == null || run.total > best.total) ? run : best,
+      null,
+    );
+  const lead =
+    activeScope?.groups.reduce<string | null>(
+      (best, group) =>
+        best == null ||
+        (priced?.next.byGroup[group]?.fan ?? -Infinity) >
+          (priced?.next.byGroup[best]?.fan ?? -Infinity)
+          ? group
+          : best,
+      null,
+    ) ?? "";
+  const systemRows = analysis?.systems ?? NO_SYSTEMS;
+  const notes = analysis?.notes ?? NO_NOTES;
+  const chosen = systemRows.find((row) => row.key === active);
+  const census = {
+    systems: systemRows.length,
+    priced: systemRows.filter((row) => row.total != null).length,
+    fix: systemRows.filter((row) =>
+      systemNoteCount(row, notes.get(row.key)).issues.some((issue) => issue.tone === "alarm"),
+    ).length,
+    partial: partialWord(coverage),
+  };
+  const jump = useRef<((key: SubjectKey) => void) | null>(null);
+  return (
+    <NetworkFrame ctx={ctx} data={data} jump={jump}>
+      <div className="relative flex size-full min-w-0 flex-col">
+        <div className="relative min-h-0 flex-1">
+          <DuctsPicture
+            ctx={ctx}
+            snapshot={data.snapshotRead.value ? snapshot : null}
+            priced={priced}
+            captureSource={data.captureSource}
+            doc={data.document}
+            subject={data.subject}
+            claims={claims}
+            onVerdict={data.onVerdict}
+            work={work}
+            selection={data.selection}
+            renderPane={(body, furniture) => (
+              <>
+                {body}
+                <PaneActions pane="e-picture">{furniture?.actions}</PaneActions>
+              </>
+            )}
+            membership={membership}
+            issueScope={issueScope}
+            annotated={annotated}
+            issues={issues}
+            scale={encoded}
+            nameOf={nameOf}
+            jump={jump}
+            groups={drawGroups}
+            members={displayMembers}
+            neighbours={neighbours}
+            lead={lead}
+            identity={{
+              system: chosen ? { ...chosen, note: notes.get(chosen.key) } : null,
+              census,
+              refreshing: !data.snapshotRead.current,
+              open: () => {},
+              breakdown:
+                activeCritical?.split && activeCritical.total
+                  ? {
+                      split: activeCritical.split,
+                      scale: activeCritical.total,
+                      fans: () => (
+                        <FanFacts
+                          facts={fanFacts(
+                            priced,
+                            activeScope?.groups ?? [],
+                            nameOf,
+                            activeScope?.terminals,
+                          )}
+                          nameOf={nameOf}
+                        />
+                      ),
+                    }
+                  : null,
+            }}
+          />
+        </div>
+      </div>
+    </NetworkFrame>
+  );
+}
+function useInboxProjection(
+  snapshot: DuctSnapshot,
+  priced: NetworkData["priced"],
+  doc: NetworkData["work"]["doc"],
+  projection: ReturnType<typeof useTreeProjection>,
+  claims: NetworkData["claims"],
+  edit: number,
+) {
+  return useMemo(() => {
+    const { scope, nameOf, groupLabel } = projection;
+    const surveyed = priced ?? survey(snapshot, doc);
+    const heal = healPlan(snapshot, doc);
+    const noRuns: InboxItem[] =
+      priced && scope
+        ? [
+            ...new Set(noRunBranches(priced.snapshot, priced.next, scope, priced.flows).values()),
+          ].map((branch) => ({
+            key: `no-run:${branch.elements[0]}`,
+            group: "diagnostics",
+            kind: "no-run",
+            title: "Branch with no run",
+            status: "outside priced paths",
+            ids: branch.elements,
+            note: branch.reasons.map((reason) => reason.text).join("; "),
+            parts: [
+              "Branch ",
+              { id: branch.elements[0]! },
+              " has no run. ",
+              ...noRunParts(branch, priced.snapshot),
+              ...priced.findings
+                .filter(
+                  (finding) =>
+                    finding.kind === "missed-join" &&
+                    finding.elementIds.some((id) =>
+                      branch.reasons.some((reason) => reason.at === id),
+                    ),
+                )
+                .flatMap((finding) => [". ", finding.note]),
+            ],
+            verbs: [{ kind: "select", ids: branch.elements }],
+          }))
+        : [];
+    const base = inboxRows({
+      snapshot: surveyed.snapshot,
+      scope,
+      findings: surveyed.findings,
+      flows: surveyed.flows,
+      equipmentFlows: unitFlowsIn(surveyed, scope?.groups ?? null),
+      doc,
+      nameOf,
+      groupLabel,
+      heal,
+      airflow: airflowOptions(surveyed.snapshot, scope),
+      unitAirflow: airflowOptions(surveyed.snapshot, scope, "unit"),
+      roles: surveyed.roles,
+      claims,
+      write: { edit, esp: stagedEsp(doc) },
+    });
+    return { heal, inbox: { ...base, diagnostics: [...base.diagnostics, ...noRuns] } };
+  }, [snapshot, priced, doc, projection, claims, edit]);
+}
+export function RulesBody({ ctx, wide = false }: { ctx: OwnContext<"e-rules">; wide?: boolean }) {
+  const data = useNetworkData(ctx);
+  const { snapshot, priced, systems, selected, work, select } = data;
+  const { drawn, groups, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
+  const ruleFocus = selected.startsWith("rule:") ? selected.slice(5) : null;
+  const requestedCell = cellFocusOf(selected);
+  const landing = requestedCell?.pane === (wide ? "all" : "this") ? requestedCell : null;
+  const setRuleFocus = (key: string | null) => select(key ? `rule:${key}` : "");
+  const rulesPane = (
+    <>
+      {priced ? (
+        <RulesTree
+          snapshot={drawn ?? snapshot}
+          priced={priced}
+          groups={groups}
+          wide={wide}
+          work={work}
+          focus={ruleFocus}
+          onFocus={setRuleFocus}
+          landing={landing}
+          nameOf={nameOf}
+        />
+      ) : (
+        <p className="text-ink-2 p-2">Loading rules</p>
+      )}
+    </>
+  );
+  return (
+    <NetworkFrame ctx={ctx} data={data}>
+      {rulesPane}
+    </NetworkFrame>
+  );
+}
 type SystemListItem = ReturnType<typeof systemList>[number];
 const systemKey = (system: SystemListItem) => system.key;
 const SYSTEM_SORTS = {
   name: (system: SystemListItem) => system.name,
   loss: (system: SystemListItem) => -(system.total ?? -Infinity),
 };
-
 /** Keep query renders below the model, drawing and ruling builders. */
 // Memoized on the Page keys it reads: a selection or a camera move never re-renders 355 rows.
 const SystemsList = memo(function SystemsList({
@@ -949,17 +802,30 @@ const SystemsList = memo(function SystemsList({
   notes,
   drawn,
   page,
-  setPage,
+  onQuery,
+  coverage,
 }: {
   systems: ReturnType<typeof systemList>;
   /** The system's fans: its hover hint and the head of its breakdown popover. */
   fansOf: (system: ReturnType<typeof systemList>[number]) => FanFact[];
   nameOf: (id: number) => string;
   notes: ReadonlyMap<string, SystemNote>;
-  drawn: ProtoProps["snapshot"];
-  page: Pick<ProtoProps["page"], "system" | "systemSearch" | "systemSort"> & { version: string };
-  setPage: ProtoProps["setPage"];
+  drawn: DuctSnapshot | null;
+  page: {
+    system: readonly string[];
+    active: string;
+    systemSearch: NetworkData["page"]["systemSearch"];
+    systemSort: NetworkData["page"]["systemSort"];
+    version: string;
+  };
+  onQuery: (
+    search: NetworkData["page"]["systemSearch"],
+    sort: NetworkData["page"]["systemSort"],
+  ) => void;
+  coverage: Coverage;
 }) {
+  const door = useAdmittedSubject();
+  const systemId = (name: string) => localId("ducts-system", name);
   const searchable = useMemo(() => (drawn ? systemSearch(drawn) : null), [drawn]);
   const search = useCallback(
     (system: ReturnType<typeof systemList>[number]) => ({
@@ -1026,12 +892,11 @@ const SystemsList = memo(function SystemsList({
     },
     onState: (next) => {
       if (next.search !== page.systemSearch || next.sort !== page.systemSort)
-        setPage({ systemSearch: next.search, systemSort: next.sort }, { history: "replace" });
+        onQuery(next.search, next.sort);
     },
-    // A pick opens the system beside the others, or closes it when it is open.
-    onPick: (system) => setPage({ system: toggleSystem(page.system, system.key) }),
+    onPick: (system) => door?.toggle(systemId(system.key)),
   });
-  const active = activeSystem(page);
+  const active = page.active;
   useEffect(() => {
     if (systemListView.target && systemListView.rows.some((row) => row.key === active))
       systemListView.reveal(active);
@@ -1046,23 +911,106 @@ const SystemsList = memo(function SystemsList({
         const fans = fansOf(system);
         return systemRowParts(
           system,
-          () => setPage({ system: withSystem(page.system, system.key) }),
+          () => door?.toggle(systemId(system.key)),
           notes.get(system.key),
           fans.map((f) => `${nameOf(f.unit)} ${f.role}: ${f.says}`),
           () => <FanFacts facts={fans} nameOf={nameOf} />,
         );
       }}
       projection={(system) => ({ weight: systemNoteCount(system, notes.get(system.key)).total })}
-      empty={{
-        message: "No duct systems in this scope",
-        exit: "Read a model containing duct systems",
-      }}
+      empty={systemsEmpty(coverage)}
     />
   );
 });
-
 /** The inbox redraws only when the hovered issue (its rail) changes. */
 function ReachInbox(props: Omit<ComponentProps<typeof Inbox>, "hoveredIssue">) {
   const issue = useHoveredIssue();
   return <Inbox {...props} hoveredIssue={issue} />;
+}
+export function AllRulesBody({ ctx }: { ctx: OwnContext<"e-rules-all"> }) {
+  const { snapshot, work } = useNetworkData(ctx);
+  const kinds = new Map((snapshot?.nodes ?? []).filter(node => node.kind === "equipment")
+    .map(node => [catalogLinkKey(node.family, node.type), node]));
+  return <>
+    <RulesBody ctx={ctx} wide />
+    <section aria-label="Unit kinds" className="flex flex-col gap-2 p-2">
+      <h3 className="t-head">Unit kinds</h3>
+      {[...kinds].map(([key, node]) => {
+        const cell = ctx.work?.kinds[key] ?? {};
+        const label = [node.family, node.type].filter(Boolean).join(" / ");
+        return <label key={key} className="flex flex-col gap-1"><span>{label}</span>
+          <ChoiceCell label={`Unit kind ${label}`} cell={cell} path={["kinds", key]}
+            current={cell.edit?.value.kind ?? suggestKind(node).kind} show={JSON.stringify}
+            options={DUCT_UNIT_KINDS.map(kind => ({ key: kind, label: kind,
+              description: kindMeaning(node, kind), disabled: kindDisabledReason(node, kind) ?? undefined }))}
+            refusal={ctx.workBasis ? null : "Read Work before editing"}
+            pick={kind => void work.write(transitionPatches(["kinds"], key, cell, { kind: "set", rung: { value: { kind } } }))}
+            act={async (path, cell, kind) => (await work.write(transitionPatches(path.slice(0, -1), key, cell, { kind }))) ?? null} />
+          {cell.edit && <Button label="Clear unit kind" onClick={() => void work.write(transitionPatches(["kinds"], key, cell, { kind: "clear" }))}>Clear unit kind</Button>}
+        </label>;
+      })}
+    </section>
+  </>;
+}
+function useTreeProjection(
+  snapshot: DuctSnapshot,
+  priced: NetworkData["priced"],
+  doc: NetworkData["work"]["doc"],
+  systems: readonly string[],
+) {
+  return useMemo(() => {
+    const drawn = priced?.snapshot ?? snapshot;
+    const scope = scopeOf(drawn, systems);
+    const groups = scope?.groups ?? NO_GROUPS;
+    const sections = scope ? sectionsOf(drawn, systems) : new Map<string, string>();
+    const sectionOf = (group: string) => {
+      const others = scope?.shared.get(group);
+      const name = sections.get(group) ?? scope?.name ?? "";
+      return others?.length ? `${name} \u00b7 shared with ${others.join(", ")}` : name;
+    };
+    const trees = scope ? buildTree(drawn, priced, doc, groups, sectionOf, scope.members) : [];
+    const labels = grilleLabels(
+      drawn,
+      trees.flatMap((tree) => tree.children),
+    );
+    const subjectName = subjectNamer(snapshot);
+    const nameOf = (id: number) => labels.get(id) ?? subjectName(id) ?? "element not in snapshot";
+    const names = groupLabels(drawn);
+    const groupLabel = (group: string) =>
+      sections.has(group) ? sectionOf(group) : (names.get(group) ?? "a duct network");
+    return { drawn, scope, groups, sections, sectionOf, trees, labels, nameOf, groupLabel };
+  }, [snapshot, priced, doc, systems]);
+}
+function drawGroupsOf(
+  snapshot: DuctSnapshot,
+  scope: ReturnType<typeof scopeOf>,
+  systems: readonly string[],
+) {
+  const groups = scope?.groups ?? NO_GROUPS;
+  const raw = scopeOf(snapshot, systems)?.groups;
+  if (!raw) return groups;
+  const merged = [...snapshot.nodes, ...snapshot.segments].flatMap((element) =>
+    element.groupId && scope?.members.has(element.id) ? [element.groupId] : [],
+  );
+  return [...new Set([...groups, ...raw, ...merged])];
+}
+
+function useNeighbours(
+  snapshot: DuctSnapshot,
+  scope: ReturnType<typeof scopeOf>,
+  systems: readonly string[],
+) {
+  const displayMembers = useMemo(
+    () =>
+      scope
+        ? new Set([...scope.members, ...(scopeOf(snapshot, systems)?.members ?? [])])
+        : undefined,
+    [scope, snapshot, systems],
+  );
+  const multi = useSyncExternalStore(knobsChanged, DUCTS_MULTI.read, DUCTS_MULTI.read).selection;
+  const neighbours = useMemo(
+    () => (displayMembers ? neighboursOf(snapshot, displayMembers, multi) : NO_NEIGHBOURS),
+    [snapshot, displayMembers, multi],
+  );
+  return { displayMembers, neighbours };
 }

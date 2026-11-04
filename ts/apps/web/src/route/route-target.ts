@@ -1,8 +1,9 @@
 /** Where a route acts: its `?target` pin, else the machine's sole user document as a fallback. */
 import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
-import { useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import {
   addressSchema,
+  machineInventory,
   documentRequestSchema,
   resolveCallTarget,
   sameAddress,
@@ -13,8 +14,15 @@ import {
   type Reading,
   type TargetResolution,
 } from "@pe/agent-contracts";
-import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import { readingAtom, peReadings, inventoryOf, previousOf, targetInventory } from "#/readings";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { peReadings } from "#/readings";
+import {
+  readingAtom,
+  inventoryOf,
+  previousOf,
+  targetInventory,
+  retainTargetInventory,
+} from "#/shell/readings-hooks";
 import { soleUserDocument } from "#/chat/scope";
 import { useOwned } from "#/shell/owner";
 
@@ -81,6 +89,47 @@ export type TargetProvenance =
  * the fallback never writes target, head, or authority; explicit human actions remain subject to
  * existing freshness/admission. The selected conversation never defaults it.
  */
+export function retainSoleDocument(
+  machine: Machine | null,
+  last: DocumentRequest | null,
+  live: ReturnType<typeof targetInventory> | null = null,
+) {
+  const inventory = machineInventory(machine ?? undefined);
+  const busy =
+    inventory.kind !== "ready" ||
+    Object.values(inventory.sessions).some((s) => s.kind !== "ready") ||
+    (machine?.revit.sessions?.some(
+      (s) => "process" in s.row && s.row.process != null && s.attachment === null,
+    ) ??
+      false);
+  // The sole document is a default, not a binding that is recomputed on every census.
+  // Once observed, tab memory wins until a complete inventory confirms its lifetime ended.
+  const observed = live?.kind === "ready" ? live : inventory;
+  const stillOpen =
+    last && resolveCallTarget({ needs: "document" }, [last], observed).kind === "resolved";
+  return {
+    request: stillOpen ? last : busy ? (last ?? liveSoleDocument(live)) : soleUserDocument(machine),
+    busy,
+  };
+}
+
+/**
+ * The live session inventory's only open document, for a page that has no last-known target while
+ * the machine census is busy (N4: a reload mid-read showed "missing target" for a minute while the
+ * one session stayed open with one document). EXCEPTION to `soleUserDocument`: the inventory rows
+ * carry no access, so this cannot refuse a Pea-opened document. It holds only until the machine
+ * census answers, which then rules as before; native writes stay behind Work and consent.
+ */
+function liveSoleDocument(live: ReturnType<typeof targetInventory> | null): DocumentRequest | null {
+  if (live?.kind !== "ready") return null;
+  const sessions = Object.entries(live.sessions);
+  if (sessions.length !== 1) return null;
+  const [session, found] = sessions[0]!;
+  return found.kind === "ready" && found.values.length === 1
+    ? { kind: "open", ref: { session, openId: found.values[0]!.openId } }
+    : null;
+}
+
 export function useRouteTarget(
   manifest: { readonly needs?: "session" | "document" | "project" | "family" },
   registry: AtomRegistry.AtomRegistry,
@@ -99,7 +148,24 @@ export function useRouteTarget(
     [seed, target],
   );
   const machineResult = useOwned(registry, machineAtom) as Reading<Machine> | null;
-  const sole = machineResult ? soleUserDocument(previousOf(machineResult) ?? null) : null;
+  const lastInventory = useRef<ReturnType<typeof targetInventory>>({ kind: "checking" });
+  const inventoryView = retainTargetInventory(
+    targetInventory(inventoryResult as Parameters<typeof targetInventory>[0]),
+    lastInventory.current,
+  );
+  lastInventory.current = inventoryView;
+  const lastSole = useRef<DocumentRequest | null>(null);
+  const held = retainSoleDocument(
+    machineResult ? (previousOf(machineResult) ?? null) : null,
+    lastSole.current,
+    inventoryView,
+  );
+  const sole = target || seed ? null : held.request;
+  lastSole.current = sole;
+  const busy =
+    !seed &&
+    (inventoryResult.state !== "ready" ||
+      (!target && (held.busy || machineResult?.state !== "ready")));
   const soleKey = JSON.stringify(sole);
   const fallback = useMemo((): DocumentRequest[] => (sole ? [sole] : []), [soleKey]);
   const resolution: TargetResolution = useMemo(() => {
@@ -112,7 +178,7 @@ export function useRouteTarget(
     if (!manifest.needs) return { kind: "resolved", target: { kind: "host" } as ExecutionTarget };
     // Adding a document Reading reconnects the shared stream. Retain the observed target
     // across that gap, or dropping its Readings would trigger another reconnect forever.
-    const inventory = targetInventory(inventoryResult as Parameters<typeof targetInventory>[0]);
+    const inventory = inventoryView;
 
     // See `parseTarget` for the `?target` grammar.
     const chosen = parseTarget(target);
@@ -163,7 +229,7 @@ export function useRouteTarget(
           } as const);
     if (needs.needs === "session" && !needs.target) return { kind: "choose", reason: "missing" };
     return resolveCallTarget(needs as never, request ? [request] : fallback, inventory);
-  }, [seed, manifest.needs, inventoryResult, fallback, target]);
+  }, [seed, manifest.needs, inventoryView, fallback, target]);
 
   // A bound exact document that left the inventory: named, with the title it last had, and the
   // same title reopened in its session offered. Titles seen are remembered for exactly this.
@@ -209,19 +275,19 @@ export function useRouteTarget(
   // `?target` for the same document read and write the same Work.
   const resolvedAddress = useMemo((): Address | null => {
     if (resolution.kind !== "resolved" || resolution.target.kind !== "document") return null;
-    const inventory = targetInventory(inventoryResult as Parameters<typeof targetInventory>[0]);
+    const inventory = inventoryView;
     const found =
       inventory.kind === "ready" ? inventory.sessions[resolution.target.ref.session] : undefined;
     const ref = resolution.target.ref;
     return found?.kind === "ready"
       ? (found.values.find((doc) => doc.openId === ref.openId)?.address ?? null)
       : null;
-  }, [resolution, inventoryResult]);
+  }, [resolution, inventoryView]);
   // Work identity alone: the live Address, else a known raw Address (a `?target` Address, or a
   // named request pinned or held by the fallback) so a closed document's Work stays readable. Never a
   // remembered title, and never an open/session ref reread as a new lifetime. Nothing native,
   // no action and no binding reads this; they stay on `resolution`.
-  const workAddress = useMemo((): Address | null => {
+  const selectedAddress = useMemo((): Address | null => {
     if (resolvedAddress || seed) return resolvedAddress;
     const chosen = parseTarget(target);
     const request =
@@ -232,7 +298,7 @@ export function useRouteTarget(
         : request?.kind === "named" && (chosen || fallback.length === 1)
           ? request.address
           : null;
-    return addressSchema.safeParse(raw).data ?? null;
+    return raw;
   }, [resolvedAddress, seed, target, fallback]);
   // The same rule for an exact open request (a `?target` pin, or the sole fallback): it names
   // its own lifetime's saved Work, read-only, while native resolution says choose. The ref is
@@ -252,6 +318,19 @@ export function useRouteTarget(
             : null;
     return request?.kind === "open" ? request.ref : null;
   }, [seed, resolution, target, fallback]);
+  const openRef =
+    resolution.kind === "resolved" && resolution.target.kind === "document"
+      ? resolution.target.ref
+      : workOpen;
+  const openKey = openRef && JSON.stringify([openRef.session, openRef.openId]);
+  const retained = useRef({ openKey, address: selectedAddress });
+  // Retain Work identity for this exact lifetime, never native authority.
+  const workAddress =
+    selectedAddress ??
+    (openKey && retained.current.openKey === openKey ? retained.current.address : null);
+  useLayoutEffect(() => {
+    retained.current = { openKey, address: workAddress };
+  }, [openKey, workAddress]);
   const targetProvenance: TargetProvenance = seed
     ? { source: "seed" }
     : target
@@ -261,6 +340,7 @@ export function useRouteTarget(
         : { source: "none" };
   return {
     inventoryResult,
+    busy,
     resolution,
     bindingLost,
     bindingLostRef,

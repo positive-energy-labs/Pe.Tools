@@ -12,7 +12,7 @@ export const spaceSeeds = {
           contextPaddingFt: 0,
           maxTriangles: 100000,
           focusOnly: false,
-          contextRepresentation: "link-boxes",
+          contextRepresentation: "overview",
         },
         response: { id: "f".repeat(64), scene: FIXTURE_SCENE.metadata.stamp },
       },
@@ -23,6 +23,11 @@ export const spaceSeeds = {
         ]),
       ),
     },
-    readings: { scene: loadedScene("f".repeat(64), FIXTURE_SCENE), answers: FIXTURE_ANSWERS },
+    readings: {
+      region: (page: { region: unknown }) =>
+        page.region ? [{ id: JSON.stringify(page.region), region: page.region }] : [],
+      scene: loadedScene("f".repeat(64), FIXTURE_SCENE),
+      answers: FIXTURE_ANSWERS,
+    },
   },
 };

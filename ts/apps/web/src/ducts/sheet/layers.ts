@@ -8,16 +8,16 @@
  * The worst complete path draws heavy. Every layer carries `targets` and `findings`, so hover,
  * pick and pins work through the picture's one plumbing.
  */
-import type { DuctsRouteDocument, DuctsSheetOverview } from "@pe/agent-contracts";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { damageLayers } from "#/scene/damage";
 import { inkOf } from "#/scene/ink";
-import { markFrame, markLines } from "#/scene/marks";
-import type { Layer3D, SceneMeshes } from "#/scene/types";
-import { findingLayers, findingShapes, type FindingShapes } from "../finding-layers";
+import { markFrame,markLines } from "#/scene/marks";
+import type { Layer3D,SceneMeshes } from "#/scene/types";
+import type { DuctsDesign,DuctsSheetOverview } from "@pe/agent-contracts";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { findingLayers,findingShapes,type FindingShapes } from "../finding-layers";
 import type { StageIssue } from "../inbox-rows";
 import type { Detail } from "./model";
-import { isConsequence, presentIds, type SheetBlocker } from "./tiers";
+import { isConsequence,presentIds,type SheetBlocker } from "./tiers";
 
 type Kind = DuctsSheetOverview["blockers"][number]["kind"];
 /** Kinds whose door is the element's damage skin. */
@@ -45,8 +45,8 @@ const CROSS = 0.25;
 
 export interface SheetLayerInput {
   snapshot: DuctSnapshot;
-  work: DuctsRouteDocument | null;
-  overview: DuctsSheetOverview;
+  work: DuctsDesign | null;
+  overview: Detail<"overview">;
   inputs: Detail<"inputs"> | null;
   blockers: readonly SheetBlocker[];
   meshes: SceneMeshes | null;
@@ -101,7 +101,7 @@ export function sheetIssues(
 /** The face shapes kept to the blockers' elements; a heal box is a ghost until its pair is accepted. */
 export function blockerShapes(
   snapshot: DuctSnapshot,
-  work: DuctsRouteDocument | null,
+  work: DuctsDesign | null,
   blockers: readonly SheetBlocker[],
   inputs: Detail<"inputs"> | null,
   focus: ReadonlySet<number>,

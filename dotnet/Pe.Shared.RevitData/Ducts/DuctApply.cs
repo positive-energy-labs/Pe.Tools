@@ -5,19 +5,12 @@ using Pe.Shared.RevitData.Serialization;
 namespace Pe.Shared.RevitData.Ducts;
 
 // The `ducts.apply` contract: write fitting coefficients, terminal and component drops, fan static
-// into Revit, plus Pe's provenance store. PreviewOnly plans every write and opens no transaction.
+// into Revit, plus Pe's provenance store. Its TransactRead sibling `ducts.apply.preview` plans every write and
+// opens no transaction; the request carries no preview flag, the op key is the mode.
 
-/// <summary>
-///     A fitting write names its Method: PeServer points the fitting at the Pe loss server, which reads the family's
-///     coefficient parameter live (the FittingCoefficient slot, default Pe_C); AshraeTable stores Table as Revit's
-///     ASHRAETableName and Revit looks the legs up itself; SpecificCoefficient freezes Coefficient (the export route,
-///     never the web's). Coefficient, Table, Inputs and RuleKey are Pe's provenance and land in the store.
-///     Terminals and Components carry a drop in in-wg; Equipment the fan external static; TerminalFlows and EquipmentFlows
-///     a design flow in cfm (the TerminalFlow slot on the terminal instance, the FanFlow slot on the unit).
-/// </summary>
+/// <summary>Host-priced losses, drops in in-wg and design flows in cfm. Preview opens no transaction.</summary>
 public sealed record DuctApplyRequest(
-    bool PreviewOnly,
-    DuctParameterSlots? Slots,
+    DuctParameterSlotOverrides? Slots,
     IReadOnlyList<DuctFittingWrite> Fittings,
     IReadOnlyList<DuctDropWrite> Terminals,
     IReadOnlyList<DuctDropWrite> Components,
@@ -26,10 +19,14 @@ public sealed record DuctApplyRequest(
     IReadOnlyList<DuctFlowWrite> EquipmentFlows,
     DuctLossStore Store);
 
-/// <summary>Table is the rule's ASHRAE table the Pe server prices the legs from when the family carries no coefficient; Coefficient is the web's number for the store and the export route.</summary>
-public sealed record DuctFittingWrite(long Id, DuctFittingMethod Method, double Coefficient, string? Table, string? Inputs, string? RuleKey);
+/// <summary>Results are the host engine's priced legs, including their velocity-pressure basis. Table and Inputs are provenance only.</summary>
+public sealed record DuctFittingWrite(long Id, DuctFittingMethod Method, double Coefficient, string? Table, string? Inputs, string? RuleKey,
+    IReadOnlyList<DuctLossResult>? Results = null);
 
-/// <summary>How Revit is told a fitting's loss (pressure-drop ledger, 2026-10-12): the Pe server live, or a frozen number for export.</summary>
+/// <summary>A signed host coefficient at one velocity pressure in in-wg. Native code refuses changed or ambiguous bases.</summary>
+public sealed record DuctLossResult(double VelocityPressureInWg, double Coefficient);
+
+/// <summary>Consume host results in Pe's server, or freeze one coefficient for export.</summary>
 [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
 public enum DuctFittingMethod {
     [System.Runtime.Serialization.EnumMember(Value = "pe-server")] PeServer,
@@ -41,15 +38,19 @@ public sealed record DuctDropWrite(long Id, double InWg, string? Source);
 public sealed record DuctEquipmentWrite(long Id, double ExternalStaticInWg);
 
 /// <summary>A design flow in cfm and where it came from (override, load preview, rooms, a person's note).</summary>
-public sealed record DuctFlowWrite(long Id, double Cfm, string? Source);
+public sealed record DuctFlowWrite(long Id, double Cfm, string? Source, string? Slot = null);
 
-/// <summary>StoreRevision is the store's WorkRevision after this call (unchanged on preview).</summary>
+/// <summary>
+///     StoreRevision is the store's WorkRevision after this call (unchanged on preview). Worksharing is set on a preview of a
+///     workshared document: what the commit will borrow.
+/// </summary>
 public sealed record DuctApplyResult(
     bool PreviewOnly,
     IReadOnlyList<DuctWrite> Writes,
     DuctApplyCounts Counts,
     IReadOnlyList<DuctSystem>? SystemsAfter,
-    int StoreRevision);
+    int StoreRevision,
+    WorksharingDisclosure? Worksharing = null);
 
 /// <summary>
 ///     One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store, and the
@@ -102,7 +103,7 @@ public sealed record DuctLossStore {
     public Dictionary<long, DuctFlowRecord> EquipmentFlows { get; init; } = new();
     public Dictionary<string, DuctVerdictRecord> Verdicts { get; init; } = new(StringComparer.Ordinal);
     public Dictionary<long, DuctRoleRecord> Roles { get; init; } = new();
-    public DuctParameterSlots? Slots { get; init; }
+    public DuctParameterSlotOverrides? Slots { get; init; }
     public int WorkRevision { get; init; }
     public DateTimeOffset? AppliedAt { get; init; }
 

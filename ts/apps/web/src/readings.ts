@@ -2,16 +2,13 @@ import { currentFixture } from "#/shell/fixture-lane";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { hostFetch, runtimeStreamUrl } from "#/host/runtime";
 /**
- * The read layer. One EventSource, one AtomRegistry, one vocabulary (fable law 5).
+ * The wire. One EventSource per tab: SSE frames, fences, reconnect backoff.
  *
- * A Reading is anything observed from Revit, the host, or disk. Every observation in the web app
- * arrives through `readingAtom` over `peReadings`. Large immutable Ducts bodies are retained by
- * the version this stream confirms; retained bytes never establish freshness. A write is not a
- * Reading: it is a plain async call whose success calls `dirty(request)`,
- * which reacquires that subject's snapshot from the host.
- *
- * This file absorbs host/resources.ts, host/resource-client.ts, host/queries.ts, host/live.ts,
- * host/fleet.ts, host/events.ts and the surviving half of host/target.ts.
+ * This module is a transport only. Every reading's lifecycle (demand, deadline, failure,
+ * retention, status) belongs to the shell reading engine (`#/shell/readings`); a View reads a
+ * transport subject through `#/shell/readings-hooks` or a graph `subscriptionSource`. A write is
+ * not a Reading: it is a plain async call whose success calls `dirty(request)`, which reacquires
+ * that subject's snapshot from the host.
  */
 import {
   READING_MAX_FRAME_BYTES,
@@ -19,66 +16,15 @@ import {
   readingFrameSchema,
   readingKey,
   readingRequestSchema,
-  addressSchema,
-  type Address,
-  type Reading,
   type ReadingFrame,
   type ReadingRequest,
-  type TargetInventory,
-  DUCTS_BODY_VERSION_HEADER,
-  DUCTS_REFRESH_HEADER,
-  ductsReadingEnvelopeSchema,
-  type DuctsReadingRequest,
-  type DuctsReadingEnvelope,
   actionReceiptSchema,
 } from "@pe/agent-contracts";
 import { bindActionObserver } from "../../../packages/mcps/src/shared/takeoff-action-client";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import { RegistryContext, useAtomValue } from "@effect/atom-react";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import type { Custody, Lane } from "@pe/host-contracts/contracts";
-import type {
-  BridgeSessionListEntry,
-  HostOpResponse,
-  HostSessionScope,
-  OpCallArgs,
-  OpKey,
-} from "@pe/host-contracts/operation-types";
-import { callHostRpc } from "#/host/client.ts";
-import { createPeClient } from "@pe/agent-contracts/pe-api";
-import {
-  HostCallError,
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
-  HOST_RPC_ORIGIN_HEADER,
-} from "@pe/host-contracts/operation-types";
-
-/** The sentence a person reads: a host refusal's own title, never `HostCallError: <op key>: â€¦`. */
-const failure = (error: unknown) =>
-  Error(
-    error instanceof HostCallError
-      ? typeof error.problem?.title === "string"
-        ? error.problem.title
-        : error.message
-      : error instanceof Error
-        ? error.message
-        : String(error),
-  );
+import { useEffect, useRef } from "react";
 import { reportFault } from "#/host/diagnostics";
-import { HOST_READ_WAIT_S } from "#/route/waits";
-import { useWork } from "@pe/kit/lang/work";
 import { resolveWorkbenchConfig } from "#/workbench/config.ts";
 import { deepEqual } from "@tanstack/react-router";
-
-export type { Lane };
 
 /* -- The one wire ------------------------------------------------------------------------- */
 
@@ -89,10 +35,9 @@ type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 const READING_DEADLINE_MS = 30_000;
 /** Reconnect delays double from 1 s to this ceiling, and reset on the first fresh frame. */
 const RETRY_CEILING_MS = 30_000;
-/** A tab hidden at least this long resyncs when it is shown again (a frozen tab's socket lies). */
-const WAKE_AFTER_MS = 5_000;
 
 /** The one place the web opens an SSE stream: Readings, and a harness thread's tail. */
+// TODO: docs/features/routes/LEDGER.md#s7-500118f3a3 Fold cursor-resuming thread tails into this transport with the composer owner; they still use a separate SSE.
 export const openEventSource = (url: string) => new EventSource(runtimeStreamUrl(url));
 
 /** One browser connection. This map owns subscriptions and retained evidence, never owner truth. */
@@ -106,7 +51,13 @@ export class PeReadings {
       stale: boolean;
     }
   >();
+  // Keep 64 inactive subjects: several dozen recent revisits; mounted readings live in entries.
+  private readonly retainedLimit = 64;
+  private readonly retained = new Map<string, ReadingFrame>();
   private source?: Source;
+  private connection = "";
+  private sent = new Map<string, ReadingRequest>();
+  private updating = false;
   /** A replacement cannot retire the active stream until it has opened. */
   private opening?: Source;
   private generation = 0;
@@ -121,7 +72,7 @@ export class PeReadings {
   private attempts = 0;
   /** A connection that opened and delivered nothing by the deadline, with keys unanswered, is faulted. */
   private watchdog?: ReturnType<typeof setTimeout>;
-  /** A fault or wake happened; the next open tells every resync listener to re-read. */
+  /** A connection fault happened; the next open tells every resync listener to re-read. */
   private faulted = false;
   private readonly resyncs = new Set<() => void>();
   private unwatchWake?: () => void;
@@ -132,16 +83,26 @@ export class PeReadings {
     private readonly url: () => string,
     private readonly connect: (url: string) => Source = openEventSource,
     private readonly batch: (deliver: () => void) => () => void = (deliver) => {
-      if (typeof requestAnimationFrame !== "function") {
-        deliver();
-        return () => {};
-      }
-      if (document.visibilityState === "hidden") {
-        const timer = setTimeout(deliver, 0);
-        return () => clearTimeout(timer);
-      }
-      const frame = requestAnimationFrame(deliver);
-      return () => cancelAnimationFrame(frame);
+      // Transport progress must not depend on a paint: a visible tab can become occluded
+      // after scheduling, leaving an rAF (and all later frames) stranded indefinitely.
+      const timer = setTimeout(deliver, 0);
+      return () => clearTimeout(timer);
+    },
+    private readonly update: (
+      connection: string,
+      add: ReadingRequest[],
+      remove: string[],
+    ) => Promise<void> = async (connection, add, remove) => {
+      const url = new URL(
+        peRouteUrl("resources.subscriptions", {}, resolveWorkbenchConfig().origin),
+      );
+      url.searchParams.set("connection", connection);
+      const response = await hostFetch(url.href, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ add, remove }),
+      });
+      if (!response.ok) throw Error(`Reading subscriptions: ${response.status}`);
     },
   ) {}
 
@@ -162,6 +123,7 @@ export class PeReadings {
     this.opening?.close();
     this.opening = undefined;
     this.entries.clear();
+    this.retained.clear();
     this.resyncs.clear();
     this.unwatchWake?.();
     this.unwatchWake = undefined;
@@ -169,7 +131,7 @@ export class PeReadings {
 
   /**
    * Transports this owner cannot carry (a thread's log tail, which resumes from its own cursor)
-   * follow its liveness: the listener runs when the connection reopens after a fault or a wake,
+   * follow its liveness: the listener runs when the connection reopens after a connection fault,
    * and re-reads its own state from the host. One owner decides when the world is suspect.
    */
   onResync(listener: () => void): () => void {
@@ -178,9 +140,9 @@ export class PeReadings {
   }
 
   /**
-   * The world may have moved without this tab hearing it (the tab woke, the network came back):
+   * The stream lost contact with its host:
    * fence every key, reconnect now, and have every follower re-read. Coalesced per tick, so a
-   * burst of wake signals is one reconnect.
+   * burst of recovery signals is one reconnect.
    */
   resync() {
     if (this.closed) return;
@@ -207,20 +169,21 @@ export class PeReadings {
 
   private watchWake() {
     if (this.unwatchWake || typeof document === "undefined") return;
-    let hiddenAt: number | undefined;
-    const visibility = () => {
-      if (document.visibilityState === "hidden") hiddenAt ??= Date.now();
-      else if (hiddenAt !== undefined) {
-        const slept = Date.now() - hiddenAt;
-        hiddenAt = undefined;
-        if (slept >= WAKE_AFTER_MS) this.resync();
+    // Visibility is not a change of basis. The live stream keeps delivering while hidden.
+    let offline = false;
+    const lostNetwork = () => {
+      offline = true;
+    };
+    const online = () => {
+      if (offline || this.faulted) {
+        offline = false;
+        this.resync();
       }
     };
-    const online = () => this.resync();
-    document.addEventListener("visibilitychange", visibility);
+    window.addEventListener("offline", lostNetwork);
     window.addEventListener("online", online);
     this.unwatchWake = () => {
-      document.removeEventListener("visibilitychange", visibility);
+      window.removeEventListener("offline", lostNetwork);
       window.removeEventListener("online", online);
     };
   }
@@ -239,8 +202,8 @@ export class PeReadings {
     const key = readingKey(request);
     let entry = this.entries.get(key);
     if (!entry) {
-      if (this.entries.size >= READING_MAX_KEYS) throw Error("Too many Pe reading subscriptions");
-      entry = { request, listeners: new Set(), stale: true };
+      entry = { request, listeners: new Set(), latest: this.retained.get(key), stale: true };
+      this.retained.delete(key);
       this.entries.set(key, entry);
       this.schedule(false);
     }
@@ -251,6 +214,12 @@ export class PeReadings {
     return () => {
       found.listeners.delete(listener);
       if (found.listeners.size === 0 && this.entries.get(key) === found) {
+        if (found.latest) {
+          this.retained.delete(key);
+          this.retained.set(key, found.latest);
+          if (this.retained.size > this.retainedLimit)
+            this.retained.delete(this.retained.keys().next().value!);
+        }
         this.entries.delete(key);
         this.pending.delete(key);
         this.schedule(false);
@@ -326,9 +295,41 @@ export class PeReadings {
       this.scheduled = false;
       clearTimeout(this.retry);
       this.retry = undefined;
+      const fenced = this.pendingFenced;
       this.pendingFenced = false;
-      this.open();
+      if (!fenced && (this.source || this.opening)) void this.syncSubscriptions();
+      else this.open();
     });
+  }
+
+  private async syncSubscriptions() {
+    if (this.updating || !this.source || this.opening || this.closed) return;
+    this.updating = true;
+    const connection = this.connection;
+    try {
+      while (!this.closed && this.connection === connection) {
+        const remove = [...this.sent.keys()]
+          .filter((key) => !this.entries.has(key))
+          .slice(0, READING_MAX_KEYS);
+        const add = [...this.entries]
+          .filter(([key]) => !this.sent.has(key))
+          .slice(0, READING_MAX_KEYS);
+        if (!remove.length && !add.length) break;
+        await this.update(
+          connection,
+          add.map(([, entry]) => entry.request),
+          remove,
+        );
+        if (this.connection !== connection) break;
+        for (const key of remove) this.sent.delete(key);
+        for (const [key, entry] of add) this.sent.set(key, entry.request);
+      }
+    } catch {
+      if (!this.closed && this.connection === connection) this.fault();
+    } finally {
+      this.updating = false;
+      if (!this.closed && this.connection !== connection) void this.syncSubscriptions();
+    }
   }
 
   private open() {
@@ -350,7 +351,14 @@ export class PeReadings {
     const url = new URL(this.url());
     url.searchParams.set(
       "keys",
-      JSON.stringify([...this.entries.values()].map(({ request }) => request)),
+      JSON.stringify(
+        [...this.entries.values()].slice(0, READING_MAX_KEYS).map(({ request }) => request),
+      ),
+    );
+    this.connection = crypto.randomUUID();
+    url.searchParams.set("connection", this.connection);
+    this.sent = new Map(
+      [...this.entries].slice(0, READING_MAX_KEYS).map(([key, entry]) => [key, entry.request]),
     );
     // Topology changes can overtake a still-opening replacement. Retire that candidate, not the
     // active stream: commands remain live while the newest connection acquires its keys.
@@ -377,6 +385,7 @@ export class PeReadings {
       this.opening = undefined;
       this.opened = true;
       this.recovered();
+      void this.syncSubscriptions();
     };
     const lost = () => {
       if (!current()) return;
@@ -414,11 +423,13 @@ export class PeReadings {
             for (const [key, frames] of pending) {
               const entry = this.entries.get(key);
               if (!entry) continue;
-              for (const frame of frames) {
+              for (let frame of frames) {
                 if (frame.kind === "gap") entry.stale = true;
                 if (frame.kind === "snapshot" || frame.kind === "failure") {
-                  const unchanged =
-                    !entry.stale && deepEqual(entry.latest, frame, { ignoreUndefined: false });
+                  const identical = deepEqual(entry.latest, frame, { ignoreUndefined: false });
+                  const unchanged = !entry.stale && identical;
+                  // A new stream must confirm freshness, but identical evidence keeps its identity.
+                  if (identical && entry.latest) frame = entry.latest;
                   entry.latest = frame;
                   entry.stale = false;
                   this.attempts = 0;
@@ -464,442 +475,6 @@ export function bindActionReadings(source: Readings = peReadings): () => void {
 }
 /** What a follower of the owner's liveness holds: `onResync` only. */
 export type Liveness = Pick<PeReadings, "onResync">;
-
-/* -- Frames become the one lifecycle ------------------------------------------------------ */
-
-const absent: Reading<never> = { state: "absent" };
-const absentAtom = Atom.make<Reading<never>>(absent);
-
-/**
- * Revit changed this Reading's document after the host served it. The host owns the mark; a
- * surface draws this and offers a re-read. A Reading that is not ready is not "changed": its own
- * lifecycle (loading, stale, failed) already says what is known.
- */
-export const changedInRevit = (reading: Reading<unknown>): boolean =>
-  reading.state === "ready" && reading.changed === true;
-
-/**
- * In flight: loading (bounded by its deadline), or a re-acquisition a write asked for. A failure is
- * said, never in flight. `disconnected` is excluded: every fence (any write, any outage) demotes
- * every open key to it with no deadline, so counting it swept every owner app-wide, and forever
- * while the host was down; the lamp says stale. The reading hooks register this with the nearest
- * work owner themselves; a call site never restates it.
- */
-export const inFlight = (reading: Reading<unknown>): boolean =>
-  reading.state === "loading" || (reading.state === "stale" && reading.reason === "dirtied");
-
-export const previousOf = <T>(reading: Reading<T>): T | undefined =>
-  reading.state === "ready"
-    ? reading.observation
-    : reading.state === "absent"
-      ? undefined
-      : reading.previous;
-
-/** Re-types one Reading's observation without changing its lifecycle or its retained evidence. */
-export const mapReading = <A, B>(reading: Reading<A>, project: (value: A) => B): Reading<B> =>
-  reading.state === "ready"
-    ? { ...reading, observation: project(reading.observation) }
-    : reading.state === "stale"
-      ? { ...reading, previous: project(reading.previous) }
-      : reading.state === "absent"
-        ? reading
-        : { ...reading, previous: reading.previous ? project(reading.previous) : undefined };
-
-/** One frame advances one Reading. Evidence from before an invalidation is never erased. */
-function advance<T>(reading: Reading<T>, frame: Frame): Reading<T> {
-  const previous = previousOf(reading);
-  switch (frame.kind) {
-    case "snapshot":
-      if (
-        reading.state === "ready" &&
-        (reading.changed ?? false) === (frame.changed ?? false) &&
-        deepEqual(reading.observation, frame.value, { ignoreUndefined: false })
-      )
-        return reading;
-      return {
-        state: "ready",
-        observation: frame.value as T,
-        ...(frame.changed === undefined ? {} : { changed: frame.changed }),
-      };
-    case "failure":
-      if (reading.state === "failed" && reading.message === frame.error) return reading;
-      return { state: "failed", message: frame.error, ...(previous !== undefined && { previous }) };
-    case "gap":
-      return previous === undefined ? absent : { state: "stale", previous, reason: "gap" };
-    case "stale":
-      // A fence demotes fresh evidence only. A loading key keeps its first deadline (a reconnect
-      // loop cannot postpone its failure forever) and a failure stays said until a frame answers.
-      if (reading.state === "loading" || reading.state === "failed") return reading;
-      return previous === undefined
-        ? { state: "loading", requestId: frame.key, deadline: Date.now() + READING_DEADLINE_MS }
-        : { state: "stale", previous, reason: "disconnected" };
-    default:
-      return reading;
-  }
-}
-
-const families = new WeakMap<Readings, (key: string) => Atom.Atom<Reading<unknown>>>();
-const makeAtoms = (source: Readings) => {
-  const family = Atom.family((serialized: string) =>
-    Atom.make<Reading<unknown>>((get) => {
-      let reading: Reading<unknown> = absent;
-      let deadline: ReturnType<typeof setTimeout> | undefined;
-      const request = JSON.parse(serialized) as ReadingRequest;
-      const set = (next: Reading<unknown>) => {
-        if (next === reading) return;
-        reading = next;
-        get.setSelf(reading);
-        clearTimeout(deadline);
-        // The `loading` state has advertised a deadline since it existed; nothing enforced it, so a
-        // host that never answers was a spinner with no end (DELL_PE, 2026-10-12). Now it fails.
-        // The kind is the closed subject word; the key names documents and never leaves the tab.
-        if (reading.state === "loading") {
-          const since = Date.now();
-          deadline = setTimeout(
-            () => {
-              reportFault(
-                {
-                  code: "reading.timeout",
-                  elapsedMs: Date.now() - since,
-                  readingKind: request.kind,
-                },
-                Error(`reading ${serialized}: the host sent nothing before its deadline`),
-              );
-              set({ state: "failed", message: "The host sent no reading in 30 s." });
-            },
-            Math.max(0, reading.deadline - since),
-          );
-        }
-      };
-      get.addFinalizer(source.subscribe(request, (frame) => set(advance(reading, frame))));
-      get.addFinalizer(() => clearTimeout(deadline));
-      return reading;
-    }).pipe(Atom.setIdleTTL(0)),
-  );
-  return (key: string) => family(key);
-};
-
-/** The only way a View observes anything. One atom per subject, shared by every reader. */
-export function readingAtom<T = unknown>(
-  request: ReadingRequest,
-  source: Readings = peReadings,
-): Atom.Atom<Reading<T>> {
-  let family = families.get(source);
-  if (!family) {
-    family = makeAtoms(source);
-    families.set(source, family);
-  }
-  return family(JSON.stringify(readingRequestSchema.parse(request))) as Atom.Atom<Reading<T>>;
-}
-
-/** A component's Reading. The request is keyed by subject, so a new object is not a new atom. */
-export function useReading<T = unknown>(
-  request: ReadingRequest | null,
-  source: Readings = peReadings,
-): Reading<T> {
-  const key = request ? readingKey(request) : null;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const atom = useMemo(
-    () => (request ? readingAtom<T>(request, source) : (absentAtom as Atom.Atom<Reading<T>>)),
-    [key, source],
-  );
-  const reading = useAtomValue(atom);
-  useWork(inFlight(reading), `reading ${request?.kind}â€¦`);
-  return reading;
-}
-
-export type DuctsNativeObservation = {
-  session: string;
-  document: { session: string; openId: string } | null;
-  requestId: string;
-  version: string;
-  reused: boolean;
-};
-type DuctsDecodedBody = { data: unknown; nativeObservation: DuctsNativeObservation; bytes: number };
-
-/** Browser evidence only: immutable Ducts bodies by host revision, never authority or a generic RPC cache. */
-export class DuctsBodies {
-  private readonly completed = new Map<string, DuctsDecodedBody>();
-  private readonly flights = new Map<string, Promise<DuctsDecodedBody>>();
-  private bytes = 0;
-  constructor(private readonly limits = { entries: 8, bytes: 256 * 1024 * 1024 }) {}
-
-  read(version: string, load: () => Promise<DuctsDecodedBody>): Promise<DuctsDecodedBody> {
-    const retained = this.completed.get(version);
-    if (retained) {
-      this.completed.delete(version);
-      this.completed.set(version, retained);
-      return Promise.resolve(retained);
-    }
-    const pending = this.flights.get(version);
-    if (pending) return pending;
-    if (this.flights.size >= this.limits.entries)
-      return Promise.reject(Error("Too many Ducts body reads are pending; refresh to retry"));
-    const flight = Promise.resolve()
-      .then(load)
-      .then((body) => {
-        const actual = body.nativeObservation.version;
-        const retained = this.completed.get(actual);
-        if (retained) return retained;
-        if (body.bytes > this.limits.bytes)
-          throw Error("Ducts body exceeds the browser byte budget; graph was not clipped");
-        while (
-          this.completed.size >= this.limits.entries ||
-          this.bytes + body.bytes > this.limits.bytes
-        ) {
-          const oldest = this.completed.keys().next().value!;
-          this.bytes -= this.completed.get(oldest)!.bytes;
-          this.completed.delete(oldest);
-        }
-        this.bytes += body.bytes;
-        this.completed.set(actual, body);
-        return body;
-      })
-      .finally(() => {
-        this.flights.delete(version);
-      });
-    this.flights.set(version, flight);
-    return flight;
-  }
-}
-const ductsBodies = new WeakMap<Readings, DuctsBodies>();
-const bodiesOf = (source: Readings) => {
-  let bodies = ductsBodies.get(source);
-  if (!bodies) {
-    bodies = new DuctsBodies();
-    ductsBodies.set(source, bodies);
-  }
-  return bodies;
-};
-
-/** Materialize an admitted immutable body; envelopes and native response headers own freshness. */
-export function readDuctsBody(
-  request: DuctsReadingRequest,
-  envelope: DuctsReadingEnvelope,
-  options: {
-    source?: Readings;
-    fetchBody?: typeof hostFetch;
-    signal?: AbortSignal;
-    refresh?: boolean;
-  } = {},
-): Promise<DuctsDecodedBody> {
-  const { revision, version, session, target } = envelope;
-  const { source = peReadings, fetchBody = hostFetch, signal, refresh = false } = options;
-  const headers: Record<string, string> = {
-    [HOST_RPC_BRIDGE_SESSION_HEADER]: session,
-    [HOST_RPC_ORIGIN_HEADER]: `web:${typeof window === "undefined" ? "/ducts" : window.location.pathname}`,
-  };
-  if (target) headers[HOST_RPC_DOCUMENT_HEADER] = target.openId;
-  if (refresh) headers[DUCTS_REFRESH_HEADER] = revision;
-  else if (version) headers[DUCTS_BODY_VERSION_HEADER] = version;
-  return bodiesOf(source).read(refresh ? `refresh:${revision}` : revision, async () => {
-    const response = await createPeClient(undefined, fetchBody).response(
-      "operation.call",
-      {
-        body:
-          request.kind === "ducts-snapshot"
-            ? {
-                key: "ducts.snapshot",
-                request: {
-                  ...(request.slots ? { slots: request.slots } : {}),
-                  ...(request.labelParameter ? { labelParameter: request.labelParameter } : {}),
-                  // The host keys the shared body on the selector too: without it a
-                  // scoped read reached Revit as the whole-document read.
-                  ...(request.selector ? { selector: request.selector } : {}),
-                },
-              }
-            : { key: "ducts.tables", request: { ids: request.ids } },
-      },
-      { headers, signal: signal ?? AbortSignal.timeout(120_000) },
-    );
-    if (!response.ok) {
-      const problem = (await response.json().catch(() => null)) as {
-        message?: string;
-        error?: string;
-      } | null;
-      throw Error(problem?.message ?? problem?.error ?? `Ducts read failed (${response.status})`);
-    }
-    const confirmedSession = response.headers.get("x-pe-resolved-session");
-    const confirmedOpenId = response.headers.get("x-pe-resolved-open-id");
-    const nativeRequestId = response.headers.get("x-pe-native-request-id");
-    const bodyVersion = response.headers.get(DUCTS_BODY_VERSION_HEADER);
-    if (
-      confirmedSession !== session ||
-      (target && decodeURIComponent(confirmedOpenId ?? "") !== target.openId) ||
-      !nativeRequestId ||
-      !bodyVersion ||
-      (version && !refresh && bodyVersion !== version)
-    )
-      throw Error("Ducts response did not confirm the requested observation");
-    const json = await response.text();
-    return {
-      data: JSON.parse(json) as unknown,
-      bytes: new TextEncoder().encode(json).byteLength,
-      nativeObservation: {
-        session,
-        document: target,
-        requestId: nativeRequestId,
-        version: bodyVersion,
-        reused: response.headers.get("x-pe-ducts-reused") === "true",
-      },
-    };
-  });
-}
-
-/** Tiny owner envelopes drive acquisition; a graph travels over admitted /call only when needed. */
-export function useDuctsReading<T>(
-  request: DuctsReadingRequest | null,
-  source: Readings = peReadings,
-  fetchBody: typeof hostFetch = hostFetch,
-) {
-  const key = request ? readingKey(request) : null;
-  const reading = useReading<DuctsReadingEnvelope>(request, source);
-  const envelope =
-    reading.state === "ready" ? ductsReadingEnvelopeSchema.parse(reading.observation) : null;
-  const current = useRef({ key, envelope });
-  current.current = { key, envelope };
-  const [body, setBody] = useState<{
-    key: string;
-    data?: T;
-    nativeObservation?: DuctsNativeObservation;
-    error?: Error;
-    revision: string;
-  }>();
-  const attempts = useRef(new Map<string, Promise<void>>());
-  const acquire = useCallback(
-    (refresh = false) => {
-      const at = current.current;
-      if (!request || !at.key || !at.envelope) return;
-      const { revision } = at.envelope;
-      const attempt = `${at.key}:${revision}:${refresh}`;
-      if (attempts.current.has(attempt)) return;
-      const promise = (async () => {
-        try {
-          const decoded = await readDuctsBody(request, at.envelope!, {
-            source,
-            fetchBody,
-            refresh,
-          });
-          const latest = current.current;
-          // The consumer moved to another subject: this body is not shown, so a return to this
-          // subject must acquire again (the host's body cache makes that cheap).
-          if (latest.key !== at.key) return void attempts.current.delete(attempt);
-          // HTTP may beat the ready SSE frame, but an older revision can never overwrite a newer body.
-          if (
-            latest.envelope?.revision !== decoded.nativeObservation.version ||
-            !["idle", "loading", "ready"].includes(latest.envelope.state)
-          )
-            return;
-          // `body` holds one subject; once it is replaced by another, a return to this one
-          // (switching an edit slot A -> B -> A) must not find a settled attempt and wait forever.
-          attempts.current.delete(attempt);
-          setBody({
-            key: at.key!,
-            data: decoded.data as T,
-            revision: decoded.nativeObservation.version,
-            nativeObservation: decoded.nativeObservation,
-          });
-        } catch (error) {
-          if (current.current.key === at.key && current.current.envelope?.revision === revision)
-            setBody({
-              key: at.key!,
-              revision,
-              error: Error(
-                `${error instanceof Error ? error.message : String(error)}; refresh to retry`,
-              ),
-            });
-        }
-      })();
-      attempts.current.set(attempt, promise);
-      // Attempts only deduplicate this mounted consumer; the host owns every completed payload.
-      if (attempts.current.size > 8) attempts.current.delete(attempts.current.keys().next().value!);
-    },
-    [key, fetchBody, source],
-  );
-  useEffect(() => {
-    if (
-      !envelope ||
-      envelope.state === "loading" ||
-      envelope.state === "failed" ||
-      envelope.state === "closed"
-    )
-      return;
-    // A failed attempt is observable until explicit refresh; rendering never spins network retries.
-    if (body?.key === key && body.revision === envelope.revision) return;
-    // The same acquisition's ready envelope can arrive before its HTTP response.
-    if (envelope.state === "ready" && attempts.current.has(`${key}:${envelope.revision}:false`))
-      return;
-    acquire();
-  }, [key, envelope?.revision, envelope?.state, body, acquire]);
-  const valid =
-    envelope?.state === "ready" &&
-    body?.key === key &&
-    body.nativeObservation?.version === envelope.version;
-  // Only a body previously admitted as ready may remain visible, and only for this exact subject.
-  const previous = useRef<{ key: string; data: T } | null>(null);
-  if (previous.current?.key !== key) previous.current = null;
-  if (valid && body.data !== undefined) previous.current = { key: key!, data: body.data };
-  const error =
-    reading.state === "failed"
-      ? Error(reading.message)
-      : envelope?.error
-        ? Error(envelope.error)
-        : body?.key === key && body.revision === envelope?.revision
-          ? body.error
-          : undefined;
-  const pending = request !== null && !valid && !error;
-  // A closed document's envelope is not acquiring; it waits for the person, not the host.
-  useWork(pending && envelope?.state !== "closed", "reading ductsâ€¦");
-  return {
-    data: valid ? body.data : undefined,
-    previous: previous.current?.data,
-    staleReason: reading.state === "stale" ? reading.reason : ("dirtied" as const),
-    nativeObservation: valid ? body.nativeObservation : undefined,
-    version: valid ? body.nativeObservation?.version : undefined,
-    error,
-    pending,
-    refresh: useCallback(() => acquire(true), [acquire]),
-  };
-}
-
-/**
- * The slice of a Reading a component uses. A frame that leaves the slice structurally equal does not
- * notify, so a poll that moved other fields re-renders nobody here.
- */
-export function useReadingSlice<T, S>(
-  request: ReadingRequest | null,
-  select: (reading: Reading<T>) => S,
-  source: Readings = peReadings,
-): S {
-  const key = request ? readingKey(request) : null;
-  const selectRef = useRef(select);
-  selectRef.current = select;
-  const registry = useContext(RegistryContext);
-  const atom = useMemo(
-    () => (request ? readingAtom<T>(request, source) : (absentAtom as Atom.Atom<Reading<T>>)),
-    [key, source],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
-  const held = useRef<{ value: S } | undefined>(undefined);
-  const subscribe = useCallback(
-    (notify: () => void) => registry.subscribe(atom, notify),
-    [registry, atom],
-  );
-  const snapshot = useCallback(() => {
-    const value = selectRef.current(registry.get(atom));
-    if (held.current && deepEqual(held.current.value, value, { ignoreUndefined: false }))
-      return held.current.value;
-    held.current = { value };
-    return value;
-  }, [registry, atom]);
-  // The slice may hide the lifecycle; a boolean snapshot of the atom itself notifies only on a flip.
-  const working = useCallback(() => inFlight(registry.get(atom)), [registry, atom]);
-  useWork(useSyncExternalStore(subscribe, working, working), `reading ${request?.kind}â€¦`);
-  return useSyncExternalStore(subscribe, snapshot, snapshot);
-}
-
-/** The `host-status` slice a component uses; see `useReadingSlice`. */
-export const useHostStatusSlice = <S>(select: (reading: Reading<PeInfo>) => S, enabled = true): S =>
-  useReadingSlice<PeInfo, S>(enabled ? { kind: "host-status" } : null, select);
 
 /** An Action succeeded; this subject's snapshot is reacquired from the host. */
 export const dirty = (request: ReadingRequest, source: Readings = peReadings) =>
@@ -972,296 +547,3 @@ export function useHostEvents<T>(enabled: boolean, onEvent: (event: T) => void) 
     });
   }, [enabled, onEvent]);
 }
-
-/* -- host-status: one subject, one cadence, both the gate read and the lamp ---------------- */
-
-export interface PeInfo {
-  controllerId?: string;
-  capabilities: { revit?: boolean } & Record<string, unknown>;
-  world?: unknown;
-  bridgeIsConnected: boolean;
-}
-
-/* -- Inventory: the open documents the host tracks, fused with the SDK census -------------- */
-
-/** One Revit process incarnation, as observed by the broker. */
-export interface SessionInventory {
-  /** The BROKER's id: hash(pid + processStartUtc). Not the pe-revit session id. */
-  sessionId: string;
-  processId: number;
-  processStartUtcUnixMs?: number | null;
-  lane: Lane | null;
-  /** The id `pe-revit session list` prints, when this payload was launched by pe-revit. */
-  sdkSessionId?: string;
-  year?: string;
-  /** Disclosed by the broker. The UI never re-implements the SDK's `observed` refusal. */
-  custody: Custody;
-  activeDocumentId?: string;
-  activeDocumentTitle?: string;
-  openDocumentCount: number;
-  openDocuments?: BridgeSessionListEntry["openDocuments"];
-  openDocumentId?: string;
-  observedAtUnixMs?: number;
-}
-
-const CUSTODIES: readonly Custody[] = ["controlled", "observed"];
-const LANES: readonly Lane[] = ["dev", "installed"];
-
-/** Wire entry (bridge.sessions.list) into inventory. Disconnected entries are not targets. */
-export function inventoryOf(entries: readonly BridgeSessionListEntry[]): SessionInventory[] {
-  return entries
-    .filter((e) => e.connected)
-    .map((e) => ({
-      sessionId: e.sessionId,
-      processId: e.processId ?? 0,
-      processStartUtcUnixMs: e.processStartUtcUnixMs ?? null,
-      // Anything outside the SDK's union is no lane at all, not an invented "unknown" member.
-      lane: LANES.find((l) => l === e.lane) ?? null,
-      sdkSessionId: e.sdkSessionId ?? undefined,
-      year: e.revitVersion ?? undefined,
-      // An entry that predates `custody` is treated as observed: the read-only reading.
-      custody: CUSTODIES.find((c) => c === e.custody) ?? "observed",
-      activeDocumentId: e.activeDocumentCloudModelGuid ?? e.activeDocumentPath ?? undefined,
-      activeDocumentTitle: e.activeDocumentTitle ?? undefined,
-      observedAtUnixMs: e.activeDocumentObservedAtUnixMs ?? undefined,
-      openDocumentCount: e.openDocumentCount,
-      openDocuments: e.openDocuments,
-    }));
-}
-
-/** The tracked open-document inventory, as the broker publishes it. */
-export const useInventory = (enabled = true) =>
-  useReading<{ sessions: BridgeSessionListEntry[] }>(enabled ? { kind: "inventory" } : null);
-
-/**
- * The one Reading, as the one Target resolver reads it. A Reading that has not yet observed is
- * `checking`; a failed Reading says why; nothing here invents a session the host did not report.
- */
-export function targetInventory(
-  reading: Reading<{ sessions: BridgeSessionListEntry[] }>,
-): TargetInventory {
-  if (reading.state === "failed") return { kind: "failed", message: reading.message };
-  const seen = previousOf(reading);
-  if (!seen) return { kind: "checking" };
-  const sessions: Record<
-    string,
-    {
-      kind: "ready";
-      values: { openId: string; address: Address | null; kind: "project" | "family" }[];
-    }
-  > = {};
-  for (const session of inventoryOf(seen.sessions)) {
-    sessions[session.sessionId] = {
-      kind: "ready",
-      values: (session.openDocuments ?? []).map((doc) => ({
-        openId: doc.openId,
-        address: addressSchema.safeParse(doc.address).data ?? null,
-        kind: doc.isFamilyDocument ? ("family" as const) : ("project" as const),
-      })),
-    };
-  }
-  return { kind: "ready", sessions };
-}
-
-/* -- Host RPC: a call, not a subject ------------------------------------------------------ */
-
-/**
- * Calls in flight by their deps. A remount (or a second component) asking the same thing joins
- * the pending call instead of queueing another: Revit runs one op at a time and refuses past 8
- * waiting (`ducts.snapshot` remounts filled it). A `refresh` always starts a fresh call.
- */
-const inflight = new Map<string, Promise<unknown>>();
-const flightKey = (deps: readonly unknown[]) => {
-  try {
-    return JSON.stringify(deps);
-  } catch {
-    return null;
-  }
-};
-
-/**
- * A host operation read on mount. Not a Reading: it has no subject key and no owner, so it
- * carries no cache and no revalidation. Call `refresh` after a write that changes its answer.
- */
-export function useHostCall<T>(
-  run: (signal: AbortSignal) => Promise<T>,
-  deps: readonly unknown[],
-  enabled = true,
-  /** Unanswered past this, the read ends as an error ("no answer after Ns") and is aborted. */
-  waitSeconds = HOST_READ_WAIT_S,
-  /** Deps name the call completely (an op key and its request), so equal deps may share it. */
-  shared = false,
-  /** What the owner's busy motif says while this call is unanswered. */
-  label = "readingâ€¦",
-) {
-  const identity = useRef({ deps: [...deps], generation: 0 });
-  if (!sameDeps(identity.current.deps, deps)) {
-    identity.current = { deps: [...deps], generation: identity.current.generation + 1 };
-  }
-  const generation = identity.current.generation;
-  const [state, setState] = useState<{
-    data?: T;
-    error?: Error;
-    pending: boolean;
-    generation: number;
-  }>({ pending: enabled, generation });
-  const [nonce, setNonce] = useState(0);
-  useEffect(() => {
-    if (!enabled) {
-      setState({ pending: false, generation });
-      return;
-    }
-    const controller = new AbortController();
-    setState((current) =>
-      current.generation === generation
-        ? { ...current, pending: true }
-        : { pending: true, generation },
-    );
-    // A read that never answers ends honestly, never as an endless "readingâ€¦" (F-J1-4).
-    const wait = setTimeout(() => {
-      if (controller.signal.aborted) return;
-      controller.abort();
-      setState({ error: Error(`no answer after ${waitSeconds}s`), pending: false, generation });
-    }, waitSeconds * 1000);
-    const key = shared ? flightKey(deps) : null;
-    const joined =
-      key !== null && nonce === 0 ? (inflight.get(key) as Promise<T> | undefined) : undefined;
-    // A shared call outlives the mount that started it, so no one mount's abort cancels it.
-    const call = joined ?? run(key !== null ? new AbortController().signal : controller.signal);
-    if (key !== null && !joined) {
-      inflight.set(key, call);
-      void call.then(
-        () => inflight.get(key) === call && inflight.delete(key),
-        () => inflight.get(key) === call && inflight.delete(key),
-      );
-    }
-    void call
-      .finally(() => clearTimeout(wait))
-      .then(
-        (data) => {
-          if (!controller.signal.aborted) setState({ data, pending: false, generation });
-        },
-        (error: unknown) => {
-          if (!controller.signal.aborted)
-            setState({ error: failure(error), pending: false, generation });
-        },
-      );
-    return () => {
-      clearTimeout(wait);
-      controller.abort();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, enabled, nonce]);
-  const refresh = useCallback(() => setNonce((n) => n + 1), []);
-  const visible =
-    enabled && state.generation === generation
-      ? state
-      : { data: undefined, error: undefined, pending: enabled };
-  useWork(visible.pending, label);
-  return {
-    data: visible.data,
-    error: visible.error,
-    pending: visible.pending,
-    isPending: visible.pending,
-    isLoading: visible.pending,
-    isSuccess: !visible.pending && visible.error === undefined && visible.data !== undefined,
-    refresh,
-  };
-}
-
-function sameDeps(left: readonly unknown[], right: readonly unknown[]): boolean {
-  return (
-    left.length === right.length && left.every((value, index) => Object.is(value, right[index]))
-  );
-}
-
-/**
- * An Action's run, as a component holds it: at most one in flight, its refusal kept, and its
- * success dirtying whatever Readings it names. Not a cache and not a queue.
- */
-export function useAction<I, T>(
-  run: (input: I) => Promise<T>,
-  onSuccess?: (value: T, input: I) => void,
-) {
-  const [state, setState] = useState<{ pending: boolean; error?: Error }>({ pending: false });
-  const mutateAsync = useCallback(
-    async (input: I) => {
-      setState({ pending: true });
-      try {
-        const value = await run(input);
-        setState({ pending: false });
-        onSuccess?.(value, input);
-        return value;
-      } catch (error) {
-        setState({ pending: false, error: failure(error) });
-        throw error;
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [run, onSuccess],
-  );
-  useWork(state.pending, "savingâ€¦");
-  return {
-    mutate: (input: I) => void mutateAsync(input).catch(() => {}),
-    mutateAsync,
-    isPending: state.pending,
-    error: state.error,
-  };
-}
-
-/* -- Host RPC reads: not Readings, just one call each over the one /call endpoint ------------ */
-
-export const HOST_QUERY_KEY = ["pe-host"] as const;
-
-type HostQueryOptions = HostSessionScope & {
-  readonly enabled?: boolean;
-  /** How long the read may go unanswered; default `HOST_READ_WAIT_S`. */
-  readonly waitSeconds?: number;
-};
-
-/** Any operation key becomes a one-shot read. A Reading is for a subject the host pushes. */
-export function useHostOp<K extends OpKey>(key: K, ...args: OpCallArgs<K, HostQueryOptions>) {
-  const [request, options] = args;
-  const { enabled, bridgeSessionId, openDocumentId, waitSeconds } = options ?? {};
-  const scope = { bridgeSessionId, openDocumentId };
-  return useHostCall(
-    // Cast: TS cannot resolve the conditional OpCallArgs tuple while K is open; the public
-    // signatures on this hook and callHostRpc enforce it at call sites.
-    () => callHostRpc(key, ...([request, scope] as OpCallArgs<K, HostSessionScope>)),
-    [
-      ...HOST_QUERY_KEY,
-      bridgeSessionId ?? "",
-      key,
-      JSON.stringify(request ?? null),
-      openDocumentId ?? "",
-    ],
-    enabled ?? true,
-    waitSeconds,
-    true,
-    `reading ${key}â€¦`,
-  );
-}
-
-/** A value domain's options (the `revit.catalog.field-options` answer). */
-export type FieldOptionsData = HostOpResponse<"revit.catalog.field-options">;
-
-/**
- * The one door to a field's options: an `x-options.key` read from one named document, with the
- * context values its `dependsOn` names. No document or no key reads nothing. A LiveDocument key's
- * Reading carries Revit's change mark (`changedInRevit`).
- */
-export const useFieldOptionsReading = (
-  target: { session: string; openId: string } | null | undefined,
-  key: string | undefined,
-  context: Record<string, string> = {},
-): Reading<FieldOptionsData> =>
-  useReading<FieldOptionsData>(
-    target && key
-      ? {
-          kind: "field-options",
-          target: { session: target.session, openId: target.openId },
-          key,
-          context,
-        }
-      : null,
-  );

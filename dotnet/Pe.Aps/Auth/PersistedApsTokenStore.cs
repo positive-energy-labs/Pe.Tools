@@ -18,7 +18,7 @@ internal sealed class PersistedApsTokenStore {
             return;
         }
 
-        this._filePath = ProductRuntimeLayout.ForCurrentUser().State.ApsTokenStorePath;
+        this._filePath = ProductRuntimeLayout.Current.State.ApsTokenStorePath;
         var root = Path.GetDirectoryName(this._filePath);
         if (!string.IsNullOrWhiteSpace(root))
             Directory.CreateDirectory(root);

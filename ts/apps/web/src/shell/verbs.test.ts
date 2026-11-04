@@ -30,15 +30,28 @@ import {
   workVerb,
   type Caller,
   type InvocationPhase,
-  type InvocationResult,
+  type VerbDelivery,
   type VerbContext,
   type VerbSubject,
 } from "./verbs";
 import { kernelCellVerbs } from "./verbs-cells";
 
-const transport = vi.hoisted(() => ({ run: vi.fn(), families: vi.fn(), schedule: vi.fn() }));
+const transport = vi.hoisted(() => ({
+  run: vi.fn(),
+  preview: vi.fn(),
+  families: vi.fn(),
+  schedule: vi.fn(),
+}));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
-  runSemanticAction: transport.run,
+  runSemanticAction: (
+    ...args: Parameters<
+      typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
+    >
+  ) =>
+    /\.preview$|^ducts\.preview-/.test(String(args[0]))
+      ? transport.preview(...args)
+      : transport.run(...args),
+  actionResult: (receipt: { result?: unknown }) => receipt.result,
   cancelRunningAdmissions: vi.fn(async () => []),
 }));
 
@@ -52,6 +65,7 @@ vi.mock("../../../../packages/mcps/src/shared/schedule-client", () => ({
 
 const key: WorkKey = { binding: "workspace", route: "verb-proof", target: null, work: "one" };
 const schema = z.object({
+  writeIntent: z.record(z.string(), z.unknown()).default({}),
   rows: z.record(z.string(), z.object({ id: z.string(), value: z.number(), note: z.string() })),
   cells: z.record(z.string(), draftCellSchema(z.string())),
 });
@@ -81,13 +95,16 @@ const succeededReceipt = () =>
     result: { wrote: true },
   });
 beforeEach(() => {
+  transport.preview.mockReset();
+  transport.preview.mockResolvedValue(succeededReceipt());
   transport.run.mockReset();
   transport.families.mockReset();
   transport.schedule.mockReset();
   transport.run.mockResolvedValue(succeededReceipt());
 });
 
-function environment<C extends Caller>(caller: C) {
+function environment<C extends Caller>(caller: C, identity: WorkKey = key) {
+  const key = identity;
   const registry = makeAtomRegistry();
   const owner = createRouteOwner("verb-proof", registry);
   cleanups.push(() => {
@@ -178,21 +195,16 @@ const edit = () =>
       ],
     },
   );
-function command(review: "none" | "shown" | "required") {
+function command(review: "none" | "shown") {
   const declaration = { label: "initialize", input: z.object({ stage: z.string() }) };
   const implementation = {
     prepare: () => ({ lines: ["Writes shared parameters"] }),
-    intent: (_scope: unknown, input: { stage: string }) => input,
+    stage: (_scope: unknown, input: { stage: string }) => input,
+    intent: () => ({}),
   };
-  return review === "required"
-    ? commandVerb(
-        "takeoffs.initialize",
-        { ...declaration, review, answers: z.object({ reason: z.string().min(1) }) },
-        implementation,
-      )
-    : commandVerb("takeoffs.initialize", { ...declaration, review }, implementation);
+  return commandVerb("takeoffs.initialize", { ...declaration, review }, implementation);
 }
-const reviewed = (result: InvocationResult) => {
+const reviewed = (result: VerbDelivery) => {
   expect(result.state).toBe("review");
   if (result.state !== "review") throw new Error("Expected review");
   return result;
@@ -252,50 +264,9 @@ test("Work acknowledges forward and inverse paths, and two patches share the own
   ).toBe("done");
 });
 
-test.each(["human", "agent"] as const)(
-  "required review refuses missing or invalid answers for %s",
-  async (caller) => {
-    const env = environment(caller);
-    const verb = command("required");
-    const started = reviewed(await invoke(env.ctx, verb, null, { stage: "sheet" }));
-    expect(started.ticket).toEqual({
-      press: started.press,
-      subject: null,
-      input: { stage: "sheet" },
-      target: env.target,
-      basis: { work: { key, revision: 4 }, value: { readingVersion: 1 } },
-      evidence: { lines: ["Writes shared parameters"] },
-      presentation: { sentence: "initialize: review the proposed changes.", rows: [] },
-    });
-    expect((await commit(env.ctx, verb, started.ticket)).state).toBe("refused");
-    expect((await commit(env.ctx, verb, started.ticket, {})).state).toBe("refused");
-    expect(transport.run).not.toHaveBeenCalled();
-    const run = vi.spyOn(env.owner, "runAction");
-    const result = await commit(env.ctx, verb, started.ticket, { reason: "Needed for takeoff" });
-    expect(result).toMatchObject({ state: "done", kind: "command", press: started.press });
-    expect(run).not.toHaveBeenCalled();
-    expect(transport.run).toHaveBeenCalledExactlyOnceWith(
-      "takeoffs.initialize",
-      { stage: "sheet" },
-      env.target,
-      { key, revision: 4 },
-      "",
-      started.press,
-      120_000,
-    );
-    if (result.state !== "done" || result.kind !== "command")
-      throw new Error("Expected host receipt");
-    expect(result.receipt).toBe(await transport.run.mock.results[0]!.value);
-    expect((await commit(env.ctx, verb, started.ticket, { reason: "again" })).state).toBe(
-      "refused",
-    );
-    expect(env.states).toEqual(["idle", "preparing", "review", "applying", "done"]);
-  },
-);
-
 test("shown review can be skipped by agent, and cannot be skipped by human at type or runtime boundary", async () => {
   const human = environment("human");
-  const agent = environment("agent");
+  const agent = environment("agent", { ...key, work: "agent" });
   const verb = command("shown");
   // @ts-expect-error A human phase has no skip alternative.
   const illegal: InvocationPhase<"human"> = { kind: "skip" };
@@ -308,10 +279,6 @@ test("shown review can be skipped by agent, and cannot be skipped by human at ty
     "done",
   );
   expect(transport.run).toHaveBeenCalledTimes(2);
-  expect(
-    (await invoke(agent.ctx, command("required"), null, { stage: "sheet" }, { kind: "skip" }))
-      .state,
-  ).toBe("refused");
 });
 
 test("placements evaluate a bounded row function and preserve distinct verb schemas", async () => {
@@ -386,7 +353,7 @@ test.each(["reading", "revision", "target"] as const)(
 
 test("tickets cannot be forged or moved between callers, and explicit cancellation releases the owner", async () => {
   const human = environment("human");
-  const agent = environment("agent");
+  const agent = environment("agent", { ...key, work: "agent" });
   const verb = command("shown");
   const review = reviewed(await invoke(human.ctx, verb, null, { stage: "sheet" }));
   expect((await commit(agent.ctx, verb, review.ticket)).state).toBe("refused");
@@ -403,10 +370,10 @@ test("tickets cannot be forged or moved between callers, and explicit cancellati
 
 test("Pea can commit an authentic ticket after JSON transport with the same invocation press", async () => {
   const env = environment("agent");
-  const verb = command("required");
+  const verb = command("shown");
   const review = reviewed(await invoke(env.ctx, verb, null, { stage: "sheet" }));
   const ticket = JSON.parse(JSON.stringify(review.ticket));
-  const result = await commit(env.ctx, verb, ticket, { reason: "Approved" });
+  const result = await commit(env.ctx, verb, ticket);
   expect(result).toMatchObject({ state: "done", kind: "command", press: review.press });
   expect(transport.run).toHaveBeenCalledTimes(1);
 });
@@ -460,7 +427,7 @@ test("validation, readiness and busy admission prevent writes", async () => {
     press: null,
     refusal: { code: "busy" },
   });
-  expect(env.writes).toEqual([]);
+  expect(env.writes).toHaveLength(1); // The review staged intent; busy admission added no write.
   await invoke(env.ctx, reviewVerb, null, undefined, { kind: "cancel", ticket: review.ticket });
 });
 
@@ -491,7 +458,8 @@ test("drift while preparing cannot issue a usable review ticket", async () => {
         env.drift();
         return { preview: true };
       },
-      intent: (_scope, input) => input,
+      stage: (_scope, input) => input,
+      intent: () => ({}),
     },
   );
   expect((await invoke(env.ctx, verb, null, { stage: "sheet" })).state).toBe("stale");
@@ -567,16 +535,14 @@ test("intent reads the evidence its review ticket froze, so an apply names the a
     { label: "initialize", input: z.object({ stage: z.string() }), review: "shown" },
     {
       prepare: () => ({ plan: { id: "plan-1" } }),
-      intent: (_scope, input, _answers, ticket) => ({
-        ...input,
-        stage: (ticket!.evidence as { plan: { id: string } }).plan.id,
-      }),
+      stage: () => ({ stage: "plan-1" }),
+      intent: () => ({}),
     },
   );
   const { ticket } = reviewed(await invoke(env.ctx, verb, null, { stage: "ignored" }));
   expect(ticket.evidence).toEqual({ plan: { id: "plan-1" } });
   expect(await commit(env.ctx, verb, ticket)).toMatchObject({ state: "done", kind: "command" });
-  expect(transport.run.mock.calls[0]![1]).toEqual({ stage: "plan-1" });
+  expect(transport.run.mock.calls[0]![1]).toEqual({});
 });
 
 test("a families read reaches the families client with the Work key and exact document", async () => {
@@ -666,7 +632,7 @@ test("K1.2: a human-only RPC refuses agent binding and direct invocation before 
     { label: "Bind", input: z.object({}), review: "none", caller: "human" },
     { intent: () => ({}) },
   );
-  const agent = environment("agent");
+  const agent = environment("agent", { ...key, work: "agent" });
   expect(bind(verb, { ctx: agent.ctx, subject: null, args: {} }).refusal).toContain(
     "Only a person",
   );
@@ -718,7 +684,8 @@ test("K1.5: command lands its result and fences late Page changes after A-B-A", 
     "takeoffs.initialize",
     { label: "Initialize", input: z.object({}), review: "none" },
     {
-      intent: () => ({ stage: "sheet" }),
+      stage: () => ({ stage: "sheet" }),
+      intent: () => ({}),
       lands: (result) => ({ selected: (result as { wrote: boolean }).wrote }),
     },
   );
@@ -748,15 +715,16 @@ test("K1.6: a sequence has one press, separate reviewed receipts, and stops at f
     "takeoffs.initialize",
     { label: "Initialize all", input: z.object({}), review: "shown" },
     {
-      intent: () => [{ stage: "first" }, { stage: "second" }, { stage: "third" }],
+      stage: () => [{ stage: "first" }, { stage: "second" }, { stage: "third" }],
+      intent: () => [{}, {}, {}],
     },
   );
   const first = reviewed(await invoke(ctx, verb, null, {}));
-  expect(first.ticket).toMatchObject({ step: 0, evidence: { stage: "first" } });
+  expect(first.ticket).toMatchObject({ step: 0, evidence: {} });
   expect(transport.run).not.toHaveBeenCalled();
   const second = reviewed(await commit(ctx, verb, first.ticket));
   expect(second.press).toBe(first.press);
-  expect(second.ticket).toMatchObject({ step: 1, evidence: { stage: "second" } });
+  expect(second.ticket).toMatchObject({ step: 1, evidence: {} });
   expect(receipts).toHaveBeenCalledTimes(1);
   transport.run.mockResolvedValueOnce({
     ...succeededReceipt(),
@@ -836,4 +804,90 @@ test("K1.2: page.bind resolves its HTTP contract at invocation and validates bef
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+// A Work write that reaches Revit is sealed at a host preview. `takeoffs.adopt` is a ModelWrite; the
+// capture `takeoffs.initialize` is SessionWrite and has no preview (ADR 0028), so the two differ here.
+const adoption = { views: [{ view: "plan", items: [{ elementId: 1, name: "Zone", systemTag: "S1" }] }] };
+const sealedWrite = () =>
+  commandVerb(
+    "takeoffs.adopt",
+    { label: "adopt", input: z.object({ stage: z.string() }), review: "none" },
+    { stage: () => adoption, intent: () => ({}) },
+  );
+
+test("a derived write stages Work before host preview and a refused preview never dispatches the write", async () => {
+  const env = environment("human");
+  transport.preview.mockImplementation(async () => {
+    expect(env.doc().writeIntent).toMatchObject({
+      "takeoffs.adopt": { edit: { value: adoption } },
+    });
+    return { ...succeededReceipt(), state: "refused" };
+  });
+  expect((await invoke(env.ctx, sealedWrite(), null, { stage: "sheet" })).state).toBe("failed");
+  expect(transport.preview).toHaveBeenCalledOnce();
+  expect(transport.run).not.toHaveBeenCalled();
+});
+
+test("staged writes prepare and dispatch against their own ack while Work delivery lags", async () => {
+  const env = environment("human");
+  const rendered = structuredClone(env.ctx.snapshot());
+  const ctx = { ...env.ctx, snapshot: () => rendered };
+  expect((await invoke(ctx, sealedWrite(), null, { stage: "sheet" })).state).toBe("done");
+  expect(transport.preview.mock.calls[0]![3]).toMatchObject({ revision: 5 });
+  expect(transport.run.mock.calls[0]![3]).toMatchObject({ revision: 5 });
+});
+
+test("a capture stages Work and dispatches with no host preview, because it writes nothing to the model", async () => {
+  const env = environment("human");
+  expect((await invoke(env.ctx, command("none"), null, { stage: "sheet" })).state).toBe("done");
+  expect(env.doc().writeIntent).toMatchObject({
+    "takeoffs.initialize": { edit: { value: { stage: "sheet" } } },
+  });
+  expect(transport.preview).not.toHaveBeenCalled();
+  expect(transport.run).toHaveBeenCalledOnce();
+});
+
+test("kernel reviews always project exact changes even when a presenter omits them", async () => {
+  const env = environment("human");
+  const verb = commandVerb(
+    "takeoffs.initialize",
+    { label: "Initialize", input: z.object({ stage: z.string() }), review: "shown" },
+    {
+      stage: (_scope, input) => input,
+      intent: () => ({}),
+      prepare: () => ({
+        plan: [
+          {
+            changes: [
+              {
+                kind: "Update",
+                key: "Amperage",
+                before: "1.01 A",
+                after: { value: "1.1", unit: "Amperes" },
+              },
+            ],
+          },
+        ],
+      }),
+      present: () => ({ sentence: "Summary", rows: [] }),
+    },
+  );
+  const result = reviewed(await invoke(env.ctx, verb, null, { stage: "sheet" }));
+  expect(result.ticket.presentation.rows).toContain("Update Amperage: 1.01 A \u2192 1.1 Amperes");
+  await invoke(env.ctx, verb, null, { stage: "sheet" }, { kind: "cancel", ticket: result.ticket });
+});
+
+test("copying a verb declaration retains its explicit executable binding", async () => {
+  const env = environment("human");
+  const declaration = pageVerb(
+    { label: "Close", input: z.object({}) },
+    { page: () => ({ inspector: "" }) },
+  );
+  const copy = { ...declaration };
+  expect(await invoke(env.ctx, copy, null, {})).toMatchObject({
+    state: "done",
+    kind: "page",
+    page: { inspector: "" },
+  });
 });

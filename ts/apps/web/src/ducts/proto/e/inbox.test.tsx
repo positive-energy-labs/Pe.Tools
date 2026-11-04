@@ -1,3 +1,4 @@
+import { designOf } from "@pe/ducts-domain/test-design";
 import { emptyListSearch, pickListPill } from "@pe/agent-contracts";
 const search = (keywords = "", pills: Record<string, string> = {}) =>
   Object.entries(pills).reduce((s, [field, value]) => pickListPill(s, field, value), {
@@ -5,13 +6,14 @@ const search = (keywords = "", pills: Record<string, string> = {}) =>
     keywords,
   });
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { ductClaimSchema, ductsDocumentSchema } from "@pe/agent-contracts";
+import { ductClaimSchema } from "@pe/agent-contracts";
 
 import { focusRow, inboxRows, type CellRef, type InboxItem } from "../../inbox-rows";
-import { ductsGraph } from "../../graph";
+import { cellFocus } from "../../inbox-rows";
+import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import { Inbox } from "./inbox";
 
 afterEach(cleanup);
@@ -40,7 +42,12 @@ test("D18 requires a short claim title and keeps its sentence in the Evidence hi
   const row = document.querySelector<HTMLElement>('[data-key="claim:c1"]')!;
   expect(within(row).getByText(claim.title)).toBeTruthy();
   expect(screen.queryByText(value.text)).toBeNull();
-  const detail = document.querySelector<HTMLElement>('[data-inbox-detail="claim:c1"]')!;
+  fireEvent.click(row);
+  const detail = await waitFor(() => {
+    const node = document.querySelector<HTMLElement>('[data-inbox-detail="claim:c1"]');
+    expect(node).not.toBeNull();
+    return node!;
+  });
   const hint = within(detail).getByRole("button", { name: "What is this?" });
   fireEvent.pointerEnter(hint, { pointerType: "mouse" });
   fireEvent.mouseEnter(hint);
@@ -201,8 +208,7 @@ test("taking back a stored ignore stages a delete over it", () => {
 // The chat head's "→ review" on a edit cell: the cell family's `focus` writes `issue`, the screen
 // resolves it with `focusRow` against the inbox's rows, and the Inbox opens and selects that row.
 const reviewPage = (segment: string, key: string) => {
-  const family = ductsGraph.cells!.find((one) => one.segment === segment)!;
-  return family.focus!(key);
+  return { selected: cellFocus(segment, key) };
 };
 const rowKeysOf = (over: NonNullable<Parameters<typeof mount>[0]>) =>
   new Set([
@@ -215,7 +221,7 @@ const rowKeysOf = (over: NonNullable<Parameters<typeof mount>[0]>) =>
   ]);
 
 test("review on a edit rule with no row of its own lands on the Write row", () => {
-  const { issue } = reviewPage("rules", "elbow-1d-le10") as { issue: string };
+  const { selected: issue } = reviewPage("rules", "elbow-1d-le10") as { selected: string };
   const focused = focusRow(issue, rowKeysOf({}));
   expect(focused).toBe("write");
   const { container } = mount({ focused });
@@ -224,7 +230,7 @@ test("review on a edit rule with no row of its own lands on the Write row", () =
   expect(container.querySelectorAll("[data-selected]")).toHaveLength(1);
 });
 
-test("review on a proposed rule lands on that cell's own row, opened", () => {
+test("review on a proposed rule lands on that cell's own row, opened", async () => {
   const check = [
     item({
       key: "rules:elbow-1d-le10",
@@ -234,13 +240,16 @@ test("review on a proposed rule lands on that cell's own row, opened", () => {
       verbs: [],
     }),
   ];
-  const { issue } = reviewPage("rules", "elbow-1d-le10") as { issue: string };
+  const { selected: issue } = reviewPage("rules", "elbow-1d-le10") as { selected: string };
   const focused = focusRow(issue, rowKeysOf({ check }));
   expect(focused).toBe("rules:elbow-1d-le10");
   const { container } = mount({ focused, check });
   const row = container.querySelector('[data-key="rules:elbow-1d-le10"]') as HTMLElement;
   expect(row.hasAttribute("data-selected")).toBe(true);
-  expect(container.querySelector('[data-inbox-detail="rules:elbow-1d-le10"]')).not.toBeNull();
+  fireEvent.click(row);
+  await waitFor(() =>
+    expect(container.querySelector('[data-inbox-detail="rules:elbow-1d-le10"]')).not.toBeNull(),
+  );
 });
 
 test("an issue id that names no Work cell lands nowhere extra", () => {
@@ -251,12 +260,17 @@ test("an issue id that names no Work cell lands nowhere extra", () => {
 });
 
 test("a loss-rule group reads as its family, type and condition", () => {
-  const family = ductsGraph.cells!.find((one) => one.segment === "rules")!;
+  const family = {
+    label: (key: string) => {
+      const rule = ruleByKey(key);
+      return rule ? ruleWords(rule) : key;
+    },
+  };
   expect(family.label!("elbow-1d-le10")).toBe("Round Elbow 1 D · D ≤ 10 in");
   expect(family.label!("not-a-rule")).toBe("not-a-rule");
 });
 
-test("picking another ruling for the selected element retains that row's details", () => {
+test("picking another ruling opens its details without owning Page selection", () => {
   const { container } = mount({
     selected: 10,
     check: [
@@ -267,7 +281,7 @@ test("picking another ruling for the selected element retains that row's details
   expect(container.querySelector('[data-inbox-detail="same-element"]')).not.toBeNull();
   expect(container.querySelector('[data-inbox-detail="heal:g1"]')).toBeNull();
   expect(container.querySelector('[data-key="same-element"]')?.getAttribute("aria-selected")).toBe(
-    "true",
+    "false",
   );
 });
 
@@ -377,7 +391,7 @@ test("a no-rule row stages a family-wide price-as choice through Work", async ()
 test("taking back a family assignment clears only its edit rung", async () => {
   const family = "Radius Elbow";
   const suggestion = { value: { rule: "elbow-mitered-vaned" }, note: "check the vanes" };
-  const doc = ductsDocumentSchema.parse({
+  const doc = designOf({
     ruleAssignments: {
       [family]: { suggestion, edit: { value: { rule: "elbow-mitered" } } },
     },
@@ -387,8 +401,9 @@ test("taking back a family assignment clears only its edit rung", async () => {
     focused: "family",
     check: [item({ key: "family", group: "check", verbs: [{ kind: "price-as", family }] })],
   });
+  fireEvent.click(view.container.querySelector('[data-key="family"]')!);
   await act(async () =>
-    fireEvent.change(screen.getByRole("combobox", { name: `price ${family} as` }), {
+    fireEvent.change(await screen.findByRole("combobox", { name: `price ${family} as` }), {
       target: { value: "" },
     }),
   );

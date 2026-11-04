@@ -1,3 +1,5 @@
+import { subjectState, useSubjects } from "../shell/subject";
+import { routeAt } from "@pe/agent-contracts";
 import { SHELL_REGIONS } from "#/route/teaching";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router";
@@ -150,6 +152,7 @@ export function AppBar() {
     },
   ]);
   const hasRouteHelp = useRouteControlPresence("controls");
+  const hasSituation = useRouteControlPresence("situation");
   useEffect(() => {
     const node = bar.current;
     if (!node) return;
@@ -209,7 +212,9 @@ export function AppBar() {
       )
     );
   });
-  const label = locationLabel(location.pathname);
+  useSubjects();
+  const subjectLabel = subjectState(routeAt(location.pathname) ?? "", location.search).label;
+  const label = locationLabel(location.pathname) + (subjectLabel ? ` \u00b7 ${subjectLabel}` : "");
   const actions = (
     <>
       <RouteControlsOutlet slot="palette" />
@@ -302,7 +307,12 @@ export function AppBar() {
               aria-autocomplete="list"
               aria-keyshortcuts="Control+Shift+K"
               aria-expanded={open}
-              placeholder={`${label}${currentWork ? ` / ${currentWork.label}` : ""}`}
+              // The Situation band titles the route when it rides the bar; the pill never repeats it.
+              placeholder={
+                hasSituation && !compact
+                  ? "Find"
+                  : `${label}${currentWork ? ` / ${currentWork.label}` : ""}`
+              }
               value={open ? query : ""}
               onKeyDown={(event) => {
                 if (!open && (event.key === "ArrowDown" || event.key === "Enter")) {
@@ -321,13 +331,17 @@ export function AppBar() {
           </span>
         </div>
       )}
+      {/* The Situation band rides the bar itself; the Ctrl+. drawer is the narrow-bar fallback. */}
+      {!compact && (
+        <RouteControlsOutlet slot="situation" as="div" className="pe-appbar-situation" />
+      )}
       <div
         className="pe-appbar-commands"
         data-compact={compact || undefined}
         role="group"
         aria-label="Situation, Page and Tutorial shortcuts"
       >
-        <SituationDrawer barAnchor={shellRef.current} rail={compact ? actions : undefined} />
+        {compact && <SituationDrawer barAnchor={shellRef.current} rail={actions} />}
         {pageSlug && <PageBindingChip slug={pageSlug} />}
         {!compact && actions}
       </div>

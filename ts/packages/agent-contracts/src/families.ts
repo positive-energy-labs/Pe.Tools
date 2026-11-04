@@ -1,3 +1,10 @@
+import { showCellValue } from "./schedule-grid-data.ts";
+import { familiesReadProgressSchema } from "./families-progress.ts";
+export { familiesReadProgressSchema, type FamiliesReadProgress } from "./families-progress.ts";
+import { workKeySchema } from "./route-state.ts";
+import { documentRefSchema } from "./target.ts";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { writeIntentSchema } from "./write-intent.ts";
 import { z } from "zod";
 
 import { isRecord, type RouteStateSpec } from "./route-state.ts";
@@ -175,6 +182,7 @@ export const familyCellValueSchema = z
   .object({
     value: z.string(),
     unit: z.string().min(1).optional(),
+    display: z.string().optional(),
     storageType: z.enum(["String", "Integer", "Double", "ElementId", "None"]),
   })
   .strict();
@@ -184,7 +192,7 @@ export type FamilyCellValue = z.infer<typeof familyCellValueSchema>;
 /** The one word for a family cell: a measured value reads with its unit. */
 export const showFamilyCell = (value: unknown): string => {
   const cell = familyCellValueSchema.parse(value);
-  return cell.unit === undefined ? cell.value : `${cell.value} ${cell.unit}`;
+  return showCellValue(cell);
 };
 export const familyCellStateSchema = draftCellSchema(familyCellValueSchema);
 export type FamilyCellState = z.infer<typeof familyCellStateSchema>;
@@ -298,6 +306,7 @@ export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuth
  */
 const familiesDocumentSchema = z
   .object({
+    writeIntent: writeIntentSchema.optional(),
     /**
      * The audited scope is a shared cell: either author edits or suggests it, and plan reads the
      * current edit. A bare filter is old Work, so it fails closed.
@@ -409,3 +418,31 @@ export const familiesRouteState = {
     };
   },
 } satisfies RouteStateSpec<typeof familiesDocumentSchema>;
+
+export const familiesObservationSchema = z.object({
+  id: z.string(),
+  work: workKeySchema,
+  document: documentRefSchema,
+  documentTitle: z.string().optional(),
+  filter: appliedScopeSchema,
+  capturedAt: z.string(),
+  completedAt: z.string(),
+  envelope: z.object({ revision: z.number().int() }).optional(),
+  progress: familiesReadProgressSchema.optional(),
+  readback: z
+    .object({
+      sourceId: z.string(),
+      verifiedFamilies: z.array(z.object({ name: z.string(), at: z.string() })),
+    })
+    .optional(),
+  result: nativeResponseSchema("revit.matrix.loaded-families"),
+});
+export const familiesObservationSummarySchema = familiesObservationSchema
+  .omit({ result: true })
+  .extend({ familyCount: z.number(), typeCount: z.number(), issueCount: z.number() });
+export type FamiliesObservation = z.output<typeof familiesObservationSchema>;
+export type FamiliesObservationSummary = Omit<FamiliesObservation, "result"> & {
+  familyCount: number;
+  typeCount: number;
+  issueCount: number;
+};

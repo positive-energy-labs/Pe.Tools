@@ -53,7 +53,7 @@ const object = (value: unknown): Record<string, unknown> | null =>
 const json = async (path: string): Promise<unknown> => {
   try {
     return JSON.parse(await readFile(path, "utf8"));
-  } catch {
+  } catch (error) { console.warn("ts/apps/host/src/family-run-recovery.ts: fallback after failure", error);
     return null;
   }
 };
@@ -106,7 +106,7 @@ export async function familiesApplyRun(
       found.source.pod === sourceRoot.id &&
       found.source.path === sourceRoot.path &&
       found.source.sha256 === sourceRoot.sha256 &&
-      (await readFile(join(run, "effective-input.json"), "utf8").catch(() => null)) ===
+      (await readFile(join(run, "effective-input.json"), "utf8").catch((error) => { console.error("family-run-recovery: asynchronous operation failed", error); return null; })) ===
         request.specJson &&
       found.files.some(
         (file) =>
@@ -120,7 +120,7 @@ export async function familiesApplyRun(
           found.files
             .filter((file) => /^source\/00-[^/\\]+$/.test(file.file))
             .map(async (file) => {
-              const bytes = await readFile(join(run, file.file)).catch(() => null);
+              const bytes = await readFile(join(run, file.file)).catch((error) => { console.error("family-run-recovery: asynchronous operation failed", error); return null; });
               return (
                 bytes &&
                 createHash("sha256").update(bytes).digest("hex") === sourceRoot.sha256 &&

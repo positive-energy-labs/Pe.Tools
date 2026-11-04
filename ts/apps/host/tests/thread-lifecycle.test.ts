@@ -1,3 +1,4 @@
+import { consentService, harnessThreads } from "./effect-test.ts";
 import { asCaller, human } from "./callers.ts";
 import { HostLog } from "../src/host-log.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -5,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { emptyThreadLifecycle, type HarnessEvent } from "@pe/agent-contracts";
-import { createHarnessThreads } from "../src/harness/threads.ts";
+import type { HarnessThreads } from "../src/harness/threads.ts";
 import type { Providers } from "../src/harness/providers.ts";
 
 const cleanups: (() => Promise<unknown>)[] = [];
@@ -13,7 +14,7 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
   vi.useRealTimers();
 });
-function fixture(events: HarnessEvent[] = []) {
+async function fixture(events: HarnessEvent[] = []) {
   const root = mkdtempSync(join(tmpdir(), "pe-lifecycle-"));
   mkdirSync(join(root, "thread"));
   const meta = {
@@ -49,7 +50,7 @@ function fixture(events: HarnessEvent[] = []) {
       invalidate: () => {},
     } as unknown as Providers,
   };
-  const threads = createHarnessThreads(options);
+  const threads = await harnessThreads({ ...options, runs: consentService() });
   const host = { ...threads, fetch: asCaller(human, threads.fetch) };
   cleanups.push(async () => {
     await host.close();
@@ -74,7 +75,7 @@ function fixture(events: HarnessEvent[] = []) {
 }
 
 test("lifecycle transitions persist, reject stale windows, and keep the exact target", async () => {
-  const { host, call, root, options } = fixture();
+  const { host, call, root, options } = await fixture();
   const scope = { kind: "open", ref: { session: "exact/session", openId: "exact/open" } };
   await host.fetch(
     new Request("http://host/pe/scope/thread", {
@@ -102,7 +103,7 @@ test("lifecycle transitions persist, reject stale windows, and keep the exact ta
     revision: 1,
   });
   await host.close();
-  const reopened = createHarnessThreads(options);
+  const reopened = await harnessThreads({ ...options, runs: consentService() });
   expect(
     (await (await reopened.fetch(new Request("http://host/pe/threads/thread"))).json()).lifecycle,
   ).toMatchObject({ pinned: true, revision: 3 });
@@ -123,7 +124,7 @@ test("restart recovery expires asks; archive and restore keep history", async ()
     at: "2026-10-01T00:00:00.000Z",
   };
   // Recovery expires the unresolved ask; write it into the fixture's next host after checking recovery.
-  const { call, root } = fixture([event]);
+  const { call, root } = await fixture([event]);
   const recovered = (await call()).value;
   expect(recovered.activity.pending).toBe(0);
   const before = readFileSync(join(root, "thread", "events.jsonl"), "utf8");

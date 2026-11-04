@@ -1,3 +1,4 @@
+import { consentService, harnessThreads } from "./effect-test.ts";
 import { createHash } from "node:crypto";
 import { HostLog } from "../src/host-log.ts";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -18,7 +19,7 @@ import { createRouteRegistrations } from "@pe/mcps";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { readNavigation } from "../src/navigation.ts";
-import { createHarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
+import type { HarnessThreads, HarnessThreadsOptions } from "../src/harness/threads.ts";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -209,14 +210,14 @@ test("Pea navigation reads real persisted harness summaries and preserves thread
     get: () => ({ id: "codex", harness: "codex", name: "Codex", auth: { kind: "subscription" } }),
     keys: () => [],
   } as unknown as HarnessThreadsOptions["providers"];
-  const options: HarnessThreadsOptions = {
+  const options: Omit<HarnessThreadsOptions, "runs"> = {
     root: join(directory, "threads"),
     log: new HostLog(join(directory, "log")),
     worldRoot: directory,
     providers,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
   };
-  const threads = createHarnessThreads(options);
+  const threads = await harnessThreads({ ...options, runs: consentService() });
   const before = await bytes(threadDirectory);
   try {
     const workspace = new RouteWorkspace({

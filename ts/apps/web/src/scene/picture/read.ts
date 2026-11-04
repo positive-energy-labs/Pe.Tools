@@ -50,7 +50,27 @@ export function useCapture(
   doc: { session: string; openId: string } | null,
   epoch: number | string,
   cuts: SceneMeshes["cuts"] = EMPTY_CUTS,
+  overviewRequest: CaptureRequest | null = null,
 ): SceneRead {
+  if (
+    request &&
+    (request.contextRepresentation === "meshes" || request.contextRepresentation === "none")
+  )
+    request = { ...request, contextPaddingFt: Math.max(5, request.contextPaddingFt) };
+  const overview = request?.contextRepresentation === "overview";
+  const staged = !overview && !!request && !!overviewRequest;
+  // The overview already carries focus bounds and zero-tessellation drawing data. An explicit
+  // detailed read replaces it directly; do not warm focus through a second native read.
+  const declared = useScene(overview ? request : null, doc, epoch);
+  const overviewKey = JSON.stringify([doc, epoch, overviewRequest]);
+  const priorOverview = useRef<{ key: string; read: SceneRead } | null>(null);
+  if (priorOverview.current?.key !== overviewKey) priorOverview.current = null;
+  if (overview && declared.meshes) priorOverview.current = { key: overviewKey, read: declared };
+  // Keep only a completed overview. Leaving its subscription also releases a pending overview
+  // when the person supersedes it with Read detailed.
+  const preview = staged ? (priorOverview.current?.read ?? declared) : declared;
+  const activeRequest = request;
+  request = overview ? null : request;
   const identity = JSON.stringify([
     doc?.session,
     doc?.openId,
@@ -67,19 +87,19 @@ export function useCapture(
     };
   }
   const focus = useScene(
-    request
+    request && !staged
       ? {
           ...request,
           focusOnly: true,
-          contextPaddingFt: 0,
-          contextRepresentation: "none",
+          contextPaddingFt: 5,
+          contextRepresentation: request.contextRepresentation === "overview" ? "overview" : "none",
         }
       : null,
     doc,
     epoch,
   );
-  // Do not queue optional geometry before exact focus has reached the browser.
-  const context = useScene(focus.meshes ? coverage : null, doc, epoch);
+  // Callers without an overview still stage exact focus first. Picture replaces its overview directly.
+  const context = useScene(staged ? request : focus.meshes ? coverage : null, doc, epoch);
   useEffect(() => {
     if (coverage && context.meshes && context.completeness?.complete)
       retain(coverages, identity, coverage);
@@ -92,6 +112,22 @@ export function useCapture(
     () => (context.meshes ? clipMeshes(context.meshes, cuts) : null),
     [context.meshes, cuts],
   );
+  const declaredMeshes = useMemo(
+    () => (preview.meshes ? clipMeshes(preview.meshes, cuts) : null),
+    [preview.meshes, cuts],
+  );
+  if (staged)
+    return {
+      ...(context.meshes ? context : preview),
+      meshes: contextMeshes ?? declaredMeshes,
+      focusMeshes: declaredMeshes,
+      focusReady: !!declaredMeshes,
+      pending: context.pending,
+      error: preview.error,
+      contextError: context.error,
+    };
+  if (overview && activeRequest)
+    return { ...declared, meshes: declaredMeshes, focusReady: !!declaredMeshes };
   if (!request || request.focusOnly) return { ...focus, meshes: focusMeshes };
   const shown = context.meshes ? context : focus;
   return {

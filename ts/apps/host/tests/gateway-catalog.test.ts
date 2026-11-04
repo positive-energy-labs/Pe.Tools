@@ -13,7 +13,7 @@ const target = {
 } as unknown as SdkSession;
 const fixture = () => {
   let listener: (event: HostBridgeEvent) => void = () => {};
-  const row = {
+  const row = {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap",
     key: "read",
     intent: "Read",
     needs: "document",

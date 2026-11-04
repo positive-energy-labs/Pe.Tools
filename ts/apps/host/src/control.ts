@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -8,7 +9,7 @@ import {
   HOST_RUNTIME_SERVICE_HEADER,
 } from "@pe/host-contracts/contracts";
 import { invocationContext, type RequestPrincipal } from "@pe/runtime/context";
-import type { RunConsents } from "./run-consent.ts";
+import type { RunConsentsPromise } from "./run-consent.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { pageKeyOf, parseContributionKey } from "@pe/agent-contracts";
 import type {
@@ -32,9 +33,22 @@ import type {
  * a host restart kills every harness child, so a token from before it is `context.unknown`.
  */
 
-export class Refused extends Error {
-  constructor(readonly refusal: Refusal) {
-    super(`${refusal.code}: ${refusal.reason}`);
+export class Refused extends Schema.TaggedError<Refused>()("Refused", {
+  message: Schema.String,
+  status: Schema.Number,
+  problem: Schema.String,
+  refusal: Schema.declare<Refusal>(
+    (value): value is Refusal =>
+      typeof value === "object" && value !== null && "code" in value && "reason" in value,
+  ),
+}) {
+  constructor(refusal: Refusal) {
+    super({
+      message: `${refusal.code}: ${refusal.reason}`,
+      status: 403,
+      problem: refusal.code,
+      refusal,
+    });
   }
 }
 /** A door's 403 names its refusal code here; request admission counts it (request-identity.ts). */
@@ -116,7 +130,7 @@ export function writeTerminalContext(serviceName: string) {
   // The host never calls itself under a context it inherited from the shell that started it.
   delete process.env[HOST_CONTEXT_VARIABLE];
   const token = mintContext({ kind: "human", via: "cli" });
-  const path = hostContextTokenPath(serviceName);
+  const path = hostContextTokenPath(hostOwnership.rootPath, serviceName);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, token, { mode: 0o600 });
   return {
@@ -332,7 +346,7 @@ export function requireHuman(caller: Caller, door: string, what: string) {
 /* ── Sources: the head store and what Pea's acquisitions hold ─────────────────────────── */
 
 type Sources = {
-  runs?: RunConsents;
+  runs?: RunConsentsPromise;
   heads: ((thread: string) => ThreadHead) | null;
   subscribeHeads?: (notify: () => void) => () => void;
   /** The acquisition that holds this exact lifetime; null (fail closed) when none is proven. */
@@ -350,6 +364,7 @@ const sources: Sources = {
 export const bindControl = (bound: Partial<Sources>) => void Object.assign(sources, bound);
 export const documentAcquisition = (lifetime: DocumentRef) => sources.acquired(lifetime);
 export const sessionAcquisition = (session: string) => sources.acquiredSession(session);
+export const commandConsentWindow = (id: string) => sources.runs?.commandWindow(id);
 export const subscribeRunChanges = (listener: () => void) =>
   sources.runs?.subscribe(listener) ?? (() => {});
 export const assertRunAdmission = (origin: Origin) => {
@@ -488,7 +503,7 @@ export const consentedRead = (
   input: unknown,
   target?: DocumentRef,
 ): boolean =>
-  // TODO(readonly-script-isolation): User ruling 2026-10-29: Pea ReadOnly scripts must run without
+  // TODO(readonly-script-isolation): docs/features/routes/LEDGER.md#s7-d090a2a7d4 User ruling 2026-10-29: Pea ReadOnly scripts must run without
   // approval. Revisit sibling-document/filesystem isolation later; do not restore blanket approval.
   readsOnly(key, input) && readConsent(caller, target);
 
@@ -637,7 +652,13 @@ export function mintPageDoor(
     door,
     readConsent: humanBound && slot.kind === "pinned" ? target : null,
   });
-  return { token, retire: () => retireContext(token) };
+  return {
+    token,
+    retire: () => {
+      pageDoors.delete(caller);
+      retireContext(token);
+    },
+  };
 }
 
 /**

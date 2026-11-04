@@ -1,4 +1,3 @@
-import { NATIVE_READ_WAIT_S } from "#/route/waits";
 import { callHostRpc } from "#/host/client";
 import { HostCallError } from "@pe/host-contracts/operation-types";
 import { fetchSceneArtifact } from "./artifact";
@@ -19,17 +18,17 @@ export type SceneSource =
 type Decoded = { metadata: Psc1Metadata; positions: Float32Array; meshes: SceneMeshes };
 export type SourceSnapshot =
   | { state: "pending" }
-  | { state: "ready"; data: Decoded }
-  | { state: "failed"; error: string };
+  | { state: "ready"; data: Decoded; notice?: string | null }
+  | { state: "failed"; error: unknown };
 const PENDING: SourceSnapshot = { state: "pending" };
 /** A refused Revit queue (`BridgeBusy`, not dispatched) is transient: resend 1 s, doubling to 15 s,
- * until the read's own deadline. Any other refusal or failure is final. */
+ * while the reader remains subscribed. Any other refusal or failure is final. */
 const BUSY_RETRY_FIRST_MS = 1_000;
 const BUSY_RETRY_CEILING_MS = 15_000;
 const isBridgeBusy = (error: unknown) =>
   error instanceof HostCallError && error.problem?.kind === "BridgeBusy";
 const cache = new SceneCache<Decoded>();
-const receipts = new Map<string, string>();
+const receipts = new Map<string, { id: string; notice: string | null }>();
 const sources = new Map<string, SceneData>();
 const identity = (source: SceneSource) =>
   source.kind === "artifact"
@@ -53,14 +52,14 @@ class SceneData {
     private readonly key: string,
   ) {}
   private artifactId() {
-    return this.source.kind === "artifact" ? this.source.id : receipts.get(this.key);
+    return this.source.kind === "artifact" ? this.source.id : receipts.get(this.key)?.id;
   }
   read = (): SourceSnapshot => {
     if (!this.owned) {
       const id = this.artifactId(),
         data = id ? cache.get(id)?.data : undefined;
       if (data && (this.current.state !== "ready" || this.current.data !== data))
-        this.current = { state: "ready", data };
+        this.current = { state: "ready", data, notice: receipts.get(this.key)?.notice };
       if (!data) this.current = PENDING;
     }
     return this.current;
@@ -93,42 +92,42 @@ class SceneData {
       if (!abort.signal.aborted && this.owned === owned) this.publish(snapshot);
     };
     if (this.source.kind === "capture") {
-      const follow = (id: string) => {
+      const follow = (id: string, notice?: string | null) => {
         abort.signal.throwIfAborted();
         const artifact = sceneData({ kind: "artifact", id });
-        owned.release = artifact.subscribe(() => publish(artifact.read()));
-        publish(artifact.read());
+        const update = () => {
+          const snapshot = artifact.read();
+          publish(snapshot.state === "ready" ? { ...snapshot, notice } : snapshot);
+        };
+        owned.release = artifact.subscribe(update);
+        update();
       };
       const id = this.artifactId();
       if (id) {
-        follow(id);
+        follow(id, receipts.get(this.key)?.notice);
         return;
       }
       const source = this.source;
-      // One deadline bounds the whole read, including every busy resend: a refusal is not an answer.
+      // An explicit read belongs to its subscribers, not a clock. Leaving releases the wait.
+      // /call disconnect releases this joiner; the host sends op.cancel when the last leaves.
       let retry: ReturnType<typeof setTimeout> | undefined;
-      const timeout = setTimeout(() => {
-        publish({ state: "failed", error: `no answer after ${NATIVE_READ_WAIT_S}s` });
-        abort.abort();
-      }, NATIVE_READ_WAIT_S * 1000);
-      owned.release = () => {
-        clearTimeout(timeout);
-        clearTimeout(retry);
-      };
+      owned.release = () => clearTimeout(retry);
       const send = (delay: number) => {
-        if (abort.signal.aborted) return;
-        void callHostRpc("revit.detail.space-scene", source.request, {
-          bridgeSessionId: source.document.session,
-          openDocumentId: source.document.openId,
-          signal: abort.signal,
-        })
-          .then(({ id }) => {
-            clearTimeout(timeout);
+        if (abort.signal.aborted || !this.listeners.size) return;
+        const call = (request: ReturnType<typeof sceneRequest>) =>
+          callHostRpc("revit.detail.space-scene", request, {
+            bridgeSessionId: source.document.session,
+            openDocumentId: source.document.openId,
+            signal: abort.signal,
+          });
+        const operation = call(source.request).then((value) => ({ value, notice: null }));
+        void operation
+          .then(({ value: { id }, notice }) => {
             abort.signal.throwIfAborted();
             receipts.delete(this.key);
-            receipts.set(this.key, id);
+            receipts.set(this.key, { id, notice });
             if (receipts.size > 32) receipts.delete(receipts.keys().next().value!);
-            follow(id);
+            follow(id, notice);
           })
           .catch((error: unknown) => {
             if (abort.signal.aborted) return;
@@ -136,11 +135,14 @@ class SceneData {
               retry = setTimeout(() => send(Math.min(BUSY_RETRY_CEILING_MS, delay * 2)), delay);
               return;
             }
-            clearTimeout(timeout);
-            publish({ state: "failed", error: String(error) });
+            publish({
+              state: "failed",
+              error,
+            });
           });
       };
-      send(BUSY_RETRY_FIRST_MS);
+      // Let selection replacement release the previous subscription before native dispatch.
+      queueMicrotask(() => send(BUSY_RETRY_FIRST_MS));
       return;
     }
     const id = this.source.id;
@@ -165,7 +167,10 @@ class SceneData {
       })
       .catch((error: unknown) => {
         lease?.release();
-        publish({ state: "failed", error: String(error) });
+        publish({
+          state: "failed",
+          error,
+        });
       });
   }
 }

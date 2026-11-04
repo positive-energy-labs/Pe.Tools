@@ -1,3 +1,4 @@
+import { callCatalogRoute, catalogEntries } from "@pe/agent-contracts/pe-api";
 import { createPeClient, peRoutes } from "@pe/agent-contracts/pe-api";
 import { pagePublicationSchema, pagePublicationResultSchema } from "@pe/host-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
@@ -58,9 +59,7 @@ import {
   type TargetInventory,
   type DocumentRef,
   type ThreadHead,
-  transitionPatches,
 } from "@pe/agent-contracts";
-import { parseLoadPreview } from "@pe/ducts-domain/load-preview";
 import {
   HostRpcCaller,
   type HostOperationCallResult,
@@ -70,7 +69,6 @@ import type { RevitCatalogLoadedFamilies } from "@pe/host-contracts/generated";
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { peSourceTree } from "./source-tree.ts";
-import { ductsGuideInputSchema, ductsGuideReading } from "./ducts-skill.ts";
 
 function base(): string {
   // Hosted tools inherit the authority already admitted by the host middleware.
@@ -598,7 +596,7 @@ async function executeTool(
       result,
     };
   }
-  // TODO: with no Target, a row that needs a document is absent from the catalog and refuses as
+  // TODO: docs/features/routes/LEDGER.md#s7-6f559ec645 with no Target, a row that needs a document is absent from the catalog and refuses as
   // "Unknown capability" instead of "no document" (ACP spike 2026-09-26, REPORT2.md reduced run).
   if (!row)
     return refuse(
@@ -632,7 +630,7 @@ async function executeTool(
     );
   const refusal = gate(row);
   if (refusal) return refuse(row.key, defaultTarget, revision, refusal);
-  // TODO: a temporary document needs an owner that releases it when the harness turn ends.
+  // TODO: docs/features/routes/LEDGER.md#s7-eaaaf0f792 a temporary document needs an owner that releases it when the harness turn ends.
   if (row.key === "op:family.temporary.acquire")
     return refuse(
       row.key,
@@ -800,57 +798,25 @@ async function dispatch(
     }
     case "route-doc":
     case "route-command": {
-      if (row.key === "route:threads.history") {
-        const response = await createPeClient(base(), fetch).response("threads.history", {
-          query: { query: JSON.stringify(payload) },
-        });
-        return {
-          ok: response.ok,
-          target: { session: null, document: null },
-          result: await response.json(),
-        };
-      }
-      if (row.key === "route:ducts.sheet" || row.key === "route:ducts.roster") {
-        const client = createPeClient(base(), fetch);
-        const response =
-          row.key === "route:ducts.sheet"
-            ? await client.response("ducts.sheet", {
-                body: peRoutes["ducts.sheet"].body.parse(payload),
-              })
-            : await client.response("ducts.roster", {
-                body: peRoutes["ducts.roster"].body.parse(payload),
-              });
+      if (
+        catalogEntries.some(
+          (entry) => entry.discovery?.key === row.key && entry.key.startsWith("route:"),
+        )
+      ) {
+        const response = await callCatalogRoute(base(), row.key, payload, fetch);
         const result = await response.json();
+        if (response.ok && result.artifact?.url)
+          result.artifact.url = new URL(result.artifact.url, base()).toString();
         return {
           ok: response.ok,
-          target: response.ok
-            ? { session: result.target.session, document: result.target.openId }
-            : { session: null, document: null },
+          target:
+            response.ok && result.target
+              ? { session: result.target.session, document: result.target.openId }
+              : { session: null, document: null },
           result,
         };
       }
-      if (row.key === "route:ducts.analysis") {
-        const response = await createPeClient(base(), fetch).response("ducts.analysis", {
-          body: peRoutes["ducts.analysis"].body.parse(payload),
-        });
-        const result = await response.json();
-        if (response.ok) result.artifact.url = new URL(result.artifact.url, base()).toString();
-        return {
-          ok: response.ok,
-          target: response.ok
-            ? { session: result.target.session, document: result.target.openId }
-            : { session: null, document: null },
-          result,
-        };
-      }
-      if (row.key === "route:ducts.guide") {
-        const { section } = ductsGuideInputSchema.parse(payload);
-        return {
-          ok: true,
-          target: { session: null, document: null },
-          result: { guide: ductsGuideReading(section) },
-        };
-      }
+
       const view = /^route:([a-z-]+)\.(view|set-view)$/.exec(row.key);
       const route = view && routeViewRoutes.find((key) => key === view[1]);
       if (view && route) {
@@ -1030,31 +996,39 @@ async function dispatch(
       if (row.kind === "route-doc") {
         if (input.expectedRevision === undefined)
           throw new Error(`Read route:${parsed.route} first and pass its expectedRevision.`);
+        if (parsed.member === "history") {
+          const direction = payload.direction;
+          if (direction !== "undo" && direction !== "redo")
+            throw new Error(
+              `route:${parsed.route}.history needs payload {direction: undo | redo}.`,
+            );
+          const scope = workspaceId
+            ? {
+                query: new URLSearchParams({ work: workspaceId }).toString(),
+                target: { session: null, document: null },
+              }
+            : await routeWorkScope(workTarget);
+          const result = await routeFetch(
+            parsed.route,
+            scope.query,
+            {
+              direction,
+              expectedRevision: input.expectedRevision,
+            },
+            "work.history",
+          );
+          return { ok: !("isError" in result), target: scope.target, result };
+        }
         // Ducts Work is keyed by document: an unbound write lands in Work no page reads (wave 3, 2026-10-19).
         if (parsed.route === "ducts" && !workspaceId && !workTarget)
           throw new Error(
             "route:ducts.edit needs an exact document. Pass target {kind: open, ref: {session, openId}} or set a thread default, then read its Work revision before editing.",
           );
-        // Ducts: a raw Load Preview paste is parsed here and proposed as loads/preview.
-        const loads =
-          parsed.route === "ducts" && typeof payload.loadsText === "string"
-            ? transitionPatches(
-                ["loads"],
-                "preview",
-                {},
-                {
-                  kind: "set",
-                  rung: { value: { systems: parseLoadPreview(payload.loadsText).systems } },
-                },
-              )
-            : [];
         return routeWrite(
           parsed.route,
           workTarget,
           input.expectedRevision,
-          {
-            patches: [...(Array.isArray(payload.patches) ? payload.patches : []), ...loads],
-          },
+          { patches: Array.isArray(payload.patches) ? payload.patches : [] },
           workspaceId,
         );
       }
@@ -1236,17 +1210,24 @@ async function routeFetch(
   route: string,
   queryString: string,
   body?: unknown,
+  write: "work.apply" | "work.history" = "work.apply",
 ): Promise<Record<string, unknown>> {
   const client = createPeClient(base(), fetch);
   const params = { route };
   const query = Object.fromEntries(new URLSearchParams(queryString));
   const response =
     body !== undefined
-      ? await client.response("work.apply", {
-          params,
-          query,
-          body: peRoutes["work.apply"].body.parse(body),
-        })
+      ? write === "work.history"
+        ? await client.response("work.history", {
+            params,
+            query,
+            body: peRoutes["work.history"].body.parse(body),
+          })
+        : await client.response("work.apply", {
+            params,
+            query,
+            body: peRoutes["work.apply"].body.parse(body),
+          })
       : await client.response("work.get", { params, query });
   const wire = (await response.json()) as Record<string, unknown>;
   const payload = response.ok
@@ -1337,7 +1318,7 @@ export const targetSet = createTool({
       params: { id: "self" },
       body,
     });
-    const wire = await response.json().catch(() => null);
+    const wire = await response.json().catch((error) => { console.error("capability-tools: asynchronous operation failed", error); return null; });
     const answer: unknown = response.ok ? wire : wire?.error?.details;
     const result = putTargetResultSchema.safeParse(answer).data;
     // A host refusal (`grant.required`, `human.only`, `context.foreign-thread`) is returned in its own words.

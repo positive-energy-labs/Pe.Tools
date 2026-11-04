@@ -36,10 +36,10 @@ public sealed class DuctHealWorksharingProofTests {
             WorksharingUtils.RelinquishOwnership(doc, new RelinquishOptions(true), new TransactWithCentralOptions());
             var end =DuctHealPinnedProofTests.End(doc.GetElement(duct), new XYZ(10, 0, 10));
             var before = WorksharingUtils.GetCheckoutStatus(doc, duct);
-            var request = new DuctHealRequest(true, [
+            var request = new DuctHealRequest([
                 new DuctHealGroup("ring", [new DuctHealItem("cap", DuctHealKind.Cap, DuctHealPinnedProofTests.Key(end), null)])
             ]);
-            var result = DuctHealer.Heal(doc, request).Groups.Single();
+            var result = DuctHealer.Heal(doc, request, true).Groups.Single();
             var after = WorksharingUtils.GetCheckoutStatus(doc, duct);
             TestContext.Out.WriteLine($"preview: {result.Outcome} / item {result.Items.Single().Outcome} {result.Items.Single().Reason}");
             TestContext.Out.WriteLine($"duct {duct.Value()} checkout before {before}, after {after}; modified {doc.IsModified}");

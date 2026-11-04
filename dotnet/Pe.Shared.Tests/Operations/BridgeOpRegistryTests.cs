@@ -10,7 +10,7 @@ public sealed class OpRegistryTests {
     [TestCase("revit.detail.space-build")]
     [TestCase("revit.detail.space-scene")]
     public void Declared_expensive_cost_survives_key_inference_in_the_public_catalog(string key) {
-        var definition = OpRegistry.Define(new OpAttribute(key) {
+        var definition = OpRegistry.Define(new OpAttribute(key, OpSubject.Region, OpTouches.Geometry, OpEffect.Read) {
             Does = "Expensive spatial ingest", Cost = OpCost.Expensive
         }, typeof(NoRequest), typeof(SchemaData));
         Assert.That(HostOpsCatalogEntry.FromDefinition(definition).CostTier, Is.EqualTo("Expensive"));
@@ -19,9 +19,9 @@ public sealed class OpRegistryTests {
     [Test]
     public void Mutation_requires_an_explicit_actor() {
         Assert.Throws<InvalidOperationException>(() => OpRegistry.Define(
-            new OpAttribute("test.mutation") { Does = "Mutate", Intent = OpIntent.Mutate }, typeof(NoRequest), typeof(SchemaData)));
+            new OpAttribute("test.mutation", OpSubject.None, OpTouches.Metadata, OpEffect.ModelWrite) { Does = "Mutate", Intent = OpIntent.Mutate }, typeof(NoRequest), typeof(SchemaData)));
         foreach (var actor in Enum.GetValues<OpActor>()) {
-            var definition = OpRegistry.Define(new OpAttribute("test.mutation") {
+            var definition = OpRegistry.Define(new OpAttribute("test.mutation", OpSubject.None, OpTouches.Metadata, OpEffect.ModelWrite) {
                 Does = "Mutate", Intent = OpIntent.Mutate, Actor = actor
             }, typeof(NoRequest), typeof(SchemaData));
             Assert.That(HostOpsCatalogEntry.FromDefinition(definition).Actor, Is.EqualTo(actor.ToString().ToLowerInvariant()));
@@ -36,7 +36,7 @@ public sealed class OpRegistryTests {
         var catalog = HostOpsCatalogEntry.FromDefinition(definition);
         Assert.That(catalog.Intent, Is.EqualTo("Read"));
         Assert.That(catalog.UsesTransactions, Is.True, "A rolled-back preview is still a transaction.");
-        var read = OpRegistry.Define(new OpAttribute("test.read") { Does = "Read without transactions" }, typeof(NoRequest), typeof(SchemaData));
+        var read = OpRegistry.Define(new OpAttribute("test.read", OpSubject.None, OpTouches.Metadata, OpEffect.Read) { Does = "Read without transactions" }, typeof(NoRequest), typeof(SchemaData));
         Assert.That(HostOpsCatalogEntry.FromDefinition(read).UsesTransactions, Is.False);
     }
 
@@ -50,7 +50,7 @@ public sealed class OpRegistryTests {
         var schema = Newtonsoft.Json.Linq.JObject.Parse(catalog.ArtifactSchemaJson!);
         Assert.That(schema["required"]!.Values<string>(), Does.Contain("elements"));
         Assert.That(catalog.ResponseSchemaJson, Does.Not.Contain("ProbeArtifact"));
-        var ordinary = OpRegistry.Define(new OpAttribute("test.no-artifact") { Does = "Return a receipt." }, typeof(NoRequest), typeof(SchemaData));
+        var ordinary = OpRegistry.Define(new OpAttribute("test.no-artifact", OpSubject.None, OpTouches.Metadata, OpEffect.Read) { Does = "Return a receipt." }, typeof(NoRequest), typeof(SchemaData));
         Assert.That(HostOpsCatalogEntry.FromDefinition(ordinary).ArtifactSchemaJson, Is.Null);
     }
 
@@ -61,7 +61,7 @@ public sealed class OpRegistryTests {
     }
 
     [Op(
-        "test.registry.probe",
+        "test.registry.probe", OpSubject.None, OpTouches.Metadata, OpEffect.Read,
         Does = "Prove attributed handlers are discovered.",
         Title = "Registry Probe",
         UsesTransactions = true,
@@ -70,16 +70,16 @@ public sealed class OpRegistryTests {
     )]
     private static SchemaData Handle(NoRequest _) => null!;
 
-    [Op("test.revit-document", Does = "Prove presence-based Revit document needs.", IsPublic = false)]
+    [Op("test.revit-document", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Prove presence-based Revit document needs.", IsPublic = false)]
     private static SchemaData HandleRevitDocument(NoRequest _, RevitDocument document) => null!;
 
-    [Op("test.project-document", Does = "Prove presence-based project document needs.", IsPublic = false)]
+    [Op("test.project-document", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Prove presence-based project document needs.", IsPublic = false)]
     private static SchemaData HandleProjectDocument(NoRequest _, ProjectDocument document) => null!;
 
-    [Op("test.family-document", Does = "Prove presence-based family document needs.", IsPublic = false)]
+    [Op("test.family-document", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Prove presence-based family document needs.", IsPublic = false)]
     private static SchemaData HandleFamilyDocument(NoRequest _, FamilyDocument document) => null!;
 
-    [Op("test.human-verb", Does = "Prove a human-only verb is declared on the catalog.", Actor = OpActor.Human, IsPublic = false)]
+    [Op("test.human-verb", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Prove a human-only verb is declared on the catalog.", Actor = OpActor.Human, IsPublic = false)]
     private static SchemaData HandleHumanVerb(NoRequest _) => null!;
 
     [Test]
@@ -119,7 +119,7 @@ public sealed class OpRegistryTests {
 
     [Test]
     public void Registration_rejects_request_examples_that_drifted_from_the_request_type() {
-        var attribute = new OpAttribute("test.stale.example") {
+        var attribute = new OpAttribute("test.stale.example", OpSubject.None, OpTouches.Metadata, OpEffect.Read) {
             Does = "Example JSON with a member the DTO no longer has.",
             Example = """{ "schemaUri": "/schemas/settings/M/r.json" }"""
         };
@@ -131,7 +131,7 @@ public sealed class OpRegistryTests {
 
     [Test]
     public void Registration_enforces_public_revit_key_taxonomy() {
-        var attribute = new OpAttribute("revit.bogus-layer.thing") { Does = "Invalid public key." };
+        var attribute = new OpAttribute("revit.bogus-layer.thing", OpSubject.None, OpTouches.Metadata, OpEffect.Read) { Does = "Invalid public key." };
 
         Assert.Throws<InvalidOperationException>(() =>
             OpRegistry.Define(attribute, typeof(NoRequest), typeof(SchemaData)));

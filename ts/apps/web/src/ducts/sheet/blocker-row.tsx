@@ -2,7 +2,7 @@
  * One blocker as a row: kind glyph, the element as a Subject (named by the snapshot, never a raw
  * id as the only noun; hover lights it, press goes to it), effect on the total ("—" until
  * recomputed), the inline number the closer needs (typed cfm or in-wg; the verb is live as it is
- * typed, Enter stages it), the closer verb as a framed house button naming the action and value,
+ * typed, and Enter or leaving the box runs it, like every authored-value cell), the closer verb as a framed house button naming the action and value,
  * and the refusal reason as row text as well as the button's tooltip. Hovering the row lights the
  * element and its mark on the picture; the picture's pick of the mark focuses the row (`focused`).
  * A `consequence` row (R-B: a blocker that exists only because of its cause row's assumed heal)
@@ -53,6 +53,14 @@ export function BlockerRow({
   // The box's uncommitted number: the verb is live while the person types (undefined: no draft).
   const [draft, setDraft] = useState<number | null | undefined>(undefined);
   const closer = closerOf(blocker, draft === undefined ? typed : draft);
+  // The action the cell's own commit already ran: leaving the box for the verb commits on blur,
+  // and the press that follows must not run it twice.
+  const committed = useRef<string | null>(null);
+  const run = (next: Closer) => {
+    const key = JSON.stringify(next.action);
+    if (committed.current === key) return void (committed.current = null);
+    onClose(next);
+  };
   const row = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (focused) row.current?.scrollIntoView({ block: "nearest" });
@@ -101,7 +109,7 @@ export function BlockerRow({
       }}
       onClick={() => onFocus(focused ? null : blocker.id)}
     >
-      <span className="face-mono t-small text-ink-2" aria-label={blocker.kind} title={blocker.kind}>
+      <span className="face-mono t-small text-ink-2" aria-label={blocker.kind}>
         {GLYPH[blocker.kind]}
       </span>
       <span className="min-w-0 truncate">
@@ -130,9 +138,7 @@ export function BlockerRow({
         {effectWord(blocker.effectInWg)}
       </span>
       {consequence ? (
-        <span className="t-small col-span-2 col-start-2 truncate" title={blocker.detail}>
-          {blocker.detail}
-        </span>
+        <span className="t-small col-span-2 col-start-2 truncate">{blocker.detail}</span>
       ) : (
         <>
           {/* The input and verb act on the blocker, not the row's focus toggle. */}
@@ -141,7 +147,8 @@ export function BlockerRow({
             onClick={(event) => event.stopPropagation()}
           >
             {closer.input && (
-              // The kit cell stages the number (Enter or leaving the box); the verb beside it runs.
+              // The kit cell commits on Enter or leaving the box (Escape cancels): a committed
+              // number runs the closer, so an ask commits exactly as an Inputs cell does.
               <SheetCell
                 label={`${blocker.kind} ${closer.input.unit}`}
                 value={typed}
@@ -160,6 +167,10 @@ export function BlockerRow({
                 onValue={(value) => {
                   setTyped(value);
                   setDraft(undefined);
+                  const next = closerOf(blocker, value);
+                  if (value == null || next.refusal || !next.action) return;
+                  onClose(next);
+                  committed.current = JSON.stringify(next.action);
                 }}
                 onDraft={setDraft}
               />
@@ -175,7 +186,6 @@ export function BlockerRow({
                 triggerLabel={`${closer.verb} for ${blocker.kind}`}
                 aria-label={`${closer.verb} for ${blocker.kind}`}
                 disabled={closer.refusal != null}
-                title={closer.refusal ?? "Choose the table this fitting is priced with"}
                 items={[...closer.choices]}
                 keyOf={(choice) => `${choice.verb}|${choice.detail}`}
                 labelOf={(choice) => `${choice.verb} ${choice.detail}`}
@@ -192,7 +202,7 @@ export function BlockerRow({
                 kind="framed"
                 label={`${closer.verb} for ${blocker.kind}`}
                 refusal={closer.refusal}
-                onClick={() => onClose(closer)}
+                onClick={() => run(closer)}
               >
                 {closer.verb}
               </Button>
@@ -218,11 +228,7 @@ export function BlockerRow({
             )}
           </span>
           {closer.refusal && (
-            <span
-              className="t-small col-span-2 col-start-2 truncate text-ink-2"
-              title={closer.refusal}
-              data-refusal=""
-            >
+            <span className="t-small col-span-2 col-start-2 truncate text-ink-2" data-refusal="">
               {closer.refusal}
             </span>
           )}

@@ -1,3 +1,4 @@
+import { defineRouteGraph } from "@pe/agent-contracts";
 import { spaceQueries, matchingScene } from "./sources";
 import type { ReadingState } from "#/shell/readings";
 import { cutPolygons } from "./state";
@@ -11,9 +12,13 @@ import { sceneRequest } from "#/scene/host";
 import { CONTEXT_DEFAULT } from "#/scene/picture/picture";
 import { refuse } from "#/route/refusal";
 import { ENCODINGS } from "./layers";
-import { spaceReads, type SpaceReadKey, type SpaceAnswerKey } from "./reads";
+import { regionSchema, spaceReads, type SpaceReadKey, type SpaceAnswerKey } from "./reads";
 
-const jsonField = <S extends z.ZodType>(schema: S) =>
+const jsonField = <S extends z.ZodType>(
+  schema: import("../../../../packages/agent-contracts/src/route-field").BareSchema<S> extends z.ZodArray<any>
+    ? never
+    : S,
+) =>
   field(
     schema,
     { url: "replace", agent: "set" },
@@ -22,20 +27,28 @@ const jsonField = <S extends z.ZodType>(schema: S) =>
       decode: (text) => {
         try {
           return JSON.parse(text);
-        } catch {
+        } catch (error) {
+          console.warn("ts/apps/web/src/space/graph.ts: fallback after failure", error);
           return undefined;
         }
       },
     },
   );
 const parameters = {
+  region: jsonField(regionSchema.nullable().default(null)),
   treeInput: jsonField(
-    spaceReads["revit.detail.space-tree"].input.default({ source: 0, maxDepth: 4 }),
+    spaceReads["revit.detail.space-tree"].input
+      .omit({ region: true })
+      .default({ source: 0, maxDepth: 4 }),
   ),
-  sliceInput: jsonField(spaceReads["revit.detail.space-slice"].input.default({ z0: 0, z1: 10 })),
-  probeInput: jsonField(spaceReads["revit.detail.space-probe"].input.default({ at: [0, 0, 5] })),
+  sliceInput: jsonField(
+    z.object({ z0: z.number().finite(), z1: z.number().finite() }).default({ z0: 0, z1: 10 }),
+  ),
+  probeInput: jsonField(
+    spaceReads["revit.detail.space-probe"].input.omit({ region: true }).default({ at: [0, 0, 5] }),
+  ),
   sweepInput: jsonField(
-    spaceReads["revit.detail.space-sweep"].input.default({
+    spaceReads["revit.detail.space-sweep"].input.omit({ region: true }).default({
       polyline: [
         [0, 0, 9],
         [20, 0, 9],
@@ -54,6 +67,7 @@ const parameters = {
 };
 const fields = { ...spaceAddress.fields, ...parameters };
 export const spacePageSchema = routeAddress("space").schema.extend({
+  region: parameters.region.schema,
   treeInput: parameters.treeInput.schema,
   sliceInput: parameters.sliceInput.schema,
   probeInput: parameters.probeInput.schema,
@@ -75,12 +89,33 @@ const read = (key: SpaceReadKey, label: string) =>
       ready: ({ snapshot }, input) =>
         snapshot.target.kind !== "document"
           ? "Choose a document"
-          : label === "capture" && !(input as { elementIds: number[] }).elementIds.length
+          : (label === "capture" || label === "load context") &&
+              !(input as { region?: unknown }).region &&
+              !(input as { elementIds: number[] }).elementIds.length
             ? "Name host element ids to capture"
             : null,
     },
   );
-export const spaceGraph: RouteGraph<SpacePage, null> = {
+export const spaceGraph: RouteGraph<SpacePage, null> = defineRouteGraph({
+  directory: {
+    path: "/space",
+    title: "Space",
+    label: "MEP context",
+    exposure: "Preview",
+    runtimeNeed: "Revit for capture; saved scenes open without Revit",
+    icon: "Boxes",
+    category: "Coordinate model data",
+    blurb:
+      "Inspect real model geometry, select elements, and draw straight or bent sections locally.",
+    aliases: ["3d", "mesh", "section", "viewer", "spatial", "context"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+  },
   key: "space",
   address: "space",
   name: "Space",
@@ -91,42 +126,34 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
     },
   },
   needs: "document",
+  subjectField: {
+    field: "region",
+    noun: "region",
+    keyKind: "name",
+    roster: "region",
+    detail: "scene",
+    pane: "picture",
+  },
   fields: {
-    threadSearch: { ...threadListFields.threadSearch, role: "pose" },
-    threadSort: { ...threadListFields.threadSort, role: "pose" },
-    scene: { ...fields.scene, role: "pose" },
-    ids: { ...fields.ids, role: "subject" },
-    mode: { ...fields.mode, role: "pose" },
-    viewport: { ...fields.viewport, role: "pose" },
-    cuts: { ...fields.cuts, role: "pose" },
-    selected: { ...fields.selected, role: "pose" },
-    hidden: { ...fields.hidden, role: "pose" },
-    isolated: { ...fields.isolated, role: "pose" },
-    layers: { ...fields.layers, role: "pose" },
-    encoding: { ...fields.encoding, role: "pose" },
-    row: { ...fields.row, role: "pose", url: false },
-    treeInput: { ...fields.treeInput, role: "pose" },
-    sliceInput: { ...fields.sliceInput, role: "pose" },
-    probeInput: { ...fields.probeInput, role: "pose" },
-    sweepInput: { ...fields.sweepInput, role: "pose" },
+    ...threadListFields,
+    ...fields,
+    selected: { ...fields.selected, role: "selection" },
+    row: { ...fields.row, url: false },
   },
   readings: {
+    region: { kind: "derive", args: (page) => page.region },
     scene: {
-      kind: "use",
-      source: "space.scene",
       args: ({ scene }) => scene,
-      retire: "page",
     },
     answers: {
       kind: "derive",
-      source: "space.answers",
       args: ({ scene }) => scene,
-      retire: "page",
     },
   },
   verbs: {
     capture: read("revit.detail.space-scene", "capture"),
     context: read("revit.detail.space-scene", "load context"),
+    detailed: read("revit.detail.space-scene", "Read detailed"),
     status: read("revit.detail.space-status", "read status"),
     rows: read("revit.detail.space-rows", "read rows"),
     tree: read("revit.detail.space-tree", "read tree"),
@@ -139,14 +166,23 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
       label: "Space",
       purpose: "Inspect captured geometry, cuts and query answers",
       draws: ["scene", "answers"],
-      verbs: [],
     },
     facts: {
       label: "Space facts",
       purpose: "Edit axis cuts and read answer layers",
       draws: ["scene", "answers"],
       verbs: Object.assign((row: { verb: string }) => [row.verb], {
-        ids: ["status", "rows", "tree", "slice", "probe", "sweep"],
+        ids: [
+          "capture",
+          "context",
+          "detailed",
+          "status",
+          "rows",
+          "tree",
+          "slice",
+          "probe",
+          "sweep",
+        ],
       }),
     },
   },
@@ -166,13 +202,12 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
   stages: {
     inspect: {
       word: "Inspecting",
-      panes: ["picture", "facts"],
       verbs: ["capture", "context"],
       teach:
         "Capture host element ids or load their context, then orbit, pick, hide, isolate and cut. Saved scene links reopen artifacts without capturing. Keys 1â€“4 switch 3D, Top, North and East. Escape returns an axis to its saved 3D pose. Each cut constrains the picture by intersection.",
     },
   },
-  pick: false,
+
   transition: (current, patch, origin, scope) => {
     if (
       origin !== "url" &&
@@ -182,9 +217,11 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
       const candidate = { ...current, ...patch };
       const reading = scope?.readings.scene;
       const loaded = reading ? matchingScene(current, reading as ReadingState) : null;
-      const named = [candidate.selected, ...candidate.hidden, ...(candidate.isolated ?? [])].filter(
-        (key): key is string => key !== null,
-      );
+      const named = [
+        candidate.selected,
+        ...(candidate.hidden === "all" ? [] : candidate.hidden),
+        ...(candidate.isolated === "all" ? [] : candidate.isolated),
+      ].filter((key): key is string => key !== null);
       if (
         (named.length || Object.hasOwn(patch, "cuts")) &&
         (!loaded || loaded.id !== candidate.scene)
@@ -219,26 +256,32 @@ export const spaceGraph: RouteGraph<SpacePage, null> = {
         : { refusal: refuse("not-ready", conflict.error) }
       : { patch: normalized };
   },
-};
+});
 
 export const spaceBinding = (id: string, row: unknown, { page }: { page: SpacePage }) => ({
   subject: null,
   args:
-    id === "capture" || id === "context"
+    id === "capture" || id === "context" || id === "detailed"
       ? {
           ...sceneRequest(
-            page.ids.filter((n) => Number.isSafeInteger(n) && n > 0),
+            (row as { input?: { elementIds?: number[] } } | undefined)?.input?.elementIds ?? [],
             false,
             15,
             CONTEXT_DEFAULT,
           ),
-          elementIds: page.ids,
-          focusOnly: id === "capture",
-          contextRepresentation: id === "capture" ? "none" : CONTEXT_DEFAULT,
+          ...(page.region ? { region: page.region } : {}),
+          elementIds: page.region
+            ? []
+            : ((row as { input?: { elementIds?: number[] } } | undefined)?.input?.elementIds ?? []),
+          focusOnly: false,
+          contextRepresentation: id === "detailed" ? "meshes" : CONTEXT_DEFAULT,
         }
-      : ((row as { input?: unknown } | undefined)?.input ??
-        (page as unknown as Record<string, unknown>)[`${id}Input`] ??
-        {}),
+      : {
+          ...((row as { input?: object } | undefined)?.input ??
+            (page as unknown as Record<string, object>)[`${id}Input`] ??
+            {}),
+          ...(page.region ? { region: page.region } : {}),
+        },
 });
 export const answerKeys: readonly SpaceAnswerKey[] = [
   "status",

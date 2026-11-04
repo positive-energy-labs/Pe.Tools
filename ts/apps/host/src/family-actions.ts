@@ -1,10 +1,11 @@
-import { resolveSdkSession } from "./sdk-session.ts";
+import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { createHash } from "node:crypto";
 import { join, resolve, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import {
   commands,
+  familyActions,
   familyReads,
   familyCaptureSchema,
   familyLiveReadSchema,
@@ -95,6 +96,7 @@ import { LocalOpError } from "./local-error.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import { familiesApplyRun, isFamiliesApplyResponse } from "./family-run-recovery.ts";
 import { familySpecExecutor } from "./family-spec.ts";
+import type { FamiliesReader } from "./families-reader.ts";
 import { nativeInputSchema } from "./native-input.ts";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -119,6 +121,7 @@ export type PodDependencies = {
 };
 export type FamilyActionDependencies = TakeoffActionDependencies &
   PodDependencies & {
+    families?: Pick<FamiliesReader["Service"], "cancel">;
     /** The demo owner keeps native reads inside its own root; a build has no output path to place. */
     nativePaths?: (
       input: { modelDirectory?: string },
@@ -193,7 +196,8 @@ export const runPods = <A, E>(
 ) =>
   deps.runPods
     ? deps.runPods(effect)
-    : Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+    : // effect-edge: island, phase 5
+      Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 
 /** Pod context whose composition runs in the exact admitted session and document lifetime. */
 export const podContext = (
@@ -265,12 +269,14 @@ async function current(
   family: boolean | "project",
   process?: NativeProcess,
 ) {
-  const session = (await Effect.runPromise(bridge.list)).find(
-    (s) => s.sessionId === target.session,
+  // effect-edge: island, phase 5
+  const session = await Effect.runPromise(
+    SdkSession.resolve(bridge, { session: target.session }).pipe(
+      Effect.mapError((error) => refused(error.message)),
+    ),
   );
-  const doc = session?.state?.openDocuments.find((d) => d.openId === target.openId);
+  const doc = session.state?.openDocuments.find((d) => d.openId === target.openId);
   if (
-    !session ||
     !doc ||
     (family === true && !doc.isFamilyDocument) ||
     (family === "project" && doc.isFamilyDocument) ||
@@ -404,7 +410,7 @@ const buildSchema = nativeSchema.extend({
 });
 const parameterApplySchema = nativeSchema.extend({
   input: nativeInputSchema("revit.apply.parameter-links").refine(
-    (input) => input.profile != null && input.previewOnly === false && input.reconcile === true,
+    (input) => input.profile != null && input.reconcile === true,
     "Apply must write and reconcile",
   ),
 });
@@ -1057,7 +1063,7 @@ export function familyExecutors(
     };
   };
   type SourceInput = Pick<
-    z.output<(typeof commands)["families.apply"]["input"]>,
+    z.output<(typeof familyActions)["families.apply"]["input"]>,
     "source" | "sources" | "familyNames" | "executionOptions"
   >;
   const sourcesFor = (input: SourceInput, review: Review) =>
@@ -1088,7 +1094,7 @@ export function familyExecutors(
   /** Direct Apply and preview adoption share one source, reservation and sealed-native algorithm. */
   const applyBinding = async (
     ctx: CommandContext,
-    input: z.output<(typeof commands)["families.apply"]["input"]>,
+    input: z.output<(typeof familyActions)["families.apply"]["input"]>,
     review: Review,
     previewKey: "family.plan" | "families.plan",
   ) => {
@@ -1160,12 +1166,14 @@ export function familyExecutors(
     recover,
   });
   const familyApply = command(commands["family.apply"], familyAppliesSchema, {
+    seal: (p) => ({ request: p.kind === "batch" ? p.items.map(({ input }) => input) : p.input }),
     bind: async (ctx) =>
       applyBinding(ctx, ctx.admission.input, await reviewFamily(ctx), "family.plan"),
     run: (ctx, execution) => runApply(ctx, execution, false),
     recover,
   });
   const familiesApply = command(commands["families.apply"], familiesAppliesSchema, {
+    seal: (p) => ({ request: p.kind === "batch" ? p.items.map(({ input }) => input) : p.input }),
     bind: async (ctx) =>
       applyBinding(
         ctx,
@@ -1492,6 +1500,7 @@ export function familyExecutors(
     },
   });
   const parameterApply = command(commands["parameter-links.apply"], parameterApplySchema, {
+    seal: (p) => ({ request: p.input }),
     bind: async (ctx) => {
       const handle = handleOf(ctx),
         doc = await ctx.selectWork(tools["parameter-links"].work, handle, () => ({ facts: [] })),
@@ -1541,8 +1550,8 @@ export function familyExecutors(
             const result = (await invoke(
               bridge,
               bound.target,
-              "revit.apply.parameter-links",
-              { profile, previewOnly: true, reconcile: false },
+              "revit.apply.parameter-links.preview",
+              { profile, reconcile: false },
               `${ctx.admission.id}:evaluate`,
             )) as { evaluation?: { issues?: { severity?: string }[] } };
             if (
@@ -1554,7 +1563,7 @@ export function familyExecutors(
           return {
             kind: "native",
             process: bound.process,
-            input: { profile, previewOnly: false, reconcile: true },
+            input: { profile, reconcile: true },
           };
         },
       };
@@ -1564,6 +1573,7 @@ export function familyExecutors(
     recover,
   });
   const build = command(commands["family.build"], buildSchema, {
+    seal: (p) => ({ request: p.input }),
     bind: async (ctx) => {
       if (ctx.admission.input.work) await familySelection(ctx);
       const bound = await nativeBinding(ctx, false),
@@ -1605,6 +1615,22 @@ export function familyExecutors(
     "settings.write": settingsWrite,
     "family.observe": familyObserve,
     "family.capture": familyCapture,
+    "families.cancel-read": command(
+      commands["families.cancel-read"],
+      z.strictObject({ readId: z.uuid(), document: documentRefSchema }),
+      {
+        bind: async (ctx) => {
+          if (!deps.families) throw refused("Families reader is unavailable");
+          const prepared = { readId: ctx.admission.input.readId, document: targetOf(ctx) };
+          return { effects: [], prepare: async () => prepared };
+        },
+        run: async (_ctx, { prepared }) => {
+          if (!deps.families) throw refused("Families reader is unavailable");
+          await deps.families.cancel(prepared.readId, prepared.document);
+          return { cancelled: true as const };
+        },
+      },
+    ),
     "families.capture": familiesCapture,
     "family.plan": familyPlan,
     "families.plan": familiesPlan,
@@ -1756,11 +1782,7 @@ export async function readFamily(
         : "Stage a profile before evaluating it",
     );
   const data = evaluate
-    ? await native("revit.apply.parameter-links", {
-        profile,
-        previewOnly: true,
-        reconcile: false,
-      })
+    ? await native("revit.apply.parameter-links.preview", { profile, reconcile: false })
     : await native("revit.detail.parameter-links", { includeEvaluation: false });
   const reading: FamilyCapture["reading"] = {
     kind: "parameter-links",

@@ -7,6 +7,7 @@ import {
   discoverHostBaseUrl,
   resolveWorkspaceKey,
   startPeaMcp,
+  verifyMcpHost,
 } from "@pe/mcps";
 import type { PeaPromptRequest } from "./prompt.ts";
 
@@ -46,7 +47,7 @@ export function createPeaCliCommand() {
       'pea --prompt "Summarize the open Revit documents." --json',
       "pea host status",
       "pea browser guide",
-      "pea mcp --host dev",
+      "pea mcp --host http://127.0.0.1:<port>",
       "pea script bootstrap",
       "pea script execute --source-path src\\SampleScript.cs",
     ].join("\n"),
@@ -70,13 +71,23 @@ export function createPeaCliSubCommands() {
       name: "mcp",
       description: "Serve Pea's tools over local stdio for an MCP client on this machine.",
       args: {
-        host: { type: "string", description: "Host URL, installed, dev, or a worktree path." },
+        host: { type: "string", description: "The host URL this MCP server serves." },
       },
       run: async (ctx) => {
-        await startPeaMcp(ctx.values.host);
+        await startPeaMcp(verifiedMcpHost(ctx.values.host));
       },
     }),
   };
+}
+
+/** stderr, never stdout (stdout is the MCP protocol stream); exits before anything is served. */
+function verifiedMcpHost(value: string | undefined): string {
+  try {
+    return verifyMcpHost(value);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
 
 export function getPeaCliCommandNames(): string[] {

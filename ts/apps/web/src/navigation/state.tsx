@@ -1,5 +1,5 @@
 import { createContext, use, useCallback, useEffect, useState, type ReactNode } from "react";
-import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { navigationClient, type NavigationSnapshot } from "./navigation-client";
 import { admittedDestination } from "./model";
 import { resolveWorkbenchConfig } from "#/workbench/config";
@@ -17,7 +17,6 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const refresh = useCallback(() => setVersion((prior) => prior + 1), []);
   useEffect(() => {
     window.addEventListener("focus", refresh);
@@ -25,7 +24,6 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
     void navigationClient(resolveWorkbenchConfig().origin)
       .read(controller.signal)
       .then((next) => {
@@ -42,7 +40,7 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [version, pathname]);
+  }, [version]);
   return <Context value={{ snapshot, loading, error, refresh }}>{children}</Context>;
 }
 export function useNavigation() {

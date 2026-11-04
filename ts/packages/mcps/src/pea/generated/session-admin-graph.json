@@ -1,0 +1,676 @@
+{
+  "address": "session-admin",
+  "directory": {
+    "aliases": [
+      "session",
+      "administration"
+    ],
+    "blurb": "Start, stop or restart one Revit session.",
+    "category": "Start / open work",
+    "exposure": "Main",
+    "icon": "Server",
+    "label": "Revit",
+    "listed": true,
+    "path": "/session-admin",
+    "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+    "satellites": [],
+    "surfaces": {
+      "pwa": "full",
+      "tray": "compact",
+      "web": "full"
+    },
+    "title": "Sessions"
+  },
+  "fields": {
+    "document": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "type": "string"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "draft": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "editor": "pane",
+      "role": "draft",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": {
+          "addins": "on",
+          "detach": false,
+          "doc": null,
+          "links": "refuse",
+          "owner": "you",
+          "target": null,
+          "year": null
+        },
+        "properties": {
+          "addins": {
+            "enum": [
+              "on",
+              "off"
+            ],
+            "type": "string"
+          },
+          "detach": {
+            "type": "boolean"
+          },
+          "doc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "links": {
+            "enum": [
+              "refuse",
+              "allow"
+            ],
+            "type": "string"
+          },
+          "owner": {
+            "enum": [
+              "you",
+              "pea"
+            ],
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "year": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "doc",
+          "target",
+          "year",
+          "owner",
+          "addins",
+          "detach",
+          "links"
+        ],
+        "type": "object"
+      },
+      "share": false,
+      "url": false
+    },
+    "epoch": {
+      "agent": false,
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "transient",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": 0,
+        "type": "number"
+      },
+      "share": false,
+      "url": false
+    },
+    "session": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "table": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "editor": "pane",
+      "role": "query",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": {
+          "query": "",
+          "sorts": []
+        },
+        "properties": {
+          "hiddenColumns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "query": {
+            "type": "string"
+          },
+          "sorts": {
+            "items": {
+              "properties": {
+                "dir": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ],
+                  "type": "string"
+                },
+                "key": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "dir"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "sorts"
+        ],
+        "type": "object"
+      },
+      "share": true,
+      "url": false
+    }
+  },
+  "key": "session-admin",
+  "layout": {
+    "axis": "v",
+    "children": [
+      {
+        "id": "sessions",
+        "kind": "pane"
+      },
+      {
+        "id": "history",
+        "kind": "pane"
+      }
+    ],
+    "id": "session-body",
+    "kind": "split",
+    "size": 140,
+    "sized": "end"
+  },
+  "moduleHash": "bb576af4553e5df659977c3b1f907437d31d7faf340152b66fddd3cc8305e49e",
+  "name": "Sessions",
+  "panes": {
+    "history": {
+      "draws": [
+        "receipts"
+      ],
+      "history": {
+        "receipts": "receipts"
+      },
+      "label": "History",
+      "purpose": "Inspect lifecycle receipts and world events",
+      "verbs": []
+    },
+    "sessions": {
+      "draws": [
+        "machine"
+      ],
+      "label": "Sessions",
+      "purpose": "Choose a running session or start a new one",
+      "verbs": [
+        "start"
+      ]
+    }
+  },
+  "readings": {
+    "machine": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "open.machine"
+    },
+    "receipts": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "open.receipts"
+    },
+    "recents": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "open.recents"
+    },
+    "threads": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "open.threads"
+    },
+    "world": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "feed",
+      "retire": "page",
+      "source": "open.world"
+    }
+  },
+  "seeds": {
+    "background-booting": {
+      "title": "background-booting"
+    },
+    "blocked-plan": {
+      "title": "blocked-plan"
+    },
+    "controlled-hot": {
+      "title": "controlled-hot"
+    },
+    "disconnected": {
+      "title": "disconnected"
+    },
+    "no-revit": {
+      "title": "no-revit"
+    },
+    "observed-icon": {
+      "title": "observed-icon"
+    },
+    "patch-bay": {
+      "title": "patch-bay"
+    },
+    "receipt-handoff": {
+      "title": "receipt-handoff"
+    },
+    "refresh": {
+      "title": "the patch bay: your Revit 2025, two of Pea's, recents 2022 to 2027"
+    },
+    "update-check-failed": {
+      "title": "update-check-failed"
+    },
+    "update-downloading": {
+      "title": "update-downloading"
+    },
+    "update-failed": {
+      "title": "update-failed"
+    },
+    "waiting-plan": {
+      "title": "waiting-plan"
+    }
+  },
+  "stageOrder": [
+    "sessions"
+  ],
+  "stages": {
+    "sessions": {
+      "panes": [
+        "sessions",
+        "history"
+      ],
+      "verbs": [
+        "refresh"
+      ],
+      "word": "Managing sessions"
+    }
+  },
+  "subject": {
+    "runtime": true
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "machine",
+    "field": "session",
+    "keyKind": "name",
+    "noun": "session",
+    "pane": "sessions",
+    "roster": "machine",
+    "show": {
+      "runtime": true
+    }
+  },
+  "verbs": {
+    "refresh": {
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {},
+        "type": "object"
+      },
+      "kind": "page",
+      "label": "refresh",
+      "review": "none"
+    },
+    "restart": {
+      "caller": "human",
+      "does": "instances.restart",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "session": {
+                "additionalProperties": false,
+                "properties": {
+                  "process": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "executable": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "pid": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "type": "integer"
+                      },
+                      "processStartUtc": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "pid",
+                      "processStartUtc",
+                      "executable"
+                    ],
+                    "type": "object"
+                  },
+                  "selection": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "pid": {
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "pid"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "selection",
+                  "process"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "session"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Restart Revit",
+      "review": "none"
+    },
+    "start": {
+      "caller": "human",
+      "does": "instances.start",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "addins": {
+                "enum": [
+                  "on",
+                  "off"
+                ],
+                "type": "string"
+              },
+              "owner": {
+                "enum": [
+                  "you",
+                  "pea"
+                ],
+                "type": "string"
+              },
+              "year": {
+                "pattern": "^20\\d{2}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "year",
+              "owner",
+              "addins"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Start Revit",
+      "review": "none"
+    },
+    "stop": {
+      "caller": "human",
+      "does": "instances.stop",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "force": {
+                "default": false,
+                "type": "boolean"
+              },
+              "session": {
+                "additionalProperties": false,
+                "properties": {
+                  "process": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "executable": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "pid": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "type": "integer"
+                      },
+                      "processStartUtc": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "pid",
+                      "processStartUtc",
+                      "executable"
+                    ],
+                    "type": "object"
+                  },
+                  "selection": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "pid": {
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "pid"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "selection",
+                  "process"
+                ],
+                "type": "object"
+              },
+              "unsaved": {
+                "enum": [
+                  "keep",
+                  "discard"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "session",
+              "unsaved"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Stop Revit",
+      "review": "none"
+    }
+  }
+}

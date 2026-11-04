@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useInsertionEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -145,7 +146,11 @@ function usePaneSize(spec: PaneSizeSpec & { target: PaneSide }) {
     if (spec.persist && typeof window !== "undefined") {
       try {
         window.localStorage.setItem(spec.persist, String(next));
-      } catch {
+      } catch (error) {
+        console.warn(
+          "ts/packages/kit/src/components/lang/pane-resize.tsx: fallback after failure",
+          error,
+        );
         // Persistence is best-effort; layout must remain usable when storage is unavailable.
       }
     }
@@ -435,9 +440,24 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
     : axis === "horizontal"
       ? ownOpen + otherOpen + gutter
       : Math.max(startMinimum.open, endMinimum.open);
-  useLayoutEffect(
-    () => parentMinimum?.(minimumId.current, { open: openWidth, compact: compactWidth }),
-    [parentMinimum, openWidth, compactWidth],
+  const minimumLease = useRef<{ parent: typeof parentMinimum; release: () => void } | null>(null);
+  useLayoutEffect(() => {
+    if (minimumLease.current?.parent !== parentMinimum) minimumLease.current?.release();
+    minimumLease.current = parentMinimum
+      ? {
+          parent: parentMinimum,
+          release: parentMinimum(minimumId.current, { open: openWidth, compact: compactWidth }),
+        }
+      : null;
+  }, [parentMinimum, openWidth, compactWidth]);
+  // Suspense and Activity disconnect layout effects without removing the region. Its minimum
+  // remains reserved until actual removal; otherwise a loading neighbor unfolds, then folds again.
+  useInsertionEffect(
+    () => () => {
+      const release = minimumLease.current?.release;
+      queueMicrotask(() => release?.());
+    },
+    [],
   );
   const target = resize?.target ?? "start";
   const folded = bothSides && !stacked ? (state.collapsed ?? autoFold) : null;
@@ -469,6 +489,8 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
   usePaneFit(
     rootRef,
     (rect) => {
+      // Retained/occluded panes have no layout; keep their last committed geometry.
+      if (rect.width <= 0 || rect.height <= 0) return;
       const gutter = seamSize();
       setGutter(gutter);
       setAvailableWidth(rect.width);

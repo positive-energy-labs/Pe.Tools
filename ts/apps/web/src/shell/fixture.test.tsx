@@ -1,5 +1,6 @@
+import { testSubject, testFields } from "../test-route-subject";
 // @vitest-environment jsdom
-import { cleanup, render, waitFor, fireEvent } from "@testing-library/react";
+import { cleanup, render, waitFor, act } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
@@ -25,12 +26,14 @@ const read = {
   },
 };
 const graph: RouteGraph<{ stage: string }, { value: number }> = {
+  ...testSubject,
+  subjectField: { ...testSubject.subjectField, roster: "derive", detail: "derive" },
   key: "fixture-proof",
   address: "fixture-proof",
   name: "Fixture proof",
   needs: "project",
   work: z.object({ value: z.number().default(0) }),
-  fields: { stage: { ...field(z.string().default("edit"), {}), role: "stage" } },
+  fields: { ...testFields, stage: { ...field(z.string().default("edit"), {}), role: "stage" } },
   readings: Object.fromEntries(
     (["use", "feed", "derive", "worker", "port"] as const).map((kind) => [
       kind,
@@ -119,7 +122,7 @@ test("kernel fixture mounts an arbitrary graph, isolates every source, and resto
     for (const id of ["rpc", "command"])
       expect(await owner.control(id).run()).toMatchObject({
         state: "refused",
-        refusal: { message: expect.stringContaining("Fixture") },
+        refusal: { message: expect.stringContaining("unavailable") },
       });
     await owner.checkpoint();
     expect(forbidden).not.toHaveBeenCalled();
@@ -151,7 +154,7 @@ test.each(["", "unknown"])(
   },
 );
 
-test("URL fixture shows its seed and switches to a fresh memory Work without acquiring the real door", async () => {
+test("URL fixture switches to a fresh memory Work without acquiring the real door", async () => {
   const fetch = vi.fn(() => {
     throw Error("Real host called");
   });
@@ -198,15 +201,17 @@ test("URL fixture shows its seed and switches to a fresh memory Work without acq
   const unsubscribe = router.history.subscribe(router.load);
   await router.load();
   const Component = route.options.component!;
-  const view = render(
+  render(
     <RouterContextProvider router={router}>
       <Component />
     </RouterContextProvider>,
   );
   try {
-    await view.findByLabelText("Fixture lane");
     await waitFor(() => expect(owner.snapshot().work?.doc.value).toBe(1));
-    fireEvent.change(view.getByLabelText("Fixture seed"), { target: { value: "two" } });
+    await act(async () => {
+      router.history.push("/fixture-proof?fixture=two");
+      await router.load();
+    });
     await waitFor(() => expect(owner.snapshot().work?.doc.value).toBe(2));
     expect(fetch).not.toHaveBeenCalled();
   } finally {
@@ -257,4 +262,51 @@ test("a failed seed import stays isolated and refuses Work", async () => {
   expect(owner.snapshot().failure).toContain("missing chunk");
   expect((await owner.control("edit").run()).state).toBe("refused");
   owner.dispose();
+});
+
+test("separate instances of the same fixture have separate Work keys and edits", async () => {
+  const a = await fixtureEnvironment(graph, "one");
+  const b = await fixtureEnvironment(graph, "one");
+  const first = a.ports.getSnapshot();
+  expect(first.workKey).not.toEqual(b.ports.getSnapshot().workKey);
+  expect(first.workKey?.work).toBe(b.ports.getSnapshot().workKey?.work);
+  if (!first.workKey) throw Error("Fixture Work key missing");
+  expect(
+    (
+      await a.ports.write(first.workKey, {
+        kind: "apply",
+        expectedRevision: 0,
+        press: null,
+        patches: [{ path: ["value"], value: 7 }],
+      })
+    ).ok,
+  ).toBe(true);
+  expect(a.ports.getSnapshot().work?.doc.value).toBe(7);
+  expect(b.ports.getSnapshot().work?.doc.value).toBe(1);
+});
+
+test("a missing query seed refuses without falling through to its real read", async () => {
+  const fetch = vi.fn(() => {
+    throw Error("Real host reached");
+  });
+  vi.stubGlobal("fetch", fetch);
+  const missing = {
+    ...graph,
+    seeds: {
+      missing: {
+        title: "Missing query",
+        load: async () => ({ work: { value: 1 }, readings: {}, queries: {} }),
+      },
+    },
+  };
+  const owner = await createFixtureMount(missing, "missing");
+  try {
+    expect(await owner.control("query").run()).toMatchObject({
+      state: "refused",
+      refusal: { message: expect.stringContaining("Missing fixture seed") },
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    owner.dispose();
+  }
 });

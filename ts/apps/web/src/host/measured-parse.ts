@@ -44,7 +44,15 @@ export function useMeasuredParse(basis: unknown, scope?: HostCallOptions) {
       if (answer == null) return null;
       if (!("ok" in answer)) return answer;
       return answer.ok && answer.value != null && Number.isFinite(answer.value)
-        ? { value: String(answer.value), unit: word }
+        ? {
+            value: String(answer.value),
+            unit: word,
+            ...(answer.text != null && {
+              display: /feetFractionalInches|fractionalInches/.test(displayUnit.typeId)
+                ? answer.text
+                : `${answer.value} ${word}`,
+            }),
+          }
         : { refusal: answer.refusal ?? `Revit could not read "${text}" here.` };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the ref is re-armed by `basis` above

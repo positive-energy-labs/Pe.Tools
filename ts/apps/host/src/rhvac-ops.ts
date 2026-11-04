@@ -407,7 +407,7 @@ const parseJson = Effect.fnUntraced(function* (key: string, text: string, label:
 });
 
 function tempJsonPath(purpose: string): string {
-  const scratch = productScratchPath();
+  const scratch = productScratchPath(hostOwnership.rootPath);
   mkdirSync(scratch, { recursive: true });
   return join(scratch, `pe-rhvac-${purpose}-${randomUUID()}.json`);
 }

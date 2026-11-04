@@ -16,6 +16,7 @@ import { approvedPea } from "./callers.ts";
 test.each(["removed", "unchanged"] as const)(
   "queued native authority: %s preserves authored Work and the dispatched result",
   async (change) => {
+    // effect-edge: island, phase 5
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -98,6 +99,7 @@ test.each(["removed", "unchanged"] as const)(
                 async () => null,
                 async (execution) =>
                   execution.step("native", op, {}, async (id) => {
+                    // effect-edge: island, phase 5
                     const result = await Effect.runPromise(
                       Effect.result(bridge.invoke(op, {}, target.session, target.openId, id)),
                     );

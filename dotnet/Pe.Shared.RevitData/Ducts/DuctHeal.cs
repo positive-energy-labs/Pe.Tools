@@ -5,11 +5,11 @@ namespace Pe.Shared.RevitData.Ducts;
 // The `ducts.heal` contract (pressure-drop ledger, 2026-10-20: heal what we can, as real geometry).
 // The web classifies the candidates (`@pe/ducts-domain/heal.ts`); the op re-checks each one, runs it,
 // checks the result with its own post-check (Revit's "connected" is not proof) and refuses and rolls
-// back an item that fails. PreviewOnly runs every group and rolls all of it back; a real heal commits
+// back an item that fails. `ducts.heal.preview` runs every group and rolls all of it back; a real heal commits
 // one transaction per group.
 
 /// <summary>Groups are the approved systems; each group is one transaction on apply.</summary>
-public sealed record DuctHealRequest(bool PreviewOnly, IReadOnlyList<DuctHealGroup> Groups);
+public sealed record DuctHealRequest(IReadOnlyList<DuctHealGroup> Groups);
 
 /// <summary>Group is the route's group id (`g&lt;lowest element id&gt;`), a label only: the items name the geometry.</summary>
 public sealed record DuctHealGroup(string Group, IReadOnlyList<DuctHealItem> Items);

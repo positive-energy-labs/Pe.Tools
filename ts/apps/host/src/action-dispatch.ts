@@ -1,7 +1,8 @@
 /** Transient routing to the journal that owns a wire request. No execution or writable state lives here. */
+export type DispatchRefusal = { kind: "cancelled" | "refused"; message: string };
 type Owner = {
-  refusal(): string | null;
-  validate(): Promise<string | null>;
+  refusal(): DispatchRefusal | null;
+  validate(): Promise<DispatchRefusal | null>;
   dispatched(): Promise<void>;
 };
 const owners = new Map<string, Owner>();

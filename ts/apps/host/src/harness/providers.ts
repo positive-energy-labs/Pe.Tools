@@ -1,3 +1,4 @@
+import { hostOwnership } from "../host-ownership.ts";
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -6,10 +7,8 @@ import { productScratchPath } from "@pe/host-contracts/service-identity";
 import { dirname, join } from "node:path";
 import { PROTOCOL_VERSION, type SessionConfigOption } from "@agentclientprotocol/sdk";
 import {
-  accessSchema,
   addProviderRequestSchema,
   harnessIds,
-  type Access,
   type AddProviderRequest,
   type HarnessId,
   type HarnessModel,
@@ -18,9 +17,11 @@ import {
   type Readiness,
   type TraitOption,
 } from "@pe/agent-contracts";
-import { Effect } from "effect";
+import { Cause, Effect, Exit, Schema, Scope } from "effect";
+import { Spawner } from "./spawner.ts";
+import { MessagesReply, ModelList, ResponsesReply } from "./edge-schemas.ts";
 import { z } from "zod";
-import { productAccessPath, productProvidersPath } from "../product-paths.ts";
+import { productProvidersPath } from "../product-paths.ts";
 import { adapterCli, adapterLogin, adapters, openAdapter, stopChild } from "./adapter.ts";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
 import { mergePath } from "./user-shell.ts";
@@ -44,9 +45,12 @@ type Probed = Pick<Provider, "readiness" | "models" | "traits" | "probedAt">;
 
 const PROBE_MS = 20_000;
 const FRESH_MS = 60_000;
+const run = <A, E>(work: Effect.Effect<A, E>): Promise<A> =>
+  // effect-edge: island, phase 5
+  Effect.runPromise(work);
 const log = {
-  info: (message: string) => Effect.runSync(Effect.logInfo(message)),
-  warn: (message: string) => Effect.runSync(Effect.logWarning(message)),
+  info: (message: string) => void run(Effect.logInfo(message)),
+  warn: (message: string) => void run(Effect.logWarning(message)),
 };
 
 /* ── What a session offers: models and traits, shared by the probe and every thread ── */
@@ -221,12 +225,13 @@ function normalizeBaseUrl(harness: HarnessId, raw: string): string {
   return `${url.origin}${path || "/v1"}`;
 }
 
-async function upstream(
+async function upstream<A>(
   step: string,
   url: string,
   headers: Record<string, string>,
+  reply: Schema.Codec<A, unknown>,
   body?: unknown,
-): Promise<Record<string, any>> {
+): Promise<A> {
   const response = await fetch(url, {
     method: body ? "POST" : "GET",
     headers: { ...headers, "content-type": "application/json" },
@@ -245,8 +250,9 @@ async function upstream(
       response.status,
       classifyEndpointFailure(text, response.status),
     );
+  let json: unknown;
   try {
-    return JSON.parse(text) as Record<string, any>;
+    json = JSON.parse(text);
   } catch {
     throw new Refusal(
       `${step}: HTTP 200 from ${url} was not JSON`,
@@ -254,6 +260,14 @@ async function upstream(
       classifyEndpointFailure(text),
     );
   }
+  // Promise caller until phase 5: the reply is decoded, and a shape the API does not speak refuses.
+  const decoded = Schema.decodeUnknownExit(reply)(json);
+  if (Exit.isSuccess(decoded)) return decoded.value;
+  throw new Refusal(
+    `${step}: HTTP 200 from ${url} is not a ${step} reply: ${Cause.pretty(decoded.cause)}`,
+    200,
+    classifyEndpointFailure(text),
+  );
 }
 
 /** Codex speaks the Responses API to the endpoint, Claude the Messages API: each probe proves its own. */
@@ -269,22 +283,16 @@ async function checkEndpoint(
     ? { authorization: `Bearer ${apiKey}`, "x-api-key": apiKey, "anthropic-version": "2023-06-01" }
     : { authorization: `Bearer ${apiKey}` };
   const root = claude ? `${baseUrl}/v1` : baseUrl;
-  const listed = await upstream("models", `${root}/models`, headers);
-  const models: HarnessModel[] = Array.isArray(listed.data)
-    ? [
-        ...new Set<string>(
-          listed.data.flatMap((row: { id?: unknown }) =>
-            typeof row?.id === "string" && row.id.trim() ? [row.id] : [],
-          ),
-        ),
-      ]
-        .filter((id) =>
-          claude
-            ? /^claude-/i.test(id) || id === selectedModel
-            : codexModels?.some((model) => model.modelId === id),
-        )
-        .map((modelId) => ({ modelId, name: modelId }))
-    : [];
+  const listed = await upstream("models", `${root}/models`, headers, ModelList);
+  const models: HarnessModel[] = [
+    ...new Set(listed.data.flatMap((row) => (row.id.trim() ? [row.id] : []))),
+  ]
+    .filter((id) =>
+      claude
+        ? /^claude-/i.test(id) || id === selectedModel
+        : codexModels?.some((model) => model.modelId === id),
+    )
+    .map((modelId) => ({ modelId, name: modelId }));
   // A custom Responses model without Codex metadata can reject the reasoning/tool
   // fields the harness sends even when the tiny endpoint request succeeds.
   if (!claude && selectedModel && !codexModels?.some((model) => model.modelId === selectedModel))
@@ -315,22 +323,25 @@ async function checkEndpoint(
   const rejected = new Set<string>();
   for (const { modelId: model } of candidates) {
     try {
-      const reply = claude
-        ? await upstream("messages", `${root}/messages`, headers, {
+      const [reply, text] = claude
+        ? await upstream("messages", `${root}/messages`, headers, MessagesReply, {
             model,
             max_tokens: 16,
             messages: [{ role: "user", content: prompt }],
-          })
-        : await upstream("responses", `${root}/responses`, headers, {
+          }).then((r) => [r, r.content?.find((c) => c.type === "text")?.text] as const)
+        : await upstream("responses", `${root}/responses`, headers, ResponsesReply, {
             model,
             input: prompt,
             max_output_tokens: 64,
-          });
-      const text: unknown = claude
-        ? reply.content?.find((c: { type?: string }) => c?.type === "text")?.text
-        : reply.output
-            ?.find((o: { type?: string }) => o?.type === "message")
-            ?.content?.find((c: { type?: string }) => c?.type === "output_text")?.text;
+          }).then(
+            (r) =>
+              [
+                r,
+                r.output
+                  ?.find((o) => o.type === "message")
+                  ?.content?.find((c) => c.type === "output_text")?.text,
+              ] as const,
+          );
       if (typeof text !== "string" || !text.trim())
         throw new Refusal(
           `${claude ? "messages" : "responses"}: HTTP 200 but no assistant text`,
@@ -356,127 +367,145 @@ async function checkEndpoint(
 
 type AuthStatus = { kind?: string; label?: string };
 
-async function acpProbe(
+function acpProbe(
+  spawner: Spawner["Service"],
   record: ProviderRecord,
   env: Record<string, string | undefined>,
   stop: ProbeStop,
   detail: ProviderRefusal,
 ): Promise<Omit<Probed, "probedAt">> {
-  const none = { models: [], traits: [] };
-  const closed: Omit<Probed, "probedAt"> = {
-    readiness: { state: "unknown", message: "The provider manager closed." },
-    ...none,
-  };
-  // A probe child's cwd is the product scratch folder: none may outlive the manager.
-  if (stop.closed) return closed;
-  let reportAuth!: (status: AuthStatus) => void;
-  const authReported = new Promise<AuthStatus>((resolve) => {
-    reportAuth = resolve;
-  });
-  let opened: ReturnType<typeof openAdapter>;
-  try {
-    mkdirSync(productScratchPath(), { recursive: true });
-    opened = openAdapter(
-      record.harness,
-      productScratchPath(),
-      env,
-      () => ({
-        sessionUpdate: async () => {},
-        requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
-        // `_auth/status_update` from both adapters (seen 2026-10-08): kind `account` or `none`.
-        extNotification: async (method, params) => {
-          const status = (params as { authStatus?: AuthStatus }).authStatus;
-          if (method.endsWith("auth/status_update") && status?.kind) reportAuth(status);
-        },
-      }),
-      detail,
-    );
-  } catch (error) {
-    return {
-      readiness: {
-        state: "refused",
-        step: "installed",
-        message: `The ${adapters[record.harness].title} adapter is missing: ${String(error)}`,
-      },
-      ...none,
-    };
-  }
-  const { child, conn, stderr } = opened;
-  const signedOut = (message: string): Readiness =>
-    record.auth.kind === "endpoint"
-      ? {
-          state: "refused",
-          step: "endpoint",
-          message: `The harness refused the endpoint: ${message}`,
-        }
-      : detail.resolvedExecutable
-        ? {
-            state: "refused",
-            step: "signed-in",
-            message: `${adapters[record.harness].title} is not signed in (${message}).`,
-          }
-        : {
-            state: "refused",
-            step: "installed",
-            message: `${adapters[record.harness].title} is not installed: no ${adapters[record.harness].cli}.exe in its installer's folder or on your PATH.`,
+  return run(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const services = yield* Effect.context<Spawner | Scope.Scope>();
+        // effect-edge: island, phase 5
+        const settle = Effect.runPromiseWith(services);
+        return yield* Effect.promise(async (): Promise<Omit<Probed, "probedAt">> => {
+          const none = { models: [], traits: [] };
+          const closed: Omit<Probed, "probedAt"> = {
+            readiness: { state: "unknown", message: "The provider manager closed." },
+            ...none,
           };
-  const work = (async (): Promise<Omit<Probed, "probedAt">> => {
-    await conn.initialize({
-      protocolVersion: PROTOCOL_VERSION,
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
-    });
-    const session = await conn
-      .newSession({ cwd: productScratchPath(), mcpServers: [] })
-      .catch((error) => {
-        const message = String(error?.message ?? error);
-        if (/auth/i.test(message)) return { refused: message };
-        throw error;
-      });
-    if ("refused" in session) return { readiness: signedOut(session.refused), ...none };
-    const state = session as Parameters<typeof sessionOffer>[0];
-    const offer = sessionOffer(state);
-    // Session metadata can precede auth notification; absence is not proof of sign-in.
-    const status = record.auth.kind === "subscription" ? await authReported : null;
-    // An endpoint provider is not a login: Claude reports "Not logged in" under ANTHROPIC_* env.
-    if (record.auth.kind === "subscription" && status?.kind === "none")
-      return {
-        readiness: signedOut(status.label ?? "not logged in"),
-        models: offer.models,
-        traits: offer.traits,
-      };
-    if (record.auth.kind === "subscription" || record.harness === "claude")
-      return { readiness: { state: "ready" }, models: offer.models, traits: offer.traits };
-    // Endpoint Codex: native models only, current first. The config picker also synthesizes a row
-    // for an unknown current model; the unstable model state is native metadata, as model[effort].
-    const base = (modelId: string) => modelId.replace(/\[[^\]]+\]$/, "");
-    const current = offer.modelId && base(offer.modelId);
-    const models = [...new Set(state.models?.availableModels.map((m) => base(m.modelId)))]
-      .map(
-        (modelId) => offer.models.find((m) => m.modelId === modelId) ?? { modelId, name: modelId },
-      )
-      .sort((x, y) => Number(y.modelId === current) - Number(x.modelId === current));
-    return { readiness: { state: "ready" }, models, traits: offer.traits };
-  })();
-  const timeout = new Promise<Omit<Probed, "probedAt">>((resolve) =>
-    setTimeout(resolve, PROBE_MS, {
-      readiness: { state: "unknown", message: `The probe timed out after ${PROBE_MS / 1000} s.` },
-      ...none,
-    }).unref(),
+          // A probe child's cwd is the product scratch folder: none may outlive the manager.
+          if (stop.closed) return closed;
+          let reportAuth!: (status: AuthStatus) => void;
+          const authReported = new Promise<AuthStatus>((resolve) => {
+            reportAuth = resolve;
+          });
+          let opened: Effect.Success<ReturnType<typeof openAdapter>>;
+          try {
+            mkdirSync(productScratchPath(hostOwnership.rootPath), { recursive: true });
+            opened = await settle(
+              openAdapter(
+                record.harness,
+                productScratchPath(hostOwnership.rootPath),
+                env,
+                () => ({
+                  sessionUpdate: async () => {},
+                  requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+                  // `_auth/status_update` from both adapters (seen 2026-10-08): kind `account` or `none`.
+                  extNotification: async (method, params) => {
+                    const status = (params as { authStatus?: AuthStatus }).authStatus;
+                    if (method.endsWith("auth/status_update") && status?.kind) reportAuth(status);
+                  },
+                }),
+                detail,
+              ),
+            );
+          } catch (error) {
+            return {
+              readiness: {
+                state: "refused",
+                step: "installed",
+                message: `The ${adapters[record.harness].title} adapter is missing: ${String(error)}`,
+              },
+              ...none,
+            };
+          }
+          const { child, conn, stderr } = opened;
+          const signedOut = (message: string): Readiness =>
+            record.auth.kind === "endpoint"
+              ? {
+                  state: "refused",
+                  step: "endpoint",
+                  message: `The harness refused the endpoint: ${message}`,
+                }
+              : detail.resolvedExecutable
+                ? {
+                    state: "refused",
+                    step: "signed-in",
+                    message: `${adapters[record.harness].title} is not signed in (${message}).`,
+                  }
+                : {
+                    state: "refused",
+                    step: "installed",
+                    message: `${adapters[record.harness].title} is not installed: no ${adapters[record.harness].cli}.exe in its installer's folder or on your PATH.`,
+                  };
+          const work = (async (): Promise<Omit<Probed, "probedAt">> => {
+            await conn.initialize({
+              protocolVersion: PROTOCOL_VERSION,
+              clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
+            });
+            const session = await conn
+              .newSession({ cwd: productScratchPath(hostOwnership.rootPath), mcpServers: [] })
+              .catch((error) => {
+                const message = String(error?.message ?? error);
+                if (/auth/i.test(message)) return { refused: message };
+                throw error;
+              });
+            if ("refused" in session) return { readiness: signedOut(session.refused), ...none };
+            const state = session as Parameters<typeof sessionOffer>[0];
+            const offer = sessionOffer(state);
+            // Session metadata can precede auth notification; absence is not proof of sign-in.
+            const status = record.auth.kind === "subscription" ? await authReported : null;
+            // An endpoint provider is not a login: Claude reports "Not logged in" under ANTHROPIC_* env.
+            if (record.auth.kind === "subscription" && status?.kind === "none")
+              return {
+                readiness: signedOut(status.label ?? "not logged in"),
+                models: offer.models,
+                traits: offer.traits,
+              };
+            if (record.auth.kind === "subscription" || record.harness === "claude")
+              return { readiness: { state: "ready" }, models: offer.models, traits: offer.traits };
+            // Endpoint Codex: native models only, current first. The config picker also synthesizes a row
+            // for an unknown current model; the unstable model state is native metadata, as model[effort].
+            const base = (modelId: string) => modelId.replace(/\[[^\]]+\]$/, "");
+            const current = offer.modelId && base(offer.modelId);
+            const models = [...new Set(state.models?.availableModels.map((m) => base(m.modelId)))]
+              .map(
+                (modelId) =>
+                  offer.models.find((m) => m.modelId === modelId) ?? { modelId, name: modelId },
+              )
+              .sort((x, y) => Number(y.modelId === current) - Number(x.modelId === current));
+            return { readiness: { state: "ready" }, models, traits: offer.traits };
+          })();
+          const timeout = new Promise<Omit<Probed, "probedAt">>((resolve) =>
+            setTimeout(resolve, PROBE_MS, {
+              readiness: {
+                state: "unknown",
+                message: `The probe timed out after ${PROBE_MS / 1000} s.`,
+              },
+              ...none,
+            }).unref(),
+          );
+          try {
+            return await Promise.race([work, timeout, stop.promise.then(() => closed)]);
+          } catch (error) {
+            return {
+              readiness: {
+                state: "unknown",
+                message:
+                  `The probe failed: ${String((error as Error)?.message ?? error)} ${stderr().trim().slice(-300)}`.trim(),
+              },
+              ...none,
+            };
+          } finally {
+            await settle(stopChild(child));
+          }
+        });
+      }),
+    ).pipe(Effect.provideService(Spawner, spawner)),
   );
-  try {
-    return await Promise.race([work, timeout, stop.promise.then(() => closed)]);
-  } catch (error) {
-    return {
-      readiness: {
-        state: "unknown",
-        message:
-          `The probe failed: ${String((error as Error)?.message ?? error)} ${stderr().trim().slice(-300)}`.trim(),
-      },
-      ...none,
-    };
-  } finally {
-    await stopChild(child);
-  }
 }
 
 /* ── The store and the routes ── */
@@ -507,6 +536,8 @@ const slug = (name: string) =>
 type ConsoleResult = Omit<NonNullable<ProviderRefusal["console"]>, "outputTail">;
 
 export type ProvidersOptions = {
+  /** The host's one Spawner (its scope owns every probe child); never a per-probe backend. */
+  spawner: Spawner["Service"];
   /** The user's shell PATH, read per spawn; null keeps the host's. */
   shellPath?: () => Promise<string | null>;
   /** Probe every provider in the background now. */
@@ -570,7 +601,10 @@ function openConsole(
   env: Record<string, string | undefined>,
   opened: () => void,
 ): Promise<ConsoleResult> {
-  const scriptPath = join(productScratchPath(), `pe-tools-console-${randomUUID()}.ps1`);
+  const scriptPath = join(
+    productScratchPath(hostOwnership.rootPath),
+    `pe-tools-console-${randomUUID()}.ps1`,
+  );
   mkdirSync(dirname(scriptPath), { recursive: true });
   writeFileSync(scriptPath, consoleScript(command), "utf8");
   const child = spawn(
@@ -789,6 +823,7 @@ export function createProviders(options: ProvidersOptions) {
     };
     const finish = (probed: Probed) => finishProbe(record, probed, detail);
     const running = acpProbe(
+      options.spawner,
       record,
       { ...cleanHarnessEnv(process.env), ...(await userPath()), ...authEnv(record) },
       stop,
@@ -874,20 +909,6 @@ export function createProviders(options: ProvidersOptions) {
     return next;
   }
 
-  const readAccess = (): Access => {
-    const path = productAccessPath();
-    try {
-      return existsSync(path)
-        ? accessSchema.parse(JSON.parse(readFileSync(path, "utf8")))
-        : { guarded: true };
-    } catch {
-      return {
-        guarded: true,
-        readError: `Cannot read ${path}. Agent approvals stay guarded. Repair or restore the file before changing approvals; its bytes are preserved.`,
-      };
-    }
-  };
-
   if (options.probeOnStart ?? true)
     for (const record of records())
       probe(record).catch((error) =>
@@ -958,21 +979,14 @@ export function createProviders(options: ProvidersOptions) {
           { error: "This route reads a JSON body: send content-type: application/json" },
           415,
         );
-      const parsed = schema.safeParse(await request.json().catch(() => null));
+      const parsed = schema.safeParse(
+        await request.json().catch((error) => {
+          console.error("providers: asynchronous operation failed", error);
+          return null;
+        }),
+      );
       return parsed.success ? parsed.data : json({ error: parsed.error.message }, 400);
     };
-    if (declared.id === "access.get" || declared.id === "access.set") {
-      if (method === "GET") return json(readAccess());
-      if (method !== "PUT") return json({ error: `No route ${method} ${url.pathname}` }, 404);
-      const input = await body(accessSchema);
-      if (input instanceof Response) return input;
-      const current = readAccess();
-      if (current.readError) return json({ error: current.readError }, 409);
-      writeJson(productAccessPath(), { guarded: input.guarded });
-      notify();
-      log.info(`access set: guarded ${input.guarded}`);
-      return json(input);
-    }
     const rawId = declared.params.id;
     if (!rawId) {
       if (method === "GET") {
@@ -1068,12 +1082,7 @@ export function createProviders(options: ProvidersOptions) {
     /** Every shell receives the same safe provider views and the same read failure. */
     snapshot: async () => {
       const all = records();
-      const access = readAccess();
-      return {
-        providers: all.map(view),
-        access,
-        readError: providerReadError ?? access.readError ?? null,
-      };
+      return { providers: all.map(view), readError: providerReadError ?? null };
     },
     subscribe: (listener: () => void) => {
       listeners.add(listener);
@@ -1139,13 +1148,12 @@ export function createProviders(options: ProvidersOptions) {
           throw error;
         }
     },
-    access: readAccess,
     /** Every endpoint key, so no thread record keeps one even when a harness echoes it. */
     keys: () => {
       stored();
       return [...knownKeys];
     },
-    /** The web handler for `/pe/providers*` and `/pe/access`. */
+    /** The web handler for `/pe/providers*`. */
     fetch: (request: Request) =>
       handle(request).catch((error) => json({ error: String(error?.message ?? error) }, 502)),
   };

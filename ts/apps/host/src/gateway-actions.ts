@@ -13,7 +13,7 @@ import {
 import { z } from "zod";
 import { refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
 import { productPagesRootPath } from "./product-paths.ts";
-import { resolveSdkSession, type SdkSession } from "./sdk-session.ts";
+import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { freezeScript, requireScriptSuccess } from "./operation-script.ts";
 import { validateNativeInput } from "./native-input.ts";
 import { Effect, Schema } from "effect";
@@ -547,10 +547,11 @@ function temporarySucceeded(value: unknown): boolean {
 /** The bridge session now serving the original's SDK session, whatever process it runs in. */
 async function successorOf(bridge: RevitBridge["Service"] | undefined, sdkSession: unknown) {
   if (!bridge || typeof sdkSession !== "string") return undefined;
-  const view = (await Effect.runPromise(bridge.list)).find(
-    (s) => s.connected && s.sdkSessionId === sdkSession && s.processId !== undefined,
+  // effect-edge: island, phase 5
+  const view = await Effect.runPromise(
+    SdkSession.resolve(bridge, { sdkSession }).pipe(Effect.orElseSucceed(() => undefined)),
   );
-  return view
+  return view?.processId !== undefined
     ? {
         sdkSessionId: sdkSession,
         pid: view.processId!,

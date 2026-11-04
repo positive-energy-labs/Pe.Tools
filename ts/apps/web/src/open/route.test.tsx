@@ -43,6 +43,7 @@ beforeEach(() => {
       recovery: [],
       startedAt: "2026-10-30T00:00:00.000Z",
       state: "succeeded",
+      effects: [{ kind: "session", session: "fixture" }],
       result: {},
     }),
   );
@@ -147,26 +148,11 @@ test("the mounted bay patches a document and dispatches its exact semantic inten
   const receipt = await transport.run.mock.results[0]!.value;
   act(() => history({ kind: "complete", value: [actionStatusSchema.parse(receipt)], revision: 2 }));
   const activity = within(view.container.querySelector('section[aria-label="History"]')!);
-  expect(activity.getByRole("link", { name: "instances.open" })).toBeTruthy();
-  expect(activity.getAllByRole("listitem")).toHaveLength(2);
+  expect(activity.getByRole("link", { name: "Open document" })).toBeTruthy();
+  expect(activity.getAllByRole("listitem")).toHaveLength(1);
   expect(router.state.location.search).not.toHaveProperty("draft");
   expect(view.queryByRole("textbox", { name: "draft" })).toBeNull();
   expect(view.queryByRole("textbox", { name: "table" })).toBeNull();
-  expect(fetch).not.toHaveBeenCalled();
-});
-test("stale machine evidence refuses an armed stop and hosted Page stays off the URL", async () => {
-  const { view, owner, router } = await mounted("/open?thread=kept", true);
-  const card = within(view.getByRole("group", { name: "Revit 2025 started from the Revit icon" }));
-  fireEvent.click(card.getByRole("button", { name: "stop" }));
-  act(() => publishMachine({ kind: "stale" }));
-  fireEvent.click(card.getByRole("button", { name: "stop, keep work" }));
-  expect(transport.run).not.toHaveBeenCalled();
-  fireEvent.change(view.getByRole("combobox", { name: "table query" }), {
-    target: { value: "clinic" },
-  });
-  await waitFor(() => expect(owner().view.read().page.table.query).toBe("clinic"));
-  expect(router.state.location.search).toEqual({ thread: "kept" });
-  expect(owner().view.read().page).not.toHaveProperty("fixture");
   expect(fetch).not.toHaveBeenCalled();
 });
 

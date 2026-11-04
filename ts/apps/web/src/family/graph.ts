@@ -1,5 +1,8 @@
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-family Declaration 213 > 60 after kernel defaults. Read/build/apply/capture workflows and receipt dependencies remain distinct.
 import { familyQueries } from "../../../../packages/mcps/src/shared/query-client";
 import { z } from "zod";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 import {
   commands,
   familyDraftRouteState,
@@ -22,7 +25,7 @@ import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { presentFamilyPlan } from "./review";
 
 export const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
-export const familyPageSchema = routeAddress("family").schema;
+export const familyPageSchema = routeAddress("family").schema.extend({ family: z.enum(["current"]).default("current") });
 export type FamilyPage = z.output<typeof familyPageSchema>;
 const fields = { ...threadListFields, ...familyAddress.fields };
 const refusal = z.string().nullable().default(null);
@@ -32,7 +35,27 @@ const familyCellParameter = (key: string) => {
   return root === "parameters" && name ? name : null;
 };
 
-export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
+export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph({
+  directory: {
+    path: "/family",
+    title: "Family",
+    label: "Family Foundry",
+    exposure: "Main",
+    runtimeNeed: "Revit for capture/apply; portable authoring is separate",
+    icon: "Boxes",
+    category: "Build / audit families",
+    blurb:
+      "One family, two lanes: an authored family.json (anatomy, matrix, build) or the family open in Revit's editor. Binding picks the lane; capture bridges them.",
+    aliases: ["rfa", "author", "build", "capture", "matrix"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+    resume: "document",
+  },
   key: familyDraftRouteState.route,
   address: "family",
   name: "Family",
@@ -51,20 +74,27 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
   needs: "family",
   work: familyDraftRouteState.schema,
   // A saved member is input to the document-owned draft, not a different Work.
+  subjectField: { kind: "singleton", field: "family", noun: "family document", keyKind: "name", roster: "document", detail: "family", pane: "matrix", },
   fields: {
+    family: { ...field(familyPageSchema.shape.family, {}) },
     threadSearch: { ...fields.threadSearch, role: "query" },
     threadSort: { ...fields.threadSort, role: "query" },
-    stage: { ...fields.stage, role: "stage" },
-    pod: { ...fields.pod, role: "subject" },
-    path: { ...fields.path, role: "subject" },
-    pane: { ...fields.pane, role: "pose", url: false },
+    stage: fields.stage,
+    pod: { ...fields.pod, role: "query" },
+    path: { ...fields.path, role: "query" },
+    pane: { ...fields.pane, url: false },
     query: { ...fields.query, role: "query" },
     sort: { ...fields.sort, role: "query" },
-    hidden: { ...fields.hidden, role: "pose" },
-    overlay: { ...fields.overlay, role: "pose" },
-    drill: { ...fields.drill, role: "selection" },
+    hidden: fields.hidden,
+    overlay: fields.overlay,
+    drill: { ...fields.drill, role: "query" },
     inspector: { ...fields.inspector, role: "selection" },
-    doc: { ...fields.doc, role: "pose" },
+    doc: fields.doc,
+  },
+  workFields: {
+    reading: { label: "reading", internal: true },
+    spec: { label: "attached spec" },
+    takenAt: { label: "capture time", internal: true },
   },
   cells: [
     {
@@ -78,39 +108,31 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
     },
   ],
   readings: {
+    family: { kind: "derive", source: "family.draft", retire: "page", deps: ["profile", "captureReceipt"] },
+    document: { kind: "derive", source: "family.document", },
     profile: {
-      kind: "use",
       source: "family.profile",
-      retire: "page",
       args: (page) => [page.pod, page.path],
     },
-    receipts: { kind: "use", source: "family.receipts", retire: "target" },
+    receipts: {  source: "family.receipts", },
     applyReceipt: {
-      kind: "use",
       source: "family.apply-receipt",
-      retire: "target",
       deps: ["receipts"],
     },
     captureReceipt: {
-      kind: "use",
       source: "family.capture-receipt",
-      retire: "target",
       deps: ["receipts"],
     },
     buildReceipt: {
-      kind: "use",
       source: "family.build-receipt",
-      retire: "page",
       deps: ["receipts", "profile"],
       args: (page) => [page.pod, page.path],
     },
     spec: {
-      kind: "use",
       source: "family.spec",
-      retire: "page",
       args: (page) => [page.pod, page.path],
     },
-    pods: { kind: "use", source: "family.pods", retire: "never" },
+    pods: {  source: "family.pods", retire: "never" },
   },
   verbs: {
     read: queryVerb(
@@ -191,10 +213,8 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
           const preview = await prepareCommand(scope, "family.plan", {}, NATIVE_APPLY_WAIT_S);
           return { ...preview, plan: familyPlanResultSchema.parse(preview.response) };
         },
-        intent: (_scope, _input, _answers, ticket) => ({
-          plan: familyPlanResultSchema.parse((ticket?.evidence as { plan?: unknown })?.plan).id,
-          include: "all",
-        }),
+        stage: () => ({ include: "all" }),
+        intent: () => ({}),
       },
     ),
     capture: commandVerb(
@@ -206,7 +226,8 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
       },
       {
         ready: (_, input) => input.refusal,
-        intent: (_, input) => ({ pod: input.pod, ...(input.spec ? { spec: input.spec } : {}) }),
+        stage: (_, input) => ({ pod: input.pod, ...(input.spec ? { spec: input.spec } : {}) }),
+        intent: () => ({}),
         lands: (result) => {
           const member = z
             .object({ member: z.object({ pod: z.string(), path: z.string() }) })
@@ -236,9 +257,8 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
               }
             : { sentence: "Family build completed.", rows: [] };
         },
-        intent: (_scope, _input, _answers, ticket) => ({
-          source: podMemberSourceSchema.parse((ticket?.evidence as { source?: unknown })?.source),
-        }),
+        stage: (_, input) => ({ source: input.source! }),
+        intent: () => ({}),
       },
     ),
     "attach-spec": commandVerb(
@@ -258,19 +278,16 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
       label: "Family parameters",
       purpose: "Edit one family's parameters across its types",
       draws: ["profile", "receipts", "applyReceipt", "captureReceipt", "buildReceipt"],
-      verbs: [],
     },
     doc: {
       label: "Family document",
       purpose: "Inspect attached cut-sheet evidence",
       draws: ["spec"],
-      verbs: [],
     },
     work: {
       label: "Family Work",
       purpose: "Review keyed cells and original receipts",
       draws: ["receipts"],
-      verbs: [],
     },
     spec: {
       label: "Family members",
@@ -284,7 +301,6 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
     history: {
       label: "Saved family readings",
       purpose: "Inspect immutable captures",
-      draws: [],
       verbs: Object.assign(
         (row: unknown) => ((row as { readingId?: unknown } | null)?.readingId ? ["saved"] : []),
         { ids: ["saved"] },
@@ -332,4 +348,4 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = {
     history: { word: "History", panes: ["history"], verbs: ["close-inspector"] },
   },
   stageOrder: ["audit", "apply", "history"],
-};
+});

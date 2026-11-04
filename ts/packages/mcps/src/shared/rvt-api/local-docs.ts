@@ -11,7 +11,7 @@
  * product root.
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { productRoot } from "@pe/host-contracts/service-identity";
+import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -71,7 +71,7 @@ function findRevitInstallXmls(year: number): string[] {
 }
 
 function defaultCacheDir(): string {
-  return process.env.PE_RVT_DOCS_CACHE ?? join(productRoot(), "cache", "rvt-docs");
+  return process.env.PE_RVT_DOCS_CACHE ?? join(runtimeRoot(), "cache", "rvt-docs");
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +269,7 @@ function openIndex(year: number, opts: LocalDocsOptions = {}): DatabaseSync | nu
         | undefined;
       if (row?.value === wanted) return db;
       db.close();
-    } catch {
+    } catch (error) { console.warn("ts/packages/mcps/src/shared/rvt-api/local-docs.ts: fallback after failure", error);
       // corrupt/old cache falls through to rebuild
     }
     rmSync(dbPath, { force: true });
@@ -304,7 +304,7 @@ function findExamplesPath(): string | null {
   // Installed layout is fixed: the index ships beside the Host bundle. The add-in no longer lives
   // under the product root, so nothing here reaches into a Revit payload. The index is staged into
   // dist-installed/ beside Pe.Host.exe by CreateInstallerModule.StageUsageIndex at pack time.
-  const candidate = join(productRoot(), "bin", "host", "examples.json");
+  const candidate = join(runtimeRoot(), "bin", "host", "examples.json");
   return existsSync(candidate) ? candidate : null;
 }
 

@@ -1,8 +1,10 @@
+using Newtonsoft.Json;
 using Autodesk.Revit.DB.ExtensibleStorage;
 using Autodesk.Revit.DB.ExternalService;
 using Autodesk.Revit.DB.Mechanical;
 using Pe.Revit.Failures;
 using Pe.Revit.Tasks;
+using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Ducts;
 using Serilog;
 using System.Globalization;
@@ -71,9 +73,9 @@ public static class DuctApplier {
         }
     }
 
-    public static DuctApplyResult Apply(Document doc, DuctApplyRequest request) {
+    public static DuctApplyResult Apply(Document doc, DuctApplyRequest request, bool preview) {
         // Name by name: a staged slot wins over the stored one, so a partial request never drops a stored name.
-        var slots = (request.Slots?.Over(request.Store.Slots) ?? request.Store.Slots ?? new DuctParameterSlots()).WithDefaults();
+        var slots = (request.Slots ?? new DuctParameterSlotOverrides()).Resolve(request.Store.Slots);
         var schemas = new Dictionary<Guid, Schema?> {
             [SpecificCoefficient] = Schema(SpecificCoefficient),
             [SpecificLoss] = Schema(SpecificLoss),
@@ -94,12 +96,14 @@ public static class DuctApplier {
 
         foreach (var w in request.Fittings ?? [])
             items.Add(Duplicate("fitting", w.Id) ?? Plan("fitting", w.Id, () => Fitting(doc, w, slots, schemas)));
+        // TODO: Chadds DS-1 14577394 / SH-1 14577396 are Mechanical Equipment; prove a
+        // parameter-backed component-drop write/readback before extending the accessory-only writer.
         foreach (var w in request.Components ?? [])
             items.Add(Duplicate("component", w.Id) ?? Plan("component", w.Id, () => Lossy(doc, w.Id, "component", BuiltInCategory.OST_DuctAccessory, SpecificLoss, schemas,
                 [(PressureLossField, Finite(w.InWg) ? UnitUtils.ConvertToInternalUnits(w.InWg, InWg).ToString("R", CultureInfo.InvariantCulture) : "")], w.InWg, $"specific-loss {w.InWg:0.####} in-wg")));
         foreach (var w in request.Terminals ?? []) items.Add(Duplicate("terminal", w.Id) ?? Plan("terminal", w.Id, () => Terminal(doc, w, slots)));
         foreach (var w in request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Plan("equipment", w.Id, () => Equipment(doc, w, slots)));
-        foreach (var w in request.TerminalFlows ?? []) items.Add(Duplicate("terminal-flow", w.Id) ?? Plan("terminal-flow", w.Id, () => TerminalFlow(doc, w, slots)));
+        foreach (var w in request.TerminalFlows ?? []) items.Add(Duplicate("terminal-flow", w.Id) ?? Plan("terminal-flow", w.Id, () => TerminalFlow(doc, w)));
         foreach (var w in request.EquipmentFlows ?? []) items.Add(Duplicate("equipment-flow", w.Id) ?? Plan("equipment-flow", w.Id, () => EquipmentFlow(doc, w, slots)));
         SharedTypes(items, "equipment", (request.Equipment ?? []).Select(w => (w.Id, w.ExternalStaticInWg)), "fan statics");
         SharedTypes(items, "equipment-flow", (request.EquipmentFlows ?? []).Select(w => (w.Id, w.Cfm)), "fan flows");
@@ -114,8 +118,10 @@ public static class DuctApplier {
             store.Refuse($"stale: the model holds store revision {storeRevision}, the request carries {request.Store.WorkRevision}; re-read ducts.snapshot");
         items.Add(store);
 
-        if (request.PreviewOnly || items.All(i => i.Outcome != "planned"))
-            return Result(request.PreviewOnly, items, null, storeRevision);
+        if (preview)
+            return Result(true, items, null, storeRevision) with { Worksharing = Borrows(doc, items) };
+        if (items.All(i => i.Outcome != "planned"))
+            return Result(false, items, null, storeRevision);
         if (store.Outcome == "refused") {
             foreach (var i in items.Where(i => i.Outcome == "planned")) i.Refuse($"not written: the store was refused ({store.Reason})");
             return Result(false, items, null, storeRevision);
@@ -165,14 +171,16 @@ public static class DuctApplier {
     private static IEnumerable<Item> StoreEntries(DuctLossStore? stored, DuctLossStore asked, DuctParameterSlots slots) {
         Item Entry(long? id, string kind, string? key, string before, string after) =>
             new(id, kind, before) { Key = key, After = after, Write = () => after };
-        var had = (stored?.Slots ?? new DuctParameterSlots()).WithDefaults();
+        // A model with no record held no slot: "none", never the C# defaults (Manual D #5 defect 8 read
+        // PE_M_Fan_AirFlowDesign there while the resolver used PE_M_Fan_AirFlow).
+        var had = stored?.Slots?.Resolve();
         var names = new[] {
-            ("fanStatic", had.FanStatic, slots.FanStatic),
-            ("fanFlow", had.FanFlow, slots.FanFlow),
-            ("componentDrop", had.ComponentDrop, slots.ComponentDrop),
-            ("terminalDrop", had.TerminalDrop, slots.TerminalDrop),
-            ("fittingCoefficient", had.FittingCoefficient, slots.FittingCoefficient),
-            ("terminalFlow", had.TerminalFlow, slots.TerminalFlow)
+            ("fanStatic", had?.FanStatic, slots.FanStatic),
+            ("fanFlow", had?.FanFlow, slots.FanFlow),
+            ("componentDrop", had?.ComponentDrop, slots.ComponentDrop),
+            ("terminalDrop", had?.TerminalDrop, slots.TerminalDrop),
+            ("fittingCoefficient", had?.FittingCoefficient, slots.FittingCoefficient),
+            ("terminalFlow", had?.TerminalFlow, slots.TerminalFlow)
         };
         foreach (var (name, before, after) in names)
             if (!string.Equals(before, after, StringComparison.Ordinal))
@@ -208,7 +216,8 @@ public static class DuctApplier {
         if (lossy.Count > 0)
             stages.Add(("not-defined", () => {
                 foreach (var i in lossy)
-                    _ = i.Element!.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM).Set(NotDefined.ToString());
+                    if (!i.Element!.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM).Set(NotDefined.ToString()))
+                        throw new InvalidOperationException($"Element {i.Id}: Revit refused to reset the loss method");
             }));
         stages.Add(("losses", () => {
             // Terminals, equipment and the store first: a terminal's SubTransaction rollback after the server change
@@ -219,7 +228,12 @@ public static class DuctApplier {
                 var entity = new Entity(schema);
                 foreach (var (field, value) in fields) entity.Set(field, value);
                 i.Element!.SetEntity(entity);
-                _ = i.Element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM).Set(server.ToString());
+                var method = i.Element.get_Parameter(BuiltInParameter.RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM);
+                if (!method.Set(server.ToString()) || !Guid.TryParse(method.AsString(), out var actual) || actual != server)
+                    throw new InvalidOperationException($"Element {i.Id}: Revit refused loss method {Name(server.ToString())}");
+                var written = i.Element.GetEntity(schema);
+                if (!written.IsValid() || fields.Any(f => written.Get<string>(schema.GetField(f.Field)) != f.Value))
+                    throw new InvalidOperationException($"Element {i.Id}: the loss value did not read back under {Name(server.ToString())}");
                 i.Outcome = "written";
             }
         }));
@@ -264,29 +278,17 @@ public static class DuctApplier {
         }
     }
 
-    /// <summary>
-    ///     A fitting under the ruled composite (2026-10-08, 2026-10-12): the Pe server charges the family's own
-    ///     coefficient when the family carries one, else prices the legs live from the rule's table; Specific
-    ///     Coefficient is the frozen export. Each refuses what it cannot honor: no server in this Revit, neither a
-    ///     coefficient parameter on the family nor a table named.
-    /// </summary>
+    /// <summary>Native code validates and persists host results. Tables are provenance, never a native pricing fallback.</summary>
     private static Item Fitting(Document doc, DuctFittingWrite w, DuctParameterSlots slots, Dictionary<Guid, Schema?> schemas) {
         const string kind = "fitting";
         switch (w.Method) {
             case DuctFittingMethod.PeServer: {
                 var e = doc.GetElement(w.Id.ToElementId());
-                var table = w.Table?.Trim().ToUpperInvariant() ?? "";
-                if (e is not null && e.Category.ToBuiltInCategory() == BuiltInCategory.OST_DuctFitting) {
-                    if (!PeLossServer.IsRegistered) return new Item(w.Id, kind, null) { Element = e }.Refuse("the Pe loss server is not registered in this Revit; it registers at Pe.App startup");
-                    var own = e.LookupParameter(slots.FittingCoefficient) is { StorageType: StorageType.Double };
-                    if (!own && table.Length == 0)
-                        return new Item(w.Id, kind, null) { Element = e }.Refuse($"the family has no number parameter '{slots.FittingCoefficient}' (the FittingCoefficient slot) and the write names no table; stamp it with ducts.family-patch or name the rule's table");
-                    if (table.Length > 0 && PeLossServer.Table(table) is null)
-                        return new Item(w.Id, kind, null) { Element = e }.Refuse($"Revit ships no readable ASHRAE table {table}");
-                }
+                if (!PeLossServer.IsRegistered) return new Item(w.Id, kind, null) { Element = e }.Refuse("the Pe loss server is not registered");
+                if (w.Results is not { Count: > 0 } || w.Results.Any(r => !PeLossServer.Valid(r)))
+                    return new Item(w.Id, kind, null) { Element = e }.Refuse("host-priced leg results with finite coefficients and velocity-pressure bases are required");
                 return Lossy(doc, w.Id, kind, BuiltInCategory.OST_DuctFitting, PeLossServer.Id, schemas,
-                    [(PeLossServer.ParameterField, slots.FittingCoefficient), (PeLossServer.TableField, table)], 0,
-                    table.Length > 0 ? $"pe-server reads '{slots.FittingCoefficient}', else {table}" : $"pe-server reads '{slots.FittingCoefficient}'");
+                    [(PeLossServer.ResultsField, JsonConvert.SerializeObject(w.Results))], 0, $"pe-server host results ({w.Results.Count} legs)");
             }
             case DuctFittingMethod.SpecificCoefficient:
                 return Lossy(doc, w.Id, kind, BuiltInCategory.OST_DuctFitting, SpecificCoefficient, schemas,
@@ -352,6 +354,8 @@ public static class DuctApplier {
             return item.Refuse($"the connector's loss method is {method}; Revit takes a drop only when the family connector is Specific Loss");
         if (!Finite(w.InWg) || w.InWg < 0) return item.Refuse("the drop must be a finite number of 0 or more");
         if (had is { } h && Math.Abs(h - w.InWg) < 1e-6) return item.Unchanged($"{w.InWg:0.#####} in-wg");
+        // TODO: Chadds louver 14088043 has no writable default TerminalDrop parameter;
+        // establish its actual connector-bound parameter before claiming this loss writes successfully.
         var bound = slots.TerminalDrop is { } name ? e.LookupParameter(name) : null;
         if (slots.TerminalDrop is { } named && (bound is null || bound.IsReadOnly || bound.StorageType != StorageType.Double))
             return item.Refuse($"the instance has no writable number parameter '{named}' (the TerminalDrop slot)");
@@ -432,29 +436,35 @@ public static class DuctApplier {
         };
     }
 
-    /// <summary>The terminal's design flow, written to the TerminalFlow slot on the instance (a terminal carries no type fallback).</summary>
-    private static Item TerminalFlow(Document doc, DuctFlowWrite w, DuctParameterSlots slots) {
+    /// <summary>The terminal's design flow, written to its previewed slot on the instance (a terminal carries no type fallback).</summary>
+    // TODO: Prove per-element Flow writes and readback in controlled u2-r2; deterministic slot checks do not prove Revit writability.
+    private static Item TerminalFlow(Document doc, DuctFlowWrite w) {
         const string kind = "terminal-flow";
+        var slot = w.Slot;
+        if (string.IsNullOrWhiteSpace(slot)) return new Item(w.Id, kind, null).Refuse("no per-element airflow slot was previewed");
+        IReadOnlyList<Parameter> Parameters(Element element) => slot == "revit:Flow"
+            ? element.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_PARAM) is { } flow ? [flow] : []
+            : element.GetParameters(slot).ToList();
         var e = doc.GetElement(w.Id.ToElementId());
         if (e is null) return new Item(w.Id, kind, null).Refuse($"element {w.Id} is not in the document");
         // A family parameter can share the built-in `Flow`'s name: write the writable air flow one.
-        var named = e.GetParameters(slots.TerminalFlow);
+        var named = Parameters(e);
         var p = named.FirstOrDefault(x => !x.IsReadOnly && IsAirFlow(x)) ?? named.FirstOrDefault();
         var item = new Item(w.Id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{Shown(p, Cfm):0.####} cfm" : null) { Element = e };
         if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_DuctTerminal) return item.Refuse($"not an air terminal ({e.Category?.Name ?? "no category"})");
-        if (p is null) return item.Refuse($"the instance has no '{slots.TerminalFlow}' (the TerminalFlow slot)");
+        if (p is null) return item.Refuse($"the instance has no '{slot}' (the TerminalFlow slot)");
         if (p.StorageType != StorageType.Double || p.Definition.GetDataType() != SpecTypeId.AirFlow)
-            return item.Refuse($"'{slots.TerminalFlow}' is not an air flow parameter");
-        if (p.IsReadOnly) return item.Refuse($"'{slots.TerminalFlow}' is read-only (a formula, a reporting parameter or a built-in drives it)");
+            return item.Refuse($"'{slot}' is not an air flow parameter");
+        if (p.IsReadOnly) return item.Refuse($"'{slot}' is read-only (a formula, a reporting parameter or a built-in drives it)");
         if (!Finite(w.Cfm) || w.Cfm < 0) return item.Refuse("the flow must be a finite number of 0 or more");
-        var after = $"'{slots.TerminalFlow}' {w.Cfm:0.####} cfm";
+        var after = $"'{slot}' {w.Cfm:0.####} cfm";
         if (p.HasValue && Math.Abs(Shown(p, Cfm) - w.Cfm) < 1e-6 * Math.Max(1, Math.Abs(w.Cfm))) return item.Unchanged(after);
         return item with {
             After = after,
-            Write = () => e.GetParameters(slots.TerminalFlow).FirstOrDefault(x => !x.IsReadOnly && IsAirFlow(x))
+            Write = () => Parameters(e).FirstOrDefault(x => !x.IsReadOnly && IsAirFlow(x))
                 ?.Set(UnitUtils.ConvertToInternalUnits(w.Cfm, Cfm)) == true
                 ? after
-                : throw new InvalidOperationException($"Revit rejected '{slots.TerminalFlow}'")
+                : throw new InvalidOperationException($"Revit rejected '{slot}'")
         };
     }
 
@@ -485,7 +495,8 @@ public static class DuctApplier {
             // The rulings as sent: the web composes the model's rulings with the person's pending deltas (`StoreEntries` names each change).
             Verdicts = new Dictionary<string, DuctVerdictRecord>(asked.Verdicts ?? new(), StringComparer.Ordinal),
             Roles = new Dictionary<long, DuctRoleRecord>(asked.Roles ?? new()),
-            Slots = slots, WorkRevision = revision, AppliedAt = now, Unknown = unknown
+            Slots = new DuctParameterSlotOverrides(slots.FanStatic, slots.FanFlow, slots.ComponentDrop,
+                slots.TerminalDrop, slots.FittingCoefficient, slots.TerminalFlow), WorkRevision = revision, AppliedAt = now, Unknown = unknown
         };
     }
 
@@ -499,6 +510,18 @@ public static class DuctApplier {
         Verdicts = s.Verdicts.ToDictionary(kv => kv.Key, kv => kv.Value with { RuledAt = default }, StringComparer.Ordinal),
         Roles = s.Roles.ToDictionary(kv => kv.Key, kv => kv.Value with { RuledAt = default })
     }).ToJson();
+
+    /// <summary>The elements a commit changes (the store's line is Project Information) and the parameter it may bind.</summary>
+    private static WorksharingDisclosure? Borrows(Document doc, List<Item> items) {
+        var planned = items.Where(i => i.Outcome == "planned").ToList();
+        var store = planned.Any(i => i.Kind == "store");
+        var ids = planned.Where(i => i.Id is not null && WritingKinds.Contains(i.Kind)).Select(i => i.Id!.Value);
+        if (store && doc.ProjectInformation is { } info) ids = ids.Append(info.Id.Value());
+        var binds = store && doc.ProjectInformation?.get_Parameter(StoreText.Guid) is null;
+        return WorksharingDisclosures.Disclose(doc, ids, binds ? [$"{StoreText.Name} project parameter"] : []);
+    }
+
+    private static readonly HashSet<string> WritingKinds = ["fitting", "terminal", "component", "equipment", "terminal-flow", "equipment-flow"];
 
     private static DuctApplyResult Result(bool preview, List<Item> items, IReadOnlyList<DuctSystem>? systems, int revision) => new(
         preview,

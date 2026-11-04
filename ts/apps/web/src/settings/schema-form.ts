@@ -13,7 +13,7 @@ function parseDocumentRaw(rawContent: string | null | undefined) {
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : null;
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/settings/schema-form.ts: fallback after failure", error);
     return null;
   }
 }

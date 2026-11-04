@@ -1,3 +1,5 @@
+import { legacyVerbEnvironment } from "./legacy-environment-bridge";
+import { createFixtureHost } from "../../../../packages/host-contracts/src/fixture-host";
 import {
   routeSettingsSnapshotSchema,
   address,
@@ -16,7 +18,23 @@ import type { WorkScopePorts } from "./use-work-scope";
 
 export { fixtureName, currentFixture } from "./fixture-lane";
 
-export async function fixtureEnvironment<P, W>(graph: RouteGraph<P, W>, name: string) {
+interface FixtureMountEnvironment<P, W> {
+  graph: RouteGraph<P, W>;
+  ports: WorkScopePorts<W>;
+  adapters: MountAdapters<P, W>;
+}
+
+export async function fixtureEnvironment<P, W>(
+  graph: RouteGraph<P, W>,
+  name: string,
+): Promise<FixtureMountEnvironment<P, W>> {
+  // Companion chat must not borrow another route's seed or block its editor as a running Pea.
+  if (
+    typeof location !== "undefined" &&
+    location.pathname !== graph.directory?.path &&
+    graph.seeds?.attach
+  )
+    name = "attach";
   const declaration = graph.seeds?.[name];
   if (!declaration)
     return pendingFixtureEnvironment(
@@ -40,10 +58,11 @@ export function pendingFixtureEnvironment<P, W>(
   name: string,
   failure: string | null = "Loading fixture…",
   seed?: GraphSeedData<P, W>,
-) {
-  // A fresh identity also keeps the shared journal separate from every real or previous Work.
-  const isolatedAddress = address(`C:/Fixtures/${crypto.randomUUID()}.rvt`);
-  let key = bindWork(graph.key, isolatedAddress, name);
+): FixtureMountEnvironment<P, W> {
+  // Isolate the journal by route namespace; Work subject bytes retain their domain meaning.
+  const fixtureId = crypto.randomUUID();
+  const isolatedAddress = address(`C:/Fixtures/${fixtureId}.rvt`);
+  let key = bindWork(`${graph.key}.${fixtureId}`, isolatedAddress, name);
   const target =
     seed?.target ??
     (graph.needs
@@ -55,7 +74,7 @@ export function pendingFixtureEnvironment<P, W>(
   const accepted = new Set<{ key: string; notify(ack: WorkWriteAck): void }>();
   const select = (page: P) => {
     const subject = graph.workSubject ? String(page[graph.workSubject] || name) : name;
-    const nextKey = bindWork(graph.key, isolatedAddress, subject);
+    const nextKey = bindWork(`${graph.key}.${fixtureId}`, isolatedAddress, subject);
     const id = workKey(nextKey);
     if (stored.has(id) && workKey(key) === id) return;
     key = nextKey;
@@ -116,6 +135,7 @@ export function pendingFixtureEnvironment<P, W>(
         patches: routeDocDelta(before, doc),
         inverse: routeDocDelta(doc, before),
         undoable: true,
+        ...(request.kind === "restore" ? { restoreOf: request.restoreOf } : {}),
       };
       snapshot = { ...snapshot, work: { handle: { key, revision }, doc } };
       stored.set(workKey(key), snapshot);
@@ -141,60 +161,53 @@ export function pendingFixtureEnvironment<P, W>(
       failure,
     },
   };
-  const sources: Record<string, ReadingSource> = {};
-  const readings = Object.fromEntries(
-    Object.entries(graph.readings).map(([id, reading]) => {
-      const value = (context: { page: unknown }) => {
-        if (!seed || !Object.hasOwn(seed.readings, id))
-          throw Error(`Fixture '${name}' has no reading '${id}'`);
-        const reading = seed.readings[id];
-        if (reading && typeof reading === "object" && "fixtureSelect" in reading) {
-          const { fields, values, fallback } = (
-            reading as {
-              fixtureSelect: {
-                fields: string[];
-                values: Record<string, unknown>;
-                fallback: unknown;
-              };
-            }
-          ).fixtureSelect;
-          const page = context.page as Record<string, unknown>;
-          return values[JSON.stringify(fields.map((field) => page[field]))] ?? fallback;
-        }
-        return reading;
-      };
-      const source = `fixture:${id}`;
-      switch (reading.kind) {
-        case "derive":
-          sources[source] = { kind: "derive", derive: value };
-          break;
-        case "worker":
-          sources[source] = {
-            kind: "worker",
-            algorithmVersion: "fixture",
-            connect: () => ({
-              update: (context, deliver) =>
-                deliver({ kind: "complete", value: value(context), revision: 0 }),
-              stop() {},
-            }),
-          };
-          break;
-        case "port":
-          sources[source] = {
-            kind: "port",
-            open: (context) => ({ value: value(context), close() {} }),
-          };
-          break;
-        default:
-          sources[source] = {
-            kind: reading.kind,
-            open: (context, deliver) =>
-              deliver({ kind: "complete", value: value(context), revision: 0 }),
-          };
-      }
-      return [id, { ...reading, source }];
-    }),
+  // Derived Reading examples use the graph catalog; native HTTP examples use producer schemas.
+  const examples = createFixtureHost(
+    Object.keys(graph.readings).map((key) => ({ key, effect: "Read" })),
+    Object.fromEntries(
+      Object.entries(seed?.readings ?? {}).filter(([key]) => Object.hasOwn(graph.readings, key)),
+    ),
   );
+  const sources: Record<string, ReadingSource> = {};
+  for (const [id, reading] of Object.entries(graph.readings)) {
+    const value = (context: { page: unknown; work?: unknown }) =>
+      examples.read(id, context.page, context.work);
+    const source = id;
+    switch (reading.kind) {
+      case "derive":
+        sources[source] = {
+          kind: "derive",
+          key: (scope) => [scope.page, scope.workRevision],
+          derive: value,
+        };
+        break;
+      case "worker":
+        sources[source] = {
+          kind: "worker",
+          algorithmVersion: "fixture",
+          connect: () => ({
+            update: (context, deliver) =>
+              deliver({ kind: "complete", value: value(context), revision: 0 }),
+            stop() {},
+          }),
+        };
+        break;
+      case "port":
+        sources[source] = {
+          kind: "port",
+          open: (context) => ({ value: value(context), close() {} }),
+        };
+        break;
+      default:
+        sources[source] = {
+          kind: reading.kind,
+          // A seed reading of Work (ducts `sheet`) must reopen on an edit, as the host's does.
+          key: (scope) => scope.workRevision,
+          open: (context, deliver) =>
+            deliver({ kind: "complete", value: value(context), revision: 0 }),
+        };
+    }
+  }
   let settings = routeSettingsSnapshotSchema.parse({ revision: 0, values: {} });
   const localSettings = createSettingsOwner(settingFields(graph), {
     read: async () => settings,
@@ -206,13 +219,17 @@ export function pendingFixtureEnvironment<P, W>(
     subscribe: () => () => {},
   });
   return {
-    graph: { ...graph, readings },
+    graph,
     ports,
     adapters: {
       ...ports,
-      sources,
+      sources: Object.fromEntries(
+        Object.entries(graph.readings).map(([id, reading]) => [reading.source, sources[id]!]),
+      ),
+      readingSources: sources,
       settings: localSettings,
-      fixture: { name, queries: seed?.queries ?? {}, select },
+      legacyEnvironment: legacyVerbEnvironment(seed?.queries ?? {}, name),
+      selectPage: select,
       initialPage: seed?.page,
       subscribeReceipts: undefined,
       subscribeDocumentChanged: undefined,

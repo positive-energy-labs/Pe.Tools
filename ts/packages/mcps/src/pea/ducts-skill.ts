@@ -11,6 +11,7 @@ export function renderDuctsSkill(): string {
     "# Calculate Duct Pressure Drop",
     "",
     DUCTS_SHEET_GUIDE.summary,
+    "Sheet and roster reads never edit Work. Stage edits through route:ducts Work verbs at expectedRevision. For duct losses, heal, or assign-fan, send only the document target and work: { key, expectedRevision }; never send native arrays or coefficients. Stage writeIntent.groups for heal scope or writeIntent.fan { unitId, systemId } for fan assignment. Preview first; apply re-derives and refuses a changed seal without clearing edits.",
     "",
     ...DUCTS_SHEET_GUIDE.walk.map((step, i) => `${i + 1}. ${step}`),
     "",

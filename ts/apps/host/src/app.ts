@@ -1,3 +1,5 @@
+import { admittedBuiltinKeys } from "../../../packages/agent-contracts/src/admitted-builtin-keys.ts";
+import { Spawner } from "./harness/spawner.ts";
 import { currentMachine } from "./machine.ts";
 import { sdkSession } from "./sdk-session.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
@@ -14,7 +16,7 @@ import {
 } from "./share.ts";
 import { mcpRoute } from "./mcp-route.ts";
 import { Deferred, Effect, Layer, Option } from "effect";
-import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -22,17 +24,21 @@ import { join } from "node:path";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { RouteWorkspace, type PeaRuntimeCapabilities } from "@pe/runtime";
 import { createRouteRegistrations } from "@pe/mcps";
+import { admittedBuiltinsLayer } from "./admitted-builtins.ts";
 import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { productRouteWorkPath } from "./product-paths.ts";
 import { hostActionJournal, releaseHostReceipts } from "./gateway-owner.ts";
-import { releaseHostReceiptExport } from "./receipt-export.ts";
+import { ReceiptExport, type ReceiptExporter } from "./receipt-export.ts";
+import { CaptureStore } from "./takeoff-captures.ts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
+import { RunConsents } from "./run-consent.ts";
 import { getHostStatus } from "./local-ops.ts";
 import { isSettingsSchemaUrl } from "./settings.ts";
 import { isNavigation, opsCatalogRoute, type SpaFallback } from "./ops-catalog.ts";
 import { demoRoutes } from "./demo-owner.ts";
 import { makeCallRoute } from "./call-route.ts";
+import { FamiliesReader } from "./families-reader.ts";
 import { instancesReadingsRoute } from "./session-route.ts";
 import {
   adminShutdownRoute,
@@ -41,7 +47,7 @@ import {
   resolveHostVersion,
   ServiceFileLive,
 } from "./host-lifecycle.ts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer, peApiErrorsLayer, type HostWork } from "./pe-routes.ts";
 import { capturesRoute } from "./captures-route.ts";
@@ -141,7 +147,17 @@ function makeRevitComposition(
       hostStatusRoute,
       hostInstallRoute,
       instancesReadingsRoute(currentMachine),
-      makeCallRoute(hostActionJournal(), undefined, { workspace: work?.workspace }, { origin }),
+      Layer.unwrap(
+        Effect.gen(function* () {
+          const families = yield* FamiliesReader;
+          return makeCallRoute(
+            hostActionJournal(),
+            undefined,
+            { workspace: work?.workspace },
+            { origin, families },
+          );
+        }),
+      ),
     ),
   };
 }
@@ -162,6 +178,11 @@ export interface HttpLiveOptions {
   readonly updateReader?: UpdateReader["Service"];
   /** The spine's intake for update facts, handed to the reader this app builds. */
   readonly updateFact?: (fact: UpdateFact) => void;
+  /**
+   * The launch root's exporter, so the boot record and update facts share it with the routes; a
+   * composition without one builds its own `ReceiptExport` layer for this app's scope.
+   */
+  readonly receipts?: ReceiptExporter;
   /** Built SPA directory, or null to skip static serving (dev/vite). */
   readonly webRoot: string | null;
   /** Route registrations for the host-owned route surface; tests inject their own. */
@@ -179,19 +200,25 @@ export function makeHttpLive(options: HttpLiveOptions) {
   const receiptOwner = hostActionJournal();
   const ReceiptLifetime = Layer.effectDiscard(
     Effect.addFinalizer(() =>
+      // Provided outermost, so this runs after the bridge and threads closed: join, flush, release.
       Effect.promise(async () => {
-        await releaseHostReceiptExport(receiptOwner);
+        await receiptOwner.close();
         releaseHostReceipts(receiptOwner);
       }),
     ),
   );
+  const ReceiptsLive = options.receipts
+    ? Layer.succeed(ReceiptExport, options.receipts)
+    : ReceiptExport.layer;
   const UpdateLive = Layer.succeed(
     UpdateReader,
     options.updateReader ?? makeInstalledUpdateReader(options.updateFact),
   );
   const nodeServer = options.nodeServer ?? createServer();
+  // Both lanes wait for explicit reads until completion or disconnect; upload limits stay intact.
+  nodeServer.setTimeout(0);
   const remoteConfig = readRemoteIngress(
-    join(productRoot(), "state", hostOwnership.serviceName, "remote-ingress.json"),
+    join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "remote-ingress.json"),
   );
   const remoteRequests = new WeakSet<object>();
   const remote = remoteConfig ? remoteListener(nodeServer, remoteRequests) : null;
@@ -229,9 +256,11 @@ export function makeHttpLive(options: HttpLiveOptions) {
     const address = nodeServer.address();
     return address && typeof address !== "string" ? address.port : options.port;
   };
-  const registrations = (options.routeRegistrations ?? createRouteRegistrations)({
+  const allRegistrations = (options.routeRegistrations ?? createRouteRegistrations)({
+    admittedKeys: [],
     loadedFamilies: (...args) => hostLoadedFamilies(`http://127.0.0.1:${port()}`)(...args),
   });
+  const registrations = allRegistrations.filter((r) => !admittedBuiltinKeys.includes(r.spec.route));
   const work: HostWork = {
     registrations,
     workspace: new RouteWorkspace({
@@ -245,23 +274,25 @@ export function makeHttpLive(options: HttpLiveOptions) {
       installed: hostOwnership.lane === "installed",
       port,
       run: tailscaleCommand(),
-      ...shareIntentFile(join(productRoot(), "state", "share.json")),
+      ...shareIntentFile(join(hostOwnership.rootPath, "state", "share.json")),
     });
   const devices =
     options.devices ??
-    createDevices(join(productRoot(), "state", hostOwnership.serviceName, "devices.json"));
+    createDevices(join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "devices.json"));
   bindControl({ deviceThread: (device) => devices.active(device).thread });
   const identity = requestIdentityLayer({
     devices,
     remoteRequests,
     remoteIngress: options.remoteIngress ?? remoteConfig?.origins,
     port,
-    frontendOrigin: () =>
-      options.webUrl
-        ? Option.getOrUndefined(
-            Effect.runSync(Deferred.poll(options.webUrl)).pipe(Option.map(Effect.runSync)),
-          )
-        : undefined,
+    // Read on each request's fiber: the dev frontend's URL settles after the layer is built.
+    frontendOrigin: options.webUrl
+      ? Deferred.poll(options.webUrl).pipe(
+          Effect.flatMap(
+            Option.match({ onNone: () => Effect.succeed(undefined), onSome: (url) => url }),
+          ),
+        )
+      : Effect.succeed(undefined),
     share,
   }).pipe(Layer.provide(peApiErrorsLayer));
 
@@ -274,7 +305,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
       : () => emptyNotFound;
   const CommonAppLive = Layer.mergeAll(
     RemoteLive,
-    identity,
     shareRoute(share),
     deviceRoutes(devices),
     mcpRoute(() => `http://127.0.0.1:${port()}`),
@@ -301,16 +331,24 @@ export function makeHttpLive(options: HttpLiveOptions) {
     // accepted while claim acquisition awaits SDK work must not be stranded without a handler.
     return ServiceFileLive.pipe(
       Layer.provideMerge(
-        HttpRouter.serve(Layer.mergeAll(revitComposition.routes, CommonAppLive)).pipe(
-          Layer.provideMerge(ServerLive),
-        ),
+        HttpRouter.serve(
+          Layer.mergeAll(revitComposition.routes, CommonAppLive).pipe(Layer.provide(identity)),
+        ).pipe(Layer.provideMerge(ServerLive)),
       ),
       Layer.provide(NodeHttpClient.layerUndici),
+      // Inside the bridge's provision, so the reader's finalizer (cancel, then join its reads)
+      // runs while the bridge it cancels through is still alive.
+      Layer.provide(FamiliesReader.layer),
       Layer.provide(revitComposition.provider),
       Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
       Layer.provide(UpdateLive),
+      Layer.provide(RunConsents.layer),
+      Layer.provide(Spawner.live),
+      Layer.provide(CaptureStore.layer()),
+      Layer.provide(ReceiptsLive),
       Layer.provide(NodeServices.layer),
       Layer.provide(ReceiptLifetime),
+      Layer.provide(admittedBuiltinsLayer(work.workspace, undefined, allRegistrations)),
     );
   }
 
@@ -328,7 +366,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
           opsCatalogRoute(spa),
           noRevitHostStatusRoute,
           CommonAppLive,
-        ),
+        ).pipe(Layer.provide(identity)),
       ).pipe(Layer.provideMerge(ServerLive)),
     ),
     // The empty in-memory bridge registry admits no native connection on this composition.
@@ -336,7 +374,12 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provide(NodeHttpClient.layerUndici),
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
     Layer.provide(UpdateLive),
+    Layer.provide(RunConsents.layer),
+    Layer.provide(Spawner.live),
+    Layer.provide(CaptureStore.layer()),
+    Layer.provide(ReceiptsLive),
     Layer.provide(NodeServices.layer),
     Layer.provide(ReceiptLifetime),
+    Layer.provide(admittedBuiltinsLayer(work.workspace, undefined, allRegistrations)),
   );
 }

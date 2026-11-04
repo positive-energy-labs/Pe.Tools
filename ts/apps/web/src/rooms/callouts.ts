@@ -104,7 +104,7 @@ export function placeCallouts(
         pin: item.anchor,
         leader: false,
         pinWidth,
-        box: [ax, ay, ax, ay],
+        box: boxAt(ax, ay),
       },
     );
   }

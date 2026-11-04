@@ -1,9 +1,10 @@
+import { captureStore } from "./effect-test.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { expect, test } from "vite-plus/test";
 import { address, bindWork, familiesRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
@@ -14,6 +15,7 @@ import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { asCaller, human } from "./callers.ts";
+import { familiesReader } from "./effect-test.ts";
 
 const target = { session: "session-a", openId: "open-a" };
 const work = bindWork("families", address("C:\\Models\\Air.rvt"), undefined, target);
@@ -97,7 +99,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
           return {
             value: {
               operations: [
-                {
+                {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap",
                   key: "revit.matrix.loaded-families",
                   intent: "Read",
                   needs: "project-document",
@@ -130,6 +132,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
       }),
     subscribe: () => () => {},
   } as unknown as RevitBridge["Service"];
+  const families = await familiesReader();
   const handlers = new Map<TakeoffCaptures, ReturnType<typeof HttpRouter.toWebHandler>>();
   const handler = (captures: TakeoffCaptures) => {
     let current = handlers.get(captures);
@@ -138,7 +141,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
         makeCallRoute(new ActionJournal(join(dir, `actions-${handlers.size}.json`)), captures, {
           sdk: sdkSessions,
           workspace,
-        }).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+        }, { families }).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
         { disableLogger: true },
       );
       handlers.set(captures, current);
@@ -165,7 +168,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
   const get = (captures: TakeoffCaptures) =>
     call(captures, new Request(`${url}?work=${encodeURIComponent(JSON.stringify(work))}`));
   try {
-    const captures = new TakeoffCaptures(dir, cachePath);
+    const captures = captureStore(dir, cachePath);
     const legacy = await captures.saveFamilies({
       work,
       document: target,
@@ -179,7 +182,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
     expect(saved).toMatchObject({ document: target, documentTitle: "Air.rvt", filter, result });
     expect(saved.capturedAt).toEqual(expect.any(String));
     expect(saved.completedAt).toEqual(expect.any(String));
-    const rebuilt = new TakeoffCaptures(dir, cachePath);
+    const rebuilt = captureStore(dir, cachePath);
     expect(await (await get(rebuilt)).json()).toEqual(saved);
     const archiveResponse = await call(rebuilt, new Request(url));
     expect(archiveResponse.status).toBe(200);
@@ -335,7 +338,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
 test("targeted readback cannot replace a newer manual read or claim error coverage", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-families-readback-"));
   try {
-    const captures = new TakeoffCaptures(dir);
+    const captures = captureStore(dir);
     const base = await captures.saveFamilies({
       work,
       document: target,

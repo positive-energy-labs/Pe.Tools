@@ -1,4 +1,6 @@
+import { zoneAuditAddress, rhvacSyncAddress, scheduleSpecsAddress, sessionAdminAddress } from "./g4-splits.ts";
 import type { RouteDeclaration } from "../route-field.ts";
+import { fansAddress } from "./fans.ts";
 import { ductsAddress } from "./ducts.ts";
 import { familiesAddress } from "./families.ts";
 import { familyAddress } from "./family.ts";
@@ -6,6 +8,7 @@ import { schedulesAddress } from "./schedules.ts";
 import { roomsAddress } from "./rooms.ts";
 import { takeoffsAddress } from "./takeoffs.ts";
 import { spaceAddress } from "./space.ts";
+import { podAdminAddress } from "./pod-admin.ts";
 import { podsAddress } from "./pods.ts";
 import { bindAddress } from "./bind.ts";
 import { settingsAddress } from "./settings.ts";
@@ -27,7 +30,12 @@ export { GALVANIZED_STEEL_ROUGHNESS } from "./duct-loss.ts";
 
 /** Every route's address, by route key; each route declares its own in `routes/<route>.ts`. */
 export const routeAddresses = {
+  "zone-audit": zoneAuditAddress,
+  "rhvac-sync": rhvacSyncAddress,
+  "schedule-specs": scheduleSpecsAddress,
+  "session-admin": sessionAdminAddress,
   ducts: ductsAddress,
+  fans: fansAddress,
   families: familiesAddress,
   family: familyAddress,
   schedules: schedulesAddress,
@@ -35,6 +43,7 @@ export const routeAddresses = {
   takeoffs: takeoffsAddress,
   space: spaceAddress,
   pods: podsAddress,
+  "pod-admin": podAdminAddress,
   bind: bindAddress,
   settings: settingsAddress,
   ops: opsAddress,

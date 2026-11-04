@@ -20,6 +20,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <None Include="../../ts/packages/host-contracts/src/generated/host-catalog.generated.ts" Link="host-catalog.generated.ts" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="../../ts/packages/host-contracts/tests/runtime-ownership.fixture.json" Link="runtime-ownership.fixture.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
         <!-- The dev bridge supervisor's real appBase derivation, compiled in so a test reads it without Revit. -->
         <Compile Include="..\Pe.App\Host\TsHostLauncher.cs" Link="Product\TsHostLauncher.cs" />
     </ItemGroup>
@@ -28,11 +33,15 @@
         <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj" />
         <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj" />
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Space\Pe.Revit.Space.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj" />
         <ProjectReference Include="..\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj" />
         <!-- Pe.Host retired — HostOperationExecutorTests.cs removed with it. -->
         <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj" />
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
         <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj" />
+        <!-- RhvacToolOwnershipTests runs the real tool process: it must be told its owner and resolve scratch under it. -->
+        <ProjectReference Include="..\Pe.Rhvac.Tool\Pe.Rhvac.Tool.csproj" />
         <ProjectReference Include="..\Pe.Shared.RevitAutomation\Pe.Shared.RevitAutomation.csproj" />
         <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj" />
         <ProjectReference Include="..\Pe.Shared.Scripting\Pe.Shared.Scripting.csproj" />

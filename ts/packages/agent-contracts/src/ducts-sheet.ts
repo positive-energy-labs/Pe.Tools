@@ -10,47 +10,22 @@ const detail = z.discriminatedUnion("kind", [
   /** Every run and section of a fan sheet (ducts LEDGER 2026-10-29): the page's worksheet and the picture's strands. */
   z.strictObject({ kind: z.literal("worksheet") }),
 ]);
-/**
- * Inputs by nature (ducts LEDGER 2026-10-29, "inputs split by nature"). The host resolves every
- * value the engine prices from into one `Inputs`: a design value (a terminal's cfm or drop, a
- * unit's cfm or external static, a part's drop) from Work's pending edit, else a catalog, else the
- * Revit parameter its slot names, else a firm default; a ruling (join, capped end, kind, role)
- * from Work, else the model's `_PE_DuctLosses` store, else a suggestion; a project rule from
- * Work's one `criteria` cell, else the firm file. Every value carries a closed `source`, so no
- * consumer parses prose, and no field is optional, so the engine cannot default. Protocol (slot
- * names, label parameter, working phase) never reaches the engine: the C# read consumes it.
- */
-export const DUCT_INPUT_SOURCES = [
-  /** A person or Pea typed it in Work. */
-  "typed",
-  /** The rooms route's share of served rooms. */
-  "rooms",
-  /** The load tool's preview, split to this terminal. */
-  "load",
-  /** A manufacturer catalog table at this flow. */
-  "catalog",
-  /** The Revit parameter the slot names (`ref` is the parameter). */
-  "revit",
-  /** The firm file (`ref` is its version). */
-  "firm",
-  /** The project's `criteria` cell. */
-  "project",
-  /** The model's `_PE_DuctLosses` store. */
-  "stored",
-  /** Pe's suggestion (`ref` says from what: ports, name, served terminals). */
-  "suggested",
-  /** Nothing states it. */
-  "none",
-] as const;
+/** Resolved engine inputs expose the winning Work layer and its revision (ADR 0028). */
+export const DUCT_INPUT_SOURCES = ["run", "Work", "model", "firm", "default", "none"] as const;
 export type DuctInputSource = (typeof DUCT_INPUT_SOURCES)[number];
 const resolved = <T extends z.ZodType>(value: T) =>
   z.strictObject({
     value,
     source: z.enum(DUCT_INPUT_SOURCES),
-    /** A short machine ref (parameter name, table id, firm version, suggestion basis), never prose to parse. */
     ref: z.string().optional(),
+    units: z.string().nullable(),
+    version: z.union([z.string(), z.number()]).nullable(),
+    status: z.enum(["valid", "missing", "invalid"]),
   });
-export type Resolved<T> = { value: T; source: DuctInputSource; ref?: string };
+// TODO: docs/features/routes/LEDGER.md#s7-2f8fa50d55 G1 render authored Work values separately; badge source from this reading (Work/model/firm/default).
+export type Resolved<T> = Omit<import("./work-value.ts").ValueResolution<T>, "value"> & {
+  value: T;
+};
 const num = z.number().finite();
 const nonneg = num.nonnegative();
 const elementKey = z.string().regex(/^[1-9]\d*$/);
@@ -115,7 +90,7 @@ export const endRulingSchema = z.strictObject({
 export const ductsInputsSchema = z.strictObject({
   terminals: z.record(
     elementKey,
-    z.strictObject({ cfm: resolved(nonneg.nullable()), drop: resolved(nonneg) }),
+    z.strictObject({ cfm: resolved(nonneg.nullable()), drop: resolved(nonneg.nullable()) }),
   ),
   units: z.record(
     elementKey,
@@ -208,6 +183,7 @@ export const sheetNoteSchema = z.strictObject({
     "auto-join",
     "heal",
     "assumed-flow",
+    "flow-conflict",
     "merge",
     "demoted",
   ]),
@@ -252,7 +228,7 @@ export const DUCTS_SHEET_GUIDE = {
     "Read route:ducts.roster with the exact target {session, openId}. Match the equipment mark, then use its unitId and portIndex; marks are not unique. A family or type name (Fantech MUAS 10, Greenheck ESD-403) identifies a product, not the unit the person named; match the mark. Suggestions remain unconfirmed until the engineer rules.",
     "Read route:ducts.sheet with {target, mode: 'fan', unitId, portIndex}. For a named start and end, use mode 'chain', start {elementId, connector?}, end {elementId}, and asserted direction 'supply' or 'return'. A chain makes no fan ESP claim.",
     "Read the sheet's blockers back to the person with their element and connector, effect on the total, and closer. Report known subtotal, completeness, and required ESP exactly as returned. Never call an incomplete path critical.",
-    "Accept or reject a returned heal proposal with the same fan request, its basis, and proposal {pair, verdict}. This writes a join ruling to document Work (edits.joins), never a Revit heal. Assumed ESP uses the continued walk; flow and pricing gaps still withhold it. An open end a person rules capped is written as edits.ends [{end: {elementId, connector}, verdict: 'capped'}]; it is then neither an end nor a blocker. Every other input is an edit on Work's own key: edits.flows (a terminal's cfm), edits.terminalDrops, edits.componentDrops, edits.esp and edits.equipmentFlows (a unit's), edits.roles and edits.kinds (rulings), edits.criteria (the project's design criteria over the firm file). A fitting's pricing is in the inputs detail's fittings census (rule, table, matched or chosen): edits.tables {ruleKey: {table}} swaps the table every fitting of that rule reads; a not-priced fitting is closed with edits.assignments {family: {rule}} (one of its candidates; prices every fitting of the family no rule matches), or, on a path through a proposed tee, tap or transition only (a transition replaces a capped end, one straight path), a typed edits.fittingDrops {key: {inWg}} for that one path. The inputs detail returns every resolved value with its source (typed, catalog, revit, firm, project, stored, suggested, none). A 'sibling-fan' end is another fan sharing the trunk, priced to the junction and carrying none of this fan's flow.",
+    "Accept or reject a returned heal proposal with the same fan request, its basis, and proposal {pair, verdict}. This writes a join ruling to document Work (edits.joins), never a Revit heal. Assumed ESP uses the continued walk; flow and pricing gaps still withhold it. An open end a person rules capped is written as edits.ends [{end: {elementId, connector}, verdict: 'capped'}]; it is then neither an end nor a blocker. Every other input is an edit on Work's own key: edits.flows (a terminal's cfm), edits.terminalDrops, edits.componentDrops, edits.esp and edits.equipmentFlows (a unit's), edits.roles and edits.kinds (rulings), edits.criteria (the project's design criteria over the firm file). A fitting's pricing is in the inputs detail's fittings census (rule, table, matched or chosen): edits.tables {ruleKey: {table}} swaps the table every fitting of that rule reads; a not-priced fitting is closed with edits.assignments {family: {rule}} (one of its candidates; prices every fitting of the family no rule matches), or, on a path through a proposed tee, tap or transition only (a transition replaces a capped end, one straight path), a typed edits.fittingDrops {key: {inWg}} for that one path. The inputs detail returns every resolved value with its source (run, Work, model, firm, default, none), units, version and missing/invalid status. A 'sibling-fan' end is another fan sharing the trunk, priced to the junction and carrying none of this fan's flow.",
     "Use the returned next handles with the same target, mode, and basis to read a path's legs, walked elements, or inputs and provenance. A stale response means read a new overview; never reuse a handle against a different basis.",
     "Read inputs detail for the full closer notes and candidates. Propose a sourced default or a basis-bound previewed heal for a blocker, with its effect on the total. Use only an available typed preview/write contract and the returned candidate. If that door is unavailable, report it as owed; do not substitute old group heals. After an authorized change, read a new sheet and report its measured effect. Unknown effects stay unknown until recomputed.",
   ],
@@ -354,6 +330,8 @@ const blocker = z.object({
  * table). `candidates` are the rules a person may price it with; `options` the tables its rule may swap to.
  */
 const fittingPricingFields = {
+  /** Controlling priced leg, including its table inputs and interpolation boundary. */
+  derivation: z.string().optional(),
   family: z.string().nullable(),
   rule: z.string().nullable(),
   table: z.string().nullable(),
@@ -547,8 +525,12 @@ export const ductsRosterResponseSchema = z.object({
   rows: z.array(
     z.object({
       unitId: elementId,
+      uniqueId: z.string().min(1),
       portIndex,
       mark: z.string(),
+      /** Display disambiguators for a duplicate mark; the UniqueId is identity, never text. */
+      level: z.string().nullable().optional(),
+      system: z.string().nullable().optional(),
       kind: z.enum(["fan-coil", "air-handler", "erv", "muas", "dehumidifier", "other"]),
       side: z.enum(["supply", "return", "exhaust", "outdoor"]),
       ratedEspInWg: z.number().nullable(),

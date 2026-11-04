@@ -1,3 +1,4 @@
+import type { Immutable } from "../../agent-contracts/src/route-kernel-data.ts";
 /**
  * Duct pressure drop per terminal path, pure and deterministic: `ducts.snapshot` + ASHRAE grids +
  * edit table choices (+ typed overrides) in, rows out. Nothing is stored.
@@ -40,7 +41,7 @@ import {
   withEquivalentLength,
 } from "./equivalent-length.ts";
 import { transitionGeometry } from "./geometry.ts";
-import { GridError, lookupGrid, type Grids } from "./loss-grid.ts";
+import { GridError, lookupBranchLoss, lookupGrid, type Grids } from "./loss-grid.ts";
 import { friction, sectionOf } from "./loss-physics.ts";
 import {
   LOSS_RULES,
@@ -147,7 +148,7 @@ interface LossError {
 export type Choices = Readonly<Record<string, string>>;
 
 export interface Overrides {
-  /** Design flow per terminal id, cfm; beats the snapshot's `flow` fact (survey: override > load preview > Revit). */
+  /** Design flow per terminal id, cfm; beats the snapshot's `flow` fact (survey: override > rooms > Revit). */
   terminalCfm?: Readonly<Record<number, number>>;
   /** Explicit manual drop per terminal id, in-wg. Native scalar drops do not attest a catalog total. */
   terminalPs?: Readonly<Record<number, number>>;
@@ -356,6 +357,7 @@ function tapDistance(
   if (total <= 0) return 0;
   const curve = duct.connectors.find((c) => c.connectedTo?.elementId === tap.id);
   const at = curve?.point ?? tap.point;
+  if (!at) throw Error(`Tap ${tap.id} has no position in this snapshot`);
   let best = { d: Infinity, s: 0 };
   let run = 0;
   poly.slice(1).forEach((b, i) => {
@@ -401,7 +403,7 @@ export function computeLosses(
   grids: Grids,
   choices: Choices = {},
   overrides: Overrides = {},
-  evidence: Readonly<Record<string, DuctCalculation>> = {},
+  evidence: Readonly<Record<string, Immutable<DuctCalculation>>> = {},
   catalogs: Catalogs = EMPTY_CATALOGS,
   inferred: readonly InferredLink[] = [],
 ): LossResult {
@@ -754,7 +756,9 @@ function pathRows(
     if (!grid) return bad(`${table} ${input.res} is not loaded`);
     let found;
     try {
-      found = lookupGrid(grid, input.x, input.y, input.z);
+      found = input.branchLossInterpolation
+        ? lookupBranchLoss(grid, input.x, input.y!)
+        : lookupGrid(grid, input.x, input.y, input.z);
     } catch (e) {
       if (e instanceof GridError) return bad(e.message);
       throw e;
@@ -873,7 +877,7 @@ function pathRows(
         kind: "terminal",
         leg: "ps",
         dp: manual,
-        desc: `terminal ${node.id}, manual pressure override`,
+        desc: "terminal, manual pressure override",
       });
       return;
     }
@@ -890,7 +894,7 @@ function pathRows(
         kind: "terminal",
         leg: "ps",
         dp: held,
-        desc: `terminal ${node.id} at ${cfm ?? "?"} cfm, terminal drop`,
+        desc: `terminal at ${cfm ?? "?"} cfm, terminal drop`,
       });
       return;
     }
@@ -899,7 +903,7 @@ function pathRows(
       id: node.id,
       kind: "terminal",
       ...loss,
-      desc: `terminal ${node.id} at ${cfm ?? "?"} cfm, catalog total pressure`,
+      desc: `terminal at ${cfm ?? "?"} cfm, catalog total pressure`,
     });
   };
 
@@ -968,7 +972,7 @@ function pathRows(
         id,
         kind: "fitting",
         dp: overrides.componentDrop[id]!,
-        desc: `passive equipment ${id}, sourced design-point drop`,
+        desc: "passive equipment, sourced design-point drop",
       });
       return;
     }

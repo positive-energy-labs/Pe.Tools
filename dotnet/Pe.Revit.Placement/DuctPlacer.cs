@@ -41,7 +41,7 @@ public sealed class DuctPlacer
         {
             var title = Sanitize(doc.Title);
             stateDir = Path.Combine(
-                ProductRuntimeLayout.ForCurrentUser().State.ResolveModuleStatePath("placement"),
+                ProductRuntimeLayout.Current.State.ResolveModuleStatePath("placement"),
                 string.IsNullOrEmpty(title) ? "untitled" : title);
         }
         _stateDir = stateDir;

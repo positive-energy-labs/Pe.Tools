@@ -26,8 +26,29 @@ interface Access {
 
 export interface RouteField<S extends z.ZodType = z.ZodType> extends Access {
   /** The typed value; it accepts `undefined` (its default, or absent). */
+  cardinality?: "one" | "many";
   schema: S;
   codec: Codec<z.output<S>>;
+}
+
+/** Presence survives decoding: an explicit empty/default value must override Place memory. */
+export function decodePageField(
+  field: Pick<RouteField, "schema" | "codec">,
+  search: Record<string, unknown>,
+  id: string,
+) {
+  const present = Object.hasOwn(search, id) && search[id] !== undefined;
+  const raw = search[id];
+  let decoded = field.schema.safeParse(raw);
+  if (!decoded.success && ["string", "number", "boolean"].includes(typeof raw)) {
+    try {
+      decoded = field.schema.safeParse(field.codec.decode(String(raw)));
+    } catch (error) {
+      console.warn("ts/packages/agent-contracts/src/route-field.ts: fallback after failure", error);
+      // The original failed schema result is the refusal, never an empty selection.
+    }
+  }
+  return { present, decoded };
 }
 
 const WRAPPERS = new Set(["default", "optional", "nullable", "readonly", "catch", "prefault"]);
@@ -49,21 +70,24 @@ const CODECS: Record<string, Codec<unknown>> = {
     decode: (text) =>
       text === "1" || text === "true" ? true : text === "0" || text === "false" ? false : INVALID,
   },
-  array: {
-    encode: (value) => (value as unknown[]).join(","),
-    decode: (text) => text.split(",").filter(Boolean),
-  },
+
 };
 
-/** One field: a plain string, enum, number, boolean or string list needs no codec; any other value brings one. */
+export type BareSchema<S> = S extends z.ZodDefault<infer I> | z.ZodOptional<infer I> | z.ZodNullable<infer I> | z.ZodReadonly<infer I> | z.ZodCatch<infer I> | z.ZodPrefault<infer I> ? BareSchema<I> : S;
+/** One field: a plain string, enum, number or boolean needs no codec; any other value brings one. */
 export function field<S extends z.ZodType, const A extends Access>(
-  schema: S,
+  schema: BareSchema<S> extends z.ZodArray<any> ? never : S,
   access: A,
   codec?: Codec<z.output<S>>,
 ): RouteField<S> & A {
   const found = codec ?? (CODECS[bare(schema).def.type] as Codec<z.output<S>> | undefined);
   if (!found) throw Error(`a ${bare(schema).def.type} field needs a codec`);
-  return { schema, codec: found, ...access };
+  return {
+    schema,
+    codec: found,
+    ...access,
+
+  };
 }
 
 export type Resolve = (
@@ -103,3 +127,68 @@ export const text = (max = 200) => z.string().max(max).default("");
 export const keysWhere = (fields: Fields, keep: (field: RouteField) => boolean) =>
   Object.keys(fields).filter((key) => keep(fields[key]!));
 export const setKeys = (fields: Fields) => keysWhere(fields, (field) => field.agent === "set");
+
+/** Exact set spelling, including ids containing commas. `all` resolves against the current roster. */
+export type Many = string[] | "all";
+export const manyCodec: Codec<Many> = {
+  encode: value => value === "all" ? "all" : value.map(id =>
+    id === "all" ? "%61ll" : encodeURIComponent(id).replaceAll("~", "%7E").replaceAll("%20", " ")
+  ).join(","),
+  decode: text => {
+    if (text === "all") return "all";
+    try { return text ? text.split(",").map(decodeURIComponent) : []; }
+    catch { return INVALID; }
+  },
+};
+export const stableKeyKinds = ["UniqueId", "system-name", "name"] as const;
+export type StableKeyKind = (typeof stableKeyKinds)[number];
+export function manyField<const A extends Access & { cap?: number; initial?: Many; choices?: readonly string[]; schema?: never; codec?: never; cardinality?: never; keyKind?: never }>(
+  keyKind: StableKeyKind, access: A,
+) {
+  if (!stableKeyKinds.includes(keyKind)) throw Error("Subject keys must be stable; ElementId is refused");
+  const { cap = 50000, initial = [], choices, ...projection } = access;
+  return {
+    ...projection,
+    schema: z.union([z.array(z.string().min(1).refine(id => !choices || choices.includes(id), "Unknown key")).max(cap), z.literal("all")]).default(initial),
+    codec: manyCodec,
+    cardinality: "many" as const,
+    keyKind,
+  };
+}
+/** Structured scalar Page values have one JSON spelling. */
+export const jsonCodec = <S extends z.ZodType>(schema: S): Codec<z.output<S>> => ({
+  encode: JSON.stringify,
+  decode: text => {
+    try { const result = schema.safeParse(JSON.parse(text)); return result.success ? result.data : INVALID; }
+    catch { return INVALID; }
+  },
+});
+export const resolveMany = (value: Many, roster: readonly string[]) =>
+  value === "all" ? [...roster] : [...new Set(value)];
+
+/** Ordered column priorities; order and direction survive URL and agent projections. */
+export function sortField<const A extends Access>(access: A) {
+  const schema = z.object({ columns: z.array(z.object({
+    key: z.string().min(1).max(512), dir: z.enum(["asc", "desc"]),
+  }).strict()).max(8) }).strict().default({ columns: [] });
+  return { ...access, schema, codec: jsonCodec(schema) };
+}
+/** A set of column keys: presence means hidden, with no ordered-list semantics. */
+export function keyedSetField<const A extends Access>(access: A) {
+  const schema = z.record(z.string().min(1).max(512), z.literal(true)).default({});
+  return { ...access, schema, codec: jsonCodec(schema) };
+}
+
+/** Ordered non-subject Page data, e.g. /captures' open-picture list. Unlike Many,
+ * it preserves duplicates and has no `all`. The wrapper keeps bare arrays refused.
+ * /captures keeps its current ids/all behavior until U9 rules on its migration. */
+export function orderedListField<S extends z.ZodType, const A extends Access>(
+  itemSchema: S,
+  access: A & { cap: number },
+) {
+  const { cap, ...projection } = access;
+  if (!Number.isSafeInteger(cap) || cap < 0)
+    throw Error("Ordered list cap must be a nonnegative integer");
+  const schema = z.strictObject({ items: z.array(itemSchema).max(cap) }).default({ items: [] });
+  return { ...projection, schema, codec: jsonCodec(schema) };
+}

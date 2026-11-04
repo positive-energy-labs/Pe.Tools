@@ -2,10 +2,8 @@
 import { createMemoryHistory } from "@tanstack/react-router";
 import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
 import { ductLossRoute } from "../duct-loss/route";
-import { ductsRoute } from "../ducts/route";
-import { familiesGraph } from "../families/graph";
+import { Route as ductsRoute } from "../routes/ducts";
 import { getRouter } from "../router";
-import { publicRoutes } from "./builtin-routes";
 
 vi.mock("../routes/__root", async () => {
   const { createRootRoute, Outlet } = await import("@tanstack/react-router");
@@ -40,7 +38,5 @@ test.each([
   expect(router.buildLocation({ to: "/duct-loss", search: { work: "W" } }).pathname).toBe(
     "/duct-loss",
   );
-  expect(publicRoutes.get(familiesGraph.key)?.graph).toBe(familiesGraph);
-  expect(publicRoutes.get(familiesGraph.key)?.manifest).toBe(familiesGraph);
   expect(Reflect.get(router.routesByPath, "/shell-probe")).toBeUndefined();
 });

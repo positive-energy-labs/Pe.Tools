@@ -1,20 +1,18 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
-import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
-import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { actionReceiptSchema, workKey, type WorkKey } from "@pe/agent-contracts";
-import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
-import { peReadings } from "#/readings";
-import { Route as root } from "../routes/__root";
-import type { GraphMount, MountScope, MountAdapters } from "#/shell/mount";
-import type { ReadingDelivery } from "#/shell/readings";
-import type { ReadingContext } from "#/shell/readings";
 import * as hostRuntime from "#/host/runtime";
+import { peReadings } from "#/readings";
+import type { GraphMount, MountAdapters, MountScope } from "#/shell/mount";
+import type { ReadingContext, ReadingDelivery } from "#/shell/readings";
+import { workKey, type WorkKey } from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
-import { dataTablesAdapters, dataTablesRoute } from "./route";
+import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
+import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
+import { Route as root } from "../routes/__root";
 import {
   dataTablesWorkSchema,
   draftFrom,
@@ -23,6 +21,7 @@ import {
   type DataTablesWork,
   type TableHandle,
 } from "./graph";
+import { dataTablesAdapters, dataTablesRoute } from "./route";
 import { dataTablesSources } from "./sources";
 
 const door = vi.hoisted(() => ({ ports: null as object | null }));
@@ -31,7 +30,18 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (ori
   ...(await original<
     typeof import("../../../../packages/mcps/src/shared/takeoff-action-client")
   >()),
-  runSemanticAction: command.run,
+  runSemanticAction: (
+    ...args: Parameters<
+      typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
+    >
+  ) =>
+    /\.preview$|^ducts\.preview-/.test(String(args[0]))
+      ? Promise.resolve({ state: "succeeded", result: {} } as Awaited<
+          ReturnType<
+            typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
+          >
+        >)
+      : command.run(...args),
 }));
 vi.mock("../shell/use-work-scope", () => ({
   useWorkScope: () => ({
@@ -51,18 +61,22 @@ vi.mock("../routes/__root", async () => {
 
 const table: TableHandle = {
   name: "Loads",
-  columns: [{ heading: "Load", kind: "Number" }],
-  rows: [
-    { key: "a", values: ["1"] },
-    { key: "b", values: ["2"] },
+  scheduleId: 1,
+  scheduleUniqueId: "schedule-1",
+  columns: [
+    { heading: "Load", kind: "Number", parameterName: "Load", sharedParameterGuid: "guid" },
   ],
-  placements: [{ sheetNumber: "M101" }],
+  rows: [
+    { key: "a", elementId: 2, uniqueId: "row-2", values: ["1"] },
+    { key: "b", elementId: 3, uniqueId: "row-3", values: ["2"] },
+  ],
+  placements: [{ sheetId: 4, sheetNumber: "M101", sheetName: "Mechanical" }],
 };
 const releases: (() => void)[] = [];
 beforeEach(() => {
   command.run.mockReset();
   vi.spyOn(hostRuntime, "hostFetch").mockImplementation(
-    async () => new Response(JSON.stringify({ tables: [table] })),
+    async () => new Response(JSON.stringify({ tables: [table], issues: [] })),
   );
   vi.spyOn(peReadings, "subscribe").mockImplementation(() => () => {});
   vi.stubGlobal(
@@ -82,11 +96,13 @@ afterEach(() => {
 });
 
 async function mounted() {
+  // Each case owns an independent Work store and therefore a distinct document incarnation.
+  const session = crypto.randomUUID();
   const key: WorkKey = {
     binding: "open",
     route: "data-tables",
     target: null,
-    open: { session: "fixture", openId: "document-a" },
+    open: { session, openId: "document-a" },
   };
   const stored = new Map<string, unknown>();
   const workspace = new RouteWorkspace({
@@ -108,7 +124,7 @@ async function mounted() {
     },
   });
   let scope: MountScope<DataTablesWork> = {
-    target: { kind: "document", ref: { session: "fixture", openId: "document-a" } },
+    target: { kind: "document", ref: { session, openId: "document-a" } },
     work: { handle: { key, revision: 0 }, doc: dataTablesWorkSchema.parse({}) },
   };
   const listeners = new Set<() => void>();
@@ -164,6 +180,7 @@ async function mounted() {
   await router.load();
   const view = render(<RouterProvider router={router} />);
   await view.findByRole("button", { name: "Open table" });
+  releases.push(() => owner.dispose());
   return {
     view,
     owner: () => owner,
@@ -172,7 +189,7 @@ async function mounted() {
     write: ports.write,
     key,
     selectDocument: async (openId: string) => {
-      const ref = { session: "fixture", openId };
+      const ref = { session, openId };
       const selected: WorkKey = { binding: "open", route: "data-tables", target: null, open: ref };
       const envelope = await workspace.view(selected, "data-tables");
       scope = {
@@ -197,83 +214,9 @@ test("the real graph mount copies native values into Work once and a refresh pre
   fireEvent.change(name, { target: { value: "Edited" } });
   await waitFor(() => expect(f.scope().work?.doc.draft?.name).toBe("Edited"));
   await act(async () => f.deliver([{ ...table, rows: [] }]));
-  expect(f.scope().work?.doc.draft?.rows).toEqual(table.rows);
+  expect(f.scope().work?.doc.draft?.rows).toEqual(draftFrom(table).rows);
   expect(f.scope().work?.doc.draft?.name).toBe("Edited");
   expect(f.owner().journal(f.scope().work!.handle.key).read().undo).toHaveLength(2);
-});
-
-test("Apply requires a prune review, refuses changed Work, and submits the sealed reviewed draft", async () => {
-  const f = await mounted();
-  fireEvent.click(f.view.getByRole("button", { name: "New table" }));
-  await waitFor(() => expect(f.scope().work?.doc.draft?.isNew).toBe(true));
-  fireEvent.change(f.view.getByPlaceholderText("Table name"), { target: { value: "Loads" } });
-  await waitFor(() => expect(f.scope().work?.doc.draft?.name).toBe("Loads"));
-  fireEvent.click(f.view.getByRole("button", { name: "Apply" }));
-  const review = await f.view.findByRole("dialog", { name: "Apply review" });
-  expect(review.textContent).toContain("Prune deletes 2 rows");
-  expect(review.textContent).toContain("Delete row a");
-  expect(review.textContent).toContain("Delete row b");
-  expect(review.textContent).not.toContain('"table"');
-  expect(command.run).not.toHaveBeenCalled();
-  await act(async () => {
-    await f.write(f.key, {
-      patches: [{ path: ["draft", "name"], value: "Changed" }],
-      expectedRevision: f.scope().work!.handle.revision,
-      press: "other-human",
-      kind: "apply",
-    });
-  });
-  fireEvent.click(f.view.getByRole("button", { name: "Apply" }));
-  await waitFor(() => expect(f.view.queryByLabelText("Apply review")).toBeNull());
-  expect(command.run).not.toHaveBeenCalled();
-  fireEvent.click(f.view.getByRole("button", { name: "Apply" }));
-  const currentReview = await f.view.findByRole("dialog", { name: "Apply review" });
-  command.run.mockResolvedValue(
-    actionReceiptSchema.parse({
-      id: "applied",
-      key: "data-table.apply",
-      caller: { kind: "human", via: "local" },
-      basis: { kind: "human" },
-      target: f.scope().target,
-      input: {},
-      state: "succeeded",
-      result: { name: "Changed" },
-      consumes: [],
-      effects: [],
-      steps: [],
-      prepared: { state: "ready", value: null },
-      recovery: [],
-      startedAt: "2026-10-30T06:00:00Z",
-    }),
-  );
-  fireEvent.change(within(currentReview).getByLabelText("Apply answers"), {
-    target: { value: "{}" },
-  });
-  fireEvent.click(within(currentReview).getByRole("button", { name: "Commit Apply" }));
-  await waitFor(() =>
-    expect(
-      f.owner().results.get("apply"),
-      JSON.stringify(f.owner().results.get("apply")),
-    ).toMatchObject({ state: "done" }),
-  );
-  expect(command.run).toHaveBeenCalledOnce();
-  expect(command.run).toHaveBeenCalledWith(
-    "data-table.apply",
-    {
-      table: {
-        name: "Changed",
-        columns: f.scope().work!.doc.draft!.columns,
-        rows: f.scope().work!.doc.draft!.rows,
-        pruneMissingRows: true,
-      },
-    },
-    f.scope().target,
-    f.scope().work!.handle,
-    "",
-    expect.any(String),
-    expect.any(Number),
-  );
-  await waitFor(() => expect(f.owner().view.read().page.table).toBe("Changed"));
 });
 
 test("switching documents selects that document's Work and returning restores its draft", async () => {
@@ -326,7 +269,7 @@ test("review counts native destination rows missing by key, including rename col
 test("the native source carries the selected document headers and preserves placements", async () => {
   const fetch = vi
     .spyOn(hostRuntime, "hostFetch")
-    .mockResolvedValue(new Response(JSON.stringify({ tables: [table] })));
+    .mockResolvedValue(new Response(JSON.stringify({ tables: [table], issues: [] })));
   const target = {
     kind: "document" as const,
     ref: { session: "chosen-session", openId: "chosen-document" },

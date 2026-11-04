@@ -1,3 +1,4 @@
+import { testSources, testSubject, testFields, testReadings } from "../test-route-subject";
 import { expect, test, vi } from "vite-plus/test";
 import {
   graphFieldPolicy,
@@ -40,11 +41,12 @@ const proofSettingFields = {
 const defaults = settingsSchema(proofSettingFields).parse({}) as RouteSettingsSnapshot["values"];
 test("settings cannot enter Page, URLs or shares, including explicit policy overrides", () => {
   const graph: RouteGraph<object> = {
+    ...testSubject,
     key: "settings-proof",
     address: "settings-proof",
     name: "Proof",
-    fields: { ...proofSettingFields },
-    readings: {},
+    fields: { ...testFields, ...proofSettingFields },
+    readings: { ...testReadings },
     verbs: {},
     panes: { body: { label: "Body", purpose: "proof", draws: [], verbs: [] } },
     stages: { main: { word: "Main", panes: ["body"], verbs: [] } },
@@ -53,13 +55,16 @@ test("settings cannot enter Page, URLs or shares, including explicit policy over
   const owner = createGraphMount(graph, {
     getSnapshot: () => ({ target: { kind: "host" }, work: null }),
     subscribe: () => () => {},
-    sources: {},
+    sources: { ...testSources },
     write: vi.fn(),
     subscribeAcceptedDeltas: () => () => {},
   });
-  expect(owner.view.read().page).toEqual({});
+  expect(owner.view.read().page).toEqual({ testSubject: "fixture", testSelected: [] });
   expect(graphUrlPage(graph).write({ supplyColour: "#123456" })).toEqual({});
-  expect(graphUrlPage(graph).read({ terminalFlow: "ignored" })).toEqual({});
+  expect(graphUrlPage(graph).read({ terminalFlow: "ignored" })).toEqual({
+    testSubject: "fixture",
+    testSelected: [],
+  });
   expect(graphFieldPolicy({ role: "setting", url: "push", share: true, agent: false })).toEqual({
     url: false,
     share: false,

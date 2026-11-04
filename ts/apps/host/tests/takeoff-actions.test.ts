@@ -1,10 +1,12 @@
+import { testConsents, captureStore } from "./effect-test.ts";
+import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
-import { address, roomEditKey, tools } from "@pe/agent-contracts";
+import { address, commands, roomEditKey, tools } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { markDispatched } from "../src/action-dispatch.ts";
 import { commandResources } from "../src/command-reads.ts";
@@ -13,11 +15,11 @@ import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import type { RevitBridge } from "../src/bridge.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
-import { RunConsents, type ConsentEvent } from "../src/run-consent.ts";
+import type { ConsentEvent } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 
-test.each(["selected", "unrelated"] as const)(
-  "rooms.write freezes requested room fields while %s Work changes after binding",
+test.each(["selected", "unrelated", "none"] as const)(
+  "rooms.write derives all edited fields and guards %s changes after preview",
   async (changed) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-rooms-command-"));
     const target = { session: "rooms-session", openId: "rooms-document" };
@@ -37,11 +39,12 @@ test.each(["selected", "unrelated"] as const)(
     });
     const calls: { key: string; input: unknown }[] = [];
     const events: ConsentEvent[] = [];
-    const runs = new RunConsents((_run, event) => events.push(event));
+    const runs = testConsents((_run, event) => events.push(event));
     const run = { thread: "rooms-thread", turn: "rooms-turn" };
     runs.open(run);
     bindControl({ runs });
     const bridge = {
+      subscribe: () => () => {},
       list: Effect.succeed([
         {
           sessionId: target.session,
@@ -86,11 +89,29 @@ test.each(["selected", "unrelated"] as const)(
       const rendered = (await work.read(key, "rooms"))!;
       const owner = new ActionJournal(join(directory, "journal.jsonl"));
       const deps = { workspace: work, sdk: sdkSessions };
-      const entry = takeoffExecutors(new TakeoffCaptures(directory), bridge, deps)["rooms.write"];
+      const write = takeoffExecutors(captureStore(directory), bridge, deps)["rooms.write"];
+      const entries: Record<string, ReturnType<typeof workWriteBoundary>> = {
+        "rooms.write": workWriteBoundary(write, bridge, deps),
+        "rooms.write.preview": workWriteBoundary(
+          { ...write, definition: commands["rooms.write.preview"] },
+          bridge,
+          deps,
+        ),
+      };
       owner.bindCommands({
         ...commandResources(bridge, deps, async (id) => (await owner.list(undefined, id))[0]),
-        resolve: () => entry,
+        resolve: (key) => entries[key]!,
       });
+      await owner.invoke(
+        {
+          id: "preview",
+          key: "rooms.write.preview",
+          target: { kind: "document", ref: target },
+          input: { work: { key, revision: rendered.revision } },
+        },
+        { caller: { kind: "human", via: "local" }, basis: { kind: "human" } },
+      );
+      expect((await owner.wait("preview")).state).toBe("succeeded");
       await owner.invoke(
         {
           id: "write",
@@ -98,7 +119,6 @@ test.each(["selected", "unrelated"] as const)(
           target: { kind: "document", ref: target },
           input: {
             work: { key, revision: rendered.revision },
-            regions: [{ guid: "room-a", name: "reviewed-a" }],
           },
         },
         {
@@ -109,17 +129,18 @@ test.each(["selected", "unrelated"] as const)(
       await vi.waitFor(() =>
         expect(events.some((event) => event.kind === "permission_request")).toBe(true),
       );
-      await work.publish(
-        key,
-        "rooms",
-        [{ path: ["edits", changed === "selected" ? a : b, "edit", "value"], value: "newer" }],
-        rendered.revision,
-      );
+      if (changed !== "none")
+        await work.publish(
+          key,
+          "rooms",
+          [{ path: ["edits", changed === "selected" ? a : b, "edit", "value"], value: "newer" }],
+          rendered.revision,
+        );
       const ask = events.find((event) => event.kind === "permission_request");
       if (ask?.kind !== "permission_request") throw Error("Missing root consent request");
       runs.decide(run.thread, ask.requestId, "allow_now");
       const receipt = await owner.wait("write");
-      if (changed === "selected") {
+      if (changed !== "none") {
         expect(receipt).toMatchObject({
           state: "failed",
           notDispatched: true,
@@ -130,10 +151,18 @@ test.each(["selected", "unrelated"] as const)(
         expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
         expect(calls).toEqual([
           { key: "takeoffs.initialize-carrier", input: { stage: "Rooms" } },
-          { key: "rooms.write", input: { regions: [{ guid: "room-a", name: "reviewed-a" }] } },
+          {
+            key: "rooms.write",
+            input: {
+              regions: [
+                { guid: "room-a", name: "reviewed-a" },
+                { guid: "room-b", name: "reviewed-b" },
+              ],
+            },
+          },
         ]);
         expect((await work.read(key, "rooms"))!.doc).toMatchObject({
-          edits: { [b]: { edit: { value: "newer" } } },
+          edits: { [b]: { edit: { value: "reviewed-b" } } },
         });
       }
     } finally {

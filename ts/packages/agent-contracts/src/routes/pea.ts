@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { modeKey } from "../page-keys.ts";
-import { field, text, type RouteDeclaration } from "../route-field.ts";
+import { manyField, field, text, type RouteDeclaration } from "../route-field.ts";
 import { threadListFields } from "./shared.ts";
 
 export const peaAddress = {
@@ -8,6 +8,7 @@ export const peaAddress = {
   title: "Pea",
   fields: {
     ...threadListFields,
+    selected: manyField("name", { url: "replace", agent: "set" }),
     mode: field(modeKey(["threads", "world"], "threads"), { url: "replace" }),
     /** The turn to focal-scroll on open; absent = the tail. */
     turn: field(z.number().int().positive().optional(), { url: "replace" }),

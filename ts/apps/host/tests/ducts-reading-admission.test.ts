@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActionJournal } from "../src/action-journal.ts";
 import { Context, Effect, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { expect, test } from "vite-plus/test";
 import { DUCTS_BODY_VERSION_HEADER, DUCTS_REFRESH_HEADER, type Caller } from "@pe/agent-contracts";
 import {
@@ -57,11 +57,11 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
               value: {
                 operations: [
                   {
-                    key: "ducts.snapshot",
-                    intent: "Read",
+                    key: "ducts.snapshot.walk",
+                    intent: "Read", subject: "Elements", touches: "Geometry", effect: "Read", cardinality: "One", costTier: "Bounded",
                     needs: "project-document",
                   },
-                  { key: "ducts.tables", intent: "Read", needs: "nothing" },
+                  { key: "ducts.tables", intent: "Read", subject: "None", touches: "Metadata", effect: "Read", cardinality: "One", costTier: "Bounded", needs: "nothing" },
                 ],
               },
               target: null,
@@ -71,7 +71,7 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
               target: {
                 session: target.session,
                 document: "C:/HVAC.rvt",
-                ...(key === "ducts.snapshot" ? { documentRef: target } : {}),
+                ...(key === "ducts.snapshot.walk" ? { documentRef: target } : {}),
               },
             },
       ),
@@ -101,15 +101,15 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
         headers: {
           "content-type": "application/json",
           [HOST_RPC_BRIDGE_SESSION_HEADER]: session,
-          ...(key === "ducts.snapshot" ? { [HOST_RPC_DOCUMENT_HEADER]: target.openId } : {}),
+          ...(key === "ducts.snapshot.walk" ? { [HOST_RPC_DOCUMENT_HEADER]: target.openId } : {}),
           ...extra,
         },
-        body: JSON.stringify({ key, request: key === "ducts.tables" ? { ids: ["SD5-9"] } : {} }),
+        body: JSON.stringify({ key, request: key === "ducts.tables" ? { ids: ["SD5-9"] } : { selector: { kind: "ids", ids: [1] } } }),
       }),
       Context.empty() as never,
     );
   try {
-    for (const key of ["ducts.snapshot", "ducts.tables"]) {
+    for (const key of ["ducts.snapshot.walk", "ducts.tables"]) {
       const first = await post(key);
       expect(first.status, await first.clone().text()).toBe(200);
       expect(first.headers.get("x-pe-ducts-reused")).toBe("false");

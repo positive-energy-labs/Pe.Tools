@@ -11,15 +11,20 @@ import {
   type FittingPricing,
   type Resolved,
 } from "@pe/agent-contracts";
-import { editCells } from "@pe/ducts-domain/sheet/index";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { fittingGroups, tableMeaning } from "./fitting-groups";
-import { cellsAt, effectWords, restorePatches } from "./input-history";
 import { inputRows } from "./input-rows";
 import { kindMeaning } from "./kind-meaning";
 
 type Node = DuctSnapshot["nodes"][number];
-const firm = <T>(value: T): Resolved<T> => ({ value, source: "firm", ref: "seed" });
+const firm = <T>(value: T): Resolved<T> => ({
+  value,
+  source: "firm",
+  ref: "seed",
+  units: null,
+  version: null,
+  status: "valid",
+});
 const inputs = (extra: Partial<DuctsInputs> = {}): DuctsInputs =>
   ductsInputsSchema.parse({
     criteria: {
@@ -65,11 +70,38 @@ const erv = (id: number): Node =>
       port(4, "in", "SupplyAir"),
     ],
   }) as unknown as Node;
-const unit = (kind: "erv" | "air-handler", source: "typed" | "suggested") => ({
-  kind: { value: kind, source, ...(source === "suggested" ? { ref: "name" } : {}) },
-  role: { value: "fan" as const, source: "suggested" as const, ref: "name" },
-  cfm: { value: 35, source: "revit" as const, ref: "PE_M_Fan_AirFlow" },
-  esp: { value: null, source: "none" as const },
+const unit = (kind: "erv" | "air-handler", source: "Work" | "default") => ({
+  kind: {
+    value: kind,
+    source,
+    units: null,
+    version: null,
+    status: "valid" as const,
+    ...(source === "default" ? { ref: "name" } : {}),
+  },
+  role: {
+    units: null,
+    version: null,
+    status: "valid" as const,
+    value: "fan" as const,
+    source: "default" as const,
+    ref: "name",
+  },
+  cfm: {
+    units: "cfm",
+    version: null,
+    status: "valid" as const,
+    value: 35,
+    source: "model" as const,
+    ref: "PE_M_Fan_AirFlow",
+  },
+  esp: {
+    units: "in-wg",
+    version: null,
+    status: "missing" as const,
+    value: null,
+    source: "none" as const,
+  },
 });
 const KEY = JSON.stringify(["Broan_B160E75RT_ERV_R25", "B160E75RT"]);
 
@@ -80,7 +112,7 @@ it("a unit kind is one row per family and type, named by family and type and the
     snapshot: { nodes: ids.map(erv) },
     doc: null,
     inputs: inputs({
-      units: Object.fromEntries(ids.map((id) => [id, unit("air-handler", "typed")])),
+      units: Object.fromEntries(ids.map((id) => [id, unit("air-handler", "Work")])),
     }),
     fanUnitId: null,
   }).filter((r) => r.label === "Unit kind");
@@ -100,9 +132,9 @@ it("a unit kind is one row per family and type, named by family and type and the
 
 it("each kind option says what it means for this unit's ports, role and flow", () => {
   const node = erv(6105264);
-  const u = unit("erv", "suggested");
+  const u = unit("erv", "default");
   expect(kindMeaning(node, "erv", u)).toBe(
-    "fan: supply out c2 from supply in c4; exhaust out c3 from exhaust in c1 · flow 35 cfm (revit PE_M_Fan_AirFlow)",
+    "fan: supply out c2 from supply in c4; exhaust out c3 from exhaust in c1 · flow 35 cfm (model PE_M_Fan_AirFlow)",
   );
   // The r22 choice: an air handler takes one outlet, so this unit loses its fan ports.
   expect(kindMeaning(node, "air-handler", u)).toMatch(
@@ -117,14 +149,27 @@ it("a row stays when its value is not typed, carrying the source underneath and 
     doc: null,
     inputs: inputs({
       terminals: {
-        7: { cfm: { value: 1120, source: "revit", ref: "Flow" }, drop: firm(0.03) },
-        8: { cfm: { value: 150, source: "typed" }, drop: firm(0.03) },
+        7: {
+          cfm: {
+            value: 1120,
+            source: "model",
+            ref: "Flow",
+            units: null,
+            version: null,
+            status: "valid",
+          },
+          drop: firm(0.03),
+        },
+        8: {
+          cfm: { value: 150, source: "Work", units: null, version: null, status: "valid" },
+          drop: firm(0.03),
+        },
       },
     }),
     fanUnitId: null,
   });
   expect(rows.find((r) => r.key === "terminal:7:cfm")).toMatchObject({
-    source: "revit Flow",
+    source: "model Flow",
     typed: false,
     clear: null,
   });
@@ -180,13 +225,23 @@ it("fittings group by rule: one header with the rule's name, table meaning and p
 
 it("picking the rule's own table over a typed choice clears it instead of typing the default", () => {
   // r16 wrote "typed CD3-2" (the default), which changed nothing and read as a person's choice.
-  const typedIn = inputs({ tables: { "elbow-1d-le10": { value: "CD3-21", source: "typed" } } });
+  const typedIn = inputs({
+    tables: {
+      "elbow-1d-le10": {
+        value: "CD3-21",
+        source: "Work",
+        units: null,
+        version: null,
+        status: "valid",
+      },
+    },
+  });
   const [g] = fittingGroups(
     [fitting(1, { table: "CD3-21", tableSource: "typed" })],
     typedIn,
     TITLES,
   );
-  expect(g!.source).toBe("typed");
+  expect(g!.source).toBe("Work");
   expect(g!.choices.find((c) => c.key === "CD3-2")!.edits).toEqual({
     tables: { "elbow-1d-le10": null },
   });
@@ -213,12 +268,22 @@ it("unmatched fittings group by family, and a choice in Work no fitting of this 
   });
   const groups = fittingGroups(
     [unmatched],
-    inputs({ tables: { "trx-round": { value: "SD4-1", source: "typed" } } }),
+    inputs({
+      tables: {
+        "trx-round": {
+          value: "SD4-1",
+          source: "Work",
+          units: null,
+          version: null,
+          status: "valid",
+        },
+      },
+    }),
     TITLES,
   );
   expect(groups.map((g) => [g.key, g.members.length, g.source])).toEqual([
     ["family:Round Elbow", 1, "not priced"],
-    ["rule:trx-round", 0, "typed"],
+    ["rule:trx-round", 0, "Work"],
   ]);
   expect(groups[0]!.choices[0]!.edits).toEqual({
     assignments: { "Round Elbow": { rule: "elbow-15d-45-le10" } },
@@ -231,58 +296,8 @@ it("ASHRAE titles read as the fitting, without the id and the source", () => {
   expect(tableMeaning("CD3-9", TITLES)).toBeNull();
 });
 
-it("undo restores the exact Work cells an edit wrote, a cell that did not exist by deleting it", () => {
-  const edits = {
-    kinds: { [KEY]: { kind: "air-handler" as const } },
-    tables: { "elbow-1d-le10": null },
-  };
-  const cells = editCells(edits);
-  expect(cells).toEqual([
-    ["kinds", KEY],
-    ["rules", "elbow-1d-le10"],
-  ]);
-  const before = {
-    kinds: {},
-    rules: { "elbow-1d-le10": { edit: { value: { table: "CD3-21" }, by: "human" } } },
-  };
-  const saved = cellsAt(before, cells);
-  expect(restorePatches(cells, saved)).toEqual([
-    { path: ["kinds", KEY] },
-    {
-      path: ["rules", "elbow-1d-le10"],
-      value: { edit: { value: { table: "CD3-21" }, by: "human" } },
-    },
-  ]);
-});
-
-it("an edit's effect reads before → after on what moved, ≥ marking an incomplete side's known subtotal", () => {
-  const side = (worstPath: number | null, knownInWg: number, complete: boolean) => ({
-    worstPath,
-    knownInWg,
-    complete,
-    assumedInWg: null,
-    allowanceInWg: 0,
-    telFt: 0,
-    frictionRatePer100: null,
-  });
-  const r14 = {
-    supply: side(null, 0.028054, false),
-    return: side(0.046875, 0.046875, true),
-    requiredEspInWg: null,
-    requiredEspAssumedInWg: null,
-  };
-  const r20 = {
-    supply: side(null, 0.016504, false),
-    return: side(0.035566, 0.035566, true),
-    requiredEspInWg: null,
-    requiredEspAssumedInWg: null,
-  };
-  expect(effectWords(r14, r20)).toBe("supply ≥0.0281 → ≥0.0165 · return 0.0469 → 0.0356");
-  expect(effectWords(r14, r14)).toBe("no change to this fan's totals");
-});
-
 it("a kind that would take the unit off the fan list is a disabled option; the rest stay pickable", () => {
-  const rowFor = (node: Node, kind: "erv" | "air-handler", source: "typed" | "suggested") =>
+  const rowFor = (node: Node, kind: "erv" | "air-handler", source: "Work" | "default") =>
     inputRows({
       snapshot: { nodes: [node] },
       doc: null,
@@ -290,7 +305,7 @@ it("a kind that would take the unit off the fan list is a disabled option; the r
       fanUnitId: null,
     }).find((r) => r.label === "Unit kind")!;
   const options = (node: Node) => {
-    const control = rowFor(node, "erv", "suggested").control;
+    const control = rowFor(node, "erv", "default").control;
     if (control.kind !== "kind") throw new Error("kind control");
     return Object.fromEntries(control.options.map((o) => [o.kind, o.disabled]));
   };
@@ -310,7 +325,7 @@ it("a kind that would take the unit off the fan list is a disabled option; the r
   } as Node;
   expect(options(single)["air-handler"]).toBeNull();
   // A stale typed air-handler on the B160 stays the standing value, flagged disabled, clearable.
-  const stale = rowFor(erv(6105264), "air-handler", "typed");
+  const stale = rowFor(erv(6105264), "air-handler", "Work");
   expect(stale.control.kind === "kind" && stale.control.value).toBe("air-handler");
   expect(
     stale.control.kind === "kind" &&

@@ -44,3 +44,20 @@ test("URL field subscribers ignore selection writes and still follow their own f
   act(() => history.back());
   await waitFor(() => expect(view.getByTestId("target").textContent).toBe("A"));
 });
+
+test("a Ducts focus selection reaches shell carry readers without a Pea field decode", async () => {
+  function Target() {
+    const target = useRouteSearchSlice(search => search.target);
+    return <output data-testid="focus-target">{String(target)}</output>;
+  }
+  const route = createRootRoute({ component: Target, validateSearch: search => ({ ...search,
+    selected: [Object.assign(Object.create(null), { kind: "focus", id: '["ducts-focus","cell:equipmentFlows:8108427:inputs"]' })],
+  }) });
+  const search = new URLSearchParams({
+    target: "Chadds",
+    selected: JSON.stringify([{ kind: "focus", id: '["ducts-focus","cell:equipmentFlows:8108427:inputs"]' }]),
+  });
+  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: [`/ducts?${search}`] }) });
+  const view = render(<RouterProvider router={router} />);
+  await waitFor(() => expect(view.getByTestId("focus-target").textContent).toBe("Chadds"));
+});

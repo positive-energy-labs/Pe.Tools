@@ -1,3 +1,4 @@
+import { routeModuleHash } from "./route-module-hash.ts";
 import path, { dirname, resolve } from "node:path";
 import { checkoutRoot, familyFixturesDir } from "./checkout-paths.ts";
 import { devIcons } from "./dev-icons.ts";
@@ -61,6 +62,7 @@ const config = defineConfig(({ mode, command }) => {
       ),
     },
     plugins: [
+      routeModuleHash(),
       devIcons(),
       // proto: with a saved ducts fixture and no host, answer the shell's one
       // required host call so /ducts opens in a plain browser. Throwaway.
@@ -127,6 +129,7 @@ const config = defineConfig(({ mode, command }) => {
         allow: [
           searchForWorkspaceRoot(import.meta.dirname),
           familyFixturesDir,
+          resolve(checkoutRoot, "examples/pods"),
           ...(ductsFixture ? [dirname(ductsFixture)] : []),
         ],
       },

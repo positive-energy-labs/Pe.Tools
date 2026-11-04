@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { useWorkOwner, WorkContext } from "@pe/kit/lang/work";
@@ -9,7 +9,7 @@ import { makeAtomRegistry } from "#/shell/owner";
 import { SceneMeshes } from "../types";
 import { Picture, type PictureContent } from "./picture";
 import type { Scene3DProps } from "../scene3d";
-import { ductsGraph } from "#/ducts/graph";
+import { ductsData as ductsGraph } from "#/ducts/neutral";
 import { reduceLayout } from "../../../../../packages/kit/src/components/lang/layout-graph";
 import type { LayoutNode } from "@pe/agent-contracts";
 
@@ -47,6 +47,15 @@ afterEach(() => {
 });
 const selection = Atom.make<ReadonlySet<SubjectKey>>(new Set<SubjectKey>());
 const content: PictureContent = {
+  geometry: {
+    overview: {
+      elementIds: [7311],
+      contextPaddingFt: 0,
+      focusOnly: false,
+      contextRepresentation: "overview",
+      maxTriangles: 100000,
+    },
+  },
   focus: { walked: ["e:7311"], near: [] },
   lines: [],
   name: () => "duct",
@@ -133,11 +142,13 @@ it("arms capture on growth from 0×0, renders, and re-arms after collapse during
   view.resize(0, 0);
   expect(io.call).not.toHaveBeenCalled();
   view.resize(640, 480);
+  await act(async () => {});
   expect(io.call).toHaveBeenCalledTimes(1);
   view.resize(0, 0);
   await act(async () => {});
   expect(io.call.mock.calls[0]![2].signal.aborted).toBe(true);
   view.resize(640, 480);
+  await act(async () => {});
   expect(io.call).toHaveBeenCalledTimes(2);
   await act(async () => resolvers[1]!({ id: "grown-picture" }));
   await waitFor(() =>
@@ -157,6 +168,7 @@ it("clears capture words when capture settles, then refresh words when the readi
   );
   const view = mount("status-settles", true);
   view.resize(640, 480);
+  await act(async () => {});
   expect(view.container.querySelector("output")!.textContent).toContain("capturing meshes");
   await act(async () => resolve({ id: "settled-picture" }));
   await waitFor(() =>

@@ -1,3 +1,5 @@
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-rooms Declaration 168 > 60 after kernel defaults. Partition/write/merge commands, anchored feedback and plan layers remain distinct.
 import { z } from "zod";
 import {
   gate,
@@ -15,12 +17,11 @@ import {
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { roomsAddress } from "../../../../packages/agent-contracts/src/routes/rooms";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
-import { commandVerb, workVerb, queryVerb } from "#/shell/verbs";
+import { commandVerb, workVerb, queryVerb, prepareCommand } from "#/shell/verbs";
 import { roomsQueries } from "./refresh";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 
 export const roomsPageSchema = routeAddress("rooms").schema.extend({
-  selected: z.array(z.string()).default([]),
   epoch: z.number().default(0),
 });
 export type RoomsPage = z.output<typeof roomsPageSchema>;
@@ -42,7 +43,27 @@ const feedbackVerbs = Object.assign(
   { ids: ["delete-note", "applyMark"] },
 );
 
-export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
+export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = defineRouteGraph({
+  directory: {
+    path: "/rooms",
+    title: "Rooms",
+    label: "Manual J",
+    exposure: "Preview",
+    runtimeNeed: "Revit for model actions; browsing saved data is separate",
+    icon: "LayoutDashboard",
+    category: "Calculate loads & airflow",
+    blurb:
+      "Split a level's plan view into room regions, stage each room's name, type and loads, and write them to the regions in Revit.",
+    aliases: ["manual", "j", "loads", "regions"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+    resume: "document",
+  },
   key: "rooms",
   address: "rooms",
   name: "Rooms",
@@ -54,28 +75,16 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
   },
   needs: "project",
   work: roomsRouteState.schema,
+  subjectField: { field: "view", noun: "view", keyKind: "name", roster: "roster", detail: "snapshot", pane: "scope", },
   fields: {
     threadSearch: { ...fields.threadSearch, role: "query" },
     threadSort: { ...fields.threadSort, role: "query" },
-    stage: { ...fields.stage, role: "stage", agent: false },
-    view: { ...fields.view, role: "subject", agent: false },
-    layers: { ...fields.layers, role: "pose", agent: false },
-    focus: { ...fields.focus, role: "selection", agent: false },
+    stage: { ...fields.stage, agent: false },
+    view: { ...fields.view, agent: false },
+    layers: { ...fields.layers, agent: false },
     show: { ...fields.show, role: "query", agent: false },
-    card: { ...fields.card, role: "selection", agent: false },
-    viewport: { ...fields.viewport, role: "pose" },
-    selected: {
-      ...field(
-        roomsPageSchema.shape.selected,
-        {},
-        {
-          encode: JSON.stringify,
-          decode: JSON.parse,
-        },
-      ),
-      role: "transient",
-      url: false,
-    },
+    viewport: fields.viewport,
+    selected: { ...fields.selected, role: "selection" },
     epoch: {
       ...field(
         roomsPageSchema.shape.epoch,
@@ -88,6 +97,9 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
       role: "transient",
       url: false,
     },
+  },
+  workFields: {
+    notes: { label: "notes" },
   },
   cells: [
     { segment: "edits", groupOf: (key) => [roomEditAddress(key).guid], nouns: ["room"] },
@@ -109,24 +121,15 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
   }),
   readings: {
     snapshot: {
-      kind: "use",
-      source: "rooms.snapshot",
-      retire: "page",
       args: (p) => [p.view, p.epoch],
     },
     trace: {
-      kind: "use",
-      source: "rooms.trace",
-      retire: "page",
       args: (p) => [p.view, p.epoch],
     },
     plan: {
-      kind: "use",
-      source: "rooms.plan",
-      retire: "page",
       args: (p) => p.view,
     },
-    receipts: { kind: "use", source: "rooms.receipts", retire: "target" },
+    receipts: {},
   },
   verbs: {
     refresh: queryVerb(roomsQueries["rooms.refresh"], {
@@ -186,18 +189,22 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
             rows: [`Keep ${count} rejected ${count === 1 ? "region" : "regions"} excluded.`],
           };
         },
-        intent: (_, input) => input.request,
+        stage: (_, input) => input.request,
+        intent: () => ({}),
       },
     ),
     apply: commandVerb(
       "rooms.write",
       { ...command, label: "apply", input: request(takeoffActions["rooms.write"].input) },
       {
-        // TODO: shell/verbs needs admitted command-result Work patches to clear only the cells written.
+        // TODO: docs/features/routes/LEDGER.md#s7-1319af9e7a shell/verbs needs admitted command-result Work patches to clear only the cells written.
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: (_, input) => input.refusal,
-        prepare: (_, input) => input.request,
-        intent: (_, input) => input.request,
+        prepare: async (scope, input) => {
+          await prepareCommand(scope, "rooms.write.preview", {});
+          return input.request;
+        },
+        intent: () => ({}),
       },
     ),
     merge: commandVerb(
@@ -210,7 +217,8 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: (_, input) => input.refusal,
         prepare: (_, input) => input.request,
-        intent: (_, input) => input.request,
+        stage: (_, input) => input.request,
+        intent: () => ({}),
       },
     ),
     applyMark: commandVerb(
@@ -220,7 +228,8 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
         waitSeconds: NATIVE_APPLY_WAIT_S,
         ready: (_, input) => input.refusal,
         prepare: (_, input) => input.request,
-        intent: (_, input) => input.request,
+        stage: (_, input) => input.request,
+        intent: () => ({}),
       },
     ),
   },
@@ -229,7 +238,6 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
       label: "Plan view",
       purpose: "Choose the level and plan view",
       draws: ["snapshot"],
-      verbs: [],
     },
     plan: {
       label: "Plan",
@@ -249,14 +257,12 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
       label: "Regions",
       purpose: "Edit room names, designation and Manual J fields",
       draws: ["snapshot"],
-      verbs: [],
     },
     history: {
       label: "History",
       history: { receipts: "receipts" },
       purpose: "Inspect this document's rooms receipts",
       draws: ["receipts"],
-      verbs: [],
     },
   },
   layout: split(
@@ -291,4 +297,4 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = {
     history: { word: "History", panes: ["history"], verbs: ["refresh"] },
   },
   stageOrder: ["partition", "review", "history"],
-};
+});

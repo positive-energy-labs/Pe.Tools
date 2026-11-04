@@ -48,6 +48,7 @@ export async function callHostRpc<K extends OpKey>(
       | { kind?: string; message?: string; status?: number }
       | undefined;
     throw new HostCallError(`${key}: ${failure.message}`, response.status, {
+      ...(Array.isArray(failure.details) ? { issues: failure.details } : problem),
       kind: problem?.kind,
       operationKey: key,
       title: failure.message,

@@ -1,0 +1,454 @@
+{
+  "actionId": "3e85dd69-e0ff-4471-8840-4c3b97aa71bb",
+  "sourceCommit": "056b5e75",
+  "prepared": {
+    "input": {
+      "include": "all",
+      "work": {
+        "key": {
+          "route": "families",
+          "target": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools\\.artifacts\\runs\\live-20261102-families-2\\Chadds-u2-i3.rvt",
+          "binding": "address",
+          "from": {
+            "session": "session-7eafdf8afb2a789d",
+            "openId": "d660ce6c632347419afd3a708ddab562"
+          }
+        },
+        "revision": 5
+      }
+    },
+    "value": {
+      "kind": "batch",
+      "items": [
+        {
+          "kind": "native",
+          "process": {
+            "pid": 62276,
+            "processStartUtc": "2026-11-02T15:06:23.1591451Z",
+            "executable": "C:\\Program Files\\Autodesk\\Revit 2025\\Revit.exe"
+          },
+          "input": {
+            "specJson": "{\n  \"$schema\": \"http://127.0.0.1:61340/schemas/settings/FamilyFoundry/patches.json\",\n  \"select\": {\n    \"names\": [\n      \"Broan_B1X0E65RT_ERV\"\n    ]\n  },\n  \"patch\": {\n    \"types\": {\n      \"B130E65RT\": {\n        \"PE_G___Model\": \"B130E65RT-U2I3\",\n        \"PE_G_Dim_Height1\": {\n          \"value\": \"1.6666666666666665\",\n          \"unit\": \"Feet and fractional inches\"\n        }\n      }\n    }\n  }\n}\n",
+            "expectedPlanHashes": {
+              "10965101": "8525C51940CCF677"
+            },
+            "familyNames": {
+              "10965101": "Broan_B1X0E65RT_ERV"
+            },
+            "source": {
+              "root": {
+                "id": null,
+                "path": "edit/Broan_B1X0E65RT_ERV.json",
+                "sha256": "75a6ab0021cd52b24638a13a917c687bf97f7b2c93fedf85593f7fa2c01c0846",
+                "bytesBase64": "ewogICIkc2NoZW1hIjogImh0dHA6Ly8xMjcuMC4wLjE6NjEzNDAvc2NoZW1hcy9zZXR0aW5ncy9GYW1pbHlGb3VuZHJ5L3BhdGNoZXMuanNvbiIsCiAgInNlbGVjdCI6IHsKICAgICJuYW1lcyI6IFsKICAgICAgIkJyb2FuX0IxWDBFNjVSVF9FUlYiCiAgICBdCiAgfSwKICAicGF0Y2giOiB7CiAgICAidHlwZXMiOiB7CiAgICAgICJCMTMwRTY1UlQiOiB7CiAgICAgICAgIlBFX0dfX19Nb2RlbCI6ICJCMTMwRTY1UlQtVTJJMyIsCiAgICAgICAgIlBFX0dfRGltX0hlaWdodDEiOiB7CiAgICAgICAgICAidmFsdWUiOiAiMS42NjY2NjY2NjY2NjY2NjY1IiwKICAgICAgICAgICJ1bml0IjogIkZlZXQgYW5kIGZyYWN0aW9uYWwgaW5jaGVzIgogICAgICAgIH0KICAgICAgfQogICAgfQogIH0KfQo=",
+                "origin": "SuppliedDraft"
+              },
+              "dependencies": []
+            },
+            "plan": "3e85dd69-e0ff-4471-8840-4c3b97aa71bb:prepared"
+          },
+          "retire": {
+            "key": {
+              "route": "families",
+              "target": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools\\.artifacts\\runs\\live-20261102-families-2\\Chadds-u2-i3.rvt",
+              "binding": "address",
+              "from": {
+                "session": "session-7eafdf8afb2a789d",
+                "openId": "d660ce6c632347419afd3a708ddab562"
+              }
+            },
+            "route": "families",
+            "cells": [
+              "[\"Broan_B1X0E65RT_ERV\",\"B130E65RT\",\"PE_G___Model\"]",
+              "[\"Broan_B1X0E65RT_ERV\",\"B130E65RT\",\"PE_G_Dim_Height1\"]"
+            ]
+          },
+          "readbackWork": {
+            "route": "families",
+            "target": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools\\.artifacts\\runs\\live-20261102-families-2\\Chadds-u2-i3.rvt",
+            "binding": "address",
+            "from": {
+              "session": "session-7eafdf8afb2a789d",
+              "openId": "d660ce6c632347419afd3a708ddab562"
+            }
+          },
+          "readbackTakenAt": "2026-11-02T15:14:02.725Z"
+        }
+      ]
+    },
+    "seal": {
+      "requestHash": "dbf003733a49243ade9a1a9c0302c11affa98d2c916f4ccd24836b73b1ee53d7",
+      "work": {
+        "handle": {
+          "key": {
+            "route": "families",
+            "target": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools\\.artifacts\\runs\\live-20261102-families-2\\Chadds-u2-i3.rvt",
+            "binding": "address",
+            "from": {
+              "session": "session-7eafdf8afb2a789d",
+              "openId": "d660ce6c632347419afd3a708ddab562"
+            }
+          },
+          "revision": 5
+        },
+        "consumed": [
+          {
+            "expected": {
+              "cells": {
+                "[\"Broan_B1X0E65RT_ERV\",\"B130E65RT\",\"PE_G_Dim_Height1\"]": {
+                  "edit": {
+                    "at": "2026-11-02T15:15:50.537Z",
+                    "base": 3,
+                    "by": "human",
+                    "value": {
+                      "display": "1' - 8\"",
+                      "storageType": "Double",
+                      "unit": "Feet and fractional inches",
+                      "value": "1.6666666666666665"
+                    }
+                  }
+                },
+                "[\"Broan_B1X0E65RT_ERV\",\"B130E65RT\",\"PE_G___Model\"]": {
+                  "edit": {
+                    "at": "2026-11-02T15:14:51.105Z",
+                    "base": 2,
+                    "by": "human",
+                    "value": {
+                      "storageType": "String",
+                      "value": "B130E65RT-U2I3"
+                    }
+                  }
+                }
+              },
+              "excluded": {},
+              "patch": {},
+              "scope": {
+                "edit": {
+                  "at": "2026-11-02T15:14:37.336Z",
+                  "base": 1,
+                  "by": "human",
+                  "value": {
+                    "categoryNames": [
+                      "Mechanical Equipment"
+                    ],
+                    "familyNames": [
+                      "Broan_B1X0E65RT_ERV"
+                    ],
+                    "placementScope": "PlacedOnly"
+                  }
+                }
+              },
+              "takenAt": "2026-11-02T15:14:02.725Z",
+              "writeIntent": {
+                "families.apply": {
+                  "edit": {
+                    "at": "2026-11-02T15:17:11.185Z",
+                    "base": 4,
+                    "by": "human",
+                    "value": {
+                      "include": "all"
+                    }
+                  }
+                }
+              }
+            },
+            "kind": "work",
+            "probe": {
+              "edits": [
+                [
+                  "cells",
+                  "*"
+                ],
+                [
+                  "patch"
+                ],
+                [
+                  "scope"
+                ],
+                [
+                  "writeIntent",
+                  "*"
+                ]
+              ],
+              "handle": {
+                "key": {
+                  "binding": "address",
+                  "from": {
+                    "openId": "d660ce6c632347419afd3a708ddab562",
+                    "session": "session-7eafdf8afb2a789d"
+                  },
+                  "route": "families",
+                  "target": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools\\.artifacts\\runs\\live-20261102-families-2\\Chadds-u2-i3.rvt"
+                },
+                "revision": 5
+              },
+              "paths": [
+                [
+                  "cells",
+                  "[\"Broan_B1X0E65RT_ERV\",\"B130E65RT\",\"PE_G_Dim_Height1\"]",
+                  "edit"
+                ],
+                [
+                  "cells",
+                  "[\"Broan_B1X0E65RT_ERV\",\"B130E65RT\",\"PE_G___Model\"]",
+                  "edit"
+                ],
+                [
+                  "cells"
+                ],
+                [
+                  "excluded"
+                ],
+                [
+                  "executionOptions"
+                ],
+                [
+                  "patch",
+                  "edit"
+                ],
+                [
+                  "patch"
+                ],
+                [
+                  "scope",
+                  "edit"
+                ],
+                [
+                  "scope"
+                ],
+                [
+                  "takenAt"
+                ],
+                [
+                  "writeIntent",
+                  "families.apply",
+                  "edit"
+                ]
+              ]
+            }
+          }
+        ]
+      },
+      "incarnation": {
+        "target": {
+          "session": "session-7eafdf8afb2a789d",
+          "openId": "d660ce6c632347419afd3a708ddab562"
+        },
+        "process": {
+          "pid": 62276,
+          "processStartUtc": "2026-11-02T15:06:23.1591451Z",
+          "executable": "C:\\Program Files\\Autodesk\\Revit 2025\\Revit.exe"
+        }
+      },
+      "dependencies": "b1cec40a0d249541aecbdcd2d665cf5008d34b11cfc47787db7e8e1e5c533b33"
+    },
+    "previewOnly": true,
+    "takenAt": "2026-11-02T15:17:11.676Z"
+  },
+  "responseActionId": "a8b84f8d-25ab-48b4-b2e5-ab8e4c1f9f5d",
+  "response": {
+    "previewOnly": true,
+    "derivedRequest": [
+      {
+        "specJson": "{\n  \"$schema\": \"http://127.0.0.1:56146/schemas/settings/FamilyFoundry/patches.json\",\n  \"select\": {\n    \"names\": [\n      \"Broan_B1X0E65RT_ERV\"\n    ]\n  },\n  \"patch\": {\n    \"types\": {\n      \"B130E65RT\": {\n        \"PE_G___Model\": \"B130E65RT-U2F3A\"\n      },\n      \"B160E65RT\": {\n        \"PE_G___Model\": \"B160E65RT-U2F3A\"\n      }\n    }\n  }\n}\n",
+        "expectedPlanHashes": {
+          "10965101": "E17870FACDEA43E8"
+        },
+        "familyNames": {
+          "10965101": "Broan_B1X0E65RT_ERV"
+        },
+        "source": {
+          "root": {
+            "id": null,
+            "path": "edit/Broan_B1X0E65RT_ERV.json",
+            "sha256": "84238a576a15f842377dfb20fb2ea40986556aad111ae12403f8c3b5bdc1742b",
+            "bytesBase64": "ewogICIkc2NoZW1hIjogImh0dHA6Ly8xMjcuMC4wLjE6NTYxNDYvc2NoZW1hcy9zZXR0aW5ncy9GYW1pbHlGb3VuZHJ5L3BhdGNoZXMuanNvbiIsCiAgInNlbGVjdCI6IHsKICAgICJuYW1lcyI6IFsKICAgICAgIkJyb2FuX0IxWDBFNjVSVF9FUlYiCiAgICBdCiAgfSwKICAicGF0Y2giOiB7CiAgICAidHlwZXMiOiB7CiAgICAgICJCMTMwRTY1UlQiOiB7CiAgICAgICAgIlBFX0dfX19Nb2RlbCI6ICJCMTMwRTY1UlQtVTJGM0EiCiAgICAgIH0sCiAgICAgICJCMTYwRTY1UlQiOiB7CiAgICAgICAgIlBFX0dfX19Nb2RlbCI6ICJCMTYwRTY1UlQtVTJGM0EiCiAgICAgIH0KICAgIH0KICB9Cn0K",
+            "origin": "SuppliedDraft"
+          },
+          "dependencies": []
+        },
+        "plan": "a8b84f8d-25ab-48b4-b2e5-ab8e4c1f9f5d:prepared"
+      }
+    ],
+    "seal": {
+      "requestHash": "f19094c551f4eebe4c96c3c16f6131268482dc302334e2060c1a0b77407b83da",
+      "work": {
+        "handle": {
+          "key": {
+            "route": "families",
+            "target": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-12242741\\.artifacts\\accept\\u2-f3a\\Chadds-u2-f3a.rvt",
+            "binding": "address",
+            "from": {
+              "session": "session-3bd44075e6614f72",
+              "openId": "167e937b4d184bcda4fe3863b32f3f4c"
+            }
+          },
+          "revision": 5
+        },
+        "consumed": [
+          {
+            "expected": {
+              "cells": {
+                "[\"Broan_B1X0E65RT_ERV\",\"B130E65RT\",\"PE_G___Model\"]": {
+                  "edit": {
+                    "at": "2026-11-02T16:01:15.903Z",
+                    "base": 2,
+                    "by": "human",
+                    "value": {
+                      "storageType": "String",
+                      "value": "B130E65RT-U2F3A"
+                    }
+                  }
+                },
+                "[\"Broan_B1X0E65RT_ERV\",\"B160E65RT\",\"PE_G___Model\"]": {
+                  "edit": {
+                    "at": "2026-11-02T16:05:03.313Z",
+                    "base": 3,
+                    "by": "human",
+                    "value": {
+                      "storageType": "String",
+                      "value": "B160E65RT-U2F3A"
+                    }
+                  }
+                }
+              },
+              "excluded": {},
+              "patch": {},
+              "scope": {
+                "edit": {
+                  "at": "2026-11-02T16:00:54.390Z",
+                  "base": 1,
+                  "by": "human",
+                  "value": {
+                    "categoryNames": [
+                      "Mechanical Equipment"
+                    ],
+                    "familyNames": [
+                      "Broan_B1X0E65RT_ERV"
+                    ],
+                    "placementScope": "PlacedOnly"
+                  }
+                }
+              },
+              "takenAt": "2026-11-02T16:00:05.644Z",
+              "writeIntent": {
+                "families.apply": {
+                  "edit": {
+                    "at": "2026-11-02T16:05:43.905Z",
+                    "base": 4,
+                    "by": "human",
+                    "value": {
+                      "include": "all"
+                    }
+                  }
+                }
+              }
+            },
+            "kind": "work",
+            "probe": {
+              "edits": [
+                [
+                  "cells",
+                  "*"
+                ],
+                [
+                  "patch"
+                ],
+                [
+                  "scope"
+                ],
+                [
+                  "writeIntent",
+                  "*"
+                ]
+              ],
+              "handle": {
+                "key": {
+                  "binding": "address",
+                  "from": {
+                    "openId": "167e937b4d184bcda4fe3863b32f3f4c",
+                    "session": "session-3bd44075e6614f72"
+                  },
+                  "route": "families",
+                  "target": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-12242741\\.artifacts\\accept\\u2-f3a\\Chadds-u2-f3a.rvt"
+                },
+                "revision": 5
+              },
+              "paths": [
+                [
+                  "cells",
+                  "[\"Broan_B1X0E65RT_ERV\",\"B130E65RT\",\"PE_G___Model\"]",
+                  "edit"
+                ],
+                [
+                  "cells",
+                  "[\"Broan_B1X0E65RT_ERV\",\"B160E65RT\",\"PE_G___Model\"]",
+                  "edit"
+                ],
+                [
+                  "cells"
+                ],
+                [
+                  "excluded"
+                ],
+                [
+                  "executionOptions"
+                ],
+                [
+                  "patch",
+                  "edit"
+                ],
+                [
+                  "patch"
+                ],
+                [
+                  "scope",
+                  "edit"
+                ],
+                [
+                  "scope"
+                ],
+                [
+                  "takenAt"
+                ],
+                [
+                  "writeIntent",
+                  "families.apply",
+                  "edit"
+                ]
+              ]
+            }
+          }
+        ]
+      },
+      "incarnation": {
+        "target": {
+          "session": "session-3bd44075e6614f72",
+          "openId": "167e937b4d184bcda4fe3863b32f3f4c"
+        },
+        "process": {
+          "pid": 56900,
+          "processStartUtc": "2026-11-02T15:41:58.7720444Z",
+          "executable": "C:\\Program Files\\Autodesk\\Revit 2025\\Revit.exe"
+        }
+      },
+      "dependencies": "da06f9395f5d97afbbf1cda7d9eda1e6833e84066a5b927ae97847ed2a4b241d"
+    },
+    "takenAt": "2026-11-02T16:05:44.319Z",
+    "authoredIntent": {
+      "include": "all",
+      "work": {
+        "key": {
+          "route": "families",
+          "target": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-12242741\\.artifacts\\accept\\u2-f3a\\Chadds-u2-f3a.rvt",
+          "binding": "address",
+          "from": {
+            "session": "session-3bd44075e6614f72",
+            "openId": "167e937b4d184bcda4fe3863b32f3f4c"
+          }
+        },
+        "revision": 5
+      }
+    }
+  }
+}

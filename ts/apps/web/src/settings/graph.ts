@@ -1,4 +1,4 @@
-import { pane, type RouteGraph } from "@pe/agent-contracts";
+import { manyField, pane, type RouteGraph } from "@pe/agent-contracts";
 import { settingsAddress } from "../../../../packages/agent-contracts/src/routes/settings";
 import { z } from "zod";
 import { pageVerb } from "#/shell/verbs";
@@ -9,6 +9,40 @@ export type SettingsPage = {
   >;
 };
 export const settingsGraph: RouteGraph<SettingsPage> = {
+  directory: {
+  "path": "/settings",
+  "title": "Settings",
+  "label": "Settings",
+  "exposure": "Main",
+  "runtimeNeed": "Host machine configuration",
+  "icon": "Settings2",
+  "category": "Explore / maintain",
+  "blurb": "This machine and every route's user settings: Revit sessions, update, sharing, Pea providers and approvals, host, notifications, appearance, diagnostics, and route preferences.",
+  "aliases": [
+    "machine",
+    "Revit",
+    "update",
+    "share",
+    "providers",
+    "sign-in",
+    "approvals",
+    "host",
+    "startup",
+    "diagnostics",
+    "theme",
+    "route",
+    "preferences",
+    "slots",
+    "colours"
+  ],
+  "listed": true,
+  "satellites": [],
+  "surfaces": {
+    "web": "full",
+    "pwa": "full",
+    "tray": "compact"
+  }
+},
   key: "settings",
   address: "settings",
   name: "Settings",
@@ -66,11 +100,12 @@ export const settingsGraph: RouteGraph<SettingsPage> = {
       load: () => import("./graph-seeds").then((m) => m.settingsSeeds["no-revit"]!),
     },
   },
-  fields: {
-    section: { ...settingsAddress.fields.section, role: "pose" },
+  subjectField: { field: "section", noun: "setting scope", keyKind: "name", cardinality: "one", roster: "scopes", detail: "machine", pane: "settings", show: (id) => id },
+  fields: { selected: { ...manyField("name", {}), role: "selection" },
+    section: { ...settingsAddress.fields.section, role: "subject" },
     session: { ...settingsAddress.fields.session, role: "pose" },
   },
-  readings: { machine: { kind: "use", source: "settings.machine", retire: "never" } },
+  readings: { scopes: { kind: "derive", source: "settings.scopes", retire: "never" }, machine: { kind: "use", source: "settings.machine", retire: "never" } },
   verbs: {
     "open-section": pageVerb(
       {

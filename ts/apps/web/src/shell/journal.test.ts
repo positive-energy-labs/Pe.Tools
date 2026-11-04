@@ -95,8 +95,22 @@ test("two accepted writes in one press are one step; undo and redo chain real ho
   expect(f.journal.read().undo[0]!.transitions).toHaveLength(2);
   expect(await f.journal.undo(f.writer)).toEqual({ ok: true, press: "cap-1", revision: 4 });
   expect(f.requests).toEqual([
-    { kind: "restore", patches: second.inverse, expectedRevision: 2, press: null },
-    { kind: "restore", patches: first.inverse, expectedRevision: 3, press: null },
+    {
+      kind: "restore",
+      restoreOf: 2,
+      label: "undid cap-1",
+      patches: second.inverse,
+      expectedRevision: 2,
+      press: null,
+    },
+    {
+      kind: "restore",
+      restoreOf: 1,
+      label: "undid cap-1",
+      patches: first.inverse,
+      expectedRevision: 3,
+      press: null,
+    },
   ]);
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
   expect(f.journal.read().undo).toEqual([]);
@@ -126,29 +140,99 @@ test("two presses 10 ms apart stay two steps, including on the same path", async
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
 });
 
-test("Pea writes never become steps; disjoint paths remain undoable", async () => {
+test("Pea's Work edits are undo steps a person reverts; a Pea press never joins a person's", async () => {
   const f = fixture();
   await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
-  await f.apply([{ path: ["settings", "height"], value: 99 }], "forged-human-press", "pea");
-  expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1"]);
-  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, revision: 3 });
+  await f.apply([{ path: ["settings", "height"], value: 99 }], "human-1", "pea");
+  await f.apply([{ path: ["settings", "width"], value: 30 }], null, "pea");
+  expect(f.journal.read().undo.map(({ press }) => press)).toEqual([
+    "human-1",
+    "pea:human-1",
+    "pea:r3",
+  ]);
+  // Named by the route's declared Work names (none here), never by a raw Work path.
+  expect(f.journal.read().undo.at(-1)).toMatchObject({ label: "Edit Work", by: "pea" });
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:r3" });
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:human-1" });
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toMatchObject({
-    settings: { width: 10, height: 99 },
+    settings: { width: 20, height: 4 },
   });
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "human-1" });
+  expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
 });
 
-test("an overlapping Pea write is a named barrier even after Pea puts the old value back", async () => {
+test("a reloaded tab rebuilds steps, the head and undo/redo entries from the host's replayed window", async () => {
   const f = fixture();
   await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
+  await f.apply([{ path: ["settings", "height"], value: 99 }], null, "pea");
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true });
+  const reloaded = createWorkJournal(f.key);
+  reloaded.name((patches) => ({ label: `Edit ${patches.map(({ path }) => path[0]).join(", ")}` }));
+  const stop = f.workspace.observeAccepted(f.key, (ack) => reloaded.accept(ack));
+  // Live and replayed edits use the same shared journal, regardless of which tab wrote them.
+  await f.apply([{ path: ["cells", "one", "edit"], value: { value: "other" } }], "tab-b");
+  stop();
+  const read = reloaded.read();
+  expect(read.undo.map(({ press, by }) => [press, by])).toEqual([
+    ["human-1", "human"],
+    ["tab-b", "human"],
+  ]);
+  expect(read.redo).toEqual([]);
+  expect(read.last).toMatchObject({ kind: "apply", step: { press: "tab-b" } });
+  expect(read.moves.map(({ kind, press, revision }) => [kind, press, revision])).toEqual([
+    ["apply", "human-1", 1],
+    ["apply", "pea:r2", 2],
+    ["undo", "pea:r2", 3],
+    ["apply", "tab-b", 4],
+  ]);
+  expect(read.moves.every(({ at }) => typeof at === "number")).toBe(true);
+});
+
+test("Pea's host undo and redo walk the person's journal: same step, same revisions, person redoes", async () => {
+  const f = fixture();
+  await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
+  const before = (await f.workspace.read(f.key, f.key.route))!.doc;
+  await f.apply([{ path: ["settings", "height"], value: 99 }], null, "pea");
+  const pea = (direction: "undo" | "redo", revision: number) =>
+    f.workspace.step(f.key, f.key.route, "pea", direction, revision);
+  expect(await pea("undo", 2)).toMatchObject({ ok: true, revision: 3, write: { kind: "restore" } });
+  expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(before);
+  expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1"]);
+  expect(f.journal.read().redo.map(({ press }) => press)).toEqual(["pea:r2"]);
+  // The Timeline says who moved last: Pea undid Pea's step; each step keeps its author.
+  expect(f.journal.read().last).toMatchObject({ kind: "undo", by: "pea" });
+  expect(f.journal.read().undo.map(({ by }) => by)).toEqual(["human"]);
+  expect(f.journal.read().redo.map(({ by }) => by)).toEqual(["pea"]);
+  // The person's Redo replays the step Pea undid, then Pea's redo-then-undo cycle stays coherent.
+  expect(await f.journal.redo(f.writer)).toMatchObject({ ok: true, press: "pea:r2", revision: 4 });
+  expect(f.journal.read().last).toMatchObject({ kind: "redo", by: "human" });
+  expect(await pea("undo", 4)).toMatchObject({ ok: true, revision: 5 });
+  expect(await pea("redo", 5)).toMatchObject({ ok: true, revision: 6 });
+  expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1", "pea:r2"]);
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:r2" });
+  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "human-1" });
+  expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
+  expect(await pea("undo", 8)).toMatchObject({ ok: false });
+});
+
+test("undoing a Pea edit still refuses when its path changed elsewhere", async () => {
+  const f = fixture();
   await f.apply([{ path: ["settings", "width"], value: 99 }], null, "pea");
-  await f.apply([{ path: ["settings", "width"], value: 20 }], null, "pea");
-  const result = await f.journal.undo(f.writer);
-  expect(result).toMatchObject({
-    ok: false,
-    code: "barrier",
-    barrier: { receiptId: `work:${workKey(f.key)}:r2` },
+  // A write this journal did not author (a publish, another surface): foreign, overlapping.
+  f.journal.accept({
+    key: f.key,
+    kind: "publish",
+    by: "human",
+    press: null,
+    base: 1,
+    revision: 2,
+    patches: [{ path: ["settings", "width"], value: 50 }],
+    inverse: [{ path: ["settings", "width"], value: 99 }],
+    undoable: false,
   });
-  expect(!result.ok && result.message).toContain("human-1 was changed elsewhere at r2");
+  const result = await f.journal.undo(f.writer);
+  expect(result).toMatchObject({ ok: false, code: "barrier" });
+  expect(!result.ok && result.message).toContain("changed elsewhere at r2");
   expect(f.requests).toEqual([]);
 });
 
@@ -396,4 +480,39 @@ test("empty descriptions cannot remove the accepted entry's required label", asy
   await f.apply([{ path: ["settings", "width"], value: 20 }], "width");
   f.journal.describe("width", { label: "  ", meta: { late: true } });
   expect(f.journal.read().undo[0]).toMatchObject({ label: "width", meta: { late: true } });
+});
+
+test("an older reread cannot roll back the journal revision or discard history", async () => {
+  const f = fixture();
+  await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
+  await f.apply([{ path: ["settings", "width"], value: 30 }], "human-2");
+  expect(f.journal.read()).toMatchObject({ revision: 2, undo: [{}, {}] });
+  // The tab-lifetime journal meets its Work recreated at r0 (fixture remount, start-fresh elsewhere).
+  f.journal.observe({ revision: 0, doc: f.initial });
+  expect(f.journal.read()).toMatchObject({ revision: 2, undo: [{}, {}], redo: [] });
+});
+
+test("explicit verb labels survive move, late describe and repeated namer registration", () => {
+  const key = { route: "labels", binding: "host" as const, target: null };
+  const journal = createWorkJournal(key);
+  journal.name(() => ({ label: "Edit Work" }));
+  journal.accept(
+    {
+      key,
+      kind: "apply",
+      by: "human",
+      base: 0,
+      revision: 1,
+      press: "verb",
+      undoable: true,
+      patches: [{ path: ["flow"], value: 950 }],
+      inverse: [{ path: ["flow"], value: 900 }],
+    },
+    { label: "Set fan flow" },
+  );
+  expect(journal.read().moves[0]?.label).toBe("Set fan flow");
+  journal.describe("verb", { label: "Set MUAS-1 flow" });
+  journal.name(() => ({ label: "Edit Work" }));
+  expect(journal.read().undo[0]?.label).toBe("Set MUAS-1 flow");
+  expect(journal.read().moves[0]?.label).toBe("Set MUAS-1 flow");
 });

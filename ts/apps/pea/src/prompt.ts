@@ -173,11 +173,11 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
         // the response, and the caller's next `--prompt --thread` carries the answers.
         if (chunks.length > 0) chunks.push("\n\n");
         chunks.push(renderQuestions(event.message, event.requestedSchema));
-        await client.call("thread.cancel", { params }).catch(() => undefined);
+        await client.call("thread.cancel", { params }).catch((error) => { console.error("prompt: asynchronous operation failed", error); return undefined; });
         return { ...result, stopReason: "question", response: chunks.join("").trim() };
       } else if (event.kind === "turn_end") {
         // The thread body's modelId is the settled model unless a model_changed already said so.
-        const settled = await client.call("thread.get", { params }).catch(() => null);
+        const settled = await client.call("thread.get", { params }).catch((error) => { console.error("prompt: asynchronous operation failed", error); return null; });
         return {
           ...result,
           model: modelSeen ? result.model : (settled?.modelId ?? result.model),
@@ -195,7 +195,7 @@ export async function runPeaPromptTurn(request: PeaPromptRequest): Promise<PeaPr
       const response = error instanceof Error ? error.message : String(error);
       return { ...result, stopReason: "error", response };
     }
-    await client.call("thread.cancel", { params }).catch(() => undefined);
+    await client.call("thread.cancel", { params }).catch((error) => { console.error("prompt: asynchronous operation failed", error); return undefined; });
     const response = `Pea did not finish within ${timeoutSeconds} seconds.`;
     return { ...result, stopReason: "timeout", response };
   } finally {
@@ -269,7 +269,7 @@ async function ensureTsHostRunning(): Promise<string> {
   const existing = discoverHostBaseUrl();
   if (existing) return existing;
 
-  const appBase = owner.installedRoot ?? productRoot();
+  const appBase = productRoot(owner);
   const launch =
     owner.lane === "installed"
       ? { entryPath: path.join(appBase, productInstallLayout["VersionedApp:host"]) }

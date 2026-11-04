@@ -5,7 +5,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { runPeaMain } from "../../pea/src/cli.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
@@ -122,7 +122,7 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     data: { succeeded: [1], failed: [{ id: 2, message: "refused" }] },
   };
   const operations = [
-    {
+    {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap",
       key: "scripting.execute",
       intent: "Mutate",
       needs: "document",

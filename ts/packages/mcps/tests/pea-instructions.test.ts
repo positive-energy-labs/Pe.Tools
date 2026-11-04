@@ -1,8 +1,7 @@
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { createHash } from "node:crypto";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { address, emptyThreadHead, type ThreadHead } from "@pe/agent-contracts";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { createPeaMcpServer } from "../src/server.ts";
@@ -99,7 +98,7 @@ test("capture_view refuses null and named targets before host work and preserves
     if (url.pathname === "/pe/scope/self") return Response.json({ thread: "capture", ...head });
     if (url.pathname === "/ops")
       return Response.json({
-        operations: [{ key: "revit.context.view-image", intent: "Read", needs: "document" }],
+        operations: [{subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "revit.context.view-image", intent: "Read", needs: "document" }],
       });
     if (url.pathname === capturePath) {
       expect(url.origin).toBe("http://127.0.0.1:9");

@@ -21,7 +21,7 @@ import type { SceneInstance } from "#/scene/types";
 
 import { ENCODINGS, ENCODING_SAYS, rowAt, type Legend, type SpaceLayer } from "./layers";
 import type { SpacePage } from "./graph";
-import type { SpaceAnswers } from "./reads";
+import { regionSchema, type SpaceAnswers } from "./reads";
 
 type Element = Psc1Metadata["elements"][number];
 
@@ -29,25 +29,66 @@ type Element = Psc1Metadata["elements"][number];
 export function HostIds({
   page,
   setPage,
+  verbs,
 }: {
   page: SpacePage;
   setPage(this: void, patch: Partial<SpacePage>): void;
+  verbs: (row: { verb: string; input?: unknown }) => ReactNode;
 }) {
+  const [regionDraft, setRegionDraft] = useState("");
+  const regionText = page.region
+    ? page.region.kind === "box"
+      ? `box:${page.region.box.join(",")}`
+      : `${page.region.kind}:${page.region.uniqueId}`
+    : "";
+  const parseRegion = (text: string) => {
+    const colon = text.indexOf(":");
+    const kind = text.slice(0, colon);
+    const value = text.slice(colon + 1);
+    return regionSchema.safeParse(
+      kind === "box" ? { kind, box: value.split(",").map(Number) } : { kind, uniqueId: value },
+    );
+  };
+  const region = parseRegion(regionDraft);
+  const [elementIds, setElementIds] = useState<number[]>([]);
   const [draft, setDraft] = useState("");
   const id = Number(draft);
   const refusal =
     !Number.isSafeInteger(id) || id <= 0
       ? "Enter a positive whole host element ID"
-      : page.ids.includes(id)
+      : elementIds.includes(id)
         ? "This host element is already named"
         : null;
   const add = () => {
     if (refusal) return;
-    setPage({ ids: [...page.ids, id] });
+    setElementIds([...elementIds, id]);
     setDraft("");
   };
   return (
     <section aria-label="Host elements" className="flex flex-wrap items-center gap-1">
+      <Label>
+        Region
+        <Input
+          aria-label="Spatial region"
+          placeholder="box:x0,y0,z0,x1,y1,z1 or room/space:UniqueId"
+          value={regionDraft || regionText}
+          onChange={(event) => setRegionDraft(event.target.value)}
+        />
+      </Label>
+      <Button
+        label="Set spatial region"
+        refusal={
+          !region.success ? "Enter a region with valid bounds or a room/space UniqueId" : null
+        }
+        onClick={() => {
+          if (region.success) {
+            setPage({ region: region.data });
+            setRegionDraft("");
+          }
+        }}
+      >
+        Set region
+      </Button>
       <Label>
         Host element ID
         <Input
@@ -68,11 +109,13 @@ export function HostIds({
       <Button label="Add host element ID" refusal={refusal} onClick={add}>
         add
       </Button>
-      {page.ids.map((id, index) => (
+      {verbs({ verb: "capture", input: { elementIds } })}
+      {verbs({ verb: "context", input: { elementIds } })}
+      {elementIds.map((id, index) => (
         <Button
           key={`${id}:${index}`}
           label={`Remove host element ${id}`}
-          onClick={() => setPage({ ids: page.ids.filter((value) => value !== id) })}
+          onClick={() => setElementIds(elementIds.filter((value) => value !== id))}
         >
           {id} ×
         </Button>
@@ -91,7 +134,7 @@ const Fact = ({ name, children }: { name: string; children: ReactNode }) => (
 /**
  * A pick's Subject name: its category, the DWG layer it came from, and "linked" when it lives in a
  * link. The element id is a fact beneath the name, never the name (SURFACE-PHILOSOPHY I1).
- * TODO(S2): render through the kit Subject text once it lands, so the name also footnotes the picture.
+ * TODO(S2): docs/features/routes/LEDGER.md#s7-dc2b076f89 render through the kit Subject text once it lands, so the name also footnotes the picture.
  */
 export const pickName = (h: {
   category: string;
@@ -118,7 +161,7 @@ function VisibilityControls({
         refusal={page.selected ? null : "Pick an element"}
         onClick={() =>
           page.selected &&
-          setPage({ hidden: [...new Set([...page.hidden, page.selected])], selected: null })
+          setPage({ hidden: page.hidden === "all" ? "all" : [...new Set([...page.hidden, page.selected])], selected: null })
         }
       >
         hide
@@ -130,7 +173,7 @@ function VisibilityControls({
           page.selected &&
           setPage({
             isolated: [page.selected],
-            hidden: page.hidden.filter((key) => key !== page.selected),
+            hidden: (page.hidden === "all" ? [] : page.hidden).filter((key) => key !== page.selected),
           })
         }
       >
@@ -138,8 +181,8 @@ function VisibilityControls({
       </Button>
       <Button
         label="show all"
-        refusal={page.hidden.length || page.isolated !== null ? null : "Everything is shown"}
-        onClick={() => setPage({ hidden: [], isolated: null })}
+        refusal={page.hidden.length || page.isolated !== "all" ? null : "Everything is shown"}
+        onClick={() => setPage({ hidden: [], isolated: "all" })}
       >
         show all
       </Button>

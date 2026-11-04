@@ -1,4 +1,4 @@
-import type { DuctsRouteDocument, DuctSystemColours } from "@pe/agent-contracts";
+import type { DuctsDesign, DuctSystemColours } from "@pe/agent-contracts";
 
 // UNPROVEN: sampled plan convention, awaiting kaitpw's verdict after use. Editable in Settings.
 // Pixel census: .artifacts/runs/ducts-multisystem-20261024/b1/colours/sample-and-census.json.
@@ -10,5 +10,5 @@ export const FIRM_COLOURS: Readonly<DuctSystemColours> = Object.freeze({
   unknown: "#808080", // Neutral fallback, not a sampled firm convention.
 });
 
-export const coloursOf = (doc: DuctsRouteDocument | null): Readonly<DuctSystemColours> =>
+export const coloursOf = (doc: DuctsDesign | null): Readonly<DuctSystemColours> =>
   doc?.systemColours?.edit?.value ?? FIRM_COLOURS;

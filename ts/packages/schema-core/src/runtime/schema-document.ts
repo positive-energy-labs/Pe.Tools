@@ -232,7 +232,7 @@ export class SchemaDocument {
   static parse(schemaJson: string): SchemaDocument | undefined {
     try {
       return SchemaDocument.from(JSON.parse(schemaJson) as RenderSchemaNode);
-    } catch {
+    } catch (error) { console.warn("ts/packages/schema-core/src/runtime/schema-document.ts: fallback after failure", error);
       return undefined;
     }
   }

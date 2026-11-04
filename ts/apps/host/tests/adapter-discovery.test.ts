@@ -1,3 +1,4 @@
+import { testSpawner } from "./effect-test.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,6 +24,7 @@ test.each(["codex", "claude"] as const)(
     vi.stubEnv("FAKE_ACP_AUTH", "none");
     let closeConsole!: () => void;
     const providers = createProviders({
+      spawner: testSpawner(),
       probeOnStart: false,
       shellPath: async () => "C:\\stale",
       openConsole: (_command, _env, opened) => {
@@ -77,6 +79,7 @@ test("a launcher exit 0 cannot mask installer exit 17 even when the next ACP pro
   const logPath = join(env.LOCALAPPDATA, "console.log");
   vi.stubEnv("PE_TEST_SECRET", "synthetic-console-secret");
   const providers = createProviders({
+    spawner: testSpawner(),
     probeOnStart: false,
     openConsole: async (_command, _env, opened) => {
       opened();

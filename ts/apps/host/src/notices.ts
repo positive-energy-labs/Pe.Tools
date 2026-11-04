@@ -34,7 +34,14 @@ export interface NoticeContext {
   /** An open permission or question: its words and the door that answers it. */
   asked(
     receipt: Receipt,
-  ): { readonly threadId: string; readonly body: string; readonly act: Act } | undefined;
+  ):
+    | {
+        readonly threadId: string;
+        readonly body: string;
+        readonly act: Act;
+        readonly deadline?: string;
+      }
+    | undefined;
   /** Pea's final response for a turn receipt, in Markdown. */
   said(receipt: Receipt): string | undefined;
   /** Durable command outcomes and exact Work addresses for this completed root turn. */
@@ -120,12 +127,10 @@ function noticeOf(r: Receipt, context: NoticeContext): MachineNotice | null {
       const title = (r.join.threadId && context.thread(r.join.threadId)?.title) || "a thread";
       return {
         ...base,
-        title: `${body.kind === "permission" ? "Pea wants approval" : "Pea is asking"} · ${title}`,
+        title: `${body.kind === "question" ? "Pea is asking" : asked?.deadline ? "Reject? Pea will write" : "Allow Pea to write?"} · ${title}`,
         body:
           asked?.body ??
-          (body.kind === "permission"
-            ? "A tool call is waiting."
-            : "Pea is waiting for an answer."),
+          (body.kind === "permission" ? "A write is waiting." : "Pea is waiting for an answer."),
         href: chatHref(asked?.threadId),
         ...(asked ? { act: asked.act } : {}),
       };

@@ -6,9 +6,9 @@ import {
   type ThreadWorkSnapshot,
   type WorkResume,
 } from "@pe/agent-contracts";
-import { fixtureThreadWork, useFixtureName } from "#/shell/fixture-services";
+import { useEnvironmentReading } from "#/shell/environment-readings";
 import { peClient } from "#/host/pe-client";
-import { previousOf, useReading } from "#/readings";
+import { previousOf } from "#/shell/readings-hooks";
 
 /** The one swap point: the `thread-work` Reading's last good snapshot, checked at the boundary.
  *  Nothing yet (or a malformed payload) is null, and rows keep their conversation titles. */
@@ -18,10 +18,9 @@ const threadWorksOf = (reading: Reading<unknown>): ThreadWorkSnapshot | null =>
 /** One snapshot for the whole sidebar, indexed by thread; rows look up, never read. `?fixture=` keeps
  *  its fixture and asks the host nothing. */
 export function useThreadWorks() {
-  const name = useFixtureName();
-  const demo = name !== null;
-  const reading = useReading(demo ? null : { kind: "thread-work" });
-  const snapshot = name !== null ? fixtureThreadWork(name) : threadWorksOf(reading);
+  const { reading, remote } = useEnvironmentReading({ kind: "thread-work" }, "threadWork");
+  const demo = !remote;
+  const snapshot = threadWorksOf(reading);
   return useMemo(
     () => ({
       demo,

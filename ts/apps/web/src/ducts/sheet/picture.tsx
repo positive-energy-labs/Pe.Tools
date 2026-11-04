@@ -4,12 +4,8 @@
  * its). The focused blocker is the page's `issue`, so a mark picked here focuses its row and a
  * row's hover lights its mark. Rendered through the layout's pane renderer, as `e-picture` is.
  */
-import { useMemo, type RefObject } from "react";
-import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
-import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
-import { snapshotById } from "@pe/ducts-domain/readiness";
 import { useElementAttention } from "#/attention";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { sceneRequest } from "#/scene/host";
 import {
   idOf,
   Picture,
@@ -18,18 +14,40 @@ import {
   type PictureOverlayFrame,
   type PictureStrand,
 } from "#/scene/picture/picture";
+import { useAdmittedSubject } from "#/shell/subject";
+import type { OrbitViewport, PicturePage } from "@pe/agent-contracts";
+import { snapshotById } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
+import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
+import type * as Atom from "effect/reactivity/Atom";
+import { useMemo, type RefObject } from "react";
 import { coloursOf } from "../colours";
 import { encodingFor } from "../encoding";
+import type { OpenSheet } from "../neutral.ts";
 import { DuctsOverlay, linesOf, useEquipment } from "../picture-content";
-import type { ProtoProps } from "../proto/props";
+import { GoToSubject } from "../proto/e/go-to";
 import { DUCTS_LAYER_OPTIONS } from "../proto/e/teaching";
 import { indexOf, sceneOf } from "../scene";
 import { paintOfDucts } from "../selection";
 import { subjectNamer } from "../subject-text";
+import type { LossesWork } from "../work";
 import { blockerElements, sheetIssues, sheetLayers } from "./layers";
+import type { Detail, FanPort } from "./model";
 import type { SheetBlocker } from "./tiers";
-import type { Detail } from "./model";
-import type { OpenSheet } from "../sources";
+export interface SheetPictureProps {
+  page: PicturePage<string, "schematic">;
+  setPage(
+    next: Partial<PicturePage<string, "schematic">>,
+    move?: { readonly history?: "push" | "replace" },
+  ): void;
+  work: Pick<LossesWork, "doc">;
+  selection: Atom.Atom<ReadonlySet<SubjectKey>>;
+  captureSource?: { document: { session: string; openId: string }; version: string } | null;
+  doc: { session: string; openId: string } | null;
+  refreshing: boolean;
+  onPose?: (pose: OrbitViewport | null) => void;
+}
 
 const NONE: readonly never[] = [];
 
@@ -55,15 +73,15 @@ export function worksheetPicture(ws: Detail<"worksheet"> | null) {
     for (const run of ws[side].runs) {
       const path = keys(run.legIds);
       if (side === "return") path.reverse();
-      strands.push({ key: `run:${run.id}` as SubjectKey, path, heavy: run.critical });
-      members.set(`run:${run.id}` as SubjectKey, path);
+      strands.push({ key: `run:${run.id}`, path, heavy: run.critical });
+      members.set(`run:${run.id}`, path);
       for (const k of keys(run.overLegIds)) over.add(k);
     }
     for (const section of ws[side].sections)
-      members.set(`section:${section.id}` as SubjectKey, keys(section.legIds));
+      members.set(`section:${section.id}`, keys(section.legIds));
     for (const [elementId, sections] of Object.entries(ws[side].elementSections))
       if (sections[0] && !sectionOf.has(elementKey(Number(elementId))))
-        sectionOf.set(elementKey(Number(elementId)), `section:${sections[0]}` as SubjectKey);
+        sectionOf.set(elementKey(Number(elementId)), `section:${sections[0]}`);
   }
   const widen = (key: SubjectKey) => {
     const section = sectionOf.get(key);
@@ -105,16 +123,29 @@ export function SheetPicture({
   blockers,
   renderPane,
   jump,
+  opened,
+  fans,
+  systemFans,
 }: {
-  props: ProtoProps;
+  props: SheetPictureProps;
   snapshot: DuctSnapshot;
+  opened?: readonly OpenSheet[];
+  fans?: readonly FanPort[];
+  /** The subject ids of a system's fans: what a go-to system pick adds. */
+  systemFans: (system: string) => readonly unknown[];
   sheet: OpenSheet | null;
   blockers: readonly SheetBlocker[];
   renderPane: TeachingPaneRender;
   /** Filled by the picture: a footnote press selects and flies to its subject. */
   jump?: RefObject<((key: SubjectKey) => void) | null>;
 }) {
-  const { page, setPage, work, priced } = props;
+  const { page, setPage, work } = props;
+  const subject = useAdmittedSubject();
+  const overviewFans =
+    fans ??
+    (opened ?? (sheet ? [sheet] : [])).flatMap((item) =>
+      item.overview.fan ? [item.overview.fan] : [],
+    );
   const worstPathIds = useMemo(
     () => new Set(sheet?.worstLegs.flatMap((path) => path.legs.map((leg) => leg.elementId)) ?? []),
     [sheet],
@@ -124,12 +155,17 @@ export function SheetPicture({
   const focusIds = useMemo(
     () =>
       new Set([
-        ...(sheet?.elements?.walkedElementIds ?? []),
-        ...(sheet?.overview.fan ? [sheet.overview.fan.unitId] : []),
+        ...overviewFans.map((fan) => fan.unitId),
+        ...(opened ?? (sheet ? [sheet] : [])).flatMap(
+          (item) => item.elements?.walkedElementIds ?? [],
+        ),
+        ...(opened ?? (sheet ? [sheet] : [])).flatMap((item) =>
+          item.overview.fan ? [item.overview.fan.unitId] : [],
+        ),
         ...blockers.flatMap(blockerElements),
         ...worstPathIds,
       ]),
-    [sheet, blockers, worstPathIds],
+    [sheet, opened, fans, blockers, worstPathIds],
   );
   const contextOn = page.layers.includes("context") || page.layers.includes("halo");
   const beyond = useMemo(
@@ -151,17 +187,11 @@ export function SheetPicture({
         ...runs.members,
         ...(sheet?.worstLegs ?? []).map(
           (path) =>
-            [
-              `path:${path.pathId}` as SubjectKey,
-              path.legs.map((leg) => elementKey(leg.elementId)),
-            ] as const,
+            [`path:${path.pathId}`, path.legs.map((leg) => elementKey(leg.elementId))] as const,
         ),
         ...blockers.map(
           (blocker) =>
-            [
-              `issue:${blocker.id}` as SubjectKey,
-              blockerElements(blocker).map((id) => elementKey(id)),
-            ] as const,
+            [`issue:${blocker.id}`, blockerElements(blocker).map((id) => elementKey(id))] as const,
         ),
       ]),
     [sheet, blockers, runs],
@@ -169,12 +199,12 @@ export function SheetPicture({
   const scene = useMemo(
     () =>
       sceneOf(
-        indexOf(snapshot, priced),
+        indexOf(snapshot, null),
         snapshot.groups.map((g) => g.id),
         () => true,
         focusIds,
       ),
-    [snapshot, priced, focusIds],
+    [snapshot, focusIds],
   );
   const lines = useMemo(() => linesOf(scene), [scene]);
   const routePaint = useMemo(
@@ -191,22 +221,22 @@ export function SheetPicture({
         key: "sheet",
         toggle: "findings",
         draw: ({ meshes }) =>
-          sheet
-            ? sheetLayers({
-                snapshot,
-                work: work.doc,
-                overview: sheet.overview,
-                inputs: sheet.inputs,
-                blockers,
-                meshes,
-                worstPathIds,
-                focus: focusIds,
-              })
-            : [],
+          (opened ?? (sheet ? [sheet] : [])).flatMap((item) =>
+            sheetLayers({
+              snapshot,
+              work: work.doc,
+              overview: item.overview,
+              inputs: item.inputs,
+              blockers,
+              meshes,
+              worstPathIds,
+              focus: focusIds,
+            }),
+          ),
       },
       ports,
     ],
-    [snapshot, work.doc, sheet, blockers, worstPathIds, focusIds, ports],
+    [snapshot, work.doc, sheet, opened, blockers, worstPathIds, focusIds, ports],
   );
   const issues = useMemo(() => sheetIssues(blockers, null), [blockers]);
   const byId = useMemo(() => snapshotById(snapshot), [snapshot]);
@@ -214,7 +244,7 @@ export function SheetPicture({
   const nameOf = (id: number) => {
     const mark = beyond.markOf.get(id);
     const name = namer(id);
-    return mark ? `${name ?? `element ${id}`} · ${beyondWords(mark)}` : name;
+    return mark ? `${name} · ${beyondWords(mark)}` : name;
   };
   // Hovering a context element names it in the readout (no tooltip): whose air it is.
   const { hovered } = useElementAttention();
@@ -222,7 +252,7 @@ export function SheetPicture({
   const encoding = useMemo(() => encodingFor("none"), []);
   const pointOf = (id: number): readonly number[] | null => {
     const node = byId.nodes.get(id);
-    if (node) return node.point;
+    if (node) return node.point ?? null;
     const line = byId.segments.get(id)?.polyline;
     return line ? (line[Math.floor((line.length - 1) / 2)] ?? null) : null;
   };
@@ -238,20 +268,20 @@ export function SheetPicture({
       covered={NONE}
       issues={issues}
       pointOf={pointOf}
-      issue={page.issue}
+      issue={page.selected}
       onRuling={() => {}}
     />
   );
-  const fan = sheet?.overview.fan;
+  const fan = overviewFans[0];
   // With no fan open there is nothing to capture; say what to do instead of the network picture's words.
   if (!fan)
     return renderPane(
       <p className="t-small p-3 text-ink-2" data-sheet-picture="">
-        Open a fan from the Fans list to draw its walk.
+        Pick a fan in the Fans list, or choose one in its header, to draw its walk.
       </p>,
       { meta: "no fan open" },
     );
-  const esp = sheet.overview.totals?.requiredEspInWg ?? null;
+  const esp = sheet?.overview.totals?.requiredEspInWg ?? null;
   const summary =
     hoveredBeyond != null ? (
       <span data-sheet-picture-beyond="" className="text-ink-2">
@@ -279,14 +309,22 @@ export function SheetPicture({
         doc: props.doc,
         version: props.captureSource?.version ?? "",
         label: "fan sheet",
-        refreshing: props.reading.refreshing,
+        refreshing: props.refreshing,
       }}
-      page={page}
+      page={{ ...page, issue: page.selected }}
       setPage={setPage}
       renderPane={renderPane}
       onPose={props.onPose}
       jump={jump}
       content={{
+        geometry: {
+          overview: sceneRequest(
+            [...new Set(overviewFans.map((fan) => fan.unitId))],
+            false,
+            0,
+            "overview",
+          ),
+        },
         focus,
         members,
         // Ruling C: hovering an element lights its section; a pick selects that section.
@@ -304,6 +342,17 @@ export function SheetPicture({
         capture: { cuts: beyond.cuts },
         overlay,
         readout: { subject: fan.mark, summary },
+        goTo: (jumpTo) => (
+          <GoToSubject
+            snapshot={snapshot}
+            here={focusIds}
+            opens={(system) => systemFans(system).length > 0}
+            nameOf={namer}
+            onGo={({ system, id }) =>
+              id == null ? subject?.add(systemFans(system)) : jumpTo(elementKey(id))
+            }
+          />
+        ),
       }}
     />
   );

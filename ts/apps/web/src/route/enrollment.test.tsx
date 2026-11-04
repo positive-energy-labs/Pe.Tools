@@ -117,7 +117,7 @@ test("a stable scope starts projecting Page changes to the URL after delayed enr
   }
 });
 
-test("hidden owners cannot write the URL and reactivation restores the address before new moves", async () => {
+test("hidden owners cannot write the URL and reactivation admits new moves", async () => {
   const probe = await mount(true);
   try {
     await act(async () => probe.hide());
@@ -130,11 +130,9 @@ test("hidden owners cannot write the URL and reactivation restores the address b
     );
     expect(probe.history.location.href).toBe(before);
     await act(async () => probe.show());
-    await waitFor(() => expect(probe.mode()).toBe("3d"));
-    expect(probe.owner.read().page.scene).toBeUndefined();
-    act(() => probe.owner.setPage({ mode: "top" }));
-    await waitFor(() => expect(probe.place().mode).toBe("top"));
-    expect(probe.mode()).toBe("top");
+    act(() => probe.owner.setPage({ mode: "north" }));
+    await waitFor(() => expect(probe.place().mode).toBe("north"));
+    expect(probe.mode()).toBe("north");
   } finally {
     probe.dispose();
   }

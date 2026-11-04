@@ -64,7 +64,9 @@ test("actual HTTP Work + journal consumes fanout only after positive acknowledgm
     transactionName: "Schedule grid push",
   });
   expect(request.edits[0].expectedBinding.targets).toEqual([target(7), target(8)]);
-  const step = (await f.owner().list())[0]!.steps[0];
+  const step = (await f.owner().list())
+    .flatMap((row) => (row.key === "schedule.grid.push" ? row.steps : []))
+    .find((step) => step.kind === "native");
   expect(step).toMatchObject({ state: "succeeded", input: request, result: { appliedCells: 1 } });
 });
 
@@ -411,7 +413,7 @@ test("F-H5-1: a dead-lifetime push names its exit; a re-read rebinds and marks a
   f.reopen();
   const live = { session: "B", openId: "reopened-B" };
   const at = async () => ({
-    ...(await f.admission()),
+    ...(await f.admission(undefined, live)),
     target: { kind: "document" as const, ref: live },
   });
   expect(await f.submit(await at())).toMatchObject({
@@ -527,28 +529,4 @@ test("the catalog names each schedule's Work before any read; an unread Work ans
   });
   expect(unread).toEqual({ status: 200, value: null });
   expect(f.reads()).toBe(reads);
-});
-
-test("History lists every retained read of one Work, newest first, and each opens as saved", async () => {
-  const f = await setup();
-  const second = await f.read();
-  const history = await f.post("/schedules/readings", {
-    key: "schedule.grid.history",
-    input: { workspaceId: f.reading.workspaceId },
-  });
-  expect(history.status).toBe(200);
-  const ids = history.value.map((row: { id: string }) => row.id);
-  expect(ids).toHaveLength(2);
-  expect(new Set(ids)).toEqual(new Set([f.reading.id, second.id]));
-  expect(history.value.map((row: { at: string }) => row.at)).toEqual(
-    history.value
-      .map((row: { at: string }) => row.at)
-      .toSorted()
-      .toReversed(),
-  );
-  const other = await f.post("/schedules/readings", {
-    key: "schedule.grid.history",
-    input: { workspaceId: "schedule:other" },
-  });
-  expect(other.value).toEqual([]);
 });

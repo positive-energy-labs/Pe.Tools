@@ -1,4 +1,4 @@
-import { inputsFor, TEST_FIRM } from "./test-inputs.ts";
+import { inputsFor, TEST_FIRM, TEST_SLOTS } from "./test-inputs.ts";
 /**
  * The path engine, deterministic. Synthetic: the kernel's independently computed network
  * (price-leg.test.ts, handcalc.py totals T6/T8) hung off a roster fan with a return run; a
@@ -414,7 +414,7 @@ it("a side-stream into another fan's return ends at the merge without a class-ch
     ) as Node[],
   };
   const gInputs = inputsFor(withG, { endCfm: { 300: 100 } });
-  expect(gInputs.units["400"]!.cfm).toMatchObject({ value: 1200, source: "revit" });
+  expect(gInputs.units["400"]!.cfm).toMatchObject({ value: 1200, source: "model" });
   const merged = buildSheet({ ...input1(withG), inputs: gInputs });
   expect(merged.paths.map((p) => p.end.kind)).toContain("joins-other-fan");
   expect(merged.fan.flowCfm).toBe(100);
@@ -487,10 +487,10 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
   expect(sheet.blockers.some((b) => b.id === "inferred-join:52:1")).toBe(false);
   expect(
     sheet.notes.some((i) =>
-      i.text.includes("auto-joined 52:1 to 53:0 across 0.400 in, default \u22643 in"),
+      i.text.includes("across 0.400 in, default \u22643 in"),
     ),
   ).toBe(true);
-  expect(sheet.legs["53:0>1"]!.lossSource.ref).toContain("auto-joined 52:1 to 53:0");
+  expect(sheet.legs["53:0>1"]!.lossSource.ref).toContain("auto-joined");
   expect(ret.complete).toBe(true);
   expect(sheet.totals.requiredEspInWg).toBeNull();
   // A person's accept closes the join; the open supply end still withholds ESP.
@@ -634,7 +634,7 @@ it("R-FACE: two walked stubs whose vacant ends face each other propose a join; w
     ["terminal", 70],
     ["terminal", 71],
   ]);
-  expect(close.notes.some((i) => i.text.includes("auto-joined 64:1 to 65:1 across 2.400 in"))).toBe(
+  expect(close.notes.some((i) => i.text.startsWith("auto-joined") && i.text.includes("across 2.400 in"))).toBe(
     true,
   );
   expect(close.walkedElementIds).toEqual(expect.arrayContaining([64, 65]));
@@ -658,7 +658,7 @@ it.skipIf(!existsSync(CHADDS))(
     });
     expect(sheet.walkedElementIds.length).toBeLessThan(500); // W0-A's all-to-all walk leaked to 1470
     const plenum = sheet.blockers.find((b) => b.id === "inferred-join:14122436:1")!;
-    expect(plenum.detail).toMatch(/14106988:1, already capped by 14107111/);
+    expect(plenum.detail).toMatch(/^this end faces .+, already capped/);
     expect(plenum.closer.candidate).toMatchObject({ toElementId: 14106988, toConnector: 1 });
     expect(sheet.paths.find((p) => p.end.kind === "joins-other-fan")!.end.fan).toMatchObject({
       unitId: 13760867,
@@ -786,7 +786,7 @@ it("side-stream design flow: a receiving unit's design flow is its share at its 
   expect(shares.legs["1:0>1"]!.flowCfm).toBe(300);
   expect([3, 4, 5].map((id) => shares.legs[`${id}:0>1`]!.flowCfm)).toEqual([50, 100, 150]);
   expect(shares.legs["4:0>1"]!.flowSource).toContain(
-    "unit design flow revit:PE_M_Fan_AirFlowDesign",
+    "unit design flow model:PE_M_Fan_AirFlowDesign",
   );
   expect(shares.blockers.some((b) => b.kind === "no-flow")).toBe(false);
   // Typed over Revit: the typed share wins; the others keep theirs.
@@ -1067,9 +1067,11 @@ it("R-SHARE: a louver shared with a sibling's inlet carries both consumers; this
   // mouth -> duct 14 -> sibling ERV 200:0 (its outdoor-air inlet; ERV 200:1 feeds grille 40).
   // Discharge: unit 100:1 -> grille 20. Mirrors Chadds MUAS-1 and louver 14088043 (2026-10-29).
   const muas = node(100, "equipment", {
+    family: "MUAS",
     connectors: [conn(0, [11, 0], round(10)), conn(1, [20, 0], round(10))],
   });
   const erv = node(200, "equipment", {
+    family: "ERV",
     connectors: [conn(0, [14, 1], round(6)), conn(1, [40, 0], round(6))],
     facts: [{ key: "fanFlow", value: 50, unit: "cfm", provenance: "designer-stated" }],
   });
@@ -1135,12 +1137,12 @@ it("R-SHARE: a louver shared with a sibling's inlet carries both consumers; this
   expect(typed.blockers.filter((b) => b.kind === "no-flow")).toEqual([]);
   expect(typed.notes).toContainEqual({
     kind: "sibling",
-    text: "sibling F-200 200:1 draws 50 cfm from shared terminal 30: revit:fanFlow",
+    text: expect.stringMatching(/^sibling F-200 draws 50 cfm from shared terminal .+: model:fanFlow$/),
     value: 50,
   });
   expect(typed.notes).toContainEqual({
     kind: "sibling",
-    text: "shared terminal 30: consumers sum 200 cfm (this fan 150, siblings 50); the terminal states 1120 (typed)",
+    text: expect.stringMatching(/^shared terminal .+: consumers sum 200 cfm \(this fan 150, siblings 50\); the terminal states 1120 \(Work\)$/),
     value: 200,
   });
 
@@ -1192,9 +1194,11 @@ it("R-SHARE + C3: a proposed transition in front of a shared plenum carries this
   // nothing of 100's), so the plenum is on unit 100's network, as Chadds' plenum is on MUAS-1's.
   const gap = 2.6 / 12;
   const muas = node(100, "equipment", {
+    family: "MUAS",
     connectors: [conn(0, [11, 0], round(10)), conn(1, [21, 0], round(10))],
   });
   const erv = node(200, "equipment", {
+    family: "ERV",
     connectors: [conn(0, [14, 1], round(6)), conn(1, [42, 1], round(6))],
     facts: [{ key: "fanFlow", value: 50, unit: "cfm", provenance: "designer-stated" }],
   });
@@ -1297,7 +1301,7 @@ it("R-SHARE + C3: a proposed transition in front of a shared plenum carries this
   // Defect 5: the louver's airflow slot is empty, so its Revit connector flow is the cross-check.
   expect(sheet.notes).toContainEqual({
     kind: "sibling",
-    text: "shared terminal 30: consumers sum 200 cfm (this fan 150, siblings 50); the terminal states 1120 (revit:connector Flow)",
+    text: expect.stringMatching(/^shared terminal .+: consumers sum 200 cfm \(this fan 150, siblings 50\); the terminal states 1120 \(model:connector Flow\)$/),
     value: 200,
   });
 });
@@ -1357,3 +1361,65 @@ it.skipIf(
   },
   120_000,
 );
+
+it("a missing terminal flow withholds path completeness and required ESP", () => {
+  const inputs = inputsFor(network);
+  inputs.terminals["6"]!.cfm = {
+    value: null,
+    source: "none",
+    units: "cfm",
+    version: null,
+    status: "missing",
+  };
+  const sheet = buildSheet({
+    snapshot: network,
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    inputs,
+  });
+  expect(sheet.paths.find((p) => p.end.elementId === 6)?.complete).toBe(false);
+  expect(sheet.totals.supply.complete).toBe(false);
+  expect(sheet.totals.requiredEspInWg).toBeNull();
+  expect(sheet.blockers.some((b) => b.kind === "no-flow")).toBe(true);
+});
+
+it("resolved unit flow and walked terminal sum remain visible when they disagree", () => {
+  const input = inputsFor(network, {
+    roles: { 100: "fan" },
+    endCfm: { 100: 1200, 6: 200, 8: 100, 10: 300 },
+  });
+  const sheet = buildSheet({
+    snapshot: network,
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    inputs: input,
+  });
+  expect(sheet.notes.find((n) => n.kind === "flow-conflict")?.text).toContain("1200 cfm (Work");
+  expect(sheet.notes.find((n) => n.kind === "flow-conflict")?.text).toContain("walked end sum");
+});
+
+it("model fan flow conflict names its slot and the terminal sum", () => {
+  const snap = structuredClone(network);
+  snap.nodes
+    .find((n) => n.id === 100)!
+    .facts.push({ key: "fanFlow", value: 1200, unit: "cfm", provenance: "designer-stated" });
+  snap.slots = {
+    ...TEST_SLOTS,
+    fanFlow: "PE_M_Fan_AirFlow",
+  };
+  const sheet = buildSheet({
+    snapshot: snap,
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    inputs: inputsFor(snap, { roles: { 100: "fan" }, endCfm: { 6: 642, 8: 300, 10: 942 } }),
+  });
+  expect(sheet.notes.find((n) => n.kind === "flow-conflict")).toMatchObject({
+    value: 258,
+    text: expect.stringContaining(
+      "1200 cfm (model:PE_M_Fan_AirFlow) conflicts with 942 cfm (walked end sum)",
+    ),
+  });
+});

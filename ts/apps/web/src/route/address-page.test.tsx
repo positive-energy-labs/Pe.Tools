@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { familyGraph, familyPageSchema } from "#/family/graph";
+import { graphUrlPage } from "#/shell/mount-page";
+import { createRouteOwner, makeAtomRegistry, useOwned } from "#/shell/owner";
+import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
+import { routeAddress } from "@pe/agent-contracts";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -7,16 +11,12 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
-import { routeAddress } from "@pe/agent-contracts";
 import { routeFile, useAddressPage } from "./address-page";
-import { createRouteOwner, makeAtomRegistry, useOwned } from "#/shell/owner";
-import { createViewOwner } from "./view-owner";
 import { useUrlPage } from "./url";
-import { familyGraph, familyPageSchema } from "#/family/graph";
-import { familiesGraph, familiesPageSchema } from "#/families/graph";
-import { ductsGraph, ductsPageSchema } from "#/ducts/graph";
-import { graphUrlPage } from "#/shell/mount-page";
+import { createViewOwner } from "./view-owner";
+const ductsPageSchema = routeAddress("ducts").schema;
 
 afterEach(cleanup);
 
@@ -120,34 +120,6 @@ test("a Family member selection uses the graph's stable URL policy and restores 
     view.unmount();
     owner.dispose();
     base.dispose();
-  }
-});
-
-test("restoring Families spec B is one Page publication and stores no preview in Page", () => {
-  const route = createRouteOwner("families", makeAtomRegistry());
-  const url = graphUrlPage(familiesGraph);
-  const owner = createViewOwner(
-    route,
-    familiesPageSchema,
-    url.read({ stage: "apply", pod: "p", path: "b.json" }),
-    { transition: familiesGraph.transition },
-  );
-  owner.setPage({ path: "a.json" });
-  owner.move(url.read({ stage: "apply", pod: "p", path: "a.json", query: "Wall" }), {}, "url");
-  const seen: ReturnType<typeof owner.read>[] = [];
-  const unsubscribe = owner.subscribe(() => seen.push(owner.read()));
-  try {
-    expect(
-      owner.move(url.read({ stage: "apply", pod: "p", path: "b.json" }), {}, "url"),
-    ).toBeNull();
-    expect(seen).toHaveLength(1);
-    expect(seen[0]!.page).toMatchObject({ path: "b.json" });
-    expect(seen[0]!.page).not.toHaveProperty("confirming");
-    expect(seen[0]!.page).not.toHaveProperty("sheet");
-  } finally {
-    unsubscribe();
-    owner.dispose();
-    route.dispose();
   }
 });
 

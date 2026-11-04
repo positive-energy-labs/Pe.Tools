@@ -71,6 +71,7 @@ function environment() {
     expectedRevision: number,
     press: string | null,
     restore: boolean,
+    restoreOf?: number,
   ): RouteStateWriteResult => {
     const before = envelope;
     const landed = applyPatches(
@@ -87,6 +88,7 @@ function environment() {
     const write: WorkWriteAck = {
       key,
       kind: restore ? "restore" : "apply",
+      ...(restoreOf !== undefined ? { restoreOf } : {}),
       by: "human",
       press,
       base: before.revision,
@@ -113,7 +115,7 @@ function environment() {
       land(request.patches, request.expectedRevision, request.press, false),
   };
   const restorer: JournalWriter = async (request) =>
-    land(request.patches, request.expectedRevision, null, true);
+    land(request.patches, request.expectedRevision, null, true, request.restoreOf);
   // The journal needs its baseline revision before the first authored edit.
   journal.accept({
     key,

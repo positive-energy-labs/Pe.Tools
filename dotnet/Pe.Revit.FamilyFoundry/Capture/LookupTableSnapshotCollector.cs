@@ -27,7 +27,7 @@ public sealed class LookupTableSnapshotCollector : IFamilySnapshotCollector {
         }
 
         var keyCountsByTable = LookupFormulaInspector.CollectLookupKeyCounts(parameterSnapshots);
-        var workingDirectory = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, "pelt", "lookup-capture", Guid.NewGuid().ToString("N"));
+        var workingDirectory = Path.Combine(ProductRuntimeLayout.Current.ScratchPath, "pelt", "lookup-capture", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workingDirectory);
 
         try {

@@ -14,7 +14,9 @@ it("finds labelled controls with units, commits captures on release, and resets 
     context: { padding: num("Capture padding", 15, [0, 60, 1], "refetch", "ft") },
   });
   render(<KnobsFloater />);
-  fireEvent.click(screen.getByRole("button", { name: "knobs" }));
+  // Clean and collapsed, the floater draws nothing; Ctrl+Alt+K opens it.
+  expect(screen.queryByRole("button", { name: /knobs/ })).toBeNull();
+  fireEvent.keyDown(window, { key: "k", ctrlKey: true, altKey: true });
   fireEvent.change(screen.getByRole("searchbox", { name: "Find knob" }), {
     target: { value: "Capture padding" },
   });

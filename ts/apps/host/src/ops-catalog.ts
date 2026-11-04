@@ -5,7 +5,7 @@ import {
   HttpRouter,
   type HttpServerRequest,
   HttpServerResponse as Response,
-} from "effect/unstable/http";
+} from "effect/http";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,

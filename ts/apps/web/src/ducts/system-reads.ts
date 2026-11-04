@@ -8,6 +8,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /** Requested IDs are completion evidence even when Revit returns no system or no network. */
 export type NetworkSnapshot = DuctSnapshot & {
+  sourceVersion?: string;
   systemReads?: { completed: number[]; missing: number[] };
 };
 

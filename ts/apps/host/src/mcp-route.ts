@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { Effect } from "effect";
-import { HttpEffect, HttpRouter } from "effect/unstable/http";
+import { Effect, Option } from "effect";
+import { HttpEffect, HttpRouter } from "effect/http";
 import { createPeaMcpServer, WebStandardStreamableHTTPServerTransport } from "@pe/mcps/server";
 import { invocationContext, type InvocationContext } from "@pe/runtime/context";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { callerOf, mintContext, retireContext } from "./control.ts";
-import { hostReceiptExport, type ReceiptExport } from "./receipt-export.ts";
+import { ReceiptExport, type ReceiptExporter } from "./receipt-export.ts";
 import { instrumentHostMcp } from "./mcp-analytics.ts";
 
 const version = "2025-11-25";
@@ -21,7 +21,7 @@ const error = (status: number, message: string) =>
 export function createMcpDoor(
   hostBaseUrl: () => string,
   makeServer = createPeaMcpServer,
-  telemetry?: ReceiptExport,
+  telemetry?: ReceiptExporter,
 ) {
   type Session = {
     principal: string;
@@ -171,10 +171,14 @@ export function createMcpDoor(
   };
 }
 
-export const mcpRoute = (base: () => string, telemetry?: ReceiptExport) =>
+export const mcpRoute = (base: () => string, telemetry?: ReceiptExporter) =>
   HttpRouter.use((router) =>
     Effect.gen(function* () {
-      const door = createMcpDoor(base, undefined, telemetry ?? hostReceiptExport());
+      const door = createMcpDoor(
+        base,
+        undefined,
+        telemetry ?? Option.getOrUndefined(yield* Effect.serviceOption(ReceiptExport)),
+      );
       yield* Effect.addFinalizer(() => Effect.promise(() => door.close()));
       yield* router.add(
         "*",

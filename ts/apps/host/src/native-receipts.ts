@@ -6,8 +6,6 @@ import {
   nativeVerdictSchema,
   type ReceiptFact,
 } from "@pe/agent-contracts";
-import { Effect } from "effect";
-import { NodeServices } from "@effect/platform-node";
 import {
   opResultArgv,
   sessionListArgv,
@@ -17,15 +15,11 @@ import {
   type SessionListResult,
 } from "@pe/host-contracts/pe-revit-contract";
 import type { ActionStep } from "@pe/agent-contracts";
-import { runPeRevitCli } from "./session-route.ts";
+import { readSdk } from "./sdk-session.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 
 export type { NativeProcess } from "@pe/agent-contracts";
 export type SdkReceiptReader = (args: readonly string[]) => Promise<string>;
-const run: SdkReceiptReader = (args) =>
-  Effect.runPromise(
-    runPeRevitCli(args).pipe(Effect.provide(NodeServices.layer), Effect.timeout("30 seconds")),
-  );
 async function sdkResult<A>(args: readonly string[], read: SdkReceiptReader) {
   return parsePeRevitEnvelope<A>(await read(args), args, peRevitLauncher());
 }
@@ -33,7 +27,7 @@ async function sdkResult<A>(args: readonly string[], read: SdkReceiptReader) {
 export async function readOriginalProcess(
   pid: number,
   startMs: number,
-  read: SdkReceiptReader = run,
+  read: SdkReceiptReader = readSdk,
 ): Promise<NativeProcess> {
   const envelope = await sdkResult<SessionListResult>(sessionListArgv({ all: true }), read);
   if (envelope.diagnostics.length) throw Error("SDK process identity read reported diagnostics");
@@ -72,7 +66,7 @@ export type Successor = {
 export async function readNativeReceipt(
   step: ActionStep,
   original: NativeProcess,
-  read: SdkReceiptReader = run,
+  read: SdkReceiptReader = readSdk,
   successor?: Successor,
 ): Promise<{
   step: ActionStep;

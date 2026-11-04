@@ -1,3 +1,4 @@
+import { testConsents } from "./effect-test.ts";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +13,7 @@ import {
   type Claim,
 } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { RunConsents, type ConsentEvent } from "../src/run-consent.ts";
+import type { ConsentEvent } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 import {
   StepFailure,
@@ -161,7 +162,7 @@ test.each([false, true])(
             execution.step("native", "probe.native", {}, async (requestId) => {
               holdReader = true;
               const refusal = await h.journal.validateDispatch(requestId);
-              if (refusal) throw new StepFailure(refusal, 409, "refused");
+              if (refusal) throw new StepFailure(refusal.message, refusal.kind === "cancelled" ? 499 : 409, "refused");
               await h.journal.markDispatched(requestId);
               return ++dispatched;
             }),
@@ -200,7 +201,7 @@ async function setup(probe?: CommandResources["probe"]) {
   const key = bindWork("probe", null);
   await work.publish(key, "probe", [{ path: ["fields", "consumed"], value: 0 }], 0);
   const events: ConsentEvent[] = [];
-  const runs = new RunConsents((_run, event) => events.push(event));
+  const runs = testConsents((_run, event) => events.push(event));
   runs.open(run);
   bindControl({ runs, acquired: () => null });
   const journal = new ActionJournal(join(directory, "journal.jsonl"));
@@ -234,7 +235,7 @@ async function setup(probe?: CommandResources["probe"]) {
   const close = async () => {
     runs.closeAll();
     await Promise.all((await journal.list()).map((row) => journal.wait(row.id)));
-    await rm(directory, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   };
   return { directory, work, key, events, runs, journal, ready, approve, close };
 }

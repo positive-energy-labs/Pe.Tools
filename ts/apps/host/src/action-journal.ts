@@ -7,7 +7,7 @@ import type {
 import { CommandRejected, StepFailure, refused } from "./command-executor.ts";
 import { readJournalSnapshot } from "./legacy-action-journal.ts";
 import { validateNativeInput } from "./native-input.ts";
-import { bindActionDispatch } from "./action-dispatch.ts";
+import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { renameReplacing } from "./rename-retry.ts";
 import { dirname, join, win32 } from "node:path";
@@ -61,6 +61,7 @@ import {
   authorizeCommand,
   commandCheckpoint,
   subscribeRunChanges,
+  commandConsentWindow,
   validateFootprintCaller,
   Refused,
 } from "./control.ts";
@@ -474,6 +475,9 @@ export class ActionJournal implements ReceiptReader {
   private loaded?: Promise<void>;
   private tail: Promise<unknown> = Promise.resolve();
   private readonly pending = new Map<string, Promise<ActionReceipt>>();
+  /** `closing` refuses admission; `flushed` refuses every write after the final flush. */
+  private closing = false;
+  private flushed = false;
   // Page authority is a host-minted object capability, never reconstructed from persisted data.
   private readonly activeCallers = new Map<string, Caller>();
   private environment?: CommandEnvironment;
@@ -626,12 +630,15 @@ export class ActionJournal implements ReceiptReader {
   }
 
   /** The committed step index also fences native work after it has waited in the bridge queue. */
-  async validateDispatch(requestId: string): Promise<string | null> {
+  async validateDispatch(requestId: string): Promise<DispatchRefusal | null> {
     const action = this.stepAction.get(requestId);
     try {
       if (action) await this.gate(this.rows.get(action)!, "dispatch");
     } catch (error) {
-      return String(error);
+      return {
+        kind: error instanceof StepFailure && error.status === 499 ? "cancelled" : "refused",
+        message: messageOf(error),
+      };
     }
     return this.dispatchRefusal(requestId);
   }
@@ -651,18 +658,29 @@ export class ActionJournal implements ReceiptReader {
       this.notify();
     });
   }
-  dispatchRefusal(requestId: string): string | null {
+  dispatchRefusal(requestId: string): DispatchRefusal | null {
     const action = this.stepAction.get(requestId);
     const row = action ? this.rows.get(action) : undefined;
     if (!row) return null;
-    if (row.cancellationRequested) return "Action cancelled before dispatch";
+    if (row.cancellationRequested)
+      return { kind: "cancelled", message: "Action cancelled before dispatch" };
+    if (row.state === "unknown")
+      return {
+        kind: "refused",
+        message: "Action checkpoint is uncertain; resolve before dispatch",
+      };
     try {
       if (row.effects.length) commandCheckpoint(originOf(row.caller), row.consent);
+    } catch (error) {
+      return { kind: "cancelled", message: messageOf(error) };
+    }
+    try {
       validateFootprintCaller(this.activeCallers.get(row.id) ?? row.caller, row.effects);
     } catch (error) {
-      return String(error);
+      return { kind: "refused", message: messageOf(error) };
     }
-    return live(row.basis, "native dispatch")?.message ?? null;
+    const dead = live(row.basis, "native dispatch");
+    return dead ? { kind: "refused", message: dead.message } : null;
   }
 
   async list(target?: DocumentRef, id?: string): Promise<ActionReceipt[]> {
@@ -719,7 +737,7 @@ export class ActionJournal implements ReceiptReader {
   async wait(id: string): Promise<ActionReceipt> {
     await this.loadOnce();
     const pending = this.pending.get(id);
-    if (pending) return pending;
+    if (pending) await pending;
     const row = (await this.list(undefined, id))[0];
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
     return row;
@@ -760,10 +778,10 @@ export class ActionJournal implements ReceiptReader {
     await writeFile(`${file}.tmp`, JSON.stringify(value, null, 2), "utf8");
     await renameReplacing(`${file}.tmp`, file);
   }
-  private async waitForTurn(id: string) {
+  private async waitForTurn(id: string, retirementOnly = false) {
     for (;;) {
       const row = this.rows.get(id)!;
-      await this.gate(row, "turn");
+      if (!retirementOnly) await this.gate(row, "turn");
       const earlier = [...this.rows.values()].slice(0, [...this.rows.keys()].indexOf(id));
       const blocked = earlier.find(
         (other) =>
@@ -875,6 +893,12 @@ export class ActionJournal implements ReceiptReader {
       selectWork: async (spec, handle, select) => {
         if (handle.key.route !== spec.route)
           throw refused("Work belongs to another tool", "work.route");
+        if (
+          admission.target.kind === "document" &&
+          handle.key.binding === "open" &&
+          canonicalRouteInput(handle.key.open) !== canonicalRouteInput(admission.target.ref)
+        )
+          throw refused("Work belongs to another document", "work.target");
         const identity = workKey(handle.key);
         let original = context.consumed.find(
           (value) => value.kind === "work" && workKey(value.probe.handle.key) === identity,
@@ -977,7 +1001,17 @@ export class ActionJournal implements ReceiptReader {
     for (const dependency of row.consumes) {
       if (dependency.kind === "work") {
         // Retirement compares each submitted cell against live Work itself.
-        if (postcondition) continue;
+        if (
+          postcondition ||
+          (moment !== "step" &&
+            moment !== "dispatch" &&
+            row.recovery.length > 0 &&
+            row.steps.some(
+              (step) => step.kind === "native" && step.state === "succeeded" && step.dispatchedAt,
+            ) &&
+            row.steps.every((step) => step.state === "succeeded"))
+        )
+          continue;
         const current = await this.environment?.work?.view(
           dependency.probe.handle.key,
           dependency.probe.handle.key.route,
@@ -1064,6 +1098,7 @@ export class ActionJournal implements ReceiptReader {
   async resume(id: string, crossing: Crossing): Promise<ActionReceipt> {
     const row = (await this.readFor(crossing.caller, undefined, id))[0];
     if (!row || !this.environment) throw Error("Original command or its executor is unavailable");
+    if (row.state === "unknown") return this.recover(id);
     return this.invoke(
       { id: row.id, key: row.key, target: row.target, input: row.input },
       crossing,
@@ -1071,7 +1106,12 @@ export class ActionJournal implements ReceiptReader {
     );
   }
 
-  async invoke(raw: ActionAdmission, crossing: Crossing, resume = false): Promise<ActionReceipt> {
+  async invoke(
+    raw: ActionAdmission,
+    crossing: Crossing,
+    resume = false,
+    retirementOnly = false,
+  ): Promise<ActionReceipt> {
     const admission = actionAdmissionSchema.parse(structuredClone(raw));
     const portable = commands[admission.key as keyof typeof commands];
     if (portable)
@@ -1099,6 +1139,15 @@ export class ActionJournal implements ReceiptReader {
       if (prior.steps.some((step) => step.state === "unknown" || step.state === "running"))
         throw Error("Recover every uncertain step before resuming the original action");
     }
+    // Native evidence authorizes only its host-owned retirement, never a fresh external effect.
+    const gate = (
+      current: ActionReceipt,
+      moment: Parameters<ActionJournal["gate"]>[1],
+      postcondition = false,
+    ) =>
+      retirementOnly && (postcondition || (moment !== "step" && moment !== "dispatch"))
+        ? Promise.resolve()
+        : this.gate(current, moment, postcondition);
     const context = this.context(admission, crossing, prior?.consumes ?? []);
     let executor!: CommandExecutor;
     let definition!: Command;
@@ -1162,7 +1211,7 @@ export class ActionJournal implements ReceiptReader {
           code: "target.required",
           message: "Target does not match the command contract",
         });
-      await this.environment?.target?.(admission.target, definition.needs);
+      if (!retirementOnly) await this.environment?.target?.(admission.target, definition.needs);
       if (prior?.prepared.state === "ready") executor.prepared.parse(prior.prepared.value);
       row = { ...row, input: structuredClone(admission.input) };
       if (!prior) {
@@ -1184,13 +1233,19 @@ export class ActionJournal implements ReceiptReader {
         context.consumed = structuredClone(row.consumes);
         context.basis = row.basis;
       }
-      await this.gate(row, "admit");
+      await gate(row, "admit");
     } catch (error) {
       observed = { error };
     }
     const admitted = await this.serial(async (): Promise<ActionReceipt | undefined> => {
       // Another admission committed this id while this one observed: re-admit against that row.
       if (this.rows.get(admission.id) !== prior) return undefined;
+      if (this.closing)
+        throw new CommandRejected({
+          kind: "domain",
+          code: "host-stopping",
+          message: "The host is stopping; this command was not admitted.",
+        });
       try {
         if (observed) throw observed.error;
         this.activeCallers.set(row.id, crossing.caller);
@@ -1392,7 +1447,13 @@ export class ActionJournal implements ReceiptReader {
                   patches.push(...next);
                 }
                 if (patches.length) {
-                  const publication = await work.publish(key, route, patches, current.revision);
+                  const publication = await work.publish(
+                    key,
+                    route,
+                    patches,
+                    current.revision,
+                    row.id,
+                  );
                   if (!publication.ok)
                     throw new ActionIncomplete("Work retirement did not land", publication);
                   return {
@@ -1463,6 +1524,11 @@ export class ActionJournal implements ReceiptReader {
             }
             throw Error("An uncertain effect cannot be replayed");
           }
+          if (retirementOnly && (kind !== "publication" || key !== "work.retire"))
+            throw new ActionIncomplete(
+              "Recovered effects require explicit resume before new external work",
+              null,
+            );
           const incarnation = row.consumes.find(
             (dependency) =>
               dependency.kind === "incarnation" &&
@@ -1472,7 +1538,13 @@ export class ActionJournal implements ReceiptReader {
             process ??
             (incarnation?.kind === "incarnation" ? incarnation.probe.process : undefined);
           const step: ActionStep = {
-            id: randomUUID(),
+            // Opaque caller ids cannot serve as the SDK's native request UUID.
+            id:
+              kind === "native" &&
+              !row.steps.some((step) => step.kind === "native") &&
+              z.uuid().safeParse(row.id).success
+                ? row.id
+                : randomUUID(),
             kind,
             key,
             input: structuredClone(input),
@@ -1507,7 +1579,7 @@ export class ActionJournal implements ReceiptReader {
                   held.state === "succeeded" &&
                   (held.kind === "file" || (held.kind === "native" && held.dispatchedAt)),
               );
-            await this.gate(row, "step", postcondition);
+            await gate(row, "step", postcondition);
             entered = true;
             result = await effect(step.id);
             returned = true;
@@ -1589,12 +1661,33 @@ export class ActionJournal implements ReceiptReader {
         },
       };
       let validated = row.prepared.state === "ready";
+      const persistenceFailed = (error: unknown) => {
+        console.error("Action consent checkpoint could not be persisted", error);
+        this.cancelWaits.get(row.id)?.();
+        this.index({
+          ...row,
+          state: "unknown",
+          cancellationRequested: true,
+          status: 503,
+          error: `Consent checkpoint could not be persisted: ${String(error)}`,
+        });
+        this.notify();
+      };
       const releaseRun = subscribeRunChanges(() => {
+        const consentWindow = commandConsentWindow(row.id);
+        if (
+          canonicalRouteInput(row.consentWindow ?? null) !==
+          canonicalRouteInput(consentWindow ?? null)
+        )
+          void save((current) => ({ ...current, consentWindow })).catch(persistenceFailed);
         try {
-          if (row.effects.length) commandCheckpoint(originOf(row.caller), row.consent);
+          if (!retirementOnly && row.effects.length)
+            commandCheckpoint(originOf(row.caller), row.consent);
         } catch {
-          this.cancelWaits.get(row.id)?.();
-          void save((current) => ({ ...current, cancellationRequested: true })).catch(() => {});
+          if (row.consent) this.cancelWaits.get(row.id)?.();
+          void save((current) => ({ ...current, cancellationRequested: true })).catch(
+            persistenceFailed,
+          );
         }
       });
       const completion = Promise.resolve()
@@ -1606,7 +1699,8 @@ export class ActionJournal implements ReceiptReader {
               claims: row.claims,
               effects: row.effects,
             });
-          await this.gate(row, "authorize");
+          await gate(row, "authorize");
+          if (!retirementOnly) await binding?.preflight?.();
           const cancelled = new Promise<never>((_, reject) =>
             this.cancelWaits.set(row.id, () =>
               reject(new StepFailure("Command cancelled before authorization", 499, "refused")),
@@ -1615,7 +1709,9 @@ export class ActionJournal implements ReceiptReader {
           let consent: CommandConsent | null;
           try {
             consent = await Promise.race([
-              authorizeCommand(originOf(row.caller), row.id, row.effects),
+              retirementOnly
+                ? Promise.resolve(row.consent)
+                : authorizeCommand(originOf(row.caller), row.id, row.effects),
               cancelled,
             ]);
           } catch (error) {
@@ -1624,8 +1720,8 @@ export class ActionJournal implements ReceiptReader {
             this.cancelWaits.delete(row.id);
           }
           await save((current) => ({ ...current, state: "running", consent }));
-          await this.gate(row, "consented");
-          await this.waitForTurn(row.id);
+          await gate(row, "consented");
+          await this.waitForTurn(row.id, retirementOnly);
           if (row.prepared.state !== "ready") {
             const value = structuredClone(
               executor.prepared.parse((await binding?.prepare?.()) ?? null),
@@ -1634,7 +1730,7 @@ export class ActionJournal implements ReceiptReader {
             await save((current) => ({ ...current, prepared: { state: "ready", value } }));
           }
           validated = true;
-          await this.gate(row, "prepared");
+          await gate(row, "prepared");
           const result = await executor.run(context, execution);
           return definition.result ? definition.result.parse(result) : result;
         })
@@ -1676,7 +1772,10 @@ export class ActionJournal implements ReceiptReader {
           }),
         );
       this.pending.set(row.id, completion);
-      void completion.catch(() => undefined);
+      void completion.catch((error) => {
+        console.error("action-journal: asynchronous operation failed", error);
+        return undefined;
+      });
       return structuredClone(row);
     });
     return admitted ?? this.invoke(raw, crossing, resume);
@@ -1763,7 +1862,7 @@ export class ActionJournal implements ReceiptReader {
           updates.push({ step, evidence: { error: String(error) } });
         }
       }
-    return this.serial(async () => {
+    const recovered = await this.serial(async () => {
       const current = this.rows.get(id)!;
       if (canonicalRouteInput(current) !== canonicalRouteInput(original))
         return structuredClone(current);
@@ -1812,11 +1911,43 @@ export class ActionJournal implements ReceiptReader {
       this.notify();
       return structuredClone(nextRow);
     });
+    // Re-enter only after every effect has a confirmed answer. Step replay reuses results;
+    // conditional retirement compares the frozen edit and preserves newer Work edits.
+    if (
+      (recovered.state === "unknown" || recovered.state === "incomplete") &&
+      recovered.steps.length > 0 &&
+      recovered.steps.every((step) => step.state === "succeeded")
+    ) {
+      await this.invoke(
+        { id: recovered.id, key: recovered.key, target: recovered.target, input: recovered.input },
+        { caller: recovered.caller, basis: recovered.basis },
+        true,
+        true,
+      );
+      return this.wait(id);
+    }
+    return recovered;
+  }
+  /**
+   * Host shutdown, last of the host's finalizers: refuse admission, join every admitted command
+   * (the bridge closed earlier, so one waiting on Revit has already failed typed), then flush the
+   * write tail. The flush is the journal's last write: every write after it is refused.
+   */
+  async close(): Promise<void> {
+    this.closing = true;
+    while (this.pending.size) await Promise.allSettled([...this.pending.values()]);
+    await this.serial(async () => {
+      this.flushed = true;
+    });
   }
   /** The journal's one write lock. Never await the bridge inside it: the bridge journals through it. */
   private serial<A>(work: () => Promise<A>): Promise<A> {
+    if (this.flushed) return Promise.reject(Error("The action journal closed with its host"));
     const next = this.tail
-      .catch(() => undefined)
+      .catch((error) => {
+        console.error("action-journal: asynchronous operation failed", error);
+        return undefined;
+      })
       .then(() => this.loadOnce())
       .then(work);
     this.tail = next.then(
@@ -1901,6 +2032,41 @@ export class ActionJournal implements ReceiptReader {
 
   /** Append the revisions these rows and facts make, and any freshly minted mappings. */
   private async commit(rows: readonly ActionReceipt[] = [], facts: readonly Receipt[] = []) {
+    // File checkpoints in the same append as the confirmed receipt, including recovery.
+    rows = rows.map((row) => {
+      if (row.state !== "succeeded" || !row.steps.some((step) => step.state === "succeeded"))
+        return row;
+      const readingHashes = Object.fromEntries(
+        row.consumes.flatMap((value, index) =>
+          value.kind === "work"
+            ? []
+            : [
+                [
+                  value.kind === "file" ? `file:${value.probe.path}` : `${value.kind}:${index}`,
+                  (value.kind === "capture" || value.kind === "file" || value.kind === "member") &&
+                  value.expected !== null
+                    ? value.expected
+                    : createHash("sha256").update(canonicalRouteInput(value)).digest("hex"),
+                ],
+              ],
+        ),
+      );
+      const snapshots = row.consumes.flatMap((value) => {
+        if (value.kind !== "work") return [];
+        const snapshot = {
+          address: value.probe.handle.key,
+          workRevision: value.probe.handle.revision,
+          readingHashes,
+        };
+        return [
+          {
+            ...snapshot,
+            id: createHash("sha256").update(canonicalRouteInput(snapshot)).digest("hex"),
+          },
+        ];
+      });
+      return { ...row, snapshots };
+    });
     const at = new Date().toISOString();
     const receipts = rows.flatMap((row) => {
       const old = this.receipts.get(this.actionReceipt.get(row.id) ?? "");

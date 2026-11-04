@@ -1,3 +1,4 @@
+import { useSelectionPage } from "#/shell/selection-page";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Popover } from "@base-ui/react/popover";
@@ -9,7 +10,7 @@ import { PopupFrame } from "@pe/kit/lang/list-popup";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Textarea } from "@pe/kit/lang/input";
 import { deliverFeedback, sendFeedback, type FeedbackReceipt } from "#/host/feedback";
-import { useAction } from "#/readings";
+import { useAction } from "#/actions/use-action";
 import { useScopeKeys } from "@pe/kit/keys";
 
 // Pick one element, write a note, send it with a cropped picture through the host, which keeps it
@@ -38,7 +39,7 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
   const capture = useRef(0);
   const [picking, setPicking] = useState(false);
   const [hover, setHover] = useState<Rect | null>(null);
-  const [picked, setPicked] = useState<Picked | null>(null);
+  const [picked, setPicked] = useSelectionPage<Picked | null>("feedback", null);
   const [note, setNote] = useState("");
   const [kept, setKept] = useState<FeedbackReceipt | null>(null);
   const [cancelHost, setCancelHost] = useState<HTMLElement | null>(null);
@@ -97,9 +98,9 @@ export function FeedbackPicker({ hideTrigger = false }: { hideTrigger?: boolean 
           if (attempt === capture.current && element.isConnected)
             setPicked({ element, rect: g.getElementBounds(element), context });
         })
-        .catch(() => {
+        .catch((error) => { console.warn("ts/apps/web/src/components/feedback-picker.tsx: fallback after failure", error);
           /* The regular picker remains available when direct capture fails. */
-        });
+         });
     };
     window.addEventListener(START_FEEDBACK, start);
     return () => {

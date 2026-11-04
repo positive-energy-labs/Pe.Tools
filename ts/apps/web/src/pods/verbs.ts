@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { podMemberSchema, type SettingsRouteDocument } from "@pe/agent-contracts";
-import { commandVerb, pageVerb, rpcVerb, workVerb } from "#/shell/verbs";
-import { activationRpc } from "./sources";
+import { commandVerb, pageVerb, workVerb } from "#/shell/verbs";
 
 const refusal = z.string().nullable().default(null);
 const editInput = z.object({ content: z.string(), refusal });
@@ -87,20 +86,6 @@ export const podsVerbs = {
           }),
         },
       ],
-    },
-  ),
-  activation: rpcVerb(
-    activationRpc,
-    {
-      label: "Change Pod activation",
-      caller: "human",
-      review: "none",
-      input: z.object({ id: z.string(), enabled: z.boolean(), refusal }),
-    },
-    {
-      ready: (_, input) => input.refusal,
-      intent: (_, { id, enabled }) => ({ id, enabled }),
-      lands: () => ({ pluginEpoch: Date.now() }),
     },
   ),
 };

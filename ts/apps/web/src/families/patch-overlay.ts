@@ -42,7 +42,9 @@ const show = (value: unknown): string => {
   if (typeof value === "string") return value;
   const measured = record(value);
   return "value" in measured && "unit" in measured
-    ? `${measured.value as string | number} ${measured.unit as string}`
+    ? typeof measured.display === "string"
+      ? measured.display
+      : `${measured.value as string | number} ${measured.unit as string}`
     : JSON.stringify(value);
 };
 const UNRESOLVED = new Set(["∅", "ambiguous", "blank"]);

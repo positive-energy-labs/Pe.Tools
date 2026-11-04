@@ -107,7 +107,8 @@ const basisOf = (snapshot: SheetSnapshot, rest: object) =>
 const round = (n: number) => +n.toFixed(6);
 
 /** A resolved value's provenance as a leg's `lossSource.ref` reads it. */
-const provenance = (v: Resolved<unknown>) => `${v.source}${v.ref ? `:${v.ref}` : ""}`;
+const provenance = (v: Resolved<unknown>) =>
+  `${v.source}${v.ref || v.version != null ? `:${v.ref ?? v.version}` : ""}`;
 const positive = (v: number | null | undefined) => (v != null && v > 0 ? v : null);
 
 /**
@@ -140,7 +141,7 @@ function lossSourceOf(src: NonNullable<PricedLeg["source"]>, note = ""): Leg["lo
     : src.kind === "rule"
       ? {
           kind: "rule",
-          ref: `${src.rule} ${src.table} ${src.inputs.res}=${round(src.coefficient)}${note}`,
+          ref: `${src.rule} ${src.table} ${src.inputs.res}=${round(src.coefficient)}${note}${src.notes.length ? `; ${src.notes.join("; ")}` : ""}`,
         }
       : { kind: src.source.startsWith("firm default") ? "default" : "drop", ref: src.source };
 }
@@ -408,7 +409,7 @@ class Pricer {
       ruleSource: rule ? "matched" : "none",
       tableSource: rule
         ? chosen
-          ? chosen.source === "stored"
+          ? chosen.source === "model"
             ? "stored"
             : "typed"
           : "default"
@@ -505,6 +506,16 @@ class Pricer {
       : { key, elementId: input.fitting.id };
     const row: FittingPricing = {
       ...identity,
+      ...(src
+        ? {
+            derivation: `${lossSourceOf(src).ref}; ${Object.entries(src.inputs)
+              .filter(([k]) => ["x", "y", "z"].includes(k))
+              .map(([k, v]) => `${k}=${v}`)
+              .join(
+                ", ",
+              )}; Pv=${src.pv} in-wg; extrapolated=${src.notes.some((n) => /extrapolated|clamped/.test(n))}`,
+          }
+        : {}),
       family,
       rule: rule?.key ?? null,
       table: src?.table ?? null,
@@ -512,7 +523,7 @@ class Pricer {
       tableSource: !src
         ? null
         : chosen && chosen.value.toUpperCase() === src.table
-          ? chosen.source === "stored"
+          ? chosen.source === "model"
             ? "stored"
             : "typed"
           : src.table === rule?.table
@@ -524,9 +535,15 @@ class Pricer {
       unpriced: p.unpriced,
       typed: null,
     };
-    // One fitting may be priced on several legs; an unpriced leg is what the census must show.
+    // A tap has both branch and straight prices. Show its controlling loss, never visitation order.
+    // An unpriced leg still withholds the fitting regardless of other priced legs.
     const had = this.fittings.get(key);
-    if (!had || had.unpriced == null) this.fittings.set(key, row);
+    if (
+      !had ||
+      (had.unpriced == null &&
+        (row.unpriced != null || (row.lossInWg ?? -Infinity) > (had.lossInWg ?? -Infinity)))
+    )
+      this.fittings.set(key, row);
     return p;
   }
 
@@ -854,7 +871,9 @@ class Pricer {
         legIds,
         end: e.end,
         knownInWg,
-        complete: blockerIds.size === 0,
+        complete:
+          blockerIds.size === 0 &&
+          legIds.every((id) => this.legs[id]!.lossInWg != null && this.legs[id]!.flowCfm != null),
         blockerIds: [...blockerIds],
       };
     });
@@ -871,6 +890,9 @@ class Pricer {
     const { proposal } = h;
     const source = w.states[h.state]!.el;
     const key = `heal:${proposal.pair.join("|")}`;
+    // TODO: Y3 (Manual D #5 defect 7) owed: this note still spells `id:port to id:port`; no web pane
+    // renders heal notes today, and heal-refusal.test parses the ids out of it. Carry the pair as a
+    // field and name the ends with g.name before any surface draws it.
     const note = `${proposal.kind} ${proposal.pair.join(" to ")}; ${proposal.risk}`;
     this.healNotes.add(note);
     const port = source.connectors.find((c) => c.index === proposal.from.connector)!;
@@ -1490,8 +1512,9 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   // The unit's own flow: typed is the side-stream exception's asserted flow, a Revit or stored value
   // its design parameter; absent both, an ordinary fan's flow is the sum of its ends (never an input).
   const unitCfm = input.inputs.units[String(unit.id)]?.cfm;
-  const typedCfm = unitCfm?.source === "typed" ? unitCfm.value : null;
-  const designCfm = unitCfm && unitCfm.source !== "typed" ? positive(unitCfm.value) : null;
+  const authored = unitCfm?.source === "Work" || unitCfm?.source === "run";
+  const typedCfm = authored ? unitCfm.value : null;
+  const designCfm = unitCfm && !authored ? positive(unitCfm.value) : null;
   const terminalCfm = (id: number) => terminalCfmOf(input.inputs, id);
   const derived =
     assumeHeals && input.assumeServedFlow !== false
@@ -1519,12 +1542,13 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   markSiblings(swap ? b! : a, "supply");
   if (b) markSiblings(swap ? a : b, "return");
   const flowOpts: FlowOptions = {
+    name: g.name,
     terminalCfm,
     // Whatever its source: a receiving unit's design flow read from Revit weights the split exactly
     // as a typed one does (ducts LEDGER 2026-10-29). A typed 0 is a share; an untyped 0 is unset.
     unitCfm: (unitId) => {
       const u = input.inputs.units[String(unitId)]?.cfm;
-      return u?.value != null && (u.source === "typed" || u.value > 0)
+      return u?.value != null && (u.source === "Work" || u.source === "run" || u.value > 0)
         ? { cfm: u.value, source: provenance(u) }
         : null;
     },
@@ -1602,7 +1626,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       kind: "open-end",
       elementId: unit.id,
       effectInWg: null,
-      detail: `the roster names no inlet for ${unit.id}; the return side is not walked`,
+      detail: `the roster names no inlet for ${g.name(unit.id)}; the return side is not walked`,
       closer: {
         kind: "ruling",
         note: "check the fan's paired duct ports; no inlet could be identified",
@@ -1629,6 +1653,12 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       ? round(sT.worstPath + rT.worstPath + sT.allowanceInWg + rT.allowanceInWg)
       : null;
   const flowCfm = retFirst ? sideSum(returnFlows!, ret!.w) : sideSum(supplyFlows, supply.w);
+  const walkedFlow = supply.w.ends.some((e) => e.end.kind === "terminal")
+    ? sideSum(
+        flowsOf(supply.w, { ...flowOpts, ordinary: true, sideStream: null }, () => ""),
+        supply.w,
+      )
+    : flowCfm;
   const walked = new Set<number>();
   for (const w of [supply.w, ret?.w]) if (w) for (const id of w.depth.keys()) walked.add(id);
 
@@ -1644,6 +1674,17 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   const tagOf = (unitId: number) => input.roster.find((p) => p.unitId === unitId)?.tag;
   const notes: SheetNote[] = [
     note("direction", `inlet ${inlet ?? "none"}, discharge ${discharge}: ${directionSource}`),
+    // Compare the shared resolver's authored/model value with the independently walked sum.
+    // Open ends make the sum partial; never allocate their unknown flow to erase a conflict.
+    ...(unitCfm?.value != null && walkedFlow != null && Math.abs(unitCfm.value - walkedFlow) > 0.5
+      ? [
+          note(
+            "flow-conflict",
+            `fan ${g.name(unit.id)}: ${unitCfm.value} cfm (${provenance(unitCfm)}) conflicts with ${round(walkedFlow)} cfm (walked end sum); ${[...supply.w.ends, ...(ret?.w.ends ?? [])].filter((e) => e.end.kind === "open-end").length} open ends; their unknown flow does not establish the difference`,
+            unitCfm.value - walkedFlow,
+          ),
+        ]
+      : []),
     ...[...derived.entries()]
       .filter(([ref]) =>
         [unit.id, ...[...a.ends, ...(b?.ends ?? [])].map((e) => e.end.fan?.unitId)].includes(
@@ -1659,11 +1700,11 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     ].map(([w, x]) => {
       const e = w.ends[x.end]!.end;
       const from = x.fan
-        ? `${tagOf(x.fan.unitId) || "unit"} ${x.fan.unitId}:${x.fan.portIndex}`
+        ? tagOf(x.fan.unitId) || g.name(x.fan.unitId)
         : "unnamed stream";
       return note(
         "inflow",
-        `inflow from ${from} at ${e.elementId}${assumeHeals ? " (assumed)" : ""}: ${x.source}`,
+        `inflow from ${from} at ${g.name(e.elementId)}${assumeHeals ? " (assumed)" : ""}: ${x.source}`,
         x.cfm,
       );
     }),
@@ -1677,7 +1718,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
         const fan = e.end.fan!;
         return note(
           "sibling",
-          `sibling ${tagOf(fan.unitId) || "unit"} ${fan.unitId}:${fan.portIndex} at ${e.end.elementId}: reached at its ${e.reached} on this fan's ${side} side; shares the trunk`,
+          `sibling ${tagOf(fan.unitId) || g.name(fan.unitId)} at ${g.name(e.end.elementId)}: reached at its ${e.reached} on this fan's ${side} side; shares the trunk`,
         );
       }),
     // R-SHARE: each sibling's draw on a shared terminal, then each shared terminal's consumers
@@ -1688,7 +1729,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
           const fan = w.ends[d.sibling]!.end.fan!;
           return note(
             "sibling",
-            `sibling ${tagOf(fan.unitId) || "unit"} ${fan.unitId}:${fan.portIndex} draws ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} from shared terminal ${w.ends[d.terminal]!.end.elementId}: ${d.source ?? "no design flow"}`,
+            `sibling ${tagOf(fan.unitId) || g.name(fan.unitId)} draws ${d.cfm == null ? "an unknown flow" : `${round(d.cfm)} cfm`} from shared terminal ${g.name(w.ends[d.terminal]!.end.elementId)}: ${d.source ?? "no design flow"}`,
             d.cfm == null ? null : round(d.cfm),
           );
         }),
@@ -1706,7 +1747,14 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
             resolved?.value != null
               ? resolved
               : revit != null
-                ? { value: revit, source: "revit", ref: "connector Flow" }
+                ? {
+                    value: revit,
+                    source: "model",
+                    ref: "connector Flow",
+                    units: "cfm",
+                    version: null,
+                    status: "valid",
+                  }
                 : null;
           if (own == null || drawn.some((d) => d.cfm == null) || stated?.value == null) return [];
           const sum = round(own + drawn.reduce((a, d) => a + d.cfm!, 0));
@@ -1714,7 +1762,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
           return [
             note(
               "sibling",
-              `shared terminal ${id}: consumers sum ${sum} cfm (this fan ${round(own)}, siblings ${drawn.map((d) => round(d.cfm!)).join(" + ")}); the terminal states ${stated.value} (${provenance(stated)})`,
+              `shared terminal ${g.name(id)}: consumers sum ${sum} cfm (this fan ${round(own)}, siblings ${drawn.map((d) => round(d.cfm!)).join(" + ")}); the terminal states ${stated.value} (${provenance(stated)})`,
               sum,
             ),
           ];
@@ -1726,7 +1774,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
       ...new Map(
         [...a.capped, ...(b?.capped ?? [])].map((c) => [`${c.elementId}:${c.connector}`, c]),
       ).values(),
-    ].map((c) => note("capped", `open end ${c.elementId}:${c.connector} ruled capped`)),
+    ].map((c) => note("capped", `an open end on ${g.name(c.elementId)} ruled capped`)),
     // Every auto-join the walks took, priced leg or not: a join that closes two walked stubs
     // into a loop (R-FACE) leaves no leg on any path, and is still a closure the engine took.
     ...[
@@ -1740,7 +1788,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     ),
     ...Object.values(pricer.legs)
       .filter((l) => l.lossSource.ref.startsWith("merge boundary"))
-      .map((l) => note("merge", `merge ${l.elementId} branch loss: ${l.lossSource.ref}`)),
+      .map((l) => note("merge", `merge ${g.name(l.elementId)} branch loss: ${l.lossSource.ref}`)),
   ];
   // R3 (kaitpw 2026-10-28): `externalStatic` is PE_M_Fan_ExternalStaticPressure, the required ESP slot Pe writes; the page labels it "required (written)".
   const ratedEsp = input.inputs.units[String(unit.id)]?.esp.value ?? null;
@@ -1846,7 +1894,7 @@ export function buildChain(input: BuildChainInput): Chain {
       kind: "open-end",
       elementId: input.end.elementId,
       effectInWg: null,
-      detail: `${input.end.elementId} is not reached from ${input.start.elementId} under the walk's stop rules`,
+      detail: `${g.name(input.end.elementId)} is not reached from ${g.name(input.start.elementId)} under the walk's stop rules`,
       closer: { kind: "ruling", note: "check the start connector, or rule the stops between" },
     });
   else {

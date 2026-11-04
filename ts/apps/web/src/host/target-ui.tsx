@@ -1,5 +1,5 @@
 import { token } from "@pe/kit/lib/token";
-import type { Lane } from "#/readings";
+import type { Lane } from "#/shell/readings-hooks";
 
 /**
  * The shared visual vocabulary for targets. One tone per resolution state, used identically

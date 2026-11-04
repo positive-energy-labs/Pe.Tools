@@ -6,7 +6,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 
 vi.mock("#/host/runtime", () => ({ hostFetch: vi.fn() }));
 
-vi.mock("#/readings", () => ({
+vi.mock("#/actions/use-action", () => ({
   useAction: () => ({ isPending: false, error: null, mutate: vi.fn() }),
 }));
 vi.mock("react-grab/primitives", () => ({

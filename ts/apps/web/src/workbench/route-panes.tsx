@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { routeAddress, split, pane } from "@pe/agent-contracts";
@@ -33,6 +33,9 @@ export function RouteDock({
   const pea = useRouterState({
     select: (state) => state.location.pathname === routeAddress("pea").path,
   });
+  const pictureLink = useRouterState({
+    select: (state) => new URLSearchParams(state.location.searchStr).get("picture") === "model",
+  });
   const plan = useAtomValue(store.atoms.planIntent);
   const planRefusal = useAtomValue(store.atoms.planRefusal);
   const intent = useMemo(
@@ -49,15 +52,19 @@ export function RouteDock({
   useEffect(() => {
     if (plan && plan.route !== tabs.route) store.actions.cancelPlan();
   }, [plan, tabs.route, store]);
-  const [layout, setLayout] = useState<GraphLayoutState>({ tools: { folded: !tabs.route } });
-  useEffect(
+  // A picture link is explicit view intent. Reserve its space before responsive folding can
+  // choose tools as the side to hide; bare routes keep the usual conversation + tool layout.
+  const [layout, setLayout] = useState<GraphLayoutState>({
+    tools: { folded: !tabs.route }, pea: { folded: pictureLink },
+  });
+  useLayoutEffect(
     () =>
       setLayout((prior) => ({
         ...prior,
         tools: { ...prior.tools, folded: !tabs.route },
-        pea: { ...prior.pea, folded: false },
+        pea: { ...prior.pea, folded: pictureLink },
       })),
-    [tabs.route, tabs.active?.id],
+    [tabs.route, tabs.active?.id, pictureLink],
   );
   const failure = tabs.failure ?? planRefusal?.message ?? null;
   // A Work pressed on a closed document: its tool says what was kept and how to reconnect, while

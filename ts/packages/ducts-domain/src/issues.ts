@@ -1,6 +1,6 @@
-import type { DuctsSnapshot } from "@pe/host-contracts/generated";
+import type { DuctsSnapshotWalk } from "@pe/host-contracts/generated";
 
-export type IssueKind = DuctsSnapshot.Res.DuctIssueKind;
+export type IssueKind = DuctsSnapshotWalk.Res.DuctIssueKind;
 export type Blocks = "walkable" | "budgetable" | "none";
 
 export const ISSUE_BLOCKS: Record<IssueKind, Blocks> = {

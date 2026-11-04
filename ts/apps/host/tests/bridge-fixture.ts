@@ -1,22 +1,26 @@
 import { Effect, Queue } from "effect";
-import { type HttpServerRequest } from "effect/unstable/http";
+import { type HttpServerRequest } from "effect/http";
 import { BRIDGE_CONTRACT_VERSION, type BridgeFrame } from "@pe/host-contracts/contracts";
 import { RevitBridge } from "../src/bridge.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 export const connectTestBridge = (processId = 42, ownership: Record<string, unknown> = {}) =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
-    const incoming = yield* Queue.make<string>();
+    // A string is one frame; an array is one socket batch, decoded frame by frame in one pull.
+    const incoming = yield* Queue.make<string | readonly string[]>();
     const outgoing = yield* Queue.make<BridgeFrame>();
     // This substitutes only the socket. Registration, JSON frame decoding, response mailbox,
     // invokeSession, BridgeError and operation-owner classification are production code.
     const req = {
       upgrade: Effect.succeed({
-        writer: Effect.succeed((raw: string) =>
-          Queue.offer(outgoing, JSON.parse(raw)).pipe(Effect.asVoid),
-        ),
-        runString: (handle: (raw: string) => Effect.Effect<unknown>) =>
-          Effect.forever(Queue.take(incoming).pipe(Effect.flatMap(handle))),
+        writer: Effect.succeed({
+          write: (raw: string) => Queue.offer(outgoing, JSON.parse(raw)).pipe(Effect.asVoid),
+        }),
+        reader: Effect.succeed({
+          pull: Queue.take(incoming).pipe(
+            Effect.map((raw) => (typeof raw === "string" ? [raw] : raw)),
+          ),
+        }),
       }),
     } as unknown as HttpServerRequest.HttpServerRequest;
     const connection = yield* Effect.forkScoped(bridge.handleConnection(req));

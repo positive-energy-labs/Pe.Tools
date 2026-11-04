@@ -1,4 +1,4 @@
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { RegistryContext } from "@effect/atom-react";
 import { useMemo, type ReactNode } from "react";
 import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";

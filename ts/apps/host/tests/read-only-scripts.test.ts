@@ -1,3 +1,4 @@
+import { testConsents } from "./effect-test.ts";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +9,7 @@ import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contr
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
-import { RunConsents, type ConsentEvent } from "../src/run-consent.ts";
+import type { ConsentEvent } from "../src/run-consent.ts";
 import { bindControl, mintContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { pagesRoute } from "../src/pages-route.ts";
@@ -52,14 +53,14 @@ function humanRevit(sent: Sent[], openDocuments: (typeof other)[], onCatalog: ()
           return {
             value: {
               operations: [
-                {
+                {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap",
                   key: "scripting.execute",
                   intent: "Mutate",
                   needs: "document",
                   actor: "any",
                   requestSchemaJson: JSON.stringify({ type: "object" }),
                 },
-                { key: "model.census", intent: "Read", needs: "document", actor: "any" },
+                {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "model.census", intent: "Read", needs: "document", actor: "any" },
               ],
             },
             target: null,
@@ -248,7 +249,7 @@ test("Pea ReadOnly scripts bypass approval at call and action doors, including b
   host.openDocuments.push(other);
   const events: ConsentEvent[] = [],
     run = { thread: "script-turn", turn: randomUUID() },
-    runs = new RunConsents((_, event) => events.push(event));
+    runs = testConsents((_, event) => events.push(event));
   runs.open(run);
   bindControl({ runs });
   const headers = as({ kind: "pea", thread: run.thread, run, root: run });
@@ -285,7 +286,7 @@ test.each(["WriteTransaction", "NoTransaction"])(
     const host = await serve();
     host.openDocuments.push(other);
     const run = { thread: "siblings", turn: randomUUID() },
-      runs = new RunConsents(() => {});
+      runs = testConsents(() => {});
     runs.open(run);
     bindControl({ runs });
     const headers = as({ kind: "pea", thread: run.thread, run, root: run });

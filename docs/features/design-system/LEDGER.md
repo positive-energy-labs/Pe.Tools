@@ -8,6 +8,8 @@ The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/
 
 ## Decided
 
+- 2026-11-02, unit H2 (kaitpw's follow-ups to the band), re-openable by kaitpw: the band frames the verb that declares `primary`, else the stage's first model write (`effect: "command"`), never declared order. A model write's review is its preview, so standalone Preview verbs leave the band (ducts and fans frame "Write to Revit"; Preview, Preview heal and Preview fan stay row and Pea verbs). A graph names its pane-head `refresh` verb (a host read cache busted from every pane head), and admission refuses it as a stage verb. A Situation field draws free text only when it declares `editor: "text"`; a bare string draws nothing. A consent countdown carries Reject on the route, the same host `thread.permission` answer as Pea's composer. A refused builtin route draws its refusal and the fix in place instead of blanking every route. Evidence: `.artifacts/runs/fixture-20261102-h2/`.
+- 2026-11-02, unit H (protoui A/B/C on the fixture lane; kaitpw "you may take some liberties on the ui polish"), re-openable by kaitpw: the Situation is one band in the app bar itself (name, context, the first declared stage verb framed, the rest behind a "⋯ n" overflow, then the Timeline head with the latest entry and each consent window's "Reject? Ns"); the Ctrl+. drawer survives only as the narrow-bar fallback. Rejected: the band in the drawer (A, a row of height and hidden behind hover) and every verb in the overflow (C, no primary). Pane help is the title's own hint, never a floating "?". Evidence: `.artifacts/runs/fixture-20261102-h/`.
 - 2026-10-28, the picture seam, kaitpw (muse with the /ducts sheet thread): one route-level `Picture` owns every picture behaviour: capture with context, retention, pose and orbit, stage verbs, selection and member registration with attention, hover, globe, go-to, section, completeness, readout slot and pane furniture. A surface hands it content only (`focus.walked` and `focus.near`, `members`, layers, issues with `tier` and `causedBy`, encodings, a readout body) and writes no other picture code. Why: the sheet variant mounted `ModelPicture` directly and lost selection, orbit pivot, group hover, context and the layer picker, because that behaviour lived in `ducts/proto/e/canvas.tsx` and `screen.tsx:510-511`, not in a primitive. Consumers: ducts, the fan sheet, pipes, rooms when promoted, space.
 - 2026-10-28, kaitpw: the picture speaks `SubjectKey` only; numeric element ids stop at the renderer. "a plain 3d view without good subject features is ... only barely better than revit ... Subjects r key." Every picture element is a subject with hover, select and the element menu.
 - 2026-10-28, kaitpw: one picture instance per route; it survives a view or variant switch (`/fans` is its own route since ADR 0027).
@@ -692,6 +694,27 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 - 2026-10-08, react-grab `freeze()` during feedback picking (halts the note popover); `.pick-mark` in `--pe-line-2` (vanishes); rasterizing `document.body` (drops `<html>` styles, 10px crop error; rasterize `document.documentElement`).
 
 ## Owed
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'reading-list-adapter' ('N6')` remains Owed. Use the shared Reading/List projection in apps/web/src/ops/route.tsx and apps/web/src/sessions/route.tsx; prove row behavior. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'nav-list-kit' ('N3')` remains Owed. Replace local navigation lists in ducts/sheet/view.tsx and shell chrome/timeline/verbs/review with the kit owner; remove the stale ducts/proto/e/preview-lines.tsx allowance. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 't-prose-ratchet' ('I6')` remains Owed. Review the move from duct/charts.tsx to duct-loss/duct/charts.tsx; transfer or remove the stale prose allowance. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'web-hover-handler' ('N7')` remains Owed. Move ducts/sheet/blocker-row.tsx hover through the shared row interaction primitive; retain hit testing. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'picture-furniture-floater' ('L2')` remains Owed. Reconcile scene/picture/picture.tsx furniture with the Picture owner and check placement. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'subject-fallback-ids' ('I1')` remains Owed. Replace raw-id fallback presentation in apps/web/src/space/facts.tsx with the admitted subject display identity. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'scene-ground-presets' ('L4')` remains Owed. Visually check scene/levels.ts, marks.ts, strands.ts and veil.ts against house tokens before changing paint. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'tutorial-no-machine-region-title' ('I1')` remains Owed. Remove the teachText(title) || id machine-id fallback in packages/kit/src/components/lang/pane.tsx; retain meaningful Tutorial region names. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/design-guard.test.ts > design checks — code holds the boundary > unregistered classes — hard zero (1 true unregistered)` remains Owed. Replace or explicitly admit text-xs in shell/mount-reading.tsx. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/design-guard.test.ts > CSS ownership across the compiled entry graph > requires a reason for every contextual override of kit vocabulary` remains Owed. Reconcile dl-button contextual overrides in shell/situation-band.css and workbench/route-tabs.css with the component owner. Keep the law; do not raise its allowance.
+
 
 - An "indirectly hovered" tier, one step lighter than hovered (kaitpw 2026-11-02): marks every place the hovered thing also appears (list row, picture, card).
 - The picture seam (Decided 2026-10-28), after `3a0be1cd` (/ducts and the fan sheet mount `scene/picture/` `Picture`):

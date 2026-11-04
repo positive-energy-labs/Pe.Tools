@@ -1,30 +1,10 @@
-import type { RouteStatePatch } from "@pe/agent-contracts";
+import type { InvocationOutcome } from "@pe/agent-contracts";
+import { receiptBarrier, type TimelineBarrier, type TimelineEntry } from "@pe/runtime/work-journal";
+export { receiptBarrier } from "@pe/runtime/work-journal";
+export type { TimelineBarrier, TimelineEntry } from "@pe/runtime/work-journal";
 
-export interface TimelineEntry {
-  kind: "invocation" | "receipt" | "checkpoint" | "feed";
-  at: string | number;
-  press?: string;
-  verb?: string;
-  subject?: unknown;
-  receiptId?: string;
-  paths?: readonly RouteStatePatch["path"][];
-  basis?: unknown;
-}
-
-// Keep the last 200 route interactions in memory; durable History needs checkpoint storage.
+// Presentation retention only; accepted Work and invocations replay from durable host history.
 export const TIMELINE_LIMIT = 200;
-
-export type TimelineBarrier = TimelineEntry & {
-  kind: "receipt";
-  paths: readonly RouteStatePatch["path"][];
-};
-
-/** A receipt without a path footprint cannot claim to block unrelated Work. [] inside paths is the root. */
-export function receiptBarrier(entry: TimelineEntry): TimelineBarrier | null {
-  return entry.kind === "receipt" && entry.paths?.length
-    ? (structuredClone(entry) as TimelineBarrier)
-    : null;
-}
 
 export const timelineBarriers = (entries: readonly TimelineEntry[]): TimelineBarrier[] =>
   entries.flatMap((entry) => {
@@ -35,12 +15,32 @@ export const timelineBarriers = (entries: readonly TimelineEntry[]): TimelineBar
 /** One instance per mounted route. Append order, rather than wall-clock order, is authoritative. */
 export function createRouteTimeline() {
   let entries: TimelineEntry[] = [];
+  let revision = 0;
   const listeners = new Set<(entry: TimelineEntry) => void>();
   return {
+    version: () => revision,
     append(entry: TimelineEntry): void {
+      revision++;
       const recorded = structuredClone(entry);
-      entries = [...entries, recorded].slice(-TIMELINE_LIMIT);
+      // Host receipts are current invocation state, identical on live delivery and replay.
+      const prior =
+        recorded.kind === "receipt" && recorded.outcome?.id
+          ? entries.filter(
+              (entry) => entry.kind !== "receipt" || entry.outcome?.id !== recorded.outcome?.id,
+            )
+          : entries;
+      entries = [...prior, recorded].slice(-TIMELINE_LIMIT);
       for (const listener of listeners) listener(structuredClone(recorded));
+    },
+    outcome(press: string, outcome: InvocationOutcome): void {
+      const index = entries.findIndex(
+        (entry) => entry.kind === "invocation" && entry.press === press,
+      );
+      if (index < 0) return;
+      revision++;
+      const updated = { ...entries[index]!, outcome: structuredClone(outcome) };
+      entries = entries.map((entry, at) => (at === index ? updated : entry));
+      for (const listener of listeners) listener(structuredClone(updated));
     },
     read: (): readonly TimelineEntry[] => structuredClone(entries),
     subscribe(listener: (entry: TimelineEntry) => void): () => void {

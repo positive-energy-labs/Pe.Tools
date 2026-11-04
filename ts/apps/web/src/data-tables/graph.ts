@@ -1,3 +1,6 @@
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-data-tables Declaration 75 > 60 after kernel defaults. Draft editing, prune review and revision checks remain distinct.
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 import {
   pane,
@@ -7,7 +10,7 @@ import {
   type RouteGraph,
 } from "@pe/agent-contracts";
 import { dataTablesAddress } from "../../../../packages/agent-contracts/src/routes/data-tables";
-import { workVerb, queryVerb, commandVerb } from "#/shell/verbs";
+import { workVerb, commandVerb, prepareCommand } from "#/shell/verbs";
 import { NATIVE_APPLY_WAIT_S } from "#/route/waits";
 import { openTable, tableSchema } from "./sources";
 
@@ -18,9 +21,9 @@ export { tableSchema };
 export type TableHandle = z.output<typeof tableSchema>;
 export { dataTablesWorkSchema };
 export type DataTablesWork = z.output<typeof dataTablesWorkSchema>;
-export type DataTablesPage = { table: string };
+export type DataTablesPage = { table: string; row: string };
 export const rowKey = () => `row-${crypto.randomUUID().slice(0, 8)}`;
-export const draftFrom = (table: TableHandle): Draft => ({
+export const draftFrom = (table: TableHandle): Draft => draftSchema.parse({
   name: table.name,
   isNew: false,
   columns: table.columns.map((column) => ({ ...column })),
@@ -52,24 +55,67 @@ export function pruneReview(draft: Draft, tables: readonly TableHandle[]) {
   };
 }
 
-export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
+export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = defineRouteGraph({
+  seeds: {
+    edit: {
+      title: "edit",
+      load: () => import("#/shell/fixture-examples").then((m) => m.routeExamples["data-tables"]),
+    },
+  },
+  directory: {
+    path: "/data-tables",
+    title: "Data Tables",
+    label: "Revit data",
+    exposure: "Preview",
+    runtimeNeed: "Revit for model actions; browsing saved data is separate",
+    icon: "Table",
+    category: "Coordinate model data",
+    blurb:
+      "Author synthetic data tables — draft columns and keyed rows, then upsert them in one apply; rows deleted here are pruned in Revit.",
+    aliases: ["Revit", "data"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+  },
   key: "data-tables",
   address: "data-tables",
   name: "Data Tables",
   needs: "project",
   work: dataTablesWorkSchema,
-  fields: { table: { ...dataTablesAddress.fields.table, role: "subject" } },
-  readings: { tables: { kind: "use", source: "data-tables.tables", retire: "target" } },
+  workFields: { draft: { label: "table draft" } },
+  subjectField: {
+    field: "table",
+    noun: "table",
+    keyKind: "name",
+    roster: "tables",
+    detail: "tables",
+    pane: "tables",
+  },
+  fields: {
+    row: { ...field(z.string().default(""), {}), role: "selection" },
+    table: dataTablesAddress.fields.table,
+  },
+  readings: {},
   verbs: {
     new: workVerb(
       { label: "New table", input: z.object({}) },
       { patches: () => [{ path: ["draft"], value: blank() }] },
     ),
-    open: queryVerb(
-      openTable,
-      { label: "Open table", input: openTable.input, review: "none" },
+    open: workVerb(
+      { label: "Open table", input: openTable.input },
       {
-        patches: (_, result) => [{ path: ["draft"], value: draftFrom(tableSchema.parse(result)) }],
+        patches: (scope, input) => {
+          const table = (scope.readings.tables?.value as TableHandle[] | undefined)?.find(
+            (table) => table.name === input.name,
+          );
+          if (!scope.readings.tables?.current || !table)
+            throw Error("Read the current tables before opening one");
+          return [{ path: ["draft"], value: draftFrom(table) }];
+        },
       },
     ),
     apply: commandVerb(
@@ -77,8 +123,7 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
       {
         label: "Apply",
         input: z.object({}),
-        review: "required",
-        answers: z.object({}),
+        review: "shown",
         chord: "Mod+Enter",
       },
       {
@@ -94,11 +139,13 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
               ? "Name the table first"
               : null;
         },
-        prepare: (scope) =>
-          pruneReview(
+        prepare: async (scope) => {
+          await prepareCommand(scope, "data-table.apply.preview", {});
+          return pruneReview(
             (scope.snapshot.work!.doc as DataTablesWork).draft!,
             scope.readings.tables!.value as TableHandle[],
-          ),
+          );
+        },
         present: (result) => {
           const review = result as ReturnType<typeof pruneReview>;
           return review.table
@@ -111,9 +158,7 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
               }
             : { sentence: "Table applied.", rows: [] };
         },
-        intent: (_, __, ___, ticket) => ({
-          table: (ticket!.evidence as ReturnType<typeof pruneReview>).table,
-        }),
+        intent: () => ({}),
         lands: (result) => ({ table: (result as { name: string }).name }),
       },
     ),
@@ -138,17 +183,15 @@ export const dataTablesGraph: RouteGraph<DataTablesPage, DataTablesWork> = {
       draws: ["tables"],
       verbs: Object.assign(() => ["open"], { ids: ["open"] }),
     },
-    draft: { label: "Draft", purpose: "Edit columns and keyed rows", draws: [], verbs: [] },
+    draft: { label: "Draft", purpose: "Edit columns and keyed rows", },
   },
   layout: split("editor", { axis: "h", sized: "start", size: 260 }, pane("tables"), pane("draft")),
   stages: {
     edit: {
       word: "Editing",
-      panes: ["tables", "draft"],
       verbs: ["new", "apply"],
       teach:
         "Choose a table or start a new draft. Apply upserts by name and row key and prunes missing rows.",
     },
   },
-  pick: false,
-};
+});

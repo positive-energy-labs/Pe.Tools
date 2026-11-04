@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import { Effect } from "effect";
-import { productRoot, osUserProductRoot } from "@pe/host-contracts/service-identity";
+import { osUserProductRoot } from "@pe/host-contracts/service-identity";
+import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, mkdir, readFile, writeFile, access, readdir, rm } from "node:fs/promises";
@@ -380,15 +381,8 @@ afterAll(async () => {
 });
 
 test("A0 default browser home uses the canonical isolated product root", async () => {
-  const expectedProductRoot = productRoot();
+  const expectedProductRoot = runtimeRoot();
   const namespace = osUserProductRoot();
-  const override = process.env.PE_TOOLS_PRODUCT_HOME;
-  try {
-    delete process.env.PE_TOOLS_PRODUCT_HOME;
-    expect(productRoot()).toBe(namespace);
-  } finally {
-    process.env.PE_TOOLS_PRODUCT_HOME = override;
-  }
   const browser = await openBrowser();
   sessions.add(browser);
   await remember(browser.info);
@@ -449,6 +443,7 @@ test("A1 typed/raw forwarding, concurrent replies, isolated events and live sche
   await direct.close();
   let scoped!: Awaited<ReturnType<typeof connectCdp>>;
   const endpoint = await getBrowserEndpoint(browser.info.endpoint);
+  // effect-edge: island, phase 5
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {

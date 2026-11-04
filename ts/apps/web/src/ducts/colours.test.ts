@@ -1,5 +1,7 @@
+import { neutralFansWork } from "@pe/agent-contracts";
+import { designOf } from "@pe/ducts-domain/test-design";
 import { expect, test } from "vite-plus/test";
-import { ductsDocumentSchema, stagedDucts } from "@pe/agent-contracts";
+import { stagedDucts } from "@pe/agent-contracts";
 import { coloursOf, FIRM_COLOURS } from "./colours";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import { paintOfDucts } from "./selection";
@@ -9,12 +11,12 @@ import type { SceneInstance } from "#/scene/types";
 test("the edit palette persists with Work, supplies the kinds table and never enters Revit apply", () => {
   const palette = { ...FIRM_COLOURS, supply: "#123456" };
   const saved = JSON.stringify(
-    ductsDocumentSchema.parse({ systemColours: { edit: { value: palette } } }),
+    designOf({ systemColours: { edit: { value: palette } } }),
   );
-  const doc = ductsDocumentSchema.parse(JSON.parse(saved));
+  const doc = designOf(JSON.parse(saved));
   expect(coloursOf(doc)).toEqual(palette);
   expect(coloursOf(null)).toEqual(FIRM_COLOURS);
-  expect(stagedDucts(doc)).not.toHaveProperty("systemColours");
+  expect(stagedDucts(doc, doc ?? neutralFansWork)).not.toHaveProperty("systemColours");
   const { snapshot } = NAVIGATION_FIXTURE;
   const id = snapshot.segments[0]!.id;
   const instance = { revitId: id } as SceneInstance;

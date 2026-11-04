@@ -60,8 +60,13 @@ export function createPackageLifecycle(
   let initialized = false;
   const signatures = new Map<string, string>();
   let initialListing: Awaited<ReturnType<typeof listPackages>> | undefined;
+  const listeners = new Set<() => void>();
+  const changed = () => {
+    options.changed?.();
+    for (const listener of listeners) listener();
+  };
   const runtime = createPluginRuntime<Contribution>({
-    changed: options.changed,
+    changed,
     persist: async (id, enabled) => {
       const next = { ...decisions, [id]: enabled };
       await writeArtifact(dirname(decisionsPath), decisionsPath, JSON.stringify(next), true);
@@ -144,18 +149,25 @@ export function createPackageLifecycle(
         decisions[id] === true || ((initial || known) && decisions[id] !== false),
       );
     }
+    initialListing = listing;
     return listing;
   }
   return {
     ready,
+    observeChanges(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     initialized: () => initialized,
-    /** The first catalog build reuses the bootstrap census; every later read re-lists. */
+    /** Explicit import, activation and update reconcile setup/cleanup; inventory reads use listing. */
     refresh: async (initial = false) => {
       await ready;
       const listing = initial ? initialListing : undefined;
-      initialListing = undefined;
       return listing ?? synchronize();
     },
+    listing: () => initialListing!,
     inventory: runtime.inventory,
     active: (id: string) => runtime.active(`pod:${id}`),
     setEnabled: async (id: string, enabled: boolean) => {
@@ -169,6 +181,7 @@ export function createPackageLifecycle(
     close: async () => {
       await ready;
       await runtime.close();
+      changed();
     },
   };
 }

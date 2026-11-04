@@ -1,4 +1,4 @@
-import type { TakeoffResidueShape } from "#/rhvac/types";
+import type { TakeoffResidueShape } from "#/takeoff/rhvac/types";
 
 import { type MockRoom, type MockZone } from "./mock";
 

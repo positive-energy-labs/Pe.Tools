@@ -4,7 +4,7 @@ import { createDevices } from "../src/remote-device.ts";
 import { admitCrossing, bindControl, live } from "../src/control.ts";
 import type { Caller, ThreadHead } from "@pe/agent-contracts";
 import { Context } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { deviceRoutes } from "../src/device-routes.ts";
 import { deviceListingSchema } from "@pe/host-contracts/pe-api";
 

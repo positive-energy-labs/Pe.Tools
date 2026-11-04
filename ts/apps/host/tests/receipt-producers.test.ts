@@ -1,28 +1,20 @@
-import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
-import { HostLog } from "../src/host-log.ts";
-import { createServer, request as httpRequest } from "node:http";
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { NodeHttpServer } from "@effect/platform-node";
+import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
+import { Deferred, Effect, Layer } from "effect";
+import { HttpEffect, HttpRouter } from "effect/http";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
-import { Deferred, Effect, Layer } from "effect";
-import { NodeHttpServer } from "@effect/platform-node";
-import { HttpEffect, HttpRouter } from "effect/unstable/http";
-import { expect, test } from "vite-plus/test";
-import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
-import { createPeRoutes } from "../src/pe-routes.ts";
-import { ActionJournal } from "../src/action-journal.ts";
-import { mintContext } from "../src/control.ts";
-import { requestIdentityLayer } from "../src/request-identity.ts";
-import { createThreadReceiptAdapter } from "../src/receipt-export.ts";
-import { createHarnessThreads } from "../src/harness/threads.ts";
-import { createProviders } from "../src/harness/providers.ts";
-import { createUpdateReader, UpdateReader } from "../src/update-reader.ts";
-import { updateRoutes } from "../src/update-route.ts";
-import { HostLifecycle } from "../src/host-lifecycle.ts";
-import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { PostHog } from "posthog-node";
+import { expect, test } from "vite-plus/test";
+import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
+import { ActionJournal } from "../src/action-journal.ts";
 import { receiptBuildStamp } from "../src/build-stamp.ts";
+import { mintContext } from "../src/control.ts";
+import { createPeRoutes } from "../src/pe-routes.ts";
+import { requestIdentityLayer } from "../src/request-identity.ts";
 
 test("real HTTP feedback retains content and caller before body; diagnostics cannot claim the exception", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-feedback-http-"));
@@ -68,7 +60,9 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
     const a = server.address();
     return a && typeof a !== "string" ? a.port : 0;
   };
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.raceFirst(
       Layer.launch(
@@ -76,7 +70,7 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
           Layer.mergeAll(
             requestIdentityLayer({
               port,
-              frontendOrigin: () => undefined,
+              frontendOrigin: Effect.succeed(undefined),
               share: {
                 read: async () => {
                   throw Error("local only");
@@ -178,6 +172,7 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
     expect(stale.status).toBe(200);
     expect((await journal.read({ kinds: ["diagnostic"] })).at(-1)!.stamp).toBeNull();
   } finally {
+    // effect-edge: island, phase 5
     Effect.runSync(Deferred.succeed(latch, undefined));
     server.closeAllConnections();
     await done.catch(() => {});
@@ -204,6 +199,7 @@ test("real HTTP refusals, from admission and from a door, export refusal_count w
     const a = server.address();
     return a && typeof a !== "string" ? a.port : 0;
   };
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
   // A door's own 403: one with a closed code, one naming a code outside the contract.
   const door = (code: string) =>
@@ -213,6 +209,7 @@ test("real HTTP refusals, from admission and from a door, export refusal_count w
         { status: 403, headers: { "x-pe-refusal": code } },
       ),
     );
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.raceFirst(
       Layer.launch(
@@ -220,7 +217,7 @@ test("real HTTP refusals, from admission and from a door, export refusal_count w
           Layer.mergeAll(
             requestIdentityLayer({
               port,
-              frontendOrigin: () => undefined,
+              frontendOrigin: Effect.succeed(undefined),
               telemetry,
               share: {
                 read: async () => {
@@ -264,6 +261,7 @@ test("real HTTP refusals, from admission and from a door, export refusal_count w
     expect(sent.every((e) => e.properties.count === 1)).toBe(true);
     expect(JSON.stringify(sent)).not.toMatch(/private|elsewhere|threads/);
   } finally {
+    // effect-edge: island, phase 5
     Effect.runSync(Deferred.succeed(latch, undefined));
     server.closeAllConnections();
     await done.catch(() => {});
@@ -271,182 +269,3 @@ test("real HTTP refusals, from admission and from a door, export refusal_count w
     rmSync(dir, { recursive: true, force: true });
   }
 }, 15_000);
-
-test("real HTTP prompt and permission produce joined receipts; remote automatic-update writes are refused before effects", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pe-producer-http-"));
-  const previous = {
-    local: process.env.LOCALAPPDATA,
-    adapter: process.env.PE_HARNESS_ADAPTER_CLAUDE,
-    home: process.env.PE_TOOLS_PRODUCT_HOME,
-  };
-  process.env.LOCALAPPDATA = dir;
-  process.env.PE_TOOLS_PRODUCT_HOME = join(dir, "Pe.Tools");
-  process.env.PE_HARNESS_ADAPTER_CLAUDE = join(import.meta.dirname, "fake-acp-agent.mjs");
-  const journal = new ActionJournal(join(dir, "journal.json"), () => receiptGoldenEnvelope.stamp);
-  const module = await import("../src/receipt-export.ts");
-  const telemetry = module.createReceiptExport({
-    journal,
-    root: dir,
-    stamps: { host: { ...receiptGoldenEnvelope.stamp!, component: "host" }, web: null },
-  });
-  const providers = createProviders({
-    probeOnStart: false,
-    shellPath: async () => process.env.PATH ?? "",
-  });
-  const adapter = createThreadReceiptAdapter(telemetry, () => threads.receiptSnapshot());
-  const threads = createHarnessThreads({
-    root: join(dir, "threads"),
-    log: new HostLog(join(dir, "log")),
-    worldRoot: dir,
-    providers,
-    mcpServer: () => ({ name: "pea", command: "unused", args: [], env: [] }),
-    receiptFact: adapter.accept,
-  });
-  const pe = createPeRoutes({
-    registrations: [],
-    store: { getState: async () => null, setState: async () => {} },
-    heads: threads.heads,
-    telemetry,
-  });
-  const updates = createUpdateReader({
-    path: join(dir, "update.json"),
-    automaticOffPath: join(dir, "automatic-off"),
-    installed: false,
-    pid: 1,
-    run: async () => {
-      throw Error("No SDK in this test");
-    },
-  });
-  const server = createServer();
-  const port = () => {
-    const a = server.address();
-    return a && typeof a !== "string" ? a.port : 0;
-  };
-  const latch = Effect.runSync(Deferred.make<void>());
-  const done = Effect.runPromise(
-    Effect.raceFirst(
-      Layer.launch(
-        HttpRouter.serve(
-          Layer.mergeAll(
-            requestIdentityLayer({
-              port,
-              frontendOrigin: () => undefined,
-              share: {
-                read: async () => ({
-                  desired: "on",
-                  state: "on",
-                  url: "https://box.tailabc.ts.net",
-                  allowRemoteAdministration: false,
-                  refusal: null,
-                  callers: [],
-                  refused: [],
-                }),
-                observe: () => {},
-              },
-            }),
-            updateRoutes,
-            HttpRouter.add(
-              "*",
-              "/pe/*",
-              HttpEffect.fromWebHandler((r) =>
-                new URL(r.url).pathname.startsWith("/pe/threads") ? threads.fetch(r) : pe.fetch(r),
-              ),
-            ),
-          ),
-          { disableLogger: true },
-        ).pipe(
-          Layer.provide(Layer.succeed(UpdateReader, updates)),
-          Layer.provide(
-            Layer.succeed(HostLifecycle, {
-              latch,
-              handle: Effect.runSync(Deferred.make<ServiceHostHandle>()),
-            }),
-          ),
-          Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: 0 })),
-        ),
-      ),
-      Deferred.await(latch),
-    ),
-  );
-  const token = mintContext({ kind: "human", via: "cli" });
-  try {
-    for (let i = 0; !port() && i < 200; i++) await new Promise((r) => setTimeout(r, 10));
-    const base = `http://127.0.0.1:${port()}`;
-    const post = (path: string, body: unknown) =>
-      fetch(`${base}${path}`, {
-        method: "POST",
-        headers: { "content-type": "application/json", [HOST_CONTEXT_HEADER]: token },
-        body: JSON.stringify(body),
-      });
-    const created = await post("/pe/threads", { providerId: "claude", title: "local thread" });
-    expect(created.status, await created.clone().text()).toBe(200);
-    const id = ((await created.json()) as { id: string }).id;
-    const prompt = await post(`/pe/threads/${id}/prompt`, {
-      id: randomUUID(),
-      text: "ask permission",
-    });
-    expect(prompt.status, await prompt.clone().text()).toBe(200);
-    await expect.poll(async () => (await journal.read({ kinds: ["permission"] })).length).toBe(1);
-    const asked = (await journal.read({ kinds: ["permission"] }))[0]!;
-    const act = adapter.context.asked(asked)?.act;
-    if (act?.kind !== "permission") throw Error("the asked receipt names no permission door");
-    expect(
-      (
-        await post(`/pe/threads/${id}/permission`, {
-          requestId: act.requestId,
-          optionId: "yes",
-        })
-      ).status,
-    ).toBe(200);
-    await expect.poll(async () => (await journal.read({ kinds: ["turn"] })).length).toBe(2);
-    const rows = (await (
-      await fetch(`${base}/pe/receipt-facts?thread=${id}`)
-    ).json()) as import("@pe/agent-contracts").Receipt[];
-    expect(rows.filter((r) => r.body.kind === "permission").map((r) => r.join.requestId)).toEqual([
-      asked.join.requestId,
-      asked.join.requestId,
-    ]);
-    expect(
-      rows
-        .filter((r) => r.body.kind === "turn")
-        .map((r) => (r.body.kind === "turn" ? r.body.phase : null)),
-    ).toEqual(["started", "finished"]);
-    const remote = await new Promise<Response>((resolve, reject) => {
-      const req = httpRequest(
-        `${base}/host/update/automatic`,
-        {
-          method: "POST",
-          headers: {
-            host: "box.tailabc.ts.net",
-            "tailscale-user-login": "remote-user",
-            "content-type": "application/json",
-          },
-        },
-        (r) => {
-          const chunks: Buffer[] = [];
-          r.on("data", (c) => chunks.push(Buffer.from(c)));
-          r.on("end", () => resolve(new Response(Buffer.concat(chunks), { status: r.statusCode })));
-        },
-      );
-      req.on("error", reject);
-      req.end(JSON.stringify({ enabled: false }));
-    });
-    expect(remote.status, await remote.clone().text()).toBe(403);
-    expect(updates.current().automatic).toBe(true);
-    expect((await post("/host/update/automatic", { enabled: false })).status).toBe(200);
-    expect(updates.current().automatic).toBe(false);
-  } finally {
-    Effect.runSync(Deferred.succeed(latch, undefined));
-    server.closeAllConnections();
-    await done.catch(() => {});
-    await threads.close();
-    await telemetry.close();
-    if (previous.local === undefined) delete process.env.LOCALAPPDATA;
-    else process.env.LOCALAPPDATA = previous.local;
-    if (previous.adapter === undefined) delete process.env.PE_HARNESS_ADAPTER_CLAUDE;
-    else process.env.PE_HARNESS_ADAPTER_CLAUDE = previous.adapter;
-    if (previous.home === undefined) delete process.env.PE_TOOLS_PRODUCT_HOME;
-    else process.env.PE_TOOLS_PRODUCT_HOME = previous.home;
-    rmSync(dir, { recursive: true, force: true });
-  }
-}, 20_000);

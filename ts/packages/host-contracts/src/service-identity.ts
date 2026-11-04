@@ -2,9 +2,9 @@
 // (./vendor/pe-service.ts). Naming mechanics (the worktree hash, a cross-language contract with the
 // SDK's C# client) live in the SDK; this module owns only what is Pe.Tools-specific: the product
 // root and the lane→name mapping.
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { isSea } from "node:sea";
 import {
   hostProcessIdentity,
@@ -12,7 +12,7 @@ import {
   productInstallLayout,
   productPathNames,
 } from "./contracts/product.ts";
-import { insideTestRoot, productHomePath } from "./product-paths.ts";
+import { insideTestRoot } from "./product-paths.ts";
 export {
   HOST_RUNTIME_SERVICE_HEADER,
   HOST_RUNTIME_SERVICE_QUERY,
@@ -22,17 +22,37 @@ import { normalizeSourceRoot, sourceServiceName } from "./vendor/pe-service.ts";
 
 export type HostLane = "dev" | "installed";
 
+/** What a process was told about itself: by its parent's env/argv, the SDK, or its install manifest. */
+export type RuntimeOwner = {
+  readonly lane: HostLane;
+  readonly sourceRoot: string | null;
+  readonly installedRoot: string | null;
+};
+
 /**
- * Product root under `%LOCALAPPDATA%\<vendor>\<product>` — the A10 service-file `appBase`
- * (`state/service/<service-name>.json` lives beneath it) and the install-receipt root. Resolved
- * lazily so tests can redirect it via `LOCALAPPDATA`. When the product home override is set the
- * root moves under it (`<home>\.local-state`), so an isolated run shares no state with the owner's
- * host; the SDK's own registry stays in `%LOCALAPPDATA%\Pe.Revit.Sdk`.
+ * Pure state root for a told owner: `<home>\.local-state` under a product home override, else the dev
+ * checkout's `.artifacts/pe-tools`, else the install root itself. The C# twin is
+ * `ProductPathing.StateRoot`; both suites assert `runtime-ownership.fixture.json`.
  */
-export function productRoot(): string {
-  if (process.env[productPathNames.productHomeVariable]?.trim())
-    return join(productHomePath(), productPathNames.localStateDirectoryName);
-  return osUserProductRoot();
+export function stateRoot(lane: HostLane, ownerRoot: string, productHome?: string): string {
+  if (!isAbsolute(ownerRoot)) throw Error(`A ${lane} runtime needs an absolute owner root.`);
+  // v0.7.30 refused an installed runtime under a home override; kept unchanged.
+  if (lane === "installed" && productHome?.trim())
+    throw Error(`An installed runtime does not run under ${productPathNames.productHomeVariable}.`);
+  if (productHome?.trim())
+    return join(resolve(productHome.trim()), productPathNames.localStateDirectoryName);
+  return lane === "dev" ? join(resolve(ownerRoot), ".artifacts", "pe-tools") : ownerRoot;
+}
+
+/** The owner's state root. Only an override can aim dev state at the installed namespace; that refuses. */
+export function productRoot(owner: RuntimeOwner): string {
+  const ownerRoot = owner.lane === "dev" ? owner.sourceRoot : owner.installedRoot;
+  if (!ownerRoot) throw Error(`A ${owner.lane} runtime was not told its owner root.`);
+  const root = stateRoot(owner.lane, ownerRoot, process.env[productPathNames.productHomeVariable]);
+  const away = relative(osUserProductRoot(), root);
+  if (owner.lane === "dev" && (away === "" || (!away.startsWith("..") && !isAbsolute(away))))
+    throw Error(`Dev host cannot use installed product state '${root}'.`);
+  return insideTestRoot(root);
 }
 
 /** OS-user product state namespace, independent of product-home overrides; test isolation still applies. */
@@ -46,24 +66,42 @@ export function osUserProductRoot(): string {
   );
 }
 
-/** Product-owned temporary files follow the same environment as durable state. No IO here. */
-export const productScratchPath = (): string => join(productRoot(), "scratch");
+/** The owner prefix every tray launch carries (`Pe.Host.Tray` Program.ParseOwner reads it); the tray never guesses. */
+export function trayOwnerArguments(owner: RuntimeOwner): string[] {
+  const root = owner.lane === "dev" ? owner.sourceRoot : owner.installedRoot;
+  if (!root) throw Error(`A ${owner.lane} tray owner has no root.`);
+  return ["--lane", owner.lane, "--root", root];
+}
+
+/** Product-owned temporary files follow the same lane as durable state. */
+export const productScratchPath = (root: string): string => join(root, "scratch");
 
 /** The owner's terminal context token, written by the host at start and read by the `pea` CLI. */
-export const hostContextTokenPath = (serviceName: string): string =>
-  join(productRoot(), "state", "service", `${serviceName}.context`);
+export const hostContextTokenPath = (root: string, serviceName: string): string =>
+  join(root, "state", "service", `${serviceName}.context`);
 
-/** Installed executables must run at the manifest's canonical installed location. */
+/**
+ * An installed executable's root is the install its SDK manifest names: strip the manifest's own
+ * relative entry path from the executable and require `product.payloads.json` for this product there.
+ */
 export function installedRuntimeRoot(
   app: "host" | "pea",
   executablePath = process.execPath,
   bundled = isSea(),
 ): string {
-  const root = productRoot();
-  const expected = join(root, productInstallLayout[`VersionedApp:${app}`]);
-  if (!bundled || normalizeSourceRoot(executablePath) !== normalizeSourceRoot(expected))
-    throw Error(`Installed ${app} must execute from '${expected}'.`);
-  return root;
+  const entry = productInstallLayout[`VersionedApp:${app}`];
+  const root = resolve(executablePath, ...entry.split("/").map(() => ".."));
+  const manifest = join(root, "product.payloads.json");
+  if (
+    !bundled ||
+    normalizeSourceRoot(join(root, entry)) !== normalizeSourceRoot(executablePath) ||
+    !existsSync(manifest)
+  )
+    throw Error(`Installed ${app} must execute from an SDK install ('${manifest}' is missing).`);
+  const { product, vendor } = JSON.parse(readFileSync(manifest, "utf8")) as Record<string, unknown>;
+  if (product !== productIdentity.productName || vendor !== productIdentity.vendorName)
+    throw Error(`Installed ${app} manifest '${manifest}' names another product.`);
+  return insideTestRoot(root);
 }
 
 /** Worktree-scoped dev-host name for a checkout root (SDK hash — byte-stable across languages). */
@@ -117,7 +155,7 @@ export const sourceRootVariable = "PE_TOOLS_SOURCE_ROOT";
 
 /**
  * The service name for a host lane: the installed host is the one global name; a dev host derives a
- * stable worktree-scoped name from its checkout root, so worktrees coexist under one product root.
+ * stable worktree-scoped name from its checkout root, alongside that checkout's state root.
  */
 export function hostServiceName(lane: HostLane, sourceRoot: string | null): string {
   if (lane === "installed") return hostProcessIdentity.serviceName;

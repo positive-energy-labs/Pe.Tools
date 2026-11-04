@@ -32,7 +32,12 @@ it("every package that depends on host-contracts runs its tests in an isolated h
       name === "@pe/host-contracts" ||
       "@pe/host-contracts" in (dependencies as object) ||
       "@pe/host-contracts" in (devDependencies as object);
-    const config = readFileSync(join(dir, "vite.config.ts"), "utf8");
+    // Source-only packages have no test runner. Their importing test package owns isolation.
+    const { scripts = {} } = JSON.parse(readFileSync(manifest, "utf8"));
+    if (!reaches || !scripts.test) return false;
+    const configPath = join(dir, "vite.config.ts");
+    if (!existsSync(configPath)) return true;
+    const config = readFileSync(configPath, "utf8");
     return reaches && !SETUPS.every((setup) => config.includes(setup));
   });
   expect(unguarded.map((dir) => dir.slice(TS.length + 1))).toEqual([]);

@@ -1,3 +1,4 @@
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 import {
   actionReceiptSchema,
@@ -12,12 +13,6 @@ import type { FieldOption, FieldOptionStatus } from "#/host/field-options";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingSource, UseSource } from "#/shell/readings";
 
-const optionSchema = z.object({
-  value: z.string(),
-  label: z.string(),
-  description: z.string().nullish(),
-  metadata: z.record(z.string(), z.string()).nullish(),
-});
 export type OptionList = { items: FieldOption[]; status: FieldOptionStatus };
 export type ProfileOptions = Readonly<Record<string, OptionList>>;
 export const optionKey = (key: string, context: Record<string, string> = {}) =>
@@ -88,7 +83,7 @@ export function parameterLinksOptionsSource(resources?: Readings): UseSource<Pro
         void Promise.resolve(
           subscriptionSource({
             request: (): ReadingRequest => ({ kind: "field-options", target, key, context }),
-            decode: (value) => z.object({ items: z.array(optionSchema) }).parse(value),
+            decode: (value) => nativeResponseSchema("revit.catalog.field-options").parse(value),
             resources,
           }).open(ctx, (publication) => {
             if (ctx.signal.aborted) return;

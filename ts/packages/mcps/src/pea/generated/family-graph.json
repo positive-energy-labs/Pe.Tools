@@ -8,10 +8,37 @@
       "groupOf": {
         "runtime": true
       },
-      "nouns": ["parameter"],
+      "nouns": [
+        "parameter"
+      ],
       "segment": "cells"
     }
   ],
+  "directory": {
+    "aliases": [
+      "rfa",
+      "author",
+      "build",
+      "capture",
+      "matrix"
+    ],
+    "blurb": "One family, two lanes: an authored family.json (anatomy, matrix, build) or the family open in Revit's editor. Binding picks the lane; capture bridges them.",
+    "category": "Build / audit families",
+    "exposure": "Main",
+    "icon": "Boxes",
+    "label": "Family Foundry",
+    "listed": true,
+    "path": "/family",
+    "resume": "document",
+    "runtimeNeed": "Revit for capture/apply; portable authoring is separate",
+    "satellites": [],
+    "surfaces": {
+      "pwa": "full",
+      "tray": false,
+      "web": "full"
+    },
+    "title": "Family"
+  },
   "fields": {
     "doc": {
       "agent": "set",
@@ -27,7 +54,10 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "text",
-        "enum": ["text", "sheet"],
+        "enum": [
+          "text",
+          "sheet"
+        ],
         "type": "string"
       },
       "share": true,
@@ -43,11 +73,33 @@
           "runtime": true
         }
       },
-      "role": "selection",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
         "maxLength": 512,
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "family": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "current",
+        "enum": [
+          "current"
+        ],
         "type": "string"
       },
       "share": true,
@@ -66,14 +118,17 @@
       "role": "pose",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
+        "additionalProperties": {
+          "const": true,
+          "type": "boolean"
+        },
+        "default": {},
+        "propertyNames": {
           "maxLength": 512,
           "minLength": 1,
           "type": "string"
         },
-        "maxItems": 500,
-        "type": "array"
+        "type": "object"
       },
       "share": true,
       "url": "replace"
@@ -113,7 +168,11 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "draft",
-        "enum": ["draft", "live", "saved"],
+        "enum": [
+          "draft",
+          "live",
+          "saved"
+        ],
         "type": "string"
       },
       "share": true,
@@ -133,7 +192,10 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "spec",
-        "enum": ["spec", "output"],
+        "enum": [
+          "spec",
+          "output"
+        ],
         "type": "string"
       },
       "share": true,
@@ -149,7 +211,7 @@
           "runtime": true
         }
       },
-      "role": "subject",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
@@ -169,7 +231,7 @@
           "runtime": true
         }
       },
-      "role": "subject",
+      "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
@@ -212,24 +274,42 @@
       "role": "query",
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": [],
-        "items": {
-          "properties": {
-            "dir": {
-              "enum": ["asc", "desc"],
-              "type": "string"
-            },
-            "key": {
-              "maxLength": 512,
-              "minLength": 1,
-              "type": "string"
-            }
-          },
-          "required": ["key", "dir"],
-          "type": "object"
+        "additionalProperties": false,
+        "default": {
+          "columns": []
         },
-        "maxItems": 8,
-        "type": "array"
+        "properties": {
+          "columns": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "dir": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ],
+                  "type": "string"
+                },
+                "key": {
+                  "maxLength": 512,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "dir"
+              ],
+              "type": "object"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "columns"
+        ],
+        "type": "object"
       },
       "share": true,
       "url": "replace"
@@ -248,7 +328,11 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "audit",
-        "enum": ["audit", "apply", "history"],
+        "enum": [
+          "audit",
+          "apply",
+          "history"
+        ],
         "type": "string"
       },
       "share": true,
@@ -297,7 +381,11 @@
                   "type": "string"
                 }
               },
-              "required": ["field", "op", "value"],
+              "required": [
+                "field",
+                "op",
+                "value"
+              ],
               "type": "object"
             },
             "maxItems": 32,
@@ -309,7 +397,11 @@
             "type": "integer"
           }
         },
-        "required": ["v", "keywords", "pills"],
+        "required": [
+          "v",
+          "keywords",
+          "pills"
+        ],
         "type": "object"
       },
       "share": true,
@@ -329,7 +421,11 @@
       "schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "default": "",
-        "enum": ["", "recent", "title"],
+        "enum": [
+          "",
+          "recent",
+          "title"
+        ],
         "type": "string"
       },
       "share": true,
@@ -430,17 +526,28 @@
     "size": 340,
     "sized": "end"
   },
+  "moduleHash": "c67f3f03ad939e1760ce3fa03fbd0751384bd01b1f154bed717f2c8d4b6e034b",
   "name": "Family",
   "needs": "family",
   "panes": {
     "anatomy": {
-      "draws": ["profile", "receipts", "applyReceipt", "captureReceipt", "buildReceipt"],
+      "draws": [
+        "profile",
+        "receipts",
+        "applyReceipt",
+        "captureReceipt",
+        "buildReceipt"
+      ],
       "label": "Family anatomy",
       "purpose": "Inspect authored family geometry",
-      "verbs": ["read"]
+      "verbs": [
+        "read"
+      ]
     },
     "doc": {
-      "draws": ["spec"],
+      "draws": [
+        "spec"
+      ],
       "label": "Family document",
       "purpose": "Inspect attached cut-sheet evidence",
       "verbs": []
@@ -450,27 +557,42 @@
       "label": "Saved family readings",
       "purpose": "Inspect immutable captures",
       "verbs": {
-        "ids": ["saved"],
+        "ids": [
+          "saved"
+        ],
         "runtime": true
       }
     },
     "spec": {
-      "draws": ["pods", "profile"],
+      "draws": [
+        "pods",
+        "profile"
+      ],
       "label": "Family members",
       "purpose": "Open a saved model into the family draft",
       "verbs": {
-        "ids": ["open"],
+        "ids": [
+          "open"
+        ],
         "runtime": true
       }
     },
     "table": {
-      "draws": ["profile", "receipts", "applyReceipt", "captureReceipt", "buildReceipt"],
+      "draws": [
+        "profile",
+        "receipts",
+        "applyReceipt",
+        "captureReceipt",
+        "buildReceipt"
+      ],
       "label": "Family parameters",
       "purpose": "Edit one family's parameters across its types",
       "verbs": []
     },
     "work": {
-      "draws": ["receipts"],
+      "draws": [
+        "receipts"
+      ],
       "label": "Family Work",
       "purpose": "Review keyed cells and original receipts",
       "verbs": []
@@ -483,7 +605,9 @@
   },
   "readings": {
     "applyReceipt": {
-      "deps": ["receipts"],
+      "deps": [
+        "receipts"
+      ],
       "kind": "use",
       "retire": "target",
       "source": "family.apply-receipt"
@@ -492,16 +616,35 @@
       "args": {
         "runtime": true
       },
-      "deps": ["receipts", "profile"],
+      "deps": [
+        "receipts",
+        "profile"
+      ],
       "kind": "use",
       "retire": "page",
       "source": "family.build-receipt"
     },
     "captureReceipt": {
-      "deps": ["receipts"],
+      "deps": [
+        "receipts"
+      ],
       "kind": "use",
       "retire": "target",
       "source": "family.capture-receipt"
+    },
+    "document": {
+      "kind": "derive",
+      "retire": "target",
+      "source": "family.document"
+    },
+    "family": {
+      "deps": [
+        "profile",
+        "captureReceipt"
+      ],
+      "kind": "derive",
+      "retire": "page",
+      "source": "family.draft"
     },
     "pods": {
       "kind": "use",
@@ -544,22 +687,63 @@
       "title": "refline"
     }
   },
-  "stageOrder": ["audit", "apply", "history"],
+  "stageOrder": [
+    "audit",
+    "apply",
+    "history"
+  ],
   "stages": {
     "apply": {
-      "panes": ["anatomy", "table", "doc", "work", "spec"],
-      "verbs": ["apply", "build", "capture", "close-inspector"],
+      "panes": [
+        "anatomy",
+        "table",
+        "doc",
+        "work",
+        "spec"
+      ],
+      "verbs": [
+        "apply",
+        "build",
+        "capture",
+        "close-inspector"
+      ],
       "word": "Applying"
     },
     "audit": {
-      "panes": ["anatomy", "table", "doc", "work", "spec"],
-      "verbs": ["capture", "close-inspector"],
+      "panes": [
+        "anatomy",
+        "table",
+        "doc",
+        "work",
+        "spec"
+      ],
+      "verbs": [
+        "capture",
+        "close-inspector"
+      ],
       "word": "Auditing"
     },
     "history": {
-      "panes": ["history"],
-      "verbs": ["close-inspector"],
+      "panes": [
+        "history"
+      ],
+      "verbs": [
+        "close-inspector"
+      ],
       "word": "History"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "family",
+    "field": "family",
+    "keyKind": "name",
+    "kind": "singleton",
+    "noun": "family document",
+    "pane": "matrix",
+    "roster": "document",
+    "show": {
+      "runtime": true
     }
   },
   "verbs": {
@@ -607,7 +791,10 @@
                 "type": "string"
               }
             },
-            "required": ["pod", "path"],
+            "required": [
+              "pod",
+              "path"
+            ],
             "type": "object"
           },
           "source": {
@@ -620,7 +807,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["path"],
+                "required": [
+                  "path"
+                ],
                 "type": "object"
               },
               {
@@ -631,7 +820,9 @@
                     "type": "string"
                   }
                 },
-                "required": ["url"],
+                "required": [
+                  "url"
+                ],
                 "type": "object"
               },
               {
@@ -646,7 +837,10 @@
                     "type": "string"
                   }
                 },
-                "required": ["fileName", "base64"],
+                "required": [
+                  "fileName",
+                  "base64"
+                ],
                 "type": "object"
               }
             ]
@@ -674,7 +868,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["session", "openId"],
+                        "required": [
+                          "session",
+                          "openId"
+                        ],
                         "type": "object"
                       },
                       "open": {
@@ -692,7 +889,11 @@
                         "not": {}
                       }
                     },
-                    "required": ["route", "target", "binding"],
+                    "required": [
+                      "route",
+                      "target",
+                      "binding"
+                    ],
                     "type": "object"
                   },
                   {
@@ -713,7 +914,10 @@
                             "type": "string"
                           }
                         },
-                        "required": ["session", "openId"],
+                        "required": [
+                          "session",
+                          "openId"
+                        ],
                         "type": "object"
                       },
                       "route": {
@@ -728,7 +932,12 @@
                         "not": {}
                       }
                     },
-                    "required": ["route", "target", "open", "binding"],
+                    "required": [
+                      "route",
+                      "target",
+                      "open",
+                      "binding"
+                    ],
                     "type": "object"
                   },
                   {
@@ -754,7 +963,12 @@
                         "type": "string"
                       }
                     },
-                    "required": ["route", "target", "work", "binding"],
+                    "required": [
+                      "route",
+                      "target",
+                      "work",
+                      "binding"
+                    ],
                     "type": "object"
                   },
                   {
@@ -778,7 +992,11 @@
                         "not": {}
                       }
                     },
-                    "required": ["route", "target", "binding"],
+                    "required": [
+                      "route",
+                      "target",
+                      "binding"
+                    ],
                     "type": "object"
                   }
                 ]
@@ -789,11 +1007,17 @@
                 "type": "integer"
               }
             },
-            "required": ["key", "revision"],
+            "required": [
+              "key",
+              "revision"
+            ],
             "type": "object"
           }
         },
-        "required": ["member", "source"],
+        "required": [
+          "member",
+          "source"
+        ],
         "type": "object"
       },
       "kind": "command",
@@ -836,7 +1060,11 @@
                     "type": "string"
                   }
                 },
-                "required": ["pod", "path", "sha256"],
+                "required": [
+                  "pod",
+                  "path",
+                  "sha256"
+                ],
                 "type": "object"
               },
               {
@@ -845,7 +1073,9 @@
             ]
           }
         },
-        "required": ["source"],
+        "required": [
+          "source"
+        ],
         "type": "object"
       },
       "kind": "command",
@@ -877,7 +1107,9 @@
             "type": "string"
           }
         },
-        "required": ["pod"],
+        "required": [
+          "pod"
+        ],
         "type": "object"
       },
       "kind": "command",
@@ -924,7 +1156,9 @@
                 },
                 "value": {}
               },
-              "required": ["path"],
+              "required": [
+                "path"
+              ],
               "type": "object"
             },
             "type": "array"
@@ -941,7 +1175,10 @@
             "default": null
           }
         },
-        "required": ["patches", "expectedRevision"],
+        "required": [
+          "patches",
+          "expectedRevision"
+        ],
         "type": "object"
       },
       "kind": "work",
@@ -982,11 +1219,17 @@
                 "type": "string"
               }
             },
-            "required": ["pod", "path", "sha256"],
+            "required": [
+              "pod",
+              "path",
+              "sha256"
+            ],
             "type": "object"
           }
         },
-        "required": ["source"],
+        "required": [
+          "source"
+        ],
         "type": "object"
       },
       "kind": "command",
@@ -1043,11 +1286,15 @@
                 "type": "string"
               }
             },
-            "required": ["id"],
+            "required": [
+              "id"
+            ],
             "type": "object"
           }
         },
-        "required": ["request"],
+        "required": [
+          "request"
+        ],
         "type": "object"
       },
       "kind": "query",
@@ -1055,18 +1302,6 @@
       "review": "none"
     },
     "work.start-fresh": {
-      "answers": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "confirm": {
-            "const": true,
-            "type": "boolean"
-          }
-        },
-        "required": ["confirm"],
-        "type": "object"
-      },
       "input": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "additionalProperties": false,
@@ -1076,11 +1311,44 @@
       },
       "kind": "recovery",
       "label": "Start fresh",
-      "review": "required",
+      "review": "shown",
       "says": "Set the unreadable Work aside and start it empty; its old bytes are kept beside it"
     }
   },
   "work": {
+    "$defs": {
+      "__schema0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "items": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "type": "array"
+          },
+          {
+            "additionalProperties": {
+              "$ref": "#/$defs/__schema0"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        ]
+      }
+    },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {
@@ -1116,13 +1384,20 @@
                       ]
                     },
                     "by": {
-                      "enum": ["human", "pea", "unknown"],
+                      "enum": [
+                        "human",
+                        "pea",
+                        "unknown"
+                      ],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": ["high", "low"],
+                          "enum": [
+                            "high",
+                            "low"
+                          ],
                           "type": "string"
                         },
                         {
@@ -1173,7 +1448,9 @@
                                 "type": "integer"
                               }
                             },
-                            "required": ["blockId"],
+                            "required": [
+                              "blockId"
+                            ],
                             "type": "object"
                           },
                           "type": "array"
@@ -1220,13 +1497,20 @@
                       ]
                     },
                     "by": {
-                      "enum": ["human", "pea", "unknown"],
+                      "enum": [
+                        "human",
+                        "pea",
+                        "unknown"
+                      ],
                       "type": "string"
                     },
                     "confidence": {
                       "anyOf": [
                         {
-                          "enum": ["high", "low"],
+                          "enum": [
+                            "high",
+                            "low"
+                          ],
                           "type": "string"
                         },
                         {
@@ -1277,7 +1561,9 @@
                                 "type": "integer"
                               }
                             },
-                            "required": ["blockId"],
+                            "required": [
+                              "blockId"
+                            ],
                             "type": "object"
                           },
                           "type": "array"
@@ -1341,7 +1627,12 @@
                                 "type": "number"
                               }
                             },
-                            "required": ["x", "y", "w", "h"],
+                            "required": [
+                              "x",
+                              "y",
+                              "w",
+                              "h"
+                            ],
                             "type": "object"
                           },
                           "type": "array"
@@ -1359,7 +1650,13 @@
                           "type": "number"
                         }
                       },
-                      "required": ["id", "page", "kind", "md", "bboxes"],
+                      "required": [
+                        "id",
+                        "page",
+                        "kind",
+                        "md",
+                        "bboxes"
+                      ],
                       "type": "object"
                     },
                     "type": "array"
@@ -1385,11 +1682,19 @@
                               "type": "number"
                             }
                           },
-                          "required": ["x", "y", "w", "h"],
+                          "required": [
+                            "x",
+                            "y",
+                            "w",
+                            "h"
+                          ],
                           "type": "object"
                         },
                         "category": {
-                          "enum": ["embedded", "layout"],
+                          "enum": [
+                            "embedded",
+                            "layout"
+                          ],
                           "type": "string"
                         },
                         "id": {
@@ -1402,7 +1707,13 @@
                           "type": "string"
                         }
                       },
-                      "required": ["id", "page", "category", "url", "bbox"],
+                      "required": [
+                        "id",
+                        "page",
+                        "category",
+                        "url",
+                        "bbox"
+                      ],
                       "type": "object"
                     },
                     "type": "array"
@@ -1438,13 +1749,25 @@
                           "type": "number"
                         }
                       },
-                      "required": ["page", "width", "height", "screenshotUrl", "markdown"],
+                      "required": [
+                        "page",
+                        "width",
+                        "height",
+                        "screenshotUrl",
+                        "markdown"
+                      ],
                       "type": "object"
                     },
                     "type": "array"
                   }
                 },
-                "required": ["jobId", "fileName", "pages", "blocks", "images"],
+                "required": [
+                  "jobId",
+                  "fileName",
+                  "pages",
+                  "blocks",
+                  "images"
+                ],
                 "type": "object"
               },
               "member": {
@@ -1456,11 +1779,17 @@
                     "type": "string"
                   }
                 },
-                "required": ["pod", "path"],
+                "required": [
+                  "pod",
+                  "path"
+                ],
                 "type": "object"
               }
             },
-            "required": ["member", "doc"],
+            "required": [
+              "member",
+              "doc"
+            ],
             "type": "object"
           },
           {
@@ -1479,8 +1808,197 @@
           }
         ],
         "default": null
+      },
+      "writeIntent": {
+        "additionalProperties": {
+          "additionalProperties": false,
+          "properties": {
+            "edit": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "base": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "by": {
+                      "enum": [
+                        "human",
+                        "pea",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "high",
+                            "low"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "delete": {
+                      "not": {}
+                    },
+                    "note": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      },
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "suggestion": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "base": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "by": {
+                      "enum": [
+                        "human",
+                        "pea",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "confidence": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "high",
+                            "low"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "delete": {
+                      "not": {}
+                    },
+                    "note": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      },
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "propertyNames": {
+          "type": "string"
+        },
+        "type": "object"
       }
     },
     "type": "object"
+  },
+  "workFields": {
+    "reading": {
+      "internal": true,
+      "label": "reading"
+    },
+    "spec": {
+      "label": "attached spec"
+    },
+    "takenAt": {
+      "internal": true,
+      "label": "capture time"
+    }
   }
 }

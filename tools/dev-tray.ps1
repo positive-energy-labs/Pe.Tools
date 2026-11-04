@@ -92,7 +92,7 @@ if (Test-Path -LiteralPath $supervisorFile) {
 }
 if ($Stop) { return }
 
-$services = Join-Path (Resolve-ProductRuntimeRoot) 'state/service'
+$services = Join-Path (Resolve-ProductRuntimeRoot -Lane dev -Root $checkoutRoot) 'state/service'
 # An override home that no host has run in has no service folder yet.
 New-Item -ItemType Directory -Force -Path $services | Out-Null
 $matches = @(Get-ChildItem -LiteralPath $services -Filter '*.json' | ForEach-Object {
@@ -165,7 +165,7 @@ if ($Window) {
         if ([DateTime]::UtcNow -ge $until) { throw 'Dev frontend startup timed out. Read .artifacts/dev-tray logs before retrying.' }
         Start-Sleep -Milliseconds 200
     } while ($true)
-    $launcher = Start-Process -FilePath $binary -ArgumentList @('--launch-window', ($pair.frontendOrigin + '/open')) -WindowStyle Hidden -PassThru
+    $launcher = Start-Process -FilePath $binary -ArgumentList @('--lane', 'dev', '--root', ('"' + $checkoutRoot + '"'), '--launch-window', ($pair.frontendOrigin + '/open')) -WindowStyle Hidden -PassThru
     if (-not $launcher.WaitForExit(10000)) { throw 'Dev PWA launcher timed out.' }
     if ($launcher.ExitCode -ne 0) { throw 'Dev PWA launcher refused the frontend or PWA registration.' }
 }

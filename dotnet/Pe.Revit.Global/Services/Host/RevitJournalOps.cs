@@ -31,7 +31,7 @@ internal static class RevitJournalOps {
 
     private static readonly string[] KnownKinds = [.. JournalKinds.Select(k => k.Kind), "other"];
 
-    [Op("revit.context.journal", Does = "Read the tail of the journal Revit is recording for this session: the only record of what the person did in the UI (ribbon commands, dialog answers, error dialogs, transactions). Each row carries its line index, timestamp when present, and kind. Pass afterLine to poll for lines past the last one seen; pass kinds to keep only commands, dialogs, errors or transactions.", Title = "Journal Tail", Finds = ["journal", "tail", "log", "history", "commands", "dialogs", "errors", "what-happened", "user-did"], Cost = OpCost.Bounded, Actor = OpActor.Any, Tier = OpTier.Default, Thread = OpThread.Revit, Example = "{ \"maxLines\": 100, \"kinds\": [\"command\", \"error\"] }")]
+    [Op("revit.context.journal", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Read the tail of the journal Revit is recording for this session: the only record of what the person did in the UI (ribbon commands, dialog answers, error dialogs, transactions). Each row carries its line index, timestamp when present, and kind. Pass afterLine to poll for lines past the last one seen; pass kinds to keep only commands, dialogs, errors or transactions.", Title = "Journal Tail", Finds = ["journal", "tail", "log", "history", "commands", "dialogs", "errors", "what-happened", "user-did"], Cost = OpCost.Bounded, Actor = OpActor.Any, Tier = OpTier.Default, Thread = OpThread.Revit, Example = "{ \"maxLines\": 100, \"kinds\": [\"command\", \"error\"] }")]
     private static RevitJournalTailData JournalTail(RevitJournalTailRequest request) {
         var maxLines = Math.Max(1, Math.Min(request.MaxLines ?? DefaultMaxLines, MaxLinesCap));
         var kinds = (request.Kinds ?? []).Select(k => k.Trim().ToLowerInvariant()).Distinct().ToList();
@@ -75,7 +75,7 @@ internal static class RevitJournalOps {
         return lines;
     }
 
-    [Op("revit.catalog.warnings", Does = "List the document's review warnings as Revit's Review Warnings dialog shows them: severity, text, the elements each is about, and the elements listed alongside. Read-only.", Title = "List Warnings", Finds = ["warnings", "review", "errors", "failures", "overlap", "join", "health"], Cost = OpCost.Bounded, Actor = OpActor.Any, Tier = OpTier.Default, Example = "{}")]
+    [Op("revit.catalog.warnings", OpSubject.Document, OpTouches.Metadata, OpEffect.Read, Does = "List the document's review warnings as Revit's Review Warnings dialog shows them: severity, text, the elements each is about, and the elements listed alongside. Read-only.", Title = "List Warnings", Finds = ["warnings", "review", "errors", "failures", "overlap", "join", "health"], Cost = OpCost.Bounded, Actor = OpActor.Any, Tier = OpTier.Default, Example = "{}")]
     private static RevitWarningsListData WarningsList(NoRequest request, RevitDocument activeDocument) {
         var rows = activeDocument.Value.GetWarnings()
             .Select(warning => new RevitWarningRow(

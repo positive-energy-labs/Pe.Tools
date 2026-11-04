@@ -37,6 +37,8 @@ export interface Rung {
   picked?: (id: string) => boolean;
   checked?: (id: string) => boolean | "mixed";
   pick: (id: string) => void;
+  /** Narrow this multi-pick to one row without dismissing it. */
+  only?: (id: string) => void;
   /** Route-supplied footer under the options of this rung. */
   extra?: ReactNode;
 }
@@ -188,7 +190,21 @@ export function Ladder({
           </span>
         ) : undefined,
         label: hit.label,
-        meta: hit.caution ? <span data-tone="caution">{hit.sub}</span> : hit.sub,
+        meta: rungOf(hit).only ? (
+          <Button
+            label={`Only ${hit.label}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              rungOf(hit).only!(hit.id);
+            }}
+          >
+            only
+          </Button>
+        ) : hit.caution ? (
+          <span data-tone="caution">{hit.sub}</span>
+        ) : (
+          hit.sub
+        ),
         refusal: hit.refusal,
       })}
     />

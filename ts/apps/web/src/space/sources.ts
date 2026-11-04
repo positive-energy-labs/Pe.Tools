@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { readTable } from "../../../../packages/mcps/src/shared/query-client";
 import { spaceReads, readSpaceCapture } from "./reads";
 import type { ReadingSource, ReadingState } from "#/shell/readings";
@@ -26,13 +27,14 @@ export function matchingScene(page: SpacePage, read: ReadingState): LoadedSpaceS
 }
 
 export const spaceSources: Readonly<Record<string, ReadingSource>> = {
+  "space.region": { kind: "derive", derive: ({ args }) => args === null ? [] : [{ id: JSON.stringify(args), region: args }] },
   "space.scene": {
     kind: "use",
     open(ctx, deliver) {
-      const page = ctx.page as SpacePage;
-      if (!page.scene) return deliver({ kind: "complete", value: null, revision: 0 });
+      const scene = z.string().nullish().parse(ctx.args);
+      if (!scene) return deliver({ kind: "complete", value: null, revision: 0 });
       // Artifact restoration has no capture branch. The kernel owns this subscription's lifetime.
-      const source = sceneData({ kind: "artifact", id: page.scene });
+      const source = sceneData({ kind: "artifact", id: scene });
       const publish = () => {
         const snapshot = source.read();
         if (snapshot.state === "pending") deliver({ kind: "pending" });
@@ -40,7 +42,7 @@ export const spaceSources: Readonly<Record<string, ReadingSource>> = {
         else
           deliver({
             kind: "complete",
-            value: loadedScene(page.scene, snapshot.data),
+            value: loadedScene(scene, snapshot.data),
             revision: 1,
             fresh: snapshot.data.metadata.stamp.fresh,
           });

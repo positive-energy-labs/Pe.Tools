@@ -165,7 +165,7 @@ description: Write and run a C# Revit script when code is the clearest way to in
 - Choose a script when no host operation is the smallest capable surface. Bootstrap the workspace when paths or references are unknown.
 - Inline snippets for tiny probes; workspace files for durable or multi-step work.
 - Default to ReadOnly. Use WriteTransaction only for an explicit, user-authorized mutation. Use NoTransaction only for APIs that reject an open transaction.
-- Pea's ReadOnly target needs read consent. Unpaired external MCP clients cannot run scripts, including ReadOnly; paired external clients still need write authority on the script's target. WriteTransaction and NoTransaction on the user's document follow the user's access setting: under Full they run on any open document; under Guarded the user adds the document to this thread in the composer; ask once. A thread may target several documents; a script names one. Any script refuses while another open document in that Revit is one Pea may not write; name those documents to the user.
+- Pea's ReadOnly target needs read consent. Unpaired external MCP clients cannot run scripts, including ReadOnly; paired external clients still need write authority on the script's target. WriteTransaction and NoTransaction on any open document run under this thread's run consent; there is no per-call or per-document approval to ask for. A thread may target several documents; a script names one. Any script refuses while another open document in that Revit is one Pea may not write; name those documents to the user.
 - Treat compiler and runtime diagnostics as steering; fix the first one before rerunning.
 - Scope every collector to the categories or classes you need. When you must read parameters across many elements, iterate element.ReadableParameters(), never element.Parameters: some models carry hidden built-in parameters whose StorageType read kills Revit outright, and no catch or rollback survives it.
 - Keep terminal output compact; write artifacts for broad evidence. Return structured results for anything a later step reads.
@@ -174,7 +174,7 @@ Building or fixing a family from a cut sheet follows build-revit-family.
 
 A Pod is a workspace with a root pod.json declaring entrypoints; the build-pod skill defines it and owns building or adapting one.
 
-For a probe, report the answer and the permission mode it ran under. For a mutation, add the script path, diagnostics, and the verification readback.
+For a probe, report the answer and the permissionMode it ran under. For a mutation, add the script path, diagnostics, and the verification readback.
 
 Worked example: to audit missing diffuser neck sizes, first read the connected project and identify the exact neck parameter. Only then create a ReadOnly script that returns grouped rows by family and type; do not register a Pod entrypoint until that first run produces the expected artifact.
 `,
@@ -313,7 +313,7 @@ description: Edit shared tool Work and apply it through the same semantic comman
 3. Either author may knowingly replace the current edit. A stale revision refuses; reread and submit a new explicit edit. Suggestions are optional review content, available to either author.
 4. For Families, set scope.edit with exact loaded family names before writing its cells. Keys are JSON arrays of [family, type, parameter]. The host validates those identities against Revit.
 5. Run the semantic apply/save/push/sync command yourself when the user authorized execution. Family apply accepts {source, include: "all"}, several sources, a prior preview plan id, or the reviewed Work drafts when no source is supplied. The host plans, checks freshness, applies, reads back and retires only unchanged consumed edits. Preview is optional inspection, never an actor gate.
-6. The first consequential write in this root turn opens one 60-second countdown. Allow now or its deadline permits remaining writes and explicitly delegated descendants; Stop writes cancels pending and unstarted mutations. Work edits and internal evidence remain immediate. Keep the original actionId through retries, and inspect uncertain native outcomes instead of submitting a replacement.
+6. The first consequential write in this thread opens its run consent (a 60-second Reject? notice under auto-approve, else the user allows). It covers remaining writes and explicitly delegated descendants until Stop; Reject or Stop cancels pending and unstarted mutations. Work edits and internal evidence remain immediate. Keep the original actionId through retries, and inspect uncertain native outcomes instead of submitting a replacement.
 7. Report completed work and exact tool/Work links. If accepted commands still run, say so. External devices and Pages keep their own trust adapter.
 `,
   },

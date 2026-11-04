@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.DB;
+using Autodesk.Revit.DB;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.App.Pods;
@@ -24,7 +24,7 @@ namespace Pe.App.Host;
 
 /// <summary>Schedule definitions (capture one as a spec, apply a spec as a new schedule) and reviewed cell values (`schedule.cells.apply`).</summary>
 internal static class ScheduleBridgeOps {
-    [Op("schedule.capture", Does = "Capture one schedule's definition (fields, sort/group, filters, header groups, view template) as a schedule spec. Never captures cell values.", Title = "Capture Schedule", Finds = ["schedule", "capture", "spec", "definition"], Cost = OpCost.Bounded)]
+    [Op("schedule.capture", OpSubject.View, OpTouches.Metadata, OpEffect.Read, Does = "Capture one schedule's definition (fields, sort/group, filters, header groups, view template) as a schedule spec. Never captures cell values.", Title = "Capture Schedule", Finds = ["schedule", "capture", "spec", "definition"], Cost = OpCost.Bounded)]
     private static Task<ScheduleSpecCaptureData> Capture(ScheduleSpecCaptureRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => {
             if (!document.Value.TryGetUserSchedule(request.ScheduleId.ToElementId(), out var schedule))
@@ -37,7 +37,7 @@ internal static class ScheduleBridgeOps {
     ///     transaction and answers per cell; a refused cell is an answer, never a reason to retry by parameter name.
     ///     The host journal seals this exact request as the step input before dispatch.
     /// </summary>
-    [Op("schedule.cells.apply", Does = "Write reviewed schedule cells by their exact reviewed bindings (target element id, parameter id, storage, read-only, hasValue, raw value) in one transaction. Stale, missing, blocked, or conflicting evidence refuses per cell; results keep the request cell index and each cell's own target index.", Title = "Apply Schedule Cells", Finds = ["schedule", "cells", "apply", "binding", "reviewed", "write"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Actor = OpActor.Any)]
+    [Op("schedule.cells.apply", OpSubject.Elements, OpTouches.Metadata, OpEffect.ModelWrite, Internal = true, Does = "Write reviewed schedule cells by their exact reviewed bindings (target element id, parameter id, storage, read-only, hasValue, raw value) in one transaction. Stale, missing, blocked, or conflicting evidence refuses per cell; results keep the request cell index and each cell's own target index.", Title = "Apply Schedule Cells", Finds = ["schedule", "cells", "apply", "binding", "reviewed", "write"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Actor = OpActor.Any)]
     private static Task<ScheduleCellApplyData> ApplyCells(ScheduleCellApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => {
             if (!request.DryRun && document.Value.IsReadOnly)
@@ -47,7 +47,7 @@ internal static class ScheduleBridgeOps {
             catch (ArgumentException exception) { throw BridgeOperationExceptions.BadRequest(exception.Message); }
         }, cancellationToken);
 
-    [Op("schedule.apply", Does = "Create a new schedule from a saved schedule spec and write the run receipt into the source pod. Never edits an existing schedule.", Title = "Apply Schedule", Finds = ["schedule", "apply", "spec", "create", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Actor = OpActor.Any)]
+    [Op("schedule.apply", OpSubject.Document, OpTouches.Metadata, OpEffect.ModelWrite, Internal = true, Does = "Create a new schedule from a saved schedule spec and write the run receipt into the source pod. Never edits an existing schedule.", Title = "Apply Schedule", Finds = ["schedule", "apply", "spec", "create", "receipt"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Actor = OpActor.Any)]
     private static Task<ScheduleSpecApplyData> Apply(ScheduleSpecApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
         PaletteThreading.RunRevitAsync(() => {
             try {

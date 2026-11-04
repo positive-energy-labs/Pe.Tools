@@ -6,10 +6,10 @@ import { BrowserError } from "./errors.ts";
 import { windowsGuardianExecutable, assertPackagedProfileAvailable } from "./native-guardian.ts";
 import { isSea } from "node:sea";
 import { CLOSE_BUDGET_MS } from "./receipts.ts";
-import { productRoot } from "@pe/host-contracts/service-identity";
+import { runtimeRoot } from "@pe/runtime/runtime-owner";
 
 export const browserHome = (home?: string) =>
-  resolve(home ?? join(productRoot(), "state", "browser"));
+  resolve(home ?? join(runtimeRoot(), "state", "browser"));
 export const defaultChromeProfile = () =>
   process.platform === "win32"
     ? join(
@@ -42,7 +42,7 @@ export async function chromeExecutable(explicit?: string): Promise<string> {
     try {
       await access(candidate);
       return resolve(candidate);
-    } catch {}
+    } catch (error) { console.error("platform: asynchronous operation failed", error); }
   }
   throw new BrowserError(
     "ExecutableNotFound",
@@ -110,7 +110,7 @@ export async function assertProfileAvailable(profile: string): Promise<void> {
       if (/^\d+$/.test(pid)) {
         try {
           commands.push((await readFile(`/proc/${pid}/cmdline`, "utf8")).replaceAll("\0", " "));
-        } catch {}
+        } catch (error) { console.error("platform: asynchronous operation failed", error); }
       }
   } else {
     try {
@@ -172,7 +172,7 @@ export async function launchGuarded(config: {
     const script = join(config.directory, "guardian.mjs");
     await writeFile(
       script,
-      `import {spawn} from 'node:child_process';import fs from 'node:fs';const c=JSON.parse(process.argv[2]);const p=spawn(c.executable,c.args,{detached:true,stdio:'ignore'});console.log(p.pid);let stopped=false;function stop(){if(stopped)return;stopped=true;try{process.kill(-p.pid,'SIGKILL')}catch{};if(c.temporary&&fs.readFileSync(c.profile+'/.pe-browser-owner','utf8')===c.id)fs.rmSync(c.profile,{recursive:true,force:true});try{if(fs.readFileSync(c.lock,'utf8')===c.id)fs.unlinkSync(c.lock)}catch{};process.exit()}process.stdin.resume();process.stdin.on('end',stop);process.on('SIGTERM',stop);`,
+      `import {spawn} from 'node:child_process';import fs from 'node:fs';const c=JSON.parse(process.argv[2]);const p=spawn(c.executable,c.args,{detached:true,stdio:'ignore'});console.log(p.pid);let stopped=false;function stop(){if(stopped)return;stopped=true;try{process.kill(-p.pid,'SIGKILL')}catch (error) { console.error("platform: asynchronous operation failed", error); };if(c.temporary&&fs.readFileSync(c.profile+'/.pe-browser-owner','utf8')===c.id)fs.rmSync(c.profile,{recursive:true,force:true});try{if(fs.readFileSync(c.lock,'utf8')===c.id)fs.unlinkSync(c.lock)}catch (error) { console.error("platform: asynchronous operation failed", error); };process.exit()}process.stdin.resume();process.stdin.on('end',stop);process.on('SIGTERM',stop);`,
     );
     child = spawn(process.execPath, [script, JSON.stringify(config)], {
       detached: true,

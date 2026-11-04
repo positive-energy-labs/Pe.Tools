@@ -3,10 +3,14 @@ import { createRouteSettings } from "./route-settings.ts";
 import { productRouteSettingsPath } from "./product-paths.ts";
 import { createDuctsSheets, sheetNativeRead, type DuctsSheetSources } from "./ducts-sheet.ts";
 import { eligibleThreads, threadHistory } from "./thread-history.ts";
-import { productRoot } from "@pe/host-contracts/service-identity";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
-import { peRoutes, peRouteUrl, servePeRoute, matchPeRoute } from "@pe/agent-contracts/pe-api";
+import {
+  httpRoutes as peRoutes,
+  peRouteUrl,
+  servePeRoute,
+  matchPeRoute,
+} from "@pe/agent-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { resolveSdkSession } from "./sdk-session.ts";
 import {
@@ -16,14 +20,14 @@ import {
 } from "./ducts-analysis.ts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import type { MachineShareAdapter } from "./machine.ts";
-import { Effect, Option, Stream } from "effect";
+import { Context, Effect, Layer, Option, Stream } from "effect";
 import {
   HttpEffect,
   HttpRouter,
   HttpServer,
   HttpServerRequest,
   HttpServerResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 import {
   addressSchema,
   sameAddress,
@@ -71,6 +75,7 @@ import {
   OwnerReads,
   resourceSnapshot,
   resourceResponse,
+  updateResourceSubscriptions,
   RouteViewStore,
   RouteWorkspace,
   type ResourceObserver,
@@ -83,7 +88,8 @@ import { RevitBridge } from "./bridge.ts";
 import { documentMarks } from "./document-marks.ts";
 import { createProviders } from "./harness/providers.ts";
 import { peaMcpServer } from "./harness/adapter.ts";
-import { createHarnessThreads } from "./harness/threads.ts";
+import { makeHarnessThreads } from "./harness/threads.ts";
+import { Spawner } from "./harness/spawner.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import {
   productDuctsAnalysesPath,
@@ -91,12 +97,14 @@ import {
   productRouteWorkPath,
 } from "./product-paths.ts";
 import { hostResourceObserver, markReadings } from "./resource-adapters.ts";
+import { CaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
 import {
-  createMachine,
+  MachineOwner,
+  hostMachineFace,
+  type MachineOptions,
   machineAcquisition,
   machineSessionAcquisition,
   machineSources,
-  useHostMachine,
 } from "./machine.ts";
 import {
   bindControl,
@@ -108,6 +116,7 @@ import {
 } from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
 import { hostActionJournal, hostLog } from "./gateway-owner.ts";
+import { RunConsents } from "./run-consent.ts";
 import type { HostLog } from "./host-log.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
@@ -144,10 +153,10 @@ import { observePluginOperations } from "./plugin-receipts.ts";
 import { importShippedPods } from "./installed-pods.ts";
 import { receiptQuerySchema } from "@pe/agent-contracts";
 import {
-  hostReceiptExport,
+  ReceiptExport,
   createThreadReceiptAdapter,
   type AgentReportContext,
-  type ReceiptExport,
+  type ReceiptExporter,
 } from "./receipt-export.ts";
 import { createNotices } from "./notices.ts";
 import { alignBootstrap } from "./bootstrap.ts";
@@ -171,7 +180,7 @@ export interface PeRoutesOptions {
   observeHostResource?: ResourceObserver;
   /** Wraps every served Reading, Work included, e.g. with the host's document change mark. */
   markReadings?: (observe: ResourceObserver) => ResourceObserver;
-  telemetry?: ReceiptExport;
+  telemetry?: ReceiptExporter;
   /** The running turn and harness behind a thread, for an agent report's stamps. */
   reportContext?: (thread: string) => AgentReportContext | null;
   /** The host log `log.read` pages; the host's own when absent. */
@@ -184,6 +193,7 @@ const feedbackSchema = peRoutes["feedback.submit"].body;
 const diagnosticsSchema = peRoutes["diagnostics.submit"].body;
 const agentFeedbackSchema = peRoutes["agent-feedback.submit"].body;
 const applyBody = peRoutes["work.apply"].body;
+const historyBody = peRoutes["work.history"].body;
 
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -207,9 +217,14 @@ export function createPeRoutes(options: PeRoutesOptions) {
       return refused("Document-owned route Work requires this caller's thread targets.");
     let documents;
     try {
-      documents = z
-        .array(documentRefSchema.extend({ address: addressSchema.nullable() }))
-        .parse(await options.navigation?.documents());
+      const entries = z.array(z.unknown()).parse(await options.navigation?.documents());
+      documents = entries.flatMap((entry) => {
+        const ref = documentRefSchema.strip().safeParse(entry);
+        if (!ref.success) return [];
+        // An unsaved/foreign relative path has no Address, but keeps its exact open identity.
+        const address = addressSchema.safeParse((entry as { address?: unknown }).address);
+        return [{ ...ref.data, address: address.success ? address.data : null }];
+      });
     } catch {
       return refused("Current document bindings are unavailable; retained Work has not changed.");
     }
@@ -254,7 +269,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
   const analysis = options.ductsAnalysis
     ? createDuctsAnalysis({
         ...options.ductsAnalysis,
-        readWork: (key) => work.readRaw(key, "ducts"),
+        readWork: async (key) => {
+          const saved = await work.readRaw(key, key.route);
+          if (!saved) throw Error(`Work is absent for ${key.route}`);
+          return saved;
+        },
       })
     : null;
   const sheets = options.ductsSheets
@@ -324,6 +343,14 @@ export function createPeRoutes(options: PeRoutesOptions) {
         return work.write(scope, route, by, body as z.infer<typeof applyBody>);
       },
     },
+    history: {
+      schema: historyBody,
+      hint: "expected { direction: undo | redo, expectedRevision }",
+      run: (scope: WorkKey, route: string, by: "pea" | "human", body: unknown) => {
+        const { direction, expectedRevision } = body as z.infer<typeof historyBody>;
+        return work.step(scope, route, by, direction, expectedRevision);
+      },
+    },
     // Authenticated authors share recovery; the workspace preserves unreadable source bytes.
     [START_FRESH]: {
       schema: z.object({}),
@@ -362,7 +389,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const id = declared.params.id!;
       if (!/^[a-f0-9]{64}$/.test(id)) return json({ error: "Invalid scene id" }, 400);
       try {
-        const bytes = await readFile(join(productRoot(), "cache", "space-scenes", `${id}.bin`));
+        const bytes = await readFile(
+          join(hostOwnership.rootPath, "cache", "space-scenes", `${id}.bin`),
+        );
         if (createHash("sha256").update(bytes).digest("hex") !== id)
           return json({ error: "Scene artifact integrity failed" }, 409);
         return new Response(bytes, {
@@ -423,7 +452,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
     if (method === "GET" && declared.id === "family.spec") return familySpecAsset(url);
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
-    const body = () => request.json().catch(() => null);
+    const body = () =>
+      request.json().catch((error) => {
+        console.error("pe-routes: asynchronous operation failed", error);
+        return null;
+      });
 
     if (method === "GET" && declared.id === "contributions.read") {
       const key = url.searchParams.get("key") ?? "";
@@ -532,6 +565,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
         return json({ error: message(error) }, 502);
       }
     }
+    if (method === "POST" && declared.id === "resources.subscriptions")
+      return updateResourceSubscriptions(request, observe);
     if (method === "GET" && declared.id === "resources.stream")
       return resourceResponse(request, observe);
     // Agent feedback (owner ruling 2026-10-14): any admitted caller may file; the host stamps it.
@@ -541,7 +576,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const thread = callerThread(caller);
       try {
         return json(
-          await (options.telemetry ?? hostReceiptExport()).submitAgentFeedback(
+          await telemetryOf(options).submitAgentFeedback(
             parsed.data,
             caller.kind,
             thread,
@@ -563,7 +598,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
           { error: "human.only: Feedback and browser diagnostics require a human caller." },
           { status: 403, headers: refusalHeaders("human.only") },
         );
-      const telemetry = options.telemetry ?? hostReceiptExport();
+      const telemetry = telemetryOf(options);
       if (declared.id === "diagnostics.submit") {
         const parsed = diagnosticsSchema.safeParse(await body());
         if (!parsed.success) return json({ error: "invalid diagnostics" }, 400);
@@ -594,7 +629,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
     // Web read of the receipt spine, including turn/permission facts. Local thread ids are mapped
     // by the owner; query joins and the returned envelopes remain opaque.
     if (method === "GET" && declared.id === "receipts.read") {
-      const journal = (options.telemetry ?? hostReceiptExport()).journal;
+      const journal = telemetryOf(options).journal;
       let query: unknown;
       try {
         query = JSON.parse(url.searchParams.get("query") ?? "{}");
@@ -719,7 +754,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
         const scope = workKey(url, route, "read");
         if (scope instanceof Response) return scope;
         const salvaged = await work.salvage(scope, route);
-        if (!salvaged) return json({ error: `nothing to salvage on '${route}'` }, 404);
+        if (!salvaged) return json(null);
         return "ok" in salvaged ? json(salvaged, 403) : json(salvaged);
       }
       const write = method === "POST" && route && verb ? writes[verb] : undefined;
@@ -857,7 +892,6 @@ export function createContributionContent(options: {
   let observedAt = 0;
   let pending = false;
   let initialized: Promise<unknown> | undefined;
-  let firstBuild = true;
   let admitted: readonly AdmittedPackage[] = [];
   const lifecycle = createPackageLifecycle({
     decisionsPath: options.decisionsPath,
@@ -910,8 +944,8 @@ export function createContributionContent(options: {
   }
   async function build(): Promise<CapabilityContent> {
     await (initialized ??= options.bootstrap?.() ?? Promise.resolve());
-    const listing = await lifecycle.refresh(firstBuild);
-    firstBuild = false;
+    await lifecycle.ready;
+    const listing = lifecycle.listing();
     admitted = lifecycle.packages();
     const allDescriptors = options.pages
       ? await options.pages(admitted)
@@ -1066,13 +1100,23 @@ export function createContributionContent(options: {
   };
 }
 
-export function makeHostPeRoutes(
+/** The exporter a route needs but its composition did not provide; reading it is a wiring fault. */
+const missingTelemetry = (): ReceiptExporter => {
+  throw Error("Receipt export is unavailable: provide ReceiptExport.");
+};
+const telemetryOf = (options: { telemetry?: ReceiptExporter }) =>
+  options.telemetry ?? missingTelemetry();
+
+function* hostPeRoutes(
   hostBaseUrl: string,
   bridge: RevitBridge["Service"] | undefined,
+  runs: RunConsents["Service"],
   registrationsFactory: typeof createRouteRegistrations = createRouteRegistrations,
   update: UpdateReader["Service"] = makeInstalledUpdateReader(),
   share?: MachineShareAdapter,
   hostWork?: HostWork,
+  captures?: TakeoffCaptures,
+  telemetry: ReceiptExporter = missingTelemetry(),
 ) {
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
@@ -1094,12 +1138,14 @@ export function makeHostPeRoutes(
   void userCodexMcpServers(userCodexConfigPath())
     .then((names) => writePeaCodexProjectConfig(worldRoot, names))
     .catch((error) =>
+      // effect-edge: island, phase 5
       Effect.runSync(
         Effect.logWarning(`Pea's Codex project config was not written: ${String(error)}`),
       ),
     );
   const shellPath = () =>
     captureUserShellPath().then((captured) => {
+      // effect-edge: island, phase 5
       Effect.runSync(
         captured
           ? Effect.logInfo(`user shell PATH captured (${captured.split(";").length} entries)`)
@@ -1110,15 +1156,25 @@ export function makeHostPeRoutes(
       return captured;
     });
   // Every provider is probed once in the background; the list says `unknown` until then.
-  const providers = createProviders({ shellPath });
-  const telemetry = hostReceiptExport();
+  const providers = createProviders({ shellPath, spawner: yield* Spawner });
   const stopOperationHooks = observePluginOperations(telemetry.journal, content.lifecycle.emit);
   const receiptThreads = createThreadReceiptAdapter(
     telemetry,
     () => threads.receiptSnapshot(),
     (threadId) => routes.completedWork(threadId),
   );
-  const threads = createHarnessThreads({
+  const routeSettings = createRouteSettings(productRouteSettingsPath());
+  const threads = yield* makeHarnessThreads({
+    runs,
+    // An unreadable settings file asks a person: unknown consent never applies by itself.
+    autoApprove: () => {
+      try {
+        return routeSettings.read("chat").values["autoApprove"] !== false;
+      } catch (error) {
+        console.warn(`Pea auto-approve unreadable; writes ask a person: ${String(error)}`);
+        return false;
+      }
+    },
     prepare: () => content.read(),
     providers,
     updatePending: update.automaticPending,
@@ -1133,6 +1189,7 @@ export function makeHostPeRoutes(
     // Cached bridge metadata only. Remembered labels/addresses never admit a native operation.
     observeDocument: (request) => {
       if (!bridge) return null;
+      // effect-edge: island, phase 5
       const matches = Effect.runSync(bridge.list).flatMap((session) =>
         session.connected && session.sessionId
           ? (session.state?.openDocuments ?? []).flatMap((doc) => {
@@ -1160,7 +1217,7 @@ export function makeHostPeRoutes(
   });
   const stopWorkContext = bridge?.subscribe(() => threads.refreshWorkContexts());
   const scheduler = createScheduledTasks({
-    path: join(productRoot(), "state", hostOwnership.serviceName, "scheduled-tasks.json"),
+    path: join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "scheduled-tasks.json"),
     receipts: telemetry.journal,
     evidence: (since, before) =>
       new Set(eligibleThreads(threads.historySnapshot(), since, before).map((t) => t.id)),
@@ -1187,37 +1244,45 @@ export function makeHostPeRoutes(
     context: receiptThreads.context,
     log: hostLog(),
   });
-  const machine = createMachine(machineSources(bridge, providers, update, share, threads.heads), {
-    fault: (fault) =>
-      telemetry.track(
-        telemetry.record({
-          kind: "diagnostic",
-          code: fault.kind === "deadline" ? "reading.timeout" : "reading.failed",
-          readingKind: "machine",
-          elapsedMs: fault.elapsedMs,
-        }),
-      ),
-    automaticUpdates:
-      hostOwnership.lane === "installed" ? { peaActive: threads.active } : undefined,
-  });
+  // The owner itself is built by the caller's scope (`MachineOwner.layer`); routes reach it late-bound.
+  const machineSpec = {
+    sources: machineSources(bridge, providers, update, share, threads.heads),
+    options: {
+      fault: (fault) =>
+        telemetry.track(
+          telemetry.record({
+            kind: "diagnostic",
+            code: fault.kind === "deadline" ? "reading.timeout" : "reading.failed",
+            readingKind: "machine",
+            elapsedMs: fault.elapsedMs,
+          }),
+        ),
+      automaticUpdates:
+        hostOwnership.lane === "installed" ? { peaActive: threads.active } : undefined,
+    } satisfies MachineOptions,
+  };
   const registrations = hostWork?.registrations ?? registrationsFactory({ hostBaseUrl });
   const catalog = createCapabilityCatalogSource({
     hostBaseUrl,
     registrations,
-    machine: () => machine.refresh(),
-    content: content.read,
+    machine: () => hostMachineFace.refresh(),
+    content: async () => {
+      await podRoutes.list();
+      return content.read();
+    },
     pages: content.pages,
   });
   invalidateCatalog = () => catalog.invalidate();
   const hostObserve = hostResourceObserver(
     bridge,
     undefined,
-    undefined,
+    captures ? () => captures : undefined,
     hostBaseUrl,
     undefined,
-    machine,
+    hostMachineFace,
   );
   const routes = createPeRoutes({
+    routeSettings,
     workspace: hostWork?.workspace,
     registrations,
     ductsSheets: { call: sheetNativeRead(hostBaseUrl) },
@@ -1256,6 +1321,7 @@ export function makeHostPeRoutes(
     turnElementNames: (request) =>
       threads.readTurnElementNames(request, (operation, input, ref) => {
         if (!bridge) return Promise.reject(new Error("No Revit bridge is available"));
+        // effect-edge: island, phase 5
         return Effect.runPromise(bridge.invoke(operation, input, ref.session, ref.openId));
       }),
     navigation: {
@@ -1283,6 +1349,7 @@ export function makeHostPeRoutes(
       },
       documents: async () => {
         if (!bridge) throw new Error("No Revit bridge metadata is available");
+        // effect-edge: island, phase 5
         const sessions = await Effect.runPromise(bridge.list);
         return sessions.flatMap((session) =>
           session.connected && session.sessionId
@@ -1310,7 +1377,7 @@ export function makeHostPeRoutes(
     telemetry,
     reportContext: threads.reportContext,
   });
-  const podRoutes = createPodRoutes(content.lifecycle, { workspace: routes.workspace });
+  const podRoutes = createPodRoutes(content.lifecycle, { workspace: routes.workspace, bridge });
   const fetchRoute = routes.fetch;
   routes.fetch = async (request) => {
     const declared = matchPeRoute(request.method, new URL(request.url).pathname);
@@ -1331,8 +1398,14 @@ export function makeHostPeRoutes(
     },
     fetch: createPluginsHandler(content, podRoutes),
   };
-  return { providers, threads, routes, catalog, machine, notices, plugins, tasks };
+  return { providers, threads, routes, catalog, machineSpec, notices, plugins, tasks };
 }
+
+/**
+ * The host-owned `/pe/*` surface, built in the launch scope: the thread store is a service whose
+ * scope stops every harness child, and the replay of the thread directories happens here.
+ */
+export const makeHostPeRoutes = Effect.fn("peRoutes.make")(hostPeRoutes);
 
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */
 export const peRoutesLayer = (
@@ -1343,12 +1416,29 @@ export const peRoutesLayer = (
   HttpRouter.use((router) =>
     Effect.gen(function* () {
       const { address } = yield* HttpServer.HttpServer;
-      const hostBaseUrl = `http://127.0.0.1:${address._tag === "TcpAddress" ? address.port : 0}`;
+      const hostBaseUrl = `http://127.0.0.1:${address._tag === "UnixPathAddress" ? 0 : address.port}`;
       const bridge = Option.getOrUndefined(yield* Effect.serviceOption(RevitBridge));
       const update = yield* UpdateReader;
-      const { providers, threads, routes, catalog, machine, notices, plugins, tasks } =
-        makeHostPeRoutes(hostBaseUrl, bridge, registrationsFactory, update, share, hostWork);
-      useHostMachine(machine);
+      const runs = yield* RunConsents;
+      const captures = Option.getOrUndefined(yield* Effect.serviceOption(CaptureStore));
+      const telemetry = yield* ReceiptExport;
+      const { providers, threads, routes, catalog, machineSpec, notices, plugins, tasks } =
+        yield* makeHostPeRoutes(
+          hostBaseUrl,
+          bridge,
+          runs,
+          registrationsFactory,
+          update,
+          share,
+          hostWork,
+          captures,
+          telemetry,
+        );
+      // Scoped: the layer closes with this one, which stops its poll and unsets the host face.
+      const machineContext = yield* Layer.build(
+        MachineOwner.layer(machineSpec.sources, machineSpec.options),
+      );
+      const machine = Context.get(machineContext, MachineOwner);
       bindControl({
         heads: threads.heads.read,
         subscribeHeads: threads.heads.subscribe,
@@ -1365,8 +1455,6 @@ export const peRoutesLayer = (
             acquired: () => null,
             acquiredSession: () => null,
           });
-          useHostMachine(undefined);
-          machine.close();
           notices.close();
         }),
       );

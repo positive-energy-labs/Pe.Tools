@@ -1,0 +1,233 @@
+{
+  "address": "pod-admin",
+  "directory": {
+    "aliases": [
+      "install",
+      "trust",
+      "plugins"
+    ],
+    "blurb": "Install Pods and manage activation and executable route trust.",
+    "category": "Ask / automate",
+    "exposure": "Preview",
+    "icon": "Settings2",
+    "label": "Pod administration",
+    "listed": true,
+    "path": "/pod-admin",
+    "runtimeNeed": "Host",
+    "satellites": [],
+    "surfaces": {
+      "pwa": "full",
+      "tray": false,
+      "web": "full"
+    },
+    "title": "Pod administration"
+  },
+  "fields": {
+    "epoch": {
+      "agent": false,
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "transient",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": 0,
+        "type": "number"
+      },
+      "share": false,
+      "url": false
+    },
+    "pod": {
+      "agent": "read",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "maxLength": 200,
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "selection": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "type": "string"
+      },
+      "share": true,
+      "url": "replace"
+    }
+  },
+  "key": "pod-admin",
+  "layout": {
+    "id": "inventory",
+    "kind": "pane"
+  },
+  "moduleHash": "70dccdaa2add51f12d415ee079b51169bcc784f3e50900ca0e0c8846faeb7a56",
+  "name": "Pod administration",
+  "panes": {
+    "inventory": {
+      "draws": [
+        "inventory"
+      ],
+      "label": "Installed Pods",
+      "purpose": "Install and manage the selected Pod",
+      "verbs": []
+    }
+  },
+  "readings": {
+    "inventory": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "pod-admin.inventory"
+    }
+  },
+  "seeds": {
+    "inventory": {
+      "title": "Installed Pods"
+    }
+  },
+  "stageOrder": [
+    "inventory"
+  ],
+  "stages": {
+    "inventory": {
+      "panes": [
+        "inventory"
+      ],
+      "verbs": [],
+      "word": "Inventory"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "inventory",
+    "field": "pod",
+    "keyKind": "name",
+    "noun": "Pod",
+    "pane": "inventory",
+    "roster": "inventory",
+    "show": {
+      "runtime": true
+    }
+  },
+  "verbs": {
+    "activation": {
+      "caller": "human",
+      "does": "plugin.update",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Change activation",
+      "review": "shown"
+    },
+    "install": {
+      "caller": "human",
+      "does": "pod.import",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "archivePath": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "archivePath"
+        ],
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Install Pod archive",
+      "review": "shown"
+    },
+    "select": {
+      "effect": "query",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "pod": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pod"
+        ],
+        "type": "object"
+      },
+      "kind": "page",
+      "label": "Select Pod",
+      "review": "none"
+    },
+    "trust": {
+      "caller": "human",
+      "does": "plugins.routeTrust",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "fingerprint": {
+            "pattern": "^pod-bytes:[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "trusted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "fingerprint",
+          "trusted"
+        ],
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Change route trust",
+      "review": "shown"
+    }
+  }
+}

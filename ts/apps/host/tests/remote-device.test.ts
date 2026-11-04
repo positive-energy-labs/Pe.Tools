@@ -11,7 +11,7 @@ import { createServer, request as httpRequest } from "node:http";
 import { once } from "node:events";
 import { Effect, Layer, Deferred } from "effect";
 import { NodeHttpServer } from "@effect/platform-node";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse } from "effect/http";
 import { createDevices, DEVICE_COOKIE } from "../src/remote-device.ts";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -21,7 +21,7 @@ import { hostOwnership } from "../src/host-ownership.ts";
 
 const options: IdentityOptions = {
   port: () => 5180,
-  frontendOrigin: () => undefined,
+  frontendOrigin: undefined,
   share: {
     observe: () => {},
     read: async () => ({
@@ -56,8 +56,10 @@ test("remote listener marks real loopback tunnel requests before the identity mi
   const devices = createDevices();
   const device = devices.claim(devices.pair("browser").code, "Tunnel browser", "ssh");
   const port = () => (server.address() as { port: number }).port;
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
   const listening = once(server, "listening");
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.raceFirst(
       Layer.launch(
@@ -65,6 +67,7 @@ test("remote listener marks real loopback tunnel requests before the identity mi
           Layer.mergeAll(
             requestIdentityLayer({
               ...options,
+              frontendOrigin: Effect.succeed(undefined),
               port,
               devices,
               remoteRequests: requests,
@@ -125,6 +128,7 @@ test("remote listener marks real loopback tunnel requests before the identity mi
   } finally {
     await remoteServer.close();
     server.closeAllConnections();
+    // effect-edge: island, phase 5
     Effect.runSync(Deferred.succeed(latch, undefined));
     await done;
   }

@@ -1,3 +1,5 @@
+import { legacyWork } from "../route/route-discovery";
+import { testSources, testSubject, testFields, testReadings } from "../test-route-subject";
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { StrictMode } from "react";
@@ -12,7 +14,8 @@ import {
   workWriteSchema,
   type RouteGraph,
 } from "@pe/agent-contracts";
-import { peReadings, previousOf } from "#/readings";
+import { peReadings } from "#/readings";
+import { previousOf } from "#/shell/readings-hooks";
 import { acquireWorkJournal } from "#/shell/journal";
 import * as host from "../route/host";
 import { useWorkHandles } from "./use-work-handles";
@@ -24,20 +27,21 @@ import { workVerb } from "./verbs";
 
 test("a Chat head Work write acknowledges the canonical kernel journal", async () => {
   const schema = z.object({ count: z.number().default(0) });
-  const graph: RouteGraph<Record<string, never>, z.output<typeof schema>> = {
+  const graph: RouteGraph<{}, z.output<typeof schema>> = {
+    ...testSubject,
     key: "head-journal",
     address: "head-journal",
     name: "Head journal",
     work: schema,
-    fields: {},
-    readings: {},
+    fields: { ...testFields },
+    readings: { ...testReadings },
     verbs: {},
     panes: { main: { label: "Main", purpose: "Test", draws: [], verbs: [] } },
     stages: { main: { word: "Main", panes: ["main"], verbs: [] } },
     layout: pane("main"),
   };
   const key = bindWork(graph.key, null, crypto.randomUUID());
-  const entries = [{ graph, key }];
+  const entries = [{ work: legacyWork(graph)!, key }];
   const held = acquireWorkJournal(key);
   vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
     if (request.kind === "work")
@@ -88,13 +92,14 @@ test("a head and its route share real host admission, undo, redo and author barr
   const route = `multi-work-${crypto.randomUUID()}`;
   const schema = z.object({ count: z.number().default(0) });
   const spec = { route, title: route, description: route, schema };
-  const graph: RouteGraph<Record<string, never>, z.output<typeof schema>> = {
+  const graph: RouteGraph<{}, z.output<typeof schema>> = {
+    ...testSubject,
     key: route,
     address: route,
     name: route,
     work: schema,
-    fields: {},
-    readings: {},
+    fields: { ...testFields },
+    readings: { ...testReadings },
     verbs: {
       increment: workVerb(
         { label: "increment", input: z.object({}) },
@@ -141,8 +146,8 @@ test("a head and its route share real host admission, undo, redo and author barr
     .spyOn(host, "writeRouteWork")
     .mockImplementation((key, request) => workspace.write(key, route, "human", request));
   const entries = [
-    { graph, key: headKey },
-    { graph, key: otherKey },
+    { work: legacyWork(graph)!, key: headKey },
+    { work: legacyWork(graph)!, key: otherKey },
   ];
   const hook = renderHook(() => useWorkHandles(entries));
   const atom = docAtom(spec, pageKey);
@@ -161,7 +166,7 @@ test("a head and its route share real host admission, undo, redo and author barr
       };
     },
     subscribe: (notify) => appAtomRegistry.subscribe(atom, notify),
-    sources: {},
+    sources: { ...testSources },
     write: host.writeRouteWork,
     subscribeAcceptedDeltas: (key, accept) => workspace.observeAccepted(key, accept),
   });
@@ -210,7 +215,9 @@ test("a head and its route share real host admission, undo, redo and author barr
       ).toBe(true);
     });
     await expect.poll(() => mount.snapshot().work?.doc.count).toBe(10);
-    expect(await mount.restore("undo")).toMatchObject({ ok: false, code: "barrier" });
+    // Pea's edit is an undo step (ADR 0027 rule 12): a person's undo reverts it.
+    expect(await mount.restore("undo")).toMatchObject({ ok: true, press: "pea:pea-edit" });
+    await expect.poll(() => mount.snapshot().work?.doc.count).toBe(4);
     expect(workKey(headKey)).toBe(workKey(pageKey));
   } finally {
     disconnect();

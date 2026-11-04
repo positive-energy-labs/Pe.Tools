@@ -36,8 +36,13 @@ export default defineConfig({
       "**/pe-service-host.ts",
       "**/pe-revit-contract.ts",
     ],
-    jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
+    jsPlugins: [
+      { name: "vite-plus", specifier: "vite-plus/oxlint-plugin" },
+      { name: "pe", specifier: "./scripts/oxlint-effect-edge.js" },
+    ],
     rules: { "vite-plus/prefer-vite-plus-imports": "error" },
+    // ADR 0029 rule 2: every fiber end in product code names its reason on the line.
+    overrides: [{ files: ["apps/**", "packages/**"], rules: { "pe/effect-edge": "error" } }],
     options: { typeAware: true, typeCheck: true },
   },
   test: {

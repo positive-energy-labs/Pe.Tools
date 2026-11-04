@@ -1,6 +1,7 @@
+import * as Atom from "effect/reactivity/Atom";
 // @vitest-environment jsdom
 /** First Send from a standalone tool: one chat, seeded only by the composer, the tool kept. */
-import { useContext } from "react";
+import { useContext, useMemo } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -13,6 +14,9 @@ import {
 } from "@tanstack/react-router";
 import { RegistryContext } from "@effect/atom-react";
 import { appAtomRegistry } from "#/shell/owner";
+import { emptyChatState, type ChatState } from "@pe/agent-contracts/chat-state";
+import { harnessEventSchema } from "@pe/agent-contracts";
+import { useTranscript } from "./use-workbench";
 import { WorkbenchContext } from "./thread-summary";
 import { WorkbenchProvider } from "./view";
 import { useRouteTabs } from "../tabs";
@@ -28,8 +32,13 @@ const client = vi.hoisted(() => ({
 }));
 const call = vi.hoisted(() => vi.fn(async (..._: unknown[]) => ({})));
 vi.mock("./harness-client", () => ({ harnessClient: () => client, notFound: () => false }));
+let publishChat: (chat: ChatState) => void;
 vi.mock("./thread-stream", () => ({
-  useThreadStream: () => ({ chat: {}, bodyAtom: null, pending: false, error: undefined }),
+  useThreadStream: () => {
+    const chatAtom = useMemo(() => Atom.make(emptyChatState()), []);
+    publishChat = (chat) => appAtomRegistry.set(chatAtom, chat);
+    return { chatAtom, bodyAtom: null, pending: false, error: undefined };
+  },
   chatLoading: () => false,
 }));
 vi.mock("@pe/agent-contracts/chat-state", async (actual) => ({
@@ -37,18 +46,26 @@ vi.mock("@pe/agent-contracts/chat-state", async (actual) => ({
   selectRunStatus: () => "idle",
   selectTurnFailure: () => undefined,
 }));
-vi.mock("./providers", () => ({
-  EMPTY_HEAD: { traits: {} },
-  isReady: () => true,
-  useProviders: () => ({ list: [{ id: "p", name: "P", readiness: { state: "ready" } }] }),
-}));
+vi.mock("./providers", () => {
+  const providers = { list: [{ id: "p", name: "P", readiness: { state: "ready" } }] };
+  return {
+    EMPTY_HEAD: { traits: {} },
+    isReady: () => true,
+    useProviders: () => providers,
+  };
+});
 // No composer document: the machine has none to offer.
 vi.mock("#/machine/use-machine", () => ({ useMachineSlice: () => null }));
-vi.mock("#/readings", () => ({
-  previousOf: () => undefined,
-  useHostStatusSlice: (select: (status: unknown) => unknown) => select({ state: "pending" }),
-  useHostEvents: () => {},
-}));
+vi.mock("#/readings", () => ({ useHostEvents: () => {} }));
+vi.mock("#/shell/readings-hooks", () => {
+  const host = { known: true };
+  return {
+    previousOf: () => undefined,
+    useReadingSlice: (_request: unknown, select: (reading: unknown) => unknown) =>
+      select({ state: "absent" }),
+    useHostStatusSlice: () => host,
+  };
+});
 vi.mock("#/navigation/surface-host", () => ({ useSurfaceHost: () => ({ surface: "web" }) }));
 vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 
@@ -137,4 +154,65 @@ test("first Send from /ducts?target=… creates one chat with no targets and kee
   expect(router.state.location.pathname).toBe("/ducts");
   expect(router.state.location.search.target).toBe("C:/Models/Office.rvt");
   expect((screen.getByLabelText("draft") as HTMLInputElement).value).toBe("unsent words");
+});
+
+test("a streamed chat chunk updates the transcript without rendering a route pane", async () => {
+  let paneRenders = 0;
+  let transcriptRenders = 0;
+  let composerRenders = 0;
+  function ComposerConsumer() {
+    const head = useTranscript(({ providerId, promptCapabilities }) => ({
+      providerId,
+      promptCapabilities,
+    }));
+    composerRenders++;
+    return <span>{head.providerId}</span>;
+  }
+  function PaneConsumer() {
+    const context = useContext(WorkbenchContext)!;
+    paneRenders++;
+    return <p>pane {context.currentThreadId}</p>;
+  }
+  function TranscriptConsumer() {
+    const chat = useTranscript((state) => state);
+    transcriptRenders++;
+    return <output>events {chat.events.length}</output>;
+  }
+  const root = createRootRoute({
+    component: () => (
+      <WorkbenchProvider>
+        <PaneConsumer />
+        <TranscriptConsumer />
+        <ComposerConsumer />
+        <Outlet />
+      </WorkbenchProvider>
+    ),
+  });
+  const router = createRouter({
+    routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: "/" })]),
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
+  await router.load();
+  render(
+    <RegistryContext.Provider value={appAtomRegistry}>
+      <RouterProvider router={router} />
+    </RegistryContext.Provider>,
+  );
+  await screen.findByText("events 0");
+  await act(async () => {});
+  const paneBefore = paneRenders;
+  const transcriptBefore = transcriptRenders;
+  const composerBefore = composerRenders;
+  const chunk = harnessEventSchema.parse({
+    kind: "update",
+    turnId: "turn-1",
+    seq: 1,
+    at: "2026-11-03T00:00:00Z",
+    update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "hello" } },
+  });
+  await act(async () => publishChat({ ...emptyChatState(), events: [chunk] }));
+  expect(screen.getByText("events 1")).toBeTruthy();
+  expect(transcriptRenders).toBeGreaterThan(transcriptBefore);
+  expect(paneRenders).toBe(paneBefore);
+  expect(composerRenders).toBe(composerBefore);
 });

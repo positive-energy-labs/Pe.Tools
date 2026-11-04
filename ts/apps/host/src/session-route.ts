@@ -8,7 +8,7 @@ import {
   type SdkReading,
   type Machine,
 } from "@pe/agent-contracts";
-import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 import { join } from "node:path";
 import {
   docListArgv,
@@ -172,6 +172,7 @@ export function observeSdkReading(
         return readHoldings(readMachine(), request);
       }
       const args = sdkReadingArgs(request);
+      // effect-edge: island, phase 5
       const result = await Effect.runPromise(
         executeSessionCli(args, runPeRevitCli, STATUS_TIMEOUT_MS, {
           action: request.read,

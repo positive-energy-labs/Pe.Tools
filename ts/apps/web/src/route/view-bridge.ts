@@ -149,7 +149,7 @@ function useRouteViewBridge<R extends RouteViewRoute>({
       const owner = lifetime.current;
       if (!owner) return Promise.resolve();
       const next = publishing.current
-        .catch(() => {})
+        .catch((error) => { console.error("view-bridge: asynchronous operation failed", error); })
         .then(async () => {
           if (lifetime.current !== owner || !routeCurrent() || current.current !== value) return;
           const accepted = (await peClient.call("view.publish", {
@@ -185,7 +185,7 @@ function useRouteViewBridge<R extends RouteViewRoute>({
       published.current = null;
       // Release only a lease the host really took; a view that never published has nothing to remove.
       publishing.current = publishing.current
-        .catch(() => {})
+        .catch((error) => { console.error("view-bridge: asynchronous operation failed", error); })
         .then(async () => {
           if (lifetime.current || !leased.current) return;
           leased.current = false;
@@ -202,9 +202,9 @@ function useRouteViewBridge<R extends RouteViewRoute>({
   }, [hasView]);
   useEffect(() => {
     if (!view) return;
-    void publish(view).catch(() => {});
+    void publish(view).catch((error) => { console.error("view-bridge: asynchronous operation failed", error); });
     const timer = setInterval(() => {
-      if (current.current) void publish(current.current).catch(() => {});
+      if (current.current) void publish(current.current).catch((error) => { console.error("view-bridge: asynchronous operation failed", error); });
     }, 5_000);
     return () => clearInterval(timer);
   }, [view, publish]);
@@ -269,7 +269,7 @@ function useRouteViewBridge<R extends RouteViewRoute>({
       if (event.type !== "route-view-intent") return;
       // The host can deliver an intent before the publication's HTTP response reaches this
       // browser. Join that receipt first, then apply the unchanged instance/revision/context fences.
-      void publishing.current.catch(() => {}).then(() => applyIntent(event));
+      void publishing.current.catch((error) => { console.error("view-bridge: asynchronous operation failed", error); }).then(() => applyIntent(event));
     },
     [applyIntent],
   );
@@ -312,7 +312,7 @@ function useRouteViewBridge<R extends RouteViewRoute>({
           });
         if (!canceled) setIntent(null);
       })
-      .catch(() => {});
+      .catch((error) => { console.error("view-bridge: asynchronous operation failed", error); });
     return () => {
       canceled = true;
     };

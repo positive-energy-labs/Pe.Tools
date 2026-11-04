@@ -1,7 +1,7 @@
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
 import { useGraphRoute, type GraphMount, type RouteAdapters } from "#/shell/mount";
-import type { InvocationResult } from "#/shell/verbs";
-import { openGraph, type OpenPageState } from "./graph";
+import type { VerbCompletion } from "#/shell/verbs";
+import { openControls as openGraph, type OpenPageState } from "./graph";
 import { openSources } from "./sources";
 export type OpenOwner = GraphMount<OpenPageState, unknown>;
 export const OpenOwnerContext = createContext<OpenOwner | null>(null);
@@ -44,9 +44,9 @@ export function useOpenOwner() {
   useSyncExternalStore(owner.subscribe, owner.version, owner.version);
   return owner;
 }
-export function outcomeOf(result: InvocationResult) {
+export function outcomeOf(result: VerbCompletion) {
   if (result.state === "done" && "receipt" in result)
-    return { kind: "receipt" as const, label: `${result.receipt.key} ${result.receipt.state}` };
+    return { kind: "receipt" as const, label: `${result.receipt.key} ${result.outcome.state}` };
   if ("refusal" in result) return { kind: "refused" as const, label: result.refusal.message };
-  return { kind: "advisory" as const, label: result.state };
+  return { kind: "advisory" as const, label: result.outcome.state };
 }

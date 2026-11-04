@@ -1,15 +1,6 @@
-/**
- * The inputs resolver (ducts LEDGER 2026-10-29, "inputs split by nature"): every value the engine
- * prices from, resolved once from its layers into one `DuctsInputs` with a closed source. Pure:
- * the host loads the layers (Work's staged edits, the model's `_PE_DuctLosses` store as the
- * snapshot carries it, the firm file, the catalog tables) and the engine reads the result and
- * nothing else. Protocol (which parameter a slot names) is consumed here, at the boundary, and
- * never reaches the engine. Design values: typed, else catalog, else the Revit parameter, else the
- * firm default. Rulings: typed, else stored, else suggested. Criteria: project, else stored, else
- * firm, each side of a sided criterion on its own.
- */
+import { resolveValue, type ValueLayers, type ValueSource } from "@pe/agent-contracts";
+/** Duct-specific acquisition feeds the shared Work resolver; observed parameters and catalogs belong to the model layer. */
 import type {
-  DuctInputSource,
   DuctUnitKind,
   DuctsCriteriaLayer,
   DuctsCriteriaValues,
@@ -61,14 +52,14 @@ export interface StoreLayer {
 
 export interface InputLayers {
   snapshot: SheetSnapshot;
+  run?: WorkLayer | null;
   work?: WorkLayer | null;
   store?: StoreLayer | null;
   firm: DuctsFirm;
   catalogs?: Catalogs;
+  versions?: Partial<Record<ValueSource, string | number>>;
 }
 
-const r = <T>(value: T, source: DuctInputSource, ref?: string): Resolved<T> =>
-  ref == null ? { value, source } : { value, source, ref };
 const factOf = (n: Node, key: string) => n.facts.find((f) => f.key === key)?.value ?? null;
 const positive = (v: number | null | undefined) => (v != null && v > 0 ? v : null);
 
@@ -145,20 +136,40 @@ export function resolveCriteria(
   work: WorkLayer | null | undefined,
   store: StoreLayer | null | undefined,
   firm: DuctsFirm,
+  run?: WorkLayer | null,
+  versions?: InputLayers["versions"],
 ): DuctsInputs["criteria"] {
   type Scalar = Exclude<keyof DuctsCriteriaValues, Sided>;
   type Sided = "velocityLimitFpm" | "allowanceInWg";
-  const layered = <T>(typed: T | undefined, stored: T | undefined, base: T): Resolved<T> =>
-    typed !== undefined
-      ? r(typed, "project")
-      : stored !== undefined
-        ? r(stored, "stored")
-        : r(base, "firm", firm.version);
+  const layered = <T>(
+    typed: T | undefined,
+    stored: T | undefined,
+    base: T,
+    units: string | null,
+    immediate?: T,
+  ): Resolved<T> => {
+    const result = resolveValue(
+      {
+        run: { value: immediate },
+        Work: { value: typed },
+        model: { value: stored },
+        firm: { value: base, version: firm.version },
+      },
+      units,
+    );
+    if (result.status !== "valid") throw new Error(`Invalid ducts criterion from ${result.source}`);
+    return {
+      ...result,
+      version: result.version ?? versions?.[result.source as ValueSource] ?? null,
+    } as Resolved<T>;
+  };
   const criterion = <K extends Scalar>(key: K): Resolved<DuctsCriteriaValues[K]> =>
     layered(
       work?.criteria?.[key] as DuctsCriteriaValues[K] | undefined,
       store?.criteria?.[key] as DuctsCriteriaValues[K] | undefined,
       firm.criteria[key],
+      key === "splitPolicy" ? null : key === "terminalDropInWg" ? "in-wg" : "in",
+      run?.criteria?.[key] as DuctsCriteriaValues[K] | undefined,
     );
   // Each side resolves on its own: typing return keeps supply's source (ducts LEDGER, sided criteria).
   const sided = (key: Sided) => ({
@@ -166,11 +177,15 @@ export function resolveCriteria(
       work?.criteria?.[key]?.supply,
       store?.criteria?.[key]?.supply,
       firm.criteria[key].supply,
+      key === "velocityLimitFpm" ? "fpm" : "in-wg",
+      run?.criteria?.[key]?.supply,
     ),
     return: layered(
       work?.criteria?.[key]?.return,
       store?.criteria?.[key]?.return,
       firm.criteria[key].return,
+      key === "velocityLimitFpm" ? "fpm" : "in-wg",
+      run?.criteria?.[key]?.return,
     ),
   });
   return {
@@ -186,11 +201,22 @@ export function resolveCriteria(
 export function resolveInputs(layers: InputLayers): DuctsInputs {
   const { snapshot, firm, catalogs } = layers;
   const work = layers.work ?? {};
+  const run = layers.run ?? {};
+  const pick = <T>(values: ValueLayers<T>, units: string | null = null): Resolved<T | null> =>
+    resolveValue(
+      Object.fromEntries(
+        Object.entries(values).map(([source, cell]) => [
+          source,
+          { ...cell, version: cell.version ?? layers.versions?.[source as ValueSource] },
+        ]),
+      ),
+      units,
+      (value) => typeof value !== "number" || (Number.isFinite(value) && value >= 0),
+    );
   const store = layers.store ?? {};
   const slots: Partial<NonNullable<SheetSnapshot["slots"]>> = snapshot.slots ?? {};
 
-  const criteria = resolveCriteria(work, store, firm);
-  const terminalDropDefault = criteria.terminalDropInWg;
+  const criteria = resolveCriteria(work, store, firm, run, layers.versions);
 
   const flowSlot = slots.terminalFlow ?? "terminalFlow";
   const terminals: DuctsInputs["terminals"] = {};
@@ -203,14 +229,14 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       const typed = work.flows?.[id]?.cfm;
       const stored = store.terminalFlows?.[id]?.cfm;
       const revit = slotFlowOf(n, flowSlot).cfm;
-      const cfm =
-        typed != null
-          ? r(typed, "typed")
-          : stored != null
-            ? r(stored, "stored")
-            : revit != null && revit > 0
-              ? r(revit, "revit", flowSlot)
-              : r(null, "none", flowSlot);
+      const cfm = pick(
+        {
+          run: { value: run.flows?.[id]?.cfm },
+          Work: { value: typed },
+          model: { value: stored ?? positive(revit), ref: flowSlot },
+        },
+        "cfm",
+      );
       const typedDrop = work.terminalDrops?.[id]?.inWg;
       const storedDrop = store.terminals?.[id]?.inWg;
       const catalog =
@@ -218,53 +244,92 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
           ? catalogLoss(n, cfm.value, catalogs, work.catalogs ?? {})
           : null;
       const parameter = positive(n.terminalDrop?.catalogDropInWg);
-      const drop =
-        typedDrop != null
-          ? r(typedDrop, "typed")
-          : storedDrop != null
-            ? r(storedDrop, "stored")
-            : catalog && catalog.dp != null
-              ? r(catalog.dp, "catalog", catalog.table)
-              : parameter != null
-                ? r(parameter, "revit", slots.terminalDrop ?? "terminalDrop")
-                : r(terminalDropDefault.value, terminalDropDefault.source, terminalDropDefault.ref);
+      const drop = pick(
+        {
+          run: { value: run.terminalDrops?.[id]?.inWg ?? run.criteria?.terminalDropInWg },
+          Work: { value: typedDrop ?? work.criteria?.terminalDropInWg },
+          model: {
+            value: storedDrop ?? store.criteria?.terminalDropInWg ?? catalog?.dp ?? parameter,
+            ref: catalog?.table,
+          },
+          firm: { value: firm.criteria.terminalDropInWg, version: firm.version },
+        },
+        "in-wg",
+      );
       terminals[id] = { cfm, drop };
     } else if (n.kind === "equipment") {
       const kindKey = catalogLinkKey(n.family, n.type);
-      const kind =
-        work.kinds?.[kindKey]?.kind != null
-          ? r(work.kinds[kindKey]!.kind, "typed")
-          : isKind(store.kinds?.[kindKey]?.kind)
-            ? r(store.kinds![kindKey]!.kind as DuctUnitKind, "stored")
-            : (({ kind, ref }) => r(kind, "suggested", ref))(suggestKind(n));
-      const role =
-        work.roles?.[id]?.role != null
-          ? r(work.roles[id]!.role, "typed")
-          : isRole(store.roles?.[id]?.role)
-            ? r(store.roles![id]!.role as "fan" | "passive", "stored")
-            : r(suggestRole(n, kind.value), "suggested", "name");
+      const suggestion = suggestKind(n);
+      const kind = pick<DuctUnitKind>({
+        run: { value: run.kinds?.[kindKey]?.kind },
+        Work: { value: work.kinds?.[kindKey]?.kind },
+        model: {
+          value: isKind(store.kinds?.[kindKey]?.kind)
+            ? (store.kinds![kindKey]!.kind as DuctUnitKind)
+            : null,
+        },
+        default: { value: suggestion.kind, ref: suggestion.ref },
+      }) as Resolved<DuctUnitKind>;
+      const role = pick<"fan" | "passive">({
+        run: { value: run.roles?.[id]?.role },
+        Work: { value: work.roles?.[id]?.role },
+        model: {
+          value: isRole(store.roles?.[id]?.role)
+            ? (store.roles![id]!.role as "fan" | "passive")
+            : null,
+        },
+        default: { value: suggestRole(n, kind.value), ref: "name" },
+      }) as Resolved<"fan" | "passive">;
+      // Revit categorizes inline heaters and silencers as equipment. They need a part drop,
+      // not fan sizing; recognized unit kinds and explicit fan rulings retain their unit inputs.
+      if (kind.value === "other" && role.value === "passive" && n.connectors.length === 2) {
+        components[id] = {
+          drop: pick(
+            {
+              run: { value: run.componentDrops?.[id]?.inWg },
+              Work: {
+                value:
+                  work.componentDrops?.[id]?.inWg ??
+                  (n.family ? work.assumptions?.[`component-drop:${n.family}`]?.inWg : undefined),
+              },
+              model: { value: positive(factOf(n, "pressureDrop")), ref: slots.componentDrop },
+            },
+            "in-wg",
+          ),
+        };
+        continue;
+      }
       const typedCfm = work.equipmentFlows?.[id]?.cfm;
       const storedCfm = store.equipmentFlows?.[id]?.cfm;
       const revitCfm = positive(factOf(n, "fanFlow"));
-      const cfm =
-        typedCfm != null
-          ? r(typedCfm, "typed")
-          : storedCfm != null
-            ? r(storedCfm, "stored")
-            : revitCfm != null
-              ? r(revitCfm, "revit", slots.fanFlow ?? "fanFlow")
-              : r(null, "none", slots.fanFlow ?? "fanFlow");
-      const typedEsp = work.esp?.[id]?.inWg;
-      const revitEsp = positive(factOf(n, "externalStatic"));
-      const esp =
-        typedEsp != null
-          ? r(typedEsp, "typed")
-          : revitEsp != null
-            ? r(revitEsp, "revit", slots.fanStatic ?? "fanStatic")
-            : r(null, "none", slots.fanStatic ?? "fanStatic");
+      const cfm = pick(
+        {
+          run: { value: run.equipmentFlows?.[id]?.cfm },
+          Work: { value: typedCfm },
+          model: { value: storedCfm ?? revitCfm, ref: slots.fanFlow ?? "fanFlow" },
+        },
+        "cfm",
+      );
+      const esp = pick(
+        {
+          run: { value: run.esp?.[id]?.inWg },
+          Work: { value: work.esp?.[id]?.inWg },
+          model: {
+            value: positive(factOf(n, "externalStatic")),
+            ref: slots.fanStatic ?? "fanStatic",
+          },
+        },
+        "in-wg",
+      );
       units[id] = { kind, role, cfm, esp };
       const typedDrop = work.componentDrops?.[id]?.inWg;
-      if (typedDrop != null) components[id] = { drop: r(typedDrop, "typed") };
+      if (typedDrop != null || run.componentDrops?.[id])
+        components[id] = {
+          drop: pick(
+            { run: { value: run.componentDrops?.[id]?.inWg }, Work: { value: typedDrop } },
+            "in-wg",
+          ),
+        };
     } else {
       // Accessories, fittings and caps: a drop only where something states one, or where a stated
       // one is the family's placeholder (recorded as none, so the census can say why).
@@ -272,30 +337,64 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       const family = n.family ? work.assumptions?.[`component-drop:${n.family}`]?.inWg : undefined;
       const stated = n.kind === "accessory" ? positive(factOf(n, "pressureDrop")) : null;
       const placeholder = n.family && stated != null ? placeholders.get(n.family) : undefined;
-      if (typed != null) components[id] = { drop: r(typed, "typed") };
-      else if (family != null) components[id] = { drop: r(family, "typed", `family ${n.family}`) };
-      else if (stated != null && !placeholder)
-        components[id] = { drop: r(stated, "revit", slots.componentDrop ?? "Pressure Drop") };
-      else if (placeholder)
+      if (
+        typed != null ||
+        family != null ||
+        stated != null ||
+        placeholder ||
+        run.componentDrops?.[id]
+      ) {
+        const resolved = pick(
+          {
+            run: { value: run.componentDrops?.[id]?.inWg },
+            Work: { value: typed ?? family },
+            model: {
+              value: placeholder ? null : stated,
+              ref: slots.componentDrop ?? "Pressure Drop",
+            },
+          },
+          "in-wg",
+        );
+        // A missing value still needs the reason this model parameter was demoted.
         components[id] = {
-          drop: r(null, "none", `family placeholder ${placeholder.inWg} on ${placeholder.count}`),
+          drop:
+            resolved.status === "missing" && placeholder
+              ? {
+                  ...resolved,
+                  ref: `family placeholder ${placeholder.inWg} on ${placeholder.count}`,
+                }
+              : resolved,
         };
+      }
     }
   }
 
   // A duct priced by hand: a typed drop replaces its friction (segments carry no other drop source).
   for (const seg of snapshot.segments) {
     const typed = work.componentDrops?.[String(seg.id)]?.inWg;
-    if (typed != null) components[String(seg.id)] = { drop: r(typed, "typed") };
+    if (typed != null || run.componentDrops?.[String(seg.id)])
+      components[String(seg.id)] = {
+        drop: pick(
+          { run: { value: run.componentDrops?.[String(seg.id)]?.inWg }, Work: { value: typed } },
+          "in-wg",
+        ),
+      };
   }
 
   const verdictAt = (key: string) =>
-    work.assumptions?.[key]?.kind === "verdict"
-      ? work.assumptions[key]!.verdict
-      : store.verdicts?.[key]?.verdict;
+    resolveValue({
+      run: {
+        value: run.assumptions?.[key]?.kind === "verdict" ? run.assumptions[key]!.verdict : null,
+      },
+      Work: {
+        value: work.assumptions?.[key]?.kind === "verdict" ? work.assumptions[key]!.verdict : null,
+      },
+      model: { value: store.verdicts?.[key]?.verdict },
+    }).value;
   const joins: DuctsInputs["rulings"]["joins"] = [];
   const ends: DuctsInputs["rulings"]["ends"] = [];
   const keys = new Set([
+    ...Object.keys(run.assumptions ?? {}),
     ...Object.keys(work.assumptions ?? {}),
     ...Object.keys(store.verdicts ?? {}),
   ]);
@@ -317,16 +416,45 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
   }
 
   const tables: DuctsInputs["tables"] = {};
-  for (const [key, cell] of Object.entries(store.rules ?? {}))
-    if (cell.table) tables[key] = r(cell.table, "stored");
-  for (const [key, cell] of Object.entries(work.rules ?? {})) tables[key] = r(cell.table, "typed");
+  for (const key of new Set([
+    ...Object.keys(run.rules ?? {}),
+    ...Object.keys(work.rules ?? {}),
+    ...Object.keys(store.rules ?? {}),
+  ])) {
+    const value = pick({
+      run: { value: run.rules?.[key]?.table },
+      Work: { value: work.rules?.[key]?.table },
+      model: { value: store.rules?.[key]?.table },
+    });
+    if (value.value != null) tables[key] = value as Resolved<string>;
+  }
   const assignments: DuctsInputs["assignments"] = {};
-  for (const [family, cell] of Object.entries(work.ruleAssignments ?? {}))
-    assignments[family] = r(cell.rule, "typed");
+  for (const family of new Set([
+    ...Object.keys(run.ruleAssignments ?? {}),
+    ...Object.keys(work.ruleAssignments ?? {}),
+  ])) {
+    const value = pick({
+      run: { value: run.ruleAssignments?.[family]?.rule },
+      Work: { value: work.ruleAssignments?.[family]?.rule },
+    });
+    if (value.value != null) assignments[family] = value as Resolved<string>;
+  }
   const fittingDrops: DuctsInputs["fittingDrops"] = {};
-  for (const [key, cell] of Object.entries(work.assumptions ?? {}))
-    if (key.startsWith(`${COMPONENT_DROP}${PROPOSED}`) && cell.inWg != null)
-      fittingDrops[key.slice(COMPONENT_DROP.length)] = r(cell.inWg, "typed");
+  for (const key of new Set([
+    ...Object.keys(run.assumptions ?? {}),
+    ...Object.keys(work.assumptions ?? {}),
+  ])) {
+    if (!key.startsWith(`${COMPONENT_DROP}${PROPOSED}`)) continue;
+    const value = pick(
+      {
+        run: { value: run.assumptions?.[key]?.inWg },
+        Work: { value: work.assumptions?.[key]?.inWg },
+      },
+      "in-wg",
+    );
+    if (value.value != null)
+      fittingDrops[key.slice(COMPONENT_DROP.length)] = value as Resolved<number>;
+  }
 
   return {
     terminals,

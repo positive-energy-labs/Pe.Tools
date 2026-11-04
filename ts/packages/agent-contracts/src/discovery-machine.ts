@@ -27,49 +27,74 @@ export function discoveryMachine(machine: Machine | DiscoveryMachine): Discovery
     ...machine,
     revit: {
       ...machine.revit,
-      sessions:
-        machine.revit.sessions?.map((session) => ({
-          ...session,
-          holdings:
-            session.holdings?.map((document): DiscoveryHoldings => {
-              if ("detail" in document) return document;
-              const holdings = document.holdings;
-              const { elements, worksets, ...facts } = holdings;
-              return {
-                openId: document.openId,
-                title: document.title,
-                detail:
-                  "process" in session.row &&
-                  session.row.process &&
-                  session.row.execution?.allowed === true &&
-                  !session.holdingsLeg.error &&
-                  !!session.holdingsLeg.observedAtUtc
-                    ? {
-                        state: "available",
-                        request: {
-                          read: "holdings",
-                          section: "elements",
-                          session: { pid: session.row.process.pid },
-                          processStartUtc: session.row.process.processStartUtc,
-                          openId: document.openId,
-                          limit: 50,
-                        },
-                      }
-                    : {
-                        state: "unavailable",
-                        reason:
-                          session.holdingsLeg.error ??
-                          session.row.execution?.detail ??
-                          "Holdings detail has not been observed in an eligible process",
-                      },
-                holdings: {
-                  ...facts,
-                  elementCount: elements.length,
-                  worksetCount: worksets.length,
-                },
-              };
-            }) ?? null,
-        })) ?? null,
+      sessions: machine.revit.sessions?.map((session) => boundedSession(session, 65536)) ?? null,
     },
+  };
+}
+
+function boundedSession(
+  session:
+    | NonNullable<Machine["revit"]["sessions"]>[number]
+    | NonNullable<DiscoveryMachine["revit"]["sessions"]>[number],
+  budget: number,
+): NonNullable<DiscoveryMachine["revit"]["sessions"]>[number] {
+  try {
+    const summary = {
+      ...session,
+      holdings:
+        session.holdings?.map((document): DiscoveryHoldings => {
+          if ("detail" in document) return document;
+          const holdings = document.holdings;
+          const { elements, worksets, ...facts } = holdings;
+          return {
+            openId: document.openId,
+            title: document.title,
+            detail:
+              "process" in session.row &&
+              session.row.process &&
+              session.row.execution?.allowed === true &&
+              !session.holdingsLeg.error &&
+              !!session.holdingsLeg.observedAtUtc
+                ? {
+                    state: "available",
+                    request: {
+                      read: "holdings",
+                      section: "elements",
+                      session: { pid: session.row.process.pid },
+                      processStartUtc: session.row.process.processStartUtc,
+                      openId: document.openId,
+                      limit: 50,
+                    },
+                  }
+                : {
+                    state: "unavailable",
+                    reason:
+                      session.holdingsLeg.error ??
+                      session.row.execution?.detail ??
+                      "Holdings detail has not been observed in an eligible process",
+                  },
+            holdings: {
+              ...facts,
+              elementCount: elements.length,
+              worksetCount: worksets.length,
+            },
+          };
+        }) ?? null,
+    };
+    if (new TextEncoder().encode(JSON.stringify(summary)).byteLength <= budget) return summary;
+  } catch (error) { console.warn("ts/packages/agent-contracts/src/discovery-machine.ts: fallback after failure", error);
+    // A bad SDK entry must not take every other session out of discovery.
+  }
+  const label =
+    "id" in session.row
+      ? session.row.id
+      : "process" in session.row && session.row.process
+        ? `pid ${session.row.process.pid}`
+        : session.row.case;
+  const error = `session ${label}: holdings too large or cannot be serialized. Choose another session, or read holdings for one document with a smaller page limit.`;
+  return {
+    ...session,
+    holdings: null,
+    holdingsLeg: { ...session.holdingsLeg, error },
   };
 }

@@ -5,6 +5,7 @@ import { RevitBridgeLive, subscribeReceiptProducers } from "../src/bridge.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 
 test("receipt.producer is admitted to the host-only tap and never the generic UI stream", () =>
+  // effect-edge: island, phase 5
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {

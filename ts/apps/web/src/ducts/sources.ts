@@ -1,15 +1,14 @@
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 
 import {
+  neutralFansWork,
   stagedDucts,
-  ductsRosterResponseSchema,
-  ductsSheetResponseSchema,
-  type DuctsRouteDocument,
   type DuctsSheetRequest,
   type DuctsSheetOverview,
 } from "@pe/agent-contracts";
 
-import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
+import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 
@@ -17,65 +16,64 @@ import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import { ductsBodySource, jsonSource, requestJson } from "#/shell/readings-api";
+import { callCompose, composeSource, ductsBodySource } from "#/shell/readings-api";
 import { acquireSource } from "#/shell/readings-use";
 
-import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
-
-import type { ReadingWorkerPort } from "#/shell/readings-worker";
-import { workerSource } from "#/shell/readings-worker";
+import type { ReadingContext, DeriveSource, UseSource } from "#/shell/readings";
 
 import { mergeSnapshots, nextSystemsRead, type NetworkSnapshot } from "./system-reads";
 
-import { applyPricingDelta, type PricingDelta } from "./pricing-delta";
-
-import type { PricingInput, PricingResult, PricingPayload } from "./pricing-job";
-
-import type { DuctsPage } from "./graph";
+import type { entries } from "./neutral";
+type ReadArgs = Partial<
+  z.output<(typeof entries)["ducts.networks"]["input"]> &
+    z.output<(typeof entries)["ducts.sheet"]["input"]> &
+    z.output<(typeof entries)["ducts.sheet-snapshot"]["input"]>
+>;
+// Kernel gap: legacy ReadingContext erases catalog input types before sources run; type that single boundary after U1.
+const args = (ctx: ReadingContext) => ctx.args as ReadArgs;
 
 import { blockerElements } from "./sheet/layers";
 
 import { detailOf } from "./sheet/tiers";
 
-import type { Detail, FanPort } from "./sheet/model";
+import { selectedFans, type Detail, type FanPort } from "./sheet/model";
 
 import { EMPTY_SNAPSHOT, sheetSnapshot } from "./sheet/scoped-snapshot";
 
-export type OpenSheet = {
-  overview: DuctsSheetOverview;
+import type { OpenSheet, SheetReading, SnapshotReading } from "./neutral.ts";
 
-  inputs: Detail<"inputs"> | null;
+/** Keep the native capture pin with the domain value; a JSON cache hash is not a native version. */
+const captured = (source: UseSource<DuctSnapshot | null>): UseSource<SnapshotReading | null> => ({
+  ...source,
+  open(ctx, deliver) {
+    return source.open(ctx, (frame) => {
+      if ((frame.kind === "complete" || frame.kind === "part") && frame.value)
+        deliver({ ...frame, value: { ...frame.value, sourceVersion: frame.sourceVersion } });
+      else deliver(frame);
+    });
+  },
+});
 
-  elements: Detail<"elements"> | null;
-
-  legs: Detail<"legs"> | null;
-
-  worstLegs: Detail<"legs">[];
-
-  worksheet: Detail<"worksheet"> | null;
-};
-
-export type SheetReading = {
-  open: OpenSheet | null;
-  rows: FanPort[];
-  progress: { done: number; total: number; mark: string; stopped: boolean } | null;
-};
+function sheetCapture(source: UseSource<DuctSnapshot | null>): UseSource<SnapshotReading | { kind: "absent" }> {
+  const native = captured(source);
+  return { ...native, open(ctx, deliver) {
+    return native.open(ctx, frame => {
+      if (frame.kind === "complete" || frame.kind === "part")
+        deliver({ ...frame, value: frame.value ?? { kind: "absent" } });
+      else if (frame.kind === "failure" || frame.kind === "pending" || frame.kind === "stale" || frame.kind === "log") deliver(frame);
+    });
+  } };
+}
 
 const target = (ctx: ReadingContext) => (ctx.target.kind === "document" ? ctx.target.ref : null);
 
-const page = (ctx: ReadingContext) => ctx.page as DuctsPage;
-
-const slots = (ctx: { work: unknown }) => {
-  const edit = stagedDucts(ctx.work as DuctsRouteDocument | null);
+const slots = (ctx: ReadingContext) => {
+  const edit = stagedDucts(args(ctx).work ?? null, args(ctx).fanWork ?? neutralFansWork);
 
   return { slots: edit.parameters, labelParameter: edit.labelParameter ?? undefined };
 };
 
-const saved: string | undefined = import.meta.env.DEV
-  ? import.meta.env.VITE_DUCTS_FIXTURE
-  : undefined;
-
-const snapshotSchema = z.custom<DuctSnapshot>();
+const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
 
 function networks(): UseSource<NetworkSnapshot | null> {
   return {
@@ -88,21 +86,16 @@ function networks(): UseSource<NetworkSnapshot | null> {
 
       if (!ref) return deliver({ kind: "complete", value: null, revision: 0 });
 
-      if (saved)
-        return jsonSource({
-          request: () => ({ path: saved }),
-          schema: snapshotSchema.nullable(),
-          absent: null,
-        }).open(ctx, deliver);
+      const roster = args(ctx).roster ?? null;
 
-      const roster = ctx.inputs.roster?.value as DuctSnapshot | null;
-
-      const names = page(ctx).system;
+      const authored = args(ctx).system ?? [];
+      const names =
+        authored === "all" ? (roster?.systems ?? []).map((system) => system.name) : authored;
 
       const wanted = [
         ...new Set(
           (roster?.systems ?? [])
-            .filter((system) => page(ctx).readAll || names.includes(system.name))
+            .filter((system) => names.includes(system.name))
             .map((system) => system.id),
         ),
       ];
@@ -159,6 +152,7 @@ function networks(): UseSource<NetworkSnapshot | null> {
             value: {
               ...mergeSnapshots(parts.map((part) => part.snapshot))!,
               systemReads: { completed: [...completed], missing: [...missing] },
+              sourceVersion: parts.map((part) => part.version).join("+"),
             },
             revision: ++serial,
             sourceVersion: parts.map((part) => part.version).join("+"),
@@ -177,21 +171,16 @@ async function sheetDetail<K extends "inputs" | "elements" | "legs" | "worksheet
   kind: K,
   pathId?: string,
 ): Promise<Detail<K>> {
-  const result = await requestJson(
-    {
-      path: "/pe/ducts/sheet",
-      body: {
-        target: overview.target,
-        mode: "fan",
-        unitId: overview.fan!.unitId,
-        portIndex: overview.fan!.portIndex,
-        basis: overview.basis,
-        detail: kind === "legs" ? { kind, pathId } : { kind },
-      },
+  const result = await callCompose(ctx, "ducts.sheet", {
+    body: {
+      target: overview.target,
+      mode: "fan",
+      unitId: overview.fan!.unitId,
+      portIndex: overview.fan!.portIndex,
+      basis: overview.basis,
+      detail: kind === "legs" ? { kind, pathId: pathId! } : { kind },
     },
-    ductsSheetResponseSchema,
-    ctx.signal,
-  );
+  });
 
   if (result.kind !== kind || result.basis !== overview.basis)
     throw Error("Sheet detail does not match its overview");
@@ -203,31 +192,29 @@ function sheets(): UseSource<SheetReading> {
   return {
     kind: "use",
     dirties: ["snapshot"],
-    key: (scope) => scope.workRevision,
 
     async open(ctx, deliver) {
       const ref = target(ctx);
 
-      const fans = ctx.inputs.fans?.value as z.output<typeof ductsRosterResponseSchema> | null;
+      const fans = args(ctx).fans ?? null;
 
       const empty: SheetReading = { open: null, rows: fans?.rows ?? [], progress: null };
 
-      const [unitId, portIndex] = page(ctx).fan.split(":").map(Number);
-      const fanPort = page(ctx).fan ? { unitId: unitId!, portIndex: portIndex! } : null;
-
-      if (!ref || (!fanPort && !page(ctx).allFans))
-        return deliver({ kind: "complete", value: empty, revision: 0 });
-
+      const keys = args(ctx).fan ?? [];
+      let chosen: FanPort[];
+      try {
+        chosen = selectedFans(keys, fans?.rows ?? []);
+      } catch (error) {
+        return deliver({ kind: "failure", error });
+      }
+      if (!ref || !chosen.length) return deliver({ kind: "complete", value: empty, revision: 0 });
+      const opened: OpenSheet[] = [];
       let serial = 0;
 
-      let base: DuctsSheetOverview | null = null;
-
       try {
-        const chosen = page(ctx).allFans ? (fans?.rows ?? []) : [fanPort!];
-
         let rows = [...empty.rows];
 
-        for (const [index, fan] of chosen.entries()) {
+        for (const fan of chosen) {
           const request: DuctsSheetRequest = {
             target: ref,
             mode: "fan",
@@ -235,15 +222,9 @@ function sheets(): UseSource<SheetReading> {
             portIndex: fan.portIndex,
           };
 
-          const result = await requestJson(
-            { path: "/pe/ducts/sheet", body: request },
-            ductsSheetResponseSchema,
-            ctx.signal,
-          );
+          const result = await callCompose(ctx, "ducts.sheet", { body: request });
 
           if (result.kind !== "overview") throw Error("Expected a fan sheet overview");
-
-          base = result;
 
           rows = rows.map((row) =>
             row.unitId === fan.unitId && row.portIndex === fan.portIndex
@@ -257,166 +238,88 @@ function sheets(): UseSource<SheetReading> {
               : row,
           );
 
-          if (page(ctx).allFans)
-            deliver({
-              kind: "part",
-              value: {
-                open: null,
-                rows,
-                progress: {
-                  done: index + 1,
-                  total: chosen.length,
-                  mark: "mark" in fan && typeof fan.mark === "string" ? fan.mark : "",
-                  stopped: false,
-                },
-              },
-              revision: ++serial,
-            });
-        }
-
-        if (!base || page(ctx).allFans)
-          return deliver({
-            kind: "complete",
-            value: {
-              open: null,
-              rows,
-              progress: { done: chosen.length, total: chosen.length, mark: "", stopped: false },
-            },
-            revision: ++serial,
+          const worst = (["supply", "return"] as const).flatMap((side) =>
+            result.totals?.[side].complete && result.paths[side].paths[0]
+              ? [result.paths[side].paths[0]!.pathId]
+              : [],
+          );
+          const paths = [
+            ...new Set([
+              ...worst,
+              ...((args(ctx).sheetPath ?? "") ? [args(ctx).sheetPath ?? ""] : []),
+            ]),
+          ];
+          const [inputs, elements, worksheet, ...legs] = await Promise.all([
+            sheetDetail(ctx, result, "inputs"),
+            sheetDetail(ctx, result, "elements"),
+            sheetDetail(ctx, result, "worksheet"),
+            ...paths.map((path) => sheetDetail(ctx, result, "legs", path)),
+          ] as const);
+          opened.push({
+            overview: result,
+            inputs,
+            elements,
+            worksheet,
+            legs:
+              legs[(args(ctx).sheetPath ?? "") ? paths.indexOf(args(ctx).sheetPath ?? "") : 0] ??
+              null,
+            worstLegs: legs.slice(0, worst.length),
           });
-
-        const worst = (["supply", "return"] as const).flatMap((side) =>
-          base!.totals?.[side].complete && base!.paths[side].paths[0]
-            ? [base!.paths[side].paths[0]!.pathId]
-            : [],
-        );
-
-        const paths = [
-          ...new Set([...worst, ...(page(ctx).sheetPath ? [page(ctx).sheetPath] : [])]),
-        ];
-
-        const [inputs, elements, worksheet, ...legs] = await Promise.all([
-          sheetDetail(ctx, base, "inputs"),
-          sheetDetail(ctx, base, "elements"),
-          sheetDetail(ctx, base, "worksheet"),
-          ...paths.map((path) => sheetDetail(ctx, base!, "legs", path)),
-        ] as const);
-
+        }
         deliver({
           kind: "complete",
-          value: {
-            rows,
-            progress: null,
-            open: {
-              overview: base,
-              inputs,
-              elements,
-              worksheet,
-              worstLegs: legs.slice(0, worst.length),
-              legs: legs[page(ctx).sheetPath ? paths.indexOf(page(ctx).sheetPath) : 0] ?? null,
-            },
-          },
+          value: { open: opened[0] ?? null, opened, rows, progress: null },
           revision: ++serial,
         });
       } catch (error) {
         if (ctx.signal.aborted) return;
 
-        // Stale detail is an explicit boundary. A fresh overview may be inspected; old details never survive it.
-
-        if (base && error instanceof Error && /stale sheet basis/i.test(error.message))
-          deliver({
-            kind: "part",
-            value: {
-              ...empty,
-              open: {
-                overview: base,
-                inputs: null,
-                elements: null,
-                worksheet: null,
-                worstLegs: [],
-                legs: null,
-              },
-            },
-            revision: ++serial,
-          });
-
+        // Failed combined reads publish nothing: the previous ledger survives as non-current.
         deliver({ kind: "failure", error });
       }
     },
   };
 }
 
-export function ductsSources(): Readonly<Record<string, ReadingSource>> {
+export function ductsSources(): Readonly<Record<string, UseSource | DeriveSource>> {
   return {
     "ducts.meshes": { kind: "derive", derive: () => null },
-    "ducts.roster": ductsBodySource({
-      request: (ctx) =>
-        target(ctx)
-          ? { kind: "ducts-snapshot", target: target(ctx)!, selector: { kind: "roster" } }
-          : null,
-      decode: (value) => snapshotSchema.parse(value),
-      absent: null,
-    }),
+    "ducts.roster": captured(
+      ductsBodySource({
+        request: (ctx) =>
+          target(ctx)
+            ? { kind: "ducts-snapshot", target: target(ctx)!, selector: { kind: "roster" } }
+            : null,
+        decode: (value) => snapshotSchema.parse(value),
+        absent: null,
+      }),
+    ),
 
     "ducts.networks": networks(),
 
-    "ducts.tables": saved
-      ? jsonSource({
-          request: () => ({ path: saved.replace(/[^/]*$/, "tables.json") }),
-          schema: z.unknown().transform(toGrids),
-          absent: null,
-        })
-      : ductsBodySource({
-          request: (ctx) =>
-            target(ctx)
-              ? { kind: "ducts-tables", session: target(ctx)!.session, ids: [...TABLE_IDS] }
-              : null,
-          decode: toGrids,
-          absent: null,
-        }),
+    "ducts.tables": ductsBodySource({
+      request: (ctx) =>
+        target(ctx)
+          ? { kind: "ducts-tables", session: target(ctx)!.session, ids: [...TABLE_IDS] }
+          : null,
+      decode: toGrids,
+      absent: null,
+    }),
 
     "ducts.catalogs": {
-      ...jsonSource({
-        request: () => ({ path: "/pe/ducts/catalogs" }),
-        schema: z.object({ tables: z.custom<Catalogs>(), findings: z.array(z.string()) }),
+      ...composeSource({
+        key: "ducts.catalogs",
+        input: () => ({}),
         absent: { tables: EMPTY_CATALOGS, findings: [] },
       }),
       dirties: ["snapshot"],
       effects: () => [],
     },
 
-    "ducts.pricing": workerSource<PricingPayload, PricingResult, PricingDelta | null>({
-      algorithmVersion: "ducts-pricing-v1",
-      input: (ctx, previous) => {
-        const same =
-          previous &&
-          ["ducts", "tables", "catalogs"].every(
-            (id) => previous.inputs[id]!.value === ctx.inputs[id]!.value,
-          );
-        const base = same
-          ? undefined
-          : {
-              snapshot: (ctx.inputs.ducts!.value as DuctSnapshot) ?? EMPTY_SNAPSHOT,
-              grids: (ctx.inputs.tables!.value as PricingInput["grids"]) ?? {},
-              catalogs: (ctx.inputs.catalogs!.value as { tables: Catalogs }).tables,
-            };
-        return { doc: ctx.work as DuctsRouteDocument | null, ...(base ? { base } : {}) };
-      },
-      spawn: () => {
-        return new Worker(new URL("./pricing.worker.ts", import.meta.url), {
-          type: "module",
-        }) as unknown as ReadingWorkerPort<PricingPayload, PricingResult, PricingDelta | null>;
-      },
-      applyDelta: (before, delta) =>
-        delta ? (applyPricingDelta(before, delta) as PricingResult) : before!,
-    }),
-
     "ducts.fans": {
-      key: (scope) => scope.workRevision,
-      ...jsonSource({
-        request: (ctx) =>
-          target(ctx) ? { path: "/pe/ducts/roster", body: { target: target(ctx) } } : null,
-        schema: ductsRosterResponseSchema.nullable(),
+      ...composeSource({
+        key: "ducts.roster",
+        input: (ctx) => (target(ctx) ? { body: { target: target(ctx)! } } : null),
         absent: null,
       }),
       dirties: ["snapshot"],
@@ -425,35 +328,41 @@ export function ductsSources(): Readonly<Record<string, ReadingSource>> {
     "ducts.sheet": sheets(),
 
     "ducts.sheet-snapshot": {
-      ...ductsBodySource({
-        request: (ctx) => {
-          const open = (ctx.inputs.sheet?.value as SheetReading | undefined)?.open;
+      ...sheetCapture(
+        ductsBodySource({
+          request: (ctx) => {
+            const open = (args(ctx).sheet ?? undefined)?.open;
 
-          if (!open?.overview.fan || !target(ctx)) return null;
+            if (!open?.overview.fan || !target(ctx)) return null;
 
-          const blockers =
-            open.inputs?.blockers ??
-            [...open.overview.blockers, ...open.overview.assumedBlockers].map(detailOf);
+            const blockers =
+              open.inputs?.blockers ??
+              [...open.overview.blockers, ...open.overview.assumedBlockers].map(detailOf);
 
-          const ids = [
-            ...new Set([
-              open.overview.fan.unitId,
-              ...(open.elements?.walkedElementIds ?? []),
-              ...(open.elements?.beyond ?? []).flatMap((unit) => unit.elementIds),
-              ...blockers.flatMap(blockerElements),
-            ]),
-          ].sort((a, b) => a - b);
+            const opens = args(ctx).sheet?.opened ?? [open];
+            const ids = [
+              ...new Set([
+                ...opens.flatMap((sheet) => [
+                  sheet.overview.fan!.unitId,
+                  ...(sheet.elements?.walkedElementIds ?? []),
+                ]),
+                ...(open.elements?.walkedElementIds ?? []),
+                ...(open.elements?.beyond ?? []).flatMap((unit) => unit.elementIds),
+                ...blockers.flatMap(blockerElements),
+              ]),
+            ].sort((a, b) => a - b);
 
-          return {
-            kind: "ducts-snapshot",
-            target: target(ctx)!,
-            ...slots(ctx),
-            selector: { kind: "ids", ids },
-          };
-        },
-        decode: (value) => sheetSnapshot(snapshotSchema.parse(value)),
-        absent: EMPTY_SNAPSHOT,
-      }),
+            return {
+              kind: "ducts-snapshot",
+              target: target(ctx)!,
+              ...slots(ctx),
+              selector: { kind: "ids", ids },
+            };
+          },
+          decode: (value) => sheetSnapshot(snapshotSchema.parse(value)),
+          absent: null,
+        }),
+      ),
       key: slots,
     },
   };

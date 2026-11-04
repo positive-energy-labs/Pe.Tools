@@ -6,9 +6,11 @@
 import { useCallback, useState } from "react";
 import type { Machine, Reading } from "@pe/agent-contracts";
 
-import { fixtureMachine, useFixtureName } from "#/shell/fixture-services";
+import { useEnvironmentReading, useEnvironmentReadingSlice } from "#/shell/environment-readings";
 import { acknowledgeUpdate } from "#/host/install";
-import { dirty, useAction, useReading, useReadingSlice } from "#/readings";
+import { dirty } from "#/readings";
+
+import { useAction } from "#/actions/use-action";
 
 import { setAccepting } from "./accepting";
 import { machineOf, planWaits } from "./model";
@@ -16,20 +18,12 @@ import { machineOf, planWaits } from "./model";
 export const SEED_REFUSAL = "Fixture: nothing on this page reaches a host.";
 
 export function useMachine(): { reading: Reading<Machine>; fixture: boolean } {
-  // Common chrome follows the kernel fixture selection, including seed switches.
-  const demo = useFixtureName();
-  const live = useReading<Machine>(demo !== null ? null : { kind: "machine" });
-  return demo !== null
-    ? { reading: fixtureMachine(demo), fixture: true }
-    : { reading: live, fixture: false };
+  const { reading, remote } = useEnvironmentReading<Machine>({ kind: "machine" });
+  return { reading, fixture: !remote };
 }
 
-/** Shell consumers select their own machine facts rather than subscribing to its polling metadata. */
 export function useMachineSlice<S>(select: (reading: Reading<Machine>) => S): S {
-  const demo = useFixtureName();
-  return useReadingSlice<Machine, S>(demo !== null ? null : { kind: "machine" }, (reading) =>
-    select(demo !== null ? fixtureMachine(demo) : reading),
-  );
+  return useEnvironmentReadingSlice<Machine, S>({ kind: "machine" }, select).reading;
 }
 
 /**

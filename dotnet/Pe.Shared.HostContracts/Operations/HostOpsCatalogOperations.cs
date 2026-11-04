@@ -8,7 +8,7 @@ namespace Pe.Shared.HostContracts.Operations;
 ///     session is used to VERIFY that projection (codegen:verify-live), not to generate it.
 /// </summary>
 internal static class HostOpsCatalogOperations {
-    [Op("host.ops.catalog", Does = "List every bridge operation this Revit session supports, with JSON Schemas for request and response payloads.", Title = "Get Host Operations Catalog", Finds = ["operations", "catalog", "schema", "discovery", "typegen"])]
+    [Op("host.ops.catalog", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "List every bridge operation this Revit session supports, with JSON Schemas for request and response payloads.", Title = "Get Host Operations Catalog", Finds = ["operations", "catalog", "schema", "discovery", "typegen"])]
     public static Task<HostOpsCatalogData> GetHostOpsCatalogAsync(
         NoRequest request,
         CancellationToken cancellationToken

@@ -25,13 +25,13 @@ public sealed class DuctHealPinnedProofTests {
             var (left, right) = Ring(doc);
             var (a, b) = (End(left, new XYZ(10, 0, 10)), End(right, new XYZ(10 + Gap, 0, 10)));
             Assert.That(a.MEPSystem?.Id, Is.EqualTo(b.MEPSystem?.Id), "the fixture's two open ends must share a system");
-            var request = new DuctHealRequest(false, [
+            var request = new DuctHealRequest([
                 new DuctHealGroup("ring", [new DuctHealItem("gap", DuctHealKind.Join, Key(a), Key(b))])
             ]);
 
             Pin(doc, right, true);
             var before = State(doc);
-            var refused = DuctHealer.Heal(doc, request).Groups.Single();
+            var refused = DuctHealer.Heal(doc, request, false).Groups.Single();
             Assert.Multiple(() => {
                 Assert.That(refused.Outcome, Is.EqualTo("empty"));
                 Assert.That(refused.Items.Single().Outcome, Is.EqualTo("refused"));
@@ -41,7 +41,7 @@ public sealed class DuctHealPinnedProofTests {
             });
 
             Pin(doc, right, false);
-            var healed = DuctHealer.Heal(doc, request).Groups.Single();
+            var healed = DuctHealer.Heal(doc, request, false).Groups.Single();
             Assert.Multiple(() => {
                 Assert.That(healed.Outcome, Is.EqualTo("healed"), healed.Reason);
                 Assert.That(healed.Items.Single().Outcome, Is.EqualTo("healed"), healed.Items.Single().Reason);

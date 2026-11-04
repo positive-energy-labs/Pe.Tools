@@ -9,7 +9,7 @@
  * With no working phase, or one the snapshot's `phases.order` does not list, nothing changes.
  */
 import { subjectName } from "./words.ts";
-import { workingPhaseOf, type DuctsRouteDocument } from "@pe/agent-contracts";
+import { workingPhaseOf, type DuctsDesign } from "@pe/agent-contracts";
 
 import { depth, inferJoints, sidesOf, type ProximityFinding } from "./proximity.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -38,7 +38,7 @@ const list = (ids: Set<number>) => [...ids].sort((a, b) => a - b).join(", ");
 /** The snapshot as it stands in Work's working phase, and an `out-of-phase` finding per dropped element touching it. */
 export function phased(
   snapshot: DuctSnapshot,
-  work: DuctsRouteDocument | null,
+  work: DuctsDesign | null,
 ): { snapshot: DuctSnapshot; findings: ProximityFinding[] } {
   const phase = workingPhaseOf(work);
   const order = snapshot.phases?.order ?? [];
@@ -76,7 +76,7 @@ export function phased(
     for (const side of sides)
       if (
         points.some((p) => {
-          const d = depth(side, p);
+          const d = p ? depth(side, p) : null;
           // A point at a piece's end is where it would connect, not inside it.
           return d != null && d.d <= 0 && d.t > IN && d.t < side.len - IN;
         })

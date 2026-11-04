@@ -1,5 +1,6 @@
 import {
   canonicalRouteInput,
+  decodePageField,
   graphFieldPolicy,
   type RouteGraph,
   type FieldDecl,
@@ -7,6 +8,15 @@ import {
 } from "@pe/agent-contracts";
 import type { UrlPage } from "../route/url";
 import type { GraphLayoutState } from "../../../../packages/kit/src/components/lang/graph-layout";
+import {
+  createRoute,
+  type RouteComponent,
+  type ResolveFullPath,
+  type ResolveId,
+} from "@tanstack/react-router";
+import { Route as rootRoute } from "../routes/__root";
+import { routeSearch } from "#/shell/owner";
+import { fixtureName } from "./fixture";
 
 /** Layout is device state. Invalid or unavailable storage never prevents a route from opening. */
 export function readLayoutState(key: string): GraphLayoutState {
@@ -44,15 +54,17 @@ export function readLayoutState(key: string): GraphLayoutState {
 export function writeLayoutState(key: string, state: GraphLayoutState): void {
   try {
     localStorage.setItem(key, JSON.stringify(state));
-  } catch {
+  } catch (error) {
+    console.warn("ts/apps/web/src/shell/mount-page.ts: fallback after failure", error);
     /* Storage may be disabled. */
   }
 }
 
-/** Graph fields supply every codec and history policy; useUrlPage owns router sequencing. */
+// TODO: docs/features/routes/LEDGER.md#s4-page-drive ? drive bare/empty URL, Back/Forward and Place reload in the browser.
 /**
  * `rest` is each field's resting value when its schema has no default (the mount's initialPage);
- * a field at rest is absent from the URL, so a shared link carries only what the user changed.
+ * S4 presence rule supersedes omission of explicit defaults: they must override Place memory.
+ * Middleware still leaves a bare route bare.
  */
 export function graphUrlPage<P, W>(graph: RouteGraph<P, W>, rest: Partial<P> = {}): UrlPage<P> {
   const entries = Object.entries(graph.fields) as [
@@ -63,37 +75,14 @@ export function graphUrlPage<P, W>(graph: RouteGraph<P, W>, rest: Partial<P> = {
   const read = (search: Record<string, unknown>) =>
     Object.fromEntries(
       fields.map(([id, field]) => {
-        const raw = search[id];
-        if (raw === undefined && id in rest) return [id, rest[id]];
-        const typed = field.schema.safeParse(raw);
-        // The router JSON-parses search values, so `?level=30` arrives as a number and `?on=true`
-        // as a boolean; a scalar re-enters the one string grammar. Objects and arrays never do.
-        const scalar =
-          typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean";
-        const decoded = typed.success
-          ? typed
-          : scalar
-            ? field.schema.safeParse(field.codec.decode(String(raw)))
-            : typed;
+        const { present, decoded } = decodePageField(field, search, id);
+        if (!present && id in rest) return [id, rest[id]];
         return [id, decoded.success ? decoded.data : field.schema.parse(undefined)];
       }),
     ) as Partial<P>;
   const write = (page: Partial<P>) =>
     Object.fromEntries(
-      fields
-        .filter(([id]) => id in page)
-        .map(([id, field]) => {
-          const value = page[id];
-          const initial = field.schema.safeParse(undefined);
-          const resting = initial.success ? initial.data : rest[id as keyof P];
-          return [
-            id,
-            (initial.success || id in rest) &&
-            canonicalRouteInput(resting) === canonicalRouteInput(value)
-              ? undefined
-              : field.codec.encode(value),
-          ];
-        }),
+      fields.filter(([id]) => id in page).map(([id, field]) => [id, field.codec.encode(page[id])]),
     );
   return {
     keys: fields.map(([id]) => id),
@@ -108,6 +97,64 @@ export function graphUrlPage<P, W>(graph: RouteGraph<P, W>, rest: Partial<P> = {
         : (override ??
             (changed.some(([, f]) => graphFieldPolicy(f).url === "push") ? "push" : "replace"));
     },
-    middlewares: [],
+    middlewares: [
+      ({ search, next }) => {
+        const out = { ...next(search) };
+        const page = read(out);
+        for (const [id, field] of fields) {
+          if (!(id in out)) continue;
+          if (!decodePageField(field, out, id).decoded.success) continue;
+          const value = write(page)[id];
+          out[id] =
+            typeof page[id] === "number" || typeof page[id] === "boolean" ? page[id] : value;
+        }
+        return out;
+      },
+    ],
   };
+}
+
+type GraphSearch<P> = ReturnType<typeof routeSearch> & Partial<P> & { fixture?: string };
+export type CodeRoute<P, Path extends string> = ReturnType<
+  typeof createRoute<
+    unknown,
+    typeof rootRoute,
+    Path,
+    ResolveFullPath<typeof rootRoute, Path>,
+    string,
+    ResolveId<typeof rootRoute, string, Path>,
+    (search: Record<string, unknown>) => GraphSearch<P>
+  >
+>;
+
+/** A code route under the app root (S0c proved coexistence); the file-route generator stays untouched. */
+export function codeRoute<P, W, const Path extends string>(
+  graph: RouteGraph<P, W>,
+  initialPage: Partial<P> | undefined,
+  component: RouteComponent,
+  path: Path,
+): CodeRoute<P, Path> {
+  const url = graphUrlPage(graph, initialPage);
+  return createRoute({
+    getParentRoute: () => rootRoute,
+    path,
+    // Type only the keys the URL carries: returning every field makes the router redirect to a
+    // URL that spells out each default. Absent fields rest at their defaults in the mount.
+    validateSearch: (search: Record<string, unknown>): GraphSearch<P> => {
+      const typed = url.read(search) as Record<string, unknown>;
+      const present = Object.fromEntries(
+        Object.entries(typed).filter(([id]) => id in search),
+      ) as Partial<P>;
+      return {
+        ...routeSearch(search),
+        ...present,
+        ...(graph.subjectField && graph.subjectField.field in search
+          ? { [graph.subjectField.field]: search[graph.subjectField.field] }
+          : {}),
+        ...(fixtureName(search) !== null ? { fixture: fixtureName(search)! } : {}),
+      };
+    },
+    search: { middlewares: [...url.middlewares] },
+    component,
+  });
 }

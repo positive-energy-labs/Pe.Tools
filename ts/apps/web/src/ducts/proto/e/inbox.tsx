@@ -2,7 +2,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { cite, citation, citationOwner, elementKey, leaveCitation } from "@pe/kit/lang/attention";
 import { useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { Ban, Check, Eye, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/agent-contracts";
 import type { LossesWork } from "../../work";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button, ButtonIcon } from "@pe/kit/lang/button";
@@ -43,7 +43,7 @@ import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { RuleAssignment } from "./rule-assignment";
 
 type InboxWork = {
-  doc: DuctsRouteDocument | null;
+  doc: DuctsDesign | null;
   revision: number | null;
   write: LossesWork["write"];
   /** The model's store: its rulings are the base a verdict or role press stages against. */
@@ -433,10 +433,7 @@ function RulingsList({
     ...emptyListState(),
     closed: [INBOX_LABELS.diagnostics],
   }));
-  const desired =
-    rows.find((row) => row.key === focused) ??
-    rows.find((row) => row.lit && view.selected.includes(row.key)) ??
-    rows.find((row) => row.lit);
+  const desired = rows.find((row) => row.key === focused) ?? rows.find((row) => row.lit);
   const list = useList({
     ...RULING_READERS,
     persist: address,
@@ -446,15 +443,15 @@ function RulingsList({
       open: desired ? [desired.key] : [],
     },
     items: rows,
-    state: view,
+    state: { ...view, selected: focused ? [focused] : [] },
     onState: (next) => {
-      setView(next);
+      setView({ ...next, selected: [] });
     },
     onPick: (row) => {
       onPick(row.key);
       setView((previous) => ({
         ...previous,
-        selected: [row.key],
+        selected: [],
         open: previous.open.includes(row.key) ? [] : [row.key],
       }));
     },

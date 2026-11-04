@@ -57,7 +57,7 @@ export function useFamilyStore(owner: FamilyMount) {
     [page.pod, page.path],
   );
   const table = useMemo<TableState>(
-    () => ({ sorts: page.sort, query: page.query, hiddenColumns: page.hidden }),
+    () => ({ sorts: page.sort.columns, query: page.query, hiddenColumns: Object.keys(page.hidden) }),
     [page.sort, page.query, page.hidden],
   );
   const inspect = useMemo(() => inspectOf(page.inspector), [page.inspector]);
@@ -130,7 +130,7 @@ export function useFamilyStore(owner: FamilyMount) {
   const authored = useMemo((): unknown => {
     try {
       return snapshot ? JSON.parse(snapshot.rawContent.replace(/^\uFEFF/, "")) : null;
-    } catch {
+    } catch (error) { console.warn("ts/apps/web/src/family/store.ts: fallback after failure", error);
       return null;
     }
   }, [snapshot]);
@@ -241,7 +241,7 @@ export function useFamilyStore(owner: FamilyMount) {
       setTable: (value: Setter<TableState>) => {
         const updated = next(value, table);
         owner.view.setPage(
-          { query: updated.query, sort: updated.sorts, hidden: updated.hiddenColumns ?? [] },
+          { query: updated.query, sort: { columns: updated.sorts }, hidden: Object.fromEntries((updated.hiddenColumns ?? []).map(key => [key, true as const])) },
           { history: "replace" },
         );
       },

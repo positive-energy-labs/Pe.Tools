@@ -1,34 +1,38 @@
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { useEffect, useMemo, useReducer } from "react";
-import { type RouteGraph, type RouteStatePatch, type WorkKey } from "@pe/agent-contracts";
-import { dirty, previousOf } from "#/readings";
+import { type RouteStatePatch, type WorkKey } from "@pe/agent-contracts";
+import { dirty } from "#/readings";
+import { previousOf } from "#/shell/readings-hooks";
 import { subscribeAcceptedDeltas, writeRouteWork } from "../route/host";
 import { refuse, writeRefusal } from "../route/refusal";
 import { appAtomRegistry, useOwned, useRouteOwner } from "./owner";
 import { docAtom } from "./work-document";
 import { acquireWorkWriter } from "./work-writes";
+import type { DiscoveredWork } from "../route/route-discovery";
 import type { MountScope } from "./mount-owner";
 
 /** Cross-Work handles use the route's schema, admission and canonical journal, without mounting its UI. */
 export function useWorkHandles<W>(
-  entries: readonly { graph: RouteGraph<any, W>; key: WorkKey | null; closed?: boolean }[],
+  entries: readonly { work: DiscoveredWork<W>; key: WorkKey | null; closed?: boolean }[],
 ) {
   const [, changed] = useReducer((version: number) => version + 1, 0);
   const owner = useRouteOwner(() => {
-    const sources = entries.map(({ graph, key, closed }) => ({
-      graph,
+    const sources = entries.map(({ work, key, closed }) => ({
+      work,
       key,
       closed,
       slice:
-        key && graph.work
+        key && work.schema
           ? docAtom(
               {
-                route: graph.key,
-                title: graph.name,
-                description: graph.name,
-                schema: graph.work,
+                route: work.route,
+                title: work.route,
+                description: work.route,
+                schema: work.schema,
               },
               key,
+              undefined,
+              work.admission,
             )
           : null,
       held: key ? acquireWorkWriter(key) : null,
@@ -48,9 +52,12 @@ export function useWorkHandles<W>(
   );
   const readings = useOwned(appAtomRegistry, collection);
   useEffect(() => {
-    const releases = sources.flatMap(({ key, held }) =>
+    const releases = sources.flatMap(({ key, held, work }) =>
       held && key
-        ? [held.writer.subscribe(changed), subscribeAcceptedDeltas(key, held.writer.accept)]
+        ? [
+            held.writer.subscribe(changed),
+            subscribeAcceptedDeltas(key, held.writer.accept, undefined, undefined, work.admission),
+          ]
         : [],
     );
     return () => {
@@ -61,13 +68,13 @@ export function useWorkHandles<W>(
     const { key, slice, closed } = sources[index]!;
     const reading = slice ? appAtomRegistry.get(slice) : null;
     const seen = reading ? previousOf(reading) : undefined;
-    const empty = seen?.doc === null ? sources[index]!.graph.work?.safeParse({}) : null;
+    const empty = seen?.doc === null ? sources[index]!.work.schema?.safeParse({}) : null;
     const doc = seen?.doc ?? (empty?.success ? empty.data : undefined);
     return {
       workKey: key ?? undefined,
       closed,
       failure:
-        key && key.route !== sources[index]!.graph.key
+        key && key.route !== sources[index]!.work.route
           ? "That Work belongs to another route"
           : reading?.state === "failed"
             ? reading.message
@@ -85,7 +92,7 @@ export function useWorkHandles<W>(
   useEffect(() => {
     sources.forEach(({ held }, index) => held?.writer.observe(scopeOf(index)));
   }, [sources, readings]);
-  return sources.map(({ key, graph, held }, index) => {
+  return sources.map(({ key, work, held }, index) => {
     const reading = readings?.[index];
     const seen = reading ? previousOf(reading) : undefined;
     const write = async (
@@ -104,7 +111,9 @@ export function useWorkHandles<W>(
                 press: context.press,
               },
               writeRouteWork,
-              graph.cells,
+              work,
+              undefined,
+              true,
             ),
           )
         : refuse("not-ready", "Choose a Work first");
@@ -122,7 +131,8 @@ export function useWorkHandles<W>(
       },
       discard: (press: string) => held?.writer.discard(press),
       reload: () => {
-        if (key) dirty({ ...key, kind: "work" });
+        if (key)
+          dirty({ ...key, kind: "work", ...(work.admission && { admission: work.admission }) });
       },
     };
   });

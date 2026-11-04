@@ -17,36 +17,38 @@ internal static class TsHostLauncher {
     private const string SourceRootEnvironmentVariable = "PE_TOOLS_SOURCE_ROOT";
     /// <summary>The checkout's TS workspace, where the dev host runs. Mirror: TS <c>checkoutLayout.ts</c>.</summary>
     private const string TsWorkspaceDirectory = "ts";
-    private static readonly TimeSpan DevStartupTimeout = TimeSpan.FromSeconds(90); // vite cold-starts in 40-60 s
+    internal static readonly TimeSpan DevStartupTimeout = TimeSpan.FromSeconds(90); // vite cold-starts in 40-60 s
 
-    private static PePayloadContext? _context;
+    public static string Lane => ProductRuntimeLayout.Current.LaneName;
 
-    public static string Lane => Context.Lane;
+    private static ProductRuntimeLayout Runtime => ProductRuntimeLayout.Current;
 
-    private static PePayloadContext Context =>
-        _context ?? throw new InvalidOperationException("TsHostLauncher.Capture must run in Startup before the host is resolved.");
-
+    /// <summary>Builds the process's one runtime record from the SDK's facts; nothing is recomputed.</summary>
     public static void Capture(PePayloadContext context) {
-        if (context.Lane == "installed" && !PathsEqual(context.InstallRoot, ProductRuntimeLayout.ForCurrentUser().RootPath))
-            throw new InvalidOperationException("The installed payload root is not the canonical product installation.");
-        _context = context;
-        // Pin only the process-local NAME; the port is re-read from the service file on every
-        // resolve so a takeover/restart can never leave a stale address behind.
-        HostEndpoint.ConfiguredServiceName = ServiceName;
-        HostEndpoint.ConfiguredLane = context.Lane;
-        HostEndpoint.ConfiguredSourceRoot = context.SourceRoot;
-        HostEndpoint.ConfiguredInstalledRoot = context.Lane == "installed" ? context.InstallRoot : null;
-        HostEndpoint.ConfiguredExecutablePath = context.Lane == "installed"
-            ? InstalledProduct.Open(context.InstallRoot!)?.Resolve(HostEndpoint.ServiceName)?.EntryPath
+        var (lane, root) = Owner(context.Lane, context.InstallRoot, context.SourceRoot);
+        ProductRuntimeLayout.Configure(lane, root);
+        HostEndpoint.InstalledExecutablePath = lane == ProductLane.Installed
+            ? InstalledProduct.Open(root)?.Resolve(HostEndpoint.ServiceName)?.EntryPath
             : null;
     }
 
+    /// <summary>The installed root IS the SDK install root; a dev payload without a descriptor refuses.</summary>
+    internal static (ProductLane Lane, string Root) Owner(string lane, string? installRoot, string? sourceRoot) =>
+        lane switch {
+            "installed" when !string.IsNullOrWhiteSpace(installRoot) => (ProductLane.Installed, installRoot!),
+            "installed" => throw new InvalidOperationException("The SDK loaded an installed payload without an install root; reinstall Pe.Tools."),
+            "dev" when !string.IsNullOrWhiteSpace(sourceRoot) => (ProductLane.Dev, sourceRoot!),
+            "dev" => throw new InvalidOperationException(
+                "This dev payload has no SDK source-session descriptor, so it cannot know its checkout. Start Revit with `pe-revit session start --project Pe.App`."),
+            _ => throw new InvalidOperationException($"The SDK reported unknown lane '{lane}'.")
+        };
+
     public static TsHostLaunchResult EnsureRunning() {
         try {
-            var result = Context.Lane == "installed" ? EnsureInstalled() : EnsureDev();
+            var result = Runtime.Lane == ProductLane.Installed ? EnsureInstalled() : EnsureDev();
             return result.State switch {
                 ServiceRunState.Running => new TsHostLaunchResult(true, true, false, $"Sharing the running host: {Describe(result.File!)}"),
-                ServiceRunState.Started => new TsHostLaunchResult(true, false, true, $"Started {Context.Lane} host: {Describe(result.File!)}"),
+                ServiceRunState.Started => new TsHostLaunchResult(true, false, true, $"Started {Lane} host: {Describe(result.File!)}"),
                 _ => new TsHostLaunchResult(false, false, false, result.Reason ?? "The host could not be started.")
             };
         } catch (Exception ex) {
@@ -57,23 +59,22 @@ internal static class TsHostLauncher {
     public static string ResolveHostBaseUrl() => HostEndpoint.ResolveHostBaseUrl();
 
     /// <summary>The checkout root is the dev service identity, the same string every TS deriver hashes.</summary>
-    private static string ServiceName => HostEndpoint.ResolveServiceName(Context.Lane, Context.SourceRoot);
+    private static string ServiceName => HostEndpoint.ResolveServiceName(Runtime);
 
     /// <summary>
     ///     The root the supervisor leases and reads <c>state\service</c> under: the product's one
-    ///     machine-local root, which <c>PE_TOOLS_PRODUCT_HOME</c> moves with the host's.
+    ///     lane-owned root, shared with bridge discovery and the TS host's productRoot.
     /// </summary>
-    internal static string ServiceAppBase => ProductRuntimeLayout.ForCurrentUser().RootPath;
+    internal static string ServiceAppBase => Runtime.RootPath;
 
     private static ServiceResult EnsureInstalled() {
-        var product = InstalledProduct.Open(Context.InstallRoot!)
-            ?? throw new InvalidOperationException($"No product manifest at '{Context.InstallRoot}'; reinstall Pe.Tools.");
+        var product = InstalledProduct.Open(Runtime.OwnerRoot)
+            ?? throw new InvalidOperationException($"No product manifest at '{Runtime.OwnerRoot}'; reinstall Pe.Tools.");
         return product.EnsureRunning(HostEndpoint.ServiceName);
     }
 
     private static ServiceResult EnsureDev() {
-        var sourceRoot = Context.SourceRoot
-            ?? throw new InvalidOperationException("The dev lane requires a checkout source root from the session descriptor.");
+        var sourceRoot = Runtime.OwnerRoot;
         var workingDirectory = Path.Combine(sourceRoot, TsWorkspaceDirectory);
         // Fresh worktrees don't share node_modules; without this the spawned host dies instantly
         // and the supervisor blind-waits the full timeout with no cause in the message.
@@ -95,8 +96,9 @@ internal static class TsHostLauncher {
         start.EnvironmentVariables[HostEndpoint.ServiceNameVariable] = ServiceName;
         start.EnvironmentVariables[SourceRootEnvironmentVariable] = sourceRoot;
 
+        // SDK beta.216 binds a dev companion's lifetime to its Revit process.
         return InstalledProduct.EnsureRunning(
-            ServiceAppBase, ServiceName, spec, start, Context.Lane, null,
+            ServiceAppBase, ServiceName, spec, start, Lane, null,
             file => file.Lane == "dev" && PathsEqual(file.SourceRoot, sourceRoot),
             DevStartupTimeout);
     }

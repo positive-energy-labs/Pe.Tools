@@ -4,15 +4,15 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { hostProgram } from "./host-program.ts";
 import { resolveHostVersion } from "./host-lifecycle.ts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import { hostRedirectionTrust, relaunchOutOfGuard } from "./redirection-trust.ts";
-import { hostReceiptExport, fatalReceipt } from "./receipt-export.ts";
+import { currentReceiptExport, fatalReceipt } from "./receipt-export.ts";
 
 // The installer stub and the login Run key start the installed host with no stdio anyone reads, so
 // a host that dies before bind (a refused claim, a thrown binding) leaves nothing behind. Tee every
 // console line to the shared log path on the installed lane; the dev lane keeps its launcher redirect.
 if (hostOwnership.lane === "installed") {
-  const dir = join(productRoot(), productPathNames.logsDirectoryName);
+  const dir = join(hostOwnership.rootPath, productPathNames.logsDirectoryName);
   mkdirSync(dir, { recursive: true });
   const file = join(dir, productPathNames.hostLogFileName);
   for (const stream of [process.stdout, process.stderr] as const) {
@@ -24,7 +24,7 @@ if (hostOwnership.lane === "installed") {
           file,
           `${new Date().toISOString()} ${String(chunk).replace(/\x1b\[[0-9;]*m/g, "")}`,
         );
-      } catch {
+      } catch (error) { write(`Host log append failed: ${String(error)}\n`);
         // The log is a courtesy; never let it take the host down.
       }
       return write(chunk, ...rest);
@@ -49,7 +49,7 @@ if (
   relaunchOutOfGuard({
     trust,
     exe: hostOwnership.executablePath,
-    marker: join(productRoot(), "guard-relaunch.stamp"),
+    marker: join(hostOwnership.rootPath, "guard-relaunch.stamp"),
   })
 )
   process.exit(0);
@@ -62,7 +62,8 @@ for (const [event, code] of [
   process.on(event, (error: unknown) => {
     if (fatal) return;
     fatal = true;
-    void fatalReceipt(hostReceiptExport(), code, error);
+    void fatalReceipt(currentReceiptExport(), code, error);
   });
 
+// effect-edge: process-main
 NodeRuntime.runMain(hostProgram());

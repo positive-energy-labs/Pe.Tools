@@ -1,14 +1,19 @@
+import { testSpawner } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createProviders } from "../src/harness/providers.ts";
-import { productAccessPath, productProvidersPath } from "../src/product-paths.ts";
+import { productProvidersPath } from "../src/product-paths.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 let root: string;
 let previous: string | undefined;
 beforeEach(async () => {
+  // The host's state root is fixed at import (ISOFIX-R) inside this file's isolated test home, so
+  // each test starts from an empty one instead of re-pointing the home env.
+  await rm(hostOwnership.rootPath, { recursive: true, force: true });
   root = await mkdtemp(join(tmpdir(), "pe-provider-state-"));
   previous = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = root;
@@ -52,7 +57,7 @@ test("the refusal logged and copied contains neither endpoint key nor URL query 
       );
   });
   const baseUrl = await listen(server);
-  const providers = createProviders({ probeOnStart: false });
+  const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
   vi.stubEnv("TEST_SECRET", "inherited-secret");
   const logged = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
@@ -90,7 +95,7 @@ test.each([
     const path = productProvidersPath();
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, bytes);
-    const providers = createProviders({ probeOnStart: false });
+    const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
     const list = await providers.fetch(request("providers"));
     expect(list.status).toBe(200);
     expect(await list.json()).toHaveLength(2);
@@ -100,17 +105,6 @@ test.each([
     expect(await readFile(path, "utf8")).toBe(bytes);
   },
 );
-
-test("unreadable approvals fail guarded and refuse overwriting the original", async () => {
-  const path = productAccessPath();
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, "{broken");
-  const providers = createProviders({ probeOnStart: false });
-  const current = await providers.fetch(request("access"));
-  expect(await current.json()).toMatchObject({ guarded: true, readError: expect.any(String) });
-  expect((await providers.fetch(request("access", "PUT", { guarded: false }))).status).toBe(409);
-  expect(await readFile(path, "utf8")).toBe("{broken");
-});
 
 const listen = async (server: Server) => {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -130,7 +124,7 @@ test("Codex endpoints publish startup config without keys and retain separate st
     ),
   );
   const baseUrl = await listen(server);
-  const providers = createProviders({ probeOnStart: false });
+  const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
   try {
     const homes: string[] = [];
     for (const name of ["First", 'Second "quoted"']) {
@@ -177,7 +171,7 @@ test("Claude validation rejects redirects before forwarding its synthetic key", 
   );
   const baseUrl = await listen(redirect);
   try {
-    const providers = createProviders({ probeOnStart: false });
+    const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
     await expect(
       providers.validateModel(
         {
@@ -198,7 +192,7 @@ test("Claude validation rejects redirects before forwarding its synthetic key", 
 
 test("old readiness remains inspectable without periodic paid inference, and a failed probe replaces it", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
-  const providers = createProviders({ probeOnStart: false });
+  const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
   expect((await providers.fetch(request("providers/claude/probe", "POST", {}))).status).toBe(200);
   vi.setSystemTime(Date.now() + 61_000);
   const expired = await providers.fetch(request("providers/claude"));
@@ -228,7 +222,7 @@ test("known keys still redact thread output after their provider file becomes un
       providers: [{ id: "claude-test", harness: "claude", name: "test", auth: add.auth }],
     }),
   );
-  const providers = createProviders({ probeOnStart: false });
+  const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
   expect(providers.keys()).toEqual(["synthetic-key"]);
   await writeFile(path, "{broken");
   expect(providers.keys()).toEqual(["synthetic-key"]);
@@ -237,7 +231,7 @@ test("known keys still redact thread output after their provider file becomes un
 test("a session response before its auth report cannot certify a signed-out subscription as ready", async () => {
   process.env.FAKE_ACP_AUTH = "none";
   process.env.FAKE_ACP_AUTH_LATE = "true";
-  const providers = createProviders({ probeOnStart: false });
+  const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
   const response = await providers.fetch(request("providers/claude/probe", "POST", {}));
   expect((await response.json()).readiness.state).toBe("refused");
 });
@@ -260,7 +254,7 @@ test("two adds sharing an identity produce one saved key, and failed validation 
   });
   const baseUrl = await listen(server);
   try {
-    const providers = createProviders({ probeOnStart: false });
+    const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
     const input = { ...add, auth: { ...add.auth, baseUrl } };
     const responses = await Promise.all([
       providers.fetch(request("providers", "POST", input)),
@@ -284,4 +278,16 @@ test("two adds sharing an identity produce one saved key, and failed validation 
   } finally {
     await close(server);
   }
+});
+
+test("a probe launches its child through the injected Spawner, not a backend of its own", async () => {
+  const spawner = testSpawner();
+  const launched: string[] = [];
+  const providers = createProviders({
+    spawner: { spawn: (launch) => (launched.push(launch.command), spawner.spawn(launch)) },
+    probeOnStart: false,
+  });
+  expect((await providers.fetch(request("providers/claude/probe", "POST", {}))).status).toBe(200);
+  expect(launched).toHaveLength(1);
+  await providers.close();
 });

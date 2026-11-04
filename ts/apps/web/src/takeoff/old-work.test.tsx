@@ -40,10 +40,19 @@ let fresh = false;
 
 /** The one wire: the document resolves and the Work Reading is the host's refusal. */
 class WireSource {
+  static current: WireSource;
+  onopen: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
   onerror: (() => void) | null = null;
   constructor(url: string) {
     const keys = JSON.parse(new URL(url).searchParams.get("keys") ?? "[]") as ReadingRequest[];
+    WireSource.current = this;
+    setTimeout(() => {
+      this.onopen?.();
+      this.answer(keys);
+    }, 0);
+  }
+  answer(keys: ReadingRequest[]) {
     for (const request of keys) {
       const key = readingKey(request);
       const frame =
@@ -97,7 +106,11 @@ test.each([OLDER_WORK, UNREADABLE_WORK])(
       },
     );
     const posts: string[] = [];
-    vi.stubGlobal("fetch", async (url: string) => {
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      if (String(url).includes("resource-subscriptions")) {
+        WireSource.current.answer(JSON.parse(String(init?.body)).add ?? []);
+        return Response.json({});
+      }
       if (String(url).includes("start-fresh")) {
         posts.push(String(url));
         fresh = true;
@@ -117,6 +130,8 @@ test.each([OLDER_WORK, UNREADABLE_WORK])(
       expect(posts).toEqual([]);
       return;
     }
+    if (!screen.queryByRole("button", { name: "Start fresh" }))
+      fireEvent.click(screen.getByRole("button", { name: /more .*verbs/ }));
     fireEvent.click(screen.getByRole("button", { name: "Start fresh" }));
     const review = await screen.findByRole("dialog", { name: "Start fresh review" });
     expect(screen.getByText(message)).toBeTruthy();

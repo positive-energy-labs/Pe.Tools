@@ -65,7 +65,7 @@ export type DuctsAnalysisRequest = z.infer<typeof ductsAnalysisRequestSchema>;
  */
 export const DUCTS_ANALYSIS_FIRST_CALL = JSON.stringify({
   source: { kind: "fresh", target: { session: "<session>", openId: "<openId>" } },
-  selector: { kind: "document" },
+  selector: { kind: "equipment", id: 9668311 },
   projection: "summary",
 });
 
@@ -107,7 +107,7 @@ const row = z.strictObject({
   requiredEspStagedInWg: z.number().nullable(),
   availableFanStaticInWg: z.number().nullable(),
   flowCfm: z.number().nullable(),
-  /** Where a terminal row's `flowCfm` came from: "override" | "load-preview:<tag>" | "revit:<airflow slot>". */
+  /** Where a terminal row's `flowCfm` came from: "override" | "rooms:<source>" | "revit:<airflow slot>". */
   flowSource: z.string().nullable(),
   spaceText: z.string().nullable(),
   detail: z.string().nullable(),
@@ -344,7 +344,7 @@ export const ductsApplyRequestArtifactSchema = z.strictObject({
           byteSize: z.number().int(),
         }),
       )
-      .length(2),
+      .length(3),
   }),
   group: z.string(),
   payload: ductsApplyInputSchema,

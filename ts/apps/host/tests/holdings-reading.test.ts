@@ -1,6 +1,6 @@
 import { peRead, buildCapabilities } from "@pe/mcps";
 import { withInvocationContext } from "@pe/runtime/context";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { Context } from "effect";
 import { instancesReadingsRoute } from "../src/session-route.ts";
 import { expect, test, vi } from "vite-plus/test";

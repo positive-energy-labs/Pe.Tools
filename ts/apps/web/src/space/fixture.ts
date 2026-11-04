@@ -173,6 +173,8 @@ const handleOf = (b: Box) => ({
 function psc1(): ArrayBuffer {
   const positions = BOXES.flatMap((b) => boxTriangles(b.box));
   const metadata: Psc1Metadata = {
+    requestedContextPaddingFt: 0,
+    effectiveContextPaddingFt: 0,
     linkEnvelopes: {},
     levels: {
       sources: [],
@@ -286,7 +288,7 @@ export const FIXTURE_ANSWERS: {
     },
   },
   rows: {
-    request: {},
+    request: { region: { kind: "box", box: [-100, -100, -100, 100, 100, 100] } },
     response: {
       stamp,
       searched,
@@ -307,7 +309,11 @@ export const FIXTURE_ANSWERS: {
     },
   },
   tree: {
-    request: { source: 0, maxDepth: 2 },
+    request: {
+      region: { kind: "box", box: [-100, -100, -100, 100, 100, 100] },
+      source: 0,
+      maxDepth: 2,
+    },
     response: {
       stamp,
       source: 0,
@@ -321,7 +327,7 @@ export const FIXTURE_ANSWERS: {
     },
   },
   slice: {
-    request: { z0: 9, z1: 10.5 },
+    request: { region: { kind: "box", box: [-100, -100, -100, 100, 100, 100] }, z0: 9, z1: 10.5 },
     response: {
       stamp,
       searched,
@@ -340,7 +346,7 @@ export const FIXTURE_ANSWERS: {
     },
   },
   probe: {
-    request: { at: [20, 13, 5] },
+    request: { region: { kind: "box", box: [-100, -100, -100, 100, 100, 100] }, at: [20, 13, 5] },
     response: {
       stamp,
       searched,
@@ -353,6 +359,7 @@ export const FIXTURE_ANSWERS: {
   },
   sweep: {
     request: {
+      region: { kind: "box", box: [-100, -100, -100, 100, 100, 100] },
       polyline: [
         [4, 25, 10],
         [20, 25, 10],

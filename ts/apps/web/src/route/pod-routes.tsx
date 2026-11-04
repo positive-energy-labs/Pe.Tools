@@ -1,11 +1,11 @@
+import { currentFixture } from "#/shell/fixture-lane";
 import { createContext, use, useEffect, useMemo, useState, type ReactNode } from "react";
 import { message, type PodRouteDescriptor } from "@pe/agent-contracts";
-import { useRouterState } from "@tanstack/react-router";
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
-import { publicRoutes } from "./builtin-routes";
-import { createPodRouteLoader, verifyBundle } from "./pod-loader";
-import { makePodRoute, type PodRouteBundle } from "./pod-view";
+import { podRoutes } from "./pod-registry";
+import { admitPodArtifact } from "./pod-artifact";
+import { createPodRouteLoader } from "./pod-loader";
 
 type Inventory = {
   rows: PodRouteDescriptor[];
@@ -23,28 +23,28 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { loader, publish } = useMemo(() => {
     const loader = createPodRouteLoader(async (row, current) => {
       try {
-        const response = await peClient.response("plugins.routeBundle", {
-          params: { key: row.key, hash: row.sha256 },
-        });
-        if (!response.ok) throw Error((await readPeError(response)).message);
-        const bytes = new Uint8Array(await response.arrayBuffer());
-        await verifyBundle(bytes, row.sha256);
-        if (!current()) return () => {};
-        const url = URL.createObjectURL(new Blob([bytes], { type: "text/javascript" }));
-        try {
-          const bundle = (await import(/* @vite-ignore */ url)) as PodRouteBundle;
-          if (!current()) return () => {};
-          const route = makePodRoute(row, bundle);
-          return publicRoutes.registerGraph(route.graph, route.hosted);
-        } finally {
-          URL.revokeObjectURL(url);
+        const fixture =
+          currentFixture() !== null ? (await import("./pod-fixtures")).podFixtures() : null;
+        let artifact: unknown;
+        if (fixture) {
+          const entry = (await fixture).find((entry) => entry.row.key === row.key);
+          if (!entry) throw Error("Unknown Pod fixture");
+          artifact = entry.envelope;
+        } else {
+          const response = await peClient.response("plugins.routeBundle", {
+            params: { key: row.key, hash: row.fingerprint },
+          });
+          if (!response.ok) throw Error((await readPeError(response)).message);
+          artifact = await response.json();
         }
+        const route = await admitPodArtifact(row, artifact);
+        if (!current()) return () => {};
+        return podRoutes.register(row.key, route);
       } catch (error) {
-        setErrors((prior) => ({ ...prior, [row.key]: message(error) }));
+        if (current()) setErrors((prior) => ({ ...prior, [row.key]: message(error) }));
         throw error;
       }
     });
@@ -57,7 +57,9 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
   }, []);
   const refresh = () => setRevision((prior) => prior + 1);
   useEffect(() => {
-    const timer = setInterval(refresh, 10_000);
+    const timer = setInterval(() => {
+      if (!document.hidden) refresh();
+    }, 10_000);
     window.addEventListener("focus", refresh);
     return () => {
       clearInterval(timer);
@@ -67,27 +69,30 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
   }, [loader]);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
-    void peClient
-      .call("plugins.routes", {}, { signal: controller.signal })
+    const inventory =
+      currentFixture() !== null
+        ? import("./pod-fixtures")
+            .then((m) => m.podFixtures())
+            .then((entries) => entries.map((entry) => entry.row))
+        : peClient.call("plugins.routes", {}, { signal: controller.signal });
+    void inventory
       .then((next) => {
         if (controller.signal.aborted) return;
         return publish(next);
       })
       .catch(async (error: unknown) => {
         if (controller.signal.aborted) return;
-        await publish([]);
         setErrors({ inventory: message(error) });
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [publish, revision, pathname]);
+  }, [publish, revision]);
   const trust = async (row: PodRouteDescriptor, trusted: boolean) => {
     const next = await peClient.call("plugins.routeTrust", {
       params: { key: row.key },
-      body: { sha256: row.sha256, trusted },
+      body: { fingerprint: row.fingerprint, trusted },
     });
     await publish(next);
   };

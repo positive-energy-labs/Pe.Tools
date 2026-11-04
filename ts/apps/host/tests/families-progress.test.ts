@@ -1,3 +1,4 @@
+import { captureStore } from "./effect-test.ts";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -7,7 +8,7 @@ import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 
 test("progress survives reconstruction, shares family blobs, and never replaces a completed plan baseline", async () => {
   const dir = await mkdtemp(join(tmpdir(), "families-progress-"));
-  const captures = new TakeoffCaptures(dir);
+  const captures = captureStore(dir);
   const document = { session: "s", openId: "o" };
   const filter = {
     categoryNames: ["Air Terminals"],
@@ -59,14 +60,14 @@ test("progress survives reconstruction, shares family blobs, and never replaces 
         workers: 1,
       },
     });
-    expect((await new TakeoffCaptures(dir).families(first.id)).result.families).toEqual([family]);
+    expect((await captureStore(dir).families(first.id)).result.families).toEqual([family]);
     // A stored "reading" revision whose run is not live here can never finish; it must not spin.
-    expect((await new TakeoffCaptures(dir).families(first.id)).progress).toMatchObject({
+    expect((await captureStore(dir).families(first.id)).progress).toMatchObject({
       state: "failed",
     });
     expect((await captures.families(cancelled.id)).progress?.state).toBe("cancelled");
     expect((await captures.latestFamilies(work))?.id).toBe(complete.id);
-    expect((await new TakeoffCaptures(dir).displayedFamilies(work))?.id).toBe(cancelled.id);
+    expect((await captureStore(dir).displayedFamilies(work))?.id).toBe(cancelled.id);
     expect(await captures.familiesReadings()).toHaveLength(1);
     expect(await readdir(join(dir, "families", "records"))).toHaveLength(1);
     const parts = await captures.familiesParts(cancelled.id);

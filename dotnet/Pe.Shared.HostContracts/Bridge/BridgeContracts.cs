@@ -22,7 +22,8 @@ public enum BridgeFrameKind {
     Request,
     Response,
     Event,
-    Disconnect
+    Disconnect,
+    Terminal
 }
 
 /// <summary>
@@ -81,7 +82,8 @@ public sealed record BridgeRegistrationRequest(
     string? BuildStamp = null,
     string? SourceRoot = null,
     string? ServiceName = null,
-    string? InstalledRoot = null
+    string? InstalledRoot = null,
+    BridgeInFlightSnapshot? InFlight = null
 );
 
 public sealed record BridgeRegistrationAck(
@@ -98,7 +100,8 @@ public sealed record BridgeRequest(
     string RequestId,
     string OperationKey,
     string PayloadJson,
-    string? OpenDocumentId = null
+    string? OpenDocumentId = null,
+    string? DerivedCommand = null
 );
 
 public sealed record BridgeResponse(
@@ -133,5 +136,14 @@ public sealed record BridgeFrame(
     BridgeRequest? Request = null,
     BridgeResponse? Response = null,
     BridgeEvent? Event = null,
-    string? DisconnectReason = null
+    string? DisconnectReason = null,
+    BridgeTerminal? Terminal = null
 );
+
+// A terminal is created once; transport replay may deliver it more than once under the original request id.
+public sealed record BridgeTerminal(
+    string RequestId, string Outcome, long StartedAtUnixMs, long CompletedAtUnixMs, string? ReceiptId = null);
+public sealed record BridgeInFlightRequest(string RequestId, string State, long StartedAtUnixMs);
+public sealed record BridgeInFlightSnapshot(
+    int ProcessId, long ProcessStartUtcUnixMs,
+    List<BridgeInFlightRequest> Requests, List<BridgeTerminal> Terminals);

@@ -15,22 +15,22 @@ export function createPluginsHandler(
     try {
       if (declared.id === "plugins.routes") return json(await routes.list());
       if (declared.id === "plugins.routeBundle")
-        return new Response(await routes.bundle(declared.params.key, declared.params.hash), {
+        return Response.json(await routes.bundle(declared.params.key, declared.params.hash), {
           headers: {
-            "content-type": "text/javascript; charset=utf-8",
+            "content-type": "application/json; charset=utf-8",
             "cache-control": "no-store",
             "x-content-type-options": "nosniff",
           },
         });
       if (declared.id === "plugins.routeTrust") {
         const body = peRoutes["plugins.routeTrust"].body.parse(await request.json());
-        return json(await routes.trust(declared.params.key, body.sha256, body.trusted));
+        return json(await routes.trust(declared.params.key, body.fingerprint, body.trusted));
       }
     } catch (error) {
       return json({ error: message(error) }, 409);
     }
-    await content.lifecycle.refresh();
     if (request.method === "GET") return json(content.lifecycle.inventory());
+    await content.lifecycle.refresh();
     const id = declared.params.id;
     if (!content.lifecycle.inventory().some((p) => p.id === id))
       return json({ error: "Unknown plugin" }, 404);

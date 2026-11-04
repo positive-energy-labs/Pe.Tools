@@ -1,3 +1,4 @@
+import { captureStore } from "./effect-test.ts";
 import { invokeCommand } from "./command-fixture.ts";
 /**
  * HTTP-level falsifiers for doors 1-3 (WAVE1-PLAN §2): the route is production code, the caller is
@@ -10,7 +11,7 @@ import { Context, Effect, Layer } from "effect";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import {
   emptyThreadHead,
   type Caller,
@@ -43,7 +44,7 @@ beforeEach(async () => {
   web = HttpRouter.toWebHandler(
     makeCallRoute(
       journal,
-      new TakeoffCaptures(join(root, "captures")),
+      captureStore(join(root, "captures")),
       { sdk: sdkSessions },
       {
         forwardBase: null,
@@ -204,4 +205,15 @@ test("the human RHVAC launch RPC refuses every other caller before dispatch", as
   expect(
     await send(human, "/call", { key: "rhvac.launch", request: { path: "test.r10" } }),
   ).toMatchObject({ status: 200 });
+});
+
+// Pod-authored queries have no legacy transform/dispatch route around admission.
+test("an unavailable Pod query gets one typed refusal before dispatch", async () => {
+  const result = await send(human, "/call", { key: "pod.fixture.unavailable", request: {} });
+  expect(result.status).toBe(403);
+  expect(result.json.refusal).toMatchObject({
+    code: "permission.undeclared",
+    door: "/call",
+    reason: "Pod query has no admitted route: pod.fixture.unavailable",
+  });
 });

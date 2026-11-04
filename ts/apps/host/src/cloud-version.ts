@@ -50,6 +50,7 @@ export async function downloadCloudVersion(
   const token = await (
     dependencies.token ??
     (async () => {
+      // effect-edge: island, phase 5
       const result = await Effect.runPromise(
         apsAuthToken({ scopeProfile: "AutomationUserContext" }, false).pipe(
           Effect.provide(NodeHttpClient.layerUndici),

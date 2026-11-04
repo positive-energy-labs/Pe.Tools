@@ -1,3 +1,4 @@
+import type { WorkAdmission } from "./route-discovery";
 import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { peClient } from "#/host/pe-client";
 import {
@@ -23,11 +24,12 @@ export function routeInput(route: string, key: WorkKey) {
 export async function writeRouteWork(
   key: WorkKey,
   write: WorkWrite,
+  invocation?: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationBasis,
 ): Promise<RouteStateWriteResult> {
   const { result, status } = await postRouteWrite(
     write.kind === "restore" ? "restore" : "apply",
     routeInput(key.route, key),
-    write,
+    { ...write, ...(invocation?.causalParent ? { causalParent: invocation.causalParent } : {}) },
   );
   return (
     result ?? {
@@ -65,7 +67,10 @@ export async function postRouteWrite(
           body: peRoutes["work.apply"].body.parse(body),
         })
       : await peClient.response("work.fresh", { ...input, body: {} });
-  const wire = await response.json().catch(() => null);
+  const wire = await response.json().catch((error) => {
+    console.error("host: asynchronous operation failed", error);
+    return null;
+  });
   return { status: response.status, result: response.ok ? wire : (wire?.error?.details ?? null) };
 }
 
@@ -75,6 +80,7 @@ export async function getRouteSalvage(
   const response = await peClient.response("work.salvage", input);
   if (response.status === 404) return null;
   const body = await response.json();
+  if (response.ok && body === null) return null;
   if (!response.ok || !body || typeof body.from !== "string")
     throw Error(body?.error?.message ?? `salvage failed (${response.status})`);
   return body;
@@ -95,17 +101,21 @@ export function subscribeAcceptedDeltas(
   onAck: (ack: WorkWriteAck) => void,
   onGap?: () => void,
   source: Readings = peReadings,
+  admission?: WorkAdmission,
 ): () => void {
   let seen: number | null = null;
-  return source.subscribe({ kind: "work-acks", work: key }, (frame) => {
-    if (frame.kind === "gap") return onGap?.();
-    if (frame.kind !== "event") return;
-    const parsed = workWriteAckSchema.safeParse(frame.value);
-    if (!parsed.success) return onGap?.();
-    const ack = parsed.data;
-    if (seen !== null && ack.revision <= seen) return;
-    if (seen !== null && ack.base !== seen) onGap?.();
-    seen = ack.revision;
-    onAck(ack);
-  });
+  return source.subscribe(
+    { kind: "work-acks", work: key, ...(admission && { admission }) },
+    (frame) => {
+      if (frame.kind === "gap") return onGap?.();
+      if (frame.kind !== "event") return;
+      const parsed = workWriteAckSchema.safeParse(frame.value);
+      if (!parsed.success) return onGap?.();
+      const ack = parsed.data;
+      if (seen !== null && ack.revision <= seen) return;
+      if (seen !== null && ack.base !== seen) onGap?.();
+      seen = ack.revision;
+      onAck(ack);
+    },
+  );
 }

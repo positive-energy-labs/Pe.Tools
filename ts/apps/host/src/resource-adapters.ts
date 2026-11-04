@@ -1,9 +1,11 @@
+import { observeWorkReceipts } from "./work-receipt-feed.ts";
 import { invocationContext, hostFetch as fetch } from "@pe/runtime/context";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "./host-ownership.ts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { Effect } from "effect";
 import {
+  discoveryMachine,
   readingKey,
   actionStatusSchema,
   receiptsForWork,
@@ -15,12 +17,12 @@ import type { BridgeError, RevitBridge } from "./bridge.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { ActionJournal } from "./action-journal.ts";
 import { hostActionJournal } from "./gateway-owner.ts";
-import { hostTakeoffCaptures, type TakeoffCaptures } from "./takeoff-captures.ts";
+import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { listBridgeSessions } from "./local-ops.ts";
 import { observeSdkReading } from "./session-route.ts";
 import { sdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef } from "./document-marks.ts";
-import type { MachineOwner } from "./machine.ts";
+import type { MachineOwnerPromise } from "./machine.ts";
 import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
 
 /**
@@ -157,11 +159,13 @@ export const markReadings =
 export function hostResourceObserver(
   bridge?: RevitBridge["Service"],
   journal: () => ActionJournal = hostActionJournal,
-  captures: () => TakeoffCaptures = hostTakeoffCaptures,
+  captures: () => TakeoffCaptures = () => {
+    throw Error("Takeoff captures are unavailable: pass the host's CaptureStore.");
+  },
   origin = "http://127.0.0.1",
   // Resolved at the call, not at the build: one observer outlives any one `fetch` binding.
   read: (url: URL, init?: RequestInit) => Promise<Response> = (url, init) => fetch(url, init),
-  machine?: MachineOwner,
+  machine?: MachineOwnerPromise,
   resolveSession: (
     bridge: RevitBridge["Service"],
     scope: HostSessionScope,
@@ -189,7 +193,10 @@ export function hostResourceObserver(
               },
               signal: controller.signal,
             });
-            const value: unknown = await response.json().catch(() => null);
+            const value: unknown = await response.json().catch((error) => {
+              console.error("resource-adapters: asynchronous operation failed", error);
+              return null;
+            });
             if (!response.ok)
               throw Error(
                 (value as { error?: string } | null)?.error ??
@@ -227,6 +234,7 @@ export function hostResourceObserver(
             request.kind === "ducts-snapshot" ? request.target.session : request.session,
           )
             .then((session) =>
+              // effect-edge: island, phase 5
               Effect.runPromise(
                 resolveSession(bridge, {
                   bridgeSessionId: session,
@@ -261,7 +269,7 @@ export function hostResourceObserver(
             accept({ error: "Machine owner is unavailable" });
             return () => {};
           }
-          return machine.observe((value) => accept({ value }));
+          return machine.observe((value) => accept({ value: discoveryMachine(value) }));
         case "sdk":
           return observeSdkReading(
             request,
@@ -280,13 +288,17 @@ export function hostResourceObserver(
         case "rhvac-file-version":
           return oneShot([ONE_SHOT[request.kind]!(request as never)], POLL_MS[request.kind]);
         case "receipts":
+          if (request.scope)
+            return observeWorkReceipts(journal(), request.scope, (value) => accept({ value }));
           return journal().observe(request.target, request.id, (result) => {
             if ("error" in result) return accept(result);
             let rows = request.work ? receiptsForWork(result.value, request.work) : result.value;
             if (request.tool)
               rows = rows.filter((row) => commandTool(row.key)?.name === request.tool);
             accept(
-              request.id ? { value: rows } : { value: actionStatusSchema.array().parse(rows) },
+              (request.id || request.work) && request.detail !== "status"
+                ? { value: rows }
+                : { value: actionStatusSchema.array().parse(rows) },
             );
           });
         case "takeoff-reading":
@@ -305,6 +317,7 @@ export function hostResourceObserver(
           }
           let live = true;
           const { target, key: domain, context } = request;
+          // effect-edge: island, phase 5
           void Effect.runPromise(
             resolveSession(bridge, {
               bridgeSessionId: target.session,
@@ -343,7 +356,8 @@ export function hostResourceObserver(
             "inventory",
             () =>
               bridge
-                ? Effect.runPromise(listBridgeSessions(bridge.list))
+                ? // effect-edge: island, phase 5
+                  Effect.runPromise(listBridgeSessions(bridge.list))
                 : Promise.resolve({ sessions: [] }),
             (notify) => (bridge ? bridge.subscribe(() => notify()) : () => {}),
             accept,

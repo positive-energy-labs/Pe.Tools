@@ -33,7 +33,7 @@ public sealed class DeploymentRuntimeContractTests {
                 content.Output.RootPath,
                 Is.EqualTo(Path.Combine(documents, "Pe.Tools", "Pods", "default", "output"))
             );
-            var runtime = ProductRuntimeLayout.ForCurrentUser(localAppData);
+            var runtime = ProductRuntimeLayout.For(ProductLane.Installed, Path.Combine(localAppData, "Positive Energy", "Pe.Tools"), null);
             Assert.That(
                 runtime.State.RootPath,
                 Is.EqualTo(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "state"))
@@ -97,59 +97,41 @@ public sealed class DeploymentRuntimeContractTests {
 
     // ADV2-S4: acceptance hosts on worktrees shared the owner's %LOCALAPPDATA% state. The one
     // override roots machine-local state too, under <home>\.local-state, matching the host's productRoot.
-    [Test, NonParallelizable]
+    [Test]
     public void Product_home_override_roots_machine_local_state_and_logs_and_nothing_resolves_under_local_app_data() {
         var home = Path.Combine(Path.GetTempPath(), $"pe-home-{Guid.NewGuid():N}", "Pe.Tools");
         var ownerRoot = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Positive Energy", "Pe.Tools");
-        var previous = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
-        Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, home);
-        try {
-            var runtime = ProductRuntimeLayout.ForCurrentUser();
-            var state = Path.Combine(home, ".local-state");
-            Assert.That(runtime.RootPath, Is.EqualTo(state));
-            var paths = new[] {
-                runtime.State.RootPath,
-                runtime.State.ApsCredentialsPath,
-                runtime.State.ApsTokenStorePath,
-                runtime.Logs.HostLogPath,
-                runtime.Cache.ResolveModuleCachePath("census"),
-                new GlobalStorage().DirectoryPath,
-                new ModuleStorage("census").State().DirectoryPath
-            };
-            foreach (var path in paths) {
-                Assert.That(path.StartsWith(state, StringComparison.OrdinalIgnoreCase), Is.True, path);
-                Assert.That(path.StartsWith(ownerRoot, StringComparison.OrdinalIgnoreCase), Is.False, path);
-            }
-            // An explicit local app data argument still wins over the environment.
-            Assert.That(
-                ProductRuntimeLayout.ForCurrentUser(Path.Combine(home, "explicit")).RootPath,
-                Is.EqualTo(Path.Combine(home, "explicit", "Positive Energy", "Pe.Tools")));
-        } finally {
-            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previous);
-            TryDeleteDirectory(Path.GetDirectoryName(home)!);
+        var runtime = ProductRuntimeLayout.For(ProductLane.Dev, @"C:\src\Pe.Tools", home);
+        var state = Path.Combine(home, ".local-state");
+        Assert.That(runtime.RootPath, Is.EqualTo(state));
+        var paths = new[] {
+            runtime.State.RootPath,
+            runtime.State.ApsCredentialsPath,
+            runtime.State.ApsTokenStorePath,
+            runtime.Logs.HostLogPath,
+            runtime.Cache.ResolveModuleCachePath("census"),
+            PeServiceDiscovery.ServiceFilePath(runtime.RootPath, "pe-host-source-test")
+        };
+        foreach (var path in paths) {
+            Assert.That(path.StartsWith(state, StringComparison.OrdinalIgnoreCase), Is.True, path);
+            Assert.That(path.StartsWith(ownerRoot, StringComparison.OrdinalIgnoreCase), Is.False, path);
         }
     }
 
-    // Acceptance round 4 F6-A: the dev bridge supervisor took its service lease and read service files
-    // under the owner's %LOCALAPPDATA% even with the override set. It must use the one runtime root.
-    [Test, NonParallelizable]
-    public void Dev_bridge_supervisor_app_base_and_service_files_land_under_the_product_home_override() {
-        var home = Path.Combine(Path.GetTempPath(), $"pe-home-{Guid.NewGuid():N}", "Pe.Tools");
-        var ownerRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Positive Energy", "Pe.Tools");
-        var previous = Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable);
-        Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, home);
-        try {
-            var appBase = Pe.App.Host.TsHostLauncher.ServiceAppBase;
-            var serviceFile = PeServiceDiscovery.ServiceFilePath(appBase, "pe-host-source-test");
-            Assert.That(appBase, Is.EqualTo(ProductRuntimeLayout.ForCurrentUser().RootPath));
-            Assert.That(serviceFile, Does.StartWith(Path.Combine(home, ".local-state", "state", "service")).IgnoreCase);
-            Assert.That(serviceFile, Does.Not.StartWith(ownerRoot).IgnoreCase);
-        } finally {
-            Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, previous);
-            TryDeleteDirectory(Path.GetDirectoryName(home)!);
-        }
+    // Libraries never resolve their own root: storage, the bridge supervisor's lease and the dev logs all
+    // follow the one runtime the shell configured (this assembly's TestRuntime).
+    [Test]
+    public void Library_storage_and_the_bridge_supervisor_follow_the_configured_runtime() {
+        var root = ProductRuntimeLayout.Current.RootPath;
+        foreach (var path in new[] {
+                     new GlobalStorage().DirectoryPath,
+                     new ModuleStorage("census").State().DirectoryPath,
+                     Pe.App.Host.TsHostLauncher.ServiceAppBase,
+                     DevLogPathResolver.HostLogPath,
+                     DevLogPathResolver.RevitAppLogPath
+                 })
+            Assert.That(path.StartsWith(root, StringComparison.OrdinalIgnoreCase), Is.True, path);
     }
 
     [Test]
@@ -177,29 +159,16 @@ public sealed class DeploymentRuntimeContractTests {
     }
 
     [Test]
-    public void Revit_log_paths_resolve_to_local_app_data_runtime_logs() {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-
-        var logs = ProductRuntimeLayout.ForCurrentUser().Logs;
-        Assert.That(DevLogPathResolver.HostLogPath, Is.EqualTo(logs.HostLogPath));
-        Assert.That(DevLogPathResolver.RevitAppLogPath, Is.EqualTo(logs.RevitAppLogPath));
-        Assert.That(
-            DevLogPathResolver.HostLogPath.StartsWith(Path.Combine(localAppData, "Positive Energy", "Pe.Tools", "logs"), StringComparison.OrdinalIgnoreCase),
-            Is.True
-        );
-    }
-
-    [Test]
     public void Host_service_identity_is_installed_global_and_dev_checkout_scoped() {
         const string sourceRoot = @"C:\Users\Alice\Repo\";
 
         Assert.Multiple(() => {
             Assert.That(
-                HostEndpoint.ResolveServiceName("installed", null),
+                HostEndpoint.ResolveServiceName(ProductRuntimeLayout.For(ProductLane.Installed, @"C:\Users\Alice\AppData\Local\Positive Energy\Pe.Tools", null)),
                 Is.EqualTo("host")
             );
             Assert.That(
-                HostEndpoint.ResolveServiceName("dev", sourceRoot),
+                HostEndpoint.ResolveServiceName(ProductRuntimeLayout.For(ProductLane.Dev, sourceRoot, null)),
                 Is.EqualTo("host-source-56fd8a189f7e")
             );
             Assert.That(

@@ -3,9 +3,44 @@ import { grillesFields, type GrillesPage } from "./page";
 export type { GrillesPage } from "./page";
 
 export const grillesGraph: RouteGraph<GrillesPage, null> = {
+  seeds: {
+    calculate: {
+      title: "calculate",
+      load: () => import("#/shell/fixture-examples").then((m) => m.routeExamples["grilles"]),
+    },
+  },
+  directory: {
+    path: "/grilles",
+    title: "Grilles",
+    label: "Wood floor grille",
+    exposure: "Main",
+    runtimeNeed: "Browser calculation and export",
+    icon: "LayoutGrid",
+    category: "Calculate loads & airflow",
+    blurb:
+      "The custom wood floor grille calculator — profiles in a sheet, the active one drawn to submittal scale, the buildable field charted; export a sheet to PDF or .svg.",
+    aliases: ["wood", "floor", "submittal", "calculator", "pdf", "svg"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+  },
   key: "grilles",
   address: "grilles",
   name: "Grilles",
+  subjectField: {
+    field: "row",
+    noun: "grille profile",
+    keyKind: "name",
+    cardinality: "one",
+    roster: "result",
+    detail: "result",
+    pane: "profiles",
+    show: (id) => id,
+  },
   fields: grillesFields,
   readings: {
     result: {
@@ -52,5 +87,4 @@ export const grillesGraph: RouteGraph<GrillesPage, null> = {
         "Edit candidate wood floor grille profiles. Drawing dimensions change every row. Pick a buildable profile in the field chart; arrow keys walk quantity and opening width. Checked rows form the printable export. Rows stay in memory for this page view.",
     },
   },
-  pick: false,
 };

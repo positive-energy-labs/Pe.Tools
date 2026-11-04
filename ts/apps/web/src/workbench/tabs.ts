@@ -1,3 +1,5 @@
+import { subjectState, useSubjects } from "../shell/subject";
+import { restorePageSearch, tabPageSearch } from "../route/url";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { useRouter, useRouterState } from "@tanstack/react-router";
@@ -46,14 +48,14 @@ const read = (): ThreadTab[] => {
 const save = (tabs: ThreadTab[]) => {
   try {
     sessionStorage.setItem(PLACES, JSON.stringify(tabs));
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
     /* This window keeps its mounted Places. */
   }
 };
 const readFocus = () => {
   try {
     return sessionStorage.getItem(FOCUS);
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
     return null;
   }
 };
@@ -61,7 +63,7 @@ const focus = (id: string | null) => {
   try {
     if (id) sessionStorage.setItem(FOCUS, id);
     else sessionStorage.removeItem(FOCUS);
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
     /* The URL still owns the Place. */
   }
 };
@@ -164,7 +166,16 @@ export function useRouteTabs() {
     ["plugin", "focus"].some((key) => new URLSearchParams(location.searchStr).has(key));
   const route = tabRouteAt(location.pathname);
   const carry = routeAddress(route ?? "pea").read(location.search).carry;
-  const link = route ? place(route, location.search, store.local) : null;
+  useSubjects();
+  const explicit = new Set(new URLSearchParams(location.searchStr).keys());
+  const search =
+    restorePageSearch(
+      "__pePageMove" in location.state || "__peRouteTab" in location.state ? undefined : tabPageSearch(location.pathname),
+      Object.fromEntries(Object.entries(location.search).filter(([key]) => explicit.has(key))),
+    ) ?? {};
+  const subject = subjectState(route ?? "", search);
+  const link = route ? place(route, search, store.local) : null;
+  const restoring = Object.keys(search).some((key) => !(key in location.search));
   const [tabs, setTabs] = useState<ThreadTab[]>(read);
   const [failure, setFailure] = useState<string | null>(null);
   const fail = (error: unknown) =>
@@ -200,6 +211,11 @@ export function useRouteTabs() {
                 tab.route === route &&
                 bindingOf(route, tab.link) === bindingOf(route, link),
             )?.id ??
+            // A deep link arriving from another Place (a /ducts row opening /fans) reuses this
+            // route's Place with the same binding; minting one drew a duplicate tab (Manual D).
+            tabs.find(
+              (tab) => tab.route === route && bindingOf(route, tab.link) === bindingOf(route, link),
+            )?.id ??
             null,
           route,
           link,
@@ -208,7 +224,7 @@ export function useRouteTabs() {
 
   // The visible tool is a Place: record its current link and tag history with its id.
   useEffect(() => {
-    if (!active) return;
+    if (!active || restoring || !subject.ready || subject.refusal) return;
     try {
       // Enrollment is idempotent: a repeat run (StrictMode, or a re-render before the history tag
       // lands) reuses the record the first run stored for this exact link instead of minting another.
@@ -230,7 +246,16 @@ export function useRouteTabs() {
     } catch (error) {
       fail(error);
     }
-  }, [active?.id, active?.link, active?.route, tagged?.id, tagged?.route]);
+  }, [
+    active?.id,
+    active?.link,
+    active?.route,
+    tagged?.id,
+    tagged?.route,
+    restoring,
+    subject.ready,
+    subject.refusal,
+  ]);
 
   // The command id names the last explicit open this Place rendered for its conversation; it
   // survives same-Place Page moves but not a change of the thread association.

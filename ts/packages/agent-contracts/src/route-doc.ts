@@ -47,6 +47,7 @@ export type RouteRefusal = {
   error: string;
   hint: string;
   code?: RouteRefusalCode;
+  revision?: number;
 };
 export type RouteLanded<D> = {
   ok: true;
@@ -58,7 +59,7 @@ const FORBIDDEN_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
 
 export function applyPatches<S extends z.ZodType>(
   spec: RouteStateSpec<S>,
-  envelope: RouteEnvelope<z.infer<S>>,
+  envelope: RouteEnvelope<unknown>,
   by: WorkAuthor,
   patches: readonly RouteStatePatch[],
   expectedRevision: number,
@@ -103,15 +104,28 @@ export function routeDocDelta(
   before: unknown,
   after: unknown,
   path: RouteStatePatch["path"] = [],
+  keyedFields: readonly string[] = [],
 ): RouteStatePatch[] {
   if (JSON.stringify(before) === JSON.stringify(after)) return [];
+  // Keyed Work records have identity by key. Do not widen deletion/insertion history
+  // to the entire map merely to preserve object enumeration order.
+  if (
+    path.length === 1 &&
+    keyedFields.includes(String(path[0])) &&
+    isRecord(before) &&
+    isRecord(after)
+  )
+    return [...new Set([...Object.keys(before), ...Object.keys(after)])].flatMap((key) =>
+      routeDocDelta(before[key], after[key], [...path, key]),
+    );
+
   if (
     isRecord(before) &&
     isRecord(after) &&
     JSON.stringify(Object.keys(before)) === JSON.stringify(Object.keys(after))
   )
     return Object.keys(before).flatMap((key) =>
-      routeDocDelta(before[key], after[key], [...path, key]),
+      routeDocDelta(before[key], after[key], [...path, key], keyedFields),
     );
   return [{ path, ...(after === undefined ? {} : { value: structuredClone(after) }) }];
 }
@@ -122,12 +136,15 @@ export function checkRevision(
 ): RouteRefusal | null {
   return expectedRevision === envelope.revision
     ? null
-    : refuse(
-        "refused",
-        `the document moved to r${envelope.revision}`,
-        "re-read before patching.",
-        "stale_revision",
-      );
+    : {
+        ...refuse(
+          "refused",
+          `the document moved to r${envelope.revision}`,
+          "re-read before patching.",
+          "stale_revision",
+        ),
+        revision: envelope.revision,
+      };
 }
 
 /** Stable JSON for comparing the raw command input across retransmissions. */
@@ -139,7 +156,7 @@ export function canonicalRouteInput(input: unknown): string {
 
 export function commitDoc<S extends z.ZodType>(
   spec: RouteStateSpec<S>,
-  envelope: RouteEnvelope<z.infer<S>>,
+  envelope: RouteEnvelope<unknown>,
   next: unknown,
 ): RouteLanded<z.infer<S>> | RouteRefusal {
   const writeSchema = spec.schema instanceof z.ZodObject ? spec.schema.strict() : spec.schema;
@@ -179,11 +196,16 @@ function formatPath(path: (string | number)[]): string {
 }
 
 function formatZodError(error: z.ZodError): string {
-  return error.issues
-    .map((issue) =>
-      issue.path.length ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
-    )
-    .join("; ");
+  return (
+    error.issues
+      .map((issue) =>
+        issue.path.length ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
+      )
+      .join("; ") +
+    (error.issues.some((issue) => issue.path.includes("edit"))
+      ? ' Cell edits wrap the typed value: patch path ["equipmentFlows","<id>","edit"] with value {"value":{"cfm":1050}}. For another cell, read its value schema; do not put cfm directly under edit.'
+      : "")
+  );
 }
 
 export function refuse(

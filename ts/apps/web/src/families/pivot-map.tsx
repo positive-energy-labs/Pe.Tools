@@ -5,7 +5,7 @@ import type { FloaterSpec } from "@pe/kit/lang/floater";
 import { canvasColor, PlaneMinimap } from "@pe/kit/lang/minimap";
 import type { TypeRow } from "./matrix-columns";
 import type { PatchOverlay } from "./patch-overlay";
-import { filledValue, type PivotRow } from "./pivot";
+import { filledValue, type PivotRow } from "./kernel-matrix-model";
 import { GRID, identityWidth } from "./pivot-grid";
 
 export function usePivotMap(

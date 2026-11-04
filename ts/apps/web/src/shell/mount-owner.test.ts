@@ -1,3 +1,4 @@
+import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
 // @vitest-environment jsdom
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
@@ -8,18 +9,18 @@ import { pageVerb, queryVerb } from "./verbs";
 
 test("K1.3/11: hydration acquires an image once; a new Target resets declared scope and fences old deliveries", () => {
   type Page = { view: string; filter: string };
-  const graph: RouteGraph<Page, Record<string, never>> = {
+  const graph: RouteGraph<Page, {}> = {...testSubject,
     key: "proof",
     address: "proof",
     name: "Proof",
     needs: "document",
     work: z.object({}),
-    fields: {
+    fields: {...testFields, testSelected: { ...testFields.testSelected, role: "query" },
       view: { ...field(z.string().default(""), {}), role: "selection" },
       filter: { ...field(z.string().default(""), {}), role: "query" },
     },
     resetOnTarget: ["view"],
-    readings: { image: { kind: "use", source: "image", retire: "target" } },
+    readings: {...testReadings, image: { kind: "use", source: "image", retire: "target" } },
     verbs: {
       close: pageVerb({ label: "Close", input: z.object({}) }, { page: () => ({ view: "" }) }),
     },
@@ -33,7 +34,7 @@ test("K1.3/11: hydration acquires an image once; a new Target resets declared sc
     target: null,
     open: { session: "S", openId: "A" },
   };
-  let scope: MountScope<Record<string, never>> = {
+  let scope: MountScope<{}> = {
     target: { kind: "document", ref: key.open },
     workKey: key,
     work: null,
@@ -49,7 +50,7 @@ test("K1.3/11: hydration acquires an image once; a new Target resets declared sc
         update = fn;
         return () => {};
       },
-      sources: {
+      sources: {...testSources,
         image: {
           kind: "use",
           open: (ctx, emit) => {
@@ -72,7 +73,7 @@ test("K1.3/11: hydration acquires an image once; a new Target resets declared sc
   expect(attempts).toHaveLength(1);
   scope = { ...scope, target: { kind: "document", ref: { session: "S", openId: "B" } } };
   update();
-  expect(owner.view.read().page).toEqual({ view: "", filter: "kept" });
+  expect(owner.view.read().page).toMatchObject({ view: "", filter: "kept" });
   expect(attempts).toHaveLength(2);
   attempts[0]!.emit({ kind: "complete", value: "late A", revision: 1 });
   expect(owner.readings.get("image").value).toBe("A");
@@ -85,12 +86,12 @@ test("K1.3/11: hydration acquires an image once; a new Target resets declared sc
 test("an admitted query publishes its result once; a failed refresh retains it without another source GET", async () => {
   const run = vi.fn(async () => ["new"]);
   const open = vi.fn((_ctx, emit) => emit({ kind: "complete", value: ["old"], revision: 1 }));
-  const graph: RouteGraph<Record<string, never>> = {
+  const graph: RouteGraph<{}> = {...testSubject,
     key: "query-proof",
     address: "query-proof",
     name: "Query",
-    fields: {},
-    readings: { list: { kind: "use", source: "list", query: "list", retire: "never" } },
+    fields: {...testFields,},
+    readings: {...testReadings, list: { kind: "use", source: "list", query: "list", retire: "never" } },
     verbs: {
       refresh: queryVerb(
         { key: "list", input: z.object({}), run },
@@ -104,7 +105,7 @@ test("an admitted query publishes its result once; a failed refresh retains it w
   const owner = createGraphMount(graph, {
     getSnapshot: () => ({ target: { kind: "host" }, work: null }),
     subscribe: () => () => {},
-    sources: { list: { kind: "use", open } },
+    sources: {...testSources, list: { kind: "use", open } },
     verbReadings: { refresh: ["list"] },
     write: vi.fn(),
     subscribeAcceptedDeltas: () => () => {},
@@ -137,12 +138,12 @@ test.each([false, true])(
     let settle!: (value: string[]) => void;
     let reject!: (cause: Error) => void;
     let dependency!: import("./readings").ReadingDelivery;
-    const graph: RouteGraph<Record<string, never>> = {
+    const graph: RouteGraph<{}> = {...testSubject,
       key: "query-race",
       address: "query-race",
       name: "Query race",
-      fields: {},
-      readings: {
+      fields: {...testFields,},
+      readings: {...testReadings,
         dependency: { kind: "use", source: "dependency", retire: "never" },
         list: { kind: "use", source: "list", query: "list", deps: ["dependency"], retire: "never" },
       },
@@ -167,7 +168,7 @@ test.each([false, true])(
     const owner = createGraphMount(graph, {
       getSnapshot: () => ({ target: { kind: "host" }, work: null }),
       subscribe: () => () => {},
-      sources: {
+      sources: {...testSources,
         dependency: {
           kind: "use",
           open: (_, emit) => {

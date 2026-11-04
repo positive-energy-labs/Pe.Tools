@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "capabilities": [],
+  "key": "captures",
+  "address": "/captures",
+  "name": "Captures",
+  "directory": {
+    "group": "Coordinate model data",
+    "summary": "Inspect retained view pictures and receipts",
+    "label": "Revit data",
+    "icon": "Image",
+    "exposure": "Preview",
+    "surfaces": {
+      "web": "full",
+      "pwa": "full",
+      "tray": false
+    },
+    "aliases": [
+      "Revit",
+      "data"
+    ],
+    "runtimeNeed": "Host retained view images",
+    "listed": true,
+    "satellites": []
+  },
+  "fields": {
+    "sha": {
+      "role": "subject",
+      "schema": "subject",
+      "codec": "subject",
+      "initial": null,
+      "url": "push",
+      "share": true,
+      "agent": "set",
+      "cardinality": "one",
+      "identity": "capture",
+      "picker": {
+        "reading": "captures",
+        "options": "pick"
+      }
+    },
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "capture"
+      ]
+    },
+    "open": {
+      "role": "pose",
+      "schema": "open",
+      "codec": "json",
+      "initial": {
+        "kind": "ids",
+        "ids": []
+      },
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    }
+  },
+  "identities": {
+    "capture": {
+      "kind": "local",
+      "codec": "local"
+    }
+  },
+  "subject": {
+    "field": "sha",
+    "noun": "capture",
+    "roster": "captures",
+    "detail": "captures",
+    "pane": "captures"
+  },
+  "readings": {
+    "captures": {
+      "kind": "use",
+      "entry": "captures.list",
+      "args": "captureArgs",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "explicit"
+    }
+  },
+  "verbs": {},
+  "panes": {
+    "captures": {
+      "label": "Captures",
+      "purpose": "Inspect retained pictures",
+      "draws": [
+        "captures"
+      ],
+      "verbs": [],
+      "body": "main"
+    }
+  },
+  "layout": {
+    "kind": "pane",
+    "id": "captures"
+  },
+  "stages": {
+    "main": {
+      "word": "Captures",
+      "panes": [
+        "captures"
+      ],
+      "verbs": []
+    }
+  },
+  "stageOrder": [
+    "main"
+  ],
+  "predicates": {},
+  "cells": {},
+  "workFields": {},
+  "seeds": {
+    "browse": {
+      "title": "Retained view picture",
+      "load": "browse"
+    }
+  },
+  "needs": "nothing",
+  "resetOnTarget": [],
+  "observe": []
+}

@@ -1,3 +1,4 @@
+import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
 // @vitest-environment jsdom
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
@@ -13,7 +14,8 @@ import {
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import { docAtom } from "./work-document";
 import { makeAtomRegistry } from "#/shell/owner";
-import { previousOf, type Readings } from "../readings";
+import { type Readings } from "../readings";
+import { previousOf } from "#/shell/readings-hooks";
 import { createGraphMount } from "./mount-owner";
 import { workVerb } from "./verbs";
 
@@ -53,13 +55,13 @@ test("a composer-shaped address reader and a page reader share accepted deltas, 
   const pageReader = docAtom({ ...spec }, page, resources);
   expect(composerReader).toBe(pageReader);
   const release = registry.mount(pageReader);
-  const graph: RouteGraph<Record<string, never>, z.output<typeof schema>> = {
+  const graph: RouteGraph<{}, z.output<typeof schema>> = {...testSubject,
     key: route,
     address: route,
     name: route,
     work: schema,
-    fields: {},
-    readings: {},
+    fields: {...testFields,},
+    readings: {...testReadings,},
     verbs: {
       edit: workVerb(
         { label: "edit", input: z.object({}) },
@@ -83,7 +85,7 @@ test("a composer-shaped address reader and a page reader share accepted deltas, 
         };
       },
       subscribe: (notify) => registry.subscribe(pageReader, notify),
-      sources: {},
+      sources: {...testSources,},
       write: (key, write) => host.write(key, route, "human", write),
       subscribeAcceptedDeltas: (key, accept) => host.observeAccepted(key, accept),
     });

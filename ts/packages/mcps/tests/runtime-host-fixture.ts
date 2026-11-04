@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { serviceFilePath } from "@pe/host-contracts/pe-service";
-import { productRoot } from "@pe/host-contracts/service-identity";
 import { resolveLaneAndRoot } from "../src/shared/host-config.ts";
+import { runtimeRoot } from "@pe/runtime/runtime-owner";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -28,7 +28,7 @@ export function fakeRuntimeHost(base = "http://127.0.0.1:19999"): string {
     vi.stubEnv("PE_TOOLS_PRODUCT_HOME", isolatedHome);
   }
   vi.stubEnv("PE_TOOLS_HOST_BASE_URL", base);
-  const path = serviceFilePath(productRoot(), owner.serviceName);
+  const path = serviceFilePath(runtimeRoot(), owner.serviceName);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(
     path,

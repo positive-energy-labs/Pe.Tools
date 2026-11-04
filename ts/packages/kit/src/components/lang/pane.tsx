@@ -154,6 +154,8 @@ interface PaneProps extends VariantProps<typeof paneRecipe>, PaneStripProps {
   meta?: ReactNode;
   help?: ReactNode;
   actions?: ReactNode;
+  /** `wrap` drops the actions under the title and flows them at their own width (a header of chips). */
+  fit?: "line" | "wrap";
   leadingActions?: ReactNode;
   titleAlign?: "start" | "center";
   /** Pane-view tabs replace the title line; the title stays the accessible name. */
@@ -209,6 +211,17 @@ export class PaneErrorBoundary extends Component<
   }
 }
 
+/** A suspended body must either resolve or fail into its enclosing pane boundary. */
+export function PaneLoading({ what = "pane" }: { what?: ReactNode }) {
+  const [expired, setExpired] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setExpired(true), 15_000);
+    return () => clearTimeout(timer);
+  }, []);
+  if (expired) throw Error("The page module or data did not load after 15s. Retry to load it again.");
+  return <Work label={typeof what === "string" ? `loading ${what}…` : "loading…"} />;
+}
+
 export function Pane({
   id,
   title,
@@ -216,6 +229,7 @@ export function Pane({
   meta,
   help,
   actions,
+  fit,
   leadingActions,
   titleAlign = "start",
   tabs,
@@ -291,26 +305,29 @@ export function Pane({
       {hasContent(tabs) ? (
         tabs
       ) : hasContent(title) ? (
-        <h2 data-slot="pane-title" data-heading={name ? "name" : undefined}>
-          {crumb}
-        </h2>
+        // Help is the title's own hint, never a floating "?" beside it; Tutorial (Alt+/) teaches
+        // the same `purpose` for keyboard readers and for tabbed heads, which carry no title.
+        <TooltipHint content={hasContent(help) ? help : ""}>
+          <h2
+            data-slot="pane-title"
+            data-heading={name ? "name" : undefined}
+            data-help={hasContent(help) || undefined}
+          >
+            {crumb}
+          </h2>
+        </TooltipHint>
       ) : null}
       {!hasContent(tabs) && hasContent(meta) && (
         <TooltipHint content={typeof meta === "string" ? meta : undefined}>
           <span className="face-mono t-small min-w-0 truncate text-ink-mute">{meta}</span>
         </TooltipHint>
       )}
-      {hasContent(help) && (
-        <span className="shrink-0 self-center">
-          <TooltipHint>{help}</TooltipHint>
-        </span>
-      )}
     </>
   );
   const guarded = (
     <PaneErrorBoundary key={boundaryKey} what={title} onRetry={onRetry}>
       <Suspense
-        fallback={<Work label={typeof title === "string" ? `loading ${title}…` : "loading…"} />}
+        fallback={<PaneLoading what={title} />}
       >
         {children}
       </Suspense>
@@ -353,9 +370,15 @@ export function Pane({
                   }}
                   className={root()}
                 >
-                  {[title, meta, actions, leadingActions, tabs, help, strip].some(hasContent) && (
-                    <div data-slot="pane-header" data-title-align={titleAlign} className="shrink-0">
+                  {[title, meta, actions, leadingActions, tabs, strip].some(hasContent) && (
+                    <div
+                      data-slot="pane-header"
+                      data-title-align={titleAlign}
+                      data-fit={fit}
+                      className="shrink-0"
+                    >
                       <Rail
+                        fit={fit}
                         lead={
                           <>
                             {leadingActions}

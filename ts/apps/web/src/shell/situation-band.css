@@ -1,0 +1,75 @@
+/* THE SITUATION BAND (situation-band.tsx): one line, never a block. Context leads and gives way
+   first (it ellipsizes); the verbs and the Timeline head keep their width. */
+[data-slot="situation-band"] {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--control-h);
+  white-space: nowrap;
+}
+[data-slot="situation-name"] {
+  flex: none;
+  font-family: var(--font-display);
+  font-size: var(--type-title-size);
+  letter-spacing: -0.01em;
+  color: var(--pe-ink);
+}
+[data-slot="situation-context"],
+[data-slot="situation-alerts"],
+[data-slot="situation-verbs"],
+[data-slot="timeline-head"],
+[data-slot="situation-overflow"] {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+[data-slot="situation-context"] {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pe-ink-2);
+}
+[data-slot="situation-subject"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+[data-slot="situation-alerts"]:empty {
+  display: none;
+}
+[data-slot="situation-verbs"] {
+  flex: none;
+  margin-inline-start: auto;
+}
+[data-slot="situation-overflow"] {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0.25rem;
+}
+[data-slot="timeline-head"] {
+  flex: none;
+  padding-inline-start: 0.5rem;
+  border-left: 1px solid var(--pe-line);
+  font-size: var(--type-small-size);
+}
+[data-slot="timeline-trigger"] {
+  gap: 0.5rem;
+  color: var(--pe-ink);
+}
+[data-slot="timeline-state"] {
+  color: var(--pe-ink-2);
+}
+/* Overflowed verbs read as menu rows: one width, left-aligned words. */
+[data-slot="situation-overflow"] > *,
+[data-slot="situation-overflow"] .dl-button {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+}
+[data-slot="consent-window"] {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}

@@ -13,17 +13,17 @@
 export interface Grid {
   title: string;
   xLabel: string;
-  x: number[];
+  x: readonly number[];
   yLabel?: string;
-  y?: number[];
+  y?: readonly number[];
   /** The outer axis of a three-axis table (its first printed column); `grid` is then [z][y][x]. */
   zLabel?: string;
-  z?: number[];
-  grid: number[][] | number[] | (number[] | null)[][];
+  z?: readonly number[];
+  grid: ReadonlyArray<readonly number[]> | readonly number[] | ReadonlyArray<ReadonlyArray<readonly number[] | null>>;
 }
 
 /** TABLE (upper case, e.g. "CD3-2") -> result ("Co", "Cb", "Cs") -> grid. */
-export type Grids = Record<string, Record<string, Grid>>;
+export type Grids = Readonly<Record<string, Readonly<Record<string, Grid>>>>;
 
 /** The point a lookup read, each axis clamped to what the table states there. */
 export interface LookupPoint {
@@ -43,9 +43,9 @@ export interface Lookup {
 
 export class GridError extends Error {}
 
-const clampTo = (v: number, xs: number[]) => Math.min(Math.max(v, xs[0]!), xs.at(-1)!);
+const clampTo = (v: number, xs: readonly number[]) => Math.min(Math.max(v, xs[0]!), xs.at(-1)!);
 
-function interp1(x: number, xs: number[], ys: number[], label: string): [number, string?] {
+function interp1(x: number, xs: readonly number[], ys: readonly number[], label: string): [number, string?] {
   const last = xs.length - 1;
   if (x <= xs[0]!) return [ys[0]!, x < xs[0]! ? `${label} clamped at ${xs[0]}` : undefined];
   if (x >= xs[last]!)
@@ -59,7 +59,7 @@ function interp1(x: number, xs: number[], ys: number[], label: string): [number,
 }
 
 /** The bracketing indices along an ascending axis and the weight of the upper one; clamped at the ends. */
-function bracket(v: number, vs: number[]): { lo: number; hi: number; t: number } {
+function bracket(v: number, vs: readonly number[]): { lo: number; hi: number; t: number } {
   const last = vs.length - 1;
   // On a node, read that slice alone (a neighbour weighted 0 would still add its clamp notes).
   const node = vs.indexOf(v);
@@ -113,7 +113,7 @@ export function toGrids(response: unknown): Grids {
   const tables = (response as { tables?: Record<string, Record<string, unknown>> } | null)?.tables;
   if (!tables || typeof tables !== "object")
     throw new GridError("ducts.tables response has no tables");
-  const out: Grids = {};
+  const out: Record<string, Record<string, Grid>> = {};
   for (const [id, results] of Object.entries(tables)) {
     out[id.toUpperCase()] = {};
     for (const [res, raw] of Object.entries(results))
@@ -186,4 +186,32 @@ export function lookupGrid(grid: Grid, x: number, y?: number | null, z?: number 
     inputs: `${xLabel}=${round(x)}, ${yLabel}=${round(y)}, ${zLabel}=${round(z)}`,
     at: { x: clampTo(x, grid.x), y: a.y + t * (b.y - a.y), z: clampTo(z, grid.z) },
   };
+}
+
+/** Low-flow branch tables: interpolate loss on a fixed velocity basis, then restore Cb.
+ * ASHRAE Fundamentals, Duct Design: C2 = C1 (V1/V2)^2. Each table node's branch
+ * velocity changes with Qb/Qc, so interpolating raw Cb across 0.01..0.1 magnifies
+ * the near-zero-flow singularity. This is an interpolation policy, not a new DFDB equation.
+ * Only the first published flow interval uses it; all published nodes remain exact.
+ * TODO: docs/features/routes/LEDGER.md#s7-76a2681e4b compare this interpolation policy with licensed DFDB at interior low-flow points;
+ * the published grids establish the nodes and velocity basis, not that proprietary algorithm.
+ * Source: https://handbook.ashrae.org/Handbooks/F21/IP/F21_Ch21/F21_Ch21_ip.aspx
+ */
+export function lookupBranchLoss(grid: Grid, x: number, y: number): Lookup {
+  // One policy: fixed-Pv loss in the first published flow interval, raw C at and above its end.
+  const end = grid.x[1];
+  if (end == null || grid.x[0]! <= 0 || x >= end || grid.z || !grid.y)
+    return lookupGrid(grid, x, y);
+  const normalized: Grid = {
+    ...grid,
+    grid: (grid.grid as number[][]).map((row) => row.map((c, i) => c * grid.x[i]! ** 2)),
+  };
+  const found = lookupGrid(normalized, x, y);
+  found.value /= found.at.x ** 2;
+  found.notes.push(
+    "low-flow interpolation on fixed velocity pressure; coefficient restored to branch Pv",
+  );
+  if (found.at.x !== x || found.at.y !== y)
+    found.notes.push("extrapolated: nearest table-domain boundary used");
+  return found;
 }

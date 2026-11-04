@@ -16,6 +16,7 @@ import {
 import type { GraphMount } from "#/shell/mount";
 import type { CellWire } from "#/components/work/band";
 import { takeoffGraph, type TakeoffGraphPage } from "./graph";
+import { selectedTakeoffPage, type TakeoffRoster } from "./subject";
 import { captureOf, valueOf, type TakeoffScope } from "./graph-actions";
 import {
   adoptDrafts,
@@ -39,7 +40,11 @@ export function useTakeoffStore(owner: TakeoffMount) {
       Object.keys(takeoffGraph.readings).map((id) => [id, owner.readings.get(id)]),
     ),
   };
-  const { page, work, target } = scope;
+  const { work, target } = scope;
+  const page = selectedTakeoffPage(
+    scope.page,
+    (owner.readings.get("roster").value as TakeoffRoster | undefined) ?? { views: [], zones: [] },
+  );
   const capture = captureOf(scope);
   const savedCapture = page.work ? capture : undefined;
   const authority = capture?.snapshot.world ?? EMPTY_WORLD;
@@ -116,7 +121,7 @@ export function useTakeoffStore(owner: TakeoffMount) {
           .map((zone) => zone.zone.guid),
       );
       navigation({
-        views,
+        views: [...views],
         zones: page.zones.filter((zone) => allowed.has(zone)),
         level: "",
         zone: "",
@@ -126,7 +131,7 @@ export function useTakeoffStore(owner: TakeoffMount) {
     },
     chooseZones: (zones: readonly string[]) =>
       owner.view.setPage({
-        zones,
+        zones: [...zones],
         ...(page.zone && !zones.includes(page.zone) ? { zone: "", room: "" } : {}),
       }),
     chooseR10: (r10: string) => owner.view.setPage({ r10 }),

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Undo2 } from "lucide-react";
 import {
   availableTransitions,
@@ -299,15 +299,11 @@ export function ReviewRow({
 export const reviewAddresses = <C extends CellLike>(cells: Record<string, C>) =>
   Object.entries(cells).filter(([, cell]) => cell.suggestion != null || cell.edit != null);
 
-/** How long the unstage confirm waits for its second press. */
-const CONFIRM_MS = 4000;
-
 /**
- * BULK UNSTAGE (F-J1-8): one `unstage` fanOut over the edit cells among `keys`, where the
- * aggregate accept/deny live. It removes the person's own work, so it asks on the SAME control:
- * the first press arms it ("unstage N edit? press again") for about 4 s, Escape cancels, and only
- * the second press writes. The unstage transition's own rule decides what it covers; Pea's
- * proposals on those cells stay.
+ * BULK REVERT: one `clear` fanOut over the edit cells among `keys`, as ONE journal step: one
+ * press writes, and Mod+Z (or the Timeline's undo) restores it (ADR 0027 rule 12), so it no
+ * longer asks first. Pea's proposals on those cells stay. A refused write wrote nothing and says
+ * why; pressing again retries against the Work now on screen.
  */
 export function UnstageAll({
   wire,
@@ -323,94 +319,23 @@ export function UnstageAll({
   /** A framed revert button with its count, for a one-line row; the words move to the title. */
   compact?: boolean;
 }) {
-  const edit = useMemo(
-    () =>
-      fanOut(cells, keys, "clear", {
-        cellsPath: cellsPath(wire),
-
-        lockOf: wire.lockOf,
-      }).covered.length,
+  const covered = useMemo(
+    () => fanOut(cells, keys, "clear", { cellsPath: cellsPath(wire), lockOf: wire.lockOf }),
     [cells, keys, wire],
   );
-  const [armed, setArmed] = useState<{
-    press: string;
-    patches: RouteStatePatch[];
-    outcome: FanOutOutcome;
-    revision: number | null;
-    confirmed: boolean;
-    registered?: boolean;
-  } | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const sending = useRef(false);
-  const cancel = () => {
-    if (armed) wire.discard?.(armed.press);
-    setArmed(null);
-    setFailure(null);
-  };
-  useEffect(() => {
-    if (!armed || armed.confirmed) return;
-    const lapse = setTimeout(() => setArmed(null), CONFIRM_MS);
-    return () => clearTimeout(lapse);
-  }, [armed]);
-  useEffect(() => {
-    if (!armed?.confirmed || !wire.pending) return;
-    if (wire.pending(armed.press) && !armed.registered) setArmed({ ...armed, registered: true });
-    else if (!wire.pending(armed.press) && armed.registered && !sending.current) {
-      setArmed(null);
-      setFailure(null);
-    }
-  }, [armed, wire]);
-  useScopeKeys(
-    armed
-      ? [
-          {
-            hotkey: "Escape",
-            callback: cancel,
-            label: "cancel unstage",
-            says: "cancel the armed unstage-all before it writes",
-            options: { enabled: !!armed },
-          },
-        ]
-      : [],
-  );
-  const count = armed?.outcome.covered.length ?? edit;
+  const count = covered.covered.length;
   if (!count) return null;
-  const title = armed
-    ? `Press again to clear your ${count} edit values in one write; Escape cancels`
-    : `Clear your ${edit} edit values in one write (asks first); Pea's proposals stay`;
+  const edits = plural(count, "edit");
+  const title = `Revert your ${edits} in one write; undo restores them. Pea's proposals stay.`;
   const press = async () => {
     if (sending.current) return;
-    if (!armed) {
-      const { covered, skipped } = fanOut(cells, keys, "clear", {
-        cellsPath: cellsPath(wire),
-        lockOf: wire.lockOf,
-      });
-      return setArmed({
-        press: crypto.randomUUID(),
-        confirmed: false,
-        revision: wire.revision,
-        patches: structuredClone(covered.map((key) => clearPatch(wire, key, cells[key]!))),
-        outcome: { kind: "clear", covered, skipped, refusal: null },
-      });
-    }
-    const intent = armed;
-    setArmed({ ...intent, confirmed: true });
     sending.current = true;
     try {
-      const revision = intent.confirmed ? wire.revision : intent.revision;
-      const refusal =
-        revision === null
-          ? {
-              code: "not-ready",
-              message: "Work has not been read yet; reload before retrying this revert",
-            }
-          : await wire.write(intent.patches, revision, { press: intent.press });
-      if (refusal) setFailure(refusal.message);
-      else {
-        setArmed(null);
-        setFailure(null);
-        done({ ...intent.outcome, refusal: null });
-      }
+      const outcome = await runFanOut(wire, cells, keys, "clear");
+      setFailure(outcome.refusal?.message ?? null);
+      if (!outcome.refusal) done(outcome);
     } catch (cause) {
       setFailure(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -423,22 +348,22 @@ export function UnstageAll({
         <Button
           kind="framed"
           icon={Undo2}
-          label={`Revert ${count} edit`}
+          label={`Revert ${edits}`}
           reason={title}
           onClick={() => void press()}
         >
-          <span className="face-mono">{armed ? `${count}? again` : count}</span>
+          <span className="face-mono">{count}</span>
         </Button>
       ) : (
         <TooltipHint content={title}>
           <Verdict kind="clear" onClick={() => void press()}>
-            {armed ? `unstage ${count} edit? press again` : `unstage all (${count})`}
+            revert all ({count})
           </Verdict>
         </TooltipHint>
       )}
       {failure && (
         <span role="alert" data-tone="caution">
-          Revert was not saved: {failure}. Press again to retry; Escape cancels.
+          Revert was not saved: {failure}. Press again to retry.
         </span>
       )}
     </>

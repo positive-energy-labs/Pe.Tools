@@ -28,6 +28,7 @@
       "types": "./src/product-map.ts",
       "import": "./src/product-map.ts"
     },
+    "./work-value": "./src/work-value.ts",
     "./space-view": "./src/space-view.ts",
     "./ducts-guide": {
       "types": "./src/ducts-guide.ts",
@@ -42,12 +43,13 @@
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",
-    "codegen:routes": "node scripts/route-links-cs.ts",
+    "codegen:routes": "node ../../apps/web/scripts/route-graphs.ts && node scripts/route-links-cs.ts",
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
     "@pe/host-contracts": "workspace:*",
-    "zod": "4.3.6"
+    "zod": "4.3.6",
+    "effect": "4.0.2"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

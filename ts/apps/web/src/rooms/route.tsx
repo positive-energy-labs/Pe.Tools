@@ -1,4 +1,5 @@
-import { useContext, useEffect, useMemo, useRef } from "react";
+import { roomSelection } from "./selection";
+import { useContext, useMemo } from "react";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 import {
   transitionPatches,
@@ -18,8 +19,9 @@ import { roomsSources } from "./sources";
 import { RoomsProvider, useRoomsWorkspace, type RoomsOwner } from "./workspace";
 import { RoomsSketch, type Drop } from "./sketch";
 import { snapPlan } from "./snap";
-import { focusOf, RoomsPlan } from "./plan";
+import { RoomsPlan } from "./plan";
 import { RoomsTable } from "./table";
+import { useNativeObservation } from "#/revit/observation";
 import type { Point2 } from "#/lib/affine-frame";
 
 import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
@@ -127,9 +129,9 @@ function PlanBody({
   visible,
   renderPane,
 }: Body & { renderPane: PaneApi }) {
+  const { scope } = useNativeObservation();
   const {
     work,
-    rows,
     onView,
     regions,
     snapshot,
@@ -137,33 +139,27 @@ function PlanBody({
     cards,
     labels,
     view,
-    fixture,
     plan,
     planError,
     trace,
-    document,
     pending,
     error,
   } = useRoomsWorkspace();
-  const focused = useMemo(() => focusOf(rows, page.focus), [rows, page.focus]);
-  const zoomTo = useMemo(() => focused.rows.map((row) => row.region.guid), [focused]);
-  const applied = useRef("");
-  useEffect(() => {
-    if (!page.focus) {
-      applied.current = "";
-      return;
-    }
-    if (!focused.rows.length || applied.current === page.focus) return;
-    applied.current = page.focus;
-    owner.view.setPage({ view: focused.rows[0]!.region.view, selected: zoomTo });
-  }, [owner, focused, page.focus, zoomTo]);
-  useEffect(() => {
-    if (fixture && !page.view) owner.view.setPage({ view }, { history: "replace" });
-  }, [owner, fixture, page.view, view]);
   const token = useMemo(() => crypto.randomUUID(), [snapshot]);
-  const selected = new Set(page.selected);
-  const pinned = page.card || null;
-  const setPinned = (id: string | null) => owner.view.setPage({ card: id ?? "" });
+  const selected = new Set(
+    roomSelection(
+      page.selected,
+      cards,
+      regions.map((region) => region.guid),
+    ).guids,
+  );
+  const { pinned } = roomSelection(
+    page.selected,
+    cards,
+    regions.map((region) => region.guid),
+  );
+  const setPinned = (id: string | null) =>
+    owner.view.setPage({ selected: id ? [`card:${id}`] : [] });
   const wire = workWire(owner);
   const level = snapshot?.levels.find((item) => item.views.includes(view))?.name ?? "";
   const onDrop = async (drop: Drop) => {
@@ -214,13 +210,13 @@ function PlanBody({
   return (
     <RoomsPlan
       renderPane={renderPane}
-      fixture={fixture}
+      fixture={scope?.source === "fixture"}
       lease={{
         thread: thread ?? undefined,
         ready: visible && !!snapshot && !pending && !error,
         context: {
-          source: fixture ? "fixture" : "native",
-          document: fixture ? null : document,
+          source: scope?.source ?? "native",
+          document: scope?.document ?? null,
           acquiredEpoch: page.epoch,
           snapshotToken: token,
           stage: page.stage,
@@ -234,20 +230,26 @@ function PlanBody({
       planRefusal={plan && "refusal" in plan ? plan.refusal : null}
       planError={planError}
       empty={empty}
-      zoomTo={zoomTo}
-      focusMissing={snapshot ? focused.missing : []}
       onSelect={(guid, add) => {
         owner.view.setPage({
-          ...(!add
-            ? { card: guid ? (cards.find((c) => c.guids.includes(guid))?.id ?? "") : "" }
-            : {}),
           selected: !guid
             ? []
             : !add
               ? [guid]
               : selected.has(guid)
-                ? page.selected.filter((item) => item !== guid)
-                : [...page.selected, guid],
+                ? roomSelection(
+                    page.selected,
+                    cards,
+                    regions.map((region) => region.guid),
+                  ).guids.filter((item) => item !== guid)
+                : [
+                    ...roomSelection(
+                      page.selected,
+                      cards,
+                      regions.map((region) => region.guid),
+                    ).guids,
+                    guid,
+                  ],
         });
       }}
       trace={trace}
@@ -282,8 +284,14 @@ function FeedbackBody({ owner, page, renderPane }: Body & { renderPane: PaneApi 
       cards={cards}
       regions={regions}
       labelOf={(guid) => labels.get(guid)}
-      pinned={page.card || null}
-      onPin={(card) => owner.view.setPage({ card })}
+      pinned={
+        roomSelection(
+          page.selected,
+          cards,
+          regions.map((region) => region.guid),
+        ).pinned
+      }
+      onPin={(card) => owner.view.setPage({ selected: [`card:${card}`] })}
       show={page.show}
       onShow={(show) => owner.view.setPage({ show })}
       markdown={() => (work && snapshot ? cardsMarkdown(work.doc, snapshot) : "")}
@@ -336,5 +344,6 @@ export const roomsAdapters: RouteAdapters<RoomsPage, RoomsRouteDocument> = {
     regions: (body) => <RegionsBody {...body} />,
   },
 };
+// TODO: docs/features/routes/LEDGER.md#s7-2335ee600e Re-run list ? picture/card ? reload in fixture=plan after the shared catalog import cycle and directory hashes are repaired.
 export const roomsRoute = routeFromGraph(roomsGraph, roomsAdapters, "/rooms");
 export const RoomsRoute = mountRoute(roomsGraph, roomsAdapters);

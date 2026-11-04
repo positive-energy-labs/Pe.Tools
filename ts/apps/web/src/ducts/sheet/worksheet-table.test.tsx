@@ -40,7 +40,7 @@ it("a derived flow's source is read from the end leg, never typed", () => {
   expect(derivedFlowSource(null)).toBe("derived");
 });
 
-it("a shared louver with no stated flow shows the 350 its run carries, sourced to its consumers, not 'none'", () => {
+it("a shared louver keeps its authored flow empty and shows the computed consumer flow separately", () => {
   const leg = {
     id: "14088043:1>",
     elementId: 14088043,
@@ -79,8 +79,22 @@ it("a shared louver with no stated flow shows the 350 its run carries, sourced t
   const inputs = {
     terminals: {
       "14088043": {
-        cfm: { value: null, source: "none", ref: "PE_M_Grd_AirFlow" },
-        drop: { value: 0.03, source: "firm", ref: "seed" },
+        cfm: {
+          value: null,
+          source: "none",
+          ref: "PE_M_Grd_AirFlow",
+          units: null,
+          version: null,
+          status: "valid",
+        },
+        drop: {
+          value: 0.03,
+          source: "firm",
+          ref: "seed",
+          units: null,
+          version: null,
+          status: "valid",
+        },
       },
     },
   } as unknown as DuctsInputs;
@@ -88,10 +102,11 @@ it("a shared louver with no stated flow shows the 350 its run carries, sourced t
     <Worksheet ws={ws} editing={{ inputs, changeInputs: () => {}, busy: false }} />,
   );
   const cell = container.querySelector("[data-sheet-cell='design cfm at 14088043']")!;
-  expect(cell.querySelector("input")?.value ?? cell.textContent).toContain("350");
+  expect(cell.querySelector("input")?.value).toBe("");
+  expect(screen.getByText("350 cfm computed ? consumers")).toBeTruthy();
   const source = cell.querySelector("[data-input-source]")!;
-  expect(source.textContent).toBe("consumers");
-  expect(source.getAttribute("data-tone")).toBeNull();
-  expect(source.getAttribute("title")).toMatch(/^consumers' sum: balance/);
+  expect(source.textContent).toBe("none");
+  expect(source.getAttribute("data-tone")).toBe("alarm");
+
   expect(screen.getByText(/1 run · worst known 0\.0469/)).toBeTruthy();
 });

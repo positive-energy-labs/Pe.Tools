@@ -1,3 +1,6 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
+import { flowWriteSlot } from "./flow-write-slot.ts";
 /**
  * The losses view's model, pure: what Revit holds now (the applied tables), what the person
  * edit on top, the two solves, and the `ducts.apply` request built from the edit cells.
@@ -5,9 +8,12 @@
  */
 import {
   stagedDucts,
+  ductsDesign,
+  type FansDocument,
+  type DuctsRouteDocument,
   type DuctFinding,
   type DuctsApplyInput,
-  type DuctsRouteDocument,
+  type DuctsDesign,
 } from "@pe/agent-contracts";
 
 import { stagedLink, EMPTY_CATALOGS, type Catalogs } from "./catalog.ts";
@@ -71,7 +77,8 @@ const appliedUnits = (raw: DuctSnapshot) => {
   const cached = appliedUnitCache.get(raw);
   if (cached) return cached;
   const stated = equipmentFlows(raw, {});
-  const roles = unitRoles(raw, stated, stagedDucts(withStoredRulings(null, raw.store)).roles);
+  const stored = withStoredRulings(null, raw.store);
+  const roles = unitRoles(raw, stated, stagedDucts(stored, stored ?? neutralFansWork).roles);
   const units = unitOverrides(roles, stated);
   appliedUnitCache.set(raw, units);
   return units;
@@ -152,7 +159,7 @@ export function guardFindings(result: LossResult): DuctFinding[] {
       id: `mixed-classification:el:${c.id}:${c.from}`,
       kind: "mixed-classification",
       elementIds: [c.id, c.from],
-      note: `${Math.round(c.cfm)} cfm of ${c.fromClassification} air below ${c.from} is kept off ${c.classification} element ${c.id}`,
+      note: `${Math.round(c.cfm)} cfm of ${c.fromClassification} air from upstream is kept off this ${c.classification} element`,
       assumed: null,
       clearer: "person",
     });
@@ -179,6 +186,7 @@ const completed = new WeakMap<
     grids: Grids;
     catalogs: Catalogs;
     doc: DuctsRouteDocument | null;
+    fans: FansDocument;
     priced: Priced;
   }
 >();
@@ -190,8 +198,9 @@ export function rememberPrice(
   doc: DuctsRouteDocument | null,
   catalogs: Catalogs,
   priced: Priced,
+  fans: FansDocument,
 ) {
-  completed.set(raw, { grids, doc, catalogs, priced });
+  completed.set(raw, { grids, doc, fans, catalogs, priced });
 }
 
 /**
@@ -203,7 +212,7 @@ interface Solved {
   now: LossResult;
   /** The design friction rate `now` was read at (it only moves a part with no duct on its path). */
   rate: number;
-  last: { doc: DuctsRouteDocument | null; priced: Priced } | null;
+  last: { doc: DuctsRouteDocument | null; fans: FansDocument; priced: Priced } | null;
   fanouts: Map<string, Fanout>;
 }
 
@@ -238,18 +247,22 @@ function solvedFor(
 export function price(
   raw: DuctSnapshot,
   grids: Grids,
-  doc: DuctsRouteDocument | null,
+  ducts: DuctsRouteDocument | null,
+  fans: FansDocument,
   catalogs: Catalogs = EMPTY_CATALOGS,
 ): Priced {
   const hit = completed.get(raw);
-  if (hit?.grids === grids && hit.catalogs === catalogs && hit.doc === doc) return hit.priced;
+  if (hit?.grids === grids && hit.catalogs === catalogs && hit.doc === ducts && hit.fans === fans)
+    return hit.priced;
+  const doc: DuctsDesign = ductsDesign(ducts, fans);
   const surveyed = survey(raw, doc);
   const { snapshot } = surveyed;
   const units = appliedUnits(raw);
   const entry = solvedFor(snapshot, grids, catalogs, surveyed.inferred, units);
-  if (entry.last?.doc === doc) return entry.last.priced;
+  if (entry.last?.doc === ducts && entry.last.fans === fans) return entry.last.priced;
   // The model's stored rulings under Work's pending ones (`rulings.ts`), as the survey read them.
-  const edit = stagedDucts(withStoredRulings(doc, raw.store));
+  const stored = withStoredRulings(doc, raw.store);
+  const edit = stagedDucts(stored, stored ?? fans);
   const rate = edit.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
   if (entry.rate !== rate) {
     entry.now = computeLosses(
@@ -314,8 +327,8 @@ export function price(
     next,
     edit,
   };
-  entry.last = { doc, priced };
-  rememberPrice(raw, grids, doc, catalogs, priced);
+  entry.last = { doc: ducts, fans, priced };
+  rememberPrice(raw, grids, ducts, catalogs, priced, fans);
   return priced;
 }
 const hasDrops = (edit: Priced["edit"]) =>
@@ -430,7 +443,7 @@ export function proposedStatic(snapshot: DuctSnapshot, result: LossResult, unit:
 }
 
 /**
- * The native `ducts.apply` request (less `previewOnly`) from the edit cells only: every instance of a edit rule under
+ * The native `ducts.apply` request from the edit cells only: every instance of a edit rule under
  * its chosen table (instances the table cannot price are left out, and the band says so), every
  * edit drop, the edit parameter slots, the edit `esp`, the resolved flow of every terminal in a
  * priced group (a group with an air mover; every precedence rung, so Revit's own value is carried
@@ -455,9 +468,21 @@ export function applyRequest(
         .filter((row) => row.c != null && !row.error && row.id > 0 && inScope(row.id))
         .map((row) => ({
           id: row.id,
-          // The Pe server charges the family's own coefficient when it has one, else prices the legs from this table.
+          // Native consumes the host results; no table or family-parameter fallback.
           method: "pe-server" as const,
           coefficient: row.c!,
+          results: Object.values(priced.next.paths)
+            .flatMap((path) => path.rows)
+            .filter((leg) => leg.id === row.id && leg.c != null && leg.pv != null && !leg.error)
+            .map((leg) => ({ velocityPressureInWg: leg.pv!, coefficient: leg.c! }))
+            .filter(
+              (leg, i, all) =>
+                all.findIndex(
+                  (other) =>
+                    other.velocityPressureInWg === leg.velocityPressureInWg &&
+                    other.coefficient === leg.coefficient,
+                ) === i,
+            ),
           table: row.table!,
           inputs: inputsOf(row),
           ruleKey,
@@ -508,11 +533,14 @@ export function applyRequest(
       if (flow?.cfm == null) return [];
       const stated = priced.edit.flows[String(node.id)]?.source;
       return [
-        flowWrite(
-          node.id,
-          flow.cfm,
-          flow.source === "override" ? (stated ?? "override") : flow.source,
-        ),
+        {
+          ...flowWrite(
+            node.id,
+            flow.cfm,
+            flow.source === "override" ? (stated ?? "override") : flow.source,
+          ),
+          slot: flowWriteSlot(node.id, node.flowParameter, priced.edit.parameters.terminalFlow),
+        },
       ];
     })
     .sort((a, b) => a.id - b.id);

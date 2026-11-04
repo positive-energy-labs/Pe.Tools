@@ -1,3 +1,4 @@
+import {testSources,testSubject,testFields,testReadings} from '../test-route-subject';
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { pane, type RouteGraph } from "@pe/agent-contracts";
@@ -26,12 +27,12 @@ afterEach(() => {
 });
 
 function mounted() {
-  const graph: RouteGraph<Record<string, never>> = {
+  const graph: RouteGraph<{}> = {...testSubject,
     key: "host-door-proof",
     address: "ops",
     name: "Host doors",
-    fields: {},
-    readings: {},
+    fields: {...testFields,},
+    readings: {...testReadings,},
     verbs: {
       automatic: rpcVerb(
         automaticUpdatesRpc,
@@ -66,7 +67,7 @@ function mounted() {
     stages: { act: { word: "Acting", panes: ["body"], verbs: ["automatic", "control", "open"] } },
   };
   const owner = createGraphMount(graph, {
-    sources: {},
+    sources: {...testSources,},
     getSnapshot: () => ({ target: { kind: "host" }, work: null }),
     subscribe: () => () => {},
     subscribeAcceptedDeltas: () => () => {},

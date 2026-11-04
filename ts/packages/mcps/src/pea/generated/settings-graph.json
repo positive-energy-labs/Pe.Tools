@@ -1,0 +1,244 @@
+{
+  "address": "settings",
+  "directory": {
+    "aliases": [
+      "machine",
+      "Revit",
+      "update",
+      "share",
+      "providers",
+      "sign-in",
+      "approvals",
+      "host",
+      "startup",
+      "diagnostics",
+      "theme",
+      "route",
+      "preferences",
+      "slots",
+      "colours"
+    ],
+    "blurb": "This machine and every route's user settings: Revit sessions, update, sharing, Pea providers and approvals, host, notifications, appearance, diagnostics, and route preferences.",
+    "category": "Explore / maintain",
+    "exposure": "Main",
+    "icon": "Settings2",
+    "label": "Settings",
+    "listed": true,
+    "path": "/settings",
+    "runtimeNeed": "Host machine configuration",
+    "satellites": [],
+    "surfaces": {
+      "pwa": "full",
+      "tray": "compact",
+      "web": "full"
+    },
+    "title": "Settings"
+  },
+  "fields": {
+    "section": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "enum": [
+          "revit",
+          "update",
+          "share",
+          "pea",
+          "host",
+          "notices",
+          "appearance",
+          "none"
+        ],
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "selected": {
+      "agent": "set",
+      "cardinality": "many",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "keyKind": "name",
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50000,
+            "type": "array"
+          },
+          {
+            "const": "all",
+            "type": "string"
+          }
+        ],
+        "default": []
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "session": {
+      "agent": "read",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "pose",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "maxLength": 200,
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    }
+  },
+  "key": "settings",
+  "layout": {
+    "id": "settings",
+    "kind": "pane"
+  },
+  "moduleHash": "e2e4999145c97087d973eefa3ece0448fb43fafa0908c4602525d9a33394d862",
+  "name": "Settings",
+  "panes": {
+    "settings": {
+      "draws": [
+        "machine"
+      ],
+      "frame": {
+        "header": false
+      },
+      "label": "Settings",
+      "purpose": "Configure this machine and every route",
+      "verbs": []
+    }
+  },
+  "readings": {
+    "machine": {
+      "kind": "use",
+      "retire": "never",
+      "source": "settings.machine"
+    },
+    "scopes": {
+      "kind": "derive",
+      "retire": "never",
+      "source": "settings.scopes"
+    }
+  },
+  "seeds": {
+    "background-booting": {
+      "title": "background-booting"
+    },
+    "blocked-plan": {
+      "title": "blocked-plan"
+    },
+    "controlled-hot": {
+      "title": "controlled-hot"
+    },
+    "disconnected": {
+      "title": "disconnected"
+    },
+    "no-revit": {
+      "title": "no-revit"
+    },
+    "observed-icon": {
+      "title": "observed-icon"
+    },
+    "patch-bay": {
+      "title": "patch-bay"
+    },
+    "receipt-handoff": {
+      "title": "receipt-handoff"
+    },
+    "refresh": {
+      "title": "the patch bay: your Revit 2025, two of Pea's, recents 2022 to 2027"
+    },
+    "update-check-failed": {
+      "title": "update-check-failed"
+    },
+    "update-downloading": {
+      "title": "update-downloading"
+    },
+    "update-failed": {
+      "title": "update-failed"
+    },
+    "waiting-plan": {
+      "title": "waiting-plan"
+    }
+  },
+  "stageOrder": [
+    "settings"
+  ],
+  "stages": {
+    "settings": {
+      "panes": [
+        "settings"
+      ],
+      "verbs": [],
+      "word": "Settings"
+    }
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "machine",
+    "field": "section",
+    "keyKind": "name",
+    "noun": "setting scope",
+    "pane": "settings",
+    "roster": "scopes",
+    "show": {
+      "runtime": true
+    }
+  },
+  "verbs": {
+    "open-section": {
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "section": {
+            "enum": [
+              "revit",
+              "update",
+              "share",
+              "pea",
+              "host",
+              "notices",
+              "appearance",
+              "none"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "kind": "page",
+      "label": "Open section",
+      "review": "none"
+    }
+  }
+}

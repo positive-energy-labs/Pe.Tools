@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { lifetime } from "./family-actions.ts";
 import { command, refused, type CommandContext } from "./command-executor.ts";
 import { preparedTakeoffSchema } from "@pe/agent-contracts";
@@ -168,6 +169,7 @@ export function takeoffExecutors(
         })),
     }),
     "takeoffs.adopt": command(commands["takeoffs.adopt"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Adoption", async (native) => {
@@ -179,6 +181,7 @@ export function takeoffExecutors(
         }),
     }),
     "takeoffs.partition": command(commands["takeoffs.partition"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Materialization", (native) =>
@@ -189,6 +192,7 @@ export function takeoffExecutors(
         ),
     }),
     "rooms.partition": command(commands["rooms.partition"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) =>
         bindCarrier(ctx, () =>
           selectRooms(ctx, (doc, paths) =>
@@ -206,6 +210,7 @@ export function takeoffExecutors(
         }),
     }),
     "rooms.draw": command(commands["rooms.draw"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx, () => selectRooms(ctx, () => [])),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
@@ -213,25 +218,37 @@ export function takeoffExecutors(
           return value(ctx, native, "rooms.draw", input);
         }),
     }),
-    "rooms.write": command(commands["rooms.write"], preparedCarrierSchema, {
-      bind: (ctx) =>
-        bindCarrier(ctx, () =>
-          selectRooms(ctx, (_doc, paths) =>
-            paths.filter((path) => {
-              if (path[0] !== "edits") return false;
-              const { guid, field } = roomEditAddress(String(path[1]));
-              return ctx.admission.input.regions.some(
-                (region) => region.guid === guid && region[field] !== undefined,
-              );
-            }),
+    // TODO: docs/features/routes/LEDGER.md#s7-1cd8580b01 rooms.write native receipts report only a count; retain edits until receipts identify confirmed guid/field cells.
+    "rooms.write": command(
+      {
+        ...commands["rooms.write"],
+        authoredInput: commands["rooms.write"].authoredInput.extend({
+          regions: z.array(z.object({ guid: z.string() }).passthrough()),
+        }),
+      },
+      preparedCarrierSchema,
+      {
+        seal: (p) => ({ request: { process: p.process } }),
+        bind: (ctx) =>
+          bindCarrier(ctx, () =>
+            selectRooms(ctx, (_doc, paths) =>
+              paths.filter((path) => {
+                if (path[0] !== "edits") return false;
+                const { guid, field } = roomEditAddress(String(path[1]));
+                return ctx.admission.input.regions.some(
+                  (region) => region.guid === guid && region[field] !== undefined,
+                );
+              }),
+            ),
           ),
-        ),
-      run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) =>
-          value(ctx, native, "rooms.write", { regions: ctx.admission.input.regions }),
-        ),
-    }),
+        run: (ctx, execution) =>
+          runCarrier(ctx, execution, captures, bridge, "Rooms", (native) =>
+            value(ctx, native, "rooms.write", { regions: ctx.admission.input.regions }),
+          ),
+      },
+    ),
     "rooms.merge": command(commands["rooms.merge"], preparedCarrierSchema, {
+      seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) =>
         bindCarrier(ctx, () =>
           selectRooms(ctx, (doc, paths) =>
@@ -369,6 +386,7 @@ export function takeoffExecutors(
                 const before = await (
                   deps.openFile ??
                   ((path) =>
+                    // effect-edge: island, phase 5
                     Effect.runPromise(rhvacOpen({ path }).pipe(Effect.provide(NodeServices.layer))))
                 )(input.path);
                 const firstRoomNumber = Math.max(0, ...before.rooms.map((room) => room.number)) + 1;
@@ -440,6 +458,7 @@ export function takeoffExecutors(
               (
                 deps.syncFile ??
                 ((input, expectedVersion) =>
+                  // effect-edge: island, phase 5
                   Effect.runPromise(
                     rhvacSync(input, expectedVersion).pipe(Effect.provide(NodeServices.layer)),
                   ))

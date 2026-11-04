@@ -1,4 +1,5 @@
 import { peRoutes } from "@pe/agent-contracts/pe-api";
+import { Context, Effect, Layer } from "effect";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -22,7 +23,7 @@ import { analyticsConfig, readOrCreateInstallId, writeFatalEvidence } from "@pe/
 import { isAnyOperationKey, isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import { ActionJournal } from "./action-journal.ts";
 import { hostActionJournal, setHostReceiptStamp } from "./gateway-owner.ts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import { subscribeReceiptProducers, type NativeReceiptProducer } from "./bridge.ts";
 import { originOf } from "./control.ts";
 import type { NoticeContext } from "./notices.ts";
@@ -478,7 +479,7 @@ export function createReceiptExport(options: {
     : options.client
       ? (event: ExportEvent) => {
           const next = delivery.then(() => withDeadline(event, sendClient));
-          delivery = next.catch(() => {});
+          delivery = next.catch((error) => { console.error("receipt-export: asynchronous operation failed", error); });
           return next;
         }
       : undefined;
@@ -735,7 +736,8 @@ export function createReceiptExport(options: {
       })()),
   };
 }
-export type ReceiptExport = ReturnType<typeof createReceiptExport>;
+/** The exporter a layer built: the Promise face every producer calls until phase 5. */
+export type ReceiptExporter = ReturnType<typeof createReceiptExport>;
 
 // H bakes these into the actual host module graph and served web artifact. Missing evidence is local-only.
 declare const __PE_HOST_RECEIPT_BUILD__:
@@ -764,66 +766,95 @@ export function admitBuild(
   });
   return result.success ? result.data : null;
 }
-let active: ReceiptExport | undefined;
-export function hostReceiptExport() {
-  if (active) return active;
-  const install = readOrCreateInstallId();
-  const processSessionId = randomUUID();
-  const stamps = {
-    host: admitBuild(
-      "host",
-      typeof __PE_HOST_RECEIPT_BUILD__ !== "undefined" ? __PE_HOST_RECEIPT_BUILD__ : null,
-      install,
-      processSessionId,
-    ),
-    web: admitBuild(
-      "web",
-      typeof __PE_WEB_RECEIPT_BUILD__ !== "undefined" ? __PE_WEB_RECEIPT_BUILD__ : null,
-      install,
-      processSessionId,
-    ),
-  };
-  if (stamps.host) setHostReceiptStamp(stamps.host);
-  const journal = hostActionJournal();
-  const config = stamps.host ? analyticsConfig(hostOwnership.lane) : null;
-  const client = config
-    ? new PostHog(config.apiKey, {
-        host: config.host,
-        disableGeoip: true,
-        flushAt: 1,
-        fetchRetryCount: 0,
-        enableExceptionAutocapture: false,
-        fetch: abortableFetch(),
-      })
-    : undefined;
-  active = createReceiptExport({
-    journal,
-    stamps,
-    client,
-    root: join(productRoot(), "state", "host", hostOwnership.serviceName),
-  });
-  if (!stamps.host)
-    active.track(active.record({ kind: "diagnostic", code: "identity.unavailable" }));
-  return active;
+/**
+ * The host's receipt exporter (ADR 0029 rule 3), built by a scoped layer: stamps, the PostHog
+ * client, the native-producer subscription and the journal subscription live as long as the scope,
+ * and its release unbinds them and drains the pending sends. A test swaps the layer.
+ *
+ * SPAN SEAM (rule 6): receipts are still recorded by hand-placed `record(...)` calls on the
+ * returned exporter. A later phase reads spans instead; the only places that change are the
+ * producers listed by `recordHostFact`/`track(record(...))` callers, not this layer.
+ */
+export class ReceiptExport extends Context.Service<ReceiptExport, ReceiptExporter>()(
+  "pe/ReceiptExport",
+) {
+  static readonly layer = Layer.effect(
+    ReceiptExport,
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const install = readOrCreateInstallId();
+        const processSessionId = randomUUID();
+        const stamps = {
+          host: admitBuild(
+            "host",
+            typeof __PE_HOST_RECEIPT_BUILD__ !== "undefined" ? __PE_HOST_RECEIPT_BUILD__ : null,
+            install,
+            processSessionId,
+          ),
+          web: admitBuild(
+            "web",
+            typeof __PE_WEB_RECEIPT_BUILD__ !== "undefined" ? __PE_WEB_RECEIPT_BUILD__ : null,
+            install,
+            processSessionId,
+          ),
+        };
+        if (stamps.host) setHostReceiptStamp(stamps.host);
+        // Seam: ActionJournal becomes a service in its own unit; this line then reads it from context.
+        const journal = hostActionJournal();
+        const config = stamps.host ? analyticsConfig(hostOwnership.lane) : null;
+        const client = config
+          ? new PostHog(config.apiKey, {
+              host: config.host,
+              disableGeoip: true,
+              flushAt: 1,
+              fetchRetryCount: 0,
+              enableExceptionAutocapture: false,
+              fetch: abortableFetch(),
+            })
+          : undefined;
+        const exporter = createReceiptExport({
+          journal,
+          stamps,
+          client,
+          root: join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName),
+        });
+        if (!stamps.host)
+          exporter.track(exporter.record({ kind: "diagnostic", code: "identity.unavailable" }));
+        const unbindNative = bindNativeProducers(exporter);
+        receiptProducerPort = exporter;
+        return { exporter, unbindNative };
+      }),
+      ({ exporter, unbindNative }) =>
+        Effect.promise(async () => {
+          unbindNative();
+          if (receiptProducerPort === exporter) receiptProducerPort = undefined;
+          await exporter.close();
+        }),
+    ).pipe(Effect.map(({ exporter }) => exporter)),
+  );
 }
-/** Scope release drops the exporter with its journal; a successor composes fresh adapters. */
-export async function releaseHostReceiptExport(journal: ActionJournal) {
-  if (active?.journal !== journal) return;
-  const closing = active;
-  active = undefined;
-  await closing.close();
-}
+
+/**
+ * The exporter for producers that are not on a fiber yet (the call route's host facts, the
+ * identity middleware's refusal counts, the process crash handler). Set by {@link ReceiptExport}'s
+ * layer and cleared by its release, so its lifetime is the scope's; phase 5 deletes it when those
+ * producers `yield* ReceiptExport`.
+ */
+let receiptProducerPort: ReceiptExporter | undefined;
+export const currentReceiptExport = () => receiptProducerPort;
+
 export function recordHostFact(body: ReceiptFact, join?: ReceiptJoin) {
-  if (!active) {
+  const exporter = receiptProducerPort;
+  if (!exporter) {
     console.warn("Host receipt producer is not initialized");
     return;
   }
-  active.track(active.record(body, join));
+  exporter.track(exporter.record(body, join));
 }
 
 /** The connection admits the native incarnation and payload; raw process/session identity stays local. */
 export async function acceptNativeProducer(
-  exporter: ReceiptExport,
+  exporter: ReceiptExporter,
   producer: NativeReceiptProducer,
 ) {
   const { fact, connection: c } = producer;
@@ -845,13 +876,13 @@ export async function acceptNativeProducer(
       : null;
   await exporter.record(fact.body, join, stamp, { id: fact.id, at: fact.at });
 }
-export function bindNativeProducers(exporter: ReceiptExport) {
+export function bindNativeProducers(exporter: ReceiptExporter) {
   return subscribeReceiptProducers((p) => exporter.track(acceptNativeProducer(exporter, p)));
 }
 
 type ThreadSnapshot = { id: string; title: string; events: readonly HarnessEvent[] };
 export function createThreadReceiptAdapter(
-  exporter: ReceiptExport,
+  exporter: ReceiptExporter,
   snapshot: () => readonly ThreadSnapshot[],
   workReady?: (threadId: string) => Promise<readonly { title: string; href: string }[]>,
 ) {
@@ -890,13 +921,16 @@ export function createThreadReceiptAdapter(
           threadId,
           body: [
             e.toolCall.title ?? "A tool call is waiting.",
-            e.scope === "run" && e.deadline
-              ? `At ${e.deadline}, Pea may write across tools and documents for the rest of this turn, including delegated work. Allow now or Stop writes for this turn.`
-              : "",
+            e.scope !== "run"
+              ? ""
+              : e.deadline
+                ? `At ${e.deadline}, Pea writes across tools and documents for this thread until Stop, including delegated work. Reject to refuse.`
+                : "Auto-approve is off: Pea's writes in this thread wait until you allow them.",
           ]
             .filter(Boolean)
             .join("\n\n"),
           act: { kind: "permission", threadId, requestId: e.requestId, options: e.options },
+          ...(e.deadline ? { deadline: e.deadline } : {}),
         };
       if (e?.kind === "question_request")
         return {
@@ -1030,7 +1064,7 @@ export function createThreadReceiptAdapter(
   return { accept, context, hydrate: () => Promise.all(snapshot().map((t) => threadJoin(t.id))) };
 }
 
-export function recordUpdateFact(exporter: ReceiptExport, fact: UpdateFact) {
+export function recordUpdateFact(exporter: ReceiptExporter, fact: UpdateFact) {
   exporter.track(
     (async () => {
       const requestId =
@@ -1074,7 +1108,7 @@ export function recordUpdateFact(exporter: ReceiptExport, fact: UpdateFact) {
 
 /** Raw fatal evidence is local first. Remote work cannot hold the nonzero exit past the deadline. */
 export async function fatalReceipt(
-  exporter: ReceiptExport,
+  exporter: ReceiptExporter | undefined,
   code: "process.uncaught" | "process.unhandled-rejection",
   error: unknown,
   exit: (code: number) => void = (code) => process.exit(code),
@@ -1084,12 +1118,14 @@ export async function fatalReceipt(
   try {
     await bounded(
       (async () => {
+        // A crash before the layer built (or after it closed) has only the local evidence above.
+        if (!exporter) return;
         await exporter.record({ kind: "diagnostic", code });
         await exporter.close();
       })(),
       ms,
     );
-  } catch {
+  } catch (error) { console.warn("ts/apps/host/src/receipt-export.ts: fallback after failure", error);
     /* local record remains */
   } finally {
     exit(1);

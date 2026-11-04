@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { ductsDocumentSchema, salvageDuctsWork, stagedDucts } from "./ducts.ts";
+import { neutralFansWork } from "./fans.ts";
 
 it("keeps the person's hex palette in Work and excludes it from native staged inputs", () => {
   const value = {
@@ -12,7 +13,7 @@ it("keeps the person's hex palette in Work and excludes it from native staged in
   };
   const doc = ductsDocumentSchema.parse({ systemColours: { edit: { value } } });
   expect(salvageDuctsWork(doc).doc.systemColours.edit?.value).toEqual(value);
-  expect(stagedDucts(doc)).not.toHaveProperty("systemColours");
+  expect(stagedDucts(doc, neutralFansWork)).not.toHaveProperty("systemColours");
   expect(
     ductsDocumentSchema.safeParse({
       systemColours: { edit: { value: { ...value, supply: "red" } } },
@@ -20,11 +21,11 @@ it("keeps the person's hex palette in Work and excludes it from native staged in
   ).toBe(false);
 });
 
-const flow = { edit: { value: { cfm: 150, source: "fixture" } } };
+const rule = { edit: { value: { table: "CR3-1" } } };
 
 describe("salvageDuctsWork", () => {
   it("returns readable Work untouched", () => {
-    const raw = { flows: { "2": flow } };
+    const raw = { rules: { "2": rule } };
     const out = salvageDuctsWork(raw);
     expect(out.dropped).toEqual([]);
     expect(out.doc).toEqual(ductsDocumentSchema.parse(raw));
@@ -32,14 +33,14 @@ describe("salvageDuctsWork", () => {
 
   it("keeps every cell that parses and names only the broken ones", () => {
     const out = salvageDuctsWork({
-      flows: { "2": flow, "3": { edit: { value: { cfm: "lots" } } } },
+      rules: { "2": rule, "3": { edit: { value: { table: 7 } } } },
       subject: { g1: { edit: { value: "old shape" } } },
       unitStatics: { "1": {} },
       labelParameter: { edit: { value: "PE_G___TagInstance" } },
     });
     expect(out.whole).toBe(false);
-    expect(out.dropped.toSorted()).toEqual(["flows.3", "subject.g1", "unitStatics"]);
-    expect(Object.keys(out.doc.flows)).toEqual(["2"]);
+    expect(out.dropped.toSorted()).toEqual(["rules.3", "subject.g1", "unitStatics"]);
+    expect(Object.keys(out.doc.rules)).toEqual(["2"]);
     expect(out.doc.labelParameter.edit?.value).toBe("PE_G___TagInstance");
     expect(out.doc.subject).toEqual({});
   });
@@ -57,9 +58,9 @@ describe("salvageDuctsWork", () => {
           },
         },
       },
-      flows: { "2": flow },
+      rules: { "2": rule },
     });
-    expect(Object.keys(out.doc.flows)).toEqual(["2"]);
+    expect(Object.keys(out.doc.rules)).toEqual(["2"]);
     expect(out.dropped.length).toBeGreaterThan(0);
   });
 });

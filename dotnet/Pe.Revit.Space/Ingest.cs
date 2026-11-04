@@ -125,11 +125,15 @@ internal static class Ingest {
             return;
         }
 
-        using (ge) {
+        var before = sink.Count;
+        var nativeBefore = budget?.NativeTriangles ?? 0;
+        try { using (ge) {
             budget?.AfterNative();
             // Winding keeps native-copy parity; the caller's link transform is never corrected (SpaceSymbolGeometryProofTests).
             if (ge is not null) Walk(ge, xf, prim, sink, ref sawSolid, region, false, budget, symbols,
                 symbols is null ? "" : e.Document.GetDocumentKey(), o.DetailLevel, miss);
+        } } finally {
+            if (sink.Count > before || (budget?.NativeTriangles ?? 0) > nativeBefore) GeometryLedger.Touch(e);
         }
     }
 
@@ -416,7 +420,8 @@ internal static class Ingest {
             failures.Add(new CurveCaptureFailure([], "traversal", "import geometry was null"));
             return;
         }
-        Curves(import.Document, geometry, curves, failures, [], 0);
+        using (geometry) Curves(import.Document, geometry, curves, failures, [], 0);
+        if (curves.Count > 0) GeometryLedger.Touch(import);
     }
 
     internal static void Curves(

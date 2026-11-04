@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vp test"
+    "test": "vp test",
+    "ratchets:tighten": "node src/tighten-unification-2.ts && node src/tighten-effect-islands.ts"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

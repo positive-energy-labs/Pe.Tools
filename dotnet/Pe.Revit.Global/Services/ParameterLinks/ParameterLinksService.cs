@@ -66,7 +66,7 @@ public sealed class ParameterLinksService {
             0);
     }
 
-    public ParameterLinksData Apply(RevitDocument document, ParameterLinksApplyRequest request) {
+    public ParameterLinksData Apply(RevitDocument document, ParameterLinksApplyRequest request, bool preview) {
         var state = this.ResolveState(document);
         var profile = request.Profile ?? state.Profile;
         if (profile == null) {
@@ -76,14 +76,14 @@ public sealed class ParameterLinksService {
             return new ParameterLinksData(null, missingProfileEvaluation, this.BuildStatus(state), false, 0);
         }
 
-        var preview = ParameterLinksEngine.Evaluate(document, profile);
-        if (request.PreviewOnly || preview.Issues.Any(issue => issue.Severity == ParameterLinkIssueSeverity.Error)) {
-            return new ParameterLinksData(profile, preview, this.BuildStatus(state, profile), false, 0);
+        var evaluated = ParameterLinksEngine.Evaluate(document, profile);
+        if (preview || evaluated.Issues.Any(issue => issue.Severity == ParameterLinkIssueSeverity.Error)) {
+            return new ParameterLinksData(profile, evaluated, this.BuildStatus(state, profile), false, 0);
         }
 
         var profileChanged = false;
         var applied = 0;
-        ParameterLinkEvaluation evaluation = preview;
+        ParameterLinkEvaluation evaluation = evaluated;
         var committed = false;
         using (var sandbox = DocumentSandbox.BeginCommit(document, "Pe Apply Parameter Links")) {
             if (request.Profile != null)

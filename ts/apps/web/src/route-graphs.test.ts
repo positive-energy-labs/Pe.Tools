@@ -1,17 +1,17 @@
 import { expect, test } from "vite-plus/test";
 import { projectRouteGraph } from "@pe/agent-contracts";
-import { ductsGraph } from "./ducts/graph";
-import { familiesGraph } from "./families/graph";
-import { familyGraph } from "./family/graph";
-import { schedulesGraph } from "./schedules/graph";
-import ducts from "../../../packages/mcps/src/pea/generated/ducts-graph.json";
-import families from "../../../packages/mcps/src/pea/generated/families-graph.json";
-import family from "../../../packages/mcps/src/pea/generated/family-graph.json";
-import schedules from "../../../packages/mcps/src/pea/generated/schedules-graph.json";
+import { legacyGraphs } from "./legacy-test-inventory.test-support";
 
-test("Pea's generated route graphs match the executable graphs (pnpm codegen:graphs)", () => {
-  expect(projectRouteGraph(ductsGraph)).toEqual(ducts);
-  expect(projectRouteGraph(familiesGraph)).toEqual(families);
-  expect(projectRouteGraph(familyGraph)).toEqual(family);
-  expect(projectRouteGraph(schedulesGraph)).toEqual(schedules);
-});
+const projections = import.meta.glob<{ default: unknown }>(
+  "../../../packages/mcps/src/pea/generated/*-graph.json",
+  { eager: true },
+);
+test.each(legacyGraphs.map((graph) => [graph.key, graph] as const))(
+  "%s Pea projection matches its inventoried legacy graph (codegen:graphs)",
+  (_, graph) => {
+    const projection =
+      projections[`../../../packages/mcps/src/pea/generated/${graph.key}-graph.json`];
+    expect(projection, `Missing projection for ${graph.key}`).toBeDefined();
+    expect(projectRouteGraph(graph)).toEqual(projection!.default);
+  },
+);

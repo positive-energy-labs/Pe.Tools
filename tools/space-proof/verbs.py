@@ -29,7 +29,6 @@ import run as R  # noqa: E402  (the scene harness: session, slot, backend host, 
 MIB = 2**20
 VERBS = ["sweep", "probe", "slice", "census"]
 PINS = HERE / "verbs-requests.json"
-PACK_DIR = Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools" / "cache" / "space-linked-geometry"
 
 
 # ---------------------------------------------------------------- requests (pure)
@@ -44,11 +43,16 @@ def build_requests(picks, pad_ft=10.0):
         lo = [min(sx, ex), min(sy, ey), min(sz, ez)]
         hi = [max(sx, ex), max(sy, ey), max(sz, ez)]
         exclude = {"excludeElementIds": [p["id"]]}
+        # Region shape (8800f56b): every verb but Census declares the box it asks inside. Sweep and Probe use the census box, the
+        # neighbourhood of the duct, as a stand-in for the room or space the page would send: the region is admission, the verb reads
+        # its own reach. Slice's region is the band itself.
+        around = {"kind": "box", "box": [lo[0] - pad_ft, lo[1] - pad_ft, lo[2] - pad_ft, hi[0] + pad_ft, hi[1] + pad_ft, hi[2] + pad_ft]}
+        band = {"kind": "box", "box": [lo[0] - 2 * pad_ft, lo[1] - 2 * pad_ft, mz - 1.5, hi[0] + 2 * pad_ft, hi[1] + 2 * pad_ft, mz + 1.5]}
         reqs = {
-            "sweep": {"polyline": [[sx, sy, sz], [ex, ey, ez]], "widthFt": p["widthFt"], "heightFt": p["heightFt"], "clearanceFt": 1.0, "filter": exclude},
-            "probe": {"at": [mx, my, mz], "filter": exclude},
-            "slice": {"z0": mz - 1.5, "z1": mz + 1.5, "xyClip": [lo[0] - 2 * pad_ft, lo[1] - 2 * pad_ft, mz - 1.5, hi[0] + 2 * pad_ft, hi[1] + 2 * pad_ft, mz + 1.5], "filter": exclude},
-            "census": {"box": [lo[0] - pad_ft, lo[1] - pad_ft, lo[2] - pad_ft, hi[0] + pad_ft, hi[1] + pad_ft, hi[2] + pad_ft], "filter": exclude},
+            "sweep": {"region": around, "polyline": [[sx, sy, sz], [ex, ey, ez]], "widthFt": p["widthFt"], "heightFt": p["heightFt"], "clearanceFt": 1.0, "filter": exclude},
+            "probe": {"region": around, "at": [mx, my, mz], "filter": exclude},
+            "slice": {"region": band, "z0": mz - 1.5, "z1": mz + 1.5, "filter": exclude},
+            "census": {"box": around["box"], "filter": exclude},
         }
         for verb in VERBS:
             out.append({"id": f"{verb}{i}", "verb": verb, "idx": i, "request": reqs[verb]})
@@ -118,7 +122,8 @@ def dominated(verb, detail):
 # ---------------------------------------------------------------- driving
 
 def pack_state():
-    files = [f for f in PACK_DIR.rglob("*") if f.is_file()] if PACK_DIR.exists() else []
+    pack_dir = R.state_root() / "cache" / "space-linked-geometry"
+    files = [f for f in pack_dir.rglob("*") if f.is_file()] if pack_dir.exists() else []
     return {"files": len(files), "bytes": sum(f.stat().st_size for f in files)}
 
 

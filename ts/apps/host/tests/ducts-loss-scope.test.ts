@@ -1,0 +1,137 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
+import { readFileSync } from "node:fs";
+import { expect, test, vi } from "vite-plus/test";
+import { lossSnapshot } from "../src/ducts-actions.ts";
+import { mergeSnapshots } from "../src/ducts-walk.ts";
+import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
+import { writeSeal } from "../src/work-write-boundary.ts";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { ductsDesign, fansDocumentSchema } from "@pe/agent-contracts";
+import { price, applyRequest } from "@pe/ducts-domain/pricing";
+import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
+
+test("fan preview survives identical re-pricing but rejects changed model inputs", () => {
+  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(
+    JSON.parse(
+      readFileSync(
+        new URL(
+          "../../../packages/host-contracts/src/fixtures/k2-four-fan-walk.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ),
+  );
+  const work = ductsDesign(
+    null,
+    fansDocumentSchema.parse({
+      componentDrops: { "14088043": { edit: { value: { inWg: 0.026 } } } },
+    }),
+  );
+  const handle = {
+    key: {
+      binding: "open" as const,
+      route: "ducts",
+      target: null,
+      open: { session: "A", openId: "doc" },
+    },
+    revision: 1,
+  };
+  const seal = (s: typeof snapshot) =>
+    writeSeal(
+      applyRequest(s, price(s, {}, work, (work) ?? neutralFansWork, EMPTY_CATALOGS), "", []),
+      work,
+      handle,
+      { openId: "doc" },
+      [],
+      ductWriteEvidence(s),
+    );
+  snapshot.walk = {
+    startId: 14577391,
+    hops: 1,
+    elementsReached: snapshot.nodes.length,
+    openEnds: 0,
+    candidates: [],
+    truncated: false,
+    elapsedMs: 12,
+  };
+  // Every set-valued collection may be enumerated differently by a fresh native read.
+  const permute = (value: unknown, key = "", parent = ""): unknown => {
+    if (Array.isArray(value)) {
+      const items = value.map(item => permute(item, "", key));
+      return ["point", "tapPoint", "facing", "widthAxis", "polyline", "order", "criticalPath"].includes(key) || parent === "polyline" || (key === "ports" && parent === "inline") ? items : items.reverse();
+    }
+    return value && typeof value === "object"
+      ? Object.fromEntries(Object.entries(value).reverse().map(([k, v]) => [k, permute(v, k, key)])) : value;
+  };
+  const facts = ductWriteEvidence(snapshot);
+  const permuted = permute(snapshot) as typeof snapshot;
+  Object.assign(permuted.document, { readAt: "new clock", elapsedMs: 900, futureDiagnostic: "new" });
+  Object.assign(permuted.walk!, { elapsedMs: 1000, futureDiagnostic: "new" });
+  for (const node of permuted.nodes) Object.assign(node, { futureDiagnostic: "new" });
+  expect(ductWriteEvidence(permuted)).toEqual(facts);
+  const geometry = structuredClone(snapshot);
+  geometry.nodes[0]!.connectors[0]!.point[0]! += 1;
+  expect(ductWriteEvidence(geometry)).not.toEqual(facts);
+  const topology = structuredClone(snapshot);
+  topology.nodes[0]!.connectors[0]!.connectedTo = { elementId: 999, connector: 4 };
+  expect(ductWriteEvidence(topology)).not.toEqual(facts);
+  const preview = seal(snapshot);
+  const reread = structuredClone(snapshot);
+  reread.document.readAt = "2026-11-02T12:00:00Z";
+  reread.document.elapsedMs += 100;
+  reread.walk!.elapsedMs += 100;
+  reread.nodes.reverse();
+  for (const node of reread.nodes) node.connectors.reverse();
+  for (const segment of reread.segments) segment.connectors.reverse();
+  for (const issue of reread.issues) issue.near?.ports.reverse();
+  expect(seal(reread)).toEqual(preview);
+  reread.slots.fanFlow = "another parameter";
+  expect(seal(reread)).not.toEqual(preview);
+});
+
+test("fan loss preparation reads both sides and carries authored drops into preview", async () => {
+  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(
+    JSON.parse(
+      readFileSync(
+        new URL(
+          "../../../packages/host-contracts/src/fixtures/k2-four-fan-walk.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ),
+  );
+  const read = vi.fn(async () => snapshot);
+  expect(await lossSnapshot({ walk: { unitId: 14577391, portIndex: 2 } }, read)).toBe(snapshot);
+  expect(read).toHaveBeenCalledExactlyOnceWith({ kind: "from", unitId: 14577391 });
+  const truncated = mergeSnapshots(snapshot, {
+    ...snapshot,
+    walk: { startId: 1, hops: 1, elementsReached: 1, openEnds: 0, candidates: [], elapsedMs: 1, truncated: true },
+  });
+  await expect(lossSnapshot({ walk: { unitId: 14577391, portIndex: 2 } }, async () => truncated))
+    .rejects.toThrow("truncated");
+  const node = snapshot.nodes.find((n) => n.id === 14088043)!;
+  expect(node).toBeTruthy();
+  const work = ductsDesign(
+    null,
+    fansDocumentSchema.parse({
+      componentDrops: { [node.id]: { edit: { value: { inWg: 0.026 } } } },
+    }),
+  );
+  const request = applyRequest(
+    snapshot,
+    price(snapshot, {}, work, (work) ?? neutralFansWork, EMPTY_CATALOGS),
+    "2026-11-02T10:00:00Z",
+    [],
+  );
+  expect(request.components).toContainEqual(expect.objectContaining({ id: node.id, inWg: 0.026 }));
+});
+
+
+test("unscoped losses do not fire a healing read", async () => {
+  const read = vi.fn();
+  await expect(lossSnapshot(undefined, read)).rejects.toThrow("stage a scope before previewing losses");
+  expect(read).not.toHaveBeenCalled();
+});

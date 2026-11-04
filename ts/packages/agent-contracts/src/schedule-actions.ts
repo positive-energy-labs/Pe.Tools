@@ -69,6 +69,18 @@ export function unstale(
   return [rest.length ? { path: ["basis", "stale"], value: rest } : { path: ["basis", "stale"] }];
 }
 export const scheduleActions = {
+  "schedule.grid.bind": {
+    says: "Bind immutable host schedule evidence to shared Work at an expected revision; retain authored cells and mark changed native bindings stale.",
+    needs: "nothing",
+    effect: "command",
+    dirties: [],
+    input: z.object({
+      readingId: z.string().min(1),
+      reading: scheduleReadingSchema.optional(),
+      expectedRevision: z.number().int().nonnegative(),
+    }),
+  },
+
   "schedule.grid.push": {
     native: ["schedule.cells.apply"],
     says: "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback. Files a run receipt (values before and after) in the bound pod, or in the action receipt when no pod is bound.",
@@ -97,16 +109,6 @@ export const scheduleActions = {
   },
 } as const;
 export const scheduleReads = {
-  "schedule.grid.bind": {
-    says: "Bind immutable host schedule evidence to shared Work at an expected revision; retain authored cells and mark changed native bindings stale.",
-    needs: "nothing",
-    effect: "query",
-    dirties: [],
-    input: z.object({
-      readingId: z.string().min(1),
-      expectedRevision: z.number().int().nonnegative(),
-    }),
-  },
   "schedule.grid.catalog": {
     says: "Read schedules from the exact selected document without changing authored Work.",
     dirties: [],

@@ -5,7 +5,7 @@
  * fresh frame clears the mark. Real frames over stand-in transports; no module is mocked.
  */
 import { act, cleanup, render } from "@testing-library/react";
-import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import {
   actionReceiptSchema,
@@ -17,18 +17,13 @@ import { submitAction } from "../../../packages/mcps/src/shared/takeoff-action-c
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { RegistryContext } from "@effect/atom-react";
 
-import {
-  PeReadings,
-  peReadings,
-  readingAtom,
-  previousOf,
-  useReadingSlice,
-  useHostEvents,
-  bindActionReadings,
-} from "./readings";
+import { PeReadings, peReadings, useHostEvents, bindActionReadings } from "./readings";
+import { readingAtom, previousOf, useReading, useReadingSlice } from "#/shell/readings-hooks";
 import { useProviders } from "./workbench/provider/providers";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture";
 import { useThreadStream } from "./workbench/provider/thread-stream";
+import { createReadingGraph, type ReadingContext } from "./shell/readings";
+import { subscriptionSource } from "./shell/readings-use";
 
 type Fake = {
   url: string;
@@ -46,6 +41,33 @@ const snapshot = (value: unknown) => ({
   ),
 });
 
+test("transport delivers when a visible tab's animation frame never runs", async () => {
+  vi.useFakeTimers();
+  const raf = vi.fn(() => 1);
+  vi.stubGlobal("requestAnimationFrame", raf);
+  const sources: Fake[] = [];
+  const readings = new PeReadings(() => "http://localhost/readings", url => {
+    const source: Fake = { url, onopen: null, onmessage: null, onerror: null,
+      closed: false, close() { this.closed = true; } };
+    sources.push(source);
+    return source;
+  }, undefined, async () => {});
+  const received = vi.fn();
+  try {
+    readings.subscribe(head, received);
+    await vi.advanceTimersByTimeAsync(0);
+    sources[0]!.onopen!();
+    sources[0]!.onmessage!(snapshot({ retained: true }));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(received).toHaveBeenCalledWith(expect.objectContaining({ value: { retained: true } }));
+    expect(raf).not.toHaveBeenCalled();
+  } finally {
+    readings.close();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  }
+});
+
 function owner(
   batch: (deliver: () => void) => () => void = (deliver) => {
     deliver();
@@ -53,6 +75,17 @@ function owner(
   },
 ) {
   const sources: Fake[] = [];
+  const subscriptions = new Set<string>();
+  const update = vi.fn(
+    async (
+      _connection: string,
+      add: import("@pe/agent-contracts").ReadingRequest[],
+      remove: string[],
+    ) => {
+      for (const key of remove) subscriptions.delete(key);
+      for (const request of add) subscriptions.add(readingKey(request));
+    },
+  );
   const readings = new PeReadings(
     () => "http://127.0.0.1:5180/readings",
     (url) => {
@@ -64,13 +97,78 @@ function owner(
         closed: false,
         close: () => void (source.closed = true),
       };
+      for (const request of JSON.parse(new URL(url).searchParams.get("keys")!))
+        subscriptions.add(readingKey(request));
       sources.push(source);
       return source as unknown as EventSource;
     },
     batch,
+    update,
   );
-  return { readings, sources };
+  return { readings, sources, subscriptions, update };
 }
+
+test("a 33-second hide keeps evidence and the stream; explicit refresh replaces changed revisions", async () => {
+  const { readings, sources } = owner();
+  const derive = vi.fn((ctx: ReadingContext) => ctx.inputs.raw!.value);
+  const graph = createReadingGraph(
+    {
+      readings: {
+        raw: { kind: "use", source: "raw", retire: "never" },
+        derived: { kind: "derive", source: "derived", retire: "never", deps: ["raw"] },
+      },
+    },
+    {
+      scope: { target: { kind: "host" }, workKey: null, workRevision: null, work: null, page: {} },
+      sources: {
+        raw: subscriptionSource({
+          request: () => head,
+          decode: (value) => value,
+          resources: readings,
+        }),
+        derived: { kind: "derive", derive },
+      },
+      log: () => {},
+    },
+  );
+  const release = graph.mount(["derived"]);
+  try {
+    await vi.waitFor(() => expect(sources).toHaveLength(1));
+    sources[0]!.onopen!();
+    sources[0]!.onmessage!(snapshot({ revision: "v1", data: { count: 1 } }));
+    const original = graph.get("raw").value;
+    expect(derive).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    vi.setSystemTime(Date.now() + 33_000);
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    vi.useRealTimers();
+    expect(graph.get("raw").current).toBe(true);
+    expect(graph.get("derived").current).toBe(true);
+    expect(sources).toHaveLength(1);
+    expect(graph.get("raw").value).toBe(original);
+    expect(derive).toHaveBeenCalledTimes(1);
+
+    readings.dirty(head);
+    expect(graph.get("raw").current).toBe(false);
+    // A pre-write stream may not restore freshness, even with an identical answer.
+    sources[0]!.onmessage!(snapshot({ revision: "v1", data: { count: 1 } }));
+    expect(graph.get("raw").current).toBe(false);
+    await vi.waitFor(() => expect(sources).toHaveLength(2));
+    sources[1]!.onopen!();
+    sources[1]!.onmessage!(snapshot({ revision: "v2", data: { count: 1 } }));
+    expect(graph.get("raw").value).not.toBe(original);
+    expect(graph.get("derived").current).toBe(true);
+    expect(derive).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+    release();
+    graph.dispose();
+    readings.close();
+  }
+});
 
 test("an acknowledged command completes on the existing receipt stream without an HTTP waiter", async () => {
   const { readings, sources } = owner();
@@ -119,46 +217,19 @@ test("an acknowledged command completes on the existing receipt stream without a
   }
 });
 
-test("a topology handover keeps its active event source until the latest replacement opens", async () => {
+test("late readings join and leave without reopening the page stream", async () => {
   const { readings, sources } = owner();
-  const received: unknown[] = [];
-  const world = { kind: "world" } as const;
-  const release = readings.subscribe(world, (frame) => {
-    if (frame.kind === "event") received.push(frame.value);
-  });
+  const release = readings.subscribe({ kind: "world" }, () => {});
   await Promise.resolve();
-  const active = sources[0]!;
-  active.onopen!();
-  const releaseHead = readings.subscribe(head, () => {});
-  await Promise.resolve();
-  const pending = sources[1]!;
-  const send = (source: Fake, commandId: string) =>
-    source.onmessage!({
-      data: JSON.stringify({
-        kind: "event",
-        key: readingKey(world),
-        value: { type: "route-view-open", commandId },
-      }),
-    });
-  send(active, "before-open");
-  expect(received).toEqual([{ type: "route-view-open", commandId: "before-open" }]);
-  const releaseMachine = readings.subscribe({ kind: "machine" }, () => {});
-  await Promise.resolve();
-  expect(active.closed).toBe(false);
-  expect(pending.closed).toBe(true);
-  send(active, "during-second-swap");
-  sources[2]!.onopen!();
-  expect(active.closed).toBe(true);
-  send(active, "late");
-  send(sources[2]!, "after-open");
-  expect(received).toEqual(
-    ["before-open", "during-second-swap", "after-open"].map((commandId) => ({
-      type: "route-view-open",
-      commandId,
-    })),
+  sources[0]!.onopen!();
+  const releases = Array.from({ length: 100 }, (_, n) =>
+    readings.subscribe({ kind: "receipts", id: String(n) }, () => {}),
   );
-  releaseMachine();
-  releaseHead();
+  await Promise.resolve();
+  expect(sources).toHaveLength(1);
+  for (const remove of releases) remove();
+  await Promise.resolve();
+  expect(sources).toHaveLength(1);
   release();
   readings.close();
 });
@@ -491,7 +562,7 @@ test.each([false, true])(
   },
 );
 
-test("a tab shown after sleeping resyncs once, and the thread re-reads its body and tail", async () => {
+test("a tab shown after sleeping retains its thread body and tail", async () => {
   const { readings, sources } = owner();
   const registry = AtomRegistry.make();
   const release = registry.subscribe(readingAtom(head, readings), () => {}, { immediate: true });
@@ -520,20 +591,135 @@ test("a tab shown after sleeping resyncs once, and the thread re-reads its body 
     window.dispatchEvent(new Event("online"));
   });
   vi.useRealTimers();
-  await vi.waitFor(() => expect(sources).toHaveLength(2));
+  await act(async () => {});
+  expect(sources).toHaveLength(1);
   expect(sources[0]!.closed).toBe(false);
-  act(() => sources[1]!.onopen!());
-  expect(sources[0]!.closed).toBe(true);
-
-  // The view is marked stale until the re-read body lands, then the tail reopens from its cursor.
-  expect(seen.some((s) => s.stale && s.error?.includes("not current"))).toBe(true);
-  await vi.waitFor(() => expect(bodyReads).toHaveLength(2));
-  await vi.waitFor(() => expect(seen.at(-1)).toEqual({ stale: false, error: null }));
-  expect(tails[0]!.closed).toBe(true);
-  expect(tails.at(-1)!.closed).toBe(false);
-  expect(tails.at(-1)!.url).toContain("after=2");
-  expect(sources).toHaveLength(2);
+  expect(bodyReads).toHaveLength(1);
+  expect(tails).toHaveLength(1);
+  expect(tails[0]!.closed).toBe(false);
+  expect(seen.at(-1)).toEqual({ stale: false, error: null });
 
   release();
   readings.close();
+});
+
+test("reopened thread with 100 action records shares each reading and releases all on unmount", async () => {
+  const { readings, sources, subscriptions } = owner();
+  const registry = AtomRegistry.make();
+  function Record({ id }: { id: string }) {
+    const value = useReading({ kind: "receipts", id }, readings);
+    return <span>{value.state}</span>;
+  }
+  const tree = (
+    <RegistryContext.Provider value={registry}>
+      {Array.from({ length: 200 }, (_, i) => (
+        <Record key={i} id={String(i % 100)} />
+      ))}
+    </RegistryContext.Provider>
+  );
+  for (let pass = 0; pass < 2; pass++) {
+    const view = render(tree);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    if (pass === 0) sources[0]!.onopen!();
+    await vi.waitFor(() => expect(subscriptions.size).toBe(100));
+    expect(sources).toHaveLength(1);
+    view.unmount();
+    await vi.waitFor(() => expect(subscriptions.size).toBe(0));
+  }
+  registry.dispose();
+  readings.close();
+});
+
+test("a remounted reading immediately retains its previous observation while reacquiring", async () => {
+  const { readings, sources } = owner();
+  let registry = AtomRegistry.make();
+  let release = registry.subscribe(readingAtom(head, readings), () => {}, { immediate: true });
+  await Promise.resolve();
+  sources[0]!.onopen!();
+  sources[0]!.onmessage!(snapshot({ revision: 1 }));
+  release();
+  registry.dispose();
+  registry = AtomRegistry.make();
+  release = registry.subscribe(readingAtom(head, readings), () => {}, { immediate: true });
+  expect(previousOf(registry.get(readingAtom(head, readings)))).toEqual({ revision: 1 });
+  release();
+  registry.dispose();
+  readings.close();
+});
+
+test("online replaces a socket that never reported its offline failure", async () => {
+  const { readings, sources } = owner();
+  const received: unknown[] = [];
+  const release = readings.subscribe(head, (frame) => received.push(frame));
+  await Promise.resolve();
+  sources[0]!.onopen!();
+  sources[0]!.onmessage!(snapshot({ revision: 1 }));
+  window.dispatchEvent(new Event("offline"));
+  window.dispatchEvent(new Event("online"));
+  await Promise.resolve();
+  expect(sources).toHaveLength(2);
+  expect(received.at(-1)).toMatchObject({ kind: "stale" });
+  sources[1]!.onopen!();
+  sources[1]!.onmessage!(snapshot({ revision: 2 }));
+  expect(received.at(-1)).toMatchObject({ kind: "snapshot", value: { revision: 2 } });
+  release();
+  readings.close();
+});
+
+test("retention evicts least-recent revisits, exempts mounted subjects, and refetches evictions", async () => {
+  const { readings, sources, update } = owner();
+  const request = (thread: string) => ({ kind: "thread-head", thread }) as const;
+  const emit = (thread: string, revision = 1) =>
+    sources[0]!.onmessage!({
+      data: JSON.stringify({
+        kind: "snapshot",
+        key: readingKey(request(thread)),
+        value: { revision },
+      }),
+    });
+  const releaseMounted = readings.subscribe(request("mounted"), () => {});
+  try {
+    await Promise.resolve();
+    sources[0]!.onopen!();
+    emit("mounted");
+    for (let i = 0; i < 64; i++) {
+      const release = readings.subscribe(request(String(i)), () => {});
+      emit(String(i));
+      release();
+    }
+    const revisit = vi.fn();
+    readings.subscribe(request("0"), revisit)();
+    expect(revisit).toHaveBeenCalledWith(expect.objectContaining({ kind: "snapshot" }));
+    const releaseExtra = readings.subscribe(request("extra"), () => {});
+    emit("extra");
+    releaseExtra();
+    const recent = vi.fn();
+    readings.subscribe(request("0"), recent)();
+    expect(recent).toHaveBeenCalledWith(expect.objectContaining({ kind: "snapshot" }));
+    const mountedAgain = vi.fn();
+    readings.subscribe(request("mounted"), mountedAgain)();
+    expect(mountedAgain).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "snapshot", stale: false }),
+    );
+    const evicted = vi.fn();
+    const releaseEvicted = readings.subscribe(request("1"), evicted);
+    expect(evicted.mock.calls).toEqual([[{ kind: "stale", key: readingKey(request("1")) }]]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(
+      update.mock.calls.some(([, add]) =>
+        add.some((r) => readingKey(r) === readingKey(request("1"))),
+      ),
+    ).toBe(true);
+    emit("1", 2);
+    expect(evicted).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: "snapshot", value: { revision: 2 } }),
+    );
+    releaseEvicted();
+  } finally {
+    releaseMounted();
+    readings.close();
+  }
 });

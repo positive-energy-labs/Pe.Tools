@@ -1,12 +1,12 @@
 import { expect, test } from "vite-plus/test";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { peRoutes } from "@pe/agent-contracts/pe-api";
+import { httpRoutes as peRoutes } from "@pe/agent-contracts/pe-api";
 import { admitRequest, type RoutePermission } from "../src/control.ts";
 
 const options: IdentityOptions = {
   port: () => 5180,
-  frontendOrigin: () => undefined,
+  frontendOrigin: undefined,
   share: {
     observe: () => {},
     read: async () => ({

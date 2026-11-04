@@ -1,3 +1,4 @@
+import { workAdmissionSchema, workFeedFailureSchema } from "./work-journal-door.ts";
 import type { HeldElement, ProcessIdentity } from "@pe/host-contracts/pe-revit-contract";
 import type { MachineLeg } from "./machine.ts";
 import type { SdkSessionSelection } from "./sdk-session.ts";
@@ -11,17 +12,19 @@ import { z } from "zod";
 import { appliedScopeSchema } from "./families.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { workKey, workKeySchema } from "./route-state.ts";
-import { addressSchema, documentRefSchema, sameAddress } from "./target.ts";
+import { addressSchema, documentRefSchema, executionTargetSchema, sameAddress } from "./target.ts";
 import { DUCT_PARAMETER_KEYS } from "./ducts.ts";
 
 /** Which elements `ducts.snapshot` reads (ducts MAP 2026-10-27, "Where the data comes from" row 1). */
 export const ductsSnapshotSelectorSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("document") }),
   /** The fan roster's read: every HVAC equipment node and air terminal, and Revit's systems without sections. Health without open-end neighbourhoods (as `ids`). */
   z.strictObject({ kind: z.literal("roster") }),
-  z.strictObject({ kind: z.literal("ids"), ids: z.array(z.number().int()).min(1) }),
+  z.strictObject({ kind: z.literal("ids"), ids: z.array(z.number().int()).min(1).max(4096) }),
   /** The named Revit systems' groups, whole, in the document read's cooked shape: the network page's read. */
-  z.strictObject({ kind: z.literal("systems"), systemIds: z.array(z.number().int()).min(1) }),
+  z.strictObject({
+    kind: z.literal("systems"),
+    systemIds: z.array(z.number().int()).min(1).max(32),
+  }),
   z.strictObject({
     kind: z.literal("from"),
     unitId: z.number().int(),
@@ -49,11 +52,8 @@ export const ductsSnapshotReadingSchema = z.strictObject({
     .nullish()
     .transform((value) => value ?? undefined)
     .optional(),
-  /** Mirrors C# DuctSnapshotSelector: absent is the whole-document read; `from`, `ids` and `roster` are raw (no groups). */
-  selector: ductsSnapshotSelectorSchema
-    .nullish()
-    .transform((value) => value ?? undefined)
-    .optional(),
+  /** Explicit roster or bounded geometry subject. */
+  selector: ductsSnapshotSelectorSchema,
 });
 export type DuctsSnapshotReading = z.infer<typeof ductsSnapshotReadingSchema>;
 export const ductsTablesReadingSchema = z.strictObject({
@@ -112,16 +112,7 @@ export const familiesMatrixEnvelopeSchema = z
   .nullable();
 export type FamiliesMatrixEnvelope = z.infer<typeof familiesMatrixEnvelopeSchema>;
 
-export const familiesReadProgressSchema = z.object({
-  runId: z.string(),
-  state: z.enum(["reading", "complete", "cancelled", "failed"]),
-  phase: z.string(),
-  completed: z.number().int().nonnegative(),
-  total: z.number().int().nonnegative(),
-  workers: z.number().int().nonnegative(),
-  message: z.string().optional(),
-});
-export type FamiliesReadProgress = z.infer<typeof familiesReadProgressSchema>;
+export { familiesReadProgressSchema, type FamiliesReadProgress } from "./families-progress.ts";
 
 /* ── The lifecycle every Reading has ──────────────────────────────────────────────────────── */
 
@@ -198,17 +189,33 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("machine") }),
   sdkReadingSchema,
   z.discriminatedUnion("binding", [
-    workKeySchema.options[0].extend({ kind: z.literal("work") }),
-    workKeySchema.options[1].extend({ kind: z.literal("work") }),
-    workKeySchema.options[2].extend({ kind: z.literal("work") }),
-    workKeySchema.options[3].extend({ kind: z.literal("work") }),
+    workKeySchema.options[0].extend({
+      kind: z.literal("work"),
+      admission: workAdmissionSchema.optional(),
+    }),
+    workKeySchema.options[1].extend({
+      kind: z.literal("work"),
+      admission: workAdmissionSchema.optional(),
+    }),
+    workKeySchema.options[2].extend({
+      kind: z.literal("work"),
+      admission: workAdmissionSchema.optional(),
+    }),
+    workKeySchema.options[3].extend({
+      kind: z.literal("work"),
+      admission: workAdmissionSchema.optional(),
+    }),
   ]),
   /**
    * One Work's accepted writes, in acceptance order: each `event` frame is one host-stamped
    * `WorkWriteAck` (author, press, forward and inverse patches, revision). A subscription replays
    * the host's retained window first, so a duplicate is possible and a revision jump is a gap.
    */
-  z.strictObject({ kind: z.literal("work-acks"), work: workKeySchema }),
+  z.strictObject({
+    kind: z.literal("work-acks"),
+    work: workKeySchema,
+    admission: workAdmissionSchema.optional(),
+  }),
   z.strictObject({ kind: z.literal("thread-head"), thread: z.string().min(1).max(200) }),
   /** Every harness thread's summary, one snapshot per change (coalesced). */
   z.strictObject({ kind: z.literal("threads") }),
@@ -245,10 +252,15 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({
     kind: z.literal("receipts"),
+    scope: z
+      .strictObject({ key: workKeySchema, target: executionTargetSchema.nullable() })
+      .optional(),
     target: documentRefSchema.optional(),
     id: z.string().min(1).max(200).optional(),
-    /** A workspace-scoped receipt list, the same subject `readScopedActionStatuses` reads. */
+    /** Full receipts for one Work, including results. Unscoped lists carry ActionStatus only. */
     work: workKeySchema.optional(),
+    /** Timeline needs outcomes, not native payloads and prepared snapshots. */
+    detail: z.literal("status").optional(),
     tool: z.string().optional(),
   }),
   /**
@@ -316,7 +328,12 @@ export const readingFrameSchema = z.discriminatedUnion("kind", [
      */
     changed: z.boolean().optional(),
   }),
-  z.strictObject({ kind: z.literal("failure"), key: z.string(), error: z.string() }),
+  z.strictObject({
+    kind: z.literal("failure"),
+    key: z.string(),
+    error: z.string(),
+    failure: workFeedFailureSchema.optional(),
+  }),
   /**
    * `id` marks a host log frame: it is the SSE id, and a reconnect resumes after the last one
    * (`?after=<id>` or `Last-Event-ID`). Log frames of every key share one lane in id order; a
@@ -352,3 +369,5 @@ export type ActionReadingKey =
   | "schedules"
   | "sdk"
   | "machine";
+
+export const rhvacFileVersionSchema = z.object({ path: z.string(), fileVersion: z.string() });

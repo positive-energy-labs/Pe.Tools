@@ -6,7 +6,7 @@
  * capture keys on the document and the focus, the camera on the document and the picture mode,
  * so neither remounts when a view or variant swaps its content.
  */
-import type * as Atom from "effect/unstable/reactivity/Atom";
+import type * as Atom from "effect/reactivity/Atom";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import {
   AttentionDocument,
@@ -79,6 +79,12 @@ export interface PictureContent<L extends string = string, F extends string = st
   hoverGroups?: (group: SubjectKey) => boolean;
   /** A picked element's selection, widened (E: its leg). Absent = the single element. */
   widen?: (key: SubjectKey) => readonly SubjectKey[];
+  /** Routes can declare only the zero-tessellation default. The kernel owns detail. */
+  geometry: {
+    overview: ReturnType<typeof sceneRequest> & {
+      contextRepresentation: Extract<ContextRepresentation, "overview">;
+    };
+  };
   /** Capture limits and clipping; `meshes` substitutes a dev fixture for the capture. */
   capture?: { maxTriangles?: number; cuts?: SceneMeshes["cuts"]; meshes?: SceneMeshes | null };
   /** Centrelines: bounds before meshes arrive, the jump fallback, and the globe's lines. */
@@ -125,11 +131,9 @@ export interface PictureContent<L extends string = string, F extends string = st
 }
 
 /** How context is drawn; `none` is the focus read's own and never a choice here. */
-export type PictureContext = Exclude<ContextRepresentation, "none">;
-/** Interim, disclosed default pending kaitpw's IFC drawing ruling (docs/features/spatial/MAP.md
- * Owed): link-frame envelopes are oriented and containing at link-box cost; meshes cost about
- * +5 GiB on Chadds SA 7, against the never-restart goal. The one place the default lives. */
-export const CONTEXT_DEFAULT: PictureContext = "link-boxes";
+export type PictureContext = Extract<ContextRepresentation, "overview" | "meshes">;
+/** Zero-native-geometry overview is the default; detail is an explicit read (kaitpw, 2026-11-02). */
+export const CONTEXT_DEFAULT = "overview" satisfies PictureContext;
 
 type DocRef = { session: string; openId: string };
 type Move = { history: "push" | "replace" };
@@ -148,8 +152,8 @@ export function captureRequest(
   return {
     ...sceneRequest(
       ids.sort((a, b) => a - b),
-      !CONTEXT_KEYS.some((key) => layers.includes(key)),
-      radiusFt,
+      representation !== "meshes" && !CONTEXT_KEYS.some((key) => layers.includes(key)),
+      representation === "meshes" ? Math.max(5, radiusFt) : radiusFt,
       representation,
     ),
     // Whole-document exact focus exceeds 1.5M triangles on Project A. Never drop focus to fit.
@@ -243,12 +247,25 @@ export function Picture<L extends string, F extends string>({
 }) {
   // No document = selection and member registration silently do nothing (the fan sheet's 10-28
   // defect), so a Picture outside an `AttentionRoot` fails loudly instead.
+  const visibleLayers = useMemo(
+    () =>
+      content.layerOptions
+        .filter((layer) => page.layers === "all" || page.layers.includes(layer.key))
+        .map((layer) => layer.key),
+    [page.layers, content.layerOptions],
+  );
   const doc = useContext(AttentionDocument);
   if (!doc) throw new Error("Picture requires an AttentionRoot (attention document)");
   useAttentionDocument(doc, selection);
   const registry = useContext(RegistryContext);
   const selectedKeys = useAtomValue(selection);
-  const [contextRepresentation, setContextRepresentation] = useState(CONTEXT_DEFAULT);
+  // A new subject or revision starts cheap; a prior click cannot warm its geometry.
+  const detailScope = JSON.stringify([source.native, source.version, content.focus]);
+  const [detailedScope, setDetailedScope] = useState<string | null>(null);
+  const contextRepresentation: PictureContext =
+    detailedScope === detailScope ? "meshes" : CONTEXT_DEFAULT;
+  const setContextRepresentation = (representation: PictureContext) =>
+    setDetailedScope(representation === "meshes" ? detailScope : null);
   const { lit: attentionLit, selected: attentionSelected } = useElementAttention();
   // Reverse hover answers a hovered element only, never a row's expansion into elements.
   const over = useAtomValue(hoveredRef);
@@ -278,24 +295,25 @@ export function Picture<L extends string, F extends string>({
     () =>
       captureRequest(
         content.focus,
-        page.layers,
+        visibleLayers,
         page.contextRadiusFt,
         contextRepresentation,
         content.capture?.maxTriangles,
       ),
     [
       content.focus,
-      page.layers,
+      visibleLayers,
       page.contextRadiusFt,
       contextRepresentation,
       content.capture?.maxTriangles,
     ],
   );
   const captured = useCapture(
-    pictureSize ? request : null,
+    pictureSize ? (contextRepresentation === "meshes" ? request : content.geometry.overview) : null,
     native,
     source.version,
     content.capture?.cuts,
+    content.geometry.overview,
   );
   const fixture = content.capture?.meshes;
   const capture = fixture ? { ...captured, meshes: fixture, focusMeshes: fixture } : captured;
@@ -346,7 +364,7 @@ export function Picture<L extends string, F extends string>({
   useEffect(() => {
     onPose?.(pose);
   }, [pose, onPose]);
-  const layers = new Set<string>(page.layers);
+  const layers = new Set<string>(visibleLayers);
   // Stable while the layers and the page's toggles hold, so the renderer's layers do too.
   // Strands and over paint are the core's own layer: always drawn while the content gives them.
   const overKeys = useMemo(
@@ -371,9 +389,9 @@ export function Picture<L extends string, F extends string>({
   const drawn = useMemo(
     () => [
       ...(coreLayer ? [coreLayer] : []),
-      ...(content.layers ?? []).filter((l) => !l.toggle || page.layers.includes(l.toggle as L)),
+      ...(content.layers ?? []).filter((l) => !l.toggle || visibleLayers.includes(l.toggle as L)),
     ],
-    [coreLayer, content.layers, page.layers],
+    [coreLayer, content.layers, visibleLayers],
   );
   // A strand lit (its subject hovered here or on a row) or selected flows: the renderer reads it
   // through the same hover and focus rungs an issue mark takes.
@@ -555,14 +573,17 @@ export function Picture<L extends string, F extends string>({
             sceneView={page.sceneView}
             paint={content.paint}
             contextMode={
-              // Main's rule: neither context layer on = no context at all (the capture asks none).
+              // Layer visibility changes drawing only; detailed acquisition stays explicit.
               CONTEXT_KEYS.some((key) => layers.has(key)) ? page.contextStyle : "off"
             }
             kinds={content.kinds}
             colour={content.colour}
             contextRadiusFt={page.contextRadiusFt}
             contextRepresentation={contextRepresentation}
-            onContextRepresentation={native ? setContextRepresentation : undefined}
+            onContextRepresentation={setContextRepresentation}
+            detailRefusal={
+              native ? null : "Choose a current Revit document to read detailed geometry"
+            }
             readout={readout}
             read={read}
             capturing={capture.pending}
@@ -658,7 +679,7 @@ export function Picture<L extends string, F extends string>({
                 }
               : undefined,
             layers: {
-              value: page.layers,
+              value: visibleLayers,
               options: content.layerOptions.map((option) => ({
                 ...option,
                 busy: CONTEXT_KEYS.includes(option.key) && read.pending,
@@ -668,7 +689,7 @@ export function Picture<L extends string, F extends string>({
                   {
                     layers: toggleLayer(
                       content.layerOptions.map((option) => option.key),
-                      page.layers,
+                      visibleLayers,
                       key as L,
                     ),
                   },

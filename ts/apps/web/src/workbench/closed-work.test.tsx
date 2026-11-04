@@ -12,7 +12,7 @@ import { address, ductsRouteState, readingKey } from "@pe/agent-contracts";
 import { z } from "zod";
 import { peReadings } from "#/readings";
 import { useEffect } from "react";
-import { ductsGraph } from "#/ducts/graph";
+import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
 import { useGraphRoute } from "#/shell/mount";
 import { graphUrlPage } from "#/shell/mount-page";
 import { subscriptionSource } from "#/shell/readings-use";
@@ -33,6 +33,7 @@ const action = (label: string) =>
   );
 const graph: typeof ductsGraph = {
   ...ductsGraph,
+  subjectField: { ...ductsGraph.subjectField, roster: "testSubject", detail: "testSubject" },
   fields: Object.fromEntries(
     Object.entries(ductsGraph.fields).map(([id, value]) => [id, { ...value, picker: undefined }]),
   ) as typeof ductsGraph.fields,
@@ -40,7 +41,11 @@ const graph: typeof ductsGraph = {
   work: ductsRouteState.schema,
   cells: undefined,
   observe: undefined,
-  readings: { takeoff: { kind: "use" as const, source: "takeoff", retire: "target" as const } },
+  refresh: undefined,
+  readings: {
+    testSubject: { kind: "derive" as const, source: "testSubject", retire: "never" as const },
+    takeoff: { kind: "use" as const, source: "takeoff", retire: "target" as const },
+  },
   verbs: { host: action("host"), doc: action("document") },
   layout: { kind: "pane" as const, id: "probe" },
   panes: { probe: { label: "Probe", purpose: "Closed Work", draws: ["takeoff"], verbs: [] } },
@@ -51,6 +56,7 @@ const url = graphUrlPage(graph);
 const adapters = {
   bodies: {},
   sources: {
+    testSubject: { kind: "derive" as const, derive: () => [] },
     takeoff: {
       kind: "use" as const,
       open(

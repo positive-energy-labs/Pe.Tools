@@ -7,14 +7,15 @@ import { useCapture } from "#/scene/picture/read";
 const native = vi.hoisted(() => ({
   calls: [] as {
     request: ReturnType<typeof sceneRequest>;
+    signal: AbortSignal;
     resolve: (value: { id: string }) => void;
     reject: (error: Error) => void;
   }[],
 }));
 vi.mock("#/host/client", () => ({
   callHostRpc: vi.fn(
-    (_key, request) =>
-      new Promise((resolve, reject) => native.calls.push({ request, resolve, reject })),
+    (_key, request, options) =>
+      new Promise((resolve, reject) => native.calls.push({ request, signal: options.signal, resolve, reject })),
   ),
 }));
 vi.mock("./artifact", () => ({
@@ -51,6 +52,7 @@ afterEach(() => {
 });
 const doc = { session: "capture-proof", openId: "doc" };
 const finish = async (index: number, id: string) => {
+  await waitFor(() => expect(native.calls[index]).toBeDefined());
   await act(async () => native.calls[index]!.resolve({ id }));
 };
 
@@ -60,6 +62,7 @@ it("context representation changes retain exact focus and never reuse incompatib
       useCapture(sceneRequest([7199], false, 10, representation), doc, "representation"),
     { initialProps: { representation: "oriented" } },
   );
+  await waitFor(() => expect(native.calls[0]).toBeDefined());
   expect(native.calls[0]!.request.contextRepresentation).toBe("none");
   await finish(0, "representation-focus");
   await waitFor(() => expect(native.calls).toHaveLength(2));
@@ -86,7 +89,7 @@ it("context representation changes retain exact focus and never reuse incompatib
   await waitFor(() =>
     expect(view.result.current.meshes).toMatchObject({ id: "representation-oriented" }),
   );
-  expect(native.calls).toHaveLength(4);
+  await waitFor(() => expect(native.calls).toHaveLength(4));
 });
 
 it("shows exact focus before context, keeps it inspectable, and does not recapture on visual renders or shrink", async () => {
@@ -95,7 +98,7 @@ it("shows exact focus before context, keeps it inspectable, and does not recaptu
       useCapture(sceneRequest([7121], false, radius, "link-boxes"), doc, epoch),
     { initialProps: { radius: 10, epoch: 3 } },
   );
-  expect(native.calls).toHaveLength(1);
+  await waitFor(() => expect(native.calls).toHaveLength(1));
   expect(native.calls[0]!.request.focusOnly).toBe(true);
   await finish(0, "focus-first");
   await waitFor(() => expect(native.calls).toHaveLength(2));
@@ -108,10 +111,10 @@ it("shows exact focus before context, keeps it inspectable, and does not recaptu
   await waitFor(() => expect(view.result.current.pending).toBe(false));
   view.rerender({ radius: 10, epoch: 3 });
   view.rerender({ radius: 5, epoch: 3 });
-  expect(native.calls).toHaveLength(2);
+  await waitFor(() => expect(native.calls).toHaveLength(2));
   expect(view.result.current.meshes).toMatchObject({ id: "context-ten" });
   view.rerender({ radius: 20, epoch: 3 });
-  expect(native.calls).toHaveLength(3);
+  await waitFor(() => expect(native.calls).toHaveLength(3));
   expect(native.calls[2]!.request.contextPaddingFt).toBe(20);
   expect(view.result.current).toMatchObject({ meshes: { id: "focus-first" }, focusReady: true });
 });
@@ -124,13 +127,13 @@ it("fences late scopes and revisions", async () => {
   await finish(0, "old-focus");
   await waitFor(() => expect(native.calls).toHaveLength(2));
   view.rerender({ ids: [7123], epoch: 0 });
-  expect(native.calls).toHaveLength(3);
+  await waitFor(() => expect(native.calls).toHaveLength(3));
   await finish(1, "late-context");
   expect(view.result.current.meshes).toBeNull();
   await finish(2, "new-focus");
   await waitFor(() => expect(native.calls).toHaveLength(4));
   view.rerender({ ids: [7123], epoch: 1 });
-  expect(native.calls).toHaveLength(5);
+  await waitFor(() => expect(native.calls).toHaveLength(5));
   expect(native.calls[4]!.request.focusOnly).toBe(true);
   await finish(3, "late-reach");
   expect(view.result.current.meshes).toBeNull();
@@ -142,13 +145,13 @@ it("shares identical in-flight reads and fences a replacement document", async (
   const second = renderHook(({ target }) => useCapture(request, target, "snapshot-a"), {
     initialProps: { target: doc },
   });
-  expect(native.calls).toHaveLength(1);
+  await waitFor(() => expect(native.calls).toHaveLength(1));
   await finish(0, "shared-focus");
   await waitFor(() => expect(native.calls).toHaveLength(2));
   expect(first.result.current.focusReady).toBe(true);
   expect(second.result.current.focusReady).toBe(true);
   second.rerender({ target: { ...doc, openId: "replacement" } });
-  expect(native.calls).toHaveLength(3);
+  await waitFor(() => expect(native.calls).toHaveLength(3));
   await finish(1, "previous-document-context");
   expect(second.result.current.meshes).toBeNull();
   await waitFor(() => expect(first.result.current.pending).toBe(false));
@@ -169,16 +172,16 @@ it("reuses A/B/A and remounts at the same native revision, but expansion and rev
   await waitFor(() => expect(view.result.current.pending).toBe(false));
   view.rerender({ id: 7130, radius: 5, revision: "reuse-a" });
   expect(view.result.current).toMatchObject({ meshes: { id: "reuse-context-a" }, pending: false });
-  expect(native.calls).toHaveLength(4);
+  await waitFor(() => expect(native.calls).toHaveLength(4));
   view.unmount();
   const remount = renderHook(hook, { initialProps: { id: 7130, radius: 10, revision: "reuse-a" } });
   expect(remount.result.current.pending).toBe(false);
-  expect(native.calls).toHaveLength(4);
+  await waitFor(() => expect(native.calls).toHaveLength(4));
   remount.rerender({ id: 7130, radius: 20, revision: "reuse-a" });
-  expect(native.calls).toHaveLength(5);
+  await waitFor(() => expect(native.calls).toHaveLength(5));
   expect(native.calls[4]!.request.contextPaddingFt).toBe(20);
   remount.rerender({ id: 7130, radius: 20, revision: "reuse-b" });
-  expect(native.calls).toHaveLength(6);
+  await waitFor(() => expect(native.calls).toHaveLength(6));
   expect(native.calls[5]!.request.focusOnly).toBe(true);
 });
 
@@ -191,7 +194,7 @@ it("keeps a limited expansion usable without retrying or promoting it over compl
   await finish(1, "complete-small-context");
   await waitFor(() => expect(view.result.current.pending).toBe(false));
   view.rerender({ radius: 20 });
-  expect(native.calls).toHaveLength(3);
+  await waitFor(() => expect(native.calls).toHaveLength(3));
   await finish(2, "limited-large-context");
   await waitFor(() => expect(view.result.current.pending).toBe(false));
   expect(view.result.current).toMatchObject({
@@ -201,24 +204,24 @@ it("keeps a limited expansion usable without retrying or promoting it over compl
     completeness: { complete: false, deferredCandidates: 20 },
   });
   view.rerender({ radius: 20 });
-  expect(native.calls).toHaveLength(3);
+  await waitFor(() => expect(native.calls).toHaveLength(3));
   view.rerender({ radius: 5 });
   expect(view.result.current).toMatchObject({
     meshes: { id: "complete-small-context" },
     completeness: { complete: true },
     pending: false,
   });
-  expect(native.calls).toHaveLength(3);
+  await waitFor(() => expect(native.calls).toHaveLength(3));
   view.rerender({ radius: 20 });
   await waitFor(() => expect(view.result.current.pending).toBe(false));
   expect(view.result.current.completeness?.complete).toBe(false);
-  expect(native.calls).toHaveLength(3);
+  await waitFor(() => expect(native.calls).toHaveLength(3));
   view.unmount();
   const remount = renderHook(hook, { initialProps: { radius: 20 } });
   await waitFor(() => expect(remount.result.current.pending).toBe(false));
   expect(remount.result.current.focusReady).toBe(true);
   expect(remount.result.current.completeness?.complete).toBe(false);
-  expect(native.calls).toHaveLength(3);
+  await waitFor(() => expect(native.calls).toHaveLength(3));
 });
 
 it("reports failed optional context separately from the usable focus", async () => {
@@ -233,6 +236,59 @@ it("reports failed optional context separately from the usable focus", async () 
     meshes: { id: "context-failure-focus" },
     focusReady: true,
     error: null,
-    contextError: "Error: context could not be acquired",
+    contextError: expect.objectContaining({ message: "context could not be acquired" }),
   });
+});
+
+it("overview completes in one zero-tessellation read without focus warming", async () => {
+  const request = sceneRequest([7199], false, 15, "overview");
+  const view = renderHook(() => useCapture(request, doc, "overview-default"));
+  await waitFor(() => expect(native.calls[0]).toBeDefined());
+  expect(native.calls[0]!.request).toEqual(request);
+  await finish(0, "overview-scene");
+  await waitFor(() => expect(view.result.current.pending).toBe(false));
+  await waitFor(() => expect(native.calls).toHaveLength(1));
+  expect(sceneRequest([7199], true, 15, "overview").contextRepresentation).toBe("overview");
+});
+
+it("detailed focus and context each retain at least five feet", async () => {
+  renderHook(() => useCapture(sceneRequest([91571], false, 2, "meshes"), doc, "padding-minimum"));
+  await waitFor(() => expect(native.calls).toHaveLength(1));
+  expect(native.calls[0]!.request.contextPaddingFt).toBe(5);
+  await finish(0, "padding-focus");
+  await waitFor(() => expect(native.calls).toHaveLength(2));
+  expect(native.calls[1]!.request.contextPaddingFt).toBe(5);
+});
+
+it("uses the overview focus bounds while one detailed read replaces it without a none read", async () => {
+  const overview = sceneRequest([8881], false, 0, "overview");
+  const detail = sceneRequest([8881, 8882], false, 10, "meshes");
+  const view = renderHook(({ detailed }) => useCapture(detailed ? detail : overview, doc, "overview-to-detail", undefined, overview), { initialProps: { detailed: false } });
+  await finish(0, "overview-staged");
+  await waitFor(() => expect(view.result.current.pending).toBe(false));
+  const meshes = view.result.current.meshes;
+  view.rerender({ detailed: true });
+  await waitFor(() => expect(native.calls).toHaveLength(2));
+  expect(native.calls.map(call => call.request.contextRepresentation)).toEqual(["overview", "meshes"]);
+  expect(view.result.current.meshes).toBe(meshes);
+  expect(view.result.current.focusMeshes).toBe(meshes);
+  expect(view.result.current.focusReady).toBe(true);
+  await finish(1, "detailed-replacement");
+  await waitFor(() => expect(view.result.current.pending).toBe(false));
+  expect(view.result.current.meshes).toMatchObject({ id: "detailed-replacement" });
+  expect(native.calls).toHaveLength(2);
+});
+
+it("Read detailed releases an unfinished overview rather than queueing behind it", async () => {
+  const overview = sceneRequest([8891], false, 0, "overview");
+  const detail = sceneRequest([8891], false, 10, "meshes");
+  const view = renderHook(({ detailed }) => useCapture(detailed ? detail : overview, doc, "superseded-overview", undefined, overview), { initialProps: { detailed: false } });
+  await waitFor(() => expect(native.calls).toHaveLength(1));
+  view.rerender({ detailed: true });
+  await waitFor(() => expect(native.calls).toHaveLength(2));
+  expect(native.calls[0]!.signal.aborted).toBe(true);
+  await finish(1, "explicit-detail");
+  await finish(0, "stale-overview");
+  expect(view.result.current.meshes).toMatchObject({ id: "explicit-detail" });
+  expect(native.calls.map(call => call.request.contextRepresentation)).toEqual(["overview", "meshes"]);
 });

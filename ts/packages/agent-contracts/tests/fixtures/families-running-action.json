@@ -1,0 +1,180 @@
+{
+  "id": "19402608-de1b-4b72-a1b9-8229c63c12ef",
+  "key": "families.apply.preview",
+  "outcome": {
+    "id": "19402608-de1b-4b72-a1b9-8229c63c12ef",
+    "state": "running",
+    "input": {
+      "work": {
+        "key": {
+          "route": "families",
+          "target": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools\\.artifacts\\runs\\live-20261102-families-3\\Chadds-families3.rvt",
+          "binding": "address",
+          "from": {
+            "session": "session-bfc14fe1f03e7233",
+            "openId": "11bec3389d58460e88aba333feeb1ee0"
+          }
+        },
+        "revision": 4
+      }
+    },
+    "receiptId": "19402608-de1b-4b72-a1b9-8229c63c12ef",
+    "snapshots": []
+  },
+  "caller": {
+    "kind": "human",
+    "via": "local"
+  },
+  "effects": [],
+  "consumes": [
+    {
+      "kind": "work",
+      "probe": {
+        "handle": {
+          "key": {
+            "route": "families",
+            "target": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools\\.artifacts\\runs\\live-20261102-families-3\\Chadds-families3.rvt",
+            "binding": "address",
+            "from": {
+              "session": "session-bfc14fe1f03e7233",
+              "openId": "11bec3389d58460e88aba333feeb1ee0"
+            }
+          },
+          "revision": 4
+        },
+        "paths": [
+          [
+            "cells",
+            "[\"Magna3 - Mechanical Equipment\",\"Grundfos_MAGNA3 32-60 GF\",\"Amperage\"]",
+            "edit"
+          ],
+          ["scope", "edit"],
+          ["writeIntent", "families.apply", "edit"],
+          ["takenAt"],
+          ["excluded"],
+          ["executionOptions"],
+          ["patch", "edit"],
+          ["writeIntent", "families.apply", "edit"],
+          [
+            "cells",
+            "[\"Magna3 - Mechanical Equipment\",\"Grundfos_MAGNA3 32-60 GF\",\"Amperage\"]",
+            "edit"
+          ],
+          ["scope", "edit"],
+          ["scope"],
+          ["excluded"],
+          ["cells"],
+          ["patch"],
+          ["takenAt"]
+        ],
+        "edits": [["writeIntent", "*"], ["cells", "*"], ["patch"], ["scope"]]
+      },
+      "expected": {
+        "writeIntent": {
+          "families.apply": {
+            "edit": {
+              "value": {
+                "include": "all"
+              },
+              "by": "human",
+              "at": "2026-11-02T18:14:04.386Z",
+              "base": 3
+            }
+          }
+        },
+        "scope": {
+          "edit": {
+            "value": {
+              "categoryNames": ["Mechanical Equipment"],
+              "familyNames": ["Magna3 - Mechanical Equipment"],
+              "placementScope": "PlacedOnly"
+            },
+            "by": "human",
+            "at": "2026-11-02T18:10:50.751Z",
+            "base": 1
+          }
+        },
+        "excluded": {},
+        "cells": {
+          "[\"Magna3 - Mechanical Equipment\",\"Grundfos_MAGNA3 32-60 GF\",\"Amperage\"]": {
+            "edit": {
+              "value": {
+                "value": "1.1",
+                "unit": "Amperes",
+                "display": "1 Amperes",
+                "storageType": "Double"
+              },
+              "by": "human",
+              "at": "2026-11-02T18:13:43.141Z",
+              "base": 2
+            }
+          }
+        },
+        "patch": {},
+        "takenAt": "2026-11-02T18:09:55.329Z"
+      }
+    },
+    {
+      "kind": "incarnation",
+      "probe": {
+        "target": {
+          "kind": "document",
+          "ref": {
+            "session": "session-bfc14fe1f03e7233",
+            "openId": "11bec3389d58460e88aba333feeb1ee0"
+          }
+        },
+        "process": {
+          "pid": 82836,
+          "processStartUtc": "2026-11-02T18:03:39.6327267Z",
+          "executable": "C:\\Program Files\\Autodesk\\Revit 2025\\Revit.exe"
+        }
+      },
+      "expected": true
+    },
+    {
+      "kind": "document-mark",
+      "probe": {
+        "ref": {
+          "session": "session-bfc14fe1f03e7233",
+          "openId": "11bec3389d58460e88aba333feeb1ee0"
+        },
+        "takenAt": "2026-11-02T18:09:55.329Z"
+      },
+      "expected": true
+    }
+  ],
+  "claims": [],
+  "consent": null,
+  "basis": {
+    "kind": "human"
+  },
+  "target": {
+    "kind": "document",
+    "ref": {
+      "session": "session-bfc14fe1f03e7233",
+      "openId": "11bec3389d58460e88aba333feeb1ee0"
+    }
+  },
+  "input": {
+    "work": {
+      "key": {
+        "route": "families",
+        "target": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools\\.artifacts\\runs\\live-20261102-families-3\\Chadds-families3.rvt",
+        "binding": "address",
+        "from": {
+          "session": "session-bfc14fe1f03e7233",
+          "openId": "11bec3389d58460e88aba333feeb1ee0"
+        }
+      },
+      "revision": 4
+    }
+  },
+  "steps": [],
+  "prepared": {
+    "state": "unprepared"
+  },
+  "recovery": [],
+  "startedAt": "2026-11-02T18:14:05.457Z",
+  "state": "running"
+}

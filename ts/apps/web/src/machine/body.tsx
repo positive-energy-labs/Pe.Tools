@@ -1,9 +1,7 @@
 /** One canonical Settings renderer on web, PWA, and tray: every machine group, then appearance. */
-import { useState } from "react";
 import type { AppSurface, Machine, Reading } from "@pe/agent-contracts";
 import { Accordion, type AccordionGroup } from "@pe/kit/lang/accordion";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { SwitchRow } from "@pe/kit/lang/switch-row";
 import { useDiagnostics, type DiagnosticsState } from "#/host/diagnostics";
 import {
   attention,
@@ -67,20 +65,7 @@ function Diagnostics() {
 }
 
 function PeaSettings({ machine, fixture }: { machine: Machine; fixture: boolean }) {
-  const providers = useProviders("", !fixture, machine);
-  return (
-    <div className="flex flex-col gap-3">
-      <ProviderSetup providers={providers} />
-      <SwitchRow
-        label="Agent approvals"
-        says="Ask before each Pea tool call. Off: Pea's reads and tool calls run without asking; consequential writes still use the turn's consent."
-        checked={providers.access?.guarded ?? true}
-        disabled={fixture || providers.access === undefined}
-        refusal={providers.access?.readError}
-        onCheckedChange={(guarded) => void providers.setAccess(guarded)}
-      />
-    </div>
-  );
+  return <ProviderSetup providers={useProviders("", !fixture, machine)} />;
 }
 
 export function SettingsBody({
@@ -100,7 +85,6 @@ export function SettingsBody({
   onGroup?: (group: GroupKey | null) => void;
 }) {
   const machine = machineOf(reading);
-  const [picked, setPicked] = useState<GroupKey | null | undefined>(group);
   const gap = reading.state !== "ready";
   const waits = machine ? attention(machine) : [];
   const refusal = fixture
@@ -189,14 +173,14 @@ export function SettingsBody({
     },
   ];
   // An address names the group (`null`: all folded); without one (the tray), what waits opens, else
-  // the first header that disagrees, and the person's pick is remembered here.
+  // the first header that disagrees. The Page owns every subsequent choice.
   const automatic =
     autoOpen(machine) ??
     (machine
       ? (machineGroups.find((entry) => entry.tone === "caution" || entry.tone === "alarm")?.key ??
         null)
       : null);
-  const open = group !== undefined ? group : picked === undefined ? automatic : picked;
+  const open = group !== undefined ? group : automatic;
   return (
     <div className="flex min-w-0 flex-col gap-2" data-shell={shell} aria-label="settings">
       <p className="m-0" data-tone={gap || waits.length ? "caution" : undefined} role="status">
@@ -216,7 +200,6 @@ export function SettingsBody({
         label="settings groups"
         open={open}
         onOpen={(key) => {
-          setPicked(key as GroupKey | null);
           onGroup?.(key as GroupKey | null);
         }}
         groups={groups}

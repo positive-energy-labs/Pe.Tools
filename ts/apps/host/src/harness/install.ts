@@ -77,7 +77,7 @@ export function codexStandaloneRelease(home: string): string | null {
   let names: string[];
   try {
     names = readdirSync(releases);
-  } catch {
+  } catch (error) { console.warn("ts/apps/host/src/harness/install.ts: fallback after failure", error);
     return null;
   }
   const best = names

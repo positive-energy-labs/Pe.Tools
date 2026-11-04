@@ -45,12 +45,12 @@ const inputsOf = (inputs: Extract<PricedLeg["source"], { kind: "rule" }>["inputs
 const byId = <T extends { id: number }>(xs: T[]) => xs.sort((a, b) => a.id - b.id);
 
 /**
- * The native `ducts.apply` request (less `previewOnly`) from one fan sheet: every rule-priced
+ * The native `ducts.apply` request from one fan sheet: every rule-priced
  * fitting leg under its table (unpriced and inferred (negative id) legs left out), every drop,
  * every terminal flow, the fan's required ESP only when complete, and the store carried forward
  * at the revision read. Rulings and roles in the store pass through untouched.
  */
-export function applyRequest(input: ApplyRequestInput): Omit<DuctsApplyInput, "previewOnly"> {
+export function applyRequest(input: ApplyRequestInput): DuctsApplyInput {
   const seen = new Set<number>();
   const fittings = byId(
     input.legs.flatMap((leg) => {
@@ -66,9 +66,23 @@ export function applyRequest(input: ApplyRequestInput): Omit<DuctsApplyInput, "p
       return [
         {
           id: leg.elementId,
-          // The Pe server charges the family's own coefficient when it has one, else prices the legs from this table.
+          // Native consumes all host-priced bases, including both legs of a tap.
           method: "pe-server" as const,
           coefficient: leg.source.coefficient,
+          results: input.legs
+            .flatMap((other) =>
+              other.elementId === leg.elementId && !other.unpriced && other.source?.kind === "rule"
+                ? [{ velocityPressureInWg: other.source.pv, coefficient: other.source.coefficient }]
+                : [],
+            )
+            .filter(
+              (result, i, all) =>
+                all.findIndex(
+                  (other) =>
+                    other.velocityPressureInWg === result.velocityPressureInWg &&
+                    other.coefficient === result.coefficient,
+                ) === i,
+            ),
           table: leg.source.table,
           inputs: inputsOf(leg.source.inputs),
           ruleKey: leg.source.rule,

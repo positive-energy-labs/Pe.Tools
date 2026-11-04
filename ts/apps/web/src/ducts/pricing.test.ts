@@ -1,5 +1,6 @@
+import { neutralFansWork } from "@pe/agent-contracts";
+import { designOf } from "@pe/ducts-domain/test-design";
 import { expect, test } from "vite-plus/test";
-import { ductsRouteState } from "@pe/agent-contracts";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 import { price, rememberPrice } from "@pe/ducts-domain/pricing";
 import { readiness } from "@pe/ducts-domain/readiness";
@@ -18,7 +19,7 @@ const input = (): PricingInput => ({
   snapshot: SCENE_FIXTURE.snapshot,
   grids: {},
   catalogs: EMPTY_CATALOGS,
-  doc: ductsRouteState.schema.parse({}),
+  doc: designOf({}),
 });
 test("a fan with no terminal fails pricing with its system and open outlet, rather than waiting", () => {
   const response = pricingJob()({
@@ -37,10 +38,10 @@ test("worker result has full solve/readiness parity through structured clone, in
   let decoded: unknown;
   for (const [id, doc] of [
     original.doc,
-    ductsRouteState.schema.parse({
+    designOf({
       equipmentFlows: { "14107111": { edit: { value: { cfm: 176 } } } },
     }),
-    ductsRouteState.schema.parse({}),
+    designOf({}),
   ].entries()) {
     const response = structuredClone(
       run(structuredClone({ id, doc, ...(id === 0 ? { base: original } : {}) })),
@@ -51,7 +52,7 @@ test("worker result has full solve/readiness parity through structured clone, in
     decoded = delta ? applyPricingDelta(decoded, delta) : decoded;
     expect(decoded).toEqual(response.result);
     previous = response.result;
-    const expected = price(original.snapshot, original.grids, doc, original.catalogs);
+    const expected = price(original.snapshot, original.grids, doc, (doc) ?? neutralFansWork, original.catalogs);
     expect(response.result.priced).toEqual(expected);
     expect(response.result.ready).toEqual(readiness(original.snapshot, doc));
     const heal = healPlan(original.snapshot, doc);
@@ -70,8 +71,9 @@ test("worker result has full solve/readiness parity through structured clone, in
       doc,
       original.catalogs,
       response.result.priced,
+      doc ?? neutralFansWork,
     );
-    expect(price(original.snapshot, original.grids, doc, original.catalogs)).toBe(
+    expect(price(original.snapshot, original.grids, doc, (doc) ?? neutralFansWork, original.catalogs)).toBe(
       response.result.priced,
     );
   }
@@ -110,15 +112,15 @@ test("deltas preserve untouched identities, Map keys/deletions, arrays, and non-
 
 test("unit-flow edits reuse topology; edit verdicts invalidate it", () => {
   const snapshot = SCENE_FIXTURE.snapshot;
-  const before = ductsRouteState.schema.parse({});
-  const after = ductsRouteState.schema.parse({
+  const before = designOf({});
+  const after = designOf({
     equipmentFlows: { "14107111": { edit: { value: { cfm: 176 } } } },
   });
   const inference = inferJoints(snapshot, 1, before);
   const heal = healPlan(snapshot, before);
   expect(inferJoints(snapshot, 1, after)).toBe(inference);
   expect(healPlan(snapshot, after)).toBe(heal);
-  const ruled = ductsRouteState.schema.parse({
+  const ruled = designOf({
     assumptions: {
       "proximity:1:0|2:0": { edit: { value: { kind: "verdict", verdict: "ignore" } } },
     },
@@ -128,7 +130,7 @@ test("unit-flow edits reuse topology; edit verdicts invalidate it", () => {
 });
 
 test("a just-started-fresh Work (the schema's empty parse), no Work, and an empty snapshot all price", () => {
-  const fresh = ductsRouteState.schema.parse({});
+  const fresh = designOf({});
   for (const snapshot of [SCENE_FIXTURE.snapshot, EMPTY_SNAPSHOT])
     for (const doc of [fresh, null]) {
       const response = pricingJob()({

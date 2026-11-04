@@ -163,7 +163,7 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
       ...local,
       search: { v: 1, keywords: query, pills: [] },
       sort,
-      open: tools.filter((tool) => !folded.includes(tool.to)).map((tool) => tool.to),
+      open: tools.filter((tool) => !(folded === "all" || folded.includes(tool.to))).map((tool) => tool.to),
     },
     onState: (next) => {
       setLocal(next);
@@ -171,7 +171,7 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
         query: next.search.keywords,
         sort: next.sort || "workflow",
         folded: [
-          ...folded.filter((path) => !tools.some((tool) => tool.to === path)),
+          ...(folded === "all" ? tools.map(tool => tool.to) : folded).filter((path) => !tools.some((tool) => tool.to === path)),
           ...tools.filter((tool) => !next.open.includes(tool.to)).map((tool) => tool.to),
         ],
       });

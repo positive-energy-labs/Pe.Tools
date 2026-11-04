@@ -6,15 +6,14 @@
  * grouped taken / accept / preview, counts in each group header, one batch verb per group that runs
  * every live closer (`kind="commit"` when live).
  */
-import { Fragment, useMemo, useState } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
-import { fanKey, pressure, type FanPort } from "./model";
+import { Fragment, useMemo, useState } from "react";
 import { BlockerRow } from "./blocker-row";
 import type { Closer } from "./closer";
-import { subjectNamer } from "../subject-text";
+import { fanKey, fanLabel, pressure, stableFanKey, type FanPort } from "./model";
 import {
   isConsequence,
   presentIds,
@@ -24,7 +23,7 @@ import {
   type SheetBlocker,
   type Tier,
 } from "./tiers";
-import type { SheetViewProps } from "./types";
+import type { LedgerProps, RosterProps } from "./types";
 import { Worksheet } from "./worksheet-table";
 
 const rosterState = (row: FanPort) =>
@@ -38,35 +37,34 @@ const rosterSearch = (row: FanPort) => ({
   ids: [row.unitId],
 });
 
-export function Roster({ props }: { props: SheetViewProps }) {
-  const openKey = props.sheet
-    ? fanKey(props.sheet.overview.fan ?? { unitId: -1, portIndex: -1 })
-    : null;
+export function Roster({ props }: { props: RosterProps }) {
   const wait = props.busy || props.loading ? "Wait for the current read" : null;
-  const [listState, setListState] = useState<ListState>(emptyListState());
+  const [listState, setListState] = useState<ListState<"name">>(emptyListState<"name">());
   const list = useList({
+    persist: props.address,
+    sorts: { name: (fan: FanPort) => fan.mark },
     items: props.roster,
     keyOf: fanKey,
     search: rosterSearch,
-    select: "single",
-    state: { ...listState, selected: openKey ? [openKey] : [] },
-    onState: setListState,
+    select: "multi",
+    state: {
+      ...listState,
+      selected: props.roster.filter((row) => props.picked?.includes(stableFanKey(row))).map(fanKey),
+    },
+    onState: (next) => setListState({ ...next, selected: [] }),
     onPick: (row) => props.open(row),
     refusalOf: () => wait,
   });
   // A blank firm tag falls back to the unit's Mark or family; a name shared by two units (Chadds
-  // has two FC-23s) carries the unit id so the person can tell the rows apart.
-  const nameOf = useMemo(() => subjectNamer(props.snapshot), [props.snapshot]);
-  const unitName = (fan: FanPort) => fan.mark || nameOf(fan.unitId) || `unit ${fan.unitId}`;
-  const shared = useMemo(() => {
-    const units = new Map<string, Set<number>>();
-    for (const fan of props.roster)
-      units.set(unitName(fan), (units.get(unitName(fan)) ?? new Set()).add(fan.unitId));
-    return new Set([...units].filter(([, ids]) => ids.size > 1).map(([name]) => name));
+  // has two FC-23s) is told apart by level, system or order (fanLabel), never by an id.
+  const nameOf = props.nameOf;
+  const unitName = (fan: FanPort) => fan.mark || nameOf(fan.unitId);
+  const named = useMemo(
+    () => props.roster.map((fan) => ({ ...fan, mark: unitName(fan) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.roster, nameOf]);
-  const labelOf = (fan: FanPort) =>
-    `${unitName(fan)}${shared.has(unitName(fan)) ? ` (${fan.unitId})` : ""} · port ${fan.portIndex}`;
+    [props.roster, nameOf],
+  );
+  const labelOf = (fan: FanPort) => fanLabel({ ...fan, mark: unitName(fan) }, named);
   const row = (fan: FanPort): ListRowParts => ({
     label: labelOf(fan),
     aside: fan.kind,
@@ -93,23 +91,7 @@ export function Roster({ props }: { props: SheetViewProps }) {
   );
 }
 
-export function RosterVerbs({ props }: { props: SheetViewProps }) {
-  const wait = props.busy || props.loading ? "Wait for the current read" : null;
-  return (
-    <span className="flex items-baseline gap-1">
-      <Button kind="framed" label="Compute every fan" refusal={wait} onClick={props.computeAll}>
-        compute all
-      </Button>
-      {props.busy && (
-        <Button kind="framed" label="Cancel" onClick={props.cancel}>
-          cancel
-        </Button>
-      )}
-    </span>
-  );
-}
-
-function Sides({ props }: { props: SheetViewProps }) {
+function Sides({ props }: { props: LedgerProps }) {
   const totals = props.sheet?.overview.totals;
   const fan = props.sheet?.overview.fan;
   if (!fan || !totals)
@@ -168,7 +150,7 @@ function TierGroup({
   /** The tier's cause rows; R-B consequences arrive through `consequencesOf`, never as rows of their own. */
   blockers: readonly SheetBlocker[];
   consequencesOf: (id: string) => readonly SheetBlocker[];
-  props: SheetViewProps;
+  props: LedgerProps;
 }) {
   // The batch runs each row's closer with no typed value: the firm shim for drops, the pair for
   // joins and heals; rows that need a typed number stay refused and are left to their row.
@@ -237,7 +219,7 @@ function TierGroup({
   );
 }
 
-export function Ledger({ props }: { props: SheetViewProps }) {
+export function Ledger({ props }: { props: LedgerProps }) {
   // R-B: consequence rows nest under their cause; only cause rows take a tier and a verb.
   const present = presentIds(props.blockers);
   const causes = props.blockers.filter((b) => !isConsequence(b, present));

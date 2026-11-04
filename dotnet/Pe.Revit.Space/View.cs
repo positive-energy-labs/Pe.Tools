@@ -129,9 +129,9 @@ public static class SpaceView {
             Math.Round(sw.Elapsed.TotalMilliseconds, 3));
     }
 
-    public static RowsAnswer Rows(Document document, Filter filter) {
+    public static RowsAnswer Rows(Document document, Filter filter, Aabb scope) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var world = SpaceWorld.Prepare(document);
+        var world = SpaceWorld.Prepare(document, scope, curves: Verbs.Curves(filter));
         var touched = world.Partitions.Where(p => filter.Wants(p.Kind)).ToList();
 
         var categories = new Legend();
@@ -152,7 +152,8 @@ public static class SpaceView {
         foreach (var p in touched)
             foreach (var row in p.Prims) {
                 candidates++;
-                if (!filter.Wants(row)) {
+                // Chadds CAD native bounds meet the reach while some emitted rows lie far below it.
+                if (!filter.Wants(row) || !row.Box.Overlaps(scope)) {
                     skipped++;
                     continue;
                 }
@@ -180,10 +181,10 @@ public static class SpaceView {
             Math.Round(sw.Elapsed.TotalMilliseconds, 3));
     }
 
-    public static TreeAnswer Tree(Document document, int source, int maxDepth) {
+    public static TreeAnswer Tree(Document document, int source, int maxDepth, Aabb scope) {
         if (maxDepth < 0) throw new ArgumentOutOfRangeException(nameof(maxDepth));
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var world = SpaceWorld.Prepare(document);
+        var world = SpaceWorld.Prepare(document, scope);
         var partition = world.Partitions.FirstOrDefault(p => p.Source == source)
             ?? throw new ArgumentOutOfRangeException(nameof(source), $"no partition with source {source}");
         var nodes = partition.Bvh.Walk(maxDepth);

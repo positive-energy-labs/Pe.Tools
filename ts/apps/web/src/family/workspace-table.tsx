@@ -43,10 +43,10 @@ export function FamilyWorkspaceTable() {
         ? focusedParts.has(row.slug ?? "")
         : focusedParams.has(row.name) || pinnedParam === row.name;
     return cn(
-      // TODO(design): Keep the directional caution gradient until data-tone wash can express it.
+      // TODO(design): docs/features/routes/LEDGER.md#s7-025b81c8e4 Keep the directional caution gradient until data-tone wash can express it.
       row.kind === "ghost" && "caution-wash-artifact",
       row.key === firstGhostKey && "[&>td]:hairline-t-2",
-      // TODO(design): Keep on-select until the selection state selector also propagates --pe-on.
+      // TODO(design): docs/features/routes/LEDGER.md#s7-bb8eb3a470 Keep on-select until the selection state selector also propagates --pe-on.
       focused && "on-select",
     );
   };

@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -202,6 +203,15 @@ export function useIsPrimaryRoute(route: string) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   return slot != null && hosted == null && pathname === routePath(route);
 }
+/**
+ * Whether this route answers keys pressed outside every route mount (its portaled Situation, the
+ * app bar, nothing focused): the URL's route, or, with no app bar to portal into, any unhosted one.
+ */
+export function useRouteKeysPrimary(route: string, hosted: boolean) {
+  const slot = useContext(Context);
+  const primary = useIsPrimaryRoute(route);
+  return !hosted && (slot == null || primary);
+}
 export function RouteControlsOutlet({
   slot: name = "controls",
   as = "span",
@@ -237,16 +247,30 @@ export function PrimaryRouteControls({
   const hosted = useContext(HostedChrome);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const token = useRef(Symbol(route)).current;
+  const [portalHost] = useState(() => {
+    if (typeof document === "undefined") return null;
+    const element = document.createElement("div");
+    element.className = "contents";
+    return element;
+  });
   const primary = hosted == null && pathname === routePath(route);
   const present = children != null && children !== false;
   const claim = slot?.claim;
   const release = slot?.release;
-  useEffect(() => {
+  const element = slot?.elements[name];
+  const owns = slot?.owners[name] === token;
+  useLayoutEffect(() => {
     if (!primary || !present || !claim || !release) return;
     claim(name, token);
     return () => release(name, token);
   }, [primary, present, claim, release, token, name]);
+  useLayoutEffect(() => {
+    if (!primary || !owns || !element || !portalHost) return;
+    // Hidden Activities defer renders, including removal of their old portal children. Detach
+    // this owner's host at the layout boundary so two bands can never share the shell's space.
+    element.replaceChildren(portalHost);
+    return () => portalHost.remove();
+  }, [primary, owns, element, portalHost]);
   if (!slot || !primary) return <>{children}</>;
-  const element = slot.elements[name];
-  return element && slot.owners[name] === token ? createPortal(children, element) : null;
+  return portalHost ? createPortal(children, portalHost) : null;
 }

@@ -49,8 +49,7 @@ test.each(["old-run", ""])(
 
 test("pre-ACK files keep causal evidence and unproven historical bytes; ACK stores only id", async () => {
   const { readOutbox, writeOutbox } = await import("@pe/runtime/context");
-  const { productRoot } = await import("@pe/host-contracts/service-identity");
-  const { resolveLaneAndRoot } = await import("../src/runtime-owner.ts");
+  const { resolveLaneAndRoot, runtimeRoot } = await import("../src/runtime-owner.ts");
   const { createHash } = await import("node:crypto");
   const { join } = await import("node:path");
   const { readFileSync, writeFileSync, unlinkSync } = await import("node:fs");
@@ -68,7 +67,7 @@ test("pre-ACK files keep causal evidence and unproven historical bytes; ACK stor
   const original = { headers: { "x-pe-context": "original-root-token" } };
   const later = { headers: { "x-pe-context": "later-root-token" } };
   const file = join(
-    productRoot(),
+    runtimeRoot(),
     "state",
     resolveLaneAndRoot().serviceName,
     "invocation-outbox",

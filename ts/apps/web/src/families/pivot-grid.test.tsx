@@ -3,7 +3,7 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
 
 import type { ParamColumn, TypeRow } from "#/families/matrix-columns";
-import { type PivotRow } from "#/families/pivot";
+import { type PivotRow } from "./kernel-matrix-model";
 import { TypeGrid, identityWidth } from "#/families/pivot-grid";
 
 const param = (key: string): ParamColumn => ({

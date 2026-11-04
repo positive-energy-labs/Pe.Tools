@@ -1,12 +1,15 @@
+import { testConsents } from "./effect-test.ts";
 import { bindFixtureCommands, invokeCommand } from "./command-fixture.ts";
 import type { CommandResources } from "../src/command-executor.ts";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
+import { readNativeReceipt } from "../src/native-receipts.ts";
+import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { bindControl } from "../src/control.ts";
-import { RunConsents, type ConsentEvent } from "../src/run-consent.ts";
+import type { ConsentEvent } from "../src/run-consent.ts";
 import type { ActionAdmission, Caller } from "@pe/agent-contracts";
 
 const run = { thread: "thread", turn: "turn" };
@@ -23,7 +26,7 @@ const setup = async (probe?: CommandResources["probe"]) => {
   const dir = await mkdtemp(join(tmpdir(), "pe-consent-")),
     path = join(dir, "journal.jsonl");
   const events: ConsentEvent[] = [],
-    runs = new RunConsents((_, e) => events.push(e));
+    runs = testConsents((_, e) => events.push(e));
   runs.open(run);
   bindControl({ runs, acquired: () => null });
   const journal = new ActionJournal(path);
@@ -77,6 +80,13 @@ test("waiting commands are durable, share approval, freeze submitted bytes and s
     expect([a.state, b.state, prepared, effects]).toEqual(["waiting", "waiting", 0, 0]);
     expect(await readFile(h.path, "utf8")).toContain('"state":"waiting"');
     expect(h.events.filter((e) => e.kind === "permission_request")).toHaveLength(1);
+    await vi.waitFor(async () => {
+      const waiting = (await h.journal.list())[0]!;
+      expect(waiting.outcome).toMatchObject({
+        state: "queued",
+        consentWindow: { deadline: expect.any(String) },
+      });
+    });
     h.approve();
     const settled = await Promise.all([h.journal.wait("a"), h.journal.wait("b")]);
     expect(settled.map((r) => r.state)).toEqual(["succeeded", "succeeded"]);
@@ -115,12 +125,15 @@ test("an acquired document supplies provenance without bypassing the run countdo
   const h = await setup();
   bindControl({ acquired: () => "pea-acquisition" });
   let writes = 0;
+  let nativeId = "";
+  // SDK-backed invocations use a UUID shared by their first native request and outcome.
+  const invocationId = "11111111-1111-4111-8111-111111111111";
   try {
     const target = { session: "owned-session", openId: "owned-document" };
     const row = await invokeCommand(
       h.journal,
       {
-        ...admission("acquired-write"),
+        ...admission(invocationId),
         caller,
         target: { kind: "document", ref: target },
         basis: {
@@ -131,7 +144,11 @@ test("an acquired document supplies provenance without bypassing the run countdo
         effects: [{ kind: "document", ref: target }],
       },
       async () => null,
-      async (execution) => execution.step("native", "write", {}, async () => ++writes),
+      async (execution) => execution.step("native", "write", {}, async (id) => {
+        nativeId = id;
+        expect(id).toBe(invocationId);
+        return ++writes;
+      }),
     );
     expect(row.state).toBe("waiting");
     await h.ready();
@@ -139,6 +156,19 @@ test("an acquired document supplies provenance without bypassing the run countdo
     h.approve();
     const done = await h.journal.wait(row.id);
     expect(done.state).toBe("succeeded");
+    expect(done.steps[0]!.id).toBe(done.id);
+    expect(done.outcome!.id).toBe(done.id);
+    const recovered = await readNativeReceipt(done.steps[0]!, originalProcess, async () => sdkEnvelope({
+      state: "ok", requestId: nativeId,
+      receipt: {
+        requestId: nativeId, key: "write", pid: originalProcess.pid,
+        processStartUtc: originalProcess.processStartUtc, verdict: "ok",
+        responsePath: "native-response.json", startedUtc: originalProcess.processStartUtc,
+        completedUtc: "1970-01-01T00:00:02.0000000Z",
+      },
+      response: { written: writes },
+    }));
+    expect(recovered.step).toMatchObject({ id: done.id, state: "succeeded", result: { written: 1 } });
     expect(done.consent).toMatchObject({ run, decision: { by: "human" } });
     expect(writes).toBe(1);
   } finally {
@@ -416,4 +446,35 @@ test("compaction and restart never forget a command id or replay its successful 
   } finally {
     await h.close();
   }
+});
+
+
+test("a human Commit is approval; Pea's same write waits and Reject leaves the destination unchanged", async () => {
+  const h = await setup();
+  let value = 100;
+  const submit = (id: string, author: Caller) => invokeCommand(h.journal,
+    { ...admission(id), caller: author, basis: null, effects: declaredEffects },
+    async () => ({ before: value, after: 250 }),
+    async (e) => e.step("file", "write", e.prepared, async () => {
+      const before = value;
+      value = 250;
+      return { before, after: value };
+    }));
+  try {
+    await submit("human-commit", { kind: "human", via: "local" });
+    const human = await h.journal.wait("human-commit");
+    expect(human).toMatchObject({ state: "succeeded", consent: { by: "press" },
+      caller: { kind: "human" }, steps: [expect.objectContaining({ result: { before: 100, after: 250 } })] });
+    expect(h.events.some((e) => e.kind === "permission_request")).toBe(false);
+    value = 100;
+    await submit("pea-commit", caller);
+    await h.ready();
+    const waiting = (await h.journal.list()).find((row) => row.id === "pea-commit");
+    expect(waiting).toMatchObject({ state: "waiting", outcome: { state: "queued", consentWindow: { requestId: expect.any(String) } } });
+    const ask = h.events.find((e) => e.kind === "permission_request")!;
+    if (ask.kind !== "permission_request") throw Error("No consent request");
+    h.runs.decide(run.thread, ask.requestId, "stop_writes");
+    expect(await h.journal.wait("pea-commit")).toMatchObject({ state: "cancelled", error: expect.stringContaining("rejected by you") });
+    expect(value).toBe(100);
+  } finally { await h.close(); }
 });

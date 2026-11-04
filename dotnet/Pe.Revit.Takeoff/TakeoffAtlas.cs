@@ -32,14 +32,21 @@ public sealed record TakeoffPlanReferenceExported(
 
 public static class TakeoffAtlas
 {
-    public static TakeoffSnapshotData Snapshot(Document doc)
+    public static TakeoffSnapshotData Snapshot(Document doc, TakeoffReadRequest request)
     {
-        var zones = ZoneRegions(doc);
+        var views = (request.Views ?? []).Select(name => FindView(doc, name).Id).ToHashSet();
+        var zoneIds = (request.ZoneGuids ?? []).ToHashSet();
+        // No selected view/zone is the metadata roster, never an implicit project geometry read.
+        var scoped = new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
+            .Where(fr => views.Contains(fr.OwnerViewId) || zoneIds.Contains(TakeoffCarriers.ReadIdentity(fr).Guid ?? Guid.Empty))
+            .ToList();
+        var zones = scoped.Where(fr => TakeoffCarriers.ReadIdentity(fr).Role == TakeoffCarriers.RoleZoningRegion)
+            .Select(fr => ToRegionFacts(doc, fr)).ToList();
         var grouped = new Dictionary<string, List<TakeoffLiveRegion>>(StringComparer.OrdinalIgnoreCase);
         var geometryKeys = new Dictionary<Guid, string>();
 
-        foreach (var fr in new FilteredElementCollector(doc)
-                     .OfClass(typeof(FilledRegion)).Cast<FilledRegion>())
+        foreach (var fr in new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
+                     .Where(fr => views.Contains(fr.OwnerViewId) || zoneIds.Count > 0))
         {
             var (role, guid) = TakeoffCarriers.ReadIdentity(fr);
             if (guid == null || role is not (TakeoffCarriers.RoleRoomRegion or TakeoffCarriers.RoleHeldResidue))
@@ -47,6 +54,7 @@ public static class TakeoffAtlas
             string blob = TakeoffCarriers.ReadProvenance(fr)
                           ?? throw new InvalidOperationException($"{role} {fr.Id} has no provenance blob");
             var provenance = RegionProvenance.FromJson(blob);
+            if (!views.Contains(fr.OwnerViewId) && !zoneIds.Contains(provenance.ZoneGuid)) continue;
             string key = provenance.ZoneGuid.ToString("D");
             if (!grouped.TryGetValue(key, out var regions))
                 grouped[key] = regions = [];

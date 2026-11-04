@@ -66,6 +66,8 @@
 }
 .pe-appbar-route-search > input {
   flex: 0 1 auto;
+  /* field-sizing: content sizes to the placeholder; without this a long one spills over the band. */
+  min-width: 0;
   field-sizing: content;
   width: auto;
   height: calc(var(--control-h) - 2px);
@@ -102,12 +104,6 @@
 }
 .pe-appbar-commands > [data-chrome-settings] {
   order: 5;
-}
-.pe-appbar-commands [data-command-word] {
-  display: none;
-}
-.pe-appbar-commands .dl-hotkey-command > .dl-button > svg {
-  display: none;
 }
 @container app-chrome (max-width: 700px) {
   .pe-appbar-row {
@@ -359,4 +355,17 @@
 .pe-tray-chrome button {
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+/* The Situation band in the bar: it takes the free middle and gives way before the commands. */
+.pe-appbar-situation {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  order: 1;
+  padding-inline: 0.5rem;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.pe-appbar-situation:empty {
+  display: none;
 }

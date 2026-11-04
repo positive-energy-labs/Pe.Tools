@@ -1,16 +1,7 @@
 import { z } from "zod";
 import { actionReceiptSchema } from "@pe/agent-contracts";
-import type {
-  RoomsSnapshot,
-  RoomsTrace,
-  RevitContextViewImage,
-} from "@pe/host-contracts/generated";
-import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
-  HOST_RPC_ORIGIN_HEADER,
-} from "@pe/host-contracts/operation-types";
-import { requestJson, type JsonRequest } from "#/shell/readings-api";
+import type { RoomsSnapshot, RevitContextViewImage } from "@pe/host-contracts/generated";
+import { callOp, opSource } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
 import type { TakeoffPlanImage } from "#/takeoff/level-plan";
@@ -20,18 +11,6 @@ import type { RoomsPage } from "./graph";
 
 export type PlanReading = { plan: TakeoffPlanImage } | { refusal: PlanRefusal } | null;
 const page = (ctx: ReadingContext) => ctx.page as RoomsPage;
-const call = (ctx: ReadingContext, key: string, request: unknown): JsonRequest => ({
-  path: "/call",
-  body: { key, request },
-  headers:
-    ctx.target.kind === "document"
-      ? {
-          [HOST_RPC_BRIDGE_SESSION_HEADER]: ctx.target.ref.session,
-          [HOST_RPC_DOCUMENT_HEADER]: ctx.target.ref.openId,
-          [HOST_RPC_ORIGIN_HEADER]: `web:${window.location.pathname}`,
-        }
-      : undefined,
-});
 
 /** Only the source listens for focus; its deliveries remain fenced by the kernel attempt. */
 export function roomsSnapshotSource(): UseSource<RoomsSnapshot.Res.Response | null> {
@@ -47,11 +26,9 @@ export function roomsSnapshotSource(): UseSource<RoomsSnapshot.Res.Response | nu
         const attempt = ++latest;
         deliver({ kind: "stale" });
         try {
-          const value = await requestJson(
-            call(ctx, "rooms.snapshot", {}),
-            z.custom<RoomsSnapshot.Res.Response>(),
-            ctx.signal,
-          );
+          const value = page(ctx).view
+            ? await callOp(ctx, "rooms.snapshot", { view: page(ctx).view })
+            : await callOp(ctx, "rooms.roster", {});
           if (!ctx.signal.aborted && attempt === latest)
             deliver({ kind: "complete", value, revision: ++serial });
         } catch (error) {
@@ -99,6 +76,7 @@ export function planOf(response: RevitContextViewImage.Res.Response): Exclude<Pl
 
 export function roomsSources(): Readonly<Record<string, ReadingSource>> {
   return {
+    "rooms.roster": opSource({ key: "rooms.roster", request: ({ target }) => target.kind === "document" ? {} : null, absent: null }),
     "rooms.snapshot": roomsSnapshotSource(),
     "rooms.trace": {
       kind: "use",
@@ -107,11 +85,7 @@ export function roomsSources(): Readonly<Record<string, ReadingSource>> {
         if (ctx.target.kind !== "document" || !page(ctx).view)
           return deliver({ kind: "complete", value: { data: null, none: null }, revision: 0 });
         try {
-          const data = await requestJson(
-            call(ctx, "rooms.trace", { view: page(ctx).view }),
-            z.custom<RoomsTrace.Res.Response>(),
-            ctx.signal,
-          );
+          const data = await callOp(ctx, "rooms.trace", { view: page(ctx).view! });
           deliver({
             kind: "complete",
             value: { data, none: null } satisfies TraceRead,
@@ -130,28 +104,17 @@ export function roomsSources(): Readonly<Record<string, ReadingSource>> {
         }
       },
     },
-    "rooms.plan": {
-      kind: "use",
-      // Re-export only when the target/view changes; room writes leave the expensive underlay alone.
+    // Re-export only when the target/view changes; room writes leave the expensive underlay alone.
+    "rooms.plan": opSource({
+      key: "revit.context.view-image",
       dirties: ["rooms-plan"],
-      async open(ctx, deliver) {
-        if (ctx.target.kind !== "document" || !page(ctx).view)
-          return deliver({ kind: "complete", value: null, revision: 0 });
-        try {
-          const response = await requestJson(
-            call(ctx, "revit.context.view-image", {
-              target: { name: page(ctx).view },
-              pixelSize: 8000,
-            }),
-            z.custom<RevitContextViewImage.Res.Response>(),
-            ctx.signal,
-          );
-          deliver({ kind: "complete", value: planOf(response), revision: 1 });
-        } catch (error) {
-          if (!ctx.signal.aborted) deliver({ kind: "failure", error });
-        }
-      },
-    },
+      absent: null as PlanReading,
+      request: (ctx) =>
+        ctx.target.kind === "document" && page(ctx).view
+          ? { target: { name: page(ctx).view! }, pixelSize: 8000 }
+          : null,
+      map: planOf,
+    }),
     "rooms.receipts": subscriptionSource({
       request: (ctx) => ({
         kind: "receipts",

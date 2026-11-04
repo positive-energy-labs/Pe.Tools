@@ -86,6 +86,8 @@ export interface CommandBinding {
   claims?: Claim[];
   effects: Footprint;
   basis?: Basis | null;
+  /** Read-only eligibility check before opening consent; preparation still rechecks after it. */
+  preflight?(): Promise<void>;
   /** Closes over already bound source facts. It runs after consent and never on resume. */
   prepare?(): Promise<unknown>;
 }
@@ -103,9 +105,16 @@ export type StepRecovery = (
 export interface CommandExecutor {
   definition: Command | ((context: CommandContext) => Command | Promise<Command>);
   prepared: z.ZodType;
+  /** Producer-owned semantic projection; acquisition envelopes never enter a write seal. */
+  sealInput?: z.ZodType;
+  seal?(prepared: unknown): { request: unknown; evidence?: unknown };
   bind(context: CommandContext): Promise<CommandBinding>;
   run(context: CommandContext, execution: ActionExecution): Promise<unknown>;
   recover?: StepRecovery;
+  /** Set only by `workWriteBoundary`: the executor derives, seals and rechecks against Work. */
+  boundary?: "work";
+  /** Receipt-confirmed cells retired by the shared Work write boundary. */
+  retires?(result: unknown): readonly WorkPath[];
   cancel?(requestId: string): Promise<unknown>;
 }
 export type CommandRegistry = (key: string) => CommandExecutor;
@@ -124,15 +133,16 @@ export interface CommandEnvironment extends CommandResources {
 export function command<C extends Command, S extends z.ZodType>(
   definition: C,
   prepared: S,
-  implementation: Omit<CommandExecutor, "definition" | "prepared" | "bind" | "run" | "recover"> & {
+  implementation: Omit<CommandExecutor, "definition" | "prepared" | "bind" | "run" | "recover" | "seal"> & {
+    seal?(prepared: z.output<S>): { request: unknown; evidence?: unknown };
     bind(
       context: Omit<CommandContext, "admission"> & {
-        admission: Omit<ActionAdmission, "input"> & { input: z.output<C["input"]> };
+        admission: Omit<ActionAdmission, "input"> & { input: AuthoredInput<C> };
       },
     ): Promise<CommandBinding>;
     run(
       context: Omit<CommandContext, "admission"> & {
-        admission: Omit<ActionAdmission, "input"> & { input: z.output<C["input"]> };
+        admission: Omit<ActionAdmission, "input"> & { input: AuthoredInput<C> };
       },
       execution: Omit<ActionExecution, "prepared"> & { readonly prepared: z.output<S> },
     ): Promise<unknown>;
@@ -143,5 +153,9 @@ export function command<C extends Command, S extends z.ZodType>(
     ): ReturnType<StepRecovery>;
   },
 ): CommandExecutor {
-  return { definition, prepared, ...implementation } as CommandExecutor;
+  return { definition, prepared, sealInput: implementation.seal ? prepared : undefined, ...implementation } as CommandExecutor;
 }
+
+type AuthoredInput<C extends Command> = C extends { authoredInput: infer S extends z.ZodType }
+  ? z.output<S> & { work: WorkHandle }
+  : z.output<C["input"]>;

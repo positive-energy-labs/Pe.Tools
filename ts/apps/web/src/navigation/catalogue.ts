@@ -16,7 +16,7 @@ import {
   Terminal,
   Wind,
 } from "lucide-react";
-import { APP_ROUTES } from "@pe/agent-contracts";
+import { ROUTE_DIRECTORY } from "@pe/agent-contracts";
 
 const ICONS = {
   FileScan,
@@ -37,7 +37,7 @@ const ICONS = {
   Wind,
 };
 
-export const TOOLS = APP_ROUTES.filter((route) => route.directory).map((route) => ({
+export const TOOLS = ROUTE_DIRECTORY.filter((route) => route.directory).map((route) => ({
   ...route,
   to: route.path,
   icon: ICONS[route.iconKey],

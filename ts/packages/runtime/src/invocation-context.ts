@@ -7,11 +7,10 @@ import {
   HOST_CONTEXT_VARIABLE,
   HOST_RUNTIME_SERVICE_HEADER,
 } from "@pe/host-contracts/contracts";
-import { resolveLaneAndRoot } from "./runtime-owner.ts";
+import { resolveLaneAndRoot, runtimeRoot } from "./runtime-owner.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { productRoot } from "@pe/host-contracts/service-identity";
 import type { InvocationContext } from "./invocation-context.browser.ts";
 export type {
   InvocationContext,
@@ -42,7 +41,7 @@ function outboxPath(slot: string) {
   // The caller's slot already includes the host base. A new root must find old pending intent.
   const hash = createHash("sha256").update(slot).digest("hex");
   return join(
-    productRoot(),
+    runtimeRoot(),
     "state",
     resolveLaneAndRoot().serviceName,
     "invocation-outbox",

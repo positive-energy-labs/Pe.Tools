@@ -32,7 +32,7 @@ public class RequestService {
         this._throttleGate = throttleGate;
     }
 
-    [Op("revit.catalog.field-options", Does = "Read the options of one value domain by key (an x-options.key on a settings or request schema, e.g. category-names), with the context values its dependsOn names. Serves the field-options Reading.", Title = "Get Field Options", Finds = ["field-options", "value-domain", "options", "categories", "families", "suggestions"], Tier = OpTier.Expert, Example = "{ \"key\": \"category-names\" }")]
+    [Op("revit.catalog.field-options", OpSubject.Document, OpTouches.Metadata, OpEffect.Read, Does = "Read the options of one value domain by key (an x-options.key on a settings or request schema, e.g. category-names), with the context values its dependsOn names. Serves the field-options Reading.", Title = "Get Field Options", Finds = ["field-options", "value-domain", "options", "categories", "families", "suggestions"], Tier = OpTier.Expert, Example = "{ \"key\": \"category-names\" }")]
     public async Task<FieldOptionsData> GetFieldOptionsAsync(
         FieldOptionsRequest request,
         RevitDocument document,
@@ -70,7 +70,7 @@ public class RequestService {
         return response;
     }
 
-    [Op("settings.schema", Does = "Read the live editor schema of the settings library a `$schema` URL names.", Title = "Get Schema", Finds = ["schema", "settings", "profile", "profiles", "module", "family-foundry"])]
+    [Op("settings.schema", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Read the live editor schema of the settings library a `$schema` URL names.", Title = "Get Schema", Finds = ["schema", "settings", "profile", "profiles", "module", "family-foundry"])]
     public Task<SchemaData> GetSchemaAsync(SchemaRequest request, RevitDocument document, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
@@ -91,7 +91,7 @@ public class RequestService {
             }
         }, cancellationToken);
 
-    [Op("settings.validate", Does = "Run the typed semantic validator of the settings library a `$schema` URL names, after host-owned structural validation.", Title = "Validate Settings", Finds = ["settings", "validation", "semantic", "spec"], IsPublic = false)]
+    [Op("settings.validate", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Run the typed semantic validator of the settings library a `$schema` URL names, after host-owned structural validation.", Title = "Validate Settings", Finds = ["settings", "validation", "semantic", "spec"], IsPublic = false)]
     public Task<SettingsValidateData> ValidateSettingsAsync(
         SettingsValidateRequest request,
         CancellationToken cancellationToken

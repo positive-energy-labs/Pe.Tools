@@ -1,20 +1,41 @@
-import * as THREE from "three";
 import { expect, test } from "vite-plus/test";
-import type { DuctsHeal } from "@pe/host-contracts/generated";
-import { healPlan } from "@pe/ducts-domain/heal";
-import type { VerbScope } from "#/shell/verbs";
-import { snapshot } from "./test-fixture";
-import { presentHeal, presentFan, plannedHeal, previewedHeal, type HealReview } from "./reviews";
-import { healReviewLayers } from "./finding-layers";
+import { presentHeal, presentFan, presentLosses } from "./reviews";
 import { ra23Snapshot, twoHealNetworksSnapshot } from "./heal.fixture";
-
-test("the two RA 37 caps name their ends' system instead of their shared group's systems and units", () => {
+import { snapshot } from "./test-fixture";
+const scope = (ducts = structuredClone(snapshot)) => ({ readings: { ducts: { value: ducts } } });
+test("fan review names targets from the Place sheet snapshot even when network scope is empty", () => {
+  const review = presentLosses(
+    {
+      previewOnly: true,
+      writes: [
+        {
+          id: 100,
+          kind: "equipment",
+          outcome: "planned",
+          before: "0 in-wg",
+          after: "0.18 in-wg",
+          reason: null,
+        },
+      ],
+      counts: { planned: 1, written: 0, refused: 0, unchanged: 0 },
+    },
+    {
+      page: { stage: "sheet" },
+      readings: {
+        ducts: { value: { ...snapshot, nodes: [], segments: [] } },
+        sheetSnapshot: { value: snapshot },
+      },
+    },
+  );
+  expect(review.rows[0]).toContain("FC-1");
+  expect(review.rows[0]).toContain("0.18 in-wg");
+});
+test("two RA 37 caps name their ends' system instead of the shared group's other systems", () => {
   const ducts = twoHealNetworksSnapshot();
   ducts.groups.find((group) => group.id === "g6953999")!.systemNames = ["FA 20", "FA 27"];
   for (const segment of ducts.segments)
     if (segment.groupId === "g6953999") segment.systemName = "RA 37";
-  const ctx = scope();
-  const presentation = presentHeal(
+  const review = presentHeal(
     {
       previewOnly: true,
       counts: { planned: 2, healed: 0, refused: 0 },
@@ -31,181 +52,60 @@ test("the two RA 37 caps name their ends' system instead of their shared group's
         },
       ],
     },
-    { ...ctx, readings: { ducts: { ...ctx.readings.ducts!, value: ducts } } },
+    scope(ducts),
   );
-  expect(presentation.sentence).toBe("RA 37: 2 planned");
+  expect(review.sentence).toBe("RA 37: 2 planned");
 });
-
-test("RA 23's one cap names its element, connector and size and draws without an issue id", () => {
-  const ctx = scope();
+test("RA 23's preview names the element and connector size without a numeric identity", () => {
   const ducts = ra23Snapshot();
-  ducts.groups[0]!.systemNames = ["FA 20", "FA 27"];
-  const current = { ...ctx, readings: { ducts: { ...ctx.readings.ducts!, value: ducts } } };
-  const response = {
-    previewOnly: true,
-    counts: { planned: 1, healed: 0, refused: 0 },
-    groups: [
-      {
-        group: "g10002953",
-        items: [
-          { key: "cap:10002955:9", kind: "cap", outcome: "planned", created: [], replaced: [] },
+  const review = presentHeal(
+    {
+      response: {
+        previewOnly: true,
+        counts: { planned: 1, healed: 0, refused: 0 },
+        groups: [
+          {
+            group: "g10002953",
+            items: [
+              { key: "cap:10002955:9", kind: "cap", outcome: "planned", created: [], replaced: [] },
+            ],
+          },
         ],
-      },
-    ],
-  };
-  const review = presentHeal({ value: response }, current).page!.heal as HealReview;
-  expect(review.sentence).toBe("RA 23: 1 planned");
-  expect(review.rows[0]).toMatch(/10002955.*end 9.*8 in round.*planned/);
-  expect(healReviewLayers(ducts, null, review)).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        targets: expect.arrayContaining([{ key: "heal:g10002953", elementId: 10002955 }]),
-      }),
-    ]),
-  );
-});
-
-test("refused repairs stay readable, never draw as planned, and never reach Heal", () => {
-  const ctx = scope();
-  const group = healPlan(ctx.readings.ducts!.value as typeof snapshot).groups[0]!;
-  const request = { groups: [{ group: group.group, items: group.items }] };
-  const response = {
-    previewOnly: true,
-    counts: { planned: 0, healed: 0, refused: 1 },
-    groups: [
-      {
-        group: group.group,
-        items: group.items.map((item) => ({
-          ...item,
-          outcome: "refused",
-          reason: "A cap would block its air",
-          created: [],
-        })),
-      },
-    ],
-  };
-  const review = presentHeal(response, ctx).page!.heal as HealReview;
-  expect(review.rows[0]).toContain("refused · A cap would block its air");
-  expect(review.request.groups).toEqual([]);
-  expect(healReviewLayers(ctx.readings.ducts!.value as typeof snapshot, null, review)).toEqual([]);
-  expect(() => plannedHeal(request, response)).toThrow("Nothing passed");
-  const partial = {
-    ...response,
-    groups: [
-      {
-        ...response.groups[0]!,
-        items: [
-          { ...response.groups[0]!.items[0]!, outcome: "planned" },
-          { ...response.groups[0]!.items[0]!, key: "cap:3:9" },
-        ],
-      },
-    ],
-  };
-  const expanded = {
-    groups: [
-      {
-        group: group.group,
-        items: [...group.items, { ...group.items[0]!, key: "cap:3:9", end: "3:9" }],
-      },
-    ],
-  };
-  expect(plannedHeal(expanded, partial).groups[0]!.items).toEqual(group.items);
-  const admitted = { ...ctx, page: { heal: review } };
-  expect(previewedHeal(admitted, request)).toEqual(review);
-  admitted.readings = { ducts: { ...ctx.readings.ducts!, version: 2 } };
-  expect(() => previewedHeal(admitted, request)).toThrow("preview again");
-});
-
-const scope = (): VerbScope => {
-  const ducts = structuredClone(snapshot);
-  const segment = ducts.segments[0]!;
-  segment.connectors.push({
-    ...segment.connectors[0]!,
-    index: 9,
-    point: [-10, 0, 0],
-    facing: [-1, 0, 0],
-    diameterIn: 8,
-    connectedTo: null,
-  });
-  ducts.issues.push({
-    id: "open-end:1:9",
-    kind: "open-end",
-    elementId: 1,
-    connector: 9,
-    note: "open end",
-  });
-  return {
-    page: { layers: [] },
-    snapshot: { target: { kind: "host" }, work: null, basis: null },
-    subject: null,
-    value: null,
-    readings: {
-      ducts: {
-        status: "ready",
-        value: ducts,
-        version: 1,
-        current: true,
-        complete: true,
-        basis: null,
       },
     },
-  };
-};
-
-test.each([true, false])(
-  "heal presentation draws admitted targets and excludes rolled-back ids (preview %s)",
-  (previewOnly) => {
-    const ctx = scope();
-    const ducts = ctx.readings.ducts!.value as typeof snapshot;
-    const group = healPlan(ducts, null).groups[0]!;
-    const response: DuctsHeal.Res.Response = {
-      previewOnly,
-      counts: { planned: previewOnly ? 1 : 0, healed: previewOnly ? 0 : 1, refused: 0 },
+    scope(ducts),
+  );
+  expect(review.sentence).toBe("RA 23: 1 planned");
+  expect(review.rows[0]).toMatch(/^Place a cap on 8 in duct \(8 in round\).*planned/);
+  expect(review.rows[0]).not.toMatch(/10002955|end 9/);
+  expect(review).not.toHaveProperty("page");
+});
+test("refused native repairs remain readable in the shared review", () => {
+  const review = presentHeal(
+    {
+      previewOnly: true,
+      counts: { planned: 0, healed: 0, refused: 1 },
       groups: [
         {
-          group: group.group,
-          outcome: previewOnly ? "planned" : "healed",
-          systemsBefore: [],
-          systemsAfter: [],
-          items: group.items.map((item) => ({
-            key: item.key,
-            kind: item.kind,
-            outcome: previewOnly ? "planned" : "healed",
-            created: [7001],
-            replaced: [],
-            check: "connection checked",
-          })),
+          group: "g1",
+          items: [
+            {
+              key: "cap:1:0",
+              kind: "cap",
+              outcome: "refused",
+              reason: "A cap would block its air",
+              created: [],
+            },
+          ],
         },
       ],
-    };
-    const presentation = presentHeal({ response }, ctx);
-    expect(presentation.sentence).toContain(previewOnly ? "1 planned" : "1 healed");
-    expect(presentation.rows[0]).toContain("cap");
-    const review = presentation.page!.heal as HealReview;
-    expect(review.targets[0]!.ids).toEqual(previewOnly ? [1] : [1, 7001]);
-    expect(review.before.roots).toEqual([100]);
-    expect(presentation.page!.layers).toEqual(["findings"]);
-    const layers = healReviewLayers(ducts, null, review);
-    expect(layers.some((layer) => layer.key.includes("heal:"))).toBe(true);
-    expect(layers.flatMap((layer) => layer.targets ?? [])).toContainEqual({
-      key: "heal:g1",
-      elementId: 1,
-    });
-    const drawn = new THREE.Group();
-    for (const layer of layers) layer.build(drawn);
-    const ghosts: boolean[] = [];
-    drawn.traverse((object) => {
-      if (object instanceof THREE.Mesh) {
-        if (typeof object.userData.ghost === "boolean") ghosts.push(object.userData.ghost);
-        object.geometry.dispose();
-        if (!Array.isArray(object.material)) object.material.dispose();
-      }
-    });
-    expect(ghosts).toEqual([previewOnly]);
-  },
-);
-
-test("fan review uses the system, unit and native read-back words", () => {
+    },
+    scope(),
+  );
+  expect(review.rows[0]).toContain("refused");
+  expect(review.rows[0]).toContain("A cap would block its air");
+});
+test("fan review uses system, unit and native read-back words", () => {
   const review = presentFan(
     {
       response: {

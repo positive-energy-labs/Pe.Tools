@@ -7,7 +7,6 @@ import { Code, JsonEditor } from "@pe/kit/lang/code";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { List } from "@pe/kit/lang/list-popup";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { SwitchRow } from "@pe/kit/lang/switch-row";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { mountRoute, routeFromGraph, type MountBody, type RouteAdapters } from "#/shell/mount";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
@@ -16,11 +15,9 @@ import { RunsList } from "#/route/runs-list";
 import { isSpecOf } from "#/route/workflow";
 import type { PodRow, Run } from "#/route/pods";
 import { familyGraph, FAMILY_MODEL_SCHEMA } from "#/family/graph";
-import { familiesGraph, FAMILIES_SPEC_SCHEMAS } from "#/families/graph";
-import { schedulesGraph, SCHEDULE_SPEC_SCHEMA } from "#/schedules/graph";
 import { podsGraph } from "./graph";
 import { podsBinding, podsCell, editRefusal } from "./actions";
-import { podsSources, type PluginsRead } from "./sources";
+import { podsSources } from "./sources";
 import {
   draftOf,
   readingValue,
@@ -33,11 +30,7 @@ import {
 import type { PodsPage } from "./page";
 
 type Body = MountBody<PodsPage, SettingsRouteDocument>;
-const PRODUCTS = [
-  { route: "schedules", graph: schedulesGraph, schema: SCHEDULE_SPEC_SCHEMA },
-  { route: "family", graph: familyGraph, schema: FAMILY_MODEL_SCHEMA },
-  { route: "families", graph: familiesGraph, schema: FAMILIES_SPEC_SCHEMAS },
-] as const;
+const PRODUCTS = [{ route: "family", graph: familyGraph, schema: FAMILY_MODEL_SCHEMA }] as const;
 const scopeOf = ({ owner, page }: Body) => ({
   ...owner.snapshot(),
   page,
@@ -50,38 +43,12 @@ function Members(body: Body) {
   const { owner, page, visible } = body;
   const reading = owner.readings.get("pods");
   const pods = readingValue<readonly PodRow[]>(reading) ?? [];
-  const plugins = readingValue<PluginsRead>(owner.readings.get("plugins"));
   const ref = selectedMember(page);
   return (
     <>
-      {!owner.fixture && (
-        <div aria-label="Pod activation">
-          {pods.map((pod) => {
-            const plugin = plugins?.statuses.find((status) => status.id === `pod:${pod.id}`);
-            const routes =
-              plugins?.routes
-                .filter((route) => route.packageId === pod.id)
-                .map((route) => route.name) ?? [];
-            const control = owner.control("activation", {
-              id: `pod:${pod.id}`,
-              enabled: plugin?.status !== "active",
-            });
-            return (
-              <SwitchRow
-                key={pod.id}
-                label={pod.name}
-                checked={plugin?.status === "active"}
-                onCheckedChange={(enabled) => {
-                  void owner.control("activation", { id: `pod:${pod.id}`, enabled }).run();
-                }}
-                disabled={!visible || owner.busy() !== null}
-                refusal={control.refusal}
-                says={`On: the host runs this Pod's plugin${routes.length ? ` and serves ${routes.join(", ")}` : ""}. Off: the folder stays in Pods.`}
-              />
-            );
-          })}
-        </div>
-      )}
+      <a href={owner.fixture ? "/pod-admin?fixture=inventory" : "/pod-admin"}>
+        Manage Pod installation and trust
+      </a>
       {pods
         .filter((pod) => pod.diagnostics.length)
         .map((pod) => (
@@ -409,7 +376,6 @@ export const podsAdapters: RouteAdapters<PodsPage, SettingsRouteDocument> = {
     adopt: ["member"],
     save: ["member", "composition"],
     "save-new": ["member", "composition"],
-    activation: ["plugins"],
   },
   receiptPaths: (receipt) =>
     receipt.key === "settings.observe" || receipt.key === "settings.write"

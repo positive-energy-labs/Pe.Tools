@@ -1,21 +1,27 @@
+import { useAtomValue } from "@effect/atom-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearch, useRouter } from "@tanstack/react-router";
+import { deepEqual, useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
-import { selectRunStatus, selectTurnFailure } from "@pe/agent-contracts/chat-state";
-import { previousOf, useHostStatusSlice } from "#/readings";
+import {
+  selectApprovals,
+  selectRunStatus,
+  selectTurnFailure,
+} from "@pe/agent-contracts/chat-state";
+import { previousOf, useHostStatusSlice } from "#/shell/readings-hooks";
 import { appAtomRegistry, useRouteOwner } from "#/shell/owner";
 import { createChatPageStore } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
-import { WorkbenchContext } from "./thread-summary";
+import { TranscriptContext, WorkbenchContext } from "./thread-summary";
 import { chatLoading, useThreadStream } from "./thread-stream";
 import { harnessClient, notFound, type PromptRequest } from "./harness-client";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
 import { routeAddress, targetKey, type DocumentRequest } from "@pe/agent-contracts";
 import { demoThreads } from "#/chat/thread-navigation";
-import { fixtureThread, useFixtureName } from "#/shell/fixture-services";
+import { useEnvironmentReading } from "#/shell/environment-readings";
+import type { HarnessThreadBody } from "@pe/agent-contracts";
 import { mergeThreadRoster, mergeThreadSummary } from "./thread-merge";
 import { emptyPrompt } from "../prompt";
 import { soleUserDocument } from "#/chat/scope";
@@ -44,14 +50,15 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }),
     structuralSharing: true,
   });
-  const fixture = useFixtureName();
+  const selected = useEnvironmentReading<HarnessThreadBody>(null, "transcript");
+  const remote = selected.remote;
   const addressedThread = search.thread ?? "";
   const currentThreadId = addressedThread;
   const store = useRouteOwner(
     () =>
       createChatPageStore({
         registry: appAtomRegistry,
-        local: fixture !== null,
+        local: !remote,
         search: {
           ...search,
           mode: "mode" in search && typeof search.mode === "string" ? search.mode : "threads",
@@ -73,7 +80,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
           },
         },
       }),
-    fixture,
+    selected.key,
   );
 
   // The one `host-status` Reading; `previousOf` keeps the last good answer through a refetch.
@@ -86,7 +93,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       revit: info?.capabilities.revit,
       world: info?.world as WorkbenchContextValue["world"],
     };
-  }, fixture === null);
+  }, remote);
   const client = useMemo(() => harnessClient(config.origin), [config.origin]);
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
   const [rosterRead, setRosterRead] = useState(false);
@@ -99,17 +106,17 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string>();
 
   // `?fixture=<seed>`: the transcript shows that seed's thread and nothing is fetched.
-  const demo = fixture !== null ? fixtureThread(fixture) : undefined;
+  const demo = previousOf(selected.reading);
   const refreshThreads = useCallback(async () => {
-    if (demo) return;
+    if (!remote) return;
     const started = rosterEpoch.current;
     const listed = await client.threads();
     if (started === rosterEpoch.current)
       setThreads((current) => mergeThreadRoster(current, listed));
-  }, [client, demo]);
+  }, [client, demo, remote]);
   useEffect(() => {
-    if (demo) {
-      setThreads(demoThreads(demo));
+    if (!remote) {
+      setThreads(demo ? demoThreads(demo) : []);
       setRosterRead(true);
       return;
     }
@@ -124,40 +131,68 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       },
       (caught) => setError((fault = errorMessage(caught))),
     );
-  }, [client, demo]);
+  }, [client, demo, remote]);
 
   const stream = useThreadStream({
     origin: config.origin,
-    threadId: demo || !currentThreadId ? null : currentThreadId,
+    threadId: !remote || !currentThreadId ? null : currentThreadId,
     onListChange: () => void refreshThreads().catch((caught) => setError(errorMessage(caught))),
   });
   const missingThread = notFound(stream.error);
-  const chat = demo ?? stream.chat;
+  const transcript = useMemo(
+    () => (demo ? Atom.make(demo) : stream.chatAtom),
+    [demo, stream.chatAtom],
+  );
+  const summary = useMemo(
+    () =>
+      Atom.map(transcript, (state) => ({
+        id: state.id,
+        providerId: state.providerId,
+        lifecycle: state.lifecycle,
+        running: selectRunStatus(state) !== "idle",
+        failure: selectTurnFailure(state),
+        runApprovals: selectApprovals(state).filter((ask) => ask.scope === "run"),
+      })).pipe(Atom.withEquality(deepEqual)),
+    [transcript],
+  );
+  const chat = useAtomValue(summary);
   const bodyAtom = useMemo(
     () => (demo ? Atom.make(AsyncResult.success(demo)) : stream.bodyAtom),
     [demo, stream.bodyAtom],
   );
-  const loading = demo ? false : chatLoading(host.known, stream.pending);
-  const isRunning = selectRunStatus(chat) !== "idle";
-  const turnFailure = selectTurnFailure(chat);
+  const loading = !remote
+    ? selected.reading.state === "absent"
+    : chatLoading(host.known, stream.pending);
+  const isRunning = chat.running;
+  const turnFailure = chat.failure;
+  const chatId = chat.id;
+  const lifecycleRevision = chat.lifecycle.revision;
+  const runApprovals = chat.runApprovals;
 
   /** Every verb: clear the last complaint, run, and say what failed. */
-  const attempt = useCallback(async (run: () => Promise<unknown>) => {
-    try {
-      setError(undefined);
-      await run();
-      return true;
-    } catch (caught) {
-      setError(errorMessage(caught));
-      return false;
-    }
-  }, []);
+  const attempt = useCallback(
+    async (run: () => Promise<unknown>) => {
+      if (!remote) {
+        setError("Native writes unavailable in this environment");
+        return false;
+      }
+      try {
+        setError(undefined);
+        await run();
+        return true;
+      } catch (caught) {
+        setError(errorMessage(caught));
+        return false;
+      }
+    },
+    [remote],
+  );
 
   useEffect(() => {
-    if (demo || loading) return;
+    if (!remote || loading) return;
     void attempt(refreshThreads);
-  }, [attempt, demo, loading, refreshThreads]);
-  const providers = useProviders(config.origin, !demo);
+  }, [attempt, remote, loading, refreshThreads]);
+  const providers = useProviders(config.origin, remote);
 
   const gotoThread = useCallback(
     (threadId: string, replace = false) => store.actions.openThread(threadId, replace),
@@ -177,7 +212,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       )
     : undefined;
   /** Why a send cannot go now, in the provider's own words, or undefined when it can. */
-  const sendRefusal = demo
+  const sendRefusal = !remote
     ? undefined
     : !providers.list
       ? "Providers are loading"
@@ -199,7 +234,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   /** Only an explicit create/send promotes a browser draft; one in-flight create owns its address. */
   const createThread = useCallback((): Promise<string> => {
     const source = router.state.location;
-    if (demo)
+    if (!remote)
       return Promise.reject(Error("Fixture threads are read-only; open a real draft to send."));
     const epoch = navigationEpoch.current;
     if (creatingThread.current)
@@ -267,7 +302,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     return promise;
   }, [
     client,
-    demo,
+    remote,
     draft,
     draftTarget,
     drafted,
@@ -328,12 +363,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   // A thread the host does not know is the transcript's empty state, not a fault.
   const operationError =
     error ??
+    (selected.reading.state === "failed" ? selected.reading.message : undefined) ??
     (host.failure !== undefined ? host.failure : missingThread ? undefined : stream.error?.message);
   const context = useMemo<WorkbenchContextValue>(
     () => ({
       store,
       config,
-      chat,
+      runApprovals,
       bodyAtom,
       loading,
       error,
@@ -365,17 +401,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       },
       updateThread: (threadId, change) =>
         attempt(async () => {
-          if (demo && change.readSeq !== undefined) return;
-          if (demo)
-            throw Error(
-              "Fixture threads are read-only; open a real thread to change its lifecycle",
-            );
-          const current =
-            threads.find((item) => item.id === threadId) ??
-            (chat.id === threadId ? chat : undefined);
+          const revision =
+            threads.find((item) => item.id === threadId)?.lifecycle.revision ??
+            (chatId === threadId ? lifecycleRevision : undefined);
           const updated = await client
             .update(threadId, {
-              expectedRevision: current?.lifecycle.revision,
+              expectedRevision: revision,
               ...change,
             })
             .catch((caught) => {
@@ -414,7 +445,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [
       attempt,
       bodyAtom,
-      chat,
+      runApprovals,
+      chatId,
+      lifecycleRevision,
       client,
       config,
       createThread,
@@ -442,5 +475,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  return <WorkbenchContext.Provider value={context}>{children}</WorkbenchContext.Provider>;
+  return (
+    <WorkbenchContext.Provider value={context}>
+      <TranscriptContext.Provider value={transcript}>{children}</TranscriptContext.Provider>
+    </WorkbenchContext.Provider>
+  );
 }

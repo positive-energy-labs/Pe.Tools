@@ -1,32 +1,35 @@
-/** The sheet's `ids` read joins one group so the picture draws it; no read is the empty snapshot. */
+/** An ids read draws under one sheet group; absence never claims native evidence. */
 import { expect, it } from "vite-plus/test";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { indexOf, sceneOf } from "../scene";
-import { EMPTY_SNAPSHOT, SHEET_GROUP, sheetSnapshot } from "./scoped-snapshot";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { schemas } from "../neutral.ts";
+import { snapshot as networkSnapshot } from "../test-fixture.ts";
+import { indexOf, sceneOf } from "../scene.ts";
+import { EMPTY_SNAPSHOT, SHEET_GROUP, sheetSnapshot, sheetSystems } from "./scoped-snapshot.ts";
 
 it("a raw ids read draws every element under the one sheet group", () => {
   const raw = {
-    ...EMPTY_SNAPSHOT,
-    nodes: [
-      { id: 1, kind: "equipment", groupId: null, connectors: [], facts: [], point: [0, 0, 0] },
-      { id: 2, kind: "terminal", groupId: null, connectors: [], facts: [], point: [1, 0, 0] },
-    ],
-    segments: [
-      {
-        id: 3,
-        groupId: null,
-        polyline: [
-          [0, 0, 0],
-          [1, 0, 0],
-        ],
-        connectors: [],
-      },
-    ],
-  } as unknown as DuctSnapshot;
+    ...networkSnapshot,
+    nodes: networkSnapshot.nodes.slice(0, 2).map((node, i) => ({ ...node, id: i + 1, groupId: null })),
+    segments: networkSnapshot.segments.slice(0, 1).map(segment => ({ ...segment, id: 3, groupId: null })),
+  };
   const snapshot = sheetSnapshot(raw);
   expect(snapshot.groups.map((g) => g.id)).toEqual([SHEET_GROUP]);
   const scene = sceneOf(indexOf(snapshot), [SHEET_GROUP], () => true);
   expect(scene.nodes.map((n) => n.node.id).sort()).toEqual([1, 2]);
   expect(scene.segments.map((s) => s.segment.id)).toEqual([3]);
-  expect(sheetSnapshot(null)).toBe(EMPTY_SNAPSHOT);
+});
+
+it("decodes absence separately and keeps native timestamp validation strict", () => {
+  expect(schemas.sheetSnapshot.parse({ kind: "absent" })).toEqual({ kind: "absent" });
+  expect(schemas.sheetSnapshot.safeParse(EMPTY_SNAPSHOT).success).toBe(false);
+  const native = { ...networkSnapshot, document: { ...networkSnapshot.document, readAt: "2026-11-04T13:25:39.031595+00:00" } };
+  expect(nativeResponseSchema("ducts.snapshot.walk").safeParse(native).success).toBe(true);
+  expect(schemas.sheetSnapshot.safeParse(native).success).toBe(true);
+});
+
+it("owner links scope only canonical roster entries and omit scope for bounded ids snapshots", () => {
+  const bounded = { ...networkSnapshot, systems: [], nodes: networkSnapshot.nodes.map(node => ({ ...node, systemName: "SA 20,RA 37" })) };
+  expect(sheetSystems(bounded)).toEqual([]);
+  const canonical = { ...bounded, systems: networkSnapshot.systems };
+  expect(sheetSystems(canonical)).toEqual(networkSnapshot.systems.map(system => system.name));
 });

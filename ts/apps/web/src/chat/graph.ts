@@ -1,3 +1,7 @@
+import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-chat Declaration 87 > 60 after kernel defaults. Thread lifecycle verbs, prompt inputs and readiness policy remain distinct.
+import { chatSeedChoices } from "./seed-choices";
+import { manyField } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   attachmentRefusal,
@@ -13,6 +17,7 @@ import {
   type PromptCapabilities,
   type Reading,
   type RouteGraph,
+  peaSettingFields,
 } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { pageVerb, rpcVerb } from "#/shell/verbs";
@@ -37,7 +42,7 @@ export interface ChatRouteDeps {
   providerName?: string;
   draftTarget?: DocumentRequest | null;
 }
-export type ChatPage = { thread: string; mode: "threads" | "world" };
+export type ChatPage = { thread: string; selected: string[] | "all"; mode: "threads" | "world" };
 export type ChatHandle = GraphMount<ChatPage, unknown>;
 const { id: _requestId, ...promptFields } = promptRequestSchema.shape;
 const promptInput = z.object(promptFields);
@@ -70,66 +75,65 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
         intent: (scope) => ({ thread: String(scope.page.thread) }),
       },
     );
-  return {
+  return defineRouteGraph({
+    directory: {
+      path: "/pea",
+      title: "Pea",
+      label: "Workbench",
+      exposure: "Main",
+      runtimeNeed: "Host for conversation; Revit depends on the requested capability",
+      icon: "MessageSquare",
+      category: "Ask / automate",
+      blurb: "The Pea agent workbench — chat and the context world inspector.",
+      aliases: ["chat", "agent", "assistant", "threads"],
+      listed: true,
+      satellites: [],
+      surfaces: {
+        web: "full",
+        pwa: "full",
+        tray: "compact",
+      },
+    },
     key: "chat",
     address: "pea",
     name: "Pea",
-    seeds: {
-      send: {
-        title: "an idle thread ready for a prompt",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["send"]!),
-      },
-      new: {
-        title: "a thread to leave for a fresh one",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["new"]!),
-      },
-      diagram: {
-        title: "pea drew a duct system, after one rejected diagram call",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["diagram"]!),
-      },
-      attach: {
-        title: "the user attached a photo, a CSV and a PDF; pea read all three",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["attach"]!),
-      },
-      skill: {
-        title: "the user ran a slash skill; the harness advertised its commands",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["skill"]!),
-      },
-      mention: {
-        title: "the user mentioned a document and a skill with @; pea used their ids",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["mention"]!),
-      },
-      closed: {
-        title:
-          "a thread whose bound session has closed; send refuses until a live document is chosen",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["closed"]!),
-      },
-      granted: {
-        title: "a human added a second document to the thread; it targets two",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["granted"]!),
-      },
-      stop: {
-        title: "pea mid-turn, with an approval owed",
-        load: () => import("./graph-seeds").then((m) => m.chatSeeds["stop"]!),
-      },
+    seeds: Object.fromEntries(
+      Object.entries(chatSeedChoices).map(([name, title]) => [
+        name,
+        {
+          title,
+          load: () => import("./graph-seeds").then((m) => m.chatSeeds[name]!),
+        },
+      ]),
+    ),
+    subjectField: {
+      field: "thread",
+      noun: "thread",
+      keyKind: "name",
+      roster: "threads",
+      detail: "head",
+      pane: "threads",
     },
     fields: {
-      thread: { ...field(z.string().default(""), {}), role: "transient" },
-      mode: { ...field(z.enum(["threads", "world"]).default("threads"), {}), role: "pose" },
+      thread: { ...field(z.string().default(""), {}) },
+      selected: {
+        ...manyField("name", { url: "replace", agent: "set" }),
+        role: "selection",
+      },
+      mode: { ...field(z.enum(["threads", "world"]).default("threads"), {}) },
+      ...peaSettingFields,
     },
     readings: {
+      threads: { source: "threads", retire: "never" },
+      transcript: { source: "transcript", args: (page) => page.thread },
       head: {
-        kind: "use",
         source: "head",
-        retire: "page",
         args: (page) => page.thread,
       },
-      machine: { kind: "use", source: "machine", retire: "page", args: (page) => page.thread },
-      receipts: { kind: "use", source: "receipts", retire: "page", args: (page) => page.thread },
+      machine: { source: "machine", args: (page) => page.thread },
+      receipts: { source: "receipts", args: (page) => page.thread },
       capabilities: {
-        kind: "use",
         source: "capabilities",
-        retire: "page",
         args: (page) => page.thread,
       },
     },
@@ -180,7 +184,7 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
         "thread.cancel",
         "stop",
         () => deps().cancel?.(),
-        () => (!deps().cancel ? "Chat is not ready" : deps().running ? null : "Nothing is running"),
+        () => (!deps().cancel || !deps().thread ? "Chat is not ready" : null),
       ),
       fork: command(
         "thread.fork",
@@ -208,15 +212,12 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
       threads: {
         label: "threads",
         purpose: "Choose a conversation",
-        draws: [],
-        verbs: [],
         frame: { header: false, flush: true, scroll: "clip" },
       },
       chat: {
         label: "chat",
         purpose: "Read and compose",
         draws: ["head", "machine", "receipts", "capabilities"],
-        verbs: [],
         frame: { header: false, flush: true, scroll: "clip" },
       },
     },
@@ -229,27 +230,36 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
     stages: {
       conversation: {
         word: "Conversation",
-        panes: ["threads", "chat"],
         verbs: ["threads", "world"],
       },
     },
-  };
+  });
 }
 
 export function chatAdapters(navigate: () => void): RouteAdapters<ChatPage, unknown> {
   return {
-    sources: Object.fromEntries(
-      (["head", "machine", "receipts", "capabilities"] as const).map((id) => {
-        const live = subscriptionSource({
-          request: (ctx) =>
-            id === "head"
-              ? { kind: "thread-head", thread: String((ctx.page as ChatPage).thread || "draft") }
-              : { kind: id },
-          decode: (value) => value,
-        });
-        return [id, live];
+    sources: {
+      transcript: subscriptionSource({
+        request: (ctx) => ({ kind: "thread", thread: String(ctx.args || "draft") }),
+        decode: (value) => value,
       }),
-    ),
+      threads: subscriptionSource({
+        request: () => ({ kind: "threads" }),
+        decode: (value) => value,
+      }),
+      ...Object.fromEntries(
+        (["head", "machine", "receipts", "capabilities"] as const).map((id) => {
+          const live = subscriptionSource({
+            request: (ctx) =>
+              id === "head"
+                ? { kind: "thread-head", thread: String((ctx.page as ChatPage).thread || "draft") }
+                : { kind: id },
+            decode: (value) => value,
+          });
+          return [id, live];
+        }),
+      ),
+    },
     binding: (_id, row) => ({ subject: null, args: row ?? {} }),
     navigate,
     bodies: {},

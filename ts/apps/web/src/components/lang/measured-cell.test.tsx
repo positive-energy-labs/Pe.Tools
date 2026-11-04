@@ -161,7 +161,7 @@ test("the cell stages Revit's unrounded length instead of its rounded display te
     },
     expect.anything(),
   );
-  expect(edit).toEqual([{ value: "0.4921259842519685", unit: "'" }]);
+  expect(edit).toEqual([{ value: "0.4921259842519685", unit: "'", display: "0' - 6\"" }]);
 });
 
 test("a host failure appears on the cell and stages nothing", async () => {

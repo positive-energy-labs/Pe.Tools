@@ -1,3 +1,3 @@
-import type { DuctsSnapshot } from "@pe/host-contracts/generated";
+import type { DuctsSnapshotWalk } from "@pe/host-contracts/generated";
 
-export type DuctSnapshot = DuctsSnapshot.Res.Response;
+export type DuctSnapshot = DuctsSnapshotWalk.Res.Response;

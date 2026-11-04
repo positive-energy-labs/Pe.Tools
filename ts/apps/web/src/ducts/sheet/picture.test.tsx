@@ -5,22 +5,45 @@
  * worst path lights its legs. Fails if the
  * sheet ever mounts its picture without them again (the 2026-10-28 defect).
  */
-import { createElement, type ComponentProps } from "react";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import { RegistryContext } from "@effect/atom-react";
-import { act, cleanup, render } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vite-plus/test";
-import { attention, elementKey, setHovered, type SubjectKey } from "@pe/kit/lang/attention";
-import { makeAtomRegistry } from "#/shell/owner";
 import { AttentionRoot } from "#/attention";
+import { boundsOfPoints } from "#/scene/orbit";
 import type { ModelPicture } from "#/scene/picture/model";
 import type { PictureStage } from "#/scene/stage-controller";
-import { boundsOfPoints } from "#/scene/orbit";
+import { SceneMeshes } from "#/scene/types";
+import { makeAtomRegistry } from "#/shell/owner";
+import { RegistryContext } from "@effect/atom-react";
+import { routeAddress } from "@pe/agent-contracts";
+import { attention, elementKey, setHovered, type SubjectKey } from "@pe/kit/lang/attention";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
+import * as Atom from "effect/reactivity/Atom";
+import { createElement, type ComponentProps } from "react";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 import { NAVIGATION_FIXTURE } from "../navigation.fixture";
-import type { ProtoProps } from "../proto/props";
-import type { OpenSheet } from "../sources";
+import type { OpenSheet } from "../neutral.ts";
+import { selectedFans, type FanPort } from "./model";
+import type { SheetPictureProps } from "./picture";
 import { beyondPicture, SheetPicture } from "./picture";
 
+const io = vi.hoisted(() => ({ call: vi.fn() }));
+vi.mock("#/host/client", () => ({ callHostRpc: io.call }));
+vi.mock("#/scene/artifact", () => ({ fetchSceneArtifact: async () => new ArrayBuffer(0) }));
+vi.mock("#/scene/psc1", () => ({
+  SCENE_FORMAT: "space-scene-v2",
+  decodeScene: () => ({
+    meshes: new SceneMeshes(
+      new Float32Array(),
+      { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 },
+      [],
+    ),
+    metadata: {
+      elements: [],
+      stamp: { sources: [] },
+      omittedElements: 0,
+      unavailableElements: [],
+      completeness: { complete: true },
+    },
+  }),
+}));
 const seen = vi.hoisted(() => ({
   model: null as Parameters<typeof ModelPicture>[0] | null,
   stage: null as ComponentProps<typeof PictureStage> | null,
@@ -31,7 +54,7 @@ vi.mock("#/scene/picture/model", async (original) => {
     ...module,
     ModelPicture: (props: Parameters<typeof ModelPicture>[0]) => {
       seen.model = props;
-      return null;
+      return <div data-drawn={!!props.read.meshes && !props.read.pending} />;
     },
   };
 });
@@ -45,7 +68,11 @@ vi.mock("#/scene/stage-controller", async (original) => {
     },
   };
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  io.call.mockReset();
+});
 
 const { snapshot } = NAVIGATION_FIXTURE;
 const [a, b, c] = snapshot.segments;
@@ -57,12 +84,32 @@ const sheet = {
   worstLegs: [{ pathId: "p1", legs: [{ elementId: a!.id }, { elementId: b!.id }] }],
 } as unknown as OpenSheet;
 
-function mount(open: OpenSheet = sheet, layers = ["meshes", "halo", "findings"]) {
+function mount(
+  open: OpenSheet | null = sheet,
+  layers = ["meshes", "halo", "findings"],
+  fans?: FanPort[],
+) {
+  const sceneSession = crypto.randomUUID();
   if (typeof ResizeObserver === "undefined")
     vi.stubGlobal(
       "ResizeObserver",
-      class {
-        observe() {}
+      class implements ResizeObserver {
+        constructor(private callback: ResizeObserverCallback) {}
+        observe(target: Element) {
+          this.callback(
+            [
+              {
+                target,
+                contentRect: new DOMRectReadOnly(0, 0, 640, 480),
+                borderBoxSize: [],
+                contentBoxSize: [],
+                devicePixelContentBoxSize: [],
+              },
+            ],
+            this,
+          );
+        }
+        unobserve() {}
         disconnect() {}
       },
     );
@@ -77,23 +124,23 @@ function mount(open: OpenSheet = sheet, layers = ["meshes", "halo", "findings"])
     ...registry.get(page),
     viewport: null,
     layers,
-    sceneView: { preset: "all", section: null },
+    sceneView: { preset: "all" as const, section: null },
     contextRadiusFt: 10,
-    contextStyle: "glass",
-    picture: "model",
+    contextStyle: "glass" as const,
+    picture: "model" as const,
     encoding: "health",
   });
-  const props = () =>
-    ({
-      page: pageOf(),
-      setPage,
-      selection,
-      work: { doc: null, revision: null, write: () => {}, preview: null },
-      priced: null,
-      captureSource: null,
-      doc: null,
-      reading: { pending: false, error: null, refreshing: false },
-    }) as unknown as ProtoProps;
+  const props = (): SheetPictureProps => ({
+    page: pageOf(),
+    setPage,
+    selection,
+    work: { doc: null },
+    captureSource: fans
+      ? { document: { session: sceneSession, openId: "doc" }, version: "roster-1" }
+      : null,
+    doc: fans ? { session: sceneSession, openId: "doc" } : null,
+    refreshing: false,
+  });
   const tree = () => (
     <RegistryContext value={registry}>
       <AttentionRoot doc="d">
@@ -101,6 +148,8 @@ function mount(open: OpenSheet = sheet, layers = ["meshes", "halo", "findings"])
           props={props()}
           snapshot={snapshot}
           sheet={open}
+          fans={fans}
+          systemFans={() => []}
           blockers={[]}
           renderPane={(body) => body}
         />
@@ -173,3 +222,38 @@ it("hovering a context element names whose air it is and that this fan's calc le
     tier: "subject",
   });
 });
+
+it.each([1, 3, "all"] as const)(
+  "fan = %s requests exactly one overview before sheet details",
+  async (pick) => {
+    io.call.mockResolvedValue({ id: `fan-overview-${pick}` });
+    const rows = Array.from({ length: 111 }, (_, i) => i + 1).map((n) => ({
+      unitId: 999100 + n,
+      uniqueId: `fan-${n}`,
+      portIndex: 1,
+      mark: `F-${n}`,
+    })) as FanPort[];
+    const text =
+      pick === "all"
+        ? "all"
+        : rows
+            .slice(0, pick)
+            .map((row) => `${row.uniqueId}@1`)
+            .join(",");
+    const page = routeAddress("fans").read(
+      Object.fromEntries(new URLSearchParams({ fan: text })),
+    ).page;
+    const fans = selectedFans(page.fan, rows);
+    mount(null, ["meshes", "halo"], fans);
+    await waitFor(() => expect(io.call).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(seen.model!.read.meshes).toBeTruthy());
+    expect(document.querySelector('[data-drawn="true"]')).not.toBeNull();
+    expect(seen.model!.read.pending).toBe(false);
+    expect(io.call.mock.calls[0]![1]).toMatchObject({
+      elementIds: fans.map((fan) => fan.unitId),
+      contextRepresentation: "overview",
+      contextPaddingFt: 0,
+      focusOnly: false,
+    });
+  },
+);

@@ -1,13 +1,15 @@
+import { followAcceptedJoins, mergeSnapshots } from "./ducts-walk.ts";
 import { createHash } from "node:crypto";
 import {
   canonicalRouteInput,
   stagedDucts,
   DUCTS_BODY_VERSION_HEADER,
+  ductsDesign,
   ductsDocumentSchema,
+  fansDocumentSchema,
   type DuctsInputs,
   type WorkKey,
   type WorkAuthor,
-  refusalText,
   ductsRosterResponseSchema,
   ductsSheetResponseSchema,
   type DocumentRef,
@@ -35,10 +37,11 @@ import {
   scopeInputs,
 } from "@pe/ducts-domain/sheet/index";
 import { readDuctCatalogs } from "./duct-catalogs.ts";
-import { editPatches, readFirm, workLayer } from "./ducts-inputs.ts";
+import { readFirm, workLayer } from "./ducts-inputs.ts";
 import type { Sheet, Chain, SheetPath } from "@pe/ducts-domain/sheet/types";
 import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import { beyondOf, stoppingUnits, type BeyondUnit } from "@pe/ducts-domain/sheet/beyond";
+import { elementLabeler } from "@pe/ducts-domain/element-label";
 /** Hops a beyond read walks from a stopping unit: enough for its stubs' 15 ft, never its whole network. */
 const BEYOND_HOPS = 12;
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -50,7 +53,6 @@ type SnapshotRequest = {
   /** Work's parameter slots (the airflow slot among them): the C# read measures under these. */
   slots?: Partial<Record<string, string>>;
   selector:
-    | { kind: "document" }
     | { kind: "roster" }
     | ({ kind: "from"; unitId: number; portIndex?: number; maxHops?: number } & Tolerances);
 };
@@ -76,31 +78,9 @@ const titlesOf = (grids: ReturnType<typeof toGrids>): Record<string, string> =>
       return title ? [[id, title]] : [];
     }),
   );
-/** Union two `from` reads of one document by element id (a walked copy wins over a candidate copy), and their health by id. */
-function mergeSnapshots(a: DuctSnapshot, b: DuctSnapshot): DuctSnapshot {
-  const union = <T extends { id: number; reason?: string | null }>(
-    x: readonly T[],
-    y: readonly T[],
-  ) => {
-    const byId = new Map(x.map((e) => [e.id, e]));
-    for (const e of y) {
-      const have = byId.get(e.id);
-      if (!have || ((have.reason ?? "walked") !== "walked" && (e.reason ?? "walked") === "walked"))
-        byId.set(e.id, e);
-    }
-    return [...byId.values()];
-  };
-  return {
-    ...a,
-    nodes: union(a.nodes as never[], b.nodes as never[]) as DuctSnapshot["nodes"],
-    segments: union(a.segments as never[], b.segments as never[]) as DuctSnapshot["segments"],
-    // Health is model truth, measured the same way in either read; the first copy of an id stands.
-    issues: [...new Map([...b.issues, ...a.issues].map((i) => [i.id, i])).values()],
-  };
-}
 export interface DuctsSheetSources {
   call: (
-    key: "ducts.snapshot" | "ducts.tables",
+    key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
     request: SnapshotRequest | { ids: string[] },
     target: DocumentRef,
     version?: string,
@@ -247,7 +227,8 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
   async function loadLayers(target: DocumentRef) {
     const scope = work ? await work.key(target) : null;
     const owned = scope && work ? await work.workspace.readRaw(scope, "ducts") : null;
-    const doc = owned ? ductsDocumentSchema.parse(owned.doc) : null;
+    const fans = scope && work ? await work.workspace.view({ ...scope, route: "fans" }, "fans") : null;
+    const doc = ductsDesign(owned ? ductsDocumentSchema.parse(owned.doc) : null, fansDocumentSchema.parse(fans?.doc ?? {}));
     const firm = await readFirm();
     return {
       scope,
@@ -256,26 +237,10 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       work: workLayer(doc),
       firm,
       /** Any Work change or firm change renames the layers, so every cached sheet over them goes stale. */
-      layers: `${owned?.revision ?? 0}:${firm.firm.version}`,
+      layers: `${owned?.revision ?? 0}:${fans?.revision ?? 0}:${firm.firm.version}`,
     };
   }
   type Layers = Awaited<ReturnType<typeof loadLayers>>;
-  async function applyEdits(request: DuctsSheetRequest, saved: Layers): Promise<Layers> {
-    if (!request.edits) return saved;
-    if (!work || !saved.scope)
-      throw new BridgeError("Document Work is unavailable for sheet edits", 409, {
-        notDispatched: true,
-      });
-    const result = await work.workspace.apply(
-      saved.scope,
-      "ducts",
-      work.author(),
-      editPatches(request.edits, saved.doc),
-      saved.revision,
-    );
-    if (!result.ok) throw new BridgeError(refusalText(result), 409, { notDispatched: true });
-    return loadLayers(request.target);
-  }
   const firmOf = (saved: Layers) => ({
     version: saved.firm.firm.version,
     path: saved.firm.path,
@@ -289,8 +254,9 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
   });
   // Results are disposable. The raw owner separately bounds acquisition bytes and invalidates versions.
   const entries = new Map<string, Entry>();
+  // TODO: docs/features/routes/LEDGER.md#s7-09645d33ea Trace the FC-23 (13760867) sheet self-fetch termination seen in k2-live-proof.log; raw walk succeeds.
   async function readNative(
-    key: "ducts.snapshot" | "ducts.tables",
+    key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
     request: SnapshotRequest | { ids: string[] },
     target: DocumentRef,
     version?: string,
@@ -299,54 +265,6 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
     if (!response.ok)
       throw new BridgeError(await response.text(), response.status, { notDispatched: true });
     return response;
-  }
-  /**
-   * The C# `from` walk follows Revit connectors only, so it stops where an accepted join bridges a gap:
-   * the far side arrives as an open-end candidate and its own connections read as open ends that are
-   * not open in Revit (MUAS-1's FA 43 onto the louver plenum, 2026-10-28). Walk again from the far
-   * element of every accepted pair whose near side was walked, merge, and repeat until no accepted
-   * join points outside the read. Elements are unioned by id; a walked copy wins over a candidate.
-   * ponytail: one extra `from` read per bridged join and round (bounded at four rounds); fold the
-   * seeds into one native read if this gets slow.
-   */
-  async function followAcceptedJoins(
-    snapshot: DuctSnapshot,
-    rulings: readonly { pair: readonly string[]; verdict: string }[],
-    target: DocumentRef,
-    tolerances: Tolerances,
-    slots: SnapshotRequest["slots"],
-  ): Promise<DuctSnapshot> {
-    type Walked = { id: number; reason?: string | null };
-    const elementOf = (end: string) => Number(end.split(":")[0]);
-    const seeded = new Set<number>();
-    let merged = snapshot;
-    for (let round = 0; round < 4; round += 1) {
-      const walked = new Set(
-        [...merged.nodes, ...merged.segments]
-          .filter((e) => ((e as Walked).reason ?? "walked") === "walked")
-          .map((e) => e.id),
-      );
-      const seeds = rulings
-        .filter((r) => r.verdict === "accept")
-        .flatMap((r) => {
-          const [a, b] = r.pair.map(elementOf) as [number, number];
-          return walked.has(a) && !walked.has(b) ? [b] : walked.has(b) && !walked.has(a) ? [a] : [];
-        })
-        .filter((id) => !seeded.has(id));
-      if (seeds.length === 0) break;
-      for (const id of seeds) {
-        seeded.add(id);
-        const more = (await (
-          await readNative(
-            "ducts.snapshot",
-            { ...(slots ? { slots } : {}), selector: { kind: "from", unitId: id, ...tolerances } },
-            target,
-          )
-        ).json()) as DuctSnapshot;
-        merged = mergeSnapshots(merged, more);
-      }
-    }
-    return merged;
   }
   /**
    * What lies past each unit this fan's walk stops at (kaitpw 2026-10-30, "yes show"): one short
@@ -373,7 +291,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       if (!read) {
         read = (await (
           await readNative(
-            "ducts.snapshot",
+            "ducts.snapshot.walk",
             {
               ...(slots ? { slots } : {}),
               selector: { kind: "from", unitId, maxHops: BEYOND_HOPS, ...tolerances },
@@ -390,37 +308,14 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
   }
   async function current(entry: Entry) {
     const responses = await Promise.all([
-      readNative("ducts.snapshot", entry.request, entry.target, entry.version),
+      readNative("ducts.snapshot.walk", entry.request, entry.target, entry.version),
       readNative("ducts.tables", tableRequest, entry.target, entry.tablesVersion),
     ]);
     await Promise.all(responses.map((response) => response.body?.cancel()));
   }
   return {
     async sheet(request: DuctsSheetRequest): Promise<DuctsSheetResponse> {
-      let saved = await loadLayers(request.target);
-      if (request.proposal) {
-        const entry = request.basis ? entries.get(request.basis) : undefined;
-        // The entry must be this fan's sheet over the layers as saved now.
-        if (!entry || request.detail || entry.subject !== subjectOf(request, saved)) throw stale();
-        await current(entry);
-        const all = allBlockers(entry.value);
-        const choice = request.proposal;
-        // A person may accept the same-class proposal or the class crossing the row offers beside it.
-        const offered = (b: (typeof all)[number]) =>
-          [b.proposal?.pair, b.closer.crossing?.pair].some(
-            (pair) => pair?.every((p) => choice.pair.includes(p)) ?? false,
-          );
-        if (!all.some(offered))
-          throw new BridgeError("Proposal is not on this sheet basis", 409, {
-            notDispatched: true,
-          });
-        // A proposal verdict is a join ruling: one Work edit, like any other input.
-        request = {
-          ...request,
-          edits: { ...request.edits, joins: [...(request.edits?.joins ?? []), choice] },
-        };
-      }
-      saved = await applyEdits(request, saved);
+      const saved = await loadLayers(request.target);
       const subject = subjectOf(request, saved);
       if (request.detail) {
         const entry = request.basis ? entries.get(request.basis) : undefined;
@@ -493,7 +388,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const tolerances = tolerancesOf(criteria);
       // The Protocol slot is a Work `parameters` cell: without it the read measured terminal flow
       // under the document's stored slot, so switching the sheet's airflow slot repriced nothing.
-      const staged = stagedDucts(saved.doc).parameters;
+      const staged = stagedDucts(saved.doc, saved.doc).parameters;
       const slots = Object.keys(staged).length ? staged : undefined;
       const acquisition: SnapshotRequest = {
         ...(slots ? { slots } : {}),
@@ -510,7 +405,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
               },
       };
       const [response, tables] = await Promise.all([
-        readNative("ducts.snapshot", acquisition, request.target),
+        readNative("ducts.snapshot.walk", acquisition, request.target),
         readNative("ducts.tables", tableRequest, request.target),
       ]);
       const version = response.headers.get(DUCTS_BODY_VERSION_HEADER);
@@ -524,6 +419,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const layersOf = (snap: DuctSnapshot) => ({
         snapshot: snap,
         work: saved.work,
+        versions: { Work: saved.revision },
         store: snap.store as Parameters<typeof resolveInputs>[0]["store"],
         firm: saved.firm.firm,
         catalogs,
@@ -531,9 +427,14 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const snapshot = await followAcceptedJoins(
         first,
         resolveInputs(layersOf(first)).rulings.joins,
-        request.target,
-        tolerances,
-        slots,
+        async (unitId) =>
+          (
+            await readNative(
+              "ducts.snapshot.walk",
+              { slots, selector: { kind: "from", unitId, ...tolerances } },
+              request.target,
+            )
+          ).json(),
       );
       const inputs = resolveInputs(layersOf(snapshot));
       const grids = toGrids(await tables.json());
@@ -569,7 +470,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
               JSON.stringify([request.target, saved.layers, version]),
               tolerances,
               slots,
-              (unitId) => ports.find((p) => p.unitId === unitId)?.tag ?? `unit ${unitId}`,
+              (unitId) => ports.find((p) => p.unitId === unitId)?.tag || elementLabeler(snapshot)(unitId),
             )
           : [];
       // The engine hashes its inputs; the host also binds the native observation and exact request.
@@ -602,22 +503,24 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       // Work's protocol slots ride along as on the sheet's own read: a unit's fanFlow fact (its design
       // flow, and whether the roster proposes it a fan) is read under the person's fan-flow slot.
       const saved = await loadLayers(request.target);
-      const staged = stagedDucts(saved.doc).parameters;
+      const staged = stagedDucts(saved.doc, saved.doc).parameters;
       const acquisition: SnapshotRequest = {
         ...(Object.keys(staged).length ? { slots: staged } : {}),
         selector: { kind: "roster" },
       };
-      const response = await readNative("ducts.snapshot", acquisition, request.target);
+      const response = await readNative("ducts.snapshot.roster", acquisition, request.target);
       const snapshot = (await response.json()) as DuctSnapshot;
       const inputs = resolveInputs({
         snapshot,
         work: saved.work,
+        versions: { Work: saved.revision },
         store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
         firm: saved.firm.firm,
       });
       const roster = suggestRoster(snapshot, [], rosterInputs(inputs));
       const activeSlot = staged.terminalFlow ?? snapshot.slots?.terminalFlow ?? "terminalFlow";
       const rows = [];
+      const label = elementLabeler(snapshot);
       for (const port of [...roster.fans, ...roster.suggestions]) {
         const cached = [...entries.values()]
           .reverse()
@@ -645,10 +548,16 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         // (PE_M_Fan_ExternalStaticPressure), the REQUIRED ESP Pe writes; the page labels it
         // "required (written)". Rated ESP has no firm slot yet; the contract field keeps its name.
         const rating = inputs.units[String(port.unitId)]?.esp.value ?? null;
+        const unit = snapshot.nodes.find((node) => node.id === port.unitId);
         rows.push({
           unitId: port.unitId,
+          uniqueId: unit?.uniqueId,
           portIndex: port.portIndex,
-          mark: port.tag,
+          // A blank tag reads as the unit's type/family (elementLabeler), never its id; the
+          // roster's `mark` is its display name, and fanLabel tells twins apart by place.
+          mark: port.tag || label(port.unitId),
+          level: snapshot.levels.find((level) => level.id === unit?.levelId)?.name ?? null,
+          system: unit?.systemName ?? null,
           kind: port.kind,
           side: port.side,
           ratedEspInWg: sheet?.fan.ratedEspInWg ?? rating,

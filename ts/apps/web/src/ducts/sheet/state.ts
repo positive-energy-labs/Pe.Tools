@@ -1,4 +1,5 @@
-import type { OpenSheet } from "../sources";
+import type { Immutable } from "../../../../../packages/agent-contracts/src/route-kernel-data";
+import type { OpenSheet } from "../neutral.ts";
 import { detailOf, takenClosures, tierCounts } from "./tiers";
 
 export function sheetState(sheet: OpenSheet | null) {
@@ -20,3 +21,5 @@ export function sheetState(sheet: OpenSheet | null) {
     firm: sheet?.inputs?.firm ?? null,
   };
 }
+
+export const EMPTY_SHEET_STATE: Immutable<ReturnType<typeof sheetState>> = sheetState(null);

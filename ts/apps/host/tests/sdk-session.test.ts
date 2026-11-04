@@ -1,165 +1,86 @@
-import { Effect } from "effect";
-import { expect, test } from "vite-plus/test";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { checkoutRootFrom, productRoot } from "@pe/host-contracts/service-identity";
-import { peRevitLauncher } from "../src/pe-revit-launch.ts";
-import { resolveSdkSession } from "../src/sdk-session.ts";
-import { RevitBridgeLive, type BridgeSessionView } from "../src/bridge.ts";
-import { connectTestBridge } from "./bridge-fixture.ts";
-import { sdkEnvelope, sdkResolved, sdkSessions } from "./native-receipt-fixture.ts";
+import { Context, Effect, Layer } from "effect";
+import { expect } from "vite-plus/test";
+import { effectTest } from "./effect-test.ts";
+import { SdkSession, SdkDriver } from "../src/sdk-session.ts";
+import { RevitBridge, type HostBridgeEvent } from "../src/bridge.ts";
+import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { replay } from "./sdk-replay.ts";
 
-const socket: BridgeSessionView = {
-  lane: hostOwnership.lane,
-  sourceRoot: hostOwnership.sourceRoot,
-  serviceName: hostOwnership.serviceName,
-  connected: true,
-  sessionId: "attachment",
-  processId: 42,
-  processStartUtcUnixMs: 1000,
-};
-const bridge = (sockets: BridgeSessionView[] = [socket]) => ({
-  list: Effect.sync(() => sockets),
-  snapshot: (id?: string) =>
-    Effect.sync(() => sockets.find((s) => s.sessionId === id) ?? { connected: false }),
-});
-
-test.each([
-  { payload: "installed", sourceRoot: null, installedRoot: productRoot() },
-  { payload: "checkout", sourceRoot: "C:/checkout-B" },
-  { payload: "checkout", sourceRoot: null },
-  { payload: null, sourceRoot: null },
-])("SDK exact process with wrong or missing owner %j refuses execution", async (owner) => {
-  await expect(
-    resolveSdkSession(bridge(), { session: { id: "explicit" } }, async () =>
-      sdkEnvelope({ state: "ok", documents: [] }, { ...sdkResolved, ...owner }),
-    ),
-  ).rejects.toMatchObject({ evidence: { notDispatched: true } });
-});
-
-test("matching SDK process cannot authorize a foreign bridge owner", async () => {
-  await expect(
-    resolveSdkSession(bridge([{ ...socket, sourceRoot: "C:/checkout-B" }]), {}, sdkSessions),
-  ).rejects.toMatchObject({ evidence: { notDispatched: true } });
-});
-
-test.each([
-  { pid: 43 },
-  { processStartUtc: "1970-01-01T00:00:02Z" },
-  { processStartUtc: null },
-  { pid: null },
-])("stale or incomplete SDK process %j has no socket fallback", async (patch) => {
-  await expect(
-    resolveSdkSession(bridge(), {}, async () =>
-      sdkEnvelope({ state: "ok", documents: [] }, { ...sdkResolved, ...patch }),
-    ),
-  ).rejects.toMatchObject({ evidence: { notDispatched: true } });
-});
-
-test("two attachments for a process refuse; an unrelated last attachment never wins", async () => {
-  await expect(
-    resolveSdkSession(bridge([socket, { ...socket, sessionId: "duplicate" }]), {}, sdkSessions),
-  ).rejects.toMatchObject({ message: expect.stringContaining("unique") });
-  expect(
-    (
-      await resolveSdkSession(
-        bridge([socket, { ...socket, sessionId: "last", processId: 99 }]),
-        {},
-        sdkSessions,
-      )
-    ).sessionId,
-  ).toBe("attachment");
-});
-
-test("the held attachment is checked again after the SDK answers", async () => {
-  const sockets = [socket];
-  await expect(
-    resolveSdkSession(bridge(sockets), { bridgeSessionId: socket.sessionId }, async (args) => {
-      sockets.length = 0;
-      return sdkSessions(args);
-    }),
-  ).rejects.toMatchObject({ evidence: { notDispatched: true } });
-});
-
-test("an exact product document uses its held pid and refuses a closed lifetime or SDK document id", () =>
-  Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const { bridge, target } = yield* connectTestBridge();
-        const scope = { bridgeSessionId: target.session, openDocumentId: target.openId };
-        const calls: string[][] = [];
-        const read = async (args: readonly string[]) => {
-          calls.push([...args]);
-          return sdkSessions(args);
-        };
-        yield* Effect.promise(async () => {
-          expect((await resolveSdkSession(bridge, scope, read)).sessionId).toBe(target.session);
-          expect(calls).toEqual([["doc", "list", "--pid", "42", "--json"]]);
-          await expect(
-            resolveSdkSession(bridge, { ...scope, openDocumentId: "sdk-open-id" }, read),
-          ).rejects.toMatchObject({
-            message: expect.stringContaining("product document lifetime"),
-          });
-          await expect(
-            resolveSdkSession(bridge, { ...scope, bridgeSessionId: "other" }, read),
-          ).rejects.toMatchObject({ message: expect.stringContaining("exact bridge attachment") });
-        });
-      }),
-    ).pipe(Effect.provide(RevitBridgeLive)),
-  ));
-
-test("pinned SDK round trip refuses a missing name against isolated roots", async () => {
-  const run = promisify(execFile);
-  const root = await mkdtemp(join(tmpdir(), "pe-sdk-resolver-"));
-  const launch = peRevitLauncher({
-    lane: "dev",
-    sourceRoot: checkoutRootFrom(import.meta.dirname)!,
-  });
-  try {
-    const started = performance.now();
-    await expect(
-      resolveSdkSession(
-        bridge(),
-        { session: { id: "mcp-w1-missing-measurement" } },
-        async (args) => {
-          const result = await run(launch.cmd, [...launch.args, ...args], {
-            cwd: launch.cwd,
-            windowsHide: true,
-            timeout: 20_000,
-            env: {
-              ...process.env,
-              PE_REVIT_ADDINS_ROOT: join(root, "addins"),
-              PE_SERVICE_STATE_ROOT: join(root, "services"),
-              PE_SESSION_FILES_ROOT: join(root, "files"),
-              PE_SESSION_REGISTRY_ROOT: join(root, "registry"),
-            },
-          }).catch((error: unknown) => {
-            if (
-              typeof error === "object" &&
-              error !== null &&
-              "stdout" in error &&
-              typeof error.stdout === "string"
-            )
-              return { stdout: error.stdout };
-            throw error;
-          });
-          return result.stdout;
+effectTest(
+  "scoped SDK cache invalidates on bridge changes and never falls back across incarnations or owners",
+  () =>
+    Effect.gen(function* () {
+      let startedAt = 1000;
+      let sdkStart = 1000;
+      let sourceRoot = hostOwnership.sourceRoot;
+      let calls = 0;
+      let changed: (() => void) | undefined;
+      const bridge = {
+        list: Effect.sync(() => [
+          {
+            ...hostOwnership,
+            connected: true,
+            sessionId: "attachment",
+            processId: process.pid,
+            processStartUtcUnixMs: startedAt,
+            state: { openDocuments: [{ openId: "open" }] },
+          },
+        ]),
+        subscribe: (listener: (event: HostBridgeEvent) => void) => {
+          changed = () => listener({ kind: "state-sync", sessionId: "attachment" });
+          return () => {
+            changed = undefined;
+          };
         },
-      ),
-    ).rejects.toMatchObject({
-      evidence: {
-        notDispatched: true,
-        result: { exitCode: 3, diagnostics: [{ code: "session.no-match" }] },
-      },
-    });
-    process.stdout.write(
-      `SDK_ISOLATED_REFUSAL_ROUND_TRIP_MS=${(performance.now() - started).toFixed(2)}\n`,
-    );
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-}, 30_000);
+      } as unknown as RevitBridge["Service"];
+      const driver = () =>
+        Effect.sync(() => {
+          calls++;
+          return replay("doc-list", {
+            result: { documents: [] },
+            resolved: {
+              payload: hostOwnership.lane === "dev" ? "checkout" : "installed",
+              sourceRoot,
+              installedRoot: hostOwnership.installedRoot,
+              pid: process.pid,
+              processStartUtc: new Date(sdkStart).toISOString(),
+              id: null,
+              how: null,
+              buildStamp: null,
+              observedAtUtc: new Date(sdkStart).toISOString(),
+              origin: null,
+            },
+          });
+        });
+      const services = yield* Layer.build(
+        SdkSession.layer.pipe(
+          Layer.provide(
+            Layer.mergeAll(Layer.succeed(RevitBridge, bridge), Layer.succeed(SdkDriver, driver)),
+          ),
+        ),
+      );
+      const sdk = Context.get(services, SdkSession);
+      const scope = { bridgeSessionId: "attachment", openDocumentId: "open" };
+      const resolve = sdk
+        .resolve(scope)
+        .pipe(
+          Effect.provideService(
+            RequestIdentity,
+            admittedRequestIdentity({ kind: "anonymous" }, scope),
+          ),
+        );
+      expect((yield* resolve).processIncarnation).toEqual({ pid: process.pid, startedAt: 1000 });
+      yield* resolve;
+      expect(calls).toBe(1);
+      changed!();
+      yield* resolve;
+      expect(calls).toBe(2);
+      startedAt = 2000;
+      changed!();
+      expect((yield* resolve.pipe(Effect.result))._tag).toBe("Failure");
+      sdkStart = 2000;
+      sourceRoot = "C:/foreign-checkout";
+      expect((yield* resolve.pipe(Effect.result))._tag).toBe("Failure");
+    }),
+);

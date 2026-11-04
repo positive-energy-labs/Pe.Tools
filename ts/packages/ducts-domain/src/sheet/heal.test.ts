@@ -420,9 +420,12 @@ it("derived served-terminal flow supplies assumed ESP, preserves missing designe
     snapshot: fallbackSnapshot,
     inputs: inputsFor(fallbackSnapshot),
   });
+  // ba4fd56c (G7): missing terminal flows block fallback to a connector total.
   expect(fallback.notes.some((i) => i.text.includes("unit connector flowCfm (assumed)"))).toBe(
-    true,
+    false,
   );
+  expect(fallback.assumed.blockers.some((b) => b.kind === "no-flow")).toBe(true);
+  expect(fallback.totals.requiredEspAssumedInWg).toBeNull();
 });
 
 it("an accepted pair takes priority over a nearer automatic join", () => {
@@ -597,11 +600,6 @@ it("assumed flow borrows a receiving unit's flow only through its intake, never 
   expect(units("in").get("300:0")?.cfm).toBe(150);
   // B's port is a discharge on the same trunk (Chadds RV-11/RV-23): a co-source, nothing to borrow.
   expect(units("out").get("300:0")).toBeUndefined();
-  // An ERV in A's place supplies no terminal through its own discharge: unknown, with a line,
-  // never B's 150 (kaitpw 2026-10-28; Chadds RV-25 and RV-7 read FC-23's sum before).
-  expect(units("in", "erv").get("300:0")).toEqual({
-    cfm: 0,
-    source:
-      "unknown (0 assumed): ERV 300:0's discharge reaches no terminal it supplies; type the unit design flow",
-  });
+  // ba4fd56c (G7): no served terminals means missing flow, never a fabricated zero.
+  expect(units("in", "erv").get("300:0")).toBeUndefined();
 });

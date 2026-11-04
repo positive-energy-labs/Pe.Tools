@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import * as Atom from "effect/unstable/reactivity/Atom";
+import * as Atom from "effect/reactivity/Atom";
 import { RegistryContext } from "@effect/atom-react";
 import { Profiler } from "react";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";

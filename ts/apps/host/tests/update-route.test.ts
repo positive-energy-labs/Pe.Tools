@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Deferred, Effect, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import type { Envelope, UpdatePlan, UpdateReceipt } from "@pe/host-contracts/pe-revit-contract";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
@@ -119,6 +119,7 @@ async function fixture() {
 
 test("GET carries the full validated plan, POST returns persisted request and receipt evidence", async () => {
   const f = await fixture();
+  // effect-edge: island, phase 5
   const lifecycle = await Effect.runPromise(
     Effect.gen(function* () {
       return {

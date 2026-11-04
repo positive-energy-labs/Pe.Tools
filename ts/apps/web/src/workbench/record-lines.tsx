@@ -6,7 +6,7 @@ import { Link } from "@tanstack/react-router";
 import type { ActionReceipt } from "@pe/agent-contracts";
 
 import { Button } from "@pe/kit/lang/button";
-import { previousOf, useReading } from "#/readings";
+import { previousOf, useReading } from "#/shell/readings-hooks";
 import {
   actionRoute,
   actionPlace,

@@ -411,7 +411,7 @@ internal static class PracticalBenchmarks {
             shortSegment = shortSegment.Substring(0, 24);
 
         var path = Path.Combine(
-            ProductRuntimeLayout.ForCurrentUser().ScratchPath,
+            ProductRuntimeLayout.Current.ScratchPath,
             "pe-benchmarks",
             shortSegment,
             Guid.NewGuid().ToString("N").Substring(0, 8));

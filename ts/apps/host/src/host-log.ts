@@ -101,7 +101,7 @@ export class HostLog {
   }
 
   /** Entries after `after`, oldest first. `gap` says retention already dropped some of them. */
-  read(after: number, match?: (entry: HostLogEntry) => boolean) {
+  read(after: number, match?: (entry: HostLogEntry) => boolean): {gap: boolean; entries: HostLogEntry[]} {
     const entries: HostLogEntry[] = [];
     this.segments.forEach((segment, i) => {
       if ((this.segments[i + 1]?.first ?? Infinity) - 1 <= after) return;

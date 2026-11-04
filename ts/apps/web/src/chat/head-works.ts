@@ -11,7 +11,6 @@ import {
   type DocumentRef,
   type CellLike,
   type WorkKey,
-  type RouteGraph,
   type CellsDecl,
 } from "@pe/agent-contracts";
 
@@ -34,14 +33,14 @@ export interface HeadExits {
 }
 
 type Doc = Record<string, unknown>;
-type Manifest = RouteGraph<any, Doc>;
+type Manifest = import("../route/route-discovery").DiscoveredWork;
 
 const keyOf = (
   manifest: Manifest,
   address: Address | null,
   document: DocumentRef | null,
 ): WorkKey | null =>
-  address || document ? bindWork(manifest.key, address, undefined, document ?? undefined) : null;
+  address || document ? bindWork(manifest.route, address, undefined, document ?? undefined) : null;
 
 const pending = (cell: CellLike | undefined) =>
   cell != null && (cell.suggestion != null || cell.edit != null);
@@ -59,20 +58,22 @@ export function useHeadWorks(
   );
   const headed = useMemo(
     () =>
-      publicRoutes.entries().flatMap(({ graph: manifest }) => {
-        return manifest?.needs && manifest.work && manifest.cells?.length
-          ? [
-              {
-                route: manifest.key,
-                manifest,
-                graph: manifest,
-                cells: manifest.cells,
-                key: keyOf(manifest, address, document),
-                closed: document === null,
-              },
-            ]
-          : [];
-      }),
+      publicRoutes
+        .entries()
+        .flatMap(({ manifest, work }) =>
+          manifest.needs && work?.cells.length
+            ? [
+                {
+                  route: manifest.key,
+                  manifest: work,
+                  work,
+                  cells: work.cells,
+                  key: keyOf(work, address, document),
+                  closed: document === null,
+                },
+              ]
+            : [],
+        ),
     [revision, address, document?.session, document?.openId],
   );
   const summaries = useWorkHandles(headed);

@@ -15,7 +15,8 @@
         "confirmed": false,
         "blockerCount": 1,
         "requiredEspInWg": null,
-        "complete": false
+        "complete": false,
+        "uniqueId": "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001"
       },
       {
         "unitId": 22,
@@ -23,7 +24,8 @@
         "mark": "FC-23",
         "kind": "fan-coil",
         "side": "supply",
-        "ratedEspInWg": 0.4
+        "ratedEspInWg": 0.4,
+        "uniqueId": "9cb9f188-28aa-4094-8b76-785395cc35e1-00000002"
       },
       {
         "unitId": 23,
@@ -34,7 +36,17 @@
         "ratedEspInWg": 0.5,
         "blockerCount": 0,
         "requiredEspInWg": 0.193,
-        "complete": true
+        "complete": true,
+        "uniqueId": "9cb9f188-28aa-4094-8b76-785395cc35e1-00000003"
+      },
+      {
+        "unitId": 13760867,
+        "portIndex": 0,
+        "mark": "FC-23",
+        "kind": "fan-coil",
+        "side": "supply",
+        "ratedEspInWg": 0.4,
+        "uniqueId": "9cb9f188-28aa-4094-8b76-785395cc35e1-00d1fa63"
       }
     ],
     "slots": [
@@ -98,7 +110,9 @@
             "knownInWg": 0,
             "complete": false,
             "legCount": 15,
-            "blockerIds": ["inferred-join:14122436:1"]
+            "blockerIds": [
+              "inferred-join:14122436:1"
+            ]
           }
         ],
         "rest": 0
@@ -158,44 +172,68 @@
           "supply": {
             "value": 900,
             "source": "firm",
-            "ref": "test"
+            "ref": "test",
+            "units": "fpm",
+            "version": "fixture",
+            "status": "valid"
           },
           "return": {
             "value": 700,
             "source": "firm",
-            "ref": "test"
+            "ref": "test",
+            "units": "fpm",
+            "version": "fixture",
+            "status": "valid"
           }
         },
         "terminalDropInWg": {
           "value": 0.03,
           "source": "firm",
-          "ref": "test"
+          "ref": "test",
+          "units": "in-wg",
+          "version": "fixture",
+          "status": "valid"
         },
         "autoJoinGapIn": {
           "value": 3,
           "source": "firm",
-          "ref": "test"
+          "ref": "test",
+          "units": "in",
+          "version": "fixture",
+          "status": "valid"
         },
         "healBoxIn": {
           "value": 36,
           "source": "firm",
-          "ref": "test"
+          "ref": "test",
+          "units": "in",
+          "version": "fixture",
+          "status": "valid"
         },
         "splitPolicy": {
           "value": "even",
           "source": "firm",
-          "ref": "test"
+          "ref": "test",
+          "units": null,
+          "version": "fixture",
+          "status": "valid"
         },
         "allowanceInWg": {
           "supply": {
             "value": 0.15,
-            "source": "project",
-            "ref": "test"
+            "source": "Work",
+            "ref": "test",
+            "units": "in-wg",
+            "version": "fixture",
+            "status": "valid"
           },
           "return": {
             "value": 0,
             "source": "firm",
-            "ref": "test"
+            "ref": "test",
+            "units": "in-wg",
+            "version": "fixture",
+            "status": "valid"
           }
         }
       },
@@ -233,7 +271,7 @@
     "notes": [
       {
         "kind": "auto-join",
-        "text": "auto-joined 1:1 to 2:0 across 2.000 in",
+        "text": "auto-joined 12″ duct to 12″ duct across 2.000 in",
         "value": null
       }
     ],
@@ -250,7 +288,10 @@
     },
     "basis": "muas-fixture-basis",
     "kind": "elements",
-    "walkedElementIds": [14577391, 14122436],
+    "walkedElementIds": [
+      14577391,
+      14122436
+    ],
     "beyond": []
   },
   "legs": {

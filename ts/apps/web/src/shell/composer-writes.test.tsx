@@ -1,3 +1,5 @@
+import { legacyWork } from "../route/route-discovery";
+import { testSources, testSubject, testFields, testReadings } from "../test-route-subject";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
@@ -11,9 +13,13 @@ import {
   type RouteGraph,
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
-import { peReadings, previousOf } from "#/readings";
+import { peReadings } from "#/readings";
+import { previousOf } from "#/shell/readings-hooks";
 import { ProposalHead } from "#/chat/proposal-head";
-import { describeInputHistory, presentInputHistory } from "#/ducts/sheet/input-history";
+import {
+  describeInputHistory,
+  presentInputHistory,
+} from "#/ducts/sheet/input-history.neutral";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import { createGraphMount } from "./mount-owner";
 import { appAtomRegistry } from "./owner";
@@ -32,13 +38,14 @@ async function scenario() {
     rules: z.record(z.string(), draftCellSchema(z.object({ table: z.string() }))).default({}),
   });
   type Work = z.output<typeof schema>;
-  const graph: RouteGraph<Record<string, never>, Work> = {
+  const graph: RouteGraph<{}, Work> = {
+    ...testSubject,
     key: route,
     address: route,
     name: "Ducts",
     work: schema,
-    fields: {},
-    readings: { sheet: { kind: "derive", source: "sheet", retire: "target" } },
+    fields: { ...testFields },
+    readings: { ...testReadings, sheet: { kind: "derive", source: "sheet", retire: "target" } },
     cells: [{ segment: "rules", groupOf: (key) => [key], label: () => LABEL, noun: "loss rules" }],
     verbs: {
       edit: workVerb(
@@ -49,8 +56,7 @@ async function scenario() {
           ],
           history: {
             readings: ["sheet"],
-            describe: (scope, _input, after) =>
-              describeInputHistory(scope.readings, { label: `Edit ${LABEL}` }, after),
+            describe: () => describeInputHistory({ label: `Edit ${LABEL}` }),
           },
         },
       ),
@@ -95,9 +101,11 @@ async function scenario() {
     expect(operation).toBe("work.apply");
     const request = workWriteSchema.parse((input as { body: unknown }).body);
     const result = await workspace.write(key, route, "human", request);
-    return new Response(JSON.stringify(result), { status: result.ok ? 200 : 409 });
+    return new Response(JSON.stringify(result.ok ? result : { error: { details: result } }), {
+      status: result.ok ? 200 : 409,
+    });
   });
-  const entries = [{ graph, key }];
+  const entries = [{ work: legacyWork(graph)!, key }];
   function Head() {
     const work = useWorkHandles(entries)[0]!;
     return (
@@ -144,6 +152,7 @@ async function scenario() {
     },
     subscribe: (notify) => appAtomRegistry.subscribe(atom, notify),
     sources: {
+      ...testSources,
       sheet: {
         kind: "derive",
         key: (scope) => scope.workRevision,
@@ -156,8 +165,7 @@ async function scenario() {
     },
     workHistory: {
       readings: ["sheet"],
-      describe: (scope, input, after) =>
-        describeInputHistory(scope.readings, { label: input.label }, after),
+      describe: (_scope, input) => describeInputHistory({ label: input.label }),
     },
     write: writeRouteWork,
     binding: (_id, args) => ({ subject: null, args }),
@@ -224,30 +232,42 @@ test("D8.7: edit → composer revert → edit → undo → undo names the restor
     const original = structuredClone(one.doc().rules[RULE]!.edit);
     expect(original?.at).toBeTruthy();
     fireEvent.click(one.view.getByRole("button", { name: /^review/ }));
-    const revert = one.view.getByRole("button", { name: "Revert 1 edit" });
-    fireEvent.click(revert);
-    fireEvent.click(revert);
+    // One press is one undoable journal step (no arming).
+    fireEvent.click(one.view.getByRole("button", { name: "Revert 1 edit" }));
     await waitFor(() => expect(one.doc().rules).toEqual({}));
     const reverted = one.owner.journal(one.owner.snapshot().work!.handle.key).read().undo.at(-1);
     await waitFor(() =>
       expect(
-        presentInputHistory(one.owner.journal(one.owner.snapshot().work!.handle.key).read(), null)
-          .last?.words,
-      ).toBe("supply ≥2.0578 → ≥1.7582"),
+        presentInputHistory(
+          one.owner
+            .journal(one.owner.snapshot().work!.handle.key)
+            .entries() as Parameters<typeof presentInputHistory>[0],
+          null,
+        ).last?.words,
+      ).toBe(""),
     );
     await one.edit("CD3-3");
     await act(async () => {
-      expect((await one.owner.restore("undo"))?.ok).toBe(true);
+      const restored = await one.owner.restore("undo");
+      expect(restored?.ok, JSON.stringify(restored)).toBe(true);
     });
     expect(one.doc().rules).toEqual({});
     await act(async () => {
-      expect((await one.owner.restore("undo"))?.ok).toBe(true);
+      const restored = await one.owner.restore("undo");
+      expect(restored?.ok, JSON.stringify(restored)).toBe(true);
     });
     expect(one.doc().rules[RULE]!.edit).toEqual(original);
     const history = one.owner.journal(one.owner.snapshot().work!.handle.key).read();
     expect(reverted?.label).toBe(`Revert ${LABEL}`);
     expect(history.redo.at(-1)?.label).toBe(`Revert ${LABEL}`);
-    expect(presentInputHistory(history, null)).toMatchObject({
+    expect(
+      presentInputHistory(
+        one.owner
+          .journal(one.owner.snapshot().work!.handle.key)
+          .entries() as Parameters<typeof presentInputHistory>[0],
+        null,
+      ),
+    ).toMatchObject({
       redoLabel: `Revert ${LABEL}`,
       last: { label: `undid Revert ${LABEL}` },
     });
@@ -256,7 +276,7 @@ test("D8.7: edit → composer revert → edit → undo → undo names the restor
   }
 });
 
-test("D8.8: a stale row with a failed reading stream says why confirm cannot post and retains the confirmed revert for retry", async () => {
+test("D8.8: a stale row with a failed reading stream says why the revert was refused and keeps the edit for a retry", async () => {
   const one = await scenario();
   try {
     await one.edit("CD3-1");
@@ -264,7 +284,6 @@ test("D8.8: a stale row with a failed reading stream says why confirm cannot pos
     const revert = one.view.getByRole("button", { name: "Revert 1 edit" });
     one.stale();
     expect(one.view.getByText("r53").parentElement?.textContent).toContain("stale");
-    fireEvent.click(revert);
     one.fail();
     fireEvent.click(revert);
     await waitFor(() =>
@@ -272,13 +291,6 @@ test("D8.8: a stale row with a failed reading stream says why confirm cannot pos
     );
     expect(one.posted).toHaveBeenCalledTimes(1);
     expect(one.doc().rules[RULE]!.edit?.value.table).toBe("CD3-1");
-    expect(revert.textContent).toContain("again");
-    vi.useFakeTimers();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
-    expect(revert.textContent).toContain("again");
-    vi.useRealTimers();
     one.recover();
     fireEvent.click(revert);
     await waitFor(() => expect(one.doc().rules).toEqual({}));

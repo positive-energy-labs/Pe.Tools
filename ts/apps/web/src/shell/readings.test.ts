@@ -64,7 +64,7 @@ function fixture(
 const done = (deliver: ReadingDelivery<number>, value: number, revision = 1) =>
   deliver({ kind: "complete", value, revision, sourceVersion: `v${value}` });
 const receipt = (
-  overrides: Partial<Pick<ActionReceipt, "id" | "state" | "effects" | "target">> = {},
+  overrides: Partial<Pick<ActionReceipt, "id" | "state" | "effects" | "target" | "input">> = {},
 ) => ({
   id: "receipt",
   state: "succeeded" as const,
@@ -329,6 +329,11 @@ describe("reading graph", () => {
     const matrix = read.attempts[0];
     done(matrix.deliver, 1);
     done(read.attempts[1].deliver, 2);
+    const previewBasis = graph.get("matrix");
+    graph.acceptReceipt({ ...receipt({ id: "preview", effects: [] }), key: "families.apply.preview" }, ["families"]);
+    expect(graph.get("matrix")).toBe(previewBasis);
+    graph.acceptReceipt(receipt({ id: "plan", effects: [] }));
+    expect(graph.get("matrix")).toBe(previewBasis);
     graph.acceptReceipt(
       receipt({ effects: [{ kind: "document", ref: { session: "session", openId: "B" } }] }),
       ["families"],
@@ -538,13 +543,16 @@ describe("reading graph", () => {
     graph.dispose();
   });
 
-  it("explicit Stop and pane-only release revoke every publication path", () => {
+  it("pane release retains its subscription; explicit Stop revokes every publication path", () => {
     const read = controlled();
     const { graph, logs } = fixture({ matrix: decl("read") }, { read: read.source });
     const release = graph.mount(["matrix"]);
     const paneRead = read.attempts[0];
     release();
+    // ADR 0027 rule 9: a hidden pane keeps its demand subscription and its old content.
+    expect(paneRead.context.signal.aborted).toBe(false);
     done(paneRead.deliver, 1);
+    expect(graph.get("matrix")).toMatchObject({ value: 1, current: true });
     graph.start("matrix", "press");
     const verbRead = read.attempts.at(-1)!;
     graph.cancel("matrix", "other-press");
@@ -552,7 +560,7 @@ describe("reading graph", () => {
     graph.cancel("matrix", "press");
     done(verbRead.deliver, 2);
     expect(graph.get("matrix").current).toBe(false);
-    expect(logs.filter((log) => log.kind === "drop")).toHaveLength(2);
+    expect(logs.filter((log) => log.kind === "drop")).toHaveLength(1);
     graph.dispose();
   });
 
@@ -811,4 +819,35 @@ it("worker errors end pending honestly and an explicit refresh gets a new channe
   release();
   graph.dispose();
   expect(terminations[1]).toHaveBeenCalledTimes(1);
+});
+
+// A stream may be alive yet never complete: progress cannot extend the attempt deadline.
+it("partial publications settle to failure within the original deadline", () => {
+  vi.useFakeTimers();
+  const read = controlled();
+  const { graph } = fixture({ matrix: decl("read") }, { read: read.source });
+  graph.mount(["matrix"]);
+  for (let revision = 0; revision < 3; revision++) {
+    vi.advanceTimersByTime(DEFAULT_WAIT_S * 250);
+    read.attempts[0]!.deliver({ kind: "part", value: revision, revision });
+  }
+  vi.advanceTimersByTime(DEFAULT_WAIT_S * 250 + 1);
+  expect(graph.get("matrix")).toMatchObject({ status: "failed", current: false });
+  graph.dispose();
+  vi.useRealTimers();
+});
+
+it("a recovering subscription with partial evidence becomes stale at its deadline", () => {
+  vi.useFakeTimers();
+  const read = controlled();
+  read.source.recovers = true;
+  const { graph } = fixture({ matrix: decl("read") }, { read: read.source });
+  graph.mount(["matrix"]);
+  read.attempts[0]!.deliver({ kind: "part", value: 1, revision: 0 });
+  vi.advanceTimersByTime(DEFAULT_WAIT_S * 1000 + 1);
+  expect(graph.get("matrix")).toMatchObject({ status: "stale", value: 1, current: false });
+  read.attempts[0]!.deliver({ kind: "complete", value: 2, revision: 1 });
+  expect(graph.get("matrix")).toMatchObject({ status: "ready", value: 2, current: true });
+  graph.dispose();
+  vi.useRealTimers();
 });

@@ -1,5 +1,9 @@
+import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
+import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
+import { RequestIdentity, admittedRequestIdentity } from "./request-services.ts";
+import { readSessionScope } from "./sdk-session.ts";
 import { Deferred, Effect, Option } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import {
   BRIDGE_PATH,
   HOST_CONTEXT_HEADER,
@@ -25,7 +29,7 @@ import {
   REFUSAL_HEADER,
   type RoutePermission,
 } from "./control.ts";
-import { recordHostFact, type ReceiptExport } from "./receipt-export.ts";
+import { recordHostFact, type ReceiptExporter } from "./receipt-export.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
 import { authorizeShutdownFor } from "@pe/host-contracts/pe-service-host";
 import { deviceCredential, DEVICE_COOKIE, type Devices } from "./remote-device.ts";
@@ -45,12 +49,13 @@ export type IdentityResult =
 export interface IdentityOptions {
   readonly devices?: Devices;
   /** Where refusals are counted; the host's own receipt export when absent. */
-  readonly telemetry?: ReceiptExport;
+  readonly telemetry?: ReceiptExporter;
   readonly remoteRequests?: WeakSet<object>;
   /** Host-configured addresses. Never inferred from Forwarded or caller-supplied transport headers. */
   readonly remoteIngress?: readonly { origin: string; transport: "lan" | "ssh" }[];
   readonly port: () => number;
-  readonly frontendOrigin: () => string | undefined;
+  /** The recorded checkout frontend origin, if one has settled. */
+  readonly frontendOrigin: string | undefined;
   readonly share: {
     read(): Promise<MachineShare>;
     observe(result: IdentityResult, path: string, from: string): void;
@@ -62,7 +67,8 @@ function authority(value: string): string | undefined {
   if (!/^[a-z0-9.-]+(?::[0-9]+)?$/i.test(value)) return undefined;
   try {
     return new URL(`https://${value}`).host;
-  } catch {
+  } catch (error) {
+    console.warn("ts/apps/host/src/request-identity.ts: fallback after failure", error);
     return undefined;
   }
 }
@@ -168,7 +174,7 @@ export async function readRequestIdentity(
       ? refuse("identity.forged-proxy", "Proxy identity is not accepted on the local authority.")
       : origin !== undefined &&
           origin !== `http://127.0.0.1:${options.port()}` &&
-          origin !== options.frontendOrigin()
+          origin !== options.frontendOrigin
         ? refuse("identity.origin", "Origin is not this host or its recorded checkout frontend.")
         : { principal: { kind: "local" }, headers: origin ? { origin } : {}, caller: anonymous };
   } else {
@@ -367,6 +373,8 @@ export async function readRequestIdentity(
 
 /** The declared API owns product permissions; protocol and machine lifecycle are separate transports. */
 function requestPermission(path: string, method: string): RoutePermission {
+  if (method === nativeReadResolveEndpoint.method && path === nativeReadResolveEndpoint.path)
+    return "read";
   const declared = matchPeRoute(method === "HEAD" ? "GET" : method, path);
   if (declared) return declared.route.permission;
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") return "read";
@@ -381,7 +389,7 @@ function requestPermission(path: string, method: string): RoutePermission {
  * The one place a refusal is counted: admission refuses here, and a door's 403 names its code in
  * `x-pe-refusal`. Only the closed code leaves the machine; a code outside the set is `refused`.
  */
-function countRefusal(telemetry: ReceiptExport | undefined, code: string) {
+function countRefusal(telemetry: ReceiptExporter | undefined, code: string) {
   const parsed = receiptReasonCodeSchema.safeParse(code);
   const fact: ReceiptFact = {
     kind: "usage",
@@ -393,8 +401,15 @@ function countRefusal(telemetry: ReceiptExport | undefined, code: string) {
 }
 
 /** A global router middleware also covers unmatched/static requests and WebSocket upgrades. */
-export const requestIdentityLayer = (options: IdentityOptions) =>
-  HttpRouter.middleware(
+export type IdentityLayerOptions = Omit<IdentityOptions, "frontendOrigin"> & {
+  /** Read on each request's fiber: the dev frontend's URL settles after the layer is built. */
+  readonly frontendOrigin: Effect.Effect<string | undefined>;
+};
+
+export const requestIdentityLayer = (options: IdentityLayerOptions) =>
+  HttpRouter.middleware<{
+    provides: import("@pe/host-internal/request-contracts").RequestIdentity;
+  }>()(
     (handler) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
@@ -410,11 +425,12 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
             serviceAuthorized = authorizeShutdownFor(handle)(request.headers, body);
           }
         }
+        const frontendOrigin = yield* options.frontendOrigin;
         const identity = yield* Effect.promise(() =>
           readRequestIdentity(
             request.headers,
             request.originalUrl,
-            options,
+            { ...options, frontendOrigin },
             request.method,
             serviceAuthorized,
             Option.getOrUndefined(request.remoteAddress),
@@ -425,25 +441,53 @@ export const requestIdentityLayer = (options: IdentityOptions) =>
           countRefusal(options.telemetry, identity.refusal.code);
           return HttpServerResponse.jsonUnsafe(identity, { status: 403 });
         }
+        const admission = yield* Effect.try({
+          try: () => admittedRequestIdentity(identity.caller, readSessionScope(request.headers)),
+          catch: () => "Invalid request target headers",
+        }).pipe(Effect.result);
+        if (admission._tag === "Failure")
+          return HttpServerResponse.jsonUnsafe({ message: admission.failure }, { status: 400 });
+        const admitted = admission.success;
+        const path = request.url.split("?")[0];
+        const call =
+          path === "/call" ? yield* request.json.pipe(Effect.orElseSucceed(() => null)) : null;
+        const native =
+          path === nativeReadResolveEndpoint.path ||
+          (path === "/call" &&
+            call !== null &&
+            typeof call === "object" &&
+            "key" in call &&
+            typeof call.key === "string" &&
+            !isTsOnlyOperationKey(call.key));
         const services = yield* Effect.context<never>();
-        const exit = yield* Effect.promise((signal) =>
-          withInvocationContext(
-            {
-              hostBaseUrl: `http://127.0.0.1:${options.port()}`,
-              principal: identity.principal,
-              caller: identity.caller,
-              device: identity.device,
-              headers: identity.headers,
-            },
-            () => Effect.runPromiseExitWith(services)(handler, { signal }),
-          ),
-        );
+        const run = Effect.provideService(handler, RequestIdentity, admitted);
+        const exit = native
+          ? yield* Effect.exit(run)
+          : yield* Effect.promise((signal) =>
+              withInvocationContext(
+                {
+                  hostBaseUrl: `http://127.0.0.1:${options.port()}`,
+                  principal: identity.principal,
+                  caller: identity.caller,
+                  device: identity.device,
+                  headers: identity.headers,
+                },
+                // I removes this legacy crossing after non-/call consumers migrate. /call receives
+                // immutable RequestIdentity once and never reads ambient authority.
+                // effect-edge: als-crossing
+                () => Effect.runPromiseExitWith(services)(run, { signal }),
+              ),
+            );
         const response = yield* exit;
         const refused = response.headers[REFUSAL_HEADER];
         if (response.status === 403 && refused) countRefusal(options.telemetry, refused);
         return identity.setCookie
           ? HttpServerResponse.setHeader(response, "set-cookie", identity.setCookie)
           : response;
-      }),
+      }).pipe(
+        // Effect 4.0.2 HttpEffect enters uninterruptibly; route interruptibility begins
+        // inside the legacy ALS child. The Node close must interrupt this outer wait too.
+        Effect.interruptible,
+      ),
     { global: true },
   );

@@ -1,3 +1,4 @@
+import { consentService, harnessThreads, testSpawner } from "./effect-test.ts";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -11,7 +12,7 @@ import {
   type HarnessThreadBody,
 } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
-import { createHarnessThreads } from "../src/harness/threads.ts";
+import type { HarnessThreads } from "../src/harness/threads.ts";
 import { createProviders } from "../src/harness/providers.ts";
 import { HostLog } from "../src/host-log.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
@@ -22,7 +23,7 @@ import type { TurnElementNamesNativeRead } from "../src/turn-element-names.ts";
 import { turnElementNamesRequestSchema } from "../../../packages/agent-contracts/src/turn-element-names.ts";
 
 let root = "";
-const owners: ReturnType<typeof createHarnessThreads>[] = [];
+const owners: HarnessThreads["Service"][] = [];
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "pe-turn-names-owner-"));
   process.env.PE_HARNESS_ADAPTER_CLAUDE = join(import.meta.dirname, "fake-acp-agent.mjs");
@@ -32,15 +33,20 @@ afterAll(async () => {
   delete process.env.PE_HARNESS_ADAPTER_CLAUDE;
   await rm(root, { recursive: true, force: true });
 });
-function host(home: string, observeDocument?: ObserveDocument) {
+async function host(home: string, observeDocument?: ObserveDocument) {
   const log = new HostLog(join(home, "log"));
-  const threads = createHarnessThreads({
+  const threads = await harnessThreads({
+    runs: consentService(),
     root: join(home, "threads"),
     log,
     observeDocument,
     worldRoot: tmpdir(),
     mcpServer: () => ({ name: "pea", command: "unused", args: [], env: [] }),
-    providers: createProviders({ shellPath: async () => "", probeOnStart: false }),
+    providers: createProviders({
+      spawner: testSpawner(),
+      shellPath: async () => "",
+      probeOnStart: false,
+    }),
   });
   owners.push(threads);
   const call = async (method: string, path: string, body?: unknown) => {
@@ -124,7 +130,7 @@ const nativeValue = (
 test("HTTP prompt pins exact refs; concurrent reads persist once and restart freezes every earlier outcome", async () => {
   const home = join(root, randomUUID());
   let observed = { ref: b, address: named.address, name: "B" };
-  let h = host(home, () => observed);
+  let h = await host(home, () => observed);
   const id = await h.create();
   await h.set(id, [{ kind: "open", ref: a }, named]);
   const turnId = await h.prompt(id);
@@ -196,7 +202,7 @@ test("HTTP prompt pins exact refs; concurrent reads persist once and restart fre
       ),
   ).toBe(true);
   await h.threads.close();
-  h = host(home, () => observed);
+  h = await host(home, () => observed);
   let rereads = 0;
   const replacement: TurnElementNamesNativeRead = async (_op, input, ref) => {
     rereads++;
@@ -233,7 +239,7 @@ test("HTTP prompt pins exact refs; concurrent reads persist once and restart fre
 });
 
 test("unavailable named metadata keeps delivery successful and the whole pin set incomplete", async () => {
-  const h = host(join(root, randomUUID()), () => null);
+  const h = await host(join(root, randomUUID()), () => null);
   const id = await h.create();
   await h.set(id, [{ kind: "open", ref: a }, named]);
   const turnId = await h.prompt(id);
@@ -249,7 +255,7 @@ test("unavailable named metadata keeps delivery successful and the whole pin set
 test.each(["refs", "string"] as const)(
   "pin %s bounds keep prompt delivery successful and names unresolved",
   async (bound) => {
-    const h = host(join(root, randomUUID()));
+    const h = await host(join(root, randomUUID()));
     const id = await h.create();
     const refs =
       bound === "refs"
@@ -271,7 +277,7 @@ test.each(["refs", "string"] as const)(
 );
 
 test("a queued prompt pins its documents at delivery after the head changes", async () => {
-  const h = host(join(root, randomUUID()));
+  const h = await host(join(root, randomUUID()));
   const id = await h.create();
   await h.set(id, [{ kind: "open", ref: a }]);
   const running = randomUUID();
@@ -319,19 +325,21 @@ test.each(["open", "named"] as const)(
   "legacy %s prompt never rebinds through today's metadata",
   async (kind) => {
     const home = join(root, randomUUID());
-    let h = host(home);
+    let h = await host(home);
     const id = await h.create();
     await h.set(id, [kind === "open" ? { kind: "open", ref: a } : named]);
     const turnId = await h.prompt(id);
+    // The store's registry ends with its scope, so the log is read while it is still open.
+    const logged = (await h.read(id)).events;
     await h.threads.close();
-    const old = (await h.read(id)).events
+    const old = logged
       .filter((event) => event.kind !== "turn_element_targets")
       .map((event, index) => {
         if (event.kind === "prompt") delete event.elementNames;
         return { ...event, seq: index + 1 };
       });
     await writeFile(h.file(id), old.map((event) => JSON.stringify(event)).join("\n") + "\n");
-    h = host(home, () => ({
+    h = await host(home, () => ({
       ref: { ...a, openId: "new-lifetime" },
       address: named.address,
       name: "Today",
@@ -358,7 +366,7 @@ test.each(["open", "named"] as const)(
 
 test("escaped maximum refs/names are byte-chunked and incomplete or altered replay refuses native rereads", async () => {
   const home = join(root, randomUUID());
-  let h = host(home);
+  let h = await host(home);
   const id = await h.create();
   const refs = Array.from({ length: 32 }, (_, index) => ({
     session: "\u0000".repeat(256),
@@ -412,7 +420,7 @@ test("escaped maximum refs/names are byte-chunked and incomplete or altered repl
       events = events.filter((_, at) => at !== index);
     }
     await writeFile(h.file(id), events.map((event) => JSON.stringify(event)).join("\n") + "\n");
-    h = host(home);
+    h = await host(home);
     let nativeCalls = 0;
     await expect(
       h.threads.readTurnElementNames(request(id, turnId, [1]), async () => {
@@ -427,7 +435,7 @@ test("escaped maximum refs/names are byte-chunked and incomplete or altered repl
 
 test("metadata refresh enriches remembered context once and leaves native admission unchanged", async () => {
   let observation: ReturnType<ObserveDocument> = null;
-  const h = host(join(root, randomUUID()), () => observation);
+  const h = await host(join(root, randomUUID()), () => observation);
   const id = await h.create();
   await h.set(id, [{ kind: "open", ref: a }]);
   const before = h.threads.heads.read(id);

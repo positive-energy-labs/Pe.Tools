@@ -10,7 +10,7 @@ import {
   ductsFirmSchema,
   stagedDucts,
   type DuctsFirm,
-  type DuctsRouteDocument,
+  type DuctsDesign,
 } from "@pe/agent-contracts";
 import { type WorkLayer } from "@pe/ducts-domain/sheet/index";
 import { productUserContentRootPath } from "./product-paths.ts";
@@ -56,8 +56,8 @@ export async function readFirm(path = firmFilePath()): Promise<FirmReading> {
 }
 
 /** Work's staged edits as the resolver reads them. */
-export function workLayer(doc: DuctsRouteDocument | null): WorkLayer {
-  const staged = stagedDucts(doc);
+export function workLayer(design: DuctsDesign): WorkLayer {
+  const staged = stagedDucts(design, design);
   return {
     flows: staged.flows,
     terminalDrops: staged.terminalDrops,

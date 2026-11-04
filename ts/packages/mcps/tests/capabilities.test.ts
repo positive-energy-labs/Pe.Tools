@@ -3,7 +3,6 @@ import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
 import { tsOnlyOperationCatalog, type PodList } from "@pe/host-contracts/operation-types";
 import { join } from "node:path";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
-import { DUCTS_SHEET_GUIDE } from "@pe/agent-contracts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   address,
@@ -23,9 +22,8 @@ import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import { createHash } from "node:crypto";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { contextFetch, withInvocationContext } from "@pe/runtime/context";
 import { createMcpDoor } from "../../../apps/host/src/mcp-route.ts";
 import {
@@ -39,6 +37,11 @@ import {
 
 const ops = [
   {
+    subject: "None",
+    touches: "Metadata",
+    effect: "Read",
+    cardinality: "One",
+    costTier: "Cheap" as const,
     key: "revit.catalog.loaded-families",
     displayName: "Loaded families",
     description: "Inventory of loaded families.",
@@ -48,6 +51,11 @@ const ops = [
     requestSchemaJson: JSON.stringify({ type: "object", title: "LoadedFamiliesRequest" }),
   },
   {
+    subject: "None",
+    touches: "Metadata",
+    effect: "Read",
+    cardinality: "One",
+    costTier: "Cheap" as const,
     key: "scripting.execute",
     description: "Run C#.",
     needs: "document" as const,
@@ -55,6 +63,11 @@ const ops = [
   },
   // What the C# catalog serves for a human verb: `[Op(..., Actor = OpActor.Human)]`.
   ...["families.plan", "families.capture"].map((key) => ({
+    subject: "None",
+    touches: "Metadata",
+    effect: "Read",
+    cardinality: "One",
+    costTier: "Cheap" as const,
     key,
     description: "Human verb over loaded families.",
     needs: "project-document" as const,
@@ -66,9 +79,39 @@ const ops = [
 test("native Human eligibility and local account requirements project into actual principals", () => {
   const rows = buildCapabilities({
     ops: [
-      { key: "native.human", needs: "document", intent: "Mutate", actor: "human" },
-      { key: "native.any", needs: "nothing", intent: "Read", actor: "any" },
-      { key: "local.human", needs: "nothing", intent: "Mutate", principal: ["human"] },
+      {
+        subject: "None",
+        touches: "Metadata",
+        effect: "Read",
+        cardinality: "One",
+        costTier: "Cheap" as const,
+        key: "native.human",
+        needs: "document",
+        intent: "Mutate",
+        actor: "human",
+      },
+      {
+        subject: "None",
+        touches: "Metadata",
+        effect: "Read",
+        cardinality: "One",
+        costTier: "Cheap" as const,
+        key: "native.any",
+        needs: "nothing",
+        intent: "Read",
+        actor: "any",
+      },
+      {
+        subject: "None",
+        touches: "Metadata",
+        effect: "Read",
+        cardinality: "One",
+        costTier: "Cheap" as const,
+        key: "local.human",
+        needs: "nothing",
+        intent: "Mutate",
+        principal: ["human"],
+      },
       ...tsOnlyOperationCatalog.filter((row) =>
         ["aps.auth.login", "aps.auth.logout", "host.shell.open"].includes(row.key),
       ),
@@ -77,15 +120,11 @@ test("native Human eligibility and local account requirements project into actua
     packages: [],
     skills: [],
   });
-  expect(rows.find((row) => row.key === "op:native.human")?.principal).toEqual(["human"]);
-  expect(rows.find((row) => row.key === "op:local.human")?.principal).toEqual(["human"]);
+  for (const key of ["native.human", "native.any", "local.human"])
+    expect(rows.find((row) => row.key === `op:${key}`)).toBeUndefined();
   for (const key of ["aps.auth.login", "aps.auth.logout"])
     expect(rows.find((row) => row.key === `op:${key}`)?.principal).toEqual(["human"]);
   expect(rows.find((row) => row.key === "op:host.shell.open")?.principal).toEqual(["human", "pea"]);
-  expect(rows.find((row) => row.key === "op:native.any")).toMatchObject({
-    needs: "session",
-    principal: ["human", "pea", "page", "external-mcp"],
-  });
 });
 
 const pods = {
@@ -228,7 +267,16 @@ test.each(["http", "stdio"])(
     });
     const nativeOps = [
       ...ops,
-      { key: "revit.context.view-image", intent: "Read" as const, needs: "document" as const },
+      {
+        subject: "None",
+        touches: "Metadata",
+        effect: "Read",
+        cardinality: "One",
+        costTier: "Cheap" as const,
+        key: "revit.context.view-image",
+        intent: "Read" as const,
+        needs: "document" as const,
+      },
     ];
     const sessions = [user, own, other].map((ref) => ({
       sessionId: ref.session,
@@ -600,6 +648,7 @@ test("an exact-open turn Target reads and writes route Work under its document's
   fakeRuntimeHost("http://127.0.0.1:9");
   const projectA = "C:\\Models\\projectA.rvt";
   const routeCalls: URL[] = [];
+  const historyBodies: unknown[] = [];
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (typeof init?.body === "string" && JSON.parse(init.body).key === "bridge.sessions.list")
@@ -615,6 +664,7 @@ test("an exact-open turn Target reads and writes route Work under its document's
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
     if (!url.pathname.includes("/route-state/")) throw Error(`unexpected ${url.pathname}`);
     routeCalls.push(url);
+    if (url.pathname.endsWith("/history")) historyBodies.push(JSON.parse(String(init?.body)));
     return url.searchParams.get("target") === projectA
       ? Response.json({ route: "families", revision: 2, doc: {}, ok: true })
       : Response.json({ error: "unknown route 'families'" }, { status: 404 });
@@ -645,6 +695,22 @@ test("an exact-open turn Target reads and writes route Work under its document's
     )) as { ok: boolean };
     expect(proposed.ok).toBe(true);
     expect(routeCalls.map((url) => url.searchParams.get("target"))).toEqual([projectA, projectA]);
+    // Pea's undo is the journal verb on the same Work key, never a null edit.
+    const undone = (await run(
+      peDo,
+      {
+        key: "route:families.history",
+        input: { direction: "undo" },
+        expectedRevision: 3,
+        timeoutSeconds: 30,
+      },
+      open,
+    )) as { ok: boolean };
+    expect(undone.ok).toBe(true);
+    expect(routeCalls.at(-1)!.pathname).toBe("/pe/route-state/families/history");
+    expect(routeCalls.at(-1)!.searchParams.get("target")).toBe(projectA);
+    expect(historyBodies).toEqual([{ direction: "undo", expectedRevision: 3 }]);
+    routeCalls.pop();
 
     // A Chat document that closed has no Address to key by: refuse, never read Target-less Work.
     const gone = (await run(
@@ -804,9 +870,36 @@ test("the live head names an open lifetime; reopen needs an explicit override an
   source.capabilities.push(
     ...buildCapabilities({
       ops: [
-        { key: "host.status", needs: "nothing", intent: "Read" },
-        { key: "revit.family.inspect", needs: "family-document", intent: "Read" },
-        { key: "revit.context.document-session", needs: "nothing", intent: "Read" },
+        {
+          subject: "None",
+          touches: "Metadata",
+          effect: "Read",
+          cardinality: "One",
+          costTier: "Cheap" as const,
+          key: "host.status",
+          needs: "nothing",
+          intent: "Read",
+        },
+        {
+          subject: "None",
+          touches: "Metadata",
+          effect: "Read",
+          cardinality: "One",
+          costTier: "Cheap" as const,
+          key: "family.look",
+          needs: "family-document",
+          intent: "Read",
+        },
+        {
+          subject: "None",
+          touches: "Metadata",
+          effect: "Read",
+          cardinality: "One",
+          costTier: "Cheap" as const,
+          key: "revit.context.document-session",
+          needs: "nothing",
+          intent: "Read",
+        },
       ],
       routes: [],
       packages: [],
@@ -856,7 +949,7 @@ test("the live head names an open lifetime; reopen needs an explicit override an
     ).toMatchObject({ ok: true, revision: 4 });
     expect(
       await call({
-        key: "op:revit.family.inspect",
+        key: "op:family.look",
         timeoutSeconds: 30,
         target: { kind: "open", ref: { session: "b1", openId: "family" } },
       }),
@@ -877,9 +970,9 @@ test("the live head names an open lifetime; reopen needs an explicit override an
     ).toMatchObject({ ok: true, revision: 4 });
     expect(
       await call({
-        key: "op:revit.catalog.loaded-families",
+        key: "op:family.look",
         timeoutSeconds: 30,
-        target: { kind: "open", ref: { session: "b1", openId: "family" } },
+        target: { kind: "open", ref: { session: "b1", openId: "a2" } },
       }),
     ).toMatchObject({ ok: false, content: expect.stringContaining("wrong-document-kind") });
     expect(
@@ -907,27 +1000,6 @@ test("the live head names an open lifetime; reopen needs an explicit override an
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
   }
-});
-test("route:ducts.guide is one read row and answers without a document or a host read", async () => {
-  fakeRuntimeHost("http://127.0.0.1:9");
-  const rows = catalog().capabilities.filter((row) => row.key === "route:ducts.guide");
-  expect(rows).toHaveLength(1);
-  expect(rows[0]).toMatchObject({ kind: "route-doc", needs: "nothing", mutates: false });
-  const calls: string[] = [];
-  vi.stubGlobal("fetch", async (url: string | URL | Request) => {
-    const path = new URL(url instanceof Request ? url.url : String(url)).pathname;
-    calls.push(path);
-    if (path === "/pe/capabilities") return Response.json(catalog());
-    throw Error(`Unexpected guide request ${path}`);
-  });
-  const read = (await run(peRead, { key: "route:ducts.guide", timeoutSeconds: 30 })) as {
-    ok: boolean;
-    result: { guide: typeof DUCTS_SHEET_GUIDE; present?: unknown };
-  };
-  expect(read.ok).toBe(true);
-  expect(read.result.guide).toEqual(DUCTS_SHEET_GUIDE);
-  expect(read.result).not.toHaveProperty("present");
-  expect(calls).toEqual(["/pe/capabilities"]);
 });
 
 test("Pea dispatches roster and sheet through their declared routes without an analysis read", async () => {

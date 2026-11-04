@@ -7,6 +7,7 @@ import { ListView } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
 import { Button } from "@pe/kit/lang/button";
 import type { HarnessThreadSummary } from "@pe/agent-contracts";
+import { currentFixture } from "#/shell/fixture-lane";
 import { peClient } from "#/host/pe-client";
 import { useMachine } from "#/machine/use-machine";
 import { attention, machineOf } from "#/machine/model";
@@ -49,7 +50,7 @@ const LEADING_GROUPS = LEDGER_GROUPS.map((group) => GROUP_NAME[group]);
 
 /** The host's open work, live: thread summaries stream; receipts are read. */
 function useLedgerRows() {
-  const [threads, setThreads] = useState<HarnessThreadSummary[] | null>(null);
+  const [threads, setThreads] = useState<readonly HarnessThreadSummary[] | null>(null);
   const [fault, setFault] = useState<string | null>(null);
   const [asks, setAsks] = useState<LedgerSources["asks"]>(new Map());
   const [receipts, setReceipts] = useState<LedgerSources["receipts"]>([]);
@@ -68,6 +69,7 @@ function useLedgerRows() {
     [],
   );
   useEffect(() => {
+    if (currentFixture() !== null) return;
     // ponytail: receipts are read on focus and every 15 s; a receipts stream (wave B) replaces this.
     const read = () =>
       void peClient
@@ -75,9 +77,11 @@ function useLedgerRows() {
         .then((value) =>
           setReceipts(Array.isArray(value) ? (value as LedgerSources["receipts"]) : []),
         )
-        .catch(() => {});
+        .catch((error) => {
+          console.error("ledger: asynchronous operation failed", error);
+        });
     read();
-    const timer = setInterval(read, 15_000);
+    const timer = setInterval(() => { if (!document.hidden) read(); }, 15_000);
     window.addEventListener("focus", read);
     return () => {
       clearInterval(timer);
@@ -96,7 +100,9 @@ function useLedgerRows() {
           const ask = openAsk(body.events);
           if (ask) setAsks((prior) => new Map(prior).set(thread.id, ask));
         })
-        .catch(() => {});
+        .catch((error) => {
+          console.error("ledger: asynchronous operation failed", error);
+        });
     }
   }, [threads]);
   const attentionLines = machine ? attention(machine) : [];

@@ -3,6 +3,7 @@
  * The host derives it once, against when the Reading it serves was taken, and republishes the
  * envelope; no consumer compares clocks and no consumer can miss the fact by missing an event.
  */
+import { captureStore } from "./effect-test.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -118,7 +119,7 @@ test("the families matrix Reading streams an envelope, never the body, and wears
   const world = fakeBridge();
   const marks = documentMarks(world.bridge);
   const dir = await mkdtemp(join(tmpdir(), "pe-matrix-envelope-"));
-  const captures = new TakeoffCaptures(dir);
+  const captures = captureStore(dir);
   const filter = {
     categoryNames: ["Mechanical Equipment"],
     familyNames: [],

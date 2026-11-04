@@ -7,7 +7,7 @@
 import {
   transitionPatches,
   type DuctAssumption,
-  type DuctsRouteDocument,
+  type DuctsDesign,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 import { rulingRung, type RulingSegment } from "@pe/ducts-domain/rulings";
@@ -17,7 +17,7 @@ type Verdict = Extract<DuctAssumption, { kind: "verdict" }>["verdict"];
 
 /** The patches one ruling choice makes on its Work cell, against the rulings the store holds. */
 export const rulingPatches = (
-  doc: DuctsRouteDocument | null,
+  doc: DuctsDesign | null,
   store: DuctSnapshot["store"],
   segment: RulingSegment,
   key: string,
@@ -35,7 +35,7 @@ export const rulingPatches = (
 
 /** The patches one verdict choice makes on an assumption's cell: stage it, or take it back for `unset`. */
 export const verdictPatches = (
-  doc: DuctsRouteDocument | null,
+  doc: DuctsDesign | null,
   issueId: string,
   choice: Verdict | "unset",
   store: DuctSnapshot["store"] = null,

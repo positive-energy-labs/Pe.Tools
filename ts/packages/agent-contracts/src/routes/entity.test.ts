@@ -1,3 +1,4 @@
+
 import { describe, expect, test } from "vite-plus/test";
 import { routeAddress } from "../route-address.ts";
 
@@ -19,24 +20,31 @@ describe("an entity route's address", () => {
   test("a table's sorts and hidden columns survive names with commas and leading dashes", () => {
     const family = routeAddress("family");
     const page = {
-      sort: [
+      sort: { columns: [
         { key: "Width, Nominal", dir: "desc" as const },
         { key: "-odd", dir: "asc" as const },
-      ],
-      hidden: ["a,b", "c\\d"],
+      ] },
+      hidden: { "a,b": true as const, "c\\d": true as const },
     };
     const link = family.link(page);
     const search = Object.fromEntries(new URL(link, "http://x").searchParams);
     expect(family.read(search).page).toMatchObject(page);
-    expect(family.agent.write(page).sort).toBe("-Width\\, Nominal,\\-odd");
+    expect(family.agent.read({ sort: family.agent.write(page).sort! }).sort).toEqual(page.sort);
   });
 
   test("Pea's patch reads through the field's codec, and a bad one is refused by name", () => {
     const families = routeAddress("families");
-    expect(families.agent.read({ sort: "-Width,Name" }).sort).toEqual([
+    expect(
+      families.agent.read({
+        sort: JSON.stringify({ columns: [
+          { key: "Width", dir: "desc" },
+          { key: "Name", dir: "asc" },
+        ] }),
+      }).sort,
+    ).toEqual({ columns: [
       { key: "Width", dir: "desc" },
       { key: "Name", dir: "asc" },
-    ]);
+    ] });
     expect(families.agent.patch.safeParse({ sort: "-" }).success).toBe(false);
     expect(routeAddress("schedules").agent.patch.safeParse({ cell: "3:1" }).success).toBe(false);
     expect(routeAddress("family").agent.patch.safeParse({ inspector: "part:hinge" }).success).toBe(
@@ -47,7 +55,7 @@ describe("an entity route's address", () => {
   test("a query typed is a step, a sort is a tweak; an agent-only pane makes no entry", () => {
     const families = routeAddress("families");
     expect(families.history({ query: "a" }, { query: "b" })).toBe("push");
-    expect(families.history({ sort: [] }, { sort: [{ key: "x", dir: "asc" }] })).toBe("replace");
+    expect(families.history({ sort: { columns: [] } }, { sort: { columns: [{ key: "x", dir: "asc" }] } })).toBe("replace");
     expect(families.history({ pane: "spec" }, { pane: "output" })).toBeNull();
   });
 

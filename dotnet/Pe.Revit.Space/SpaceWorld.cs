@@ -17,12 +17,22 @@ public static class SpaceWorld {
                     .Any(id => state.LinkIds.Contains(id.Value()))) state.Generation = Guid.NewGuid().ToString("N");
             }
         };
-        documents.Closed += key => { lock (Sync) States.Remove(key.Value); };
+        documents.Closed += key => {
+            lock (Sync) States.Remove(key.Value);
+            // An open host can keep a shared link loaded even before its first Space read.
+            foreach (var tracked in documents.Open) {
+                var host = tracked.Resolve();
+                using var links = new FilteredElementCollector(host).OfClass(typeof(RevitLinkInstance));
+                GeometryLedger.Sources(tracked.Key.Value, links.Cast<RevitLinkInstance>()
+                    .Select(link => link.GetLinkDocument()).OfType<Document>().Select(doc => doc.GetDocumentKey()));
+            }
+            GeometryLedger.Closed(key.Value);
+        };
+        documents.KeyChanged += (tracked, oldKey) => GeometryLedger.Renamed(oldKey.Value, tracked.Key.Value);
     }
 
-    public static World Build(Document document) => Prepare(document);
-
-    /// <summary>The whole model. Only status, rows and tree ask for it; one cold Chadds read is 220 s and +9.4 GiB (READING-REVIT U5).</summary>
+    /// <summary>Explicit whole-model geometry door for scripts and Pods. Cold Chadds costs 220 s and +9.4 GiB;
+    /// native geometry remains until document close. Prefer scoped reads for smaller questions.</summary>
     public static World Prepare(Document document) {
         var world = new World(document.GetDocumentKey(), Epoch(document));
         world.BuildAll(document);
@@ -35,6 +45,7 @@ public static class SpaceWorld {
     ///     <paramref name="reach" /> (host-frame boxes as 8 corners; default the scope itself), through the /ducts context
     ///     read: one quick filter per placement, ids counted before any load, triangle-less classes never loaded. A verb
     ///     asks this world only inside <paramref name="scope" />; a question outside it throws instead of answering CLEAR.
+    ///     Every source is planned before geometry acquisition; the stamp reports estimated and retained cost.
     ///     <paramref name="curves" /> reads CAD ribbons: a site DWG's ribbons were 2.6 M of a 10 ft Cleremont Sweep's
     ///     2.75 M triangles, and no default question asks for Curve2D.
     /// </summary>
@@ -94,6 +105,8 @@ public static class SpaceWorld {
 /// <summary>One operation's source documents, triangles and query indexes.</summary>
 public sealed class World {
     private readonly List<Partition> _partitions = [];
+    internal GeometryLedger.Read? Acquisition { get; set; }
+    public GeometryCost? GeometryCost => this.Acquisition?.Report();
 
     internal World(string hostKey, long epoch, Aabb? scope = null, bool curves = true) {
         this.HostDocumentKey = hostKey; this.CurrentEpoch = epoch; this.Scope = scope; this.Curves = curves;
@@ -129,30 +142,34 @@ public sealed class World {
             var kind = linked.Title.IndexOf(".ifc", StringComparison.OrdinalIgnoreCase) >= 0 ? SourceKind.IfcLink : SourceKind.RevitLink;
             this._partitions.Add(new Partition(source++, linked, kind, link.Id.Value(), link.GetTotalTransform(), generation));
         }
+        // Unsaved tracker keys use the SDK open id, not GetDocumentKey's wrapper hash.
+        var ledgerHost = PeDocumentIdentity.TryGetOpenId(host, out var openId)
+            ? DocumentKey.For(host, openId).Value : this.HostDocumentKey;
+        GeometryLedger.Sources(ledgerHost, this._partitions.Select(p => p.DocumentKey));
         this.BuiltUtc = DateTime.UtcNow;
     }
 
     internal void BuildAll(Document host) {
         this.InitializeSources(host);
-        foreach (var partition in this._partitions) partition.Build(this.CurrentEpoch);
+        var plans = this._partitions.Select(p => {
+            using var collector = new FilteredElementCollector(p.Doc).WhereElementIsNotElementType();
+            return ReachPlan.Empty(p) with { Keep = collector.ToElementIds().ToArray() };
+        }).ToList();
+        this.Acquisition = new GeometryLedger.Read(plans);
+        foreach (var plan in plans) plan.Source.Build(this.CurrentEpoch, plan.Source.Load(plan).Kept);
         this.BuiltUtc = DateTime.UtcNow;
     }
 
     internal void BuildWithin(Document host, IReadOnlyList<XYZ[]> reach) {
         this.InitializeSources(host);
         var scope = this.Scope!.Value;
-        foreach (var partition in this._partitions) {
-            var near = partition.Reach(reach, scope.Corners(), obstacles: true).Kept;
-            var read = new HashSet<long>(near.Select(e => e.Id.Value()));
-            // A DWG's ribbons rise from its curves to the storey above, past the import's own bounds: imports gate in plan.
-            List<Element> below = [];
-            if (this.Curves) {
-                using var imports = new FilteredElementCollector(partition.Doc).OfClass(typeof(ImportInstance));
-                below = imports.Where(e => !read.Contains(e.Id.Value()) && Ingest.Allowed(e) && partition.SceneBounds(e) is { } b
-                    && b.MinZ <= scope.MaxZ && b.MinX <= scope.MaxX && b.MaxX >= scope.MinX && b.MinY <= scope.MaxY && b.MaxY >= scope.MinY).ToList();
-            }
-            // Document order, as the whole-model walk loads them.
-            partition.Build(this.CurrentEpoch, near.Concat(below).OrderBy(e => e.Id.Value()), this.Curves);
+        // Plan every source and CAD ribbon reach before geometry acquisition.
+        var plans = this._partitions.Select(partition => partition.Plan(reach, scope.Corners(), obstacles: true)).ToList();
+        if (this.Curves) plans = plans.Select(plan => plan.Source.WithImports(plan, scope)).ToList();
+        this.Acquisition = new GeometryLedger.Read(plans);
+        foreach (var plan in plans) {
+            var partition = plan.Source;
+            partition.Build(this.CurrentEpoch, partition.Load(plan).Kept, this.Curves);
         }
         this.BuiltUtc = DateTime.UtcNow;
     }
@@ -168,7 +185,7 @@ public sealed class World {
     internal Stamp StampFor(IEnumerable<Partition> touched, Filter filter) {
         var seen = touched as IReadOnlyList<Partition> ?? touched.ToList();
         return new Stamp(this.HostDocumentKey, this.CurrentEpoch, Stamp.HostInternalFt, this.BuiltUtc,
-            this._partitions.Select(p => p.Row).ToList(), this.BuiltUtc != default, Resolve(seen, filter));
+            this._partitions.Select(p => p.Row).ToList(), this.BuiltUtc != default, Resolve(seen, filter)) { GeometryCost = this.GeometryCost };
     }
 
     /// <summary>

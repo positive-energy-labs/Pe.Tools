@@ -27,6 +27,7 @@ import {
   type HistoryRow,
   type WorkKey,
 } from "@pe/agent-contracts";
+import { Clock, Context, Effect, Layer } from "effect";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
@@ -46,7 +47,7 @@ import {
   type TakeoffObservation,
   type TakeoffSnapshot,
 } from "@pe/agent-contracts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 
 const keyOf = (target: DocumentRef) => JSON.stringify([target.session, target.openId]);
 const previousOf = (state: TakeoffObservation) =>
@@ -185,6 +186,14 @@ const progressReading = (manifest: ProgressManifest, families: unknown[]) => ({
   },
 });
 
+/** The store's scope closed: this write was refused before it touched a file. */
+export class CaptureStoreClosed extends Error {
+  readonly _tag = "CaptureStoreClosed";
+  constructor() {
+    super("The capture store closed with its host; nothing was written.");
+  }
+}
+
 export class TakeoffCaptures {
   private readonly states = new Map<string, TakeoffObservation>();
   private readonly generations = new Map<string, number>();
@@ -195,15 +204,43 @@ export class TakeoffCaptures {
   /** Progressive reads this process is running; a stored "reading" revision outside it was interrupted. */
   private readonly liveReads = new Set<string>();
   private readonly listeners = new Set<(key: string) => void>();
+  /**
+   * Every map above lives and dies with this instance. The sets are keyed by document or Work and
+   * bounded by what one host session touches; `close()` empties them and stops every notify, which
+   * is what the owning {@link CaptureStore} scope does on release.
+   */
   constructor(
     readonly directory: string,
-    private readonly apsCachePath = join(
-      productRoot(),
-      productPathNames.stateDirectoryName,
-      productPathNames.globalDirectoryName,
-      "parameters-service-cache.json",
-    ),
+    private readonly apsCachePath: string,
+    /** The wall stamp on a completed reading; the store's layer supplies `Clock`'s. */
+    private readonly now: () => string,
   ) {}
+
+  /**
+   * Families publication is admitted or refused here: an admitted write is joined by `close`, and
+   * after close begins every write is refused typed. So no file appears after close returned.
+   */
+  private closing = false;
+  private readonly writes = new Set<Promise<unknown>>();
+  private admit<T>(write: () => Promise<T>): Promise<T> {
+    if (this.closing) return Promise.reject(new CaptureStoreClosed());
+    const running = write();
+    this.writes.add(running);
+    const forget = () => void this.writes.delete(running);
+    running.then(forget, forget);
+    return running;
+  }
+
+  async close() {
+    this.closing = true;
+    while (this.writes.size) await Promise.allSettled([...this.writes]);
+    this.states.clear();
+    this.generations.clear();
+    this.pending.clear();
+    this.familiesSaves.clear();
+    this.liveReads.clear();
+    this.listeners.clear();
+  }
 
   private notify(key: string) {
     for (const listener of this.listeners) listener(key);
@@ -365,7 +402,7 @@ export class TakeoffCaptures {
   }
 
   async saveSchedule(value: Omit<ScheduleReading, "id">): Promise<ScheduleReading> {
-    const id = createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    const id = createHash("sha256").update(canonicalRouteInput(value)).digest("hex");
     const reading = scheduleReadingSchema.parse({ ...value, id });
     const directory = join(this.directory, "schedules");
     await mkdir(directory, { recursive: true });
@@ -516,13 +553,16 @@ export class TakeoffCaptures {
       .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
   }
   /** One latest pointer per durable Families Work; full observations remain immutable. */
-  async saveFamilies(
+  saveFamilies(...args: Parameters<TakeoffCaptures["writeFamilies"]>) {
+    return this.admit(() => this.writeFamilies(...args));
+  }
+  private async writeFamilies(
     value: Omit<FamiliesObservation, "id" | "completedAt" | "result"> & { result: unknown },
     expectedLatestId?: string,
   ): Promise<FamiliesObservation> {
     const work = workKey(value.work);
     if (value.progress) this.liveReads.delete(value.progress.runId);
-    const completedAt = new Date().toISOString();
+    const completedAt = this.now();
     const id = createHash("sha256")
       .update(JSON.stringify({ ...value, completedAt }))
       .digest("hex");
@@ -559,7 +599,10 @@ export class TakeoffCaptures {
       }
     };
     const pending = (this.familiesSaves.get(key) ?? Promise.resolve())
-      .catch(() => undefined)
+      .catch((error) => {
+        console.error("takeoff-captures: asynchronous operation failed", error);
+        return undefined;
+      })
       .then(save);
     this.familiesSaves.set(key, pending);
     try {
@@ -726,7 +769,10 @@ export class TakeoffCaptures {
   }
 
   /** Per-family blobs are written once. Tiny immutable manifests project each revision for the existing envelope. */
-  async saveFamiliesProgress(
+  saveFamiliesProgress(...args: Parameters<TakeoffCaptures["writeFamiliesProgress"]>) {
+    return this.admit(() => this.writeFamiliesProgress(...args));
+  }
+  private async writeFamiliesProgress(
     value: Omit<FamiliesObservation, "id" | "completedAt"> & { progress: FamiliesReadProgress },
   ) {
     if (value.progress.state === "reading") this.liveReads.add(value.progress.runId);
@@ -753,7 +799,7 @@ export class TakeoffCaptures {
       }),
     );
     const { result: _, ...metadata } = value;
-    const completedAt = new Date().toISOString();
+    const completedAt = this.now();
     const id = createHash("sha256")
       .update(JSON.stringify([metadata, completedAt, records]))
       .digest("hex");
@@ -948,8 +994,41 @@ export class TakeoffCaptures {
   }
 }
 
-let captures: TakeoffCaptures | undefined;
-export const hostTakeoffCaptures = () =>
-  (captures ??= new TakeoffCaptures(
-    join(productRoot(), "state", "host", hostOwnership.serviceName, "takeoff-captures"),
-  ));
+/** Where this host service keeps its Takeoff, schedule and Families readings. */
+export const takeoffCapturesDirectory = () =>
+  join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName, "takeoff-captures");
+/** The APS Parameters Service cache Families readings reference. */
+export const apsParameterCachePath = () =>
+  join(
+    hostOwnership.rootPath,
+    productPathNames.stateDirectoryName,
+    productPathNames.globalDirectoryName,
+    "parameters-service-cache.json",
+  );
+
+/**
+ * The host's capture files and in-memory readings (ADR 0029 rule 3): built once by a scoped layer,
+ * state dies with the scope, stamps come from `Clock`. A test swaps the directory or the layer.
+ * Its writes stay on `node:fs/promises`: the Promise callers (call-route, the action doors,
+ * families-reader) cannot yet run a `FileSystem` effect without an island this file may not add.
+ */
+export class CaptureStore extends Context.Service<CaptureStore, TakeoffCaptures>()(
+  "pe/CaptureStore",
+) {
+  static readonly layer = (
+    directory: string = takeoffCapturesDirectory(),
+    apsCachePath: string = apsParameterCachePath(),
+  ) =>
+    Layer.effect(
+      CaptureStore,
+      Effect.acquireRelease(
+        Effect.gen(function* () {
+          const clock = yield* Clock.Clock;
+          return new TakeoffCaptures(directory, apsCachePath, () =>
+            new Date(clock.currentTimeMillisUnsafe()).toISOString(),
+          );
+        }),
+        (captures) => Effect.promise(() => captures.close()),
+      ),
+    );
+}

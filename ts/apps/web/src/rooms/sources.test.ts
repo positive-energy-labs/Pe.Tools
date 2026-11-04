@@ -10,8 +10,9 @@ import { planOf, roomsSnapshotSource } from "./sources";
 afterEach(() => vi.unstubAllGlobals());
 
 test("Pea's Rooms lease keeps view, stage, focus, layers and selection with the person", () => {
-  for (const key of ["view", "stage", "focus", "layers", "show", "card", "selected"] as const)
+  for (const key of ["view", "stage", "layers", "show"] as const)
     expect(graphFieldPolicy(roomsGraph.fields[key]).agent).toBe(false);
+  expect(graphFieldPolicy(roomsGraph.fields.selected).agent).toBe("set");
   expect(graphFieldPolicy(roomsGraph.fields.viewport).agent).toBe("set");
 });
 

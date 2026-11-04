@@ -241,7 +241,7 @@ export async function importPod(
   options: TransferOptions = {},
 ): Promise<PodImport> {
   const archivePath = zipPath(request.archivePath);
-  const info = await stat(archivePath).catch(() => null);
+  const info = await stat(archivePath).catch((error) => { console.error("pod-transfer: asynchronous operation failed", error); return null; });
   if (!info?.isFile()) throw new TransferRefused(`No pod archive at ${archivePath}.`, 404);
   if (info.size > MAX_ARCHIVE_BYTES)
     throw new TransferRefused(`Pod archive exceeds ${MAX_ARCHIVE_BYTES} bytes.`);
@@ -267,7 +267,7 @@ export async function installArchive(
       409,
     );
   const directory = join(podsRoot, folder);
-  if (await lstat(directory).catch(() => null))
+  if (await lstat(directory).catch((error) => { console.error("pod-transfer: asynchronous operation failed", error); return null; }))
     throw new TransferRefused(`Pod folder already exists: ${directory}`, 409);
   for (const [path, bytes] of entries) {
     if (/^pages\/[^/]+\/index\.html$/.test(path)) validatePageHtml(bytes.toString("utf8"), true);
@@ -342,7 +342,7 @@ export async function promotePage(
   if (!id.success)
     throw new TransferRefused(`'${request.id}' is not a valid, unreserved pod id.`, 400);
   const source = join(options.pagesRoot ?? productPagesRootPath(), request.page);
-  if (!(await lstat(join(source, "index.html")).catch(() => null))?.isFile())
+  if (!(await lstat(join(source, "index.html")).catch((error) => { console.error("pod-transfer: asynchronous operation failed", error); return null; }))?.isFile())
     throw new TransferRefused(`No scratch Page '${request.page}' (no index.html).`, 404);
   const page = await captureDirectory(source);
   const errors = page.diagnostics.filter((d) => d.severity === "error");

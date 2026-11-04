@@ -1,39 +1,36 @@
+import { settleWork } from "../shell/work-door-observation";
 import { createContext, useContext, type ReactNode } from "react";
 import type { CellTransition } from "@pe/kit/lang/cell";
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
-import type { MountBody, GraphMount } from "#/shell/mount";
-import type { DuctsPage } from "./graph";
-
-export const PaneBody = createContext<MountBody<DuctsPage, DuctsRouteDocument> | null>(null);
-export const DuctsOwner = createContext<GraphMount<DuctsPage, DuctsRouteDocument> | null>(null);
+import type { SceneMeshes } from "#/scene/types";
+import type { FanPort } from "./sheet/model";
+export const DuctsOwner = createContext<{
+  selected: string;
+  select(selected: string): void;
+  cells: import("../../../../packages/agent-contracts/src/route-kernel-bodies").PaneContext<
+    typeof import("./neutral").ductsData,
+    typeof import("./neutral").schemas,
+    typeof import("./neutral").entries,
+    keyof typeof import("./neutral").ductsData.panes
+  >["cells"];
+  fanRoster: readonly FanPort[];
+  meshes?: SceneMeshes;
+  commands?: (row?: unknown) => ReactNode;
+} | null>(null);
 export function PaneCommands({ row }: { row?: unknown }) {
-  return useContext(PaneBody)?.verbs(row) ?? null;
+  return useContext(DuctsOwner)?.commands?.(row) ?? null;
 }
 export const commands = (row?: unknown): ReactNode => <PaneCommands row={row} />;
-
-/** StateCell's small lifecycle controls invoke the same kernel declarations as a row placement. */
-export function useCellTransitions(segment: string, key: string): readonly CellTransition[] {
+export function useCellTransitions(
+  segment: keyof typeof import("./neutral").ductsData.cells,
+  key: string,
+): readonly CellTransition[] {
   const owner = useContext(DuctsOwner);
   if (!owner) return [];
-  return (
-    [
-      ["take", "take"],
-      ["reject", "unsuggest"],
-      ["reopen", "clear"],
-    ] as const
-  ).flatMap(([verb, kind]) => {
-    const control = owner.control(`cell:${segment}.${verb}`, { segment, key });
-    return control.refusal
-      ? []
-      : [
-          {
-            kind,
-            reason: control.label,
-            run: async () => {
-              const result = await control.run();
-              return "refusal" in result ? result.refusal : null;
-            },
-          },
-        ];
-  });
+  return (["take", "unsuggest", "clear"] as const).map((kind) => ({
+    kind,
+    run: async () => {
+      const result = await settleWork(owner.cells[kind](segment, key));
+      return result.kind === "refused" ? { code: "refused", message: result.refusal.error } : null;
+    },
+  }));
 }

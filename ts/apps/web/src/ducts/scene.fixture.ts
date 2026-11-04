@@ -563,6 +563,7 @@ const snapshot: DuctSnapshot = {
   layers: [],
   systems: [],
   slots: {
+    terminalDrop: "PE_M_Grd_ExternalStaticPressure",
     fanStatic: "PE_M_Fan_ExternalStaticPressure",
     fanFlow: "PE_M_Fan_AirFlow",
     componentDrop: "Pressure Drop",
@@ -590,13 +591,13 @@ export const SCENE_CLAIMS: Record<string, DuctClaim> = {
     title: "Intake gap",
     state: "unproven",
     ids: [14122436, 14107111],
-    text: "The intake is not connected in the model: duct 14122436 ends open 1.6 in short of end cap 14107111 on the plenum 14106988 that feeds louver 14088043; joined by proximity, it needs a ruling.",
+    text: "The intake is not connected in the model: its duct ends open 1.6 in short of the end cap on the plenum that feeds the louver; joined by proximity, it needs a ruling.",
   },
   c4: {
     title: "Branched network",
     state: "assumed",
     ids: [14515917, 14343729],
-    text: "This is a branched network: two takeoffs on the trunk feed ERVs 6105264 and 6953852.",
+    text: "This is a branched network: two takeoffs on the trunk feed two ERVs.",
   },
   c5: {
     title: "Flow direction",

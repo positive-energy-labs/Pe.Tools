@@ -5,7 +5,7 @@ import { bootstrapBlockers } from "@pe/host-contracts/pe-api";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { alignRevitBootstrap } from "#/host/machine";
-import { useAction } from "#/readings";
+import { useAction } from "#/actions/use-action";
 
 export function BootstrapAlignment({
   machine,

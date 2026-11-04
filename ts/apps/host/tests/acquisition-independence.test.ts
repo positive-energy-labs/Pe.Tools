@@ -22,7 +22,7 @@ import { makeHttpLive } from "../src/app.ts";
 import { hostActionJournal } from "../src/gateway-owner.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { planAcquisition } from "../src/acquisition.ts";
-import { hostOwnership, productRoot } from "../src/host-ownership.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 import { originalProcess } from "./native-receipt-fixture.ts";
 import { crossingOf } from "./callers.ts";
 
@@ -166,7 +166,7 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
   const work: Record<string, string> = {};
   const planned: Record<string, { result: string; diffPlan: string }> = {};
   const journalPath = join(
-    productRoot(),
+    hostOwnership.rootPath,
     "state",
     "host",
     hostOwnership.serviceName,
@@ -218,7 +218,9 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
   const journal = hostActionJournal();
   census("controlled", {});
 
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -235,10 +237,10 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
   );
   let socket: WebSocket | undefined;
   try {
-    let file = await readServiceFile(productRoot(), hostOwnership.serviceName);
+    let file = await readServiceFile(hostOwnership.rootPath, hostOwnership.serviceName);
     for (let i = 0; !file && i < 200; i++) {
       await new Promise((resolve) => setTimeout(resolve, 50));
-      file = await readServiceFile(productRoot(), hostOwnership.serviceName);
+      file = await readServiceFile(hostOwnership.rootPath, hostOwnership.serviceName);
     }
     const base = `http://127.0.0.1:${file!.port}`;
     // Pe.App in Pea's Revit attaches and attests the SDK's openIds.
@@ -287,7 +289,10 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
     );
     expect(await ack).toMatchObject({ registrationAck: { accepted: true } });
 
-    const terminal = readFileSync(hostContextTokenPath(hostOwnership.serviceName), "utf8");
+    const terminal = readFileSync(
+      hostContextTokenPath(hostOwnership.rootPath, hostOwnership.serviceName),
+      "utf8",
+    );
     const handover = async (acquisition: string) => {
       const response = await fetch(`${base}/actions`, {
         method: "POST",
@@ -369,6 +374,7 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
     }
   } finally {
     if (socket && socket.readyState === WebSocket.OPEN) socket.close();
+    // effect-edge: island, phase 5
     Effect.runSync(Deferred.succeed(latch, undefined));
     await done.catch(() => {});
     if (prev.localAppData === undefined) delete process.env.LOCALAPPDATA;

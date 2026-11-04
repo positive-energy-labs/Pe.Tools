@@ -4,8 +4,15 @@ import { describeCloser, type CloserContext } from "./closer";
 import { detailOf, type SheetBlocker } from "./tiers";
 
 const context: CloserContext = {
-  terminalDrop: { value: 0.03, source: "firm", ref: "seed" },
-  nameOf: (id) => (id === 2 ? "14×10 duct" : null),
+  terminalDrop: {
+    value: 0.03,
+    source: "firm",
+    ref: "seed",
+    units: null,
+    version: null,
+    status: "valid",
+  },
+  nameOf: (id) => (id === 2 ? "14×10 duct" : "an element outside this read"),
   wait: null,
 };
 const pair: [string, string] = ["1:1", "2:0"];
@@ -57,7 +64,7 @@ it("a join names the candidate it accepts and never a raw id alone", () => {
     null,
     context,
   );
-  expect(join.verb).toBe("accept join → element 7");
+  expect(join.verb).toBe("accept join → an element outside this read");
 });
 
 it("an unknown drop takes the typed value, else the firm shim named in the verb", () => {
@@ -213,7 +220,7 @@ it("a proposed fitting's path takes a typed drop for that path only, with no def
     action: null,
   });
   expect(describeCloser(blocker, 0.04, fittings(join))).toMatchObject({
-    verb: "set path drop 0.04 in-wg → element 14106988",
+    verb: "set path drop 0.04 in-wg → an element outside this read",
     refusal: null,
     action: { kind: "pathDrop", key, value: 0.04 },
   });
@@ -294,7 +301,7 @@ it("a class crossing is a second framed verb naming the air classes, ordered fir
     null,
     context,
   );
-  expect(near.verb).toBe("heal → element 9");
+  expect(near.verb).toBe("heal → an element outside this read");
   expect(near.crossing).toMatchObject({
     verb: "accept join → 14×10 duct (crosses ReturnAir→SupplyAir air)",
     refusal: null,

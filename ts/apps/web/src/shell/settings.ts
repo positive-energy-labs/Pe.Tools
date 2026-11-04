@@ -5,9 +5,9 @@ import {
   type SettingField,
   type RouteSettingsSnapshot,
 } from "@pe/agent-contracts";
-import { peRouteUrl } from "@pe/agent-contracts/pe-api";
+
 import { peReadings } from "../readings";
-import { requestJson } from "./readings-api";
+import { callCompose } from "./readings-api";
 
 export const settingFields = (graph: Pick<RouteGraph<any, any>, "fields">) =>
   Object.fromEntries(
@@ -77,7 +77,26 @@ export function createSettingsOwner(
       }
     }
   };
-  const refresh = () => run(transport.read).catch(() => {});
+  let fetching: Promise<void> | undefined;
+  const refresh = () =>
+    (fetching ??= run(transport.read)
+      .catch((error) => {
+        console.error("settings: asynchronous operation failed", error);
+      })
+      .finally(() => {
+        fetching = undefined;
+      }));
+  let invalidated = false;
+  const changed = () => {
+    if (fetching) {
+      if (invalidated) return;
+      invalidated = true;
+      void fetching.then(() => {
+        invalidated = false;
+        void refresh();
+      });
+    } else void refresh();
+  };
   let users = 0;
   let release = () => {};
   return {
@@ -91,13 +110,13 @@ export function createSettingsOwner(
     refresh,
     connect() {
       if (++users === 1 && Object.keys(fields).length) {
-        release = transport.subscribe(() => void refresh());
-        void refresh();
+        release = transport.subscribe(changed);
+        if (state.revision < 0) void refresh();
       }
       return () => {
         if (--users === 0) {
           release();
-          for (const controller of controllers) controller.abort();
+          // The route owns hydration, not a transient React mount. Keep an in-flight read.
         }
       };
     },
@@ -125,27 +144,25 @@ export function graphSettings(graph: RouteGraph<any, any>): SettingsOwner {
   if (!owner) {
     owner = createSettingsOwner(settingFields(graph), {
       read: (signal) =>
-        requestJson(
-          { path: peRouteUrl("route-settings.get", { params: { route: graph.key } }) },
-          routeSettingsSnapshotSchema,
-          signal,
-        ),
+        callCompose({ signal }, "route-settings.get", { params: { route: graph.key } }),
       write: (patch, expectedRevision, signal) =>
-        requestJson(
-          {
-            path: peRouteUrl("route-settings.set", { params: { route: graph.key } }),
-            body: { patch, expectedRevision },
-          },
-          routeSettingsSnapshotSchema,
-          signal,
-        ),
-      subscribe: (notify) =>
-        peReadings.subscribe({ kind: "world" }, (frame) => {
-          if (frame.kind === "gap" || frame.kind === "stale") return notify();
+        callCompose({ signal }, "route-settings.set", {
+          params: { route: graph.key },
+          body: { patch: routeSettingsSnapshotSchema.shape.values.parse(patch), expectedRevision },
+        }),
+      subscribe: (notify) => {
+        const recovered = peReadings.onResync(notify);
+        const release = peReadings.subscribe({ kind: "world" }, (frame) => {
+          if (frame.kind === "gap" && frame.dropped !== null) return notify();
           if (frame.kind !== "event") return;
           const event = frame.value as { type?: string; route?: string };
           if (event?.type === "route-settings-changed" && event.route === graph.key) notify();
-        }),
+        });
+        return () => {
+          release();
+          recovered();
+        };
+      },
     });
     owners.set(graph, owner);
   }

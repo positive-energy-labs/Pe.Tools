@@ -1,6 +1,6 @@
 import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { join, resolve, relative, isAbsolute } from "node:path";
-import { HttpEffect, HttpRouter } from "effect/unstable/http";
+import { HttpEffect, HttpRouter } from "effect/http";
 import { catalogSchema, type Catalogs, type CatalogTable } from "@pe/ducts-domain/catalog";
 import { productUserContentRootPath } from "./product-paths.ts";
 

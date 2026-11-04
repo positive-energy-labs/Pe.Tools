@@ -5,6 +5,7 @@ import { createServer } from "vite-plus";
 import {
   checkoutRootFrom,
   hostProcessIdentity,
+  productRoot,
   productScratchPath,
 } from "@pe/host-contracts/service-identity";
 
@@ -24,8 +25,10 @@ const baseUrl = `http://127.0.0.1:${file.port}`;
 process.env.PE_TOOLS_HOST_BASE_URL = baseUrl;
 process.env[hostProcessIdentity.serviceNameVariable] = file.name;
 // Each launch owns its optimizer files, including after an abrupt backend/watch exit.
-await mkdir(productScratchPath(), { recursive: true });
-const cacheDir = await mkdtemp(join(productScratchPath(), "pe-vite-"));
+// The host told this child its checkout (checked above); scratch follows that dev owner.
+const scratch = productScratchPath(productRoot({ lane: "dev", sourceRoot, installedRoot: null }));
+await mkdir(scratch, { recursive: true });
+const cacheDir = await mkdtemp(join(scratch, "pe-vite-"));
 let vite: Awaited<ReturnType<typeof createServer>> | undefined;
 try {
   vite = await createServer({

@@ -1,3 +1,6 @@
+import { route as rhvacSyncRoute } from "./rhvac-sync/route";
+import { route as zoneAuditRoute } from "./zone-audit/route";
+import { sessionsRoute } from "./sessions/route";
 import {
   createRouter as createTanStackRouter,
   Link,
@@ -9,7 +12,6 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
 import { settingsRoute } from "./settings/route";
-import { ductsRoute } from "./ducts/route";
 import { ductLossRoute } from "./duct-loss/route";
 import { grillesRoute } from "./grilles/route";
 import { schedulesRoute } from "./schedules/route";
@@ -18,6 +20,7 @@ import { familyRoute } from "./family/route";
 import { roomsRoute } from "./rooms/route";
 import { spaceRoute } from "./space/route";
 import { takeoffsRoute } from "./takeoff/route";
+import { podAdminRoute } from "./pod-admin/route";
 import { podsRoute } from "./pods/route";
 import { parameterLinksRoute } from "./parameter-links/route";
 import { dataTablesRoute } from "./data-tables/route";
@@ -32,12 +35,14 @@ import { Route as rootRoute } from "./routes/__root";
 // routes once this module re-evaluates (SSR runner, HMR); re-adding by path keeps the tree idempotent.
 const pathOf = (route: AnyRoute) => (route.options as { path?: string }).path;
 const codeRoutes: AnyRoute[] = [
+  sessionsRoute,
+  zoneAuditRoute,
+  rhvacSyncRoute,
   settingsRoute,
   opsRoute,
   openRoute,
   ductLossRoute,
   grillesRoute,
-  ductsRoute,
   schedulesRoute,
   familiesRoute,
   familyRoute,
@@ -45,6 +50,7 @@ const codeRoutes: AnyRoute[] = [
   spaceRoute,
   takeoffsRoute,
   podsRoute,
+  podAdminRoute,
   parameterLinksRoute,
   dataTablesRoute,
   bindRoute,
@@ -68,7 +74,6 @@ const appRouteTree = rootRoute.addChildren([
   openRoute: typeof openRoute;
   ductLossRoute: typeof ductLossRoute;
   grillesRoute: typeof grillesRoute;
-  ductsRoute: typeof ductsRoute;
   schedulesRoute: typeof schedulesRoute;
   familiesRoute: typeof familiesRoute;
   familyRoute: typeof familyRoute;

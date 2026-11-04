@@ -1,3 +1,4 @@
+import { SPACE_LAYERS } from "./layers";
 /** /space is a graph mount; drawing and cut geometry remain in their existing bodies. */
 import {
   createContext,
@@ -40,6 +41,7 @@ import type { SpaceAnswers, SpaceReadResult } from "./reads";
 import { routeFromGraph, type GraphMount, type RouteAdapters, type MountBody } from "#/shell/mount";
 import { useRouteLease } from "#/route/view-bridge";
 import type { PageMove } from "#/shell/page";
+import { DetailedRead } from "#/scene/picture/detail";
 import { SpacePicture } from "./picture";
 import { rowAt } from "./layers";
 
@@ -62,7 +64,7 @@ function SpaceMount({ owner, children }: { owner: Owner; children: ReactNode }) 
   const [error, setError] = useState<string | null>(null);
   const [frame, setFrame] = useState<Record<string, unknown> | null>(null);
   const seen = useRef(new Set<string>());
-  const captures = ["capture", "context"]
+  const captures = ["capture", "context", "detailed"]
     .flatMap((key) => {
       const result = owner.results.get(key);
       return result?.state === "done" && result.kind === "query" ? [result] : [];
@@ -84,12 +86,13 @@ function SpaceMount({ owner, children }: { owner: Owner; children: ReactNode }) 
     seen.current.add(latest.press);
     if (captured.document.session !== doc?.session || captured.document.openId !== doc.openId)
       return;
+    setError(captured.notice ?? null);
     owner.view.setPage(
       {
         scene: captured.response.id,
         selected: null,
         hidden: [],
-        isolated: null,
+        isolated: "all",
         viewport: null,
         row: null,
       },
@@ -143,10 +146,15 @@ function SpaceMount({ owner, children }: { owner: Owner; children: ReactNode }) 
       visibilityMembersBeforeCuts:
         scene?.meshes.instances.filter(
           (instance) =>
-            page.layers.includes("meshes") &&
-            !page.hidden.includes(instance.key) &&
-            (page.isolated === null || page.isolated.includes(instance.key)) &&
-            (page.layers.includes("context") || instance.focus),
+            SPACE_LAYERS.filter(
+              (layer) => page.layers === "all" || page.layers.includes(layer),
+            ).includes("meshes") &&
+            !(page.hidden === "all" || page.hidden.includes(instance.key)) &&
+            (page.isolated === "all" || page.isolated.includes(instance.key)) &&
+            (SPACE_LAYERS.filter(
+              (layer) => page.layers === "all" || page.layers.includes(layer),
+            ).includes("context") ||
+              instance.focus),
         ).length ?? 0,
       elements:
         scene?.metadata.elements.slice(0, 200).map((e) => ({
@@ -179,7 +187,13 @@ function SpaceBody({ owner, page }: MountBody<SpacePage, null>) {
   const doc = target.kind === "document" ? target.ref : null;
   const answers = answersFor(owner);
   const rows = answers.rows?.response ?? null;
-  const on = useMemo(() => new Set<SpaceLayer>(page.layers), [page.layers]);
+  const on = useMemo(
+    () =>
+      new Set<SpaceLayer>(
+        SPACE_LAYERS.filter((layer) => page.layers === "all" || page.layers.includes(layer)),
+      ),
+    [page.layers],
+  );
   const legend = useMemo(() => (rows ? legendOf(rows, page.encoding) : []), [rows, page.encoding]);
   // One Layer3D per answer that is on, rebuilt only when its answer (or its ink) changes.
   const boxes = useMemo(
@@ -267,6 +281,14 @@ function SpaceBody({ owner, page }: MountBody<SpacePage, null>) {
     }),
     [doc, hostKeys, refProps],
   );
+  const detailed = owner.control("detailed", {
+    input: {
+      elementIds:
+        metadata?.elements
+          .filter((e) => e.focus && e.handle.linkInstanceId == null)
+          .map((e) => e.handle.elementId) ?? [],
+    },
+  });
   return (
     <SubjectTextContext value={subjects}>
       {error && (
@@ -276,6 +298,13 @@ function SpaceBody({ owner, page }: MountBody<SpacePage, null>) {
       )}
       <div className="flex min-h-0 flex-1">
         <SpacePicture
+          detail={
+            <DetailedRead
+              metadata={metadata}
+              refusal={detailed.refusal}
+              onRead={() => void detailed.run()}
+            />
+          }
           answers={answers}
           onFrame={setFrame}
           meshes={meshes}
@@ -348,10 +377,12 @@ function FactsBody({ owner, page, verbs }: MountBody<SpacePage, null>) {
   const { setPage, setError } = useContext(SpaceContext)!;
   const meshes = matchingScene(page, owner.readings.get("scene"))?.meshes;
   const answers = answersFor(owner);
-  const on = new Set(page.layers);
+  const on = new Set(
+    SPACE_LAYERS.filter((layer) => page.layers === "all" || page.layers.includes(layer)),
+  );
   return (
     <div className="flex flex-col gap-3">
-      <HostIds page={page} setPage={setPage} />
+      <HostIds page={page} setPage={setPage} verbs={verbs} />
       {page.mode !== "3d" && meshes ? (
         <CutControls
           axis={page.mode}

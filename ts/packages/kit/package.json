@@ -85,13 +85,14 @@
     "./lang/revit-target": "./src/components/lang/revit-target.tsx"
   },
   "scripts": {
-    "build": "vp build && node scripts/page.mjs",
+    "build": "vp build",
+    "codegen:pages": "node scripts/page.mjs",
     "test": "vp test && node --test tests/*.test.mjs",
     "check": "vp check"
   },
   "dependencies": {
     "@base-ui/react": "catalog:",
-    "@effect/atom-react": "4.0.0-beta.92",
+    "@effect/atom-react": "4.0.2",
     "@pe/agent-contracts": "workspace:*",
     "@tanstack/highlight": "catalog:",
     "@tanstack/react-hotkeys": "catalog:",
@@ -99,7 +100,7 @@
     "@tanstack/react-virtual": "catalog:",
     "beautiful-mermaid": "catalog:",
     "clsx": "^2.1.1",
-    "effect": "4.0.0-beta.92",
+    "effect": "4.0.2",
     "lucide-react": "1.21.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

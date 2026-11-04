@@ -240,3 +240,39 @@ test("a choice cell greys a disabled option with its reason and refuses to pick 
   expect(pick).toHaveBeenCalledOnce();
   expect(pick).toHaveBeenCalledWith("other");
 });
+
+test("Enter then blur commits once, even when the commit answers synchronously", async () => {
+  const onCommit = vi.fn(() => undefined);
+  render(<StateCell value="10" scale="row" onCommit={onCommit} />);
+  const input = screen.getByRole("textbox") as HTMLInputElement;
+  await act(async () => fireEvent.change(input, { target: { value: "12" } }));
+  await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
+  await act(async () => fireEvent.blur(input));
+  expect(onCommit).toHaveBeenCalledTimes(1);
+});
+
+test("an acknowledged retry clears the previous cell refusal", async () => {
+  const onCommit = vi.fn(async () => "Work moved to r3");
+  const view = render(<StateCell value="old" scale="row" onCommit={onCommit} />);
+  const input = screen.getByRole("textbox");
+  fireEvent.change(input, { target: { value: "new" } });
+  await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
+  expect(screen.getByText("Work moved to r3")).toBeTruthy();
+  view.rerender(<StateCell value="new" scale="row" onCommit={onCommit} />);
+  expect(screen.queryByText("Work moved to r3")).toBeNull();
+});
+
+test("semantic landing focuses only its own input and survives remount", () => {
+  const view = render(
+    <>
+      <StateCell value="1" cap="editable" onCommit={() => {}} scale="row" />
+      <StateCell value="2" cap="editable" onCommit={() => {}} scale="row" land="cell:second" />
+    </>,
+  );
+  expect(document.activeElement).toHaveProperty("value", "2");
+  view.rerender(<>{null}</>);
+  view.rerender(
+    <StateCell value="2" cap="editable" onCommit={() => {}} scale="row" land="cell:second" />,
+  );
+  expect(document.activeElement).toHaveProperty("value", "2");
+});

@@ -1,13 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { ductsDocumentSchema } from "@pe/agent-contracts";
-
 import { bin } from "./bins.ts";
 
 import { computeLosses } from "./losses.ts";
 import { survey } from "./survey.ts";
 import { terminalFlows } from "./terminal-flows.ts";
-import { groupTree } from "./topology.ts";
+import { designOf } from "./test-design.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type Node = DuctSnapshot["nodes"][number];
@@ -153,51 +151,38 @@ const snapshot = (area31: number | null): DuctSnapshot =>
     slots: {},
   }) as unknown as DuctSnapshot;
 
-const loads = {
-  systems: [
-    { name: "System 1 Golf FC-4", tag: "FC-4", cfm: 600, rooms: [] },
-    { name: "System 2 Bar FC-7", tag: "FC-7", cfm: 400, rooms: [] },
-    { name: "System 3 Theater FC-10", tag: "FC-10", cfm: 300, rooms: [] },
-    { name: "System 4 Loft", tag: null, cfm: 200, rooms: [] },
-  ],
-};
-const trees = (s: DuctSnapshot) => s.groups.map((g) => groupTree(s, g.id));
-const run = (area31: number | null, edit = {}) => {
-  const s = snapshot(area31);
-  const { flows, findings } = terminalFlows(s, loads, edit, trees(s));
+const run = (edit = {}) => {
+  const { flows, findings } = terminalFlows(snapshot(0.7854), edit);
   return { flows: Object.fromEntries(flows), findings };
 };
 
+// FANSPLIT (kaitpw 2026-11-03): the Load Preview source is deleted, so its neck-area split, even
+// split and tag/mark findings cases are gone; precedence is edit, then rooms, then Revit.
 describe("terminalFlows", () => {
-  it("splits the tagged system's flow by neck area and falls back to Revit", () => {
-    const { flows, findings } = run(0.7854 / 3);
-    expect(flows[30]!.source).toBe("load-preview:FC-4");
-    expect(flows[30]!.cfm).toBeCloseTo(450);
-    expect(flows[31]!.cfm).toBeCloseTo(150);
+  it("falls back to Revit, and a terminal with no flow is a finding", () => {
+    const { flows, findings } = run();
+    expect(flows[30]).toEqual({ cfm: null, source: null, finding: "no-flow" });
     expect(flows[40]).toEqual({ cfm: 120, source: "revit" });
     expect(flows[41]).toEqual({ cfm: null, source: null, finding: "no-flow" });
     expect(findings).toEqual([
-      { kind: "no-terminals", mark: "FC-7", equipment: 2 },
-      { kind: "tag-without-mark", tag: "FC-10", system: "System 3 Theater FC-10" },
-      { kind: "mark-without-system", mark: "FC-99", equipment: 3 },
+      { kind: "no-flow", terminal: 30 },
+      { kind: "no-flow", terminal: 31 },
       { kind: "no-flow", terminal: 41 },
     ]);
   });
 
-  it("splits evenly when any terminal has no area", () => {
-    const { flows } = run(null);
-    expect(flows[30]!.cfm).toBe(300);
-    expect(flows[31]!.cfm).toBe(300);
+  it("takes an edit flow over Revit", () => {
+    expect(run({ "40": { cfm: 90 } }).flows[40]).toEqual({ cfm: 90, source: "override" });
   });
 
-  it("takes a rooms flow after a edit one and before the load preview and Revit", () => {
+  it("takes a rooms flow after an edit one and before Revit", () => {
     const s = snapshot(0.7854);
     const rooms = new Map([
       [30, { cfm: 111, source: "room 101" }],
       [31, { cfm: 222, source: "room 102" }],
       [40, { cfm: 333, source: "room 103" }],
     ]);
-    const { flows } = terminalFlows(s, loads, { "31": { cfm: 150 } }, trees(s), rooms);
+    const { flows } = terminalFlows(s, { "31": { cfm: 150 } }, rooms);
     expect(flows.get(31)).toEqual({ cfm: 150, source: "override" });
     expect(flows.get(30)).toEqual({ cfm: 111, source: "rooms:room 101" });
     expect(flows.get(40)).toEqual({ cfm: 333, source: "rooms:room 103" });
@@ -214,7 +199,7 @@ describe("a group with no air mover", () => {
       { name: "SA 1", baseEquipmentId: 1, sections: [] },
       { name: "SA 2", baseEquipmentId: 2, sections: [] },
     ] as unknown as DuctSnapshot["systems"];
-    const work = ductsDocumentSchema.parse({});
+    const work = designOf({});
     const found = survey(s, work).findings.filter((f) => f.kind === "no-fan");
     expect(found.map((f) => f.groupId)).toEqual(["g40"]);
     expect(found[0]!.elementIds).toEqual([40, 41]);
@@ -225,7 +210,7 @@ describe("a group with no air mover", () => {
     expect(result.paths[40]).toBeUndefined();
     expect(result.paths[30]).toBeDefined();
     // Staging unit 1 passive leaves g10 with no fan too.
-    const passive = ductsDocumentSchema.parse({
+    const passive = designOf({
       roles: { "1": { edit: { value: { role: "passive" } } } },
     });
     const again = survey(s, passive).findings.filter((f) => f.kind === "no-fan");

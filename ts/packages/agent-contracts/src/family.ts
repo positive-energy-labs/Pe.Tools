@@ -1,3 +1,4 @@
+import { writeIntentSchema } from "./write-intent.ts";
 /** Family UI projections of immutable readings. */
 import { z } from "zod";
 import { parsedDocViewSchema } from "./grounded-doc.ts";
@@ -15,6 +16,7 @@ import { settingsFieldStateSchema } from "./settings.ts";
 /** `/family` Work: an immutable capture baseline plus keyed JSON-pointer cells. */
 export const familyDraftSchema = z
   .object({
+    writeIntent: writeIntentSchema.optional(),
     /** Immutable draft baseline; it is not a claim about current Revit state. */
     reading: z.string().nullable().default(null),
     spec: z

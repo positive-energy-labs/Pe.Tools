@@ -1,5 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Pe.Shared.Product;
 using Pe.Shared.Rhvac;
 
 namespace Pe.Rhvac.Tool;
@@ -7,6 +8,11 @@ namespace Pe.Rhvac.Tool;
 internal static class Program {
     public static int Main(string[] args) {
         try {
+            // Nothing in the product launches this tool; its launcher (the rhvac-compare Pod's launch.ps1, or a
+            // person) names the owner whose scratch it may use. It never infers one from where its bytes sit.
+            var (lane, root, rest) = ProductRuntimeLayout.ParseOwnerArguments(args);
+            ProductRuntimeLayout.Configure(lane, root);
+            args = rest;
             if (args.Length == 0) throw new ArgumentException("Use inspect, compare, serve or selftest.");
             string Option(string name) { var index = Array.IndexOf(args, name); if (index < 0 || index + 1 >= args.Length) throw new ArgumentException("Missing " + name); return args[index + 1]; }
             if (args[0] == "selftest") { SelfTest.Run(); return 0; }

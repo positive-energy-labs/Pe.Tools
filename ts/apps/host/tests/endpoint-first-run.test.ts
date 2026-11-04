@@ -1,3 +1,4 @@
+import { testAdapter as openAdapter, settle, testSpawner } from "./effect-test.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -5,7 +6,7 @@ import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
 import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import { createProviders } from "../src/harness/providers.ts";
-import { adapterCli, openAdapter, stopChild } from "../src/harness/adapter.ts";
+import { adapterCli, stopChild } from "../src/harness/adapter.ts";
 
 // Opt-in real CLI proof. isolated-home owns product state; no user auth/config is read or copied.
 // FOOTGUN: codex-acp 2.1.0 checks startup auth before CODEX_CONFIG. On 0.162.1 this test first
@@ -54,8 +55,8 @@ test.skipIf(!process.env.PE_TEST_HARNESS_AUTH)(
     const baseUrl = live
       ? "https://api.openai.com/v1"
       : `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-    const providers = createProviders({ probeOnStart: false });
-    let opened: ReturnType<typeof openAdapter> | undefined;
+    const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
+    let opened: Awaited<ReturnType<typeof openAdapter>> | undefined;
     try {
       expect(existsSync(join(loginHome, "auth.json"))).toBe(false);
       expect(existsSync(join(loginHome, "config.toml"))).toBe(false);
@@ -90,7 +91,7 @@ test.skipIf(!process.env.PE_TEST_HARNESS_AUTH)(
       }
       if (live) {
         let text = "";
-        opened = openAdapter(harness, root, env, () => ({
+        opened = await openAdapter(harness, root, env, () => ({
           sessionUpdate: async ({ update }) => {
             if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text")
               text += update.content.text;
@@ -106,11 +107,16 @@ test.skipIf(!process.env.PE_TEST_HARNESS_AUTH)(
         expect(reply.stopReason).toBe("end_turn");
         expect(text.trim()).toBe("OK");
         console.log("Real Codex ACP turn: OK; no onboarding or login");
-        await stopChild(opened.child);
-        opened = openAdapter(harness, root, await providers.env(providers.get(result.id)!), () => ({
-          sessionUpdate: async () => {},
-          requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
-        }));
+        await settle(stopChild(opened.child));
+        opened = await openAdapter(
+          harness,
+          root,
+          await providers.env(providers.get(result.id)!),
+          () => ({
+            sessionUpdate: async () => {},
+            requestPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+          }),
+        );
         await opened.conn.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} });
         await opened.conn.resumeSession({
           sessionId: session.sessionId,
@@ -123,7 +129,7 @@ test.skipIf(!process.env.PE_TEST_HARNESS_AUTH)(
       expect(existsSync(join(loginHome, "auth.json"))).toBe(false);
       expect(existsSync(join(loginHome, "config.toml"))).toBe(false);
     } finally {
-      await stopChild(opened?.child ?? null);
+      await settle(stopChild(opened?.child ?? null));
       await providers.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       vi.unstubAllEnvs();

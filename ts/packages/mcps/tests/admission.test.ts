@@ -8,11 +8,11 @@ import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { bodyText } from "./body-text.ts";
 
 const operations: HostOperationDefinition[] = [
-  { key: "scripting.execute", intent: "Mutate", needs: "document" },
-  { key: "scripting.workspace.bootstrap", intent: "Mutate", needs: "nothing" },
-  { key: "pod.import", intent: "Mutate", needs: "nothing" },
-  { key: "pod.export", intent: "Mutate", needs: "nothing" },
-  { key: "revit.context.summary", intent: "Read", needs: "document" },
+  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "scripting.execute", intent: "Mutate", needs: "document" },
+  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "scripting.workspace.bootstrap", intent: "Mutate", needs: "nothing" },
+  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "pod.import", intent: "Mutate", needs: "nothing" },
+  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "pod.export", intent: "Mutate", needs: "nothing" },
+  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "revit.context.summary", intent: "Read", needs: "document" },
 ];
 const target = { kind: "open", ref: { session: "A", openId: "open-A" } } as const;
 const destination = { kind: "document", ref: target.ref };
@@ -173,13 +173,7 @@ test("pe_do admits native and semantic commands with exact Work intent and no ac
       key: "op:takeoffs.partition",
       actionId: "partition",
       target,
-      input: {
-        zoneRegion: 1,
-        view: "v",
-        zoneName: "z",
-        zoneGuid: "g",
-        work,
-      },
+      input: { work },
     }),
   ).toMatchObject({ ok: true });
   expect(posts).toMatchObject([
@@ -281,12 +275,22 @@ test("pe_do admits a lifecycle action at the session its input names, with no he
 });
 
 test("semantic recovery normalizes declared defaults before reading a later thread or closed document", async () => {
-  const selected = { path: "C:/old.rhvac", captureId: "c".repeat(64), fileVersion: "v13" };
+  const selected = {
+    work: {
+      key: {
+        binding: "open",
+        route: "takeoffs",
+        target: null,
+        open: { session: "A", openId: "open-A" },
+      },
+      revision: 13,
+    },
+  };
   const original = receipt({
     id: "old-sync",
     key: "takeoffs.sync",
     target: destination,
-    input: { ...selected, zones: [] },
+    input: selected,
   });
   const { posts, reads } = host(original);
   const recover = (input: Record<string, unknown>, override?: unknown) =>
@@ -309,11 +313,7 @@ test("semantic recovery normalizes declared defaults before reading a later thre
     target: { session: "A" },
     result: { id: "old-sync" },
   });
-  expect(await recover({ ...selected, path: "C:/changed.rhvac" })).toMatchObject({
-    isError: true,
-    content: expect.stringContaining("conflicts"),
-  });
-  expect(await recover({ ...selected, fileVersion: "v14" })).toMatchObject({
+  expect(await recover({ ...selected, work: { ...selected.work, revision: 14 } })).toMatchObject({
     isError: true,
     content: expect.stringContaining("conflicts"),
   });
@@ -364,4 +364,41 @@ test("a direct RPC caller recovers its original command before consulting a miss
   });
   expect(posts).toEqual([]);
   expect(reads).toEqual(["/actions"]);
+});
+
+
+import { runCapability } from "../src/shared/admission.ts";
+import { ductsDocumentSchema } from "@pe/agent-contracts";
+test.each(["open", "address", "workspace", "host"] as const)("loss preview reads exact %s Work before submission", async binding => {
+ for (const scoped of [false, true]) {
+  const posts: unknown[] = [];
+  const key = binding === "address" ? {route: "ducts", binding, target: "C:/Models/A.rvt"}
+    : binding === "open" ? {route: "ducts", binding, target: null, open: target.ref}
+    : binding === "workspace" ? {route: "ducts", binding, target: null, work: "draft"}
+    : {route: "ducts", binding, target: null};
+  const work = { key, revision: 3 };
+  vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/pe/route-state/ducts") {
+      const expected = binding === "address" ? {target: "C:/Models/A.rvt"}
+        : binding === "open" ? {open: "A/open-A"}
+        : binding === "workspace" ? {work: "draft"} : {};
+      expect(Object.fromEntries(url.searchParams)).toEqual(expected);
+      return Response.json({revision: 3, doc: ductsDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {groups: ["g14577391"]}}}} : {})});
+    }
+    if (url.pathname === "/actions" && init?.method === "POST") {
+      const body = JSON.parse(String(init.body)); posts.push(body);
+      return Response.json(receipt(body));
+    }
+    throw Error(`Unexpected ${url.pathname}`);
+  });
+  const run = () => runCapability("ducts.preview-losses", {work}, {hostBaseUrl: "http://preflight.test", receipt: true, bridgeSessionId: "A", openDocumentId: "open-A"}, {door: "command", mutates: false, needs: "project-document"});
+  if (scoped) {
+    expect(await run()).toMatchObject({state: "succeeded"});
+    expect(posts).toHaveLength(1);
+  } else {
+    await expect(run()).rejects.toThrow("No preview was submitted");
+    expect(posts).toEqual([]);
+  }
+ }
 });

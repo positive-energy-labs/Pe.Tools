@@ -10,13 +10,11 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { invokeInstances, fixtureAction } from "./domain-fixture.ts";
 import { crossingOf } from "./callers.ts";
 import { replay } from "./e2-sdk-recordings.ts";
-import { createMachine, useHostMachine, unavailableShare } from "../src/machine.ts";
+import { unavailableShare } from "../src/machine.ts";
+import { machineOwner } from "./effect-test.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 const folders: string[] = [];
-const machines: ReturnType<typeof createMachine>[] = [];
 afterEach(async () => {
-  useHostMachine(undefined);
-  for (const machine of machines.splice(0)) machine.close();
   for (const folder of folders.splice(0)) await rm(folder, { recursive: true, force: true });
 });
 async function folder() {
@@ -148,7 +146,7 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
     receiptLeg: unreadLeg(),
     automatic: true,
   };
-  const machine = createMachine({
+  machineOwner({
     targets: { targets: () => [], subscribe: () => () => {} },
     actions: () => owner.list(),
     host: async () => {
@@ -156,7 +154,7 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
     },
     peers: async () => [],
     years: async () => [],
-    providers: async () => ({ providers: [], access: { guarded: true } }),
+    providers: async () => ({ providers: [] }),
     share: unavailableShare,
     sessions: async () => [
       {
@@ -177,8 +175,6 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
       setAutomatic: async () => update,
     },
   });
-  useHostMachine(machine);
-  machines.push(machine);
   const peaWork = join(dir, "pea-work");
   const started = await fixtureAction(
     owner,

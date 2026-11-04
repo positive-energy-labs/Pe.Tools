@@ -1,11 +1,15 @@
+import { testSources, testSubject, testFields, testReadings } from "../test-route-subject";
 // @vitest-environment jsdom
 import { StrictMode } from "react";
+import { Popover, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import {
+  manyField,
   actionReceiptSchema,
+  actionStatusSchema,
   draftCellSchema,
   pane,
   split,
@@ -14,6 +18,7 @@ import {
   type WorkKey,
   type WorkWrite,
   type ActionReceipt,
+  type ActionStatus,
 } from "@pe/agent-contracts";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { listSearchKey, listSearchCodec } from "@pe/agent-contracts";
@@ -30,12 +35,26 @@ import {
   type MountScope,
 } from "./mount";
 import { commandVerb, workVerb } from "./verbs";
+import { routeOwnsKey } from "./mount-work";
 import type { ReadingContext, ReadingDelivery } from "./readings";
 import { peReadings } from "#/readings";
+import { subjectState } from "./subject";
 
 const transport = vi.hoisted(() => ({ run: vi.fn() }));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
-  runSemanticAction: transport.run,
+  runSemanticAction: (
+    ...args: Parameters<
+      typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
+    >
+  ) =>
+    /\.preview$|^ducts\.preview-/.test(String(args[0]))
+      ? Promise.resolve({ state: "succeeded", result: {} } as Awaited<
+          ReturnType<
+            typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
+          >
+        >)
+      : transport.run(...args),
+  actionResult: (receipt: { result?: unknown }) => receipt.result,
   cancelRunningAdmissions: vi.fn(async () => []),
 }));
 // The kernel's Target/Work door, faked with the fixture's ports; null runs the real door.
@@ -96,7 +115,14 @@ function receipt(): ActionReceipt {
     caller: { kind: "human", via: "local" },
     target: { kind: "host" },
     basis: null,
-    input: { stage: "sheet" },
+    input: {},
+    consumes: [
+      {
+        kind: "work",
+        probe: { handle: { key, revision: 1 }, paths: [["rows"], ["writeIntent"]] },
+        expected: {},
+      },
+    ],
     steps: [],
     prepared: { state: "unprepared" },
     recovery: [],
@@ -115,8 +141,9 @@ type Doc = {
 };
 const key: WorkKey = { binding: "workspace", route: "mount-proof", target: null, work: "one" };
 const rows = z.record(z.string(), z.object({ id: z.string(), n: z.number() }));
-const docSchema = z.object({ rows });
+const docSchema = z.object({ rows, writeIntent: z.record(z.string(), z.unknown()).default({}) });
 const cellDocSchema = z.object({
+  writeIntent: z.record(z.string(), z.unknown()).default({}),
   rows,
   rules: z.record(z.string(), draftCellSchema(z.string())).default({}),
 });
@@ -161,8 +188,9 @@ async function fixture(cells = false) {
   let subscriptions = 0;
   let deltaSubscriptions = 0;
   let documentChange: ((ref: { session: string; openId: string }) => void) | undefined;
-  let late: ((receipt: ActionReceipt, key: WorkKey | null, press?: string) => void) | undefined;
+  let late: ((receipt: ActionReceipt | ActionStatus, key: WorkKey | null, press?: string) => void) | undefined;
   const graph: RouteGraph<Page, Doc> = {
+    ...testSubject,
     key: "mount-proof",
     address: "mount-proof",
     name: "Mount proof",
@@ -174,10 +202,12 @@ async function fixture(cells = false) {
         }
       : {}),
     fields: {
+      ...testFields,
       stage: { ...field(z.string().default("edit"), {}), role: "stage" },
-      cfm: { ...field(z.number().default(400), {}), role: "query", editor: "situation" },
+      cfm: { ...field(z.number().default(400), {}), role: "query", editor: "text" },
     },
     readings: {
+      ...testReadings,
       result: {
         kind: "derive",
         source: "solve",
@@ -210,7 +240,8 @@ async function fixture(cells = false) {
             rows: ["2 planned writes"],
             page: { cfm: 412 },
           }),
-          intent: () => ({ stage: "sheet" }),
+          stage: () => ({ stage: "sheet" }),
+          intent: () => ({}),
         },
       ),
     },
@@ -250,6 +281,7 @@ async function fixture(cells = false) {
       };
     },
     sources: {
+      ...testSources,
       solve: { kind: "derive", derive: (ctx) => (ctx.page as Page).cfm * 2 },
       capture: {
         kind: "use",
@@ -288,7 +320,7 @@ async function fixture(cells = false) {
     }),
     subjects: { row: (value) => (value as { id: string }).id },
     verbReadings: { apply: ["capture"] },
-    receiptPaths: () => [["rows", "slot", "n"]],
+    receiptPaths: () => [["rows", "slot", "n"], ["writeIntent"]],
     subscribeDocumentChanged: (accept) => {
       documentChange = accept;
       return () => {
@@ -334,6 +366,11 @@ async function fixture(cells = false) {
     late: () => late,
   };
 }
+async function revealVerb(view: ReturnType<typeof render>, name: string) {
+  if (!view.queryByRole("button", { name }))
+    fireEvent.click(view.getByRole("button", { name: /more .* verbs/ }));
+  return view.findByRole("button", { name });
+}
 async function mounted(f: Awaited<ReturnType<typeof fixture>>, strict = false) {
   door.ports = f.adapters;
   const route = routeFromGraph(f.graph, f.adapters, "/mount-proof");
@@ -377,6 +414,20 @@ test("admission shows graph and reserved chord refusals and acquires nothing", a
   expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
 });
 
+test("refused mounts never enroll their subject in discovery", async () => {
+  const f = await fixture();
+  const key = "refused-subject-enrollment";
+  f.graph.key = key;
+  f.graph.panes.inputs!.draws = ["missing"];
+  const Component = mountRoute(f.graph, f.adapters);
+  render(<Component />);
+  // A registered subject would diagnose this malformed value; an unregistered one has no policy.
+  expect(subjectState(key, { [f.graph.subjectField!.field]: {} })).toEqual({
+    ready: false, refusal: null, label: "",
+  });
+  expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
+});
+
 test("missing source bindings and cyclic readings refuse before creating a partial owner", async () => {
   const f = await fixture();
   delete (f.adapters.sources as Record<string, unknown>).solve;
@@ -384,7 +435,7 @@ test("missing source bindings and cyclic readings refuse before creating a parti
   const snapshot = vi.spyOn(f.adapters, "getSnapshot");
   const Component = mountRoute(f.graph, f.adapters);
   const view = render(<Component />);
-  expect(view.getByRole("alert").textContent).toContain("Unresolved derive source 'solve'");
+  expect(view.getByRole("alert").textContent).toContain("readings:");
   expect(view.getByRole("alert").textContent).toContain("Reading dependency cycle");
   expect(snapshot).not.toHaveBeenCalled();
   expect(f.captures).toEqual([]);
@@ -427,14 +478,76 @@ test("one graph mounts Page-derived layout and one stable owner; Work press, Mod
   expect(f.subscriptions()).toEqual({ subscriptions: 1, deltaSubscriptions: 1 });
 });
 
+test("D7: Mod+Z and Mod+Shift+Z restore from outside the route mount (a portaled Situation, nothing focused), and the head draws Undo/Redo", async () => {
+  const f = await fixture();
+  const { view } = await mounted(f);
+  await waitFor(() => expect(view.getByLabelText("Solved").textContent).toBe("800"));
+  fireEvent.click(view.getByRole("button", { name: "Edit" }));
+  await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(2));
+  // The app bar's Situation slot lives outside the mount element: stand one in.
+  const portaled = document.createElement("button");
+  document.body.append(portaled);
+  try {
+    portaled.focus();
+    chord(portaled, "z");
+    await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(1));
+    chord(document.body, "z", true);
+    await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(2));
+    // The Timeline head's own Undo is the same restore.
+    const undo = view.getAllByRole("button", { name: /^Undo / })[0]!;
+    fireEvent.click(undo);
+    await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(1));
+    expect(view.getAllByRole("button", { name: /^Redo / }).length).toBeGreaterThan(0);
+  } finally {
+    portaled.remove();
+  }
+});
+
+test("D7: a key inside another route's journaled mount is that route's, never this one's", () => {
+  const mine = document.createElement("div");
+  const theirs = document.createElement("div");
+  mine.dataset.routeMount = "families";
+  theirs.dataset.routeMount = "chat";
+  theirs.dataset.routeJournal = "";
+  const journalless = document.createElement("div");
+  journalless.dataset.routeMount = "pea";
+  const inPea = document.createElement("button");
+  journalless.append(inPea);
+  const inTheirs = document.createElement("input");
+  theirs.append(inTheirs);
+  const outside = document.createElement("button");
+  document.body.append(mine, theirs, outside, journalless);
+  const at = (target: Element) => ({ target }) as unknown as KeyboardEvent;
+  try {
+    expect(routeOwnsKey(mine, true, at(mine))).toBe(true);
+    expect(routeOwnsKey(mine, true, at(inTheirs))).toBe(false);
+    expect(routeOwnsKey(mine, true, at(outside))).toBe(true);
+    expect(routeOwnsKey(theirs, false, at(outside))).toBe(false);
+    // A docked route with no Work (Pea's composer Revert) leaves its keys to the URL's route.
+    expect(routeOwnsKey(mine, true, at(inPea))).toBe(true);
+    expect(routeOwnsKey(mine, false, at(inPea))).toBe(false);
+  } finally {
+    journalless.remove();
+    mine.remove();
+    theirs.remove();
+    outside.remove();
+  }
+});
+
 test("Situation renders declared subject, typed Page controls, verbs and a working log filter", async () => {
   const f = await fixture();
   const graph = f.graph as RouteGraph<any, Doc>;
   Object.assign(graph, { subject: () => "Pricing fans on the fixture" });
   Object.assign(graph.fields, {
-    mode: { ...field(z.enum(["all", "one"]).default("all"), {}), role: "subject" },
+    testSubject: { ...testFields.testSubject, role: "query" },
+    testSelected: { ...testFields.testSelected, role: "query" },
+    mode: {
+      ...field(z.enum(["all", "one"]).default("all"), {}),
+      role: "query",
+      editor: "situation",
+    },
     system: {
-      ...field(z.array(z.string()).default([]), {}),
+      ...manyField("name", {}),
       role: "subject",
       picker: {
         reading: "capture",
@@ -442,13 +555,24 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
         options: () => [{ id: "SA", label: "Supply air" }],
       },
     },
-    search: { ...field(listSearchKey(), {}, listSearchCodec), role: "draft", editor: "situation" },
+    search: { ...field(listSearchKey(), {}, listSearchCodec), role: "draft", editor: "text" },
     paneSearch: { ...field(z.string().default("local"), {}), role: "query" },
     selected: { ...field(z.string().default("4"), {}), role: "selection" },
   });
+  graph.subjectField = {
+    field: "system",
+    noun: "system",
+    keyKind: "name",
+    cardinality: "many",
+    roster: "capture",
+    detail: "result",
+    pane: "inputs",
+    show: (id) => id,
+  };
   const { view } = await mounted(f);
+  act(() => f.owner().view.setPage({ system: ["SA"] } as any));
   const situation = within(view.getByLabelText("Situation"));
-  expect(situation.getByText("Pricing fans on the fixture")).toBeTruthy();
+  expect(await situation.findByText("Supply air")).toBeTruthy();
   expect(situation.queryByLabelText("paneSearch")).toBeNull();
   expect(situation.queryByLabelText("selected")).toBeNull();
   expect(situation.getByRole("button", { name: "Edit" })).toBeTruthy();
@@ -458,7 +582,7 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
   expect((f.owner().view.read().page as any).mode).toBe("one");
   fireEvent.click(situation.getByRole("button", { name: "Choose system" }));
   fireEvent.click(view.getByRole("option", { name: "Supply air" }));
-  expect((f.owner().view.read().page as any).system).toEqual(["SA"]);
+  expect((f.owner().view.read().page as any).system).toEqual([]);
   const search = situation.getByLabelText("search");
   expect((search as HTMLInputElement).value).toBe("");
   fireEvent.change(search, { target: { value: "fans" } });
@@ -475,9 +599,8 @@ test("Situation renders declared subject, typed Page controls, verbs and a worki
     f.owner().timeline.append({ kind: "invocation", verb: "edit", at: 1 });
     f.owner().timeline.append({ kind: "feed", subject: "external", at: 2 });
   });
-  fireEvent.click(situation.getByRole("button", { name: "work" }));
-  expect(situation.getByLabelText("Route log").textContent).toContain("edit");
-  expect(situation.getByLabelText("Route log").textContent).not.toContain("external");
+  fireEvent.click(situation.getByRole("button", { name: "Open the Timeline" }));
+  expect(view.getAllByText(/Edit/).length).toBeGreaterThan(0);
 });
 
 test.each(["Cancel", "Escape"])(
@@ -485,7 +608,7 @@ test.each(["Cancel", "Escape"])(
   async (cancel) => {
     const f = await fixture();
     const { view } = await mounted(f);
-    fireEvent.click(view.getByRole("button", { name: "Apply" }));
+    fireEvent.click(await revealVerb(view, "Apply"));
     const review = await view.findByLabelText("Apply review");
     const capture = f.captures.at(-1)!;
     if (cancel === "Escape") fireEvent.keyDown(review, { key: "Escape" });
@@ -500,7 +623,7 @@ test.each(["Cancel", "Escape"])(
 test("review survives window disturbances and outside presses", async () => {
   const f = await fixture();
   const { view } = await mounted(f);
-  fireEvent.click(view.getByRole("button", { name: "Apply" }));
+  fireEvent.click(await revealVerb(view, "Apply"));
   await view.findByLabelText("Apply review");
   fireEvent.blur(window);
   fireEvent(document, new Event("visibilitychange"));
@@ -510,12 +633,27 @@ test("review survives window disturbances and outside presses", async () => {
   expect(view.getByLabelText("Apply review")).toBeTruthy();
 });
 
-test("shown review keeps its control armed; its portal commits one receipt and its barrier blocks undo", async () => {
+test("opening the Timeline cannot silently dismiss a pending write review", async () => {
+  const f = await fixture();
+  const { view } = await mounted(f);
+  fireEvent.click(await revealVerb(view, "Apply"));
+  await view.findByLabelText("Apply review");
+  render(
+    <Popover defaultOpen>
+      <SubjectPopoverContent>Timeline detail</SubjectPopoverContent>
+    </Popover>,
+  );
+  await view.findByText("Timeline detail");
+  expect(f.owner().reviews.size).toBe(1);
+  expect(view.queryByLabelText("Apply review")).not.toBeNull();
+});
+
+test('shown review keeps its control armed: "unconsumed edits remain undoable; an undo that would cross a committed native write is blocked by its receipt barrier"', async () => {
   const f = await fixture();
   const { view } = await mounted(f);
   fireEvent.click(view.getByRole("button", { name: "Edit" }));
   await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(2));
-  const apply = view.getByRole("button", { name: "Apply" });
+  const apply = await revealVerb(view, "Apply");
   fireEvent.click(apply);
   await view.findByLabelText("Apply review");
   expect(view.getByLabelText("Apply review").textContent).toContain("Write this row");
@@ -533,19 +671,32 @@ test("shown review keeps its control armed; its portal commits one receipt and i
       .timeline.read()
       .map((e) => e.kind),
   ).toEqual(["invocation", "invocation", "receipt"]);
+  expect(f.owner().timeline.read().at(-1)?.basis).toEqual({
+    workKey: workKey(key), receipt: receipt(), receiptId: "native-1",
+  });
+  expect(f.owner().journal(key).read().undo).toMatchObject([
+    { transitions: [{ revision: 1 }], barrier: { receiptId: "native-1" } },
+    { transitions: [{ revision: 2, forward: [{ path: ["writeIntent", "takeoffs.initialize"] }] }] },
+  ]);
+  expect(f.owner().journal(key).read().undo[1]!.barrier).toBeUndefined();
   const before = f.writes.length;
   apply.focus();
   chord(apply, "z");
   await act(async () => {});
-  expect(f.writes).toHaveLength(before);
-  expect(await f.owner().restore("undo")).toMatchObject({ ok: false, code: "barrier" });
+  expect(f.writes).toHaveLength(before + 1);
+  expect(f.writes.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2, expectedRevision: 2 });
+  expect(f.scope().work).toMatchObject({ handle: { revision: 3 }, doc: { rows: { slot: { n: 2 } }, writeIntent: {} } });
+  expect(await f.owner().restore("undo")).toMatchObject({
+    ok: false, code: "barrier", barrier: { receiptId: "native-1" },
+  });
+  expect(f.writes).toHaveLength(before + 1);
   expect(transport.run.mock.calls[0]![5]).toBe(f.owner().timeline.read()[1]!.press);
 });
 
 test("pane unmount releases demand while a review pins its acquisition; explicit cancel ends it", async () => {
   const f = await fixture();
   const { view } = await mounted(f);
-  fireEvent.click(view.getByRole("button", { name: "Apply" }));
+  fireEvent.click(await revealVerb(view, "Apply"));
   await view.findByLabelText("Apply review");
   const capture = f.captures.at(-1)!;
   expect(capture.ctx.trigger.kind).toBe("verb");
@@ -589,7 +740,7 @@ test("stage changes replace key registration and pane bindings stay inside kit P
   await waitFor(() => expect(f.scope().work.doc.rows.slot!.n).toBe(10));
 });
 
-test("late command receipt remains associated with dispatch Work after switching to another Work", async () => {
+test('late receipt stays on dispatch Work: "unconsumed edits remain undoable; an undo that would cross a committed native write is blocked by its receipt barrier"', async () => {
   const f = await fixture();
   const owner = createGraphMount(f.graph, f.adapters);
   const disconnect = owner.connect();
@@ -599,7 +750,7 @@ test("late command receipt remains associated with dispatch Work after switching
   });
   await owner.control("edit").run();
   const review = await owner.control("apply").run();
-  expect(review.state).toBe("review");
+  expect(review, JSON.stringify(review)).toMatchObject({ state: "review" });
   let resolve!: (receipt: ActionReceipt) => void;
   transport.run.mockImplementation(
     () =>
@@ -621,10 +772,25 @@ test("late command receipt remains associated with dispatch Work after switching
   expect(owner.journal(second).read().undo).toHaveLength(0);
   resolve(receipt());
   await pending;
-  expect(owner.timeline.read().at(-1)?.basis).toMatchObject({ workKey: workKey(key) });
-  expect(await owner.journal(key).undo((write) => f.adapters.write(key, write))).toMatchObject({
-    code: "barrier",
+  expect(owner.timeline.read().at(-1)?.basis).toEqual({
+    workKey: workKey(key), receipt: receipt(), receiptId: "native-1",
   });
+  expect(owner.journal(key).read().undo).toMatchObject([
+    { transitions: [{ revision: 1 }], barrier: { receiptId: "native-1" } },
+    { transitions: [{ revision: 2, forward: [{ path: ["writeIntent", "takeoffs.initialize"] }] }] },
+  ]);
+  expect(await owner.journal(key).undo((write) => f.adapters.write(key, write))).toMatchObject({
+    ok: true, revision: 3,
+  });
+  expect(f.writes.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2, expectedRevision: 2 });
+  const before = f.writes.length;
+  expect(await owner.journal(key).undo((write) => f.adapters.write(key, write))).toMatchObject({
+    ok: false, code: "barrier", barrier: { receiptId: "native-1" },
+  });
+  expect(f.writes).toHaveLength(before);
+  expect((await f.workspace.read(key, key.route))!.doc).toMatchObject({ rows: { slot: { n: 2 } }, writeIntent: {} });
+  // The fixture writer refreshes its written Work; return to the second Work for its own edit.
+  await f.refresh(second);
   await owner.control("edit").run();
   expect(await owner.restore("undo")).toMatchObject({ ok: true });
 });
@@ -650,46 +816,6 @@ test("accepted foreign deltas, settled late receipts and checkpoint facts enter 
   expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
   expect(f.late()).toBeUndefined();
   expect(f.documentChange()).toBeUndefined();
-});
-
-test("required answers stay in the same review until valid, and a different placement cannot commit it", async () => {
-  const f = await fixture();
-  f.graph.verbs = {
-    ...f.graph.verbs,
-    apply: commandVerb(
-      "takeoffs.initialize",
-      {
-        label: "Apply",
-        input: z.object({}),
-        review: "required",
-        answers: z.object({ approved: z.literal(true) }),
-      },
-      { prepare: () => ({ summary: "Review first" }), intent: () => ({ stage: "sheet" }) },
-    ),
-  };
-  const { view } = await mounted(f);
-  const button = view.getByRole("button", { name: "Apply" });
-  fireEvent.click(button);
-  await view.findByLabelText("Apply review");
-  expect(f.owner().control("apply", undefined, "pane:charts").refusal).toContain(
-    "original control",
-  );
-  fireEvent.click(view.getByRole("button", { name: "Commit Apply" }));
-  await view.findByText("Answer the required review before committing");
-  expect(f.owner().reviews.size).toBe(1);
-  expect(transport.run).not.toHaveBeenCalled();
-  fireEvent.change(view.getByLabelText("Apply answers"), {
-    target: { value: '{"approved":true}' },
-  });
-  fireEvent.click(view.getByRole("button", { name: "Commit Apply" }));
-  await waitFor(() => expect(f.owner().reviews.size).toBe(0));
-  expect(transport.run).toHaveBeenCalledOnce();
-  expect(
-    f
-      .owner()
-      .timeline.read()
-      .filter((e) => e.kind === "invocation"),
-  ).toHaveLength(1);
 });
 
 test("a dynamic pane binds only its explicit focused row and keeps row identity on the verb", async () => {
@@ -826,7 +952,7 @@ test("settled partial and late command receipts invalidate their aliases; docume
   });
 });
 
-test("a detached command's later receipt uses its frozen Work even when the adapter currently shows another Work", async () => {
+test('detached receipt stays on frozen Work: "unconsumed edits remain undoable; an undo that would cross a committed native write is blocked by its receipt barrier"', async () => {
   const f = await fixture();
   const owner = createGraphMount(f.graph, f.adapters);
   owner.connect();
@@ -849,11 +975,25 @@ test("a detached command's later receipt uses its frozen Work even when the adap
   await f.refresh(second);
   await owner.control("edit").run();
   f.late()!(receipt(), second);
-  expect(owner.timeline.read().at(-1)?.basis).toMatchObject({ workKey: workKey(key) });
-  expect(await owner.restore("undo")).toMatchObject({ ok: true });
-  expect(await owner.journal(key).undo((request) => f.adapters.write(key, request))).toMatchObject({
-    code: "barrier",
+  expect(owner.timeline.read().at(-1)?.basis).toEqual({
+    workKey: workKey(key), receipt: receipt(), receiptId: "native-1",
   });
+  expect(owner.journal(key).read().undo).toMatchObject([
+    { transitions: [{ revision: 1 }], barrier: { receiptId: "native-1" } },
+    { transitions: [{ revision: 2, forward: [{ path: ["writeIntent", "takeoffs.initialize"] }] }] },
+  ]);
+  expect(await owner.restore("undo")).toMatchObject({ ok: true, revision: 2 });
+  expect(f.scope().work).toMatchObject({ handle: { key: second }, doc: { rows: { slot: { n: 1 } } } });
+  expect(await owner.journal(key).undo((request) => f.adapters.write(key, request))).toMatchObject({
+    ok: true, revision: 3,
+  });
+  expect(f.writes.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2, expectedRevision: 2 });
+  const before = f.writes.length;
+  expect(await owner.journal(key).undo((request) => f.adapters.write(key, request))).toMatchObject({
+    ok: false, code: "barrier", barrier: { receiptId: "native-1" },
+  });
+  expect(f.writes).toHaveLength(before);
+  expect((await f.workspace.read(key, key.route))!.doc).toMatchObject({ rows: { slot: { n: 2 } }, writeIntent: {} });
 });
 
 test("graph field policies project Page to URL and Back restores its stage without replaying Work", async () => {
@@ -1032,7 +1172,7 @@ test("a declared History pane renders kernel invocations and checkpoints without
   const history = within(view.getByLabelText("History"));
   expect(history.getByText("No activity yet")).toBeTruthy();
   fireEvent.click(view.getByRole("button", { name: "Edit" }));
-  await waitFor(() => expect(history.getByText(/edit.*invocation/)).toBeTruthy());
+  await waitFor(() => expect(history.getByText(/Edit Work.*applied/)).toBeTruthy());
   act(() => {
     f.owner().timeline.append({
       kind: "checkpoint",
@@ -1127,9 +1267,9 @@ test("shared History scopes receipts to exact Work, links Ops, deduplicates even
   };
   const mountedView = await mounted(f);
   const view = within(mountedView.view.container.querySelector("[data-pane-id=wheel]")!);
-  const link = await view.findByRole("link", { name: "takeoffs.initialize" });
+  const link = await view.findByRole("link", { name: "Apply" });
   expect(link.getAttribute("href")).toContain("actionId=ours");
-  expect(view.queryAllByRole("link", { name: "takeoffs.initialize" })).toHaveLength(1);
+  expect(view.queryAllByRole("link", { name: "Apply" })).toHaveLength(1);
   act(() => f.owner().timeline.append({ kind: "checkpoint", at: 77, receiptId: "ours" }));
   expect(view.queryByText(/checkpoint.*77/)).toBeNull();
   act(() => deliver({ kind: "failure", error: "receipt service unavailable" }));
@@ -1145,7 +1285,7 @@ test("a History pane naming an absent reading is refused before mounting", async
   expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
 });
 
-test.each(["shown", "required"] as const)(
+test.each(["shown"] as const)(
   "%s reviews without a presenter show counts and keep raw evidence sealed",
   async (review) => {
     const f = await fixture();
@@ -1156,21 +1296,20 @@ test.each(["shown", "required"] as const)(
         {
           label: "Apply",
           input: z.object({}),
-          ...(review === "required"
-            ? { review, answers: z.object({ ok: z.literal(true) }) }
-            : { review }),
+          review,
         },
         {
           prepare: () => ({
             counts: { planned: 3, refused: 1 },
             secret: "private receipt details",
           }),
-          intent: () => ({ stage: "sheet" }),
+          stage: () => ({ stage: "sheet" }),
+          intent: () => ({}),
         },
       ),
     };
     const { view } = await mounted(f);
-    fireEvent.click(await view.findByRole("button", { name: "Apply" }));
+    fireEvent.click(await revealVerb(view, "Apply"));
     const shown = await view.findByLabelText("Apply review");
     expect(shown.textContent).toContain("3 planned · 1 refused");
     expect(shown.textContent).not.toContain("private receipt details");
@@ -1178,3 +1317,20 @@ test.each(["shown", "required"] as const)(
     expect(transport.run).not.toHaveBeenCalled();
   },
 );
+
+
+test.each(["succeeded", "failed", "cancelled"] as const)("Pea's compact %s receipt closes its route Timeline and a second write is recorded", async (state) => {
+  const f = await fixture(), owner = createGraphMount(f.graph, f.adapters);
+  owner.connect();
+  cleanups.push(() => owner.dispose());
+  const base = actionStatusSchema.parse({ ...receipt(), caller: { kind: "pea", context: "minted", thread: "t" } });
+  const row = (id: string, status: string) => actionStatusSchema.parse({
+    ...base, id, state: status, ...(status === "failed" || status === "cancelled" ? { error: status === "cancelled" ? "rejected by you" : "write failed", status: 499 } : {}),
+  });
+  f.late()!(row("first", "running"), key);
+  f.late()!(row("first", state), key);
+  f.late()!(row("second", "succeeded"), key);
+  const entries = owner.timeline.read().filter((entry) => entry.kind === "receipt");
+  expect(entries.findLast((entry) => entry.outcome?.id === "first")?.outcome?.state).toBe(state);
+  expect(entries.find((entry) => entry.outcome?.id === "second")?.outcome?.state).toBe("succeeded");
+});

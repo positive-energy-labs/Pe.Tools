@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { applyPatches, ductsRouteState } from "@pe/agent-contracts";
+import { designOf } from "@pe/ducts-domain/test-design";
 import { SystemColours } from "./settings";
 import { FIRM_COLOURS } from "../../colours";
 import type { LossesWork } from "../../work";
@@ -21,7 +22,7 @@ test("the compact colour picker stages one validated Work palette and survives r
     doc = result.envelope.doc;
     return null;
   });
-  const work: LossesWork = { doc, revision: 0, write };
+  const work: LossesWork = { doc: designOf(doc), revision: 0, write };
   const view = render(<SystemColours work={work} />);
   expect(view.container.querySelectorAll('input[type="color"]')).toHaveLength(5);
   fireEvent.change(screen.getByLabelText("Supply air colour"), { target: { value: "#123456" } });
@@ -29,7 +30,7 @@ test("the compact colour picker stages one validated Work palette and survives r
     expect(doc.systemColours.edit?.value).toEqual({ ...FIRM_COLOURS, supply: "#123456" }),
   );
   view.unmount();
-  render(<SystemColours work={{ ...work, doc }} />);
+  render(<SystemColours work={{ ...work, doc: designOf(doc) }} />);
   expect((screen.getByLabelText("Supply air colour") as HTMLInputElement).value).toBe("#123456");
 });
 

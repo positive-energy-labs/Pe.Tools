@@ -138,7 +138,7 @@ Warning: ${data.warning}`
             chunks.push(chunk.value);
           }
         } finally {
-          await reader.cancel().catch(() => {});
+          await reader.cancel().catch((error) => { console.error("capture-view: asynchronous operation failed", error); });
         }
         const bytes = Buffer.concat(chunks);
         if (createHash("sha256").update(bytes).digest("hex") !== sha)

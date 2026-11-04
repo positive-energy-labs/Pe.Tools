@@ -1,8 +1,9 @@
+import { captureStore } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import {
   address,
@@ -41,7 +42,7 @@ const raw = {
 
 test("actual snapshot read leaves real Work revision and a concurrent authored edit intact; saved capture survives reconstruction", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-captures-"));
-  const captures = new TakeoffCaptures(dir);
+  const captures = captureStore(dir);
   let release!: () => void;
   let started!: () => void;
   const entered = new Promise<void>((resolve) => {
@@ -152,7 +153,7 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
     expect(first).not.toHaveProperty("capture");
     const capture = await captures.saved(observed.captureId);
     expect(capture.snapshot.reading.at).toBe(at);
-    const restored = new TakeoffCaptures(dir);
+    const restored = captureStore(dir);
     expect(await restored.saved(observed.captureId)).toEqual(capture);
   } finally {
     release?.();
@@ -163,7 +164,7 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
 
 test("actual /call rejects a closed openId and a late generation; saved HTTP reads reconstruct without any bridge service", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-capture-late-"));
-  const captures = new TakeoffCaptures(dir);
+  const captures = captureStore(dir);
   let open = true;
   let release!: () => void;
   let entered = 0;
@@ -235,7 +236,7 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
     const restored = HttpRouter.toWebHandler(
       makeCallRoute(
         new ActionJournal(join(dir, "restored-journal.jsonl")),
-        new TakeoffCaptures(dir),
+        captureStore(dir),
       ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       {
         disableLogger: true,

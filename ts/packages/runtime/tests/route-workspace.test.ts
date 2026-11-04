@@ -1,7 +1,7 @@
 import { observeResources, resourceResponse } from "../src/resource-stream.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { address, routeBindingsSchema } from "@pe/agent-contracts";
+import { address, routeBindingsSchema, workKey } from "@pe/agent-contracts";
 import type { WorkAuthor, RouteStatePatch, RouteStateSpec, WorkKey } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import type {
@@ -63,6 +63,96 @@ const documentB: WorkKey = {
   route: "test-route",
   target: address("C:\\Models\\B.rvt"),
 };
+
+test("throwing accepted and publish listeners cannot fail a committed write or skip peers", async () => {
+  const memory = memoryStore();
+  const module = workspace(memory.store);
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  const accepted = vi.fn();
+  const published = vi.fn();
+  const stops = [
+    module.observeAccepted(
+      documentA,
+      () => {
+        throw Error("accepted listener failed");
+      },
+      undefined,
+      false,
+    ),
+    module.observeAccepted(documentA, accepted, undefined, false),
+    module.subscribe(() => {
+      throw Error("publish listener failed");
+    }),
+    module.subscribe(published),
+  ];
+  try {
+    const result = await bind(module).apply("human", [{ path: ["count"], value: 1 }], 0);
+    expect(result).toMatchObject({ ok: true, revision: 1 });
+    expect(await bind(workspace(memory.store)).read()).toMatchObject({
+      revision: 1,
+      doc: { count: 1 },
+    });
+    expect(accepted).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ revision: 1 }));
+    expect(published).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ ok: true, revision: 1 }),
+    );
+    expect(logged.mock.calls.map(([message]) => message)).toEqual([
+      "Work accepted listener failed",
+      "Work publication listener failed",
+    ]);
+  } finally {
+    stops.forEach((stop) => stop());
+    logged.mockRestore();
+  }
+});
+
+test("start-fresh commits and publishes despite a throwing accepted listener", async () => {
+  const memory = memoryStore();
+  await memory.store.setState({
+    targetKey: workKey(documentA),
+    route: documentA.route,
+    value: { version: 1, schemaVersion: 1, revision: 4, doc: { count: "unreadable" } },
+  });
+  const module = workspace(memory.store);
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  const accepted = vi.fn();
+  const published = vi.fn();
+  const stops = [
+    module.observeAccepted(
+      documentA,
+      () => {
+        throw Error("accepted listener failed");
+      },
+      undefined,
+      false,
+    ),
+    module.observeAccepted(documentA, accepted, undefined, false),
+    module.subscribe(published),
+  ];
+  try {
+    expect(await module.startFresh(documentA, documentA.route, "human")).toMatchObject({
+      ok: true,
+      revision: 5,
+    });
+    expect(await bind(workspace(memory.store)).read()).toMatchObject({
+      revision: 5,
+      doc: { count: 0 },
+    });
+    expect(accepted).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "start-fresh", revision: 5 }),
+    );
+    expect(published).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ ok: true, revision: 5 }),
+    );
+    expect(logged).toHaveBeenCalledExactlyOnceWith(
+      "Work accepted listener failed",
+      expect.any(Error),
+    );
+  } finally {
+    stops.forEach((stop) => stop());
+    logged.mockRestore();
+  }
+});
 
 function bind(module: RouteWorkspace, scope: WorkKey = documentA) {
   return {
@@ -232,9 +322,9 @@ test("accepted writes reach a stream subscriber with the host's stamps; a Pea wr
       by: "human",
       base: 0,
       revision: 1,
-      // The host's accepted delta, not the request: it reconciles to the parent it created.
-      patches: [{ path: ["values"], value: { a: "1" } }],
-      inverse: [{ path: ["values"] }],
+      // Keyed Work history retains the entry footprint, including insertion/deletion.
+      patches: [{ path: ["values", "a"], value: "1" }],
+      inverse: [{ path: ["values", "a"] }],
     },
   });
   expect(second).toMatchObject({
@@ -244,7 +334,7 @@ test("accepted writes reach a stream subscriber with the host's stamps; a Pea wr
   abort.abort();
 });
 
-test("a resubscription replays the retained window; a late reader starts at the window and sees the jump", async () => {
+test("a resubscription replays durable history beyond 100 accepted writes", async () => {
   const module = workspace(memoryStore().store);
   const write = bind(module);
   for (let revision = 0; revision < 3; revision++)
@@ -255,12 +345,12 @@ test("a resubscription replays the retained window; a late reader starts at the 
   expect(revisions.map((value) => value.revision)).toEqual([1, 2, 3]);
   await replay.cancel();
 
-  // 130 writes: the module keeps 100 and the stream tail 128, so a late reader sees the last 100.
+  // Durable replay keeps the beginning even after more than 100 writes.
   for (let revision = 3; revision < 130; revision++)
     await write.apply("pea", [{ path: ["count"], value: revision + 1 }], revision);
   const late = acksStream(module);
   const first = (await readSse(late)).value as { revision: number; base: number };
-  expect(first).toMatchObject({ base: 30, revision: 31 });
+  expect(first).toMatchObject({ base: 0, revision: 1 });
   await late.cancel();
 });
 
@@ -275,6 +365,7 @@ test("a tail that overflows says gap with the count it dropped, then delivers wh
     observeResources(module, { observe: () => () => {} }),
     { frameBytes: 1 << 20, worldEvents: 64, workAckEvents: 2, stallMs: 10_000, logFrames: 8 },
   ).body!.getReader();
+  await module.view(documentA, documentA.route); // let durable hydration fill the mailbox
   expect(await readSse(reader)).toMatchObject({ kind: "gap", dropped: 3 });
   const kept = [(await readSse(reader)).value, (await readSse(reader)).value] as {
     revision: number;
@@ -361,4 +452,134 @@ test("an addressed document's own Work is never replaced by a stale addressless 
     target: savedAs.target,
   }).apply("human", [{ path: ["values", "a"], value: "addressed" }], 0);
   expect((await bind(module, savedAs).read())?.doc).toMatchObject({ values: { a: "addressed" } });
+});
+
+function feedSnapshot(module: RouteWorkspace) {
+  return new Promise<
+    import("../src/owner-read.ts").OwnerValue<Awaited<ReturnType<RouteWorkspace["read"]>>>
+  >((resolve) => {
+    const stop = module.observe(
+      documentA,
+      documentA.route,
+      (result) => {
+        stop();
+        resolve(result);
+      },
+      true,
+      true,
+    );
+  });
+}
+
+test.each([
+  { maxCount: 2, maxBytes: 1_000_000, from: 3 },
+  { maxCount: 20, maxBytes: 0, from: 5 },
+  { maxCount: 20, maxBytes: 100, from: 5 },
+])(
+  "host history is a bounded contiguous suffix ($maxCount/$maxBytes)",
+  async ({ maxCount, maxBytes, from }) => {
+    const store = memoryStore();
+    const module = new RouteWorkspace({
+      registrations: [registration()],
+      store: store.store,
+      workHistoryLimits: { maxCount, maxBytes },
+    });
+    for (let revision = 0; revision < 4; revision++)
+      await module.write(documentA, documentA.route, "human", {
+        kind: "apply",
+        press: `p${revision}`,
+        expectedRevision: revision,
+        patches: [{ path: ["count"], value: revision + 1 }],
+        label: `Count ${revision + 1}`,
+      });
+    const acquired = await feedSnapshot(module);
+    expect(acquired).toMatchObject({ value: { revision: 4, history: { from } } });
+    if (!("value" in acquired) || !acquired.value?.history) throw Error("Missing history");
+    expect(acquired.value.history.acks.map((ack) => ack.revision)).toEqual(
+      from === 3 ? [3, 4] : [],
+    );
+    const persisted = [...store.state.values()][0] as { history: unknown[] };
+    expect(persisted.history.length).toBe(from === 3 ? 2 : 0);
+  },
+);
+
+test("host refuses a persisted history hole before emitting a snapshot", async () => {
+  const store = memoryStore();
+  const module = workspace(store.store);
+  const write = bind(module);
+  for (let revision = 0; revision < 3; revision++)
+    await write.apply("pea", [{ path: ["count"], value: revision + 1 }], revision);
+  const [key, raw] = [...store.state.entries()][0]!;
+  const saved = raw as { history: unknown[] };
+  saved.history.splice(1, 1);
+  store.state.set(key, saved);
+  expect(await feedSnapshot(workspace(store.store))).toMatchObject({
+    error: "Work history is not contiguous through its snapshot",
+  });
+});
+
+test("an admitted live-only ack subscription never floods the transport with historical events", async () => {
+  const module = workspace(memoryStore().store);
+  const write = bind(module);
+  for (let revision = 0; revision < 130; revision++)
+    await write.apply("pea", [{ path: ["count"], value: revision + 1 }], revision);
+  const seen: unknown[] = [];
+  const stop = module.observeAccepted(documentA, (ack) => seen.push(ack), undefined, false);
+  await module.view(documentA, documentA.route);
+  expect(seen).toEqual([]);
+  await write.apply("pea", [{ path: ["count"], value: 131 }], 130);
+  expect(seen).toMatchObject([{ revision: 131 }]);
+  stop();
+});
+
+test("a write racing feed acquisition is delivered exactly once", async () => {
+  const module = workspace(memoryStore().store);
+  const revisions: number[] = [];
+  const release = module.observeFeed(
+    documentA,
+    (raw) => {
+      const value = raw as { history: { acks: { revision: number }[] } };
+      revisions.push(...value.history.acks.map((ack) => ack.revision));
+    },
+    (ack) => revisions.push(ack.revision),
+    (error) => {
+      throw error;
+    },
+  );
+  await bind(module).apply("human", [{ path: ["count"], value: 1 }], 0);
+  expect(revisions).toEqual([1]);
+  release();
+});
+
+test("a registration removed before serialized feed acquisition fails terminally", async () => {
+  const module = new RouteWorkspace({ registrations: [], store: memoryStore().store });
+  const unregister = module.register(registration());
+  const snapshot = vi.fn();
+  const ack = vi.fn();
+  const failure = deferred<unknown>();
+  const stop = module.observeFeed(documentA, snapshot, ack, failure.resolve);
+  unregister();
+  expect(await failure.promise).toEqual({
+    kind: "failed",
+    code: "WorkRouteUnregistered",
+    message: "route no longer registered",
+  });
+  expect(snapshot).not.toHaveBeenCalled();
+  expect(ack).not.toHaveBeenCalled();
+  stop();
+});
+
+test("metadata without an admitted schema is refused before creating Work", async () => {
+  const { store } = memoryStore();
+  const module = workspace(store);
+  expect(
+    await module.write(documentA, "test-route", "human", {
+      kind: "apply",
+      press: "untyped-meta",
+      expectedRevision: 0,
+      patches: [{ path: ["count"], value: 1 }],
+      meta: { row: "one" },
+    }),
+  ).toMatchObject({ ok: false, kind: "refused", code: "invalid_meta" });
+  expect(await module.read(documentA, "test-route")).toBeNull();
 });

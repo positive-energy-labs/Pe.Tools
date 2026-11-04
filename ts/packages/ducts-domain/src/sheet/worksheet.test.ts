@@ -66,11 +66,12 @@ it("sections are where the run bundle keeps its count; residual and velocity-ove
 
   const run = (end: number) => w.runs.find((r) => r.end.elementId === end)!;
   expect(run(40)).toMatchObject({
-    critical: true,
-    residualInWg: 0,
+    critical: false,
+    residualInWg: null,
     sectionIds: ["supply:a1", "supply:a2", "supply:b3", "supply:c4"],
   });
-  expect(run(60).residualInWg).toBeCloseTo(0.06);
+  expect(run(60).residualInWg).toBeNull();
+  expect(run(50).complete).toBe(false);
   expect(run(60).overLegIds).toEqual(["a1", "a2"]);
   expect(run(70)).toMatchObject({ critical: false, residualInWg: null });
   expect(w.worstKnownInWg).toBe(0.14);
@@ -106,8 +107,8 @@ it("a side with no terminal: other fans' ports and streams it delivers to set th
   const w = worksheet(muas, { maxFpm: { supply: 900, return: 700 } }).supply;
   expect(w.worstKnownInWg).toBe(0.028054);
   const run = (end: number) => w.runs.find((r) => r.end.elementId === end)!;
-  expect(run(6953852)).toMatchObject({ critical: true, residualInWg: 0 });
-  expect(run(13760945).residualInWg).toBeCloseTo(0.002415);
+  expect(run(6953852)).toMatchObject({ critical: false, residualInWg: null });
+  expect(run(13760945).residualInWg).toBeNull();
   // An open end delivers nothing: never the worst, no residual.
   expect(run(8)).toMatchObject({ critical: false, residualInWg: null });
 });

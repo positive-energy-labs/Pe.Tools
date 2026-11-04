@@ -133,25 +133,27 @@ internal sealed class Partition {
     }
 
     /// <summary>
-    ///     The one context query of this source instance: ids whose bounds meet any reach box, counted without
-    ///     loading. Exclusion classes are quick filters over those ids alone (id-seeded collectors, no reach term);
-    ///     only what survives is iterated, and iterating loads (≈14 KB per element in the Chadds IFC link). The reach
-    ///     query is the time cost: it scales with outlines × elements tested (501 outlines over Chadds' host took
+    ///     The one context query of this source instance, split in two so planning precedes acquisition:
+    ///     <see cref="Plan" /> finds the ids whose bounds meet any reach box and counts them without loading anything,
+    ///     then queries the exclusion classes over those ids alone (id-seeded collectors, no reach term);
+    ///     <see cref="Load" /> iterates what survives, and iterating loads (≈14 KB per element in the Chadds IFC link).
+    ///     The reach query is the time cost: it scales with outlines × elements tested (501 outlines over Chadds' host took
     ///     19.5 s), so outlines merge and their extent filters first. One reach query per source.
     /// </summary>
     /// <param name="reach">Host-frame boxes, each as its 8 corners; mapped into this instance's frame here.</param>
     /// <param name="bound">Host-frame box every reach box is clamped to, as 8 corners: nothing within reach lies outside it.</param>
-    /// <param name="absorbRunInsulation">A scene read: a represented duct/pipe run absorbs its insulation (classified after load).</param>
     /// <param name="obstacles">A verb's read: skip only the classes Ingest draws no triangle for, and keep
     ///     insulation, CAD, planting and site, which a sweep or probe can hit.</param>
-    internal SceneReach Reach(IReadOnlyList<XYZ[]> reach, XYZ[] bound, bool absorbRunInsulation = false, bool obstacles = false) {
+    /// <param name="light">The kept elements of this source the read will load but never tessellate (a link's DirectShapes
+    ///     under link-boxes, sized runs and family frames under oriented context); counted for cost reporting.</param>
+    internal ReachPlan Plan(IReadOnlyList<XYZ[]> reach, XYZ[] bound, bool obstacles = false, ElementFilter? light = null) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
-        if (reach.Count == 0) return new SceneReach(0, [], new Dictionary<string, int>(), 0, 0, 0, 0, 0);
+        if (reach.Count == 0) return ReachPlan.Empty(this);
         using var inverse = this.Transform.Inverse;
         var limit = Bounds(bound.Select(inverse.OfPoint));
         var local = Merge(reach.Select(corners => Clamp(Bounds(corners.Select(inverse.OfPoint)), limit))
             .Where(box => box.Min.X <= box.Max.X && box.Min.Y <= box.Max.Y && box.Min.Z <= box.Max.Z).ToList());
-        if (local.Count == 0) return new SceneReach(0, [], new Dictionary<string, int>(), 0, 0, 0, 0, 0);
+        if (local.Count == 0) return ReachPlan.Empty(this);
         var boxes = local.Select(box => (ElementFilter)Intersecting(box)).ToList();
         // The extent of every reach box goes first, so the OR tests only elements already inside it.
         using var extent = Intersecting(local.Aggregate(Union));
@@ -178,6 +180,29 @@ internal sealed class Partition {
             }
         }
         var classified = clock.Elapsed.TotalMilliseconds;
+        var lightCount = 0;
+        if (light is not null && keep.Count > 0) {
+            using var collector = new FilteredElementCollector(this.Doc, keep).WherePasses(light);
+            lightCount = collector.GetElementCount();
+        }
+        return new ReachPlan(this, inside.Count, keep, excluded, lightCount, queried, classified - queried);
+    }
+
+    internal ReachPlan WithImports(ReachPlan plan, Aabb scope) {
+        using var imports = new FilteredElementCollector(this.Doc).OfClass(typeof(ImportInstance));
+        var keep = new HashSet<ElementId>(plan.Keep);
+        foreach (var element in imports)
+            if (Ingest.Allowed(element) && this.SceneBounds(element) is { } b && b.MinZ <= scope.MaxZ
+                && b.MinX <= scope.MaxX && b.MaxX >= scope.MinX && b.MinY <= scope.MaxY && b.MaxY >= scope.MinY)
+                keep.Add(element.Id);
+        return plan with { Keep = keep, Counted = Math.Max(plan.Counted, keep.Count) };
+    }
+
+    /// <summary>Loads what <see cref="Plan" /> kept. <paramref name="absorbRunInsulation" />: a scene read, where a represented duct/pipe run absorbs its insulation (classified after load).</summary>
+    internal SceneReach Load(ReachPlan plan, bool absorbRunInsulation = false) {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var keep = plan.Keep;
+        var excluded = new Dictionary<string, int>(plan.Excluded, StringComparer.Ordinal);
         var kept = new List<Element>();
         var rejected = 0;
         if (keep.Count > 0) {
@@ -204,8 +229,9 @@ internal sealed class Partition {
                 if (Ingest.Allowed(element)) kept.Add(element); else rejected++;
             }
         }
-        var total = clock.Elapsed.TotalMilliseconds;
-        return new SceneReach(inside.Count, kept, excluded, rejected, total, queried, classified - queried, total - classified);
+        var iterate = clock.Elapsed.TotalMilliseconds;
+        return new SceneReach(plan.Counted, kept, excluded, rejected, plan.QueryMilliseconds + plan.ExcludeMilliseconds + iterate,
+            plan.QueryMilliseconds, plan.ExcludeMilliseconds, iterate);
     }
 
     /// <summary>
@@ -368,3 +394,12 @@ internal sealed class Partition {
 /// <param name="QueryMilliseconds">The one reach query; ExcludeMilliseconds the class queries; IterateMilliseconds the loads.</param>
 internal sealed record SceneReach(int Counted, IReadOnlyList<Element> Kept, IReadOnlyDictionary<string, int> Excluded,
     int RejectedAfterLoad, double Milliseconds, double QueryMilliseconds, double ExcludeMilliseconds, double IterateMilliseconds);
+
+/// <summary>What one source's reach query found, before anything is loaded: the ids a read would walk.</summary>
+/// <param name="Counted">Ids inside reach before any exclusion.</param>
+/// <param name="Keep">Ids that survive every exclusion class: the elements a read would load.</param>
+/// <param name="Light">Of <paramref name="Keep" />, the ones the read loads but never tessellates.</param>
+internal sealed record ReachPlan(Partition Source, int Counted, IReadOnlyCollection<ElementId> Keep, IReadOnlyDictionary<string, int> Excluded,
+    int Light, double QueryMilliseconds, double ExcludeMilliseconds) {
+    public static ReachPlan Empty(Partition source) => new(source, 0, [], new Dictionary<string, int>(), 0, 0, 0);
+}

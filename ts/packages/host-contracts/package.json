@@ -68,7 +68,8 @@
       "default": "./src/pe-api.ts"
     },
     "./native-adapter": "./src/native-adapter.ts",
-    "./host-descriptor": "./src/host-descriptor.ts"
+    "./host-descriptor": "./src/host-descriptor.ts",
+    "./decoders": "./src/decoders.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -84,7 +85,7 @@
     "codegen:verify-live": "vpx node --import jiti/register scripts/host-typegen.ts --check"
   },
   "dependencies": {
-    "effect": "4.0.0-beta.92",
+    "effect": "4.0.2",
     "zod": "4.3.6"
   },
   "devDependencies": {

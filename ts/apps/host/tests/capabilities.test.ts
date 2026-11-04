@@ -14,10 +14,11 @@ import { createContributionContent, createPeRoutes } from "../src/pe-routes.ts";
 import { listPackages } from "../src/packages.ts";
 import { buildCapabilities, createCapabilityCatalogSource } from "@pe/mcps";
 import { findCapabilities } from "@pe/agent-contracts";
-import { hostOwnership, productRoot } from "../src/host-ownership.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 vi.mock("../src/machine.ts", async (original) => {
   const real = await original<typeof import("../src/machine.ts")>();
+  const { Effect } = await import("effect");
   return {
     ...real,
     machineSources: (...args: Parameters<typeof real.machineSources>) => {
@@ -25,14 +26,12 @@ vi.mock("../src/machine.ts", async (original) => {
       const value = machineFixture();
       return {
         ...sources,
-        host: async () => {
-          throw Error("fixture has no host record");
-        },
-        peers: async () => [],
-        sessions: async () => [],
-        years: async () => [],
-        attachments: async () => [],
-        documents: async () => ({ state: "ok", documents: [] }),
+        host: () => Effect.fail(Error("fixture has no host record")),
+        peers: () => Effect.succeed([]),
+        sessions: () => Effect.succeed([]),
+        years: () => Effect.succeed([]),
+        attachments: () => Effect.succeed([]),
+        documents: () => Effect.succeed({ state: "ok" as const, documents: [] }),
         update: {
           current: () => value.update,
           refresh: async () => value.update,
@@ -54,7 +53,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
   const previousLocalAppData = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = localAppData;
   vi.stubEnv(productPathNames.productHomeVariable, join(localAppData, "Documents", "Pe.Tools"));
-  const appBase = productRoot();
+  const appBase = hostOwnership.rootPath;
   const nodeServer = createNodeServer();
   const program = Effect.scoped(
     Effect.gen(function* () {
@@ -74,6 +73,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
       );
     }),
   );
+  // effect-edge: island, phase 5
   const fiber = Effect.runFork(program);
   try {
     const deadline = Date.now() + 10_000;
@@ -130,7 +130,10 @@ test("the host-owned /pe surface answers without Revit", async () => {
     expect(await (await putAs({ "x-pe-context": "forged" })).json()).toMatchObject({
       error: { code: "context.unknown" },
     });
-    const terminal = readFileSync(hostContextTokenPath(hostOwnership.serviceName), "utf8");
+    const terminal = readFileSync(
+      hostContextTokenPath(hostOwnership.rootPath, hostOwnership.serviceName),
+      "utf8",
+    );
     const put = await putAs({ "x-pe-context": terminal });
     expect(await put.json()).toMatchObject({ ok: true, head: { revision: 1 } });
     const resources = await fetch(
@@ -146,15 +149,16 @@ test("the host-owned /pe surface answers without Revit", async () => {
     const routeList = await fetch(`${base}/pe/route-state`);
     expect(routeList.status).toBe(200);
     expect(((await routeList.json()) as unknown[]).length).toBeGreaterThan(0);
-    expect((await fetch(`${base}/pe/access`)).status).toBe(200);
 
     await fetch(`${base}/admin/shutdown`, {
       method: "POST",
       headers: { "x-pe-service-token": service.token },
     });
+    // effect-edge: island, phase 5
     await Effect.runPromise(Fiber.join(fiber));
   } finally {
     nodeServer.closeAllConnections();
+    // effect-edge: island, phase 5
     await Effect.runPromise(Fiber.interrupt(fiber));
     vi.unstubAllEnvs();
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;

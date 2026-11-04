@@ -5,7 +5,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
 import { readKeyMeta, readRegistrations } from "@pe/kit/keys";
 import { readTeaching } from "@pe/kit/lang/teach";
-import { solve } from "#/duct/math";
+import { solve } from "#/duct-loss/duct/math";
 import { Route as root } from "../routes/__root";
 import { ductLossGraph } from "./graph";
 import { ductLossRoute } from "./route";
@@ -58,8 +58,7 @@ test("a shared URL restores every graph field and the real solve, and edits roun
   expect(router.routesByPath["/duct-loss"]).toBe(ductLossRoute);
   const search = () => router.state.location.search;
   expect(address.read(search()).page).toMatchObject(page);
-  const situation = within(view.getByLabelText("Situation"));
-  expect(situation.getByRole("button", { name: "Choose shape" }).textContent).toBe("rect");
+  expect((inputs.getByRole("combobox", { name: "shape" }) as HTMLSelectElement).value).toBe("rect");
   for (const [id, name] of [
     ["a", /^width/],
     ["b", /^height/],

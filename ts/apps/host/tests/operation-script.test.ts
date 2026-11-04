@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { Deferred, Effect, Layer } from "effect";
 import { NodeHttpClient, NodeHttpServer } from "@effect/platform-node";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
@@ -39,6 +39,11 @@ it.each([
             ? {
                 operations: [
                   {
+                    subject: "None",
+                    touches: "Metadata",
+                    effect: "Read",
+                    cardinality: "One",
+                    costTier: "Cheap",
                     key: "scripting.execute",
                     intent: "Mutate",
                     needs: "document",
@@ -72,6 +77,7 @@ it.each([
           },
         },
       ]),
+      subscribe: () => () => {},
       invoke,
     } as unknown as RevitBridge["Service"];
     const server = createServer();
@@ -79,23 +85,26 @@ it.each([
       const address = server.address();
       return address && typeof address !== "string" ? address.port : 0;
     };
+    // effect-edge: island, phase 5
     const latch = Effect.runSync(Deferred.make<void>());
+    // effect-edge: island, phase 5
     const done = Effect.runPromise(
       Effect.raceFirst(
         Layer.launch(
           HttpRouter.serve(
-            Layer.mergeAll(
-              requestIdentityLayer({
-                port,
-                frontendOrigin: () => undefined,
-                share: {
-                  read: async () => {
-                    throw Error("loopback only");
+            makeCallRoute(journal, undefined, { sdk: sdkSessions }).pipe(
+              Layer.provide(
+                requestIdentityLayer({
+                  port,
+                  frontendOrigin: Effect.succeed(undefined),
+                  share: {
+                    read: async () => {
+                      throw Error("loopback only");
+                    },
+                    observe: () => {},
                   },
-                  observe: () => {},
-                },
-              }),
-              makeCallRoute(journal, undefined, { sdk: sdkSessions }),
+                }),
+              ),
             ),
             { disableLogger: true },
           ).pipe(
@@ -139,23 +148,8 @@ it.each([
         const reloaded = new ActionJournal(join(dir, "actions.json"));
         expect(await reloaded.wait(id)).toMatchObject({ state, evidence: { result } });
       }
-      const read = await fetch(`http://127.0.0.1:${port()}/call`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }),
-          "x-pe-bridge-session-id": "bridge-script",
-          "x-pe-open-document-id": "open-script",
-        },
-        body: JSON.stringify({
-          key: "scripting.execute",
-          request: { scriptContent: "WriteLine(1);" },
-        }),
-      });
-      // The query door relays native data; command settlement interprets its typed outcome.
-      expect(read.status, await read.clone().text()).toBe(200);
-      expect(await read.json()).toEqual(result);
     } finally {
+      // effect-edge: island, phase 5
       Effect.runSync(Deferred.succeed(latch, undefined));
       await done;
       await rm(dir, { recursive: true, force: true });

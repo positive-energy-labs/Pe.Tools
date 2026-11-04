@@ -533,6 +533,7 @@ public sealed class RevitScriptingPortTests {
 
     [Test]
     public void Inline_execution_ignores_workspace_project_file(UIApplication uiApplication) {
+        _ = EnsureActiveProjectDocument(uiApplication);
         var workspaceKey = $"test-inline-project-override-{Guid.NewGuid():N}";
         var workspaceRoot = RevitScriptingStorageLocations.ResolveWorkspaceRoot(workspaceKey);
         Directory.CreateDirectory(workspaceRoot);

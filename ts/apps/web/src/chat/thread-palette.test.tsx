@@ -1,3 +1,4 @@
+import { useState, type ComponentProps } from "react";
 import { emptyListSearch, pickListPill, threadSearchDefault } from "@pe/agent-contracts";
 const search = (keywords = "", pills: Record<string, string> = {}) =>
   Object.entries(pills).reduce((s, [field, value]) => pickListPill(s, field, value), {
@@ -11,8 +12,12 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import type { UpdateThreadRequest } from "@pe/agent-contracts";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { demoThreads } from "./thread-navigation";
-import { ThreadsSidebar, ThreadPane } from "./thread-palette";
+import { ThreadsSidebar as Sidebar, ThreadPane } from "./thread-palette";
 
+function ThreadsSidebar(props: ComponentProps<typeof Sidebar>) {
+  const [selected, onSelection] = useState<string[]>([]);
+  return <Sidebar {...props} selected={selected} onSelection={onSelection} />;
+}
 afterEach(cleanup);
 beforeEach(() => {
   vi.stubGlobal(

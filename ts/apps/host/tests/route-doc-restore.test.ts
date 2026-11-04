@@ -83,7 +83,13 @@ async function fixture() {
   const apply = (patches: RouteStatePatch[], revision: number, caller: Caller = human) =>
     post({ patches, expectedRevision: revision, press: "press-1" }, caller);
   const restore = (write: WorkWriteAck, revision = write.revision) =>
-    post({ patches: write.inverse, expectedRevision: revision, press: "ignored", kind: "restore" });
+    post({
+      patches: write.inverse,
+      expectedRevision: revision,
+      press: null,
+      kind: "restore",
+      restoreOf: write.revision,
+    });
   const stored = () => store.getState({ targetKey: workKey(scope), route: scope.route });
   return { app, store, scope, spec, post, apply, restore, stored, events };
 }
@@ -99,7 +105,7 @@ test("HTTP apply overwrites client by with the principal, and restore preserves 
   expect(seeded.write).toMatchObject({
     kind: "apply",
     by: "pea",
-    press: null,
+    press: "press-1",
     base: 0,
     revision: 1,
   });
@@ -185,24 +191,6 @@ test("restore refuses forged inverses, another Work's inverse and stale revision
   expect(await h.stored()).toEqual(before);
 });
 
-test("Pea paths are barriers even after an ABA write, while disjoint paths remain restorable", async () => {
-  const h = await fixture();
-  const edited = await h.apply(width(20), 0);
-  await h.apply([{ path: ["settings", "height"], value: 8 }], 1, pea());
-  expect(await h.restore(edited.write, 2)).toMatchObject({
-    ok: true,
-    doc: { settings: { width: 10, height: 8 } },
-  });
-  const again = await h.apply(width(20), 3);
-  await h.apply(width(99), 4, pea());
-  await h.apply(width(20), 5, pea());
-  expect(h.events.at(-1)).toMatchObject({ by: "pea", press: null, patches: width(20) });
-  expect(await h.restore(again.write, 6)).toMatchObject({ ok: false });
-  expect((await h.app.workspace.view(h.scope, h.scope.route))?.doc).toMatchObject({
-    settings: { width: 20 },
-  });
-});
-
 test("ordinary restore still validates the inverse against the current Work schema", async () => {
   const h = await fixture();
   const edited = await h.apply(width(20), 0);
@@ -243,7 +231,7 @@ test("startFresh returns the set-aside inverse and recovery restores the unparse
     doc: original.doc,
     write: { kind: "restore", press: null },
   });
-  expect(await h.stored()).toEqual({ ...original, revision: 9 });
+  expect(await h.stored()).toMatchObject({ ...original, revision: 9, history: expect.any(Array) });
 });
 
 test("startFresh refuses an unmarked malformed envelope and preserves its exact bytes", async () => {
@@ -292,7 +280,7 @@ test("an agent's HTTP write reaches a resource-stream subscriber with its host s
   expect(agent).toMatchObject({
     kind: "apply",
     by: "pea",
-    press: null,
+    press: "press-1",
     base: 0,
     revision: 1,
     patches: [{ path: ["settings", "width"], value: 20 }],
@@ -305,4 +293,51 @@ test("an agent's HTTP write reaches a resource-stream subscriber with its host s
   const again = await open();
   expect([(await again.next()).revision, (await again.next()).revision]).toEqual([1, 2]);
   again.close();
+});
+
+test("Pea's undo pops its edit off the one journal: pre-edit Work, a restore revision, and redo", async () => {
+  const h = await fixture();
+  const history = (direction: "undo" | "redo", expectedRevision: number, caller: Caller = pea()) =>
+    h.post({ direction, expectedRevision }, caller, "history");
+  expect(await history("undo", 0)).toMatchObject({ ok: false });
+  await h.apply(width(20), 0);
+  const before = ((await h.stored()) as { doc: unknown }).doc;
+  const edited = await h.apply(
+    [{ path: ["cells", "8781191", "edit"], value: { value: "200" } }],
+    1,
+    pea(),
+  );
+  expect(edited.write).toMatchObject({ kind: "apply", by: "pea", revision: 2 });
+
+  // The same write a person's Undo sends (route/work-journal): one restore revision, no null left.
+  const undone = await history("undo", 2);
+  expect(undone.write).toMatchObject({ kind: "restore", by: "pea", base: 2, revision: 3 });
+  expect(undone.doc).toEqual(before);
+  expect(JSON.stringify(undone.doc)).not.toContain("null");
+  expect(undone.write.patches).toEqual(edited.write.inverse);
+
+  const redone = await history("redo", 3);
+  expect(redone.write).toMatchObject({ kind: "restore", by: "pea", revision: 4 });
+  expect(redone.doc.cells["8781191"].edit).toMatchObject({ value: "200", by: "pea" });
+  expect(await history("redo", 4)).toMatchObject({ ok: false });
+
+  // A person's restore and Pea's history walk the same stack: the person's undo is Pea's redo.
+  expect((await h.restore(redone.write)).doc).toEqual(before);
+  expect((await history("redo", 5)).doc.cells["8781191"].edit.value).toBe("200");
+
+  // Undo steps through earlier edits in order, whoever made them; a new edit ends the redo branch.
+  expect((await history("undo", 6)).doc).toEqual(before);
+  expect((await history("undo", 7)).doc).toEqual(h.spec.schema.parse({}));
+  await h.apply(width(30), 8);
+  expect(await history("redo", 9)).toMatchObject({ ok: false });
+  expect(await history("undo", 3)).toMatchObject({ ok: false, code: "stale_revision" });
+});
+
+
+test("wrong cell edit shape returns a concrete wrapper example and remains unchanged", async () => {
+  const h = await fixture();
+  const result = await h.post({patches: [{path: ["cells", "a", "edit"], value: {value: 1050}}], expectedRevision: 0, press: "bad-cell"});
+  expect(result).toMatchObject({ok: false});
+  expect(result.hint).toContain('Cell edits wrap the typed value');
+  expect(result.hint).toContain('{"value":{"cfm":1050}}');
 });

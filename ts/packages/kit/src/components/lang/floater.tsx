@@ -178,7 +178,7 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
       const saved = JSON.parse(window.localStorage.getItem(storageKey()) ?? "null");
       if (saved && [saved.width, saved.height].every((n) => Number.isFinite(n) && n > 0))
         setBox({ width: saved.width, height: saved.height });
-    } catch {
+    } catch (error) { console.warn("ts/packages/kit/src/components/lang/floater.tsx: fallback after failure", error);
       /* Storage is optional; furniture remains usable. */
     }
   }, [spec.key]);
@@ -212,7 +212,7 @@ export function Floater({ spec }: { spec: FloaterSurfaceSpec }) {
       () => {
         try {
           window.localStorage.setItem(storageKey(), JSON.stringify(chosen));
-        } catch {
+        } catch (error) { console.warn("ts/packages/kit/src/components/lang/floater.tsx: fallback after failure", error);
           /* Best effort. */
         }
       },

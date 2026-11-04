@@ -16,6 +16,7 @@ import {
 } from "@pe/host-contracts/generated";
 import type { MemberIssue } from "@pe/host-contracts/operation-types";
 import { productPodsRootPath } from "./product-paths.ts";
+import { verifyPodArtifact } from "./pod-artifact.ts";
 
 export type PackageEntrypoint = {
   sourcePath: string;
@@ -363,13 +364,22 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
   for (const raw of Array.isArray(value.routes) ? value.routes : []) {
     try {
       const declaration = podRouteDeclarationSchema.parse(raw);
-      const slug = declaration.sourcePath.split("/")[1];
+      const slug = declaration.artifact.split("/")[1];
       if (`pod.${value.id}.${slug}`.length > 100)
         throw Error("Route Work identity exceeds 100 characters");
-      if (routes.some((route) => route.sourcePath === declaration.sourcePath))
-        throw Error("Duplicate route sourcePath");
-      if (!members.some((member) => member.path === declaration.sourcePath))
-        throw Error("Route has no admitted module");
+      if (routes.some((route) => route.artifact === declaration.artifact))
+        throw Error("Duplicate route artifact");
+      const artifact = members.find((member) => member.path === declaration.artifact);
+      if (!artifact) throw Error("Route has no admitted artifact");
+      try {
+        await verifyPodArtifact(
+          JSON.parse(new TextDecoder().decode(artifact.bytes)),
+          declaration.fingerprint,
+        );
+      } catch (error) {
+        diagnostics.push(problem("RouteFingerprintMismatch", declaration.artifact, message(error)));
+        continue;
+      }
       if (
         declaration.page &&
         !members.some((member) => member.path === `${declaration.page}/index.html`)
@@ -419,9 +429,9 @@ async function readFolder(directory: string, folder: string): Promise<AdmittedPa
       ...contributions,
       ...routes.map((route) => ({
         kind: "route" as const,
-        path: route.sourcePath,
-        memberPath: route.sourcePath,
-        key: contributionKey({ kind: "route", packageId: value.id, path: route.sourcePath }),
+        path: route.artifact,
+        memberPath: route.artifact,
+        key: contributionKey({ kind: "route", packageId: value.id, path: route.artifact }),
         name: route.name,
         description: route.description,
       })),

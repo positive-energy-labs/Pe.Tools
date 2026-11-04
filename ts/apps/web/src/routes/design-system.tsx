@@ -1,4 +1,5 @@
-import { pane, type RouteGraph } from "@pe/agent-contracts";
+import { designSystemGraph } from "#/design-system/graph";
+export { designSystemGraph } from "#/design-system/graph";
 import { mountRoute } from "#/shell/mount";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
@@ -7,31 +8,12 @@ import { DesignSystemLaws, LAW_POINTERS } from "#/design-system/laws";
 import { DesignSystemSpecimens } from "#/design-system/specimens/index";
 import { ThesisSpecimen } from "#/design-system/specimens/thesis";
 
-export const designSystemGraph: RouteGraph<Record<string, never>, null> = {
-  key: "design-system",
-  address: "design-system",
-  stages: {},
-  name: "Design System",
-  fields: {},
-  readings: {},
-  verbs: {},
-  panes: {
-    specimens: {
-      label: "Laws and specimens",
-      purpose:
-        "The design language laws and production specimens. Inspect each rule beside its actual component; the swatch carries exhaustive variants.",
-      draws: [],
-      verbs: [],
-    },
-  },
-  layout: pane("specimens"),
-};
 const RouteShelledDesignSystem = mountRoute(designSystemGraph, {
   initialPage: {},
-  sources: {},
-  bodies: { specimens: () => <DesignSystem /> },
+  sources: { catalog: { kind: "derive", derive: () => ({ id: "builtin", laws: LAW_POINTERS }) } },
+  bodies: { main: () => <DesignSystem /> },
   furniture: {
-    specimens: () => ({
+    main: () => ({
       meta: (
         <FactChip title="Rulings with one surviving authority">{LAW_POINTERS.length} laws</FactChip>
       ),

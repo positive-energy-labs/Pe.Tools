@@ -4,11 +4,11 @@ import { DUCT_CASES, casesForFindings } from "./ducts-guide.ts";
 
 /**
  * Every string that reaches `DuctFinding.kind` in a `route:ducts.analysis` read, confirmed from
- * `ts/packages/ducts-domain/src`: `survey.ts` (series, no-fan, multi-fan, the flow findings and the
+ * `ts/packages/ducts-domain/src`: `survey.ts` (no-fan, multi-fan, the flow findings and the
  * snapshot's model-health issues it passes through), `pricing.ts` (`mixed-classification` on an element),
  * `proximity.ts` and `phases.ts` (the inferred joins, `loop-by-inference`, `out-of-phase`) and
- * `assessment.ts` (the catalog findings and the plausibility guard's `implausible-loss`). Heal row kinds (`cap`, `join`, `end`, `verdict`),
- * load-preview line kinds (`no-tag`, `no-cfm`) and node kinds (`passive`) never reach it.
+ * `assessment.ts` (the catalog findings and the plausibility guard's `implausible-loss`). Heal row kinds (`cap`, `join`, `end`, `verdict`)
+ * and node kinds (`passive`) never reach it.
  */
 const FINDING_KINDS = new Set([
   "joined-by-proximity",
@@ -18,13 +18,8 @@ const FINDING_KINDS = new Set([
   "near-miss-across-classifications",
   "loop-by-inference",
   "out-of-phase",
-  "series-by-inference",
   "no-fan",
   "multi-fan",
-  "tag-without-mark",
-  "mark-without-system",
-  "no-terminals",
-  "no-mark",
   "no-flow",
   "open-end",
   "near-miss",

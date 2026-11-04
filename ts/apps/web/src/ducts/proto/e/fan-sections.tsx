@@ -1,3 +1,8 @@
+import { useContext } from "react";
+import { DuctsOwner } from "../../pane-context";
+import { stableFanKey } from "../../sheet/model";
+import { fansLink } from "../../../fans/neutral.ts";
+import { useRouteSearchSlice } from "#/route/activity";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
 import { RevitTarget } from "@pe/kit/lang/revit-target";
@@ -71,6 +76,9 @@ export function FanFacts({
   nameOf: (id: number) => string;
 }) {
   const observation = useNativeObservation();
+  const owner = useContext(DuctsOwner);
+  const search = useRouteSearchSlice((search) => search);
+  const roster = owner?.fanRoster ?? [];
   if (!facts.length) return null;
   const scale = Math.max(...facts.map((fact) => fact.esp), 0);
   return (
@@ -90,7 +98,14 @@ export function FanFacts({
                   <RevitTarget scope={observation.scope} ids={[fact.unit]}>
                     <TooltipHint content={fact.says}>
                       <span>
-                        {nameOf(fact.unit)}{" "}
+                        <a
+                          href={fansLink(
+                            roster.filter((row) => row.unitId === fact.unit).map(stableFanKey),
+                            search,
+                          )}
+                        >
+                          {nameOf(fact.unit)}
+                        </a>{" "}
                         <span className="text-ink-2">
                           {fact.role} {fact.end}
                         </span>

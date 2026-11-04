@@ -1,207 +1,300 @@
-/**
- * Revit runs one op at a time, so a native Read at /call is one turn of a serial queue. An
- * identical caller that arrives while it runs (a browser resubscribe, a retry) joins it rather
- * than queueing its twin, and a read every caller abandoned is cancelled rather than run to
- * completion for nobody. The bridge here is a stand-in that never answers the read on its own,
- * so "joined", "not interrupted" and "cancelled" are assertions, not timing inferences.
- */
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { Context, Deferred, Effect, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
-import { expect, test } from "vite-plus/test";
-import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
-} from "@pe/host-contracts/operation-types";
-import { ActionJournal } from "../src/action-journal.ts";
-import { RevitBridge, type HostBridgeEvent } from "../src/bridge.ts";
+import { Context, Deferred, Effect, Fiber, Layer, Schema } from "effect";
+import { NodeHttpClient, NodeServices } from "@effect/platform-node";
+import { expect } from "vite-plus/test";
+import { effectTest } from "./effect-test.ts";
+import { NativeReads, NativeReadLimits } from "../src/native-reads.ts";
+import { RevitBridge } from "../src/bridge.ts";
+import { prepareRead } from "../../../packages/host-internal/src/read-admission.ts";
+import type { DoorFailure, NativeAnswer, NativeOutcome } from "@pe/host-internal/request-contracts";
+import { HttpRouter } from "effect/http";
 import { makeCallRoute } from "../src/call-route.ts";
+import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { asCaller, human } from "./callers.ts";
-import { sdkSessions } from "./native-receipt-fixture.ts";
+import { replay } from "./sdk-replay.ts";
+import type { ActionJournal } from "../src/action-journal.ts";
+import type { TakeoffCaptures } from "../src/takeoff-captures.ts";
 
-const KEY = "revit.detail.space-scene";
-const target = { session: "bridge-a", openId: "open-a" };
-
-async function harness() {
-  const dir = await mkdtemp(join(tmpdir(), "pe-native-read-"));
-  const reads: { requestId: string; input: unknown; interrupted: boolean; answer: () => void }[] =
-    [];
-  const cancels: string[] = [];
-  const listeners = new Set<(event: HostBridgeEvent) => void>();
-  const bridge = {
-    list: Effect.succeed([
-      {
-        connected: true,
-        sessionId: target.session,
-        sdkSessionId: "dev",
-        lane: hostOwnership.lane,
-        sourceRoot: hostOwnership.sourceRoot,
-        serviceName: hostOwnership.serviceName,
-        processId: 42,
-        processStartUtcUnixMs: 1000,
-        state: {
-          openDocuments: [
-            {
-              openId: target.openId,
-              address: "C:/HVAC.rvt",
-              title: "HVAC",
-              isFamilyDocument: false,
-            },
-          ],
-        },
-      },
-    ]),
-    subscribe: (listener: (event: HostBridgeEvent) => void) => {
-      listeners.add(listener);
-      return () => void listeners.delete(listener);
-    },
-    invoke: (
-      key: string,
-      input: unknown,
-      _session?: string,
-      _open?: string,
-      requestId?: string,
-    ) => {
-      if (key === "host.ops.catalog")
-        return Effect.succeed({
-          value: { operations: [{ key: KEY, intent: "Read", needs: "project-document" }] },
-          target: null,
-        });
-      if (key === "op.cancel")
-        return Effect.sync(() => {
-          const named = (input as { requestId: string }).requestId;
-          cancels.push(named);
-          reads.find((read) => read.requestId === named)?.answer();
-          return { value: { cancelled: true, requestId: named }, target: null };
-        });
-      return Effect.gen(function* () {
-        const done = yield* Deferred.make<void>();
-        const read = {
-          requestId: requestId!,
-          input,
-          interrupted: false,
-          answer: () => Deferred.doneUnsafe(done, Effect.void),
-        };
-        reads.push(read);
-        yield* Deferred.await(done).pipe(
-          Effect.onInterrupt(() => Effect.sync(() => void (read.interrupted = true))),
-        );
-        return {
-          value: { id: `artifact-${reads.indexOf(read)}` },
-          target: { session: target.session, document: "C:/HVAC.rvt", documentRef: target },
-        };
-      });
-    },
-  } as unknown as RevitBridge["Service"];
-  const web = HttpRouter.toWebHandler(
-    makeCallRoute(
-      new ActionJournal(join(dir, "journal.jsonl")),
-      undefined,
-      { sdk: sdkSessions },
-      {
-        forwardBase: null,
-        dispatch: () => Effect.die("No TS-only calls expected"),
-        captureHostOp: () => {},
-      },
-    ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
-    { disableLogger: true },
+const descriptor = {
+  operationKey: "read",
+  operation: { key: "read", intent: "Read" as const },
+  processIncarnation: { pid: 42, startedAt: 1000 },
+  openDocumentLifetime: { openId: "open-a" },
+  freshnessGeneration: "generation:0",
+  representation: "overview" as const,
+  responseSchemaVersion: "1",
+};
+const prepare = (input: Schema.Json = {}, overrides = {}) =>
+  prepareRead({ ...descriptor, ...overrides }, input, Schema.Json, Schema.Json);
+const until = (ready: () => boolean): Effect.Effect<void> =>
+  Effect.suspend(() =>
+    ready() ? Effect.void : Effect.yieldNow.pipe(Effect.andThen(until(ready))),
   );
-  const post = (request: unknown, signal?: AbortSignal) =>
-    asCaller(human, web.handler)(
-      new Request("http://host/call", {
-        method: "POST",
-        signal,
-        headers: {
-          "content-type": "application/json",
-          [HOST_RPC_BRIDGE_SESSION_HEADER]: target.session,
-          [HOST_RPC_DOCUMENT_HEADER]: target.openId,
-        },
-        body: JSON.stringify({ key: KEY, request }),
-      }),
-      Context.empty() as never,
+
+const makeHarness = (holdCancel = false) =>
+  Effect.gen(function* () {
+    const jobs: {
+      id: string;
+      answer: Deferred.Deferred<NativeAnswer<unknown, "unavailable">, DoorFailure>;
+      terminal: Deferred.Deferred<NativeOutcome>;
+    }[] = [];
+    const cancels: string[] = [];
+    let cancelWaiters = 0;
+    const bridge = {
+      invokeHandle: (
+        _key: string,
+        _input: unknown,
+        _session?: string,
+        _open?: string | null,
+        id?: string,
+      ) =>
+        Effect.gen(function* () {
+          const job = {
+            id: id!,
+            answer: yield* Deferred.make<NativeAnswer<unknown, "unavailable">, DoorFailure>(),
+            terminal: yield* Deferred.make<NativeOutcome>(),
+          };
+          jobs.push(job);
+          return { answer: Deferred.await(job.answer), terminal: Deferred.await(job.terminal) };
+        }),
+      invoke: (_key: string, input: { requestId: string }) =>
+        Effect.gen(function* () {
+          cancels.push(input.requestId);
+          if (holdCancel) {
+            cancelWaiters++;
+            yield* Effect.never.pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  cancelWaiters--;
+                }),
+              ),
+            );
+          }
+          return { value: {}, target: { session: "session", document: null } };
+        }),
+    } as unknown as RevitBridge["Service"];
+    const services = yield* Layer.build(
+      NativeReads.layer.pipe(Layer.provide(Layer.succeed(RevitBridge, bridge))),
     );
-  const until = async (ready: () => boolean) => {
-    for (let turn = 0; turn < 200 && !ready(); turn++)
-      await new Promise((resolve) => setTimeout(resolve, 5));
-    expect(ready()).toBe(true);
-  };
-  return {
-    reads,
-    cancels,
-    post,
-    until,
-    dispose: async () => {
-      await web.dispose();
-      await rm(dir, { recursive: true, force: true });
-    },
-  };
-}
+    const reads = Context.get(services, NativeReads);
+    const answer = (index: number, value: Schema.Json = {}) =>
+      Deferred.succeed(jobs[index]!.answer, {
+        value,
+        nativeRequestId: jobs[index]!.id,
+        actualTarget: {
+          processIncarnation: descriptor.processIncarnation,
+          openDocumentLifetime: descriptor.openDocumentLifetime,
+        },
+        freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" },
+        cost: {},
+        outcome: "native-acknowledged",
+      });
+    return { reads, jobs, cancels, answer, cancelWaiters: () => cancelWaiters };
+  });
+const harness = makeHarness();
 
-const scene = { elementIds: [7199], focusOnly: false, contextRepresentation: "meshes" };
+effectTest(
+  "joiners detach independently; last departure cancels once and retirement lasts until terminal, not answer",
+  () =>
+    Effect.gen(function* () {
+      const { reads, jobs, cancels, cancelWaiters } = yield* makeHarness(true);
+      const read = yield* prepare();
+      const one = yield* reads.join(read, "session").pipe(Effect.forkScoped);
+      yield* until(() => jobs.length === 1);
+      const two = yield* reads.join(read, "session").pipe(Effect.forkScoped);
+      yield* Effect.yieldNow;
+      expect((yield* reads.retained).joiners).toBe(2);
+      yield* Fiber.interrupt(one);
+      expect(cancels).toEqual([]);
+      yield* Fiber.interrupt(two);
+      yield* until(() => cancels.length === 1);
+      expect(cancels).toEqual([jobs[0]!.id]);
+      expect(cancelWaiters()).toBe(1);
+      yield* Deferred.fail(jobs[0]!.answer, {
+        _tag: "BridgeError",
+        message: "unknown",
+        status: 503,
+        problem: "native.unknown",
+      } as DoorFailure);
+      yield* Effect.yieldNow;
+      const refused = yield* reads.join(read, "session").pipe(Effect.result);
+      expect(refused._tag).toBe("Failure");
+      if (refused._tag === "Failure") expect(refused.failure._tag).toBe("ReadRetiring");
+      expect(jobs).toHaveLength(1);
+      expect((yield* reads.retained).entries).toBe(1);
+      yield* Deferred.succeed(jobs[0]!.terminal, "native-acknowledged");
+      yield* Effect.yieldNow;
+      expect((yield* reads.retained).entries).toBe(0);
+      yield* until(() => cancelWaiters() === 0);
+    }),
+);
 
-test("an identical native read joins the one in flight instead of queueing behind it", async () => {
-  const { reads, post, until, dispose } = await harness();
-  try {
-    const first = post(scene);
-    await until(() => reads.length === 1);
-    const second = post(scene);
-    const other = post({ ...scene, contextRepresentation: "boxes" });
-    await until(() => reads.length >= 2);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(reads.map((read) => read.input)).toEqual([
-      scene,
-      { ...scene, contextRepresentation: "boxes" },
-    ]);
-    for (const read of reads) read.answer();
-    const [a, b] = await Promise.all([first, second, other]);
-    expect(a!.status, await a!.clone().text()).toBe(200);
-    expect(await b!.json()).toEqual(await a!.json());
-    expect(b!.headers.get("x-pe-native-request-id")).toBe(reads[0]!.requestId);
-  } finally {
-    await dispose();
-  }
-});
+effectTest(
+  "canonical objects share; array order, incarnation, open lifetime and freshness do not",
+  () =>
+    Effect.gen(function* () {
+      const { reads, jobs } = yield* harness;
+      const input = { nested: { b: 2, a: 1 }, ids: [1, 2] };
+      yield* reads.join(yield* prepare(input), "session").pipe(Effect.forkScoped);
+      yield* until(() => jobs.length === 1);
+      yield* reads
+        .join(yield* prepare({ ids: [1, 2], nested: { a: 1, b: 2 } }), "session")
+        .pipe(Effect.forkScoped);
+      for (const read of [
+        yield* prepare({ ...input, ids: [2, 1] }),
+        yield* prepare(input, { freshnessGeneration: "generation:1" }),
+        yield* prepare(input, { processIncarnation: { pid: 42, startedAt: 2000 } }),
+        yield* prepare(input, { openDocumentLifetime: { openId: "open-b" } }),
+      ])
+        yield* reads.join(read, "session").pipe(Effect.forkScoped);
+      yield* until(() => jobs.length === 5);
+      expect((yield* reads.retained).joiners).toBe(6);
+    }),
+);
 
-test("a read its only caller abandoned is cancelled in Revit, and a later ask reads afresh", async () => {
-  const { reads, cancels, post, until, dispose } = await harness();
-  try {
-    const abort = new AbortController();
-    const abandoned = post(scene, abort.signal).catch(() => null);
-    await until(() => reads.length === 1);
-    abort.abort();
-    await until(() => cancels.length === 1);
-    expect(cancels).toEqual([reads[0]!.requestId]);
-    // The bridge turn itself is not interrupted: the FIFO gate is held until Revit answers.
-    expect(reads[0]!.interrupted).toBe(false);
-    await abandoned;
-    const again = post(scene);
-    await until(() => reads.length === 2);
-    reads[1]!.answer();
-    expect((await again).status).toBe(200);
-  } finally {
-    await dispose();
-  }
-});
-
-test("a joined read survives one caller leaving and is cancelled only when the last leaves", async () => {
-  const { reads, cancels, post, until, dispose } = await harness();
-  try {
-    const leaving = new AbortController();
-    const staying = post(scene);
-    await until(() => reads.length === 1);
-    const gone = post(scene, leaving.signal).catch(() => null);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    leaving.abort();
-    await gone;
-    await new Promise((resolve) => setTimeout(resolve, 20));
+effectTest("successful values reach surviving joiners and are never cached after terminal", () =>
+  Effect.gen(function* () {
+    const { reads, jobs, answer, cancels } = yield* harness;
+    const read = yield* prepare();
+    const leaving = yield* reads.join(read, "session").pipe(Effect.forkScoped);
+    const staying = yield* reads.join(read, "session").pipe(Effect.forkScoped);
+    yield* until(() => jobs.length === 1);
+    yield* Fiber.interrupt(leaving);
+    yield* answer(0, { result: true });
+    expect((yield* Fiber.join(staying)).value).toEqual({ result: true });
     expect(cancels).toEqual([]);
-    reads[0]!.answer();
-    expect((await staying).status).toBe(200);
-    expect(reads).toHaveLength(1);
-  } finally {
-    await dispose();
-  }
-});
+    yield* Deferred.succeed(jobs[0]!.terminal, "native-acknowledged");
+    yield* Effect.yieldNow;
+    yield* reads.join(read, "session").pipe(Effect.forkScoped);
+    yield* until(() => jobs.length === 2);
+  }),
+);
+
+effectTest("entry, joiner, encoded key and result bounds refuse without duplicate dispatch", () =>
+  Effect.gen(function* () {
+    const { reads, jobs, answer } = yield* harness;
+    const read = yield* prepare();
+    const waiting = yield* reads.join(read, "session").pipe(Effect.result, Effect.forkScoped);
+    yield* until(() => jobs.length === 1);
+    expect((yield* reads.join(read, "session").pipe(Effect.result))._tag).toBe("Failure");
+    expect(
+      (yield* reads.join(yield* prepare({ other: true }), "session").pipe(Effect.result))._tag,
+    ).toBe("Failure");
+    expect(
+      (yield* reads.join(yield* prepare({ data: "x".repeat(2000) }), "session").pipe(Effect.result))
+        ._tag,
+    ).toBe("Failure");
+    expect(jobs).toHaveLength(1);
+    yield* answer(0, { data: "x".repeat(2000) });
+    const oversized = yield* Fiber.join(waiting);
+    expect(oversized._tag).toBe("Failure");
+    if (oversized._tag === "Failure") expect(oversized.failure._tag).toBe("ReadBusy");
+    expect((yield* reads.retained).entries).toBe(1);
+  }).pipe(
+    Effect.provideService(NativeReadLimits, {
+      entries: 1,
+      joiners: 1,
+      keyBytes: 1024,
+      resultBytes: 1024,
+    }),
+  ),
+);
+
+effectTest(
+  "the host resolve door canonicalizes admitted input, resolves an implicit document and advances on journal acceptance",
+  () =>
+    Effect.gen(function* () {
+      let accepted: (() => void) | undefined;
+      const journal = {
+        bindCommands: () => {},
+        subscribe: (query: unknown, listener: () => void) => {
+          expect(query).toEqual({ kinds: ["action"] });
+          accepted = listener;
+          return () => {
+            accepted = undefined;
+          };
+        },
+      } as unknown as ActionJournal;
+      const bridge = {
+        list: Effect.succeed([
+          {
+            ...hostOwnership,
+            connected: true,
+            sessionId: "session",
+            processId: process.pid,
+            processStartUtcUnixMs: 1000,
+            state: {
+              openDocuments: [
+                {
+                  openId: "open-a",
+                  isActive: true,
+                  isFamilyDocument: false,
+                  title: "Model",
+                  address: "C:/model.rvt",
+                },
+              ],
+            },
+          },
+        ]),
+        subscribe: () => () => {},
+      } as unknown as RevitBridge["Service"];
+      const sdkDriver = () =>
+        Effect.succeed(
+          replay("doc-list", {
+            result: { documents: [] },
+            resolved: {
+              payload: hostOwnership.lane === "dev" ? "checkout" : "installed",
+              sourceRoot: hostOwnership.sourceRoot,
+              installedRoot: hostOwnership.installedRoot,
+              pid: process.pid,
+              processStartUtc: new Date(1000).toISOString(),
+              id: null,
+              how: null,
+              buildStamp: null,
+              observedAtUtc: new Date(1000).toISOString(),
+              origin: null,
+            },
+          }),
+        );
+      const web = HttpRouter.toWebHandler(
+        makeCallRoute(journal, {} as TakeoffCaptures, {}, { sdkDriver }).pipe(
+          HttpRouter.provideRequest(
+            Layer.succeed(
+              RequestIdentity,
+              admittedRequestIdentity(
+                { kind: "human", via: "local" },
+                { bridgeSessionId: "session" },
+              ),
+            ),
+          ),
+          HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
+          Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
+        ),
+      );
+      yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
+      const resolve = (input: object, operationKey = "revit.detail.space-scene") =>
+        Effect.promise(async () => {
+          const response = await web.handler(
+            new Request("http://host/pe/reads/resolve", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ operationKey, input }),
+            }),
+            Context.empty(),
+          );
+          return { status: response.status, body: await response.json() };
+        });
+      const first = yield* resolve({ elementIds: [3, 2], contextRepresentation: "overview" });
+      expect(first.status, JSON.stringify(first.body)).toBe(200);
+      expect(first.body.openDocumentLifetime).toEqual({ openId: "open-a" });
+      expect(first.body.processIncarnation).toEqual({ pid: process.pid, startedAt: 1000 });
+      expect(first.body.normalizedInput).toBe(
+        '{"contextRepresentation":"overview","elementIds":[3,2]}',
+      );
+      const reordered = yield* resolve({ contextRepresentation: "overview", elementIds: [3, 2] });
+      expect(reordered.body).toEqual(first.body);
+      accepted!();
+      const afterWrite = yield* resolve({ elementIds: [3, 2], contextRepresentation: "overview" });
+      expect(afterWrite.body.freshnessGeneration).not.toBe(first.body.freshnessGeneration);
+      expect((yield* resolve({}, "missing.operation")).status).toBe(409);
+    }),
+);

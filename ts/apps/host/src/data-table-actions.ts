@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { canonicalRouteInput, commands, tools, nativeProcessSchema } from "@pe/agent-contracts";
+import { commands, tools, nativeProcessSchema } from "@pe/agent-contracts";
 import type { DataTableApply } from "@pe/host-contracts/generated";
 import { invokeBridge, type RevitBridge } from "./bridge.ts";
 import { command, refused } from "./command-executor.ts";
@@ -19,6 +19,7 @@ export function dataTableExecutors(
         input: nativeInputSchema("data-table.apply"),
       }),
       {
+        seal: (p) => ({ request: p.input }),
         bind: async (ctx) => {
           const { target, input } = ctx.admission;
           if (target.kind !== "document") throw refused("Exact project document required");
@@ -28,16 +29,14 @@ export function dataTableExecutors(
           }));
           if (!draft) throw refused("Choose a table or start a new one first");
           const { isNew: _, ...table } = draft;
-          if (
-            canonicalRouteInput(input.table) !==
-            canonicalRouteInput({ ...table, pruneMissingRows: true })
-          )
-            throw refused("The reviewed table differs from the current draft");
           const { process } = await lifetime(bridge, target.ref, "project", deps);
           return {
             consumes: [{ kind: "incarnation", probe: { target, process }, expected: true }],
             effects: [{ kind: "document", ref: target.ref }],
-            prepare: async () => ({ process, input: { table: input.table } }),
+            prepare: async () => ({
+              process,
+              input: { table: { ...table, pruneMissingRows: true } },
+            }),
           };
         },
         run: async (ctx, execution) => {

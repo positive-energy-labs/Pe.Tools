@@ -31,7 +31,7 @@ class FamilyEditBuffer {
     for (const patch of patches) this.pending.set(JSON.stringify(patch.path), patch);
     this.publish(draft, this.state.failure);
     // A refusal requires an explicit retry; more typing must not silently rebase failed input.
-    if (!this.state.failure) void this.flush().catch(() => undefined);
+    if (!this.state.failure) void this.flush().catch((error) => { console.error("edit-buffer: asynchronous operation failed", error); return undefined; });
   }
   observe(revision: number) {
     this.observedRevision = revision;

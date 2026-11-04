@@ -7,7 +7,7 @@ import { Deferred, Effect, Layer } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { makeHttpLive } from "../src/app.ts";
-import { hostOwnership, productRoot } from "../src/host-ownership.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 
@@ -45,9 +45,11 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
   process.env.PE_TOOLS_PRODUCT_HOME = join(localAppData, "content");
   process.env.PE_TOOLS_WEB_DIST = webDir;
   // appBase is resolved the same way the running host resolves it (LOCALAPPDATA now = temp).
-  const appBase = productRoot();
+  const appBase = hostOwnership.rootPath;
 
+  // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
+  // effect-edge: island, phase 5
   const handle = Effect.runSync(Deferred.make<ServiceHostHandle>());
   const program = Effect.scoped(
     Effect.gen(function* () {
@@ -61,12 +63,14 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     }),
   );
 
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(program);
 
   try {
     // A published service file precedes terminal context creation. The host's handle signals
     // completed acquisition; retain the independent file read below as the boundary assertion.
     await Promise.race([
+      // effect-edge: island, phase 5
       Effect.runPromise(Deferred.await(handle)),
       done.then(() => {
         throw new Error("Host exited before readiness");
@@ -80,7 +84,10 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(file.lane).toBe("dev");
 
     const base = `http://127.0.0.1:${file.port}`;
-    const terminal = readFileSync(hostContextTokenPath(hostOwnership.serviceName), "utf8");
+    const terminal = readFileSync(
+      hostContextTokenPath(hostOwnership.rootPath, hostOwnership.serviceName),
+      "utf8",
+    );
 
     // (2) GET /host/status â†’ 200 (confirms the recorded port is the real bound one).
     const status = await fetch(`${base}/host/status`);
@@ -132,7 +139,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(await spa.text()).toContain("pe-spa");
 
     // (4) the host-owned harness surface answers at its absolute path.
-    const access = await fetch(`${base}/pe/access`);
+    const access = await fetch(`${base}/pe/providers`);
     expect(access.status).toBe(200);
 
     // (5) the release readout is lane-truthful: a source-lane host reports no installed release.
@@ -171,6 +178,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(await readServiceFile(appBase, hostOwnership.serviceName)).toBeNull();
     await expect(fetch(`${base}/host/status`)).rejects.toBeDefined();
   } finally {
+    // effect-edge: island, phase 5
     Effect.runSync(Deferred.succeed(latch, undefined));
     await done.catch(() => {});
     if (prevLocalAppData === undefined) delete process.env.LOCALAPPDATA;

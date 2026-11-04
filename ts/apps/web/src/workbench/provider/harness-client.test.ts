@@ -115,4 +115,77 @@ describe("streamThread", () => {
     expect(sources).toHaveLength(2);
     stop();
   });
+  it("a frame that does not decode is a fault and a reread, never an applied event", () => {
+    const sources: FakeSource[] = [];
+    const open = ((url: string) => {
+      const source = new FakeSource(url);
+      sources.push(source);
+      return source;
+    }) as unknown as OpenEvents;
+    const seen: number[] = [];
+    const faults: string[] = [];
+    let rereads = 0;
+    streamThread({
+      origin: "http://host",
+      threadId: "th 1",
+      cursor: 40,
+      lastSeq: 4,
+      open,
+      onEvent: (event) => seen.push(event.seq),
+      onReread: () => rereads++,
+      onFault: (error) => faults.push(error.message),
+    });
+    sources[0]!.onmessage?.({
+      data: JSON.stringify({ kind: "bogus", key: "k", id: 41 }),
+      lastEventId: "41",
+    } as MessageEvent<string>);
+    expect(seen).toEqual([]);
+    expect(rereads).toBe(1);
+    expect(sources[0]!.closed).toBe(true);
+    expect(faults[0]).toContain("Thread frame does not decode");
+  });
+  it("a valid frame with an unusable cursor is refused whole and moves nothing", () => {
+    for (const lastEventId of ["abc", "-1", "1.5", "9007199254740993"]) {
+      const sources: FakeSource[] = [];
+      const open = ((url: string) => {
+        const source = new FakeSource(url);
+        sources.push(source);
+        return source;
+      }) as unknown as OpenEvents;
+      const seen: number[] = [];
+      const faults: string[] = [];
+      let rereads = 0;
+      streamThread({
+        origin: "http://host",
+        threadId: "th 1",
+        cursor: 40,
+        lastSeq: 4,
+        open,
+        onEvent: (event) => seen.push(event.seq),
+        onReread: () => rereads++,
+        onFault: (error) => faults.push(error.message),
+      });
+      sources[0]!.emit(5, 41);
+      const frame = JSON.stringify({
+        kind: "event",
+        key: "k",
+        id: 42,
+        value: harnessEventSchema.parse({
+          seq: 6,
+          at: "2026-10-01T12:00:00.000Z",
+          kind: "turn_end",
+          turnId: "t1",
+          stopReason: "end_turn",
+        }),
+      });
+      sources[0]!.onmessage?.({ data: frame, lastEventId } as MessageEvent<string>);
+      expect({ lastEventId, seen, rereads, closed: sources[0]!.closed }).toEqual({
+        lastEventId,
+        seen: [5],
+        rereads: 1,
+        closed: true,
+      });
+      expect(faults[0]).toContain("Thread frame does not decode");
+    }
+  });
 });

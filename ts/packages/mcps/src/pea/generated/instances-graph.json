@@ -1,0 +1,746 @@
+{
+  "address": "open",
+  "directory": {
+    "aliases": [
+      "documents",
+      "model",
+      "launcher"
+    ],
+    "blurb": "Choose a document and its destination Revit.",
+    "category": "Start / open work",
+    "exposure": "Main",
+    "icon": "Server",
+    "label": "Revit",
+    "listed": true,
+    "path": "/open",
+    "runtimeNeed": "Revit for model actions; browsing saved data is separate",
+    "satellites": [],
+    "surfaces": {
+      "pwa": "full",
+      "tray": "compact",
+      "web": "full"
+    },
+    "title": "Open document"
+  },
+  "fields": {
+    "document": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "picker": {
+        "options": {
+          "runtime": true
+        },
+        "placeholder": "Choose a document",
+        "reading": "recents"
+      },
+      "role": "subject",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "type": "string"
+      },
+      "share": true,
+      "url": "push"
+    },
+    "draft": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "editor": "pane",
+      "role": "draft",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": {
+          "addins": "on",
+          "detach": false,
+          "doc": null,
+          "links": "refuse",
+          "owner": "you",
+          "target": null,
+          "year": null
+        },
+        "properties": {
+          "addins": {
+            "enum": [
+              "on",
+              "off"
+            ],
+            "type": "string"
+          },
+          "detach": {
+            "type": "boolean"
+          },
+          "doc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "links": {
+            "enum": [
+              "refuse",
+              "allow"
+            ],
+            "type": "string"
+          },
+          "owner": {
+            "enum": [
+              "you",
+              "pea"
+            ],
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "year": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991,
+                "minimum": -9007199254740991,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "doc",
+          "target",
+          "year",
+          "owner",
+          "addins",
+          "detach",
+          "links"
+        ],
+        "type": "object"
+      },
+      "share": false,
+      "url": false
+    },
+    "epoch": {
+      "agent": false,
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "transient",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": 0,
+        "type": "number"
+      },
+      "share": false,
+      "url": false
+    },
+    "session": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "role": "selection",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": "",
+        "type": "string"
+      },
+      "share": true,
+      "url": "replace"
+    },
+    "table": {
+      "agent": "set",
+      "codec": {
+        "decode": {
+          "runtime": true
+        },
+        "encode": {
+          "runtime": true
+        }
+      },
+      "editor": "pane",
+      "role": "query",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "default": {
+          "query": "",
+          "sorts": []
+        },
+        "properties": {
+          "hiddenColumns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "query": {
+            "type": "string"
+          },
+          "sorts": {
+            "items": {
+              "properties": {
+                "dir": {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ],
+                  "type": "string"
+                },
+                "key": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "dir"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "sorts"
+        ],
+        "type": "object"
+      },
+      "share": true,
+      "url": false
+    }
+  },
+  "key": "instances",
+  "layout": {
+    "axis": "v",
+    "children": [
+      {
+        "id": "bay",
+        "kind": "pane"
+      },
+      {
+        "id": "history",
+        "kind": "pane"
+      }
+    ],
+    "id": "open-body",
+    "kind": "split",
+    "size": 140,
+    "sized": "end"
+  },
+  "moduleHash": "21350399cdd3bfa321c971648748cf070e1af3ed744a2169a6c17e42fdd1f29a",
+  "name": "Open",
+  "panes": {
+    "bay": {
+      "draws": [
+        "machine",
+        "recents",
+        "threads",
+        "world"
+      ],
+      "label": "Documents",
+      "purpose": "Patch a document into a Revit, review its consequences, then press",
+      "verbs": [
+        "open",
+        "close"
+      ]
+    },
+    "history": {
+      "draws": [
+        "receipts"
+      ],
+      "history": {
+        "receipts": "receipts"
+      },
+      "label": "History",
+      "purpose": "Inspect lifecycle receipts and world events",
+      "verbs": []
+    }
+  },
+  "readings": {
+    "machine": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "open.machine"
+    },
+    "receipts": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "open.receipts"
+    },
+    "recents": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "open.recents"
+    },
+    "threads": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "open.threads"
+    },
+    "world": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "feed",
+      "retire": "page",
+      "source": "open.world"
+    }
+  },
+  "seeds": {
+    "background-booting": {
+      "title": "background-booting"
+    },
+    "blocked-plan": {
+      "title": "blocked-plan"
+    },
+    "controlled-hot": {
+      "title": "controlled-hot"
+    },
+    "disconnected": {
+      "title": "disconnected"
+    },
+    "no-revit": {
+      "title": "no-revit"
+    },
+    "observed-icon": {
+      "title": "observed-icon"
+    },
+    "patch-bay": {
+      "title": "patch-bay"
+    },
+    "receipt-handoff": {
+      "title": "receipt-handoff"
+    },
+    "refresh": {
+      "title": "the patch bay: your Revit 2025, two of Pea's, recents 2022 to 2027"
+    },
+    "update-check-failed": {
+      "title": "update-check-failed"
+    },
+    "update-downloading": {
+      "title": "update-downloading"
+    },
+    "update-failed": {
+      "title": "update-failed"
+    },
+    "waiting-plan": {
+      "title": "waiting-plan"
+    }
+  },
+  "stageOrder": [
+    "open"
+  ],
+  "stages": {
+    "open": {
+      "panes": [
+        "bay",
+        "history"
+      ],
+      "verbs": [
+        "refresh"
+      ],
+      "word": "Opening"
+    }
+  },
+  "subject": {
+    "runtime": true
+  },
+  "subjectField": {
+    "cardinality": "one",
+    "detail": "machine",
+    "field": "document",
+    "keyKind": "name",
+    "noun": "document",
+    "pane": "bay",
+    "roster": "recents",
+    "show": {
+      "runtime": true
+    }
+  },
+  "transition": {
+    "runtime": true
+  },
+  "verbs": {
+    "close": {
+      "caller": "human",
+      "does": "instances.close",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "document": {
+                "additionalProperties": false,
+                "properties": {
+                  "openId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "session": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "pid": {
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "pid"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "source": {
+                    "const": "sdk",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source",
+                  "session",
+                  "openId"
+                ],
+                "type": "object"
+              },
+              "session": {
+                "additionalProperties": false,
+                "properties": {
+                  "process": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "executable": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "pid": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "type": "integer"
+                      },
+                      "processStartUtc": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "pid",
+                      "processStartUtc",
+                      "executable"
+                    ],
+                    "type": "object"
+                  },
+                  "selection": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "pid": {
+                            "exclusiveMinimum": 0,
+                            "maximum": 9007199254740991,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "pid"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "selection",
+                  "process"
+                ],
+                "type": "object"
+              },
+              "unsaved": {
+                "enum": [
+                  "keep",
+                  "discard"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "session",
+              "document",
+              "unsaved"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Close document",
+      "review": "none"
+    },
+    "open": {
+      "caller": "human",
+      "does": "instances.open",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "cloudVersion": {
+                "additionalProperties": false,
+                "properties": {
+                  "itemId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "projectId": {
+                    "pattern": "^b\\.[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "versionId": {
+                    "pattern": "^urn:adsk\\.[^:]+:fs\\.file:vf\\.[^?]+\\?version=\\d+$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "projectId",
+                  "itemId",
+                  "versionId"
+                ],
+                "type": "object"
+              },
+              "detach": {
+                "type": "boolean"
+              },
+              "into": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "session": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "pid": {
+                                "exclusiveMinimum": 0,
+                                "maximum": 9007199254740991,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "pid"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "session"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "start": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "addins": {
+                            "enum": [
+                              "on",
+                              "off"
+                            ],
+                            "type": "string"
+                          },
+                          "owner": {
+                            "enum": [
+                              "you",
+                              "pea"
+                            ],
+                            "type": "string"
+                          },
+                          "year": {
+                            "pattern": "^20\\d{2}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "year",
+                          "owner",
+                          "addins"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "start"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "links": {
+                "enum": [
+                  "allow",
+                  "refuse"
+                ],
+                "type": "string"
+              },
+              "reload": {
+                "type": "boolean"
+              },
+              "source": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "template": {
+                "type": "boolean"
+              },
+              "upgrade": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "source",
+              "into"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "type": "object"
+      },
+      "kind": "command",
+      "label": "Open document",
+      "review": "none"
+    },
+    "refresh": {
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {},
+        "type": "object"
+      },
+      "kind": "page",
+      "label": "refresh",
+      "review": "none"
+    }
+  }
+}

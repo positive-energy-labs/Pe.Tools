@@ -93,7 +93,7 @@ export function loadLedger(storage: Store): NoticeLedger {
 export function saveLedger(storage: Store, ledger: NoticeLedger) {
   try {
     storage.setItem(STORAGE_KEY, JSON.stringify(ledger));
-  } catch {
+  } catch (error) { console.warn("ts/apps/web/src/machine/notice-policy.ts: fallback after failure", error);
     /* Storage can be unavailable or full: the ledger then lasts for this page only. */
   }
 }

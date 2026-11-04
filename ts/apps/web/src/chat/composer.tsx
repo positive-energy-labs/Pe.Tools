@@ -13,13 +13,15 @@ import { FirstOpenCard, ProviderRepair } from "#/chat/first-open";
 import { isReady } from "#/workbench/provider/providers";
 import { Pane } from "@pe/kit/lang/pane";
 import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
-import { useWorkbench } from "#/workbench/provider";
+import { useTranscript, useWorkbench } from "#/workbench/provider";
 import { EMPTY_CHAT_DRAFT, type ChatDraft } from "#/workbench/prompt";
 import {
   selectMessages,
+  selectQuestions,
   selectRunStatus,
   selectSkillCommands,
 } from "@pe/agent-contracts/chat-state";
+import { composerAnswer } from "./question-form";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
 import { chatReading } from "./graph";
@@ -27,8 +29,8 @@ import { Composer, ComposerFrame } from "#/components/lang/conversation";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { MentionChip } from "@pe/kit/lang/chip";
-import { previousOf } from "#/readings";
-import { AssetReel, referModel } from "./asset-reel";
+import { previousOf } from "#/shell/readings-hooks";
+import { AssetReel, referModel, threadAssets } from "./asset-reel";
 import { AttachmentChip } from "./attachment-chip";
 import { useAttachments } from "./use-attachments";
 import { useSlashMenu, type SlashCommand } from "./use-slash-menu";
@@ -74,24 +76,35 @@ export function ThreadComposer({
   autoFocus?: boolean;
 }) {
   const [draft, setDraft] = useState(initialDraft);
-  const { chat, providers, config, currentThreadId, threads, draft: head } = useWorkbench();
+  const {
+    providers,
+    config,
+    currentThreadId,
+    threads,
+    draft: head,
+    answerQuestion,
+  } = useWorkbench();
+  const { providerId, isRunning, commands, assets, asking } = useTranscript((state) => ({
+    providerId: state.providerId,
+    isRunning: selectRunStatus(state) !== "idle",
+    commands: selectSkillCommands(state),
+    assets: threadAssets(selectMessages(state)),
+    asking: selectQuestions(state)[0],
+  }));
   // Loaded and none ready: the composer carries the first-open doors and Send says why it waits.
   const noneReady = providers.list !== undefined && !providers.list.some(isReady);
   // Some ready, but not the one this head runs on: that provider carries its own repair.
   const headId = currentThreadId
-    ? chat.providerId || threads.find((item) => item.id === currentThreadId)?.providerId
+    ? providerId || threads.find((item) => item.id === currentThreadId)?.providerId
     : head.providerId;
   const unready = noneReady ? undefined : providers.list?.find((item) => item.id === headId);
   const repairing = unready && !isReady(unready) ? unready : undefined;
-  const isRunning = selectRunStatus(chat) !== "idle";
   const send = useSend(handle, draft, (sent) => {
     setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current));
   });
   const files = useAttachments(draft, setDraft);
   const sendResult = handle.results.get("send");
   const refusedSend = sendResult && "refusal" in sendResult ? sendResult.refusal.message : null;
-  const commands = useMemo<SlashCommand[]>(() => selectSkillCommands(chat), [chat]);
-  const messages = useMemo(() => selectMessages(chat), [chat]);
   const slash = useSlashMenu(draft.text, commands);
   const [area, setArea] = useState<HTMLTextAreaElement | null>(null);
   const form = area?.form ?? null;
@@ -101,7 +114,16 @@ export function ThreadComposer({
   const catalog = useMemo(() => read && machine && liveCatalog(read, machine), [read, machine]);
   const mentions = useMentions(draft, setDraft, catalog, area, slash.open);
   const setText = (text: string) => setDraft((previous) => withText(previous, text));
-  const sendCurrent = () => void send.run();
+  // A question Pea is waiting on takes the composer's text as its answer (its "Other" box), so
+  // typing while Pea waits is never silently dropped behind a stop button.
+  const answer = asking && composerAnswer(asking, draft.text.trim());
+  const answerCurrent = async () => {
+    if (!asking || !answer || !draft.text.trim()) return;
+    const sent = draft;
+    await answerQuestion(asking.requestId, "accept", answer);
+    setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current));
+  };
+  const sendCurrent = () => void (asking ? answerCurrent() : send.run());
   const SkillIcon = MENTION_KINDS.skill.icon;
 
   const paneOwnsFocus = () =>
@@ -269,7 +291,29 @@ export function ThreadComposer({
             </>
           }
           send={
-            isRunning ? (
+            asking ? (
+              <>
+                <Button
+                  label="stop"
+                  icon={Square}
+                  refusal={handle.control("stop").refusal}
+                  onClick={() => void handle.control("stop").run()}
+                />
+                <Button
+                  kind="commit"
+                  label="Answer Pea's question"
+                  icon={ArrowUp}
+                  refusal={
+                    !answer
+                      ? "This question takes a pick, not text: answer it above"
+                      : draft.text.trim()
+                        ? null
+                        : "Type your answer, or pick one above"
+                  }
+                  onClick={sendCurrent}
+                />
+              </>
+            ) : isRunning ? (
               <Button
                 label="stop"
                 icon={Square}
@@ -298,7 +342,13 @@ export function ThreadComposer({
           aria-autocomplete="list"
           aria-haspopup="listbox"
           placeholder={
-            noneReady ? "no provider is ready" : "Ask Pea; / for a skill, @ to point at a thing"
+            noneReady
+              ? "no provider is ready"
+              : asking
+                ? answer
+                  ? "Pea is waiting on your answer; type it here, Enter sends it"
+                  : "Pea is waiting on a pick in the question above"
+                : "Ask Pea; / for a skill, @ to point at a thing"
           }
           autoFocus={autoFocus}
           value={draft.text}
@@ -312,7 +362,7 @@ export function ThreadComposer({
           onPaste={files.pasteHandler}
         />
         <AssetReel
-          messages={messages}
+          assets={assets}
           onMention={(mention) => {
             setDraft((previous) => referModel(previous, mention));
             area?.focus();

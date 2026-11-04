@@ -1,8 +1,9 @@
-import { pane, split, type RouteGraph } from "@pe/agent-contracts";
-import type { z } from "zod";
+import { manyField, pane, split, type RouteGraph } from "@pe/agent-contracts";
+import { z } from "zod";
+import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { ductLossAddress } from "../../../../packages/agent-contracts/src/routes/duct-loss";
 
-export type DuctLossPage = {
+export type DuctLossPage = { case: "duct" } & {
   [K in keyof typeof ductLossAddress.fields]: z.output<
     (typeof ductLossAddress.fields)[K]["schema"]
   >;
@@ -10,11 +11,38 @@ export type DuctLossPage = {
 const fields = ductLossAddress.fields;
 
 export const ductLossGraph: RouteGraph<DuctLossPage, null> = {
+  seeds: {
+    calculate: {
+      title: "calculate",
+      load: () => import("#/shell/fixture-examples").then((m) => m.routeExamples["duct-loss"]),
+    },
+  },
+  directory: {
+    path: "/duct-loss",
+    title: "Duct Loss",
+    label: "Duct friction",
+    exposure: "Main",
+    runtimeNeed: "Browser calculation",
+    icon: "Wind",
+    category: "Calculate loads & airflow",
+    blurb:
+      "The imperial duct friction loss formula, live — type a duct and airflow, read Δp with every intermediate term beside the equation.",
+    aliases: ["friction", "airflow", "pressure", "calculator"],
+    listed: true,
+    satellites: [],
+    surfaces: {
+      web: "full",
+      pwa: "full",
+      tray: false,
+    },
+  },
   key: "duct-loss",
   address: "duct-loss",
   name: "Duct Loss",
-  fields: {
-    shape: { ...fields.shape, role: "subject" },
+  subjectField: { kind: "singleton", field: "case", noun: "hypothetical duct case", keyKind: "name", cardinality: "one", roster: "case", detail: "result", pane: "inputs", show: (id) => id },
+  fields: { selected: { ...manyField("name", {}), role: "selection" },
+    case: { ...field(z.enum(["duct"]).default("duct"), {}), role: "subject" },
+    shape: { ...fields.shape, role: "query" },
     a: { ...fields.a, role: "query" },
     b: { ...fields.b, role: "query" },
     cfm: { ...fields.cfm, role: "query" },
@@ -24,6 +52,7 @@ export const ductLossGraph: RouteGraph<DuctLossPage, null> = {
     face: { ...fields.face, role: "pose" },
   },
   readings: {
+    case: { kind: "derive", source: "duct-loss.case", retire: "page" },
     result: {
       kind: "derive",
       source: "duct-loss.solve",
@@ -63,5 +92,4 @@ export const ductLossGraph: RouteGraph<DuctLossPage, null> = {
         "Calculate duct friction from dimensions and airflow. The wheel, charts and formula use the same inputs. All calculation runs in this browser. The formula is ASHRAE Fundamentals, Duct Design: Darcy friction with the Altshul-Tsal factor (L in ft, D in inches, roughness in ft, density in lb/ft3). The wheel reads the friction-chart power law 0.109136·Q^1.9/D^5.02 for galvanized duct and standard air, as the SMACNA Ductulator does; it runs up to a tenth above the Altshul-Tsal figure.",
     },
   },
-  pick: false,
 };

@@ -145,7 +145,7 @@ public sealed class ParameterLinksBehaviorTests {
 
             var preview = ParameterLinksEngine.Evaluate(document, profile);
             var applied = ParameterLinksService.Instance.Apply(document,
-                new ParameterLinksApplyRequest(profile));
+                new ParameterLinksApplyRequest(profile), false);
 
             var expected = UnitUtils.ConvertToInternalUnits(30, UnitTypeId.Amperes);
             Assert.Multiple(() => {

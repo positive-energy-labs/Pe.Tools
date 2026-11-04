@@ -6,18 +6,22 @@ import type {
   SessionObservation,
 } from "@pe/host-contracts/pe-revit-contract";
 import {
-  createMachine,
   machineSources,
   unavailableShare,
   type AttachmentRead,
   type HeldTarget,
-  type MachineSources,
 } from "../src/machine.ts";
+import { machineOwner, settle, type PromiseMachineSources } from "./effect-test.ts";
 import type { Providers } from "../src/harness/providers.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 import { planAcquisition } from "../src/acquisition.ts";
+import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
+/** Effect yields on setImmediate: only the clock and its timers are faked, or no fiber ever resumes. */
+const FAKE_CLOCK: { toFake: ("setTimeout" | "clearTimeout" | "Date")[] } = {
+  toFake: ["setTimeout", "clearTimeout", "Date"],
+};
 const sdkRun = vi.hoisted(() => vi.fn<(args: readonly string[]) => Promise<string>>());
 vi.mock("../src/session-route.ts", async (original) => {
   const real = await original<typeof import("../src/session-route.ts")>();
@@ -92,7 +96,7 @@ function fixture() {
     receiptLeg: unreadLeg(),
     automatic: true,
   };
-  const sources: MachineSources = {
+  const sources: PromiseMachineSources = {
     actions: vi.fn(async (): Promise<readonly ActionReceipt[]> => []),
     host: vi.fn(async () => ({
       serviceName: "host",
@@ -127,7 +131,6 @@ function fixture() {
           probedAt: null,
         },
       ],
-      access: { guarded: true },
     })),
     update: {
       automaticPending: () => false,
@@ -144,11 +147,11 @@ function fixture() {
       subscribe: vi.fn(() => vi.fn()),
     },
   };
-  return { sources, machine: createMachine(sources, { periodMs: 60_000 }) };
+  return { sources, machine: machineOwner(sources, { periodMs: 60_000 }) };
 }
 
 test("a stalled observed-document leg publishes unknown at the Machine deadline", async () => {
-  vi.useFakeTimers();
+  vi.useFakeTimers(FAKE_CLOCK);
   const f = fixture();
   vi.mocked(f.sources.documents).mockReturnValue(new Promise(() => {}));
   let value: Machine | undefined;
@@ -163,7 +166,6 @@ test("a stalled observed-document leg publishes unknown at the Machine deadline"
       documentsLeg: { observedAtUtc: null, error: expect.stringContaining("leg exceeded") },
     });
   } finally {
-    f.machine.close();
     vi.useRealTimers();
   }
 });
@@ -217,10 +219,10 @@ function acquiring(
 }
 
 test("automatic update requires two continuous Revit-free minutes and waits for Pea", async () => {
-  vi.useFakeTimers();
+  vi.useFakeTimers(FAKE_CLOCK);
   const f = fixture();
   let busy = false;
-  const machine = createMachine(f.sources, {
+  const machine = machineOwner(f.sources, {
     automaticUpdates: { peaActive: () => busy },
   });
   const plan = { planId: "idle-plan", available: true, blockers: [], revits: [] };
@@ -244,17 +246,15 @@ test("automatic update requires two continuous Revit-free minutes and waits for 
     await machine.refresh();
     expect(f.sources.update.apply).toHaveBeenCalledExactlyOnceWith("idle-plan", true);
   } finally {
-    machine.close();
-    f.machine.close();
     vi.useRealTimers();
   }
 });
 
 test("failed absence observations reset the automatic wait and a Pea turn starting during recheck blocks admission", async () => {
-  vi.useFakeTimers();
+  vi.useFakeTimers(FAKE_CLOCK);
   const f = fixture();
   let busy = false;
-  const machine = createMachine(f.sources, {
+  const machine = machineOwner(f.sources, {
     automaticUpdates: { peaActive: () => busy },
   });
   Object.assign(f.sources.update.current(), {
@@ -283,8 +283,6 @@ test("failed absence observations reset the automatic wait and a Pea turn starti
     expect(busy).toBe(true);
     expect(f.sources.update.apply).not.toHaveBeenCalled();
   } finally {
-    machine.close();
-    f.machine.close();
     vi.useRealTimers();
   }
 });
@@ -302,7 +300,6 @@ test("unread observed documents remain unknown and a reused pid cannot classify 
       { ...reused, documents: [{ ...reused.documents![0]!, access: { kind: "read" } }] },
     ]);
   } finally {
-    f.machine.close();
   }
 });
 
@@ -323,15 +320,15 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
   const sources = machineSources(undefined, {} as Providers, f.sources.update);
   try {
     sdkRun.mockResolvedValueOnce(envelope({ sessions: [row], processReadErrors: [] }));
-    expect(await sources.sessions()).toEqual([row]);
+    expect(await settle(sources.sessions())).toEqual([row]);
     expect(sdkRun).toHaveBeenLastCalledWith(["session", "list", "--all", "--json"]);
     sdkRun.mockResolvedValueOnce(envelope(docs, row.process));
-    expect(await sources.documents(row.process)).toEqual(docs);
+    expect(await settle(sources.documents(row.process))).toEqual(docs);
     expect(sdkRun).toHaveBeenLastCalledWith(["doc", "list", "--pid", "42", "--json"]);
     sdkRun.mockResolvedValueOnce(
       envelope(docs, { ...row.process, processStartUtc: "a-new-process" }),
     );
-    await expect(sources.documents(row.process)).rejects.toThrow("different process incarnation");
+    await expect(settle(sources.documents(row.process))).rejects.toThrow("different process incarnation");
     const holdings = [
       {
         openId: "sdk-open",
@@ -347,28 +344,27 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
       },
     ];
     sdkRun.mockResolvedValueOnce(envelope({ state: "ok", documents: holdings }, row.process));
-    expect(await sources.holdings(row.process)).toEqual(holdings);
+    expect(await settle(sources.holdings(row.process))).toEqual(holdings);
     expect(sdkRun).toHaveBeenLastCalledWith(["doc", "list", "--pid", "42", "--holdings", "--json"]);
     sdkRun.mockResolvedValueOnce(envelope({ state: "ok", documents: null }, row.process));
-    expect(await sources.holdings(row.process)).toBeNull();
+    expect(await settle(sources.holdings(row.process))).toBeNull();
     sdkRun.mockResolvedValueOnce(envelope({ state: "ok", documents: [] }, row.process));
-    expect(await sources.holdings(row.process)).toEqual([]);
+    expect(await settle(sources.holdings(row.process))).toEqual([]);
     sdkRun.mockResolvedValueOnce(
       envelope({ state: "ok", documents: holdings }, { ...row.process, processStartUtc: "new" }),
     );
-    await expect(sources.holdings(row.process)).rejects.toThrow("different process incarnation");
+    await expect(settle(sources.holdings(row.process))).rejects.toThrow("different process incarnation");
   } finally {
     sdkRun.mockReset();
-    f.machine.close();
   }
 });
 
 test("SDK process read errors fail the real census adapter and restart the full automatic wait", async () => {
-  vi.useFakeTimers();
+  vi.useFakeTimers(FAKE_CLOCK);
   const f = fixture();
   const adapter = machineSources(undefined, {} as Providers, f.sources.update);
-  const machine = createMachine(
-    { ...f.sources, sessions: adapter.sessions },
+  const machine = machineOwner(
+    { ...f.sources, sessions: () => settle(adapter.sessions()) },
     {
       automaticUpdates: { peaActive: () => false },
     },
@@ -409,8 +405,6 @@ test("SDK process read errors fail the real census adapter and restart the full 
     await machine.refresh();
     expect(f.sources.update.apply).toHaveBeenCalledExactlyOnceWith("idle-plan", true);
   } finally {
-    machine.close();
-    f.machine.close();
     sdkRun.mockReset();
     vi.useRealTimers();
   }
@@ -458,14 +452,12 @@ const accessesAt = async (
       },
     ]);
   }
-  const machine = createMachine(f.sources, { periodMs: 60_000, now: () => at });
+  const machine = machineOwner(f.sources, { periodMs: 60_000, now: () => at });
   try {
     return (await machine.refresh()).revit.sessions![0]!.attachment!.documents!.map(
       (doc) => doc.access,
     );
   } finally {
-    machine.close();
-    f.machine.close();
   }
 };
 const accessAt = async (targets: readonly HeldTarget[], at: string) =>
@@ -487,9 +479,9 @@ test("access: one SDK id joins the acquisition and a human-added target; without
 });
 
 test("U-02: an automatic apply slower than the leg deadline is not a failed read and is not re-admitted", async () => {
-  vi.useFakeTimers();
+  vi.useFakeTimers(FAKE_CLOCK);
   const f = fixture();
-  const machine = createMachine(f.sources, { automaticUpdates: { peaActive: () => false } });
+  const machine = machineOwner(f.sources, { automaticUpdates: { peaActive: () => false } });
   Object.assign(f.sources.update.current(), {
     plan: { planId: "idle-plan", latest: "0.9.0", available: true, blockers: [], revits: [] },
   });
@@ -506,8 +498,57 @@ test("U-02: an automatic apply slower than the leg deadline is not a failed read
     expect(later.legs["automatic-update"]).toBeUndefined();
     expect(f.sources.update.apply).toHaveBeenCalledTimes(1);
   } finally {
-    machine.close();
-    f.machine.close();
     vi.useRealTimers();
+  }
+});
+
+test("the machine resource publishes holdings counts while scoped reads retain the canonical ids", async () => {
+  const f = fixture();
+  vi.mocked(f.sources.holdings).mockResolvedValue([
+    {
+      openId: "sdk-open",
+      title: "Model",
+      holdings: {
+        elements: Array.from({ length: 100000 }, (_, id) => ({
+          id,
+          category: "Ducts",
+          name: "HELD_SENTINEL",
+          changedSinceSync: null,
+          requesters: [],
+        })),
+        worksets: [],
+        empty: false,
+        savedNotSynced: null,
+        unsaved: false,
+        workshared: true,
+      },
+    },
+  ]);
+  try {
+    await f.machine.refresh();
+    let snapshot: unknown;
+    const release = hostResourceObserver(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      f.machine,
+    )({ kind: "machine" }, (frame) => {
+      snapshot = frame;
+    });
+    try {
+      const json = JSON.stringify(snapshot);
+      expect(json).not.toContain("HELD_SENTINEL");
+      expect(JSON.parse(json).value.revit.sessions[0].holdings[0].holdings.elementCount).toBe(
+        100000,
+      );
+      expect(f.machine.current().revit.sessions![0]!.holdings![0]!.holdings.elements).toHaveLength(
+        100000,
+      );
+    } finally {
+      release();
+    }
+  } finally {
   }
 });

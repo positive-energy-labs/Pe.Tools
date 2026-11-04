@@ -25,6 +25,29 @@ type Property = {
 /** A schema constant as the user reads it. */
 const label = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
 
+/**
+ * Each open question's partial answer, so the composer can answer with what the form holds.
+ * ponytail: module-level, keyed by requestId; entries are tiny and die with the tab.
+ */
+const partial = new Map<string, Record<string, unknown>>();
+
+/** The free-text box an answer typed in the composer lands in: the harness's "Other", else the first plain box. */
+function freeField(question: Question): string | undefined {
+  const properties = Object.entries(
+    (question.requestedSchema as { properties?: Record<string, Property> }).properties ?? {},
+  );
+  const plain = properties.filter(
+    ([, property]) => property.type === "string" && !choices(property),
+  );
+  return (plain.find(([key]) => key.endsWith("_custom")) ?? plain[0])?.[0];
+}
+
+/** The content a composer text answers `question` with, or null when the question has no box for text. */
+export function composerAnswer(question: Question, text: string) {
+  const key = freeField(question);
+  return key ? { ...partial.get(question.requestId), [key]: text } : null;
+}
+
 /** The choices a property offers, or undefined for a free box. */
 const choices = (property: Property): Option[] | undefined =>
   property.oneOf ??
@@ -47,13 +70,19 @@ export function QuestionForm({
   };
   const fields = Object.entries(schema.properties ?? {});
   const required = new Set(schema.required ?? []);
-  const [content, setContent] = useState<Record<string, unknown>>({});
+  const [content, setContent] = useState<Record<string, unknown>>(
+    () => partial.get(question.requestId) ?? {},
+  );
   const [busy, setBusy] = useState(false);
   useWork(busy, "sending answer…");
   const region = useRef<HTMLDivElement>(null);
   const sending = useRef(false);
   const set = (key: string, value: unknown) =>
-    setContent((previous) => ({ ...previous, [key]: value }));
+    setContent((previous) => {
+      const next = { ...previous, [key]: value };
+      partial.set(question.requestId, next);
+      return next;
+    });
   const missing = fields.some(
     ([key]) => required.has(key) && (content[key] === undefined || content[key] === ""),
   );
@@ -70,6 +99,7 @@ export function QuestionForm({
     setBusy(true);
     try {
       await onAnswer(action, action === "accept" ? values : undefined);
+      partial.delete(question.requestId);
     } finally {
       setBusy(false);
       sending.current = false;
@@ -86,6 +116,12 @@ export function QuestionForm({
           const target = event.target as HTMLElement;
           if (target.closest('[data-question-action="decline"]')) {
             void answer("decline");
+            return;
+          }
+          // "Other" only opens its box; the typed answer is sent by Enter in the box or Answer.
+          const other = target.closest<HTMLElement>("[data-other-for]");
+          if (other) {
+            document.getElementById(other.dataset.otherFor!)?.focus();
             return;
           }
           const radio = target.closest<HTMLElement>('[role="radio"]');
@@ -120,6 +156,11 @@ export function QuestionForm({
           key={key}
           id={`${question.requestId}-${key}`}
           fieldKey={key}
+          other={
+            fields.some(([each]) => each === `${key}_custom`)
+              ? `${question.requestId}-${key}_custom`
+              : undefined
+          }
           property={property}
           value={content[key]}
           disabled={busy}
@@ -161,6 +202,7 @@ export function QuestionForm({
 function Field({
   id,
   fieldKey,
+  other,
   property,
   value,
   onChange,
@@ -168,6 +210,8 @@ function Field({
 }: {
   id: string;
   fieldKey: string;
+  /** The id of this pick's "Other" box, when the question has one. */
+  other?: string;
   property: Property;
   value: unknown;
   onChange: (value: unknown) => void;
@@ -271,6 +315,29 @@ function Field({
               </span>
             </Button>
           ))}
+          {other ? (
+            // Clears the pick and moves to the box; it never answers by itself.
+            <Button
+              type="button"
+              label="Other"
+              refusal={disabled ? "The answer is being sent." : null}
+              role="radio"
+              aria-checked={false}
+              tabIndex={-1}
+              data-other-for={other}
+              onClick={() => {
+                onChange(undefined);
+                document.getElementById(other)?.focus();
+              }}
+            >
+              <span className="grid w-full grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-2 px-2 py-1.5 text-left">
+                <span aria-hidden="true" className="face-mono text-ink-2">
+                  {`${options.length + 1}.`}
+                </span>
+                <span className="min-w-0">Other: type your own answer below</span>
+              </span>
+            </Button>
+          ) : null}
         </div>
       </div>
     );

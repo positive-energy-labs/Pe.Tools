@@ -1,4 +1,4 @@
-import { APP_ROUTES } from "@pe/agent-contracts";
+import { ROUTE_DIRECTORY } from "@pe/agent-contracts";
 import type { NavigationSnapshot } from "./navigation-client";
 import { podRoutePath } from "#/route/pod-address";
 import type { PodRouteDescriptor } from "@pe/agent-contracts";
@@ -26,14 +26,14 @@ export function globalItems(
           kind: "Tools" as const,
           label: route.name,
           context: route.packageId,
-          aliases: `${route.description} ${route.sourcePath}`,
+          aliases: `${route.description} ${route.artifact}`,
           state: route.trusted ? "Trusted Pod route" : "Trust required",
           url: podRoutePath(route.key),
           reason: null,
         }))
       : []),
     ...(kind === "All" || kind === "Tools"
-      ? APP_ROUTES.filter((tool) => tool.directory).map((tool) => ({
+      ? ROUTE_DIRECTORY.filter((tool) => tool.directory).map((tool) => ({
           key: `tool:${tool.path}`,
           kind: "Tools" as const,
           label: tool.title,

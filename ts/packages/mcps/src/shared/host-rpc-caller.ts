@@ -58,7 +58,8 @@ function schemaTitle(schemaJson: string | undefined): string | undefined {
   try {
     const parsed = JSON.parse(schemaJson) as { title?: unknown };
     return typeof parsed.title === "string" ? parsed.title : undefined;
-  } catch {
+  } catch (error) {
+    console.warn("ts/packages/mcps/src/shared/host-rpc-caller.ts: fallback after failure", error);
     return undefined;
   }
 }
@@ -195,7 +196,10 @@ export class HostRpcCaller {
 
   /** Enrichment lookup against the live catalog; undefined when the catalog is unreachable. */
   async getOperation(key: string): Promise<HostOperationDefinition | undefined> {
-    const catalog = await this.catalog().catch(() => undefined);
+    const catalog = await this.catalog().catch((error) => {
+      console.error("host-rpc-caller: asynchronous operation failed", error);
+      return undefined;
+    });
     return catalog?.ops.find((operation) => operation.key === key);
   }
 
@@ -248,6 +252,7 @@ export class HostRpcCaller {
             ],
           };
     }
+    // effect-edge: island, phase 5
     return Effect.runPromise(
       callHostRpcOperationEffect(this.options, key, operation, request, verbosity),
     );
@@ -329,7 +334,8 @@ function readResolvedTarget(response: Response): ResolvedTarget | undefined {
     try {
       const ref = documentRefSchema.safeParse({ session, openId: decodeURIComponent(openId) });
       if (ref.success) nativeObservation = { source: "native", document: ref.data, requestId };
-    } catch {
+    } catch (error) {
+      console.warn("ts/packages/mcps/src/shared/host-rpc-caller.ts: fallback after failure", error);
       // Malformed provenance leaves the read visible but unavailable for native actions.
     }
   }
@@ -350,14 +356,14 @@ function readCapture(response: Response): { id: string; url: string } | undefine
 
 // Plain POST /call — unknown keys pass through so runtime-registered Revit ops
 // are callable without a package rebuild; the host/Revit side owns validation.
-const runHostRpcEffect = Effect.fnUntraced(function* (
+export const runHostRpcEffect = Effect.fnUntraced(function* (
   key: string,
   request: unknown,
   options: HostRpcCallerOptions,
 ) {
   const base = trimTrailingSlash(options.hostBaseUrl ?? resolveHostBaseUrl());
   return yield* Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (options.requestId) headers["x-pe-action-id"] = options.requestId;
       if (options.session) headers[HOST_RPC_SDK_SESSION_HEADER] = JSON.stringify(options.session);
@@ -371,8 +377,8 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
           headers,
           signal:
             options.timeoutMs == null
-              ? undefined
-              : AbortSignal.timeout(Math.max(options.timeoutMs, 1)),
+              ? signal
+              : AbortSignal.any([signal, AbortSignal.timeout(Math.max(options.timeoutMs, 1))]),
         },
       );
       if (!response.ok) {

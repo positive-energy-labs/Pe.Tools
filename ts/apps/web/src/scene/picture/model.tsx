@@ -13,26 +13,26 @@ import {
   type ReactNode,
 } from "react";
 
-import type { PicturePage, SceneView } from "@pe/agent-contracts";
-import { LOOK } from "#/scene/grounds";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
-import { fitSection, sectionVolume, type Section } from "#/scene/section";
-import { SectionControls, SectionHandles } from "#/scene/section-controls";
-import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "#/scene/orbit";
+import { ContinuationMarks } from "#/scene/continuations";
 import type { PictureBounds } from "#/scene/framing";
 import { framingPoints } from "#/scene/framing";
-import { useStage } from "#/scene/stage-controller";
-import { sectionProject, viewportProject, type Project, type Size } from "#/scene/projection";
-import { ContinuationMarks } from "#/scene/continuations";
-import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
-import { PaneOverlay } from "@pe/kit/lang/pane";
-import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { Button } from "@pe/kit/lang/button";
+import { LOOK } from "#/scene/grounds";
+import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "#/scene/orbit";
 import { CONTEXT_DEFAULT, type PictureContext } from "#/scene/picture/picture";
-import { Scene3D } from "#/scene/scene3d";
-import type { SceneRead } from "#/scene/use-scene";
-import type { Bounds, IssueTarget, Kinds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
+import { sectionProject, viewportProject, type Project, type Size } from "#/scene/projection";
 import type { ColourMode, ContextMode } from "#/scene/renderer";
+import { Scene3D } from "#/scene/scene3d";
+import { fitSection, sectionVolume, type Section } from "#/scene/section";
+import { SectionControls, SectionHandles } from "#/scene/section-controls";
+import { useStage } from "#/scene/stage-controller";
+import type { Bounds, IssueTarget, Kinds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
+import type { SceneRead } from "#/scene/use-scene";
+import type { PicturePage, SceneView } from "@pe/agent-contracts";
+import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { PaneOverlay } from "@pe/kit/lang/pane";
+import { DetailedRead } from "./detail";
 
 const NONE: ReadonlySet<string> = new Set();
 const CONTEXT_LIMITS: Record<string, string> = {
@@ -119,7 +119,8 @@ export const poseOf = (
   size?: Size | null,
 ): OrbitViewport | null =>
   viewport?.kind === "orbit"
-    ? viewport
+    ? // The renderer owns its mutable camera pivot; Page remains immutable.
+      { ...viewport, pivot: [viewport.pivot[0], viewport.pivot[1], viewport.pivot[2]] }
     : bounds && size
       ? frame(bounds.scene, bounds.subject, undefined, size.width / size.height, bounds.points?.())
       : null;
@@ -139,6 +140,7 @@ export function ModelPicture({
   contextRadiusFt,
   contextRepresentation,
   onContextRepresentation,
+  detailRefusal,
   kinds,
   colour,
   sceneView,
@@ -169,6 +171,7 @@ export function ModelPicture({
   contextRadiusFt?: number;
   contextRepresentation?: PictureContext;
   onContextRepresentation?: (representation: PictureContext) => void;
+  detailRefusal?: string | null;
   /** Kind to hue and the Colour dial: the two inputs of the paint seam. */
   kinds: Kinds;
   colour: ColourMode;
@@ -281,7 +284,7 @@ export function ModelPicture({
   const status =
     said ??
     (read.error
-      ? `scene: ${read.error}`
+      ? `scene: ${read.error instanceof Error ? read.error.message : JSON.stringify(read.error)}`
       : !meshes
         ? "no meshes: choose a system on a Revit document"
         : null);
@@ -357,8 +360,9 @@ export function ModelPicture({
           />
         </PaneOverlay>
       )}
-      {(onContextRepresentation && contextMode !== "off") ||
+      {onContextRepresentation ||
       read.completeness?.complete === false ||
+      read.notice ||
       read.contextError ||
       read.omittedElements ||
       read.unavailableElements ? (
@@ -369,9 +373,12 @@ export function ModelPicture({
               onContextRepresentation
                 ? contextRepresentation === "meshes"
                   ? "Detailed context"
-                  : "Link-frame envelopes"
+                  : "Overview"
                 : "",
-              read.contextError ? `context: ${read.contextError}` : "",
+              read.notice ?? "",
+              read.contextError
+                ? `context: ${read.contextError instanceof Error ? read.contextError.message : JSON.stringify(read.contextError)}`
+                : "",
               read.completeness?.complete === false
                 ? (CONTEXT_LIMITS[read.completeness.limitReason ?? ""] ?? "Context limited")
                 : "",
@@ -389,26 +396,18 @@ export function ModelPicture({
               .filter(Boolean)
               .join(" / ")}
           />
-          {onContextRepresentation && contextMode !== "off" ? (
-            // Only link-boxes and meshes are offered; triangle-boxes stays a request option. The IFC default
-            // is kaitpw's open ruling (docs/features/spatial/LEDGER.md Owed).
-            <Button
-              label={
-                contextRepresentation !== "meshes"
-                  ? "Read detailed context"
-                  : "Use simplified context"
-              }
-              busy={read.pending}
-              onClick={() =>
+          {onContextRepresentation ? (
+            <DetailedRead
+              refusal={detailRefusal}
+              metadata={read.metadata}
+              pending={!detailRefusal && contextRepresentation === "meshes" && read.pending}
+              overview={contextRepresentation === "meshes"}
+              onRead={() =>
                 onContextRepresentation(
-                  contextRepresentation !== "meshes" ? "meshes" : CONTEXT_DEFAULT,
+                  contextRepresentation === "meshes" ? CONTEXT_DEFAULT : "meshes",
                 )
               }
-            >
-              {contextRepresentation !== "meshes"
-                ? "Read detailed context"
-                : "Use simplified context"}
-            </Button>
+            />
           ) : null}
         </PaneOverlay>
       ) : null}

@@ -1,13 +1,6 @@
+import { contextFetch as fetch } from "@pe/runtime/context";
 import { z } from "zod";
-import {
-  appliedScopeSchema,
-  documentRefSchema,
-  familiesReadProgressSchema,
-  workKeySchema,
-  type DocumentRef,
-  type WorkKey,
-} from "@pe/agent-contracts";
-import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
+import { appliedScopeSchema, type DocumentRef, type WorkKey } from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -25,31 +18,13 @@ export const familiesReads = {
 } as const;
 export type FamiliesReadKey = keyof typeof familiesReads;
 
-export const familiesObservationSchema = z.object({
-  id: z.string(),
-  work: workKeySchema,
-  document: documentRefSchema,
-  documentTitle: z.string().optional(),
-  filter: appliedScopeSchema,
-  capturedAt: z.string(),
-  completedAt: z.string(),
-  envelope: z.object({ revision: z.number().int() }).optional(),
-  progress: familiesReadProgressSchema.optional(),
-  readback: z
-    .object({
-      sourceId: z.string(),
-      verifiedFamilies: z.array(z.object({ name: z.string(), at: z.string() })),
-    })
-    .optional(),
-  result: z.custom<RevitMatrixLoadedFamilies.Res.Response>(),
-});
-export type FamiliesObservation = z.output<typeof familiesObservationSchema>;
-export type FamiliesObservationSummary = Omit<FamiliesObservation, "result"> & {
-  familyCount: number;
-  typeCount: number;
-  issueCount: number;
-};
-
+import { familiesObservationSchema } from "@pe/agent-contracts";
+export {
+  familiesObservationSchema,
+  familiesObservationSummarySchema,
+  type FamiliesObservation,
+  type FamiliesObservationSummary,
+} from "@pe/agent-contracts";
 /** Native matrix queries share the shell invocation door; no route owns a host client. */
 export async function readFamiliesCapture(
   key: FamiliesReadKey,
@@ -69,13 +44,22 @@ export async function readFamiliesCapture(
     },
     body: JSON.stringify(key === "families.read" ? { work, ...parsed } : parsed),
   });
-  const body = await response.json();
   if (!response.ok) {
-    const reason = typeof body.error === "string" ? body.error : body.error?.message;
+    const text = await response.text();
+    let reason = text;
+    try {
+      const body = JSON.parse(text);
+      reason = typeof body.error === "string" ? body.error : (body.error?.message ?? text);
+    } catch (cause) {
+      throw Object.assign(Error(text || `Families query failed (${response.status})`, { cause }), {
+        status: response.status,
+      });
+    }
     throw Object.assign(Error(reason ?? `Families query failed (${response.status})`), {
       status: response.status,
     });
   }
+  const body = await response.json();
   return key === "families.read"
     ? familiesObservationSchema.parse(body)
     : z.object({ cancelled: z.literal(true) }).parse(body);

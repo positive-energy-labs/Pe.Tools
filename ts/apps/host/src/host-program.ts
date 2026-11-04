@@ -1,14 +1,16 @@
+import { catalogEntries } from "@pe/agent-contracts/pe-api";
+import { requireLinkedCatalog } from "../../../packages/agent-contracts/src/catalog.ts";
 import { execFile, spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { Deferred, Effect, Layer, type Scope } from "effect";
-import { hostReceiptExport, bindNativeProducers, recordUpdateFact } from "./receipt-export.ts";
+import { Context, Deferred, Effect, Layer, type Scope } from "effect";
+import { ReceiptExport, recordUpdateFact } from "./receipt-export.ts";
 import { serviceFilePath, type ServiceFile } from "@pe/host-contracts/pe-service";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
-import { productRoot } from "@pe/host-contracts/service-identity";
 import { openWindow, prepareHostBinding, resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
+import { trayOwnerArguments } from "@pe/host-contracts/service-identity";
 import { makeInstalledUpdateReader } from "./update-route.ts";
 import { installedForeignAddins } from "./foreign-addins.ts";
 
@@ -22,14 +24,9 @@ export const hostProgram = (
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const telemetry = hostReceiptExport();
-      const unbindNative = bindNativeProducers(telemetry);
-      yield* Effect.addFinalizer(() =>
-        Effect.promise(async () => {
-          unbindNative();
-          await telemetry.close();
-        }),
-      );
+      requireLinkedCatalog(catalogEntries);
+      // One exporter for the launch: its scope unbinds the native producers and drains pending sends.
+      const telemetry = Context.get(yield* Layer.build(ReceiptExport.layer), ReceiptExport);
       yield* Effect.promise(() =>
         telemetry.record({
           kind: "usage",
@@ -66,10 +63,19 @@ export const hostProgram = (
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const webUrl = web ? yield* Deferred.make<string>() : undefined;
+      // The update reader's handoff is a Promise-world callback: it only settles this signal, and
+      // the fiber below sleeps and settles the latch, so the exit is owned by the launch scope.
+      const handoff = yield* Deferred.make<void>();
       const updateReader = makeInstalledUpdateReader(
         (fact) => recordUpdateFact(telemetry, fact),
-        // Let the POST/receipt frame flush before the launch scope tears the server down.
-        () => void setTimeout(() => Effect.runSync(Deferred.succeed(latch, undefined)), 1000),
+        () => void Deferred.doneUnsafe(handoff, Effect.void),
+      );
+      yield* Effect.forkScoped(
+        Deferred.await(handoff).pipe(
+          // Let the POST/receipt frame flush before the launch scope tears the server down.
+          Effect.andThen(Effect.sleep("1 second")),
+          Effect.andThen(Deferred.succeed(latch, undefined)),
+        ),
       );
       const HttpLive = makeHttpLive({
         port,
@@ -84,6 +90,7 @@ export const hostProgram = (
               : undefined,
         },
         updateReader,
+        receipts: telemetry,
         webRoot: resolveWebRoot(),
       });
 
@@ -140,12 +147,13 @@ const installedTrayExecutable = () =>
 
 function installedTrayArguments(file: ServiceFile, show: boolean): string[] {
   return [
+    ...trayOwnerArguments(hostOwnership),
     "--parent-pid",
     String(file.pid),
     "--parent-start",
     file.processStartUtc,
     "--service-file",
-    serviceFilePath(productRoot(), hostOwnership.serviceName),
+    serviceFilePath(hostOwnership.rootPath, hostOwnership.serviceName),
     ...(show ? ["--show"] : []),
   ];
 }

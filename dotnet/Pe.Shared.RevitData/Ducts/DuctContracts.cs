@@ -86,7 +86,7 @@ public enum DuctIssueKind {
 ///     PE's alternative to the built-in Mark, never the Mark itself).
 /// </summary>
 public sealed record DuctSnapshotRequest(
-    DuctParameterSlots? Slots = null,
+    DuctParameterSlotOverrides? Slots = null,
     string? LabelParameter = "PE_G___TagInstance", // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
     DuctSnapshotSelector? Selector = null);
 
@@ -158,35 +158,41 @@ public sealed record DuctOpenEnd(long ElementId, int Connector, double[] Point, 
 ///     FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
 ///     live (the configurable door, kaitpw 2026-10-08).
 /// </summary>
+public sealed record DuctParameterSlotOverrides(
+    string? FanStatic = null,
+    string? FanFlow = null,
+    string? ComponentDrop = null,
+    string? TerminalDrop = null,
+    string? FittingCoefficient = null,
+    string? TerminalFlow = null) {
+    // Overrides preserve absence until they merge over the store. Dispatch populates ctor defaults.
+    // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later).
+    private static readonly DuctParameterSlots Defaults = new(
+        "PE_M_Fan_ExternalStaticPressure", "PE_M_Fan_AirFlowDesign", "Pressure Drop",
+        "PE_M_Grd_ExternalStaticPressure", DuctParameterSlots.DefaultFittingCoefficient, "PE_M_Grd_AirFlow");
+
+    /// <summary>Resolve nullable overrides over the stored names, then engine defaults, exactly once.</summary>
+    public DuctParameterSlots Resolve(DuctParameterSlotOverrides? stored = null) => new(
+        Name(this.FanStatic, stored?.FanStatic, Defaults.FanStatic),
+        Name(this.FanFlow, stored?.FanFlow, Defaults.FanFlow),
+        Name(this.ComponentDrop, stored?.ComponentDrop, Defaults.ComponentDrop),
+        Name(this.TerminalDrop, stored?.TerminalDrop, Defaults.TerminalDrop),
+        Name(this.FittingCoefficient, stored?.FittingCoefficient, Defaults.FittingCoefficient),
+        Name(this.TerminalFlow, stored?.TerminalFlow, Defaults.TerminalFlow));
+
+    private static string Name(string? authored, string? stored, string fallback) =>
+        !string.IsNullOrWhiteSpace(authored) ? authored : !string.IsNullOrWhiteSpace(stored) ? stored : fallback;
+}
+
+/// <summary>Complete parameter names after override, store and engine-default resolution.</summary>
 public sealed record DuctParameterSlots(
-    string FanStatic = "PE_M_Fan_ExternalStaticPressure", // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
-    string FanFlow = "PE_M_Fan_AirFlowDesign", // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
-    string ComponentDrop = "Pressure Drop",
-    string? TerminalDrop = "PE_M_Grd_ExternalStaticPressure", // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
-    string FittingCoefficient = DuctParameterSlots.DefaultFittingCoefficient,
-    string TerminalFlow = "PE_M_Grd_AirFlow") { // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later)
+    string FanStatic,
+    string FanFlow,
+    string ComponentDrop,
+    string TerminalDrop,
+    string FittingCoefficient,
+    string TerminalFlow) {
     public const string DefaultFittingCoefficient = "Pe_C";
-    private static readonly DuctParameterSlots Defaults = new();
-
-    /// <summary>Each name this leaves blank (a partial wire object) comes from <paramref name="under" />.</summary>
-    public DuctParameterSlots Over(DuctParameterSlots? under) => under is null
-        ? this
-        : new DuctParameterSlots(
-            string.IsNullOrWhiteSpace(this.FanStatic) ? under.FanStatic : this.FanStatic,
-            string.IsNullOrWhiteSpace(this.FanFlow) ? under.FanFlow : this.FanFlow,
-            string.IsNullOrWhiteSpace(this.ComponentDrop) ? under.ComponentDrop : this.ComponentDrop,
-            string.IsNullOrWhiteSpace(this.TerminalDrop) ? under.TerminalDrop : this.TerminalDrop,
-            string.IsNullOrWhiteSpace(this.FittingCoefficient) ? under.FittingCoefficient : this.FittingCoefficient,
-            string.IsNullOrWhiteSpace(this.TerminalFlow) ? under.TerminalFlow : this.TerminalFlow);
-
-    /// <summary>A partial slots object from the wire deserializes missing names as null, not the defaults; this restores them.</summary>
-    public DuctParameterSlots WithDefaults() => new(
-        string.IsNullOrWhiteSpace(this.FanStatic) ? Defaults.FanStatic : this.FanStatic,
-        string.IsNullOrWhiteSpace(this.FanFlow) ? Defaults.FanFlow : this.FanFlow,
-        string.IsNullOrWhiteSpace(this.ComponentDrop) ? Defaults.ComponentDrop : this.ComponentDrop,
-        string.IsNullOrWhiteSpace(this.TerminalDrop) ? Defaults.TerminalDrop : this.TerminalDrop,
-        string.IsNullOrWhiteSpace(this.FittingCoefficient) ? Defaults.FittingCoefficient : this.FittingCoefficient,
-        string.IsNullOrWhiteSpace(this.TerminalFlow) ? Defaults.TerminalFlow : this.TerminalFlow);
 }
 
 /// <summary>
@@ -387,7 +393,7 @@ public sealed record DuctNode(
     string? Type,
     string? PartType,
     long? LevelId,
-    double[] Point,
+    double[]? Point,
     string? GroupId,
     string? SystemName,
     string? Classification,

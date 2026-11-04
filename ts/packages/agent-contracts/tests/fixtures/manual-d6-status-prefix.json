@@ -1,0 +1,495 @@
+{
+  "id": "808e6d64-dbab-4ea4-8bb7-f88d617324f8",
+  "key": "ducts.preview-losses",
+  "outcome": {
+    "id": "808e6d64-dbab-4ea4-8bb7-f88d617324f8",
+    "state": "succeeded",
+    "input": {
+      "work": {
+        "key": {
+          "route": "ducts",
+          "target": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools\\.artifacts\\runs\\live-20261102-manual-d-6\\local\\Chadds-manuald6.rvt",
+          "binding": "address",
+          "from": {
+            "session": "session-dc58265a016aef3c",
+            "openId": "2a8bceb76ba542cb94c41ea3de1ba624"
+          }
+        },
+        "revision": 15
+      }
+    },
+    "receiptId": "808e6d64-dbab-4ea4-8bb7-f88d617324f8",
+    "snapshots": []
+  },
+  "caller": {
+    "kind": "human",
+    "via": "local"
+  },
+  "effects": [],
+  "consumes": [
+    {
+      "kind": "work",
+      "probe": {
+        "handle": {
+          "key": {
+            "route": "ducts",
+            "target": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools\\.artifacts\\runs\\live-20261102-manual-d-6\\local\\Chadds-manuald6.rvt",
+            "binding": "address",
+            "from": {
+              "session": "session-dc58265a016aef3c",
+              "openId": "2a8bceb76ba542cb94c41ea3de1ba624"
+            }
+          },
+          "revision": 15
+        },
+        "paths": [
+          [
+            "writeIntent",
+            "edit"
+          ],
+          [
+            "assumptions",
+            "join:14106988:1|14122436:1",
+            "edit"
+          ],
+          [
+            "terminalDrops",
+            "14088043",
+            "edit"
+          ],
+          [
+            "componentDrops",
+            "14577394",
+            "edit"
+          ],
+          [
+            "componentDrops",
+            "14577396",
+            "edit"
+          ],
+          [
+            "equipmentFlows",
+            "14577391",
+            "edit"
+          ],
+          [
+            "workingPhase"
+          ],
+          [
+            "writeIntent",
+            "edit"
+          ],
+          [
+            "assumptions",
+            "join:14106988:1|14122436:1",
+            "edit"
+          ],
+          [
+            "terminalDrops",
+            "14088043",
+            "edit"
+          ],
+          [
+            "componentDrops",
+            "14577394",
+            "edit"
+          ],
+          [
+            "componentDrops",
+            "14577396",
+            "edit"
+          ],
+          [
+            "equipmentFlows",
+            "14577391",
+            "edit"
+          ],
+          [
+            "criteria"
+          ],
+          [
+            "kinds"
+          ],
+          [
+            "calculation"
+          ],
+          [
+            "assumptions"
+          ],
+          [
+            "rules"
+          ],
+          [
+            "catalogs"
+          ],
+          [
+            "ruleAssignments"
+          ],
+          [
+            "terminalDrops"
+          ],
+          [
+            "componentDrops"
+          ],
+          [
+            "esp"
+          ],
+          [
+            "equipmentFlows"
+          ],
+          [
+            "roles"
+          ],
+          [
+            "loads"
+          ],
+          [
+            "flows"
+          ],
+          [
+            "parameters"
+          ],
+          [
+            "subject"
+          ],
+          [
+            "claims"
+          ],
+          [
+            "labelParameter"
+          ],
+          [
+            "workingPhase"
+          ],
+          [
+            "designFriction"
+          ],
+          [
+            "systemColours"
+          ]
+        ],
+        "edits": [
+          [
+            "writeIntent"
+          ],
+          [
+            "calculation",
+            "*"
+          ],
+          [
+            "assumptions",
+            "*"
+          ],
+          [
+            "rules",
+            "*"
+          ],
+          [
+            "catalogs",
+            "*"
+          ],
+          [
+            "ruleAssignments",
+            "*"
+          ],
+          [
+            "terminalDrops",
+            "*"
+          ],
+          [
+            "componentDrops",
+            "*"
+          ],
+          [
+            "esp",
+            "*"
+          ],
+          [
+            "equipmentFlows",
+            "*"
+          ],
+          [
+            "roles",
+            "*"
+          ],
+          [
+            "loads",
+            "*"
+          ],
+          [
+            "flows",
+            "*"
+          ],
+          [
+            "parameters",
+            "*"
+          ],
+          [
+            "subject",
+            "*"
+          ],
+          [
+            "claims",
+            "*"
+          ],
+          [
+            "labelParameter"
+          ],
+          [
+            "workingPhase"
+          ],
+          [
+            "designFriction"
+          ],
+          [
+            "systemColours"
+          ],
+          [
+            "sheetInputs",
+            "*"
+          ],
+          [
+            "sheetDefaults"
+          ],
+          [
+            "writeIntent"
+          ],
+          [
+            "calculation",
+            "*"
+          ],
+          [
+            "assumptions",
+            "*"
+          ],
+          [
+            "rules",
+            "*"
+          ],
+          [
+            "catalogs",
+            "*"
+          ],
+          [
+            "ruleAssignments",
+            "*"
+          ],
+          [
+            "terminalDrops",
+            "*"
+          ],
+          [
+            "componentDrops",
+            "*"
+          ],
+          [
+            "esp",
+            "*"
+          ],
+          [
+            "equipmentFlows",
+            "*"
+          ],
+          [
+            "roles",
+            "*"
+          ],
+          [
+            "loads",
+            "*"
+          ],
+          [
+            "flows",
+            "*"
+          ],
+          [
+            "parameters",
+            "*"
+          ],
+          [
+            "subject",
+            "*"
+          ],
+          [
+            "claims",
+            "*"
+          ],
+          [
+            "labelParameter"
+          ],
+          [
+            "workingPhase"
+          ],
+          [
+            "designFriction"
+          ],
+          [
+            "systemColours"
+          ],
+          [
+            "sheetInputs",
+            "*"
+          ],
+          [
+            "sheetDefaults"
+          ]
+        ]
+      },
+      "expected": {
+        "criteria": {},
+        "kinds": {},
+        "writeIntent": {
+          "edit": {
+            "value": {
+              "walk": {
+                "unitId": 14577391,
+                "portIndex": 2
+              }
+            },
+            "by": "human",
+            "at": "2026-11-02T18:31:44.070Z",
+            "base": 12
+          }
+        },
+        "calculation": {},
+        "assumptions": {
+          "join:14106988:1|14122436:1": {
+            "edit": {
+              "value": {
+                "kind": "verdict",
+                "verdict": "connect"
+              },
+              "by": "human",
+              "at": "2026-11-02T18:23:35.369Z",
+              "base": 2
+            }
+          }
+        },
+        "rules": {},
+        "catalogs": {},
+        "ruleAssignments": {},
+        "terminalDrops": {
+          "14088043": {
+            "edit": {
+              "value": {
+                "inWg": 0.026
+              },
+              "by": "human",
+              "at": "2026-11-02T18:27:49.302Z",
+              "base": 6
+            }
+          }
+        },
+        "componentDrops": {
+          "14577394": {
+            "edit": {
+              "value": {
+                "inWg": 0.0132
+              },
+              "by": "human",
+              "at": "2026-11-02T18:27:26.791Z",
+              "base": 5
+            }
+          },
+          "14577396": {
+            "edit": {
+              "value": {
+                "inWg": 0.18
+              },
+              "by": "human",
+              "at": "2026-11-02T18:28:36.067Z",
+              "base": 7
+            }
+          }
+        },
+        "esp": {},
+        "equipmentFlows": {
+          "14577391": {
+            "edit": {
+              "value": {
+                "cfm": 925
+              },
+              "by": "human",
+              "at": "2026-11-02T18:49:47.068Z",
+              "base": 14
+            }
+          }
+        },
+        "roles": {},
+        "loads": {},
+        "flows": {},
+        "parameters": {
+          "fanFlow": {
+            "edit": null
+          },
+          "terminalFlow": {
+            "edit": null
+          }
+        },
+        "subject": {},
+        "claims": {},
+        "labelParameter": {},
+        "workingPhase": {},
+        "designFriction": {},
+        "systemColours": {}
+      }
+    },
+    {
+      "kind": "incarnation",
+      "probe": {
+        "target": {
+          "kind": "document",
+          "ref": {
+            "session": "session-dc58265a016aef3c",
+            "openId": "2a8bceb76ba542cb94c41ea3de1ba624"
+          }
+        },
+        "process": {
+          "pid": 9008,
+          "processStartUtc": "2026-11-02T18:04:41.9546821Z",
+          "executable": "C:\\Program Files\\Autodesk\\Revit 2025\\Revit.exe"
+        }
+      },
+      "expected": true
+    },
+    {
+      "kind": "document-mark",
+      "probe": {
+        "ref": {
+          "session": "session-dc58265a016aef3c",
+          "openId": "2a8bceb76ba542cb94c41ea3de1ba624"
+        },
+        "takenAt": "2026-11-02T18:53:56.258Z"
+      },
+      "expected": true
+    }
+  ],
+  "claims": [],
+  "consent": {
+    "by": "press"
+  },
+  "basis": {
+    "kind": "human"
+  },
+  "target": {
+    "kind": "document",
+    "ref": {
+      "session": "session-dc58265a016aef3c",
+      "openId": "2a8bceb76ba542cb94c41ea3de1ba624"
+    }
+  },
+  "input": {
+    "work": {
+      "key": {
+        "route": "ducts",
+        "target": "C:\\Users\\kaitp\\source\\repos\\Pe.Tools\\.artifacts\\runs\\live-20261102-manual-d-6\\local\\Chadds-manuald6.rvt",
+        "binding": "address",
+        "from": {
+          "session": "session-dc58265a016aef3c",
+          "openId": "2a8bceb76ba542cb94c41ea3de1ba624"
+        }
+      },
+      "revision": 15
+    }
+  }
+}

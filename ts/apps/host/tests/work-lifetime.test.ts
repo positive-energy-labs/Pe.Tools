@@ -1,3 +1,4 @@
+import { consentService } from "./effect-test.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,6 +9,7 @@ import { z } from "zod";
 import {
   address,
   routeBindingsSchema,
+  workWriteSchema,
   takeoffsRouteState,
   threadHeadSchema,
   tools,
@@ -16,12 +18,17 @@ import {
   type ThreadHead,
 } from "@pe/agent-contracts";
 import { RouteWorkspace, type RouteWorkspaceRegistration } from "@pe/runtime";
-import { Effect, PubSub } from "effect";
+import { Effect, Layer, PubSub } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { MachineOwner } from "../src/machine.ts";
+import { hostActionJournal } from "../src/gateway-owner.ts";
+import { createReceiptExport } from "../src/receipt-export.ts";
 import type { RevitBridge, HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
 import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import type { Caller } from "@pe/agent-contracts";
 import { human, pea } from "./callers.ts";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { admitCrossing, bindControl } from "../src/control.ts";
 
 afterEach(() =>
@@ -41,7 +48,16 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
     openId: "outside",
     address: address("C:/Models/Other.rvt"),
   };
-  let documents = [a, b, outside];
+  let documents = [
+    a,
+    b,
+    outside,
+    {
+      session: "foreign",
+      openId: "detached",
+      address: "relative-detached.rvt" as typeof a.address,
+    },
+  ];
   let head: ThreadHead = {
     revision: 4,
     targets: [
@@ -336,6 +352,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
   const frames: Array<{ kind: string; value?: { kind?: string; type?: string; action?: string } }> =
     [];
   try {
+    // effect-edge: island, phase 5
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -349,12 +366,24 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
               return () => listeners.delete(listener);
             },
           } as unknown as RevitBridge["Service"];
-          const { routes: host, threads } = makeHostPeRoutes(
+          const telemetry = createReceiptExport({
+            journal: hostActionJournal(),
+            root: directory,
+            stamps: { host: null, web: null },
+          });
+          yield* Effect.addFinalizer(() => Effect.promise(() => telemetry.close()));
+          const { routes: host, machineSpec } = yield* makeHostPeRoutes(
             "http://127.0.0.1:0",
             bridge,
+            consentService(),
             () => registrations,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            telemetry,
           );
-          yield* Effect.addFinalizer(() => Effect.sync(() => threads.close()));
+          yield* Layer.build(MachineOwner.layer(machineSpec.sources, machineSpec.options));
           yield* Effect.gen(function* () {
             yield* Effect.promise(async () => {
               const response = await asHuman(host)(
@@ -417,7 +446,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             });
           });
         }),
-      ),
+      ).pipe(Effect.provide(Spawner.live), Effect.provide(NodeServices.layer)),
     );
   } finally {
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
@@ -580,10 +609,24 @@ test("HTTP authored writes enforce short local revision checks", async () => {
     withInvocationContext({ caller: as }, () =>
       app.fetch(new Request(`http://local/pe/route-state/test-route/salvage?${queryA}`)),
     );
-  expect((await salvage(human)).status).toBe(404);
-  expect((await salvage(pea())).status).toBe(404);
+  expect(await (await salvage(human)).json()).toBeNull();
+  expect(await (await salvage(pea())).json()).toBeNull();
   // Work has no execution endpoint; consequential commands belong to the journal door.
   expect(
     (await post("/pe/route-state/test-route/command", { command: "external", input: {} })).status,
   ).toBe(404);
 });
+
+test("HTTP Work writes use the producer schema including restore identity", () => {
+  expect(peRoutes["work.apply"].body).toBe(workWriteSchema);
+  expect(
+    peRoutes["work.apply"].body.parse({
+      kind: "restore",
+      restoreOf: 12,
+      patches: [],
+      expectedRevision: 15,
+      press: null,
+    }),
+  ).toMatchObject({ restoreOf: 12 });
+});
+import { Spawner } from "../src/harness/spawner.ts";

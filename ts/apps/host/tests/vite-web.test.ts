@@ -6,7 +6,7 @@ import { Deferred, Effect, Layer } from "effect";
 import { createServer as createViteServer } from "vite-plus";
 import { expect, test } from "vite-plus/test";
 import { makeHttpLive } from "../src/app.ts";
-import { hostOwnership, productRoot } from "../src/host-ownership.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { checkoutIngress, devHostProxy } from "../../web/dev-proxy.ts";
@@ -48,6 +48,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
   const webUrl = Deferred.makeUnsafe<string>();
   const latch = Deferred.makeUnsafe<void>();
   const handle = Deferred.makeUnsafe<ServiceHostHandle>();
+  // effect-edge: island, phase 5
   const done = Effect.runPromise(
     Effect.scoped(
       Effect.raceFirst(
@@ -64,10 +65,11 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
       ),
     ),
   );
-  const appBase = productRoot();
+  const appBase = hostOwnership.rootPath;
   let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
   let socket: WebSocket | undefined;
   try {
+    // effect-edge: island, phase 5
     const claimed = await Effect.runPromise(
       Deferred.await(handle).pipe(Effect.timeout("10 seconds")),
     );
@@ -82,6 +84,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
     });
     await vite.listen();
     const browser = vite.resolvedUrls!.local[0]!.replace(/\/$/, "");
+    // effect-edge: island, phase 5
     await Effect.runPromise(Deferred.succeed(webUrl, browser));
     expect(browser).not.toBe(backend);
     expect(await fetch(browser).then((r) => r.text())).toContain("frontend");
@@ -102,24 +105,13 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
     expect(html).toContain("frontend");
     const cookie = document.headers["set-cookie"]?.[0]?.split(";")[0];
     expect(cookie).toContain(hostOwnership.serviceName);
-    const approval = await fetch(`${browser}/pe/access`, {
-      method: "PUT",
-      headers: {
-        origin: browser,
-        referer: `${browser}/ops`,
-        cookie: cookie!,
-        "content-type": "application/json",
-        "x-pe-runtime-service": hostOwnership.serviceName,
-      },
-      body: JSON.stringify({ guarded: true }),
-    });
-    expect(approval.status).toBe(200);
+
     expect(await fetch(`${browser}/ops`).then((r) => r.json())).toHaveProperty("operations");
     expect(await fetch(`${browser}/host/status`).then((r) => r.json())).toEqual(
       await fetch(`${backend}/host/status`).then((r) => r.json()),
     );
-    expect(await fetch(`${browser}/pe/access`).then((r) => r.json())).toEqual(
-      await fetch(`${backend}/pe/access`).then((r) => r.json()),
+    expect(await fetch(`${browser}/pe/providers`).then((r) => r.json())).toEqual(
+      await fetch(`${backend}/pe/providers`).then((r) => r.json()),
     );
     const world = encodeURIComponent(JSON.stringify([{ kind: "world" }]));
     const events = await fetch(`${browser}/pe/resources?keys=${world}`);
@@ -163,6 +155,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
   } finally {
     socket?.close();
     await vite?.close();
+    // effect-edge: island, phase 5
     await Effect.runPromise(Deferred.succeed(latch, undefined));
     await done;
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;

@@ -1,8 +1,9 @@
+import { captureStore } from "./effect-test.ts";
 import { createPeClient, matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { afterEach, expect, vi } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter } from "effect/http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,7 +20,6 @@ import {
 } from "@pe/agent-contracts";
 import { buildCapabilities } from "../../../packages/mcps/src/pea/capabilities.ts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { RevitBridge, BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 import { documentMarks } from "../src/document-marks.ts";
@@ -47,7 +47,6 @@ async function readScheduleCapture(
   });
   const value = await response.json();
   if (!response.ok) throw Error((value as { error?: string }).error ?? `${response.status}`);
-  if (key === "schedule.grid.bind") return value;
   return key === "schedule.grid.catalog"
     ? scheduleCatalogSchema.parse(value)
     : scheduleReadingSchema.parse(value);
@@ -82,7 +81,7 @@ export async function setup() {
   vi.stubEnv("PE_LANE", "dev");
   const dir = await mkdtemp(join(tmpdir(), "pe-schedule-chain-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true, maxRetries: 5 }));
-  const captures = new TakeoffCaptures(join(dir, "captures"));
+  const captures = captureStore(join(dir, "captures"));
   const app = createPeRoutes({
     store: fileRouteDocumentStore(join(dir, "work")),
     heads: { observe: () => () => {} },
@@ -316,16 +315,39 @@ export async function setup() {
       as = human;
     }
   };
-  await readScheduleCapture("schedule.grid.bind", { readingId: reading.id, expectedRevision: 0 });
+  const bindReading = async (input: {
+    readingId: string;
+    expectedRevision: number;
+    reading?: ScheduleReading;
+  }) => {
+    const id = crypto.randomUUID();
+    const response = await fetch("/actions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, key: "schedule.grid.bind", target: { kind: "host" }, input }),
+    });
+    if (!response.ok) throw Error(JSON.stringify(await response.json()));
+    const receipt = await owner.wait(id);
+    if (receipt.state !== "succeeded") throw Error(JSON.stringify(receipt));
+    return receipt.result;
+  };
+  await bindReading({ readingId: reading.id, expectedRevision: 0, reading });
   expect(
     await patch([{ path: ["cells", "1::2"], value: { edit: { value: "150 VA" } } }]),
   ).toMatchObject({ ok: true });
-  const admission = async (id = crypto.randomUUID()): Promise<ActionAdmission> => ({
-    id,
-    key: "schedule.grid.push",
-    target: { kind: "document", ref: b },
-    input: { work: { key: scope, revision: (await view()).revision } },
-  });
+  const admission = async (id = crypto.randomUUID(), ref = b): Promise<ActionAdmission> => {
+    const value: ActionAdmission = {
+      id,
+      key: "schedule.grid.push",
+      target: { kind: "document", ref },
+      input: { work: { key: scope, revision: (await view()).revision } },
+    };
+    // Exercise the same explicit preview boundary as callers before returning an apply admission.
+    const preview = { ...value, id: `${id}:preview`, key: "schedule.grid.push.preview" };
+    const result = await post("/actions", preview);
+    if (result.status !== 409) await owner.wait(preview.id);
+    return value;
+  };
   const post = async (path: string, body: unknown) => {
     const response = await fetch(path, {
       method: "POST",
@@ -352,8 +374,9 @@ export async function setup() {
     patch,
     read,
     bind: async (reading: ScheduleReading) =>
-      readScheduleCapture("schedule.grid.bind", {
+      bindReading({
         readingId: reading.id,
+        reading,
         expectedRevision: (await view()).revision,
       }),
     post,

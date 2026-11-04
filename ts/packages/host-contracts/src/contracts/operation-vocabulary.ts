@@ -54,6 +54,12 @@ export type HostOperationRequestExample = Schema.Schema.Type<
 
 export const hostOperationDefinitionSchema = Schema.Struct({
   key: Schema.String,
+  subject: Schema.String,
+  touches: Schema.String,
+  effect: Schema.String,
+  cardinality: Schema.String,
+  internal: Schema.optional(Schema.Boolean),
+  rollsBack: Schema.optional(Schema.Boolean),
   requestTypeName: Schema.optional(Schema.String),
   responseTypeName: Schema.optional(Schema.String),
   displayName: Schema.optional(Schema.String),
@@ -63,7 +69,7 @@ export const hostOperationDefinitionSchema = Schema.Struct({
   actor: Schema.optional(hostOperationActorSchema),
   usesTransactions: Schema.optional(Schema.Boolean),
   needs: hostOperationNeedsSchema,
-  costTier: Schema.optional(hostOperationCostTierSchema),
+  costTier: hostOperationCostTierSchema,
   visibility: Schema.optional(hostOperationVisibilitySchema),
   requestExamples: Schema.optional(Schema.Array(hostOperationRequestExampleSchema)),
   requestSchemaJson: Schema.optional(Schema.String),

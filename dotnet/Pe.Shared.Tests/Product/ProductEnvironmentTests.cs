@@ -12,7 +12,7 @@ public sealed class ProductEnvironmentTests {
         Directory.CreateDirectory(home);
         Environment.SetEnvironmentVariable(ProductPathNames.ProductHomeVariable, home);
         try {
-            var paths = Paths(ProductRuntimeLayout.ForCurrentUser())
+            var paths = Paths(ProductRuntimeLayout.For(ProductLane.Dev, @"C:\src\Pe.Tools", home))
                 .Concat(Paths(ProductUserContentLayout.ForCurrentUser()));
             foreach (var path in paths) {
                 var child = Path.GetRelativePath(home, path);
@@ -25,9 +25,16 @@ public sealed class ProductEnvironmentTests {
         }
     }
 
+    // The owner's identity (lane, checkout or install root) is an input, not a product output.
+    private static readonly HashSet<string> Identity = [
+        nameof(ProductRuntimeLayout.LaneName), nameof(ProductRuntimeLayout.OwnerRoot),
+        nameof(ProductRuntimeLayout.SourceRoot), nameof(ProductRuntimeLayout.InstallRoot)
+    ];
+
     // Walk every public layout property and Resolve method so a new output joins the same contract.
     private static IEnumerable<string> Paths(object layout) {
-        foreach (var property in layout.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)) {
+        foreach (var property in layout.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                     .Where(property => layout is not ProductRuntimeLayout || !Identity.Contains(property.Name))) {
             var value = property.GetValue(layout);
             if (value is string path) yield return path;
             else if (value != null && value.GetType().Namespace == typeof(ProductRuntimeLayout).Namespace)

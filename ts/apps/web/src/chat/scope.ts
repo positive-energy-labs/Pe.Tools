@@ -1,6 +1,7 @@
 import { peClient } from "#/host/pe-client";
 import { useEffect, useRef, useState } from "react";
-import { peReadings, previousOf, useReading } from "#/readings";
+import { peReadings } from "#/readings";
+import { previousOf, useReading } from "#/shell/readings-hooks";
 import {
   threadHeadSchema,
   putTargetResultSchema,
@@ -93,7 +94,7 @@ export function useThreadScope(threadId: string, enabled = true, observed?: Read
           expectedRevision: parsed.data.revision,
         },
       });
-      const wire = await response.json().catch(() => null);
+      const wire = await response.json().catch((error) => { console.error("scope: asynchronous operation failed", error); return null; });
       const body = response.ok ? wire : wire?.error?.details;
       const result = putTargetResultSchema.safeParse(body).data;
       const refused = refusalSchema.safeParse(body?.refusal).data;

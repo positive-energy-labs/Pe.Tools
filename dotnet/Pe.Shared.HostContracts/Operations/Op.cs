@@ -19,6 +19,13 @@ public enum OpCost {
     Mutation
 }
 
+/// <summary>Acquisition boundary, independent of the active document requirement.</summary>
+public enum OpSubject { Unset = 0, None, Document, FamilyDocument, View, Elements, System, Region, Session }
+[Flags]
+public enum OpTouches { Unset = 0, Metadata = 1, Topology = 2, Geometry = 4 }
+public enum OpEffect { Unset = 0, Read, TransactRead, SessionWrite, ModelWrite }
+public enum OpCardinality { One, Many }
+
 public enum OpTier {
     Default,
     Escalation,
@@ -38,12 +45,18 @@ public enum OpThread {
 }
 
 [AttributeUsage(AttributeTargets.Method)]
-public sealed class OpAttribute(string key) : Attribute {
+public sealed class OpAttribute(string key, OpSubject subject, OpTouches touches, OpEffect effect) : Attribute {
     public string Key { get; } = key;
     public string? Title { get; init; }
     public required string Does { get; init; }
     public string[]? Finds { get; init; }
     public OpIntent Intent { get; init; } = OpIntent.Read;
+    public OpSubject Subject { get; } = subject;
+    public OpTouches Touches { get; } = touches;
+    public OpEffect Effect { get; } = effect;
+    public OpCardinality Cardinality { get; init; } = OpCardinality.One;
+    public bool Internal { get; init; }
+    public bool RollsBack { get; init; }
     public OpCost Cost { get; init; } = OpCost.Cheap;
     public OpTier Tier { get; init; } = OpTier.Escalation;
     public string? Example { get; init; }
@@ -58,14 +71,9 @@ public sealed class OpAttribute(string key) : Attribute {
 }
 
 public sealed class Op {
-    // TODO: Align omitted request defaults with JSON dispatch. Json.NET supplies CLR defaults
-    // to record constructor arguments unless population is explicit; optional C# values alone
-    // do not apply. Audit AgentContext, LoadedFamilies, ParameterLinks, RibbonCommand and Ducts
-    // request defaults before changing global settings. Preserve explicit zero/false values;
-    // FamilyInstanceReferencesRequest.MaxResults is the scoped Populate precedent.
     private static readonly JsonSerializerSettings JsonSettings = new() {
         NullValueHandling = NullValueHandling.Ignore,
-        ContractResolver = new DefaultContractResolver {
+        ContractResolver = new OpRequestContractResolver {
             NamingStrategy = new CamelCaseNamingStrategy {
                 ProcessDictionaryKeys = false,
                 OverrideSpecifiedNames = false
@@ -90,7 +98,8 @@ public sealed class Op {
 
     internal bool SameHandler(Op other) => this._method == other._method;
 
-    public async Task<object?> ExecuteAsync(string payloadJson, object? document, CancellationToken cancellationToken) {
+    public async Task<object?> ExecuteAsync(string payloadJson, object? document, CancellationToken cancellationToken, string? derivedCommand = null) {
+        OpCallGate.Require(this.Definition, derivedCommand, payloadJson);
         object? request;
         try {
             request = JsonConvert.DeserializeObject(payloadJson, this.Definition.RequestType, JsonSettings);
@@ -216,12 +225,19 @@ public static class OpRegistry {
 
         if ((OpIntent)EnumValue(nameof(OpAttribute.Intent), (int)OpIntent.Read) == OpIntent.Mutate && Named(nameof(OpAttribute.Actor)) is null)
             throw new InvalidOperationException($"[Op({data.ConstructorArguments[0].Value})] must declare Actor for mutation.");
-        return new OpAttribute((string)data.ConstructorArguments[0].Value!) {
+        return new OpAttribute(
+            (string)data.ConstructorArguments[0].Value!,
+            (OpSubject)Convert.ToInt32(data.ConstructorArguments[1].Value),
+            (OpTouches)Convert.ToInt32(data.ConstructorArguments[2].Value),
+            (OpEffect)Convert.ToInt32(data.ConstructorArguments[3].Value)) {
             Title = Named(nameof(OpAttribute.Title)) as string,
             Does = Named(nameof(OpAttribute.Does)) as string
                    ?? throw new InvalidOperationException("[Op] requires Does."),
             Finds = Strings(nameof(OpAttribute.Finds)),
             Intent = (OpIntent)EnumValue(nameof(OpAttribute.Intent), (int)OpIntent.Read),
+            Cardinality = (OpCardinality)EnumValue(nameof(OpAttribute.Cardinality), 0),
+            Internal = Named(nameof(OpAttribute.Internal)) as bool? ?? false,
+            RollsBack = Named(nameof(OpAttribute.RollsBack)) as bool? ?? false,
             Cost = (OpCost)EnumValue(nameof(OpAttribute.Cost), (int)OpCost.Cheap),
             Tier = (OpTier)EnumValue(nameof(OpAttribute.Tier), (int)OpTier.Escalation),
             Example = Named(nameof(OpAttribute.Example)) as string,
@@ -307,13 +323,16 @@ public static class OpRegistry {
             attribute.Key,
             requestType,
             responseType,
+            attribute.Subject, attribute.Touches, attribute.Effect,
             attribute.IsPublic,
             attribute.Title,
             metadata,
             needs,
             attribute.Actor,
             attribute.UsesTransactions || attribute.Intent == OpIntent.Mutate,
-            attribute.ArtifactMetadata
+            attribute.ArtifactMetadata,
+            attribute.Cardinality,
+            attribute.Internal, attribute.RollsBack
         );
         Validate(definition);
         return definition;
@@ -321,7 +340,7 @@ public static class OpRegistry {
 
     private static readonly JsonSerializerSettings StrictRequestJsonSettings = new() {
         MissingMemberHandling = MissingMemberHandling.Error,
-        ContractResolver = new DefaultContractResolver {
+        ContractResolver = new OpRequestContractResolver {
             NamingStrategy = new CamelCaseNamingStrategy {
                 ProcessDictionaryKeys = false,
                 OverrideSpecifiedNames = false
@@ -399,7 +418,9 @@ public sealed record HostOpsCatalogEntry(
     string ResponseSchemaJson,
     string Actor,
     bool UsesTransactions,
-    string? ArtifactSchemaJson = null
+    string? ArtifactSchemaJson = null,
+    string Subject = "None", string Touches = "Metadata", string Effect = "Read",
+    string Cardinality = "One", bool Internal = false, bool RollsBack = false
 ) {
     public static HostOpsCatalogEntry FromOp(Op op) {
         return FromDefinition(op.Definition);
@@ -428,7 +449,9 @@ public sealed record HostOpsCatalogEntry(
             BridgeOpSchemaGenerator.GetResponseSchemaJson(definition.ResponseType),
             definition.Actor.ToString().ToLowerInvariant(),
             definition.UsesTransactions,
-            definition.ArtifactMetadataType is { } artifact ? BridgeOpSchemaGenerator.GetResponseSchemaJson(artifact) : null
+            definition.ArtifactMetadataType is { } artifact ? BridgeOpSchemaGenerator.GetResponseSchemaJson(artifact) : null,
+            definition.Subject.ToString(), definition.Touches.ToString(), definition.Effect.ToString(),
+            definition.Cardinality.ToString(), definition.Internal, definition.RollsBack
         );
     }
 }
@@ -442,7 +465,8 @@ public sealed record HostOpsCatalogData(
     ///     Public const fields of each contract-constants class, keyed by camel-cased class and field name.
     ///     The live catalog and the offline `pe-dev ops-catalog` both call this, so they agree.
     /// </summary>
-    public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, object>> ReadConstants() =>
+    public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, object>> ReadConstants() {
+        var result =
         new[] { typeof(Scripting.ScriptPodSourceBounds), typeof(Scripting.ScriptPodMemberBounds), typeof(Pe.Shared.RevitData.ParameterValueApplyBounds) }.OrderBy(type => type.Name, StringComparer.Ordinal).ToDictionary(
             type => CamelCase(type.Name),
             type => (IReadOnlyDictionary<string, object>)type
@@ -450,6 +474,10 @@ public sealed record HostOpsCatalogData(
                 .Where(field => field.IsLiteral)
                 .OrderBy(field => field.MetadataToken)
                 .ToDictionary(field => CamelCase(field.Name), field => field.GetRawConstantValue()!));
+        foreach (var type in new[] { typeof(OpSubject), typeof(OpTouches), typeof(OpEffect), typeof(OpCardinality), typeof(OpCost) })
+            result.Add(CamelCase(type.Name), Enum.GetNames(type).ToDictionary(name => name, name => (object)name));
+        return result;
+    }
 
     private static string CamelCase(string name) => char.ToLowerInvariant(name[0]) + name.Substring(1);
 }
@@ -475,5 +503,21 @@ public static class OpDocumentGate {
         throw BridgeOperationExceptions.BadRequest(
             message,
             [BridgeOperationExceptions.Issue("$", "InvalidRequest", message, $"Open a {expected} and retry.")]);
+    }
+}
+
+/// <summary>The private bridge accepts internal leaves only with host-owned command provenance.</summary>
+public static class OpCallGate {
+    public static void Require(HostOperationDefinition definition, string? derivedCommand, string? payloadJson = null) {
+        if (definition.Internal && string.IsNullOrWhiteSpace(derivedCommand))
+            throw BridgeOperationExceptions.BadRequest($"'{definition.Key}' is internal; invoke its derived command.");
+        if (definition.Effect == OpEffect.TransactRead && !definition.RollsBack)
+            throw BridgeOperationExceptions.BadRequest($"'{definition.Key}' must declare rollback.");
+        if (definition.Effect is OpEffect.Read or OpEffect.TransactRead
+            && definition.Touches.HasFlag(OpTouches.Geometry) && definition.Subject == OpSubject.Document
+            && definition.Needs != OpNeeds.FamilyDocument)
+        {
+            throw BridgeOperationExceptions.BadRequest($"'{definition.Key}' requires a narrower geometry subject.");
+        }
     }
 }

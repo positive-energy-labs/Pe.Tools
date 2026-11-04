@@ -11,7 +11,6 @@ import {
   type MemberRead,
   type CompositionRead,
 } from "./model";
-import type { PluginsRead } from "./sources";
 
 export type PodsScope = BindingScope<PodsPage, SettingsRouteDocument>;
 export function memberWorkRefusal(scope: PodsScope) {
@@ -97,23 +96,7 @@ export function podsBinding(id: string, row: unknown, scope: PodsScope) {
         refusal: saveRefusal(scope),
       },
     };
-  if (id === "activation") {
-    const plugins = readingValue<PluginsRead>(scope.readings.plugins);
-    const plugin = plugins?.statuses.find((status) => status.id === args.id);
-    return {
-      subject: null,
-      args: {
-        ...args,
-        refusal: !scope.readings.plugins?.current
-          ? "Reading this Pod's activation."
-          : !plugin
-            ? "This host lists no activation for this Pod."
-            : plugin.status === "error"
-              ? (plugin.error ?? "This Pod failed to activate.")
-              : null,
-      },
-    };
-  }
+
   return { subject: null, args };
 }
 

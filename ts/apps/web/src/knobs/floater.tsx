@@ -3,7 +3,7 @@
  * EXCEPTION to SURFACE-PHILOSOPHY P1: native range/colour controls have no kit primitive.
  * The deliberately separate dev skin remains bounded to this floater; production never loads it.
  */
-import { useMemo, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { tokenRef } from "@pe/kit/lib/token";
 import {
   changedCount,
@@ -201,9 +201,20 @@ export default function KnobsFloater(): ReactNode {
   const [query, setQuery] = useState("");
   const [onlyChanged, setOnlyChanged] = useState(false);
   const [said, setSaid] = useState("");
+  useEffect(() => {
+    const toggle = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.altKey && e.key.toLowerCase() === "k") setOpen((was) => !was);
+    };
+    window.addEventListener("keydown", toggle);
+    return () => window.removeEventListener("keydown", toggle);
+  }, []);
   const modules = knobModules();
   if (!modules.length) return null;
   const changed = changedCount();
+  // A fixed badge always covers some pane's corner (Manual D: the ledger's). Collapsed and clean,
+  // the floater draws nothing and Ctrl+Alt+K opens it; the badge shows only while overrides are
+  // live, because then the page is not the shipped look and must say so.
+  if (!open && !changed) return null;
   if (!open)
     return (
       <button
@@ -211,7 +222,7 @@ export default function KnobsFloater(): ReactNode {
         style={{ ...BUTTON, ...TOOL, padding: "3px 10px" }}
         onClick={() => setOpen(true)}
       >
-        knobs{changed ? ` · ${changed} changed` : ""}
+        knobs · {changed} changed
       </button>
     );
   const groups = modules.flatMap(({ name, source, spec }) =>

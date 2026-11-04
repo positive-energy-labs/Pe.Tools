@@ -1,10 +1,10 @@
 import { peReadings, type Liveness } from "#/readings";
 import type { HarnessEvent } from "@pe/agent-contracts";
-import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import * as Atom from "effect/unstable/reactivity/Atom";
+import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import { Cause, Effect } from "effect";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { emptyChatState, type ChatState, type ThreadBody } from "@pe/agent-contracts/chat-state";
 import { harnessClient, streamThread } from "./harness-client";
 
@@ -64,17 +64,25 @@ export function useThreadStream(options: {
   const bodyAtom = useMemo(() => (key === null ? emptyBodyAtom : bodyAtoms(key)), [key]);
   const body = useAtomValue(bodyAtom);
   const invalidate = useAtomRefresh(bodyAtom);
-  // Reset during the selection render so B never briefly projects A.
-  const [live, setLive] = useState<{
-    key: string | null;
-    events: HarnessEvent[];
-    fault: Error | null;
-    /** The owner resynced; this view is not current until the re-read body lands. */
-    stale: boolean;
-    /** Bumped per resync: the follow reopens from its cursor even when the body did not move. */
-    epoch: number;
-  }>(() => ({ key, events: [], fault: null, stale: false, epoch: 0 }));
-  if (live.key !== key) setLive({ key, events: [], fault: null, stale: false, epoch: 0 });
+  const registry = useContext(RegistryContext);
+  const liveAtom = useMemo(
+    () =>
+      Atom.make({
+        events: [] as HarnessEvent[],
+        fault: null as Error | null,
+        stale: false,
+        epoch: 0,
+      }),
+    [key],
+  );
+  const setLive = useCallback(
+    (update: (live: Atom.Type<typeof liveAtom>) => Atom.Type<typeof liveAtom>) =>
+      registry.update(liveAtom, update),
+    [registry, liveAtom],
+  );
+  const fault = useAtomValue(liveAtom, (live) => live.fault);
+  const stale = useAtomValue(liveAtom, (live) => live.stale);
+  const epoch = useAtomValue(liveAtom, (live) => live.epoch);
 
   // The readings connection faulted or the tab woke: this tail may be a dead socket that never
   // errors. Mark the view stale, re-read the body (a new cursor), and reopen the follow.
@@ -86,19 +94,18 @@ export function useThreadStream(options: {
       setLive((previous) => ({ ...previous, stale: true, epoch: previous.epoch + 1 }));
       invalidate();
     });
-  }, [invalidate, readings, threadId]);
+  }, [invalidate, readings, threadId, setLive]);
 
   const stored: ThreadBody | undefined = body._tag === "Success" ? body.value : undefined;
   // Only a body the host answered after the resync clears the mark.
   const settled = body._tag === "Success" && !body.waiting;
   useEffect(() => {
     if (settled) setLive((previous) => (previous.stale ? { ...previous, stale: false } : previous));
-  }, [settled, stored]);
+  }, [settled, stored, setLive]);
   const storedRef = useRef(stored);
   storedRef.current = stored;
   // A re-read body carries a new cursor: the follow restarts from it, and seq skips the overlap.
   const cursor = stored?.cursor;
-  const epoch = live.epoch;
   useEffect(() => {
     if (threadId === null || cursor === undefined) return;
     return streamThread({
@@ -108,45 +115,44 @@ export function useThreadStream(options: {
       lastSeq: lastSeq(storedRef.current?.events ?? []),
       onReread: invalidate,
       onEvent: (event) => {
-        setLive((previous) =>
-          previous.key === key
-            ? { ...previous, events: [...previous.events, event], fault: null }
-            : previous,
-        );
+        setLive((previous) => ({ ...previous, events: [...previous.events, event], fault: null }));
         const configuration =
           event.kind === "update" && event.update.sessionUpdate === "config_option_update";
         if (bodyEvents.has(event.kind) || configuration) invalidate();
         if (listEvents.has(event.kind) || configuration) onListChange.current?.();
       },
-      onFault: (fault) =>
-        setLive((previous) => (previous.key === key ? { ...previous, fault } : previous)),
+      onFault: (fault) => setLive((previous) => ({ ...previous, fault })),
     });
     // `epoch` reopens the follow after a resync.
-  }, [cursor, epoch, invalidate, key, origin, threadId]);
+  }, [cursor, epoch, invalidate, key, origin, threadId, setLive]);
 
-  const chat = useMemo<ChatState>(() => {
-    if (!stored) return EMPTY;
-    const after = lastSeq(stored.events);
-    const tail = live.key === key ? live.events.filter((event) => event.seq > after) : [];
-    return tail.length ? { ...stored, events: [...stored.events, ...tail] } : stored;
-  }, [key, live, stored]);
+  const chatAtom = useMemo(
+    () =>
+      Atom.make((get): ChatState => {
+        const body = get(bodyAtom);
+        if (body._tag !== "Success") return EMPTY;
+        const stored = body.value;
+        const after = lastSeq(stored.events);
+        const tail = get(liveAtom).events.filter((event) => event.seq > after);
+        return tail.length ? { ...stored, events: [...stored.events, ...tail] } : stored;
+      }),
+    [bodyAtom, liveAtom],
+  );
   const error = useMemo(() => {
     if (body._tag !== "Failure")
-      return live.key !== key
-        ? null
-        : (live.fault ??
-            (live.stale
-              ? new Error("This thread is not current; re-reading it from the host.")
-              : null));
-    const fault = Cause.squash(body.cause);
-    return fault instanceof Error ? fault : new Error(Cause.pretty(body.cause));
-  }, [body, key, live]);
+      return (
+        fault ??
+        (stale ? new Error("This thread is not current; re-reading it from the host.") : null)
+      );
+    const caught = Cause.squash(body.cause);
+    return caught instanceof Error ? caught : new Error(Cause.pretty(body.cause));
+  }, [body, fault, stale]);
 
   return {
-    chat,
+    chatAtom,
     pending: threadId !== null && body._tag === "Initial" && body.waiting,
     error,
-    stale: live.key === key && live.stale,
+    stale,
     invalidate,
     bodyAtom,
   };

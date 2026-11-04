@@ -1,5 +1,5 @@
 /** What the Work has edit for a write, counted from the document alone. */
-import type { DuctsApplyInput, DuctsRouteDocument, WorkPath } from "@pe/agent-contracts";
+import type { DuctsApplyInput, DuctsDesign, WorkPath } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
 import { pendingRulings } from "./rulings.ts";
@@ -19,7 +19,7 @@ export const WRITTEN = [
   "parameters",
 ] as const;
 
-export const stagedCells = (doc: DuctsRouteDocument | null) =>
+export const stagedCells = (doc: DuctsDesign | null) =>
   ([...WRITTEN, "catalogs", "ruleAssignments"] as const).flatMap((segment) =>
     Object.entries(doc?.[segment] ?? {}).flatMap(([key, cell]) =>
       cell?.edit ? [{ segment, key, cell }] : [],
@@ -27,11 +27,11 @@ export const stagedCells = (doc: DuctsRouteDocument | null) =>
   );
 
 /** How many changes a write would carry: edit cells, and rulings that differ from the store's. */
-export const pendingCount = (doc: DuctsRouteDocument | null, store: DuctSnapshot["store"]) =>
+export const pendingCount = (doc: DuctsDesign | null, store: DuctSnapshot["store"]) =>
   stagedCells(doc).length + pendingRulings(doc, store).length;
 
 /** Staged ESP cells: the one write that waits for a clean calc. */
-export const stagedEsp = (doc: DuctsRouteDocument | null) =>
+export const stagedEsp = (doc: DuctsDesign | null) =>
   Object.values(doc?.esp ?? {}).filter((cell) => cell?.edit).length;
 
 /** Retire only cells whose transmitted native writes succeeded; held and refused cells stay edit. */
@@ -66,4 +66,33 @@ export function appliedCellPaths(
     if (write.kind === "slot" && write.key) paths.push(["parameters", write.key]);
   }
   return paths;
+}
+
+/** Explicit cell scope limits both native writes and the provenance delta sent with them. */
+export function scopeApplyRequest(
+  request: DuctsApplyInput,
+  store: DuctSnapshot["store"],
+  cells: readonly (readonly [string, string])[] | undefined,
+): DuctsApplyInput {
+  if (!cells) return request;
+  const has = (segment: string, key: string | number) => cells.some(([s, k]) => s === segment && k === String(key));
+  const fittings = request.fittings.filter(row => row.ruleKey && has("rules", row.ruleKey));
+  const terminals = request.terminals.filter(row => has("terminalDrops", row.id));
+  const components = request.components.filter(row => has("componentDrops", row.id));
+  const equipment = request.equipment.filter(row => has("esp", row.id));
+  const terminalFlows = request.terminalFlows.filter(row => has("flows", row.id));
+  const equipmentFlows = request.equipmentFlows.filter(row => has("equipmentFlows", row.id));
+  const merge = (key: "instances" | "terminals" | "terminalFlows" | "equipmentFlows", ids: readonly number[]) => ({
+    ...store?.[key],
+    ...Object.fromEntries(Object.entries(request.store?.[key] ?? {}).filter(([id]) => ids.includes(Number(id)))),
+  });
+  return { ...request, fittings, terminals, components, equipment, terminalFlows, equipmentFlows,
+    store: { ...store, version: 2, workRevision: store?.workRevision ?? 0, appliedAt: request.store?.appliedAt,
+      rules: { ...store?.rules, ...Object.fromEntries(Object.entries(request.store?.rules ?? {}).filter(([key]) => has("rules", key))) },
+      instances: merge("instances", fittings.map(row => row.id)),
+      terminals: merge("terminals", terminals.map(row => row.id)),
+      terminalFlows: merge("terminalFlows", terminalFlows.map(row => row.id)),
+      equipmentFlows: merge("equipmentFlows", equipmentFlows.map(row => row.id)),
+    },
+  };
 }

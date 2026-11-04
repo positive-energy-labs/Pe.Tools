@@ -1,3 +1,4 @@
+import { designOf } from "@pe/ducts-domain/test-design";
 import { readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 import {
@@ -70,6 +71,7 @@ const snapshot = {
   layers: [],
   systems: [],
   slots: {
+    terminalDrop: "PE_M_Grd_ExternalStaticPressure",
     fanStatic: "PE_M_Fan_ExternalStaticPressure",
     fanFlow: "PE_M_Fan_AirFlow",
     componentDrop: "Pressure Drop",
@@ -92,15 +94,15 @@ it("a group climbs from blocked to walkable to budgetable as a person stages ass
     return landed.envelope.doc;
   };
   let doc = ductsRouteState.schema.parse({});
-  expect(readiness(snapshot, doc).g1).toEqual({
+  expect(readiness(snapshot, designOf(doc)).g1).toEqual({
     level: "blocked",
     walk: ["open-end:2:1"],
     budget: ["no-component-drop:3"],
   });
   doc = stage(doc, "open-end:2:1", { kind: "verdict", verdict: "capped" });
-  expect(readiness(snapshot, doc).g1?.level).toBe("walkable");
+  expect(readiness(snapshot, designOf(doc)).g1?.level).toBe("walkable");
   // A suggestion is not an assumption until a person stages it.
-  const proposed = ductsRouteState.schema.parse({
+  const proposed = designOf({
     ...doc,
     assumptions: {
       ...doc.assumptions,
@@ -109,7 +111,7 @@ it("a group climbs from blocked to walkable to budgetable as a person stages ass
   });
   expect(readiness(snapshot, proposed).g1?.level).toBe("walkable");
   doc = stage(doc, "component-drop:Damper", { kind: "component-drop", inWg: 0.05 });
-  expect(readiness(snapshot, doc).g1).toEqual({ level: "budgetable", walk: [], budget: [] });
+  expect(readiness(snapshot, designOf(doc)).g1).toEqual({ level: "budgetable", walk: [], budget: [] });
 });
 
 it("every issue kind the C# enum can emit has one taxonomy entry, and no entry is orphaned", () => {

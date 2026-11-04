@@ -9,7 +9,7 @@ import {
 import { GoToPopup } from "@pe/kit/lang/go-to";
 /** Revit's registered picture under selectable room regions, paired with the table. */
 import { SvgTip } from "@pe/kit/lang/tooltip";
-import { useContext, type CSSProperties, type ReactNode, useEffect, useMemo, useRef } from "react";
+import { useContext, type CSSProperties, type ReactNode, useMemo } from "react";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { PictureStage, stageViewport } from "#/scene/stage-controller";
 import { PictureReadout } from "@pe/kit/lang/readout";
@@ -131,26 +131,8 @@ export interface RoomRow {
   label: string;
 }
 
-/** The URL's `focus` (`R12,R3`) against the table's labels: the rows it names, and what none wears. */
-export function focusOf(rows: readonly RoomRow[], focus: string) {
-  const labels = [
-    ...new Set(
-      focus
-        .split(",")
-        .map((label) => label.trim())
-        .filter(Boolean),
-    ),
-  ];
-  return {
-    rows: rows.filter((row) => labels.includes(row.label)),
-    missing: labels.filter((label) => !rows.some((row) => row.label === label)),
-  };
-}
-
-// ponytail: the world is drawn at 4 px per foot; zoom 0.02 to 24 spans 0.08 to 96 screen px per foot.
 const PLAN_PX_PER_FT = 4;
 const ZOOM_PAD_PX = 48;
-/** w16's fill: alpha 70/255 of the state ink. */
 const FILL_PCT = 27;
 const FILL_HOT_PCT = 40;
 
@@ -163,8 +145,6 @@ export function RoomsPlan({
   planRefusal,
   planError,
   empty,
-  zoomTo,
-  focusMissing,
   onSelect,
   trace,
   page,
@@ -184,10 +164,6 @@ export function RoomsPlan({
   planError: string | null;
   /** Why nothing can be drawn yet (no document, no view, snapshot failed); null = draw. */
   empty: { says: string; exit: string } | null;
-  /** Region guids the URL's `focus` names: the view zooms to their union once they are drawn. */
-  zoomTo: readonly string[];
-  /** Labels the URL's `focus` names that no region wears. */
-  focusMissing: readonly string[];
   /** A click selects one region; a shift-click adds or removes it (merge takes two or more). */
   onSelect: (guid: string | null, add: boolean) => void;
   /** `rooms.trace` for the drawn view; `none` names why there is nothing to draw. */
@@ -304,7 +280,7 @@ export function RoomsPlan({
     dragDistance: dragDist,
     handlers,
   } = viewport;
-  const layers = page.layers;
+  const layers = (ROOMS_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer)));
   const mapShapes = useMemo(
     () =>
       world?.shapes.map((shape) => ({ d: shape.d, ink: token(REGION_INK[shape.state].ink!) })) ??
@@ -324,32 +300,11 @@ export function RoomsPlan({
       options: ROOMS_LAYERS.map((key) => ({ key, label: key, says: LAYER_SAYS[key] })),
       onToggle: (key: string) =>
         setPage(
-          { layers: toggleLayer(ROOMS_LAYERS, page.layers, key as Layer) },
+          { layers: toggleLayer(ROOMS_LAYERS, (ROOMS_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer))), key as Layer) },
           { history: "push" },
         ),
     },
   };
-
-  // Focus: zoom to the named regions' union once, when they are drawn.
-  const zoomKey = page.focus;
-  const zoomed = useRef("");
-  useEffect(() => {
-    if (!zoomKey) {
-      zoomed.current = "";
-      return;
-    }
-    if (!world || !size || zoomed.current === zoomKey) return;
-    const boxes = world.shapes
-      .filter((shape) => zoomTo.includes(shape.region.guid))
-      .flatMap((shape) => [
-        [shape.box.minX, shape.box.minY] as const,
-        [shape.box.maxX, shape.box.maxY] as const,
-      ]);
-    const to = boxes.length ? frameBox(boundsOf(boxes), ZOOM_PAD_PX) : null;
-    if (!to) return;
-    zoomed.current = zoomKey;
-    move(to, "move");
-  }, [world, size, zoomKey, zoomTo, move]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedPoints =
     world?.shapes
@@ -362,12 +317,7 @@ export function RoomsPlan({
   // The lease's one key is the viewport (`roomsAddress.agent`); the rest stays the person's.
   useRouteLease("rooms", [page, setPage], {
     thread: lease?.thread,
-    visible:
-      !!lease?.ready &&
-      !empty &&
-      !!world &&
-      !!size &&
-      (!page.focus || !zoomTo.length || zoomed.current === page.focus),
+    visible: !!lease?.ready && !empty && !!world && !!size,
     context: {
       ...lease?.context,
       size,
@@ -468,13 +418,6 @@ export function RoomsPlan({
         />
       ) : planError ? (
         <OutcomeLine kind="error" label="plan image unread" says={planError} />
-      ) : null}
-      {focusMissing.length ? (
-        <OutcomeLine
-          kind="refused"
-          label={`focus · ${focusMissing.join(", ")}`}
-          says="no region in this snapshot wears that label"
-        />
       ) : null}
     </>
   );

@@ -1,6 +1,6 @@
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { SvgTip } from "@pe/kit/lang/tooltip";
-import { useId, useState } from "react";
+import { useId } from "react";
 import type { PartitionReviewData } from "@pe/agent-contracts";
 import { List } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
@@ -275,9 +275,13 @@ function ReviewList({
 }
 
 export function PartitionReview({
+  selected,
+  onSelect: setSelected,
   review,
   onFlag,
 }: {
+  selected: string | null;
+  onSelect: (key: string | null) => void;
   review: {
     zone: string;
     data: PartitionReviewData | null;
@@ -286,8 +290,6 @@ export function PartitionReview({
   };
   onFlag?: (key: string) => void;
 }) {
-  // Review-widget focus; the keyed review mount resets it when evidence changes.
-  const [selected, setSelected] = useState<string | null>(null);
   const data = review.data;
   if (!data)
     return (

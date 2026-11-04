@@ -580,18 +580,20 @@ function CompactThreadTrail({ thread, now }: { thread: RosterThread; now: number
 
 export type ThreadSort = "recent" | "title";
 
-function initialShelfState(current: RosterThread | undefined): ListState<ThreadSort> {
+function initialShelfState(
+  current: RosterThread | undefined,
+): Omit<ListState<ThreadSort>, "selected"> {
   const closed = SHELF_ORDER.filter((shelf) => {
     if (current && shelfOf(current) === shelf) return false;
     try {
       const saved = localStorage.getItem(`pe.shelf.${shelf}`);
       if (saved !== null) return saved !== "open";
-    } catch {
+    } catch (error) { console.warn("ts/apps/web/src/chat/thread-palette.tsx: fallback after failure", error);
       /* The list still works without storage. */
     }
     return shelf === "snoozed" || shelf === "settled" || shelf === "archived";
   }).map((shelf) => SHELF_WORD[shelf]);
-  return { search: threadSearchDefault(), sort: "", closed, open: [], selected: [] };
+  return { search: threadSearchDefault(), sort: "" as const, closed, open: [] };
 }
 
 function ThreadActivityMark({
@@ -644,6 +646,8 @@ function ThreadActivityMark({
 const searchThread = (thread: RosterThread) => ({ text: [threadSearchText(thread)] });
 
 export function ThreadsSidebar({
+  selected = [],
+  onSelection,
   threads,
   currentThreadId,
   onSelect,
@@ -654,6 +658,8 @@ export function ThreadsSidebar({
   reading = false,
   ...verbs
 }: ThreadVerbs & {
+  selected?: string[];
+  onSelection?: (ids: string[]) => void;
   threads: RosterThread[];
   currentThreadId: string;
   onSelect: (id: string) => void;
@@ -796,9 +802,11 @@ export function ThreadsSidebar({
       order: SHELF_ORDER.map((key) => SHELF_WORD[key]),
     },
     select: "multi",
-    state: view,
+    state: { ...view, selected },
     onState: (next) => {
-      setView(next);
+      const { selected: selection, ...pose } = next;
+      setView(pose);
+      if (selection !== selected) onSelection?.([...selection]);
       if (next.closed !== view.closed)
         for (const shelf of SHELF_ORDER) {
           try {
@@ -806,13 +814,13 @@ export function ThreadsSidebar({
               `pe.shelf.${shelf}`,
               next.closed.includes(SHELF_WORD[shelf]) ? "closed" : "open",
             );
-          } catch {
+          } catch (error) { console.warn("ts/apps/web/src/chat/thread-palette.tsx: fallback after failure", error);
             /* Collapse is still held in page state. */
           }
         }
     },
     onPick: (thread) => {
-      setView((previous) => ({ ...previous, selected: [] }));
+      onSelection?.([]);
       onSelect(thread.id);
     },
   });
@@ -849,6 +857,7 @@ export function ThreadsSidebar({
     const work = works.of.get(thread.id);
     const lead = leadWork(work);
     // The remembered documents lead; the conversation title stands in when there are none.
+    // TODO: Manual D drive-7 verdict E (S9): "Thread titles carry ids" including a model GUID and "grille 8747668". Give historical titles readable names.
     const title = documentsLabel(work) ?? thread.title;
     return {
       label: compactRows ? (

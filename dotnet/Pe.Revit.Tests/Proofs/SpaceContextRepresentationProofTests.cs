@@ -29,7 +29,7 @@ public sealed class SpaceContextRepresentationProofTests {
                 transaction.Commit();
             }
             using var nativeBytes = new MemoryStream();
-            var native = Scene.Write(document, new SceneRequest([focus.Id.Value()], 20), nativeBytes);
+            var native = Scene.Write(document, new SceneRequest([focus.Id.Value()], 20, ContextRepresentation: SceneContextRepresentation.LinkBoxes), nativeBytes);
             Assert.That(native.Elements.Single(e => e.Handle.ElementId == context.Id.Value()).Representation, Is.EqualTo(SceneRepresentation.Mesh));
             using var boxBytes = new MemoryStream();
             var boxed = Scene.Write(document, new SceneRequest([focus.Id.Value()], 20,
@@ -51,7 +51,7 @@ public sealed class SpaceContextRepresentationProofTests {
     }
 
     [Test]
-    public void DefaultUsesNativeMeshesForDirectShapesWithoutAnElementFrame(UIApplication uiApplication) {
+    public void DetailedLinkBoxesUsesNativeMeshesForDirectShapesWithoutAnElementFrame(UIApplication uiApplication) {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
         try {
             DirectShape focus;
@@ -65,7 +65,7 @@ public sealed class SpaceContextRepresentationProofTests {
                 transaction.Commit();
             }
             using var bytes = new MemoryStream();
-            var scene = Scene.Write(document, new SceneRequest([focus.Id.Value()], 100, MaxTriangles: 1000), bytes);
+            var scene = Scene.Write(document, new SceneRequest([focus.Id.Value()], 100, MaxTriangles: 1000, ContextRepresentation: SceneContextRepresentation.LinkBoxes), bytes);
             Assert.That(scene.Format, Is.EqualTo("space-scene-v4"));
             Assert.That(scene.Elements.Select(row => row.Handle.ElementId), Is.EquivalentTo(expectedIds),
                 "A triangle budget must not become a box candidate cap. Actual: " + string.Join(", ",
@@ -104,7 +104,7 @@ public sealed class SpaceContextRepresentationProofTests {
                 transaction.Commit();
             }
             using var bytes = new MemoryStream();
-            var scene = Scene.Write(document, new SceneRequest([round.Id.Value(), rectangular.Id.Value()], FocusOnly: true), bytes);
+            var scene = Scene.Write(document, new SceneRequest([round.Id.Value(), rectangular.Id.Value()], FocusOnly: true, ContextRepresentation: SceneContextRepresentation.LinkBoxes), bytes);
             Assert.That(scene.Elements.All(row => row.Focus && row.Representation == SceneRepresentation.Run && row.VertexCount == 0), Is.True);
             Assert.That(scene.Triangles, Is.Zero);
             Assert.That(scene.Work.NativeGeometryCalls, Is.Zero);
@@ -180,7 +180,7 @@ public sealed class SpaceContextRepresentationProofTests {
             var connector = manager.Connectors.Cast<Connector>().First();
             Assert.That(hostRun.DiameterFt, Is.EqualTo(2 * connector.Radius + 2 * insulation.Thickness).Within(1e-8));
             using var bytes = new MemoryStream();
-            var scene = Scene.Write(document, new SceneRequest([insulation.Id.Value(), flex.Id.Value()], FocusOnly: true), bytes);
+            var scene = Scene.Write(document, new SceneRequest([insulation.Id.Value(), flex.Id.Value()], FocusOnly: true, ContextRepresentation: SceneContextRepresentation.LinkBoxes), bytes);
             Assert.That(scene.UnavailableElements, Is.Empty);
             Assert.That(scene.Elements.Select(row => row.Handle.ElementId), Is.EquivalentTo(new[] { insulation.Id.Value(), flex.Id.Value() }));
             Assert.That(scene.Elements.All(row => row.Focus), Is.True);
@@ -218,7 +218,7 @@ public sealed class SpaceContextRepresentationProofTests {
                 transaction.Commit();
             }
             using var bytes = new MemoryStream();
-            var scene = Scene.Write(document, new SceneRequest([duct.Id.Value()], 20), bytes);
+            var scene = Scene.Write(document, new SceneRequest([duct.Id.Value()], 20, ContextRepresentation: SceneContextRepresentation.LinkBoxes), bytes);
             Assert.That(scene.Completeness.Complete, Is.True);
             Assert.That(scene.Elements.Any(e => e.Handle.ElementId == runInsulation.Id.Value()), Is.False);
             var drawn = scene.Elements.Single(e => e.Handle.ElementId == fittingInsulation.Id.Value());

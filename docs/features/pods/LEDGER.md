@@ -4,6 +4,9 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 
 ## Decided
 
+- 2026-11-03, orchestrator-authorized P1: Pod route members declare strict `{artifact, fingerprint, name, description, page?}`. `artifact` names `routes/<slug>/route.artifact`; fingerprint is `pod-bytes:<digest>`. Legacy route `sourcePath` and descriptor member `sha256` are deleted. `publishPodRoute` uses `buildRouteArtifact` and serializes `RouteArtifactBytes` byte fields as integer-octet arrays. `PodRouteAuthoring` is the typed source declaration. Package inventory verifies actual closure bytes against the manifest fingerprint before route discovery.
+- 2026-11-03, P1 applies routes ruling `0944c85d`: Snowdon's admitted route is an authored copper voltage-drop worksheet with subject display, calculation, Work editing and v1-to-v2 migration. Removed route demo behavior: wire-intent editor, staged native parameter write, native circuit/manual picker, manual fixture and legacy custom renderer/registration. The portable Page tour remains separate. No kernel slot was added to preserve this demo behavior.
+
 - 2026-10-24: `document-profiler/tools/journal_profile.py` reads saved journals offline as an observed-build internal phase sensor. Exact browser-path/ViewOpen association, drawing brackets and first idle remain separate; ambiguous targets null metrics, overlaps are never summed, URLs are redacted, and none is a pixel/Ready or clean-baseline claim.
 
 - 2026-10-24: User stopped Computer Use because it throttles their computer and requested continued work from known evidence. No further Computer Use; this offline wave launches no runtime follow-up. Existing authorization for non-CU work remains in force. Manual GUI comparison is optional, not a pending QA request.
@@ -72,6 +75,7 @@ Rewritten 2026-09-16 after the pod/product boundary grill. Git holds the earlier
 - 2026-09-16: Whole-pod snapshot hash as receipt attribution; an edit to an unrelated member changes every future receipt's source. Attribution uses member path plus member SHA-256.
 
 ## Owed
+- Shared Documents\Pe.Tools (prefs, settings, Pods) stays shared between dev and installed. Bar: an installed build must recover, not brick, when it meets files written by a newer or dev build or carried over a 0.7.30 upgrade (this morning's writeIntent failure class). Owed: census installed readers of shared home files for strict schemas that refuse to load. (kaitpw, 2026-11-03)
 - Document profiler proof gap: immediate-cold Level1 parent1444683 remains unmeasured after the user stopped the trial. The basement's long-idle visible observation is contaminated by high pre-trigger load and reported CU throttling; it is not a normal-use baseline. No further Computer Use; this offline wave launches no runtime follow-up. See `.artifacts/accept/document-profiler-gui-levels-20261024-resume-ahk-off/REPORT.md`.
 - Document profiler: integrate scene census/cold activation/deferred-read orchestration; retain the current-live versus recovered-source mismatch. Coordination scene12478682 refused hide and direct deletion on the copy; a fresh rendering-style arm and scene cost attribution remain unproven.
 

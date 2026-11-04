@@ -5,12 +5,38 @@ import {
   addressSchema,
   bindWork,
   ductsRouteState,
+  ductsDocumentSchema,
+  ductsDesign,
+  neutralFansWork,
+  fansDocumentSchema,
   type DuctsSheetEdits,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { expect, test } from "vite-plus/test";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { editPatches, workLayer } from "../src/ducts-inputs.ts";
+import { price } from "@pe/ducts-domain/pricing";
+import { snapshot } from "../../web/src/ducts/test-fixture.ts";
+
+test("joined Fans edits reach the pricing solve and input layer", () => {
+  const fans = fansDocumentSchema.parse({
+    flows: { "4": { edit: { value: { cfm: 250 } } } },
+    terminalDrops: { "4": { edit: { value: { inWg: 0.27 } } } },
+    parameters: { fanFlow: { edit: { value: "Project fan flow" } } },
+  });
+  const joined = ductsDesign(ductsDocumentSchema.parse({}), fans);
+  const layer = workLayer(joined);
+  expect(layer.flows).toEqual({ "4": { cfm: 250 } });
+  expect(layer.terminalDrops).toEqual({ "4": { inWg: 0.27 } });
+  const priced = price(snapshot, {}, joined, joined);
+  expect(priced.edit.parameters.fanFlow).toBe("Project fan flow");
+  expect(priced.flows.get(4)).toMatchObject({ cfm: 250 });
+  expect(priced.next.paths[4]?.rows.find((row) => row.id === 4)).toMatchObject({ dp: 0.27 });
+  expect(priced.overrides.terminalPs).toEqual({ "4": 0.27 });
+});
+
+// U4 supplies a real fans Work; this test owns only ducts edits.
+const design = (raw: unknown) => ductsDesign(ductsDocumentSchema.parse(raw), neutralFansWork);
 
 /**
  * Fitting pricing from the sheet (ducts LEDGER 2026-10-29): a person's table, rule assignment and
@@ -46,7 +72,7 @@ test("fitting edits land on Work's own keys and read back through the Work layer
     ]);
     expect(await workspace.apply(scope, "ducts", "human", patches, 0)).toMatchObject({ ok: true });
     const saved = await workspace.readRaw(scope, "ducts");
-    const layer = workLayer(saved!.doc as Parameters<typeof workLayer>[0]);
+    const layer = workLayer(design(saved!.doc));
     expect(layer.rules).toEqual({ "elbow-1d-le10": { table: "CD3-21" } });
     expect(layer.ruleAssignments).toEqual({ "Round Elbow": { rule: "elbow-15d-45-le10" } });
     expect(layer.assumptions?.[`component-drop:${key}`]).toEqual({
@@ -57,13 +83,13 @@ test("fitting edits land on Work's own keys and read back through the Work layer
     // `null` takes each back.
     const cleared = editPatches(
       { assignments: { "Round Elbow": null }, fittingDrops: { [key]: null } },
-      saved!.doc as Parameters<typeof editPatches>[1],
+      design(saved!.doc),
     );
     expect(await workspace.apply(scope, "ducts", "human", cleared, saved!.revision)).toMatchObject({
       ok: true,
     });
     const after = workLayer(
-      (await workspace.readRaw(scope, "ducts"))!.doc as Parameters<typeof workLayer>[0],
+      design((await workspace.readRaw(scope, "ducts"))!.doc),
     );
     expect(after.ruleAssignments).toEqual({});
     expect(after.assumptions?.[`component-drop:${key}`]).toBeUndefined();
@@ -74,7 +100,7 @@ test("fitting edits land on Work's own keys and read back through the Work layer
 
 test("a criteria edit writes and clears one side, keeping the other side staged", () => {
   const doc = (value: unknown) =>
-    ({ criteria: { edit: { value } } }) as unknown as Parameters<typeof editPatches>[1];
+    design({ criteria: { edit: { value } } });
   // supply 850 over nothing staged: return stays unstaged, so it keeps the firm's value and source.
   expect(editPatches({ criteria: { velocityLimitFpm: { supply: 850 } } }, null)).toEqual([
     { path: ["criteria", "edit"], value: { value: { velocityLimitFpm: { supply: 850 } } } },

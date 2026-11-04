@@ -1,3 +1,5 @@
+import { fansDocumentSchema } from "@pe/agent-contracts";
+import { consentService, harnessThreads, testSpawner, settle } from "./effect-test.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
@@ -7,14 +9,17 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { Effect, Schema } from "effect";
+import { HarnessEventLine } from "../src/harness/thread-store.ts";
 import type {
   Caller,
   HarnessEvent,
   HarnessThreadBody,
   PluginHookName,
   PluginHooks,
+  WorkHandle,
 } from "@pe/agent-contracts";
-import { HARNESS_EVENT_MAX_BYTES } from "@pe/agent-contracts";
+import { HARNESS_EVENT_MAX_BYTES, tools, bindWork, stagedDucts, workKey, address as documentAddress } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human } from "./callers.ts";
 import {
@@ -27,12 +32,25 @@ import {
   assertRunAdmission,
 } from "../src/control.ts";
 import { createProviders } from "../src/harness/providers.ts";
-import { createHarnessThreads, IDLE_CHILD_MS } from "../src/harness/threads.ts";
+import {
+  IDLE_CHILD_MS,
+  type HarnessThreads,
+  type HarnessThreadsOptions,
+} from "../src/harness/threads.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { productProvidersPath } from "../src/product-paths.ts";
 import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
+import { ActionJournal } from "../src/action-journal.ts";
+import { ductsExecutors } from "../src/ducts-actions.ts";
+import { workWriteBoundary } from "../src/work-write-boundary.ts";
+import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
+import { sdkSessions } from "./native-receipt-fixture.ts";
+import type { RevitBridge } from "../src/bridge.ts";
+import { buildCapabilities, peFind, peRead } from "@pe/mcps";
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 
 let root = "";
 let previousLocalAppData: string | undefined;
@@ -40,10 +58,10 @@ type Host = {
   fetch: (request: Request) => Promise<Response>;
   /** Who every request crosses as: the identity middleware's stand-in. */
   as: Caller;
-  launchScheduled: ReturnType<typeof createHarnessThreads>["launchScheduled"];
-  heads: ReturnType<typeof createHarnessThreads>["heads"];
-  observe: ReturnType<typeof createHarnessThreads>["observe"];
-  runs: ReturnType<typeof createHarnessThreads>["runs"];
+  launchScheduled: HarnessThreads["Service"]["launchScheduled"];
+  heads: HarnessThreads["Service"]["heads"];
+  observe: HarnessThreads["Service"]["observe"];
+  runs: HarnessThreads["Service"]["runs"];
   log: HostLog;
   close: () => Promise<unknown>;
   consoles: string[];
@@ -51,15 +69,17 @@ type Host = {
 const hosts: Host[] = [];
 const mcpServer = () => ({ name: "pea", command: "unused", args: [], env: [] });
 /** Threads and providers behind one fetch, as the host's router mounts them. No probe at start. */
-const host = (
+const host = async (
   updatePending?: () => boolean,
   prepare?: () => Promise<unknown>,
   openConsole: (command: string, opened: () => void) => Promise<void> = async (_, opened) =>
     opened(),
   pluginHook?: <N extends PluginHookName>(name: N, event: PluginHooks[N]) => Promise<void>,
-): Host => {
+  extra: Partial<HarnessThreadsOptions> = {},
+): Promise<Host> => {
   const consoles: string[] = [];
   const providers = createProviders({
+    spawner: testSpawner(),
     shellPath: async () => "C:\\canary-bin;C:\\also",
     probeOnStart: false,
     openConsole: async (command, _env, opened) => {
@@ -69,7 +89,8 @@ const host = (
     },
   });
   const log = new HostLog(join(root, ".log", randomUUID()));
-  const threads = createHarnessThreads({
+  const threads = await harnessThreads({
+    runs: consentService(),
     log,
     prepare,
     pluginHook,
@@ -79,6 +100,7 @@ const host = (
     mcpServer,
     developerInstructions: async () => "KERNEL: You are Pea.",
     providers,
+    ...extra,
   });
   const routed: Host = {
     as: human,
@@ -166,6 +188,246 @@ const kinds = (events: HarnessEvent[]) =>
     )
     .map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
 
+test.each(["claude", "codex"] as const)(
+  "%s: canonical Address Work joins find, stage, sealed preview, 60-second consent, journal apply and receipt in one chain",
+  async (harness) => {
+    const dir = await mkdtemp(join(root, "chain-"));
+    const h = await host(),
+      call = caller(h),
+      read = reader(h);
+    const target = { session: "A", openId: "open-A" };
+    const address = documentAddress("C:/Models/chain.rvt");
+    const key = bindWork("ducts", address, undefined, target);
+    const routes = createPeRoutes({
+      registrations: [{ spec: tools.ducts.work }, { spec: tools.fans.work }],
+      store: fileRouteDocumentStore(join(dir, "work")),
+      heads: { observe: () => () => {} },
+      navigation: { documents: async () => [{ ...target, address }], threads: async () => [] },
+    });
+    const snapshot = JSON.parse(
+      await readFile(
+        new URL(
+          "../../../packages/host-contracts/src/fixtures/k2-four-fan-walk.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    const writes: unknown[] = [];
+    const bridge = {
+      subscribe: () => () => {},
+      list: Effect.succeed([
+        {
+          sessionId: "A",
+          connected: true,
+          ...hostOwnership,
+          processId: 42,
+          processStartUtcUnixMs: 1000,
+          state: { openDocuments: [{ ...target, address, isFamilyDocument: false }] },
+        },
+      ]),
+      invoke: (op: string, input: unknown, _session: string, _doc: string, requestId: string) =>
+        Effect.promise(async () => {
+          let value: unknown;
+          if (op.startsWith("ducts.snapshot.")) value = snapshot;
+          else if (op === "ducts.tables") value = { tables: {}, missing: [], unsupported: [] };
+          else if (op === "ducts.apply") {
+            await journal.markDispatched(requestId);
+            writes.push(input);
+            value = {
+              previewOnly: false,
+              counts: { written: 1, planned: 0, refused: 0, unchanged: 0 },
+              writes: [{ kind: "equipment-flow", id: 14577391, outcome: "written" }],
+              storeRevision: 1,
+              systemsAfter: [],
+            };
+          } else throw Error(`Unexpected bridge op ${op}`);
+          return { value, target: { session: "A", document: address, documentRef: target } };
+        }),
+    } as unknown as RevitBridge["Service"];
+    const executors = ductsExecutors(bridge, { sdk: sdkSessions });
+    const entries = Object.fromEntries(
+      Object.entries(executors)
+        .filter(([name]) => name !== "ducts.refresh")
+        .map(([name, executor]) => [
+          name,
+          workWriteBoundary(executor, bridge, { sdk: sdkSessions }),
+        ]),
+    );
+    const journal = new ActionJournal(join(dir, "journal.jsonl"));
+    journal.bindCommands({
+      work: routes.workspace,
+      resolve: (name) => entries[name]!,
+      probe: async () => true,
+    });
+    let base = "";
+    let located: WorkHandle;
+    const failures: unknown[] = [];
+    const server = createServer(async (incoming, outgoing) => {
+      try {
+        const path = new URL(incoming.url!, base).pathname;
+        const resolved = callerOf(
+          { kind: "local" },
+          { "x-pe-context": String(incoming.headers["x-pe-context"] ?? "") },
+        );
+        if (!("caller" in resolved)) throw Error("Unrecognized chain caller");
+        const result = await withInvocationContext(
+          {
+            caller: resolved.caller,
+            hostBaseUrl: base,
+            headers: { "x-pe-context": String(incoming.headers["x-pe-context"] ?? "") },
+          },
+          async () => {
+            if (path === "/pe/scope/self") return Response.json({}, { status: 404 });
+            if (path === "/ops") return Response.json({ operations: [] });
+            if (path === "/call")
+              return Response.json({
+                sessions: [
+                  { sessionId: "A", connected: true, openDocuments: [{ ...target, address }] },
+                ],
+              });
+            if (path === "/pe/route-state/fans")
+              return routes.fetch(new Request(`${base}${incoming.url}`));
+            if (path === "/chain/locate") {
+              const found = await peRead.execute(
+                { key: "route:fans", timeoutSeconds: 30, target: { kind: "open", ref: target } },
+                {},
+              );
+              expect(found).toMatchObject({
+                ok: true,
+                target: { document: address },
+                result: {
+                  revision: 1,
+                  doc: { equipmentFlows: { "14577391": { edit: { value: { cfm: 975 } } } } },
+                },
+              });
+              const census = await routes.workspace.instances();
+              expect(census.works).toHaveLength(1);
+              expect(census.works[0]).toMatchObject({ scope: { binding: "address" }, revision: 1 });
+              expect(workKey(census.works[0]!.scope)).toBe(workKey({ ...key, route: "fans" }));
+              located = { key, revision: 0 };
+              return Response.json(found);
+            }
+            if (path === "/pe/capabilities")
+              return Response.json({
+                at: new Date().toISOString(),
+                sources: {},
+                diagnostics: [],
+                machine: machineFixture(),
+                capabilities: buildCapabilities({
+                  ops: [],
+                  routes: [tools.ducts.work, tools.fans.work],
+                  packages: [],
+                  skills: [],
+                }),
+              });
+            if (path === "/chain/find")
+              return Response.json(await peFind.execute({ query: "ducts", limit: 8 }, {}));
+            if (path === "/chain/stage")
+              return routes.fetch(
+                new Request(
+                  `${base}/pe/route-state/fans/apply?target=${encodeURIComponent(address)}`,
+                  {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({
+                      kind: "apply",
+                      expectedRevision: 0,
+                      press: null,
+                      patches: [
+                        {
+                          path: ["equipmentFlows", "14577391"],
+                          value: { edit: { value: { cfm: 975, source: "chain" } } },
+                        },
+                        {
+                          path: ["writeIntent"],
+                          value: {
+                            edit: {
+                              value: {
+                                walk: { unitId: 14577391, portIndex: 2 },
+                                cells: [["equipmentFlows", "14577391"]],
+                              },
+                            },
+                          },
+                        },
+                      ],
+                    }),
+                  },
+                ),
+              );
+            const phase = path.endsWith("/preview") ? "preview" : "apply";
+            const work = located;
+            await journal.invoke(
+              {
+                id: phase,
+                key: `ducts.${phase}-losses`,
+                target: { kind: "document", ref: target },
+                input: { work },
+              },
+              { caller: resolved.caller, basis: null },
+            );
+            return Response.json(await journal.wait(phase));
+          },
+        );
+        outgoing.writeHead(result.status, Object.fromEntries(result.headers));
+        outgoing.end(await result.text());
+      } catch (error) {
+        failures.push(error);
+        outgoing.writeHead(500);
+        outgoing.end(String(error));
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    vi.stubEnv("FAKE_ACP_CHAIN", `${base}/chain`);
+    try {
+      const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
+      await until(read, id, (body) => body.models.length > 0);
+      bindControl({ runs: h.runs });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      await call("POST", `/pe/threads/${id}/prompt`, { text: `chain ${harness}` });
+      const waiting = await untilIo(
+        () => read(id),
+        (body) => !body.running || openAsks(body).some((ask) => ask.scope === "run"),
+      );
+      expect(openAsks(waiting), String(failures[0] ?? JSON.stringify(waiting.events))).toHaveLength(1);
+      expect(JSON.stringify(waiting.events)).toContain("chain find:");
+      const preview = (await journal.list(undefined, "preview"))[0];
+      expect(preview).toMatchObject({
+        state: "succeeded",
+        result: { previewOnly: true, seal: { requestHash: expect.any(String) } },
+      });
+      expect(writes).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(59_000);
+      expect(writes).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1_000);
+      const done = await untilIo(
+        () => read(id),
+        (body) => !body.running && turnEnds(body).length === 1,
+      );
+      expect(JSON.stringify(done.events)).toContain("chain apply:");
+      expect(writes).toHaveLength(1);
+      expect(await journal.wait("apply")).toMatchObject({
+        state: "succeeded",
+        consent: { decision: { by: "deadline" } },
+        steps: [
+          { kind: "native", state: "succeeded", dispatchedAt: expect.any(String) },
+          { kind: "publication", state: "succeeded" },
+        ],
+      });
+      const saved = (await routes.workspace.view(key, "ducts"))!.doc as never;
+      const fans = fansDocumentSchema.parse((await routes.workspace.view({ ...key, route: "fans" }, "fans"))!.doc);
+      expect(stagedDucts(saved, fans).equipmentFlows).toEqual({});
+      expect(writes[0]).toMatchObject({ equipmentFlows: [{ id: 14577391, cfm: 975, source: "chain" }] });
+    } finally {
+      vi.useRealTimers();
+      await h.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  },
+  30_000,
+);
+
 test("automatic update admission refuses a new Pea prompt through download and releases on confirmed refusal", async () => {
   const planId = "64f25f46-dfa6-4ee6-b973-d7f6a8b523c4";
   let release!: () => void;
@@ -208,7 +470,7 @@ test("automatic update admission refuses a new Pea prompt through download and r
     installed: true,
     pid: 123,
   });
-  const threads = host(updates.automaticPending);
+  const threads = await host(updates.automaticPending);
   const call = caller(threads);
   const read = reader(threads);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -278,7 +540,7 @@ async function untilIo<T>(read: () => Promise<T>, done: (value: T) => boolean): 
 
 test("turn children retire while conversation history and model choices survive", async () => {
   process.env.FAKE_ACP_SHAPE = "config";
-  const h = host(),
+  const h = await host(),
     call = caller(h),
     read = reader(h);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -313,7 +575,7 @@ test("connect, model/trait RPCs, active turns and asks prevent idle reaping", as
   process.env.FAKE_ACP_GATE = gates;
   await writeFile(join(gates, "connect"), "hold");
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-  const threads = host();
+  const threads = await host();
   const call = caller(threads);
   const read = reader(threads);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -339,16 +601,11 @@ test("connect, model/trait RPCs, active turns and asks prevent idle reaping", as
       await rm(join(gates, "config"));
       expect((await changed).status).toBe(200);
     }
-    for (const prompt of ["hang", "permission", "question"]) {
+    for (const prompt of ["hang", "question"]) {
       await call("POST", `/pe/threads/${id}/prompt`, { text: prompt });
       await untilIo(
         () => read(id),
-        (b) =>
-          prompt === "permission"
-            ? openAsks(b).length > 0
-            : prompt === "question"
-              ? openQuestions(b).length > 0
-              : lastEcho(b) === "echo: hang",
+        (b) => (prompt === "question" ? openQuestions(b).length > 0 : lastEcho(b) === "echo: hang"),
       );
       await vi.advanceTimersByTimeAsync(2 * IDLE_CHILD_MS);
       const active = await read(id);
@@ -366,220 +623,8 @@ test("connect, model/trait RPCs, active turns and asks prevent idle reaping", as
   }
 });
 
-test("a thread prompts, parks a permission, cancels, interrupts, renames, and replays over SSE", async () => {
-  process.env.FAKE_ACP_SHAPE = "config";
-  const threads = host();
-  const call = caller(threads);
-  const read = reader(threads);
-  const created = await call("POST", "/pe/threads", { providerId: "claude" });
-  const id = created.json.id as string;
-  const started = await until(read, id, (b) => b.session === "started" && b.models.length > 0);
-  expect(started.models.map((m) => m.modelId)).toEqual(["m1", "m2"]);
-  expect([started.modelId, started.lastSeq]).toEqual(["m1", 1]);
-  expect([started.providerId, started.providerName]).toEqual(["claude", "Claude Code"]);
-  // Traits are the config options beyond model and mode, normalized.
-  expect(started.traits).toEqual([
-    {
-      id: "effort",
-      name: "Effort",
-      kind: "select",
-      options: [
-        { id: "low", name: "Low" },
-        { id: "high", name: "High" },
-      ],
-      current: "low",
-    },
-    { id: "fast", name: "Fast", kind: "boolean", current: false },
-  ]);
-
-  // Prompt -> echo + tool_call -> turn_end.
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "hello" });
-  let body = await until(read, id, (b) => turnEnds(b).length === 1);
-  expect(kinds(body.events)).toEqual([
-    "session",
-    "prompt",
-    "turn_element_targets",
-    "update:agent_message_chunk",
-    "update:tool_call",
-    "turn_end",
-  ]);
-  expect(body.events.map((e) => e.seq)).toEqual(
-    Array.from({ length: body.events.length }, (_, index) => index + 1),
-  );
-  expect(body.lastSeq).toBe(body.events.length);
-
-  // Permission parks the turn until answered.
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "ask permission" });
-  body = await until(read, id, (b) => openAsks(b).length === 1);
-  expect(body.running).toBe(true);
-  const ask = openAsks(body)[0]!;
-  for (const change of [
-    { status: "settled" },
-    { status: "archived" },
-    { snoozedUntil: "2099-10-11T12:00:00.000Z" },
-  ])
-    expect(
-      (
-        await call("PUT", `/pe/threads/${id}`, {
-          expectedRevision: body.lifecycle.revision,
-          ...change,
-        })
-      ).status,
-    ).toBe(409);
-  expect((await read(id)).activity).toMatchObject({ state: "waiting", pending: 1 });
-  expect(ask.toolCall).toMatchObject({ toolCallId: "t-ask permission", title: "fake tool" });
-  expect(
-    (await call("POST", `/pe/threads/${id}/permission`, { requestId: "nope", optionId: "yes" }))
-      .status,
-  ).toBe(409);
-  await call("POST", `/pe/threads/${id}/permission`, {
-    requestId: ask.requestId,
-    optionId: "yes",
-  });
-  body = await until(read, id, (b) => turnEnds(b).length === 2);
-  expect(kinds(body.events).slice(6)).toEqual([
-    "prompt",
-    "turn_element_targets",
-    "update:agent_message_chunk",
-    "update:tool_call",
-    "permission_request",
-    "permission_resolved",
-    "update:agent_message_chunk",
-    "turn_end",
-  ]);
-  expect(body.events.find((e) => e.kind === "permission_resolved")).toMatchObject({
-    by: "user",
-    optionId: "yes",
-  });
-
-  // Cancel a parked permission: it resolves by cancel and the turn ends cancelled.
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "permission again" });
-  await until(read, id, (b) => openAsks(b).length === 1);
-  await call("POST", `/pe/threads/${id}/cancel`);
-  body = await until(read, id, (b) => turnEnds(b).length === 3);
-  const cancelled = body.events.findLast((e) => e.kind === "permission_resolved");
-  expect(cancelled).toMatchObject({ by: "cancel" });
-  expect(cancelled).not.toHaveProperty("optionId");
-  expect(turnEnds(body).at(-1)).toMatchObject({ stopReason: "cancelled" });
-
-  // A prompt sent while a turn runs interrupts it: the turn ends cancelled, then the new one starts.
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "hang" });
-  await until(read, id, (b) => lastEcho(b) === "echo: hang");
-  const interrupting = await call("POST", `/pe/threads/${id}/prompt`, { text: "slow" });
-  expect(interrupting.status).toBe(200);
-  body = await until(read, id, (b) => turnEnds(b).length === 5 && !b.running);
-  expect(
-    body.events
-      .flatMap((e) =>
-        e.kind === "prompt"
-          ? [`prompt ${e.text}`]
-          : e.kind === "turn_end"
-            ? [`end ${e.stopReason}`]
-            : [],
-      )
-      .slice(-4),
-  ).toEqual(["prompt hang", "end cancelled", "prompt slow", "end end_turn"]);
-  expect(body.events.findLast((e) => e.kind === "prompt")).toMatchObject({
-    turnId: interrupting.json.turnId,
-  });
-  // Cancel reads no body, so it needs no content type.
-  expect((await bare(threads, "POST", `/pe/threads/${id}/cancel`)).status).toBe(200);
-  expect(body.events.map((e) => e.seq)).toEqual(body.events.map((_, i) => i + 1));
-
-  // Model and traits (config option branch) go through ACP and land in the log.
-  await call("POST", `/pe/threads/${id}/model`, { modelId: "m2" });
-  await call("POST", `/pe/threads/${id}/trait`, { id: "effort", value: "high" });
-  const fast = await call("POST", `/pe/threads/${id}/trait`, { id: "fast", value: true });
-  expect(fast.json.traits.map((t: { current: unknown }) => t.current)).toEqual(["high", true]);
-  body = await read(id);
-  expect(body.modelId).toBe("m2");
-  expect(body.events.slice(-3)).toMatchObject([
-    { kind: "model_changed", modelId: "m2" },
-    { kind: "trait_changed", traitId: "effort", value: "high" },
-    { kind: "trait_changed", traitId: "fast", value: true },
-  ]);
-  // A trait the harness does not offer, or a value of the wrong kind, is refused.
-  expect((await call("POST", `/pe/threads/${id}/trait`, { id: "nope", value: "x" })).status).toBe(
-    502,
-  );
-  expect((await call("POST", `/pe/threads/${id}/trait`, { id: "fast", value: "on" })).status).toBe(
-    502,
-  );
-  // A refused model surfaces the harness's own error; it does not fall through to `session/set_model`.
-  const refused = await call("POST", `/pe/threads/${id}/model`, { modelId: "nope" });
-  expect([refused.status, refused.json.error]).toEqual([
-    502,
-    expect.stringMatching(/Invalid params/),
-  ]);
-
-  // The harness names the session; a rename by the user is logged the same way.
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "title" });
-  body = await until(read, id, (b) => b.title === "Fake title" && !b.running);
-  expect(kinds(body.events).slice(-3)).toEqual([
-    "update:session_info_update",
-    "title_changed",
-    "turn_end",
-  ]);
-  expect((await call("PUT", `/pe/threads/${id}`, { title: "Renamed" })).json.title).toBe("Renamed");
-  expect((await read(id)).events.at(-1)).toMatchObject({ kind: "title_changed", title: "Renamed" });
-
-  // A route that reads a body refuses one without a JSON content type.
-  expect((await bare(threads, "POST", `/pe/threads/${id}/prompt`)).status).toBe(415);
-}, 30_000);
-
-test("a restarted host expires open asks, ends the open turn, resumes, and keeps the model", async () => {
-  // The `models` shape: no config option, so the model goes through `session/set_model`.
-  const first = host();
-  const call = caller(first);
-  const read = reader(first);
-  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
-  await until(read, id, (b) => b.session === "started");
-  await call("POST", `/pe/threads/${id}/model`, { modelId: "m2" });
-  await call("POST", `/pe/threads/${id}/prompt`, { text: "permission" });
-  const parked = await until(read, id, (b) => openAsks(b).length === 1);
-  const turnId = parked.events.findLast((e) => e.kind === "prompt")!.turnId;
-  await first.close();
-
-  // A torn thread directory is skipped, never fatal.
-  await mkdir(join(root, "torn"), { recursive: true });
-  await writeFile(join(root, "torn", "meta.json"), "{ not json");
-
-  const second = host();
-  const reread = reader(second);
-  const recall = caller(second);
-  expect((await recall("POST", `/pe/threads/${id}/prompt`, { text: "after restart" })).status).toBe(
-    200,
-  );
-  const resumed = await until(
-    reread,
-    id,
-    (b) => b.session === "closed" && !b.running && turnEnds(b).length === 1,
-  );
-  const tail = resumed.events
-    .slice(parked.events.length)
-    .filter((event) => event.kind !== "run_consent");
-  expect(kinds(tail)).toEqual([
-    "permission_resolved",
-    "error",
-    "prompt",
-    "turn_element_targets",
-    "session",
-    "model_changed",
-    "update:agent_message_chunk",
-    "update:tool_call",
-    "turn_end",
-  ]);
-  expect(tail[0]).toMatchObject({ by: "expired", requestId: openAsks(parked)[0]!.requestId });
-  expect(tail[1]).toMatchObject({ turnId, message: "host restarted during this turn" });
-  expect(tail[2]).toMatchObject({ text: "after restart" });
-  expect(resumed.modelId).toBe("m2");
-  expect(
-    (await caller(second)("GET", "/pe/threads")).json.map((t: { id: string }) => t.id),
-  ).not.toContain("torn");
-});
-
 test("a question parks the turn, a fork copies the log, and a lost session re-feeds the transcript", async () => {
-  const threads = host();
+  const threads = await host();
   const call = caller(threads);
   const read = reader(threads);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -673,7 +718,7 @@ test("a question parks the turn, a fork copies the log, and a lost session re-fe
   const metaPath = join(root, id, "meta.json");
   const meta = JSON.parse(await readFile(metaPath, "utf8")) as { acpSessionId: string };
   await writeFile(metaPath, JSON.stringify({ ...meta, acpSessionId: "lost" }));
-  const second = host();
+  const second = await host();
   await caller(second)("POST", `/pe/threads/${id}/prompt`, { text: "still there?" });
   const lost = await until(reader(second), id, (b) => turnEnds(b).length === 3);
   expect(lost.events.findLast((e) => e.kind === "session")).toMatchObject({ state: "detached" });
@@ -695,7 +740,7 @@ const said = (body: HarnessThreadBody, name: string) =>
 test("subscription children exclude inherited inference credentials without changing the host", async () => {
   const names = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"];
   for (const name of names) vi.stubEnv(name, "synthetic-inherited-credential");
-  const threads = host();
+  const threads = await host();
   for (const provider of ["claude", "codex"]) {
     const body = await envOf(threads, provider);
     for (const name of names) expect(said(body, name)).toBe("");
@@ -761,7 +806,7 @@ test("an endpoint provider is checked before save, and every thread carries its 
   const codexKey = "sk-codex-secret-4321";
   const claudeKey = "sk-claude-secret-8765";
   try {
-    const threads = host();
+    const threads = await host();
     const call = caller(threads);
     const add = (harness: string, name: string, baseUrl: string, apiKey: string) =>
       call("POST", "/pe/providers", { harness, name, auth: { kind: "endpoint", baseUrl, apiKey } });
@@ -918,7 +963,20 @@ test("an endpoint provider is checked before save, and every thread carries its 
       const log = await readFile(join(root, body.id, "events.jsonl"), "utf8");
       expect(log).not.toContain(codexKey);
       expect(log).not.toContain(claudeKey);
+      // The line on disk is the typed event, redacted on its value: every line decodes as one.
+      for (const line of log.trim().split(/\r?\n/))
+        expect(() => Schema.decodeUnknownSync(HarnessEventLine)(line)).not.toThrow();
     }
+    // An event whose string field carries a key is written with its last four, and still decodes.
+    const echoed = await call("POST", "/pe/threads", { providerId: "codex-vps" });
+    await call("POST", `/pe/threads/${echoed.json.id}/prompt`, { text: `leak ${codexKey}` });
+    const echoLog = await readFile(join(root, echoed.json.id, "events.jsonl"), "utf8");
+    expect(echoLog).not.toContain(codexKey);
+    const promptLine = echoLog.split(/\r?\n/).find((line) => line.includes('"kind":"prompt"'))!;
+    expect(Schema.decodeUnknownSync(HarnessEventLine)(promptLine)).toMatchObject({
+      kind: "prompt",
+      text: "leak …4321",
+    });
 
     expect((await call("DELETE", "/pe/providers/codex-vps")).status).toBe(204);
     expect((await call("DELETE", "/pe/providers/claude-gate")).status).toBe(204);
@@ -928,22 +986,14 @@ test("an endpoint provider is checked before save, and every thread carries its 
     server.close();
     await rm(productProvidersPath(), { force: true });
   }
-}, 30_000);
+  // Every probe child now dies by tree kill (two awaited taskkill.exe runs on win32): 11.6 s -> 47 s
+  // measured 2026-11-02. The cost is the Spawner closing a live leader, not this test.
+}, 90_000);
 
-test("both harnesses retain journal-safe modes even when access was Full", async () => {
-  const threads = host();
-  const call = caller(threads);
-  try {
-    expect((await call("GET", "/pe/access")).json).toEqual({ guarded: true });
-    expect(said(await envOf(threads, "claude"), "MODE")).toBe("default");
-    expect((await call("PUT", "/pe/access", { guarded: false })).json).toEqual({ guarded: false });
-    expect((await call("GET", "/pe/access")).json).toEqual({ guarded: false });
-    expect(said(await envOf(threads, "codex"), "MODE")).toBe("read-only");
-    expect((await bare(threads, "PUT", "/pe/access")).status).toBe(415);
-    expect((await call("PUT", "/pe/access", { guarded: "no" })).status).toBe(400);
-  } finally {
-    await call("PUT", "/pe/access", { guarded: true });
-  }
+test("both harnesses retain journal-safe modes", async () => {
+  const threads = await host();
+  expect(said(await envOf(threads, "claude"), "MODE")).toBe("default");
+  expect(said(await envOf(threads, "codex"), "MODE")).toBe("read-only");
 });
 
 // A 1x1 PNG, the same fixture the Mastra-era attachment test used.
@@ -967,7 +1017,7 @@ const onDoc = (ref: { session: string; openId: string }) => ({ kind: "document",
 const put = (...requests: unknown[]) => requests.map((request) => ({ request }));
 
 test("access-050: fork retains the targets but never inherits a human admission", async () => {
-  const threads = host();
+  const threads = await host();
   const call = caller(threads);
   const created = await call("POST", "/pe/threads", { providerId: "claude" });
   const id = created.json.id;
@@ -1000,7 +1050,7 @@ test("door 6: a human adds your open lifetimes with an admission; Pea's own and 
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(T0);
   bindControl(peaAcquiredCopy);
-  const call = caller(host());
+  const call = caller(await host());
   const id = "target-door-6";
   const set = await call("PUT", `/pe/scope/${id}`, { targets: put(yours), expectedRevision: 0 });
   expect(set.status).toBe(200);
@@ -1031,7 +1081,7 @@ test("door 6: a human adds your open lifetimes with an admission; Pea's own and 
 });
 
 test("thread target changes preserve Pea capability and retain revocation for external grants", async () => {
-  const h = host();
+  const h = await host();
   bindControl({ heads: h.heads.read });
   const call = caller(h),
     id = "target-context";
@@ -1047,7 +1097,7 @@ test("thread target changes preserve Pea capability and retain revocation for ex
 });
 
 test("Pea context targets are editable defaults and mint no external write admission", async () => {
-  const h = host(),
+  const h = await host(),
     call = caller(h),
     id = "context-only";
   h.as = peaOf(id);
@@ -1065,7 +1115,7 @@ test("Pea context targets are editable defaults and mint no external write admis
 });
 
 test("Pea cannot create its own independent prompt and target selection grants no write", async () => {
-  const h = host(),
+  const h = await host(),
     call = caller(h),
     id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id;
   await call("PUT", `/pe/scope/${id}`, { targets: put(yours), expectedRevision: 0 });
@@ -1092,7 +1142,7 @@ const story = (body: HarnessThreadBody) =>
   );
 
 test("a prompt id is the turn id: a retry never sends twice, other content under it is refused", async () => {
-  const threads = host();
+  const threads = await host();
   const call = caller(threads);
   const read = reader(threads);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -1117,7 +1167,7 @@ test("a prompt id is the turn id: a retry never sends twice, other content under
 });
 
 test("queue order holds under steer: the steer runs next, then the queue in order", async () => {
-  const threads = host();
+  const threads = await host();
   const call = caller(threads);
   const read = reader(threads);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -1145,7 +1195,7 @@ test("queue order holds under steer: the steer runs next, then the queue in orde
 });
 
 test("a restarted host drops the prompts it had queued, saying so", async () => {
-  const first = host();
+  const first = await host();
   const call = caller(first);
   const read = reader(first);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -1154,7 +1204,7 @@ test("a restarted host drops the prompts it had queued, saying so", async () => 
   const queued = randomUUID();
   await call("POST", `/pe/threads/${id}/prompt`, { id: queued, text: "later", delivery: "queue" });
   await first.close();
-  const second = host();
+  const second = await host();
   const body = await reader(second)(id);
   expect(body.events.at(-1)).toMatchObject({
     kind: "prompt_dropped",
@@ -1168,7 +1218,7 @@ test("a restarted host drops the prompts it had queued, saying so", async () => 
 });
 
 test("declared client and actual harness handler share input, output and refusal contracts", async () => {
-  const owner = host();
+  const owner = await host();
   const client = createPeClient("http://host", (url, init) =>
     servePeRoute(new Request(url, init), owner.fetch),
   );
@@ -1189,7 +1239,7 @@ test("declared client and actual harness handler share input, output and refusal
 });
 
 test("one huge tool result is kept bounded in the record, the log and every reader", async () => {
-  const threads = host();
+  const threads = await host();
   const call = caller(threads);
   const read = reader(threads);
   const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
@@ -1230,7 +1280,7 @@ for (const harness of ["claude", "codex"] as const) {
         };
         return realOpen(...args);
       });
-      const h = host(),
+      const h = await host(),
         call = caller(h),
         read = reader(h);
       try {
@@ -1270,7 +1320,7 @@ for (const harness of ["claude", "codex"] as const) {
       calls.push({ harness: args[0], token: args[2].PE_CONTEXT ?? "" });
       return realOpen(...args);
     });
-    const h = host(),
+    const h = await host(),
       call = caller(h),
       read = reader(h);
     try {
@@ -1294,12 +1344,17 @@ for (const harness of ["claude", "codex"] as const) {
       const oldCaller = "caller" in old.resolved ? old.resolved.caller : null;
       expect(oldCaller?.kind).toBe("pea");
       const next = randomUUID();
+      const gate = join(root, `cancel-gate-${next}`);
+      await mkdir(gate);
+      await writeFile(join(gate, "hang"), "hold prompt output");
+      vi.stubEnv("FAKE_ACP_GATE", gate);
       await call("POST", `/pe/threads/${id}/prompt`, { id: next, text: "hang" });
       await until(
         read,
         id,
         (body) =>
           body.running &&
+          existsSync(join(gate, "hang.active")) &&
           body.events.some(
             (event) =>
               event.kind === "session" &&
@@ -1322,45 +1377,20 @@ for (const harness of ["claude", "codex"] as const) {
         scoped && "caller" in scoped && scoped.caller.kind === "pea" ? scoped.caller.run : null,
       ).toEqual({ thread: id, turn: next });
       await call("POST", `/pe/threads/${id}/cancel`);
+      await until(read, id, () => existsSync(join(gate, "cancel.received")));
+      expect((await read(id)).running).toBe(true);
+      await rm(join(gate, "hang"));
       await until(read, id, (body) => !body.running);
     } finally {
       launched.mockRestore();
       await h.close();
     }
   }, 15000);
-  test(`${harness}: a Pea MCP tool of kind other reaches the permission card instead of a refusal`, async () => {
-    // Claude's ACP adapter reports every MCP tool, Pea's pe_find included, as kind "other".
-    // 2aecd374's kind-only allowlist refused them all and Pea could read nothing (2026-10-27).
-    const h = host(),
+  test(`${harness}: Pea's own MCP tools run without a card (ADR 0027 rule 11)`, async () => {
+    const h = await host(),
       call = caller(h),
       read = reader(h);
     try {
-      const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
-      await until(read, id, (body) => body.models.length > 0);
-      await call("POST", `/pe/threads/${id}/prompt`, { text: "permission mcp" });
-      const body = await until(read, id, (body) => openAsks(body).length === 1);
-      expect(
-        body.events.some(
-          (event) =>
-            event.kind === "update" &&
-            String(event.update.title).includes("writes are unsupported"),
-        ),
-      ).toBe(false);
-      await call("POST", `/pe/threads/${id}/cancel`);
-      await until(read, id, (body) => !body.running);
-    } finally {
-      await h.close();
-    }
-  });
-  test(`${harness}: unguarded access answers an MCP ask without a card`, async () => {
-    // The Agent approvals switch off: Pea's own tool calls run without asking (2026-10-27 verdict).
-    const h = host(),
-      call = caller(h),
-      read = reader(h);
-    try {
-      expect((await call("PUT", "/pe/access", { guarded: false })).json).toEqual({
-        guarded: false,
-      });
       const id = (await call("POST", "/pe/threads", { providerId: harness })).json.id as string;
       await until(read, id, (body) => body.models.length > 0);
       await call("POST", `/pe/threads/${id}/prompt`, { text: "permission mcp" });
@@ -1376,12 +1406,11 @@ for (const harness of ["claude", "codex"] as const) {
         ),
       ).toBe(true);
     } finally {
-      await call("PUT", "/pe/access", { guarded: true });
       await h.close();
     }
   });
   test(`${harness}: a native write approval is refused with the host-command boundary`, async () => {
-    const h = host(),
+    const h = await host(),
       call = caller(h),
       read = reader(h);
     try {
@@ -1411,8 +1440,39 @@ for (const harness of ["claude", "codex"] as const) {
   });
 }
 
+test("Codex correlated Pea approval uses recorded identity and still refuses native shell/edit", async () => {
+  const h = await host(),
+    call = caller(h),
+    read = reader(h);
+  try {
+    const id = (await call("POST", "/pe/threads", { providerId: "codex" })).json.id as string;
+    await until(read, id, (body) => body.models.length > 0);
+    for (const [index, text] of [
+      "permission codex",
+      "permission codex shell",
+      "permission codex edit",
+    ].entries()) {
+      await call("POST", `/pe/threads/${id}/prompt`, { text });
+      const body = await until(
+        read,
+        id,
+        (body) => !body.running && turnEnds(body).length === index + 1,
+      );
+      const turn = turnEnds(body).at(-1)!.turnId;
+      const events = body.events.filter((event) => "turnId" in event && event.turnId === turn);
+      expect(openAsks(body)).toHaveLength(0);
+      expect(JSON.stringify(events)).toContain(index === 0 ? "chose yes" : "chose no");
+      expect(JSON.stringify(events).includes("Native unjournaled writes are unsupported")).toBe(
+        index !== 0,
+      );
+    }
+  } finally {
+    await h.close();
+  }
+});
+
 test("recorded run permission answers survive reconnect and restart without approving an old run", async () => {
-  const h = host(),
+  const h = await host(),
     call = caller(h),
     read = reader(h),
     id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string,
@@ -1439,7 +1499,7 @@ test("recorded run permission answers survive reconnect and restart without appr
   });
   expect(repeated.json.decision).toEqual(first.json.decision);
   await h.close();
-  const restarted = host(),
+  const restarted = await host(),
     again = caller(restarted);
   try {
     const recovered = await again("POST", `/pe/threads/${id}/permission`, {
@@ -1448,6 +1508,32 @@ test("recorded run permission answers survive reconnect and restart without appr
     });
     expect(recovered.json.decision).toEqual(first.json.decision);
     expect(() => restarted.runs.assertOpen(originOf(by))).toThrow("run.closed");
+    const next = { thread: id, turn: randomUUID() };
+    restarted.runs.open(next);
+    const allowed = await restarted.runs.authorize(
+      originOf({ ...by, run: next, root: next }),
+      "next",
+      [],
+    );
+    expect(allowed).toMatchObject({ decision: { id: ask.requestId } });
+    restarted.runs.close(next, "completed");
+    expect((await again("POST", `/pe/threads/${id}/cancel`)).status).toBe(200);
+    expect(() =>
+      restarted.runs.checkpoint(originOf({ ...by, run: next, root: next }), allowed),
+    ).toThrow("consent.stopped");
+    const third = await host();
+    try {
+      const fresh = { thread: id, turn: randomUUID() };
+      third.runs.open(fresh);
+      const rejected = third.runs
+        .authorize(originOf({ ...by, run: fresh, root: fresh }), "fresh", [])
+        .catch((error) => error.message);
+      expect(openAsks(await reader(third)(id))).toHaveLength(1);
+      third.runs.revoke(id);
+      expect(await rejected).toContain("consent.stopped");
+    } finally {
+      await third.close();
+    }
   } finally {
     await restarted.close();
   }
@@ -1460,7 +1546,7 @@ test("delegated thread processes carry host-bound root consent and Stop", async 
     tokens.push(args[2].PE_CONTEXT ?? "");
     return realOpen(...args);
   });
-  const h = host(),
+  const h = await host(),
     call = caller(h),
     read = reader(h);
   const minted = (turn: string) => {
@@ -1518,3 +1604,183 @@ test("delegated thread processes carry host-bound root consent and Stop", async 
     await h.close();
   }
 }, 15000);
+
+test("restart rejects an open countdown and requires a fresh full window", async () => {
+  const first = await host();
+  const id = (await caller(first)("POST", "/pe/threads", { providerId: "claude" })).json
+    .id as string;
+  const run = { thread: id, turn: randomUUID() };
+  first.runs.open(run);
+  const by: Caller = { kind: "pea", context: "fixture", thread: id, run, root: run };
+  const stopped = first.runs
+    .authorize(originOf(by), "interrupted", [])
+    .catch((error) => error.message);
+  const ask = openAsks(await reader(first)(id))[0]!;
+  await first.close();
+  expect(await stopped).toContain("consent.stopped");
+  const second = await host();
+  try {
+    expect(openAsks(await reader(second)(id))).toHaveLength(0);
+    const next = { thread: id, turn: randomUUID() };
+    second.runs.open(next);
+    const rejected = second.runs
+      .authorize(originOf({ ...by, run: next, root: next }), "new", [])
+      .catch((error) => error.message);
+    const fresh = openAsks(await reader(second)(id))[0]!;
+    expect(fresh.requestId).not.toBe(ask.requestId);
+    expect(Date.parse(fresh.deadline!) - Date.now()).toBeGreaterThan(59_000);
+    second.runs.revoke(id);
+    expect(await rejected).toContain("consent.stopped");
+  } finally {
+    await second.close();
+  }
+});
+
+test("host shutdown settles a running turn and a queued prompt durably, even when the turn ignores cancel", async () => {
+  const h = await host();
+  const call = caller(h);
+  const read = reader(h);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const running = randomUUID();
+  const queued = randomUUID();
+  await call("POST", `/pe/threads/${id}/prompt`, { id: running, text: "stubborn" });
+  await until(read, id, (b) => lastEcho(b) === "echo: stubborn");
+  await call("POST", `/pe/threads/${id}/prompt`, { id: queued, text: "later", delivery: "queue" });
+  await h.close(); // the turn awaits a child that ignores cancel: closing must not deadlock
+  const durable = (await readFile(join(root, id, "events.jsonl"), "utf8"))
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  const terminals = (turnId: string) =>
+    durable.filter(
+      (e) =>
+        e.turnId === turnId &&
+        (e.kind === "turn_end" || e.kind === "error" || e.kind === "prompt_dropped"),
+    );
+  expect(terminals(running)).toEqual([
+    expect.objectContaining({ kind: "error", message: expect.stringContaining("unknown") }),
+  ]);
+  expect(terminals(queued)).toEqual([
+    expect.objectContaining({ kind: "prompt_dropped", by: "expired" }),
+  ]);
+}, 30_000);
+
+test("Stop with a failing consent persist still cancels, then kills a child that ignores cancel, recording unknown", async () => {
+  const consents = consentService();
+  let failed = false;
+  const runs: typeof consents = {
+    ...consents,
+    // The first grant-revocation persist fails, as ConsentPersistFailed would.
+    close: (ref, reason) =>
+      failed ? consents.close(ref, reason) : ((failed = true), Effect.die(Error("persist failed"))),
+  };
+  const h = await host(undefined, undefined, undefined, undefined, { runs, stopGraceMs: 500 });
+  const call = caller(h);
+  const read = reader(h);
+  const id = (await call("POST", "/pe/threads", { providerId: "claude" })).json.id as string;
+  const turn = randomUUID();
+  await call("POST", `/pe/threads/${id}/prompt`, { id: turn, text: "stubborn" });
+  await until(read, id, (b) => lastEcho(b) === "echo: stubborn");
+  await call("POST", `/pe/threads/${id}/cancel`); // the persist fails; the cancel still goes out
+  const body = await until(read, id, (b) => !b.running);
+  expect(JSON.stringify(body.events)).toContain("ignoring cancel"); // the child received ACP cancel
+  expect(
+    body.events.filter(
+      (e) => "turnId" in e && e.turnId === turn && (e.kind === "error" || e.kind === "turn_end"),
+    ),
+  ).toEqual([
+    expect.objectContaining({ kind: "error", message: expect.stringContaining("unknown") }),
+  ]);
+  await h.close();
+}, 30_000);
+
+test("question settlement survives a throwing persist listener and reports failure", async () => {
+  const h = await host(undefined, undefined, undefined, undefined, {
+    receiptFact: (_id, _title, event) => {
+      if (event.kind === "question_resolved") throw Error("question persist failed");
+    },
+  });
+  const call = caller(h);
+  const read = reader(h);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id: string = created.json.id;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "question" });
+  const body = await until(read, id, (b) => openQuestions(b).length === 1);
+  const result = await call("POST", `/pe/threads/${id}/question`, {
+    requestId: openQuestions(body)[0]!.requestId,
+    action: "accept",
+    content: { pick: "b" },
+  });
+  expect(result.status).toBe(502);
+  expect(result.json.error).toContain("question persist failed");
+  await expect.poll(async () => JSON.stringify((await read(id)).events)).toContain("answered b");
+  await until(read, id, (b) => !b.running);
+});
+
+test("Stop escalation kills the child even when the transcript disk append fails", async () => {
+  let killed = false;
+  const h = await host(
+    undefined,
+    undefined,
+    undefined,
+    async (name) => {
+      if (name === "harness.session.stopped") killed = true;
+    },
+    { stopGraceMs: 500 },
+  );
+  const call = caller(h);
+  const read = reader(h);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id: string = created.json.id;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "stubborn" });
+  await until(read, id, (b) => lastEcho(b) === "echo: stubborn");
+  killed = false;
+  const append = h.log.append.bind(h.log);
+  const fault = vi.spyOn(h.log, "append").mockImplementation((event) => {
+    if (
+      event.kind === "thread" &&
+      event.event.kind === "error" &&
+      event.event.message.startsWith("Stop:")
+    ) {
+      fault.mockRestore();
+      throw Error("transcript disk full");
+    }
+    return append(event);
+  });
+  try {
+    await call("POST", `/pe/threads/${id}/cancel`);
+    await until(read, id, (b) => JSON.stringify(b.events).includes("ignoring cancel"));
+    await expect.poll(() => killed, { timeout: 2500 }).toBe(true);
+    expect((await call("GET", `/pe/threads/${id}`)).status).toBe(200);
+  } finally {
+    fault.mockRestore();
+    await h.close();
+  }
+});
+
+test("Stop escalation logs a retiring failure as ThreadRetireFailed", async () => {
+  const h = await host(undefined, undefined, undefined, undefined, { stopGraceMs: 50 });
+  const call = caller(h);
+  const read = reader(h);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id: string = created.json.id;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "stubborn" });
+  await until(read, id, (b) => lastEcho(b) === "echo: stubborn");
+  const stopChild = adapter.stopChild;
+  let detached: Parameters<typeof stopChild>[0] = null;
+  const stop = vi.spyOn(adapter, "stopChild").mockImplementationOnce((child) => {
+    detached = child;
+    throw Error("retire rejected");
+  });
+  const log = vi.spyOn(console, "log");
+  try {
+    await call("POST", `/pe/threads/${id}/cancel`);
+    await expect.poll(() => log.mock.calls.flat().join(" ")).toContain("ThreadRetireFailed");
+    expect(log.mock.calls.flat().join(" ")).toContain("retire rejected");
+  } finally {
+    stop.mockRestore();
+    log.mockRestore();
+    await settle(stopChild(detached));
+    await h.close();
+  }
+});

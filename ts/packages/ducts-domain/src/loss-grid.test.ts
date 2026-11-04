@@ -1,7 +1,7 @@
 import { expect, it } from "vite-plus/test";
 
 import tables from "./fixtures/converging-tables.json" with { type: "json" };
-import { GridError, lookupGrid, toGrids } from "./loss-grid.ts";
+import { GridError, lookupBranchLoss, lookupGrid, toGrids } from "./loss-grid.ts";
 
 // Revit's ER5-1, ED5-3 and ED5-4 as the live `ducts.tables` op served them on 2026-10-28 (session
 // probe-sheet, dev lane); converging-tables.json is that response's tables, byte for byte.
@@ -74,4 +74,32 @@ it("a three-axis grid needs all three inputs; a two-axis grid refuses a third", 
   expect(() => lookupGrid(er55, 1, 1, 1)).toThrow("takes Qb1/Qc and Ab1/Ac only");
   // One-axis and constant grids keep their shape; the point read is x alone.
   expect(lookupGrid(grids["ER5-2"]!.Cb!, 0.4)).toMatchObject({ value: 0.65, at: { x: 0.4 } });
+});
+
+it("low branch flow interpolates fixed-basis loss, preserves nodes and labels off-domain estimates", () => {
+  const g = {
+    title: "SD5-9 Cb",
+    xLabel: "Qb/Qc",
+    yLabel: "Ab/Ac",
+    x: [0.01, 0.1],
+    y: [1],
+    grid: [[10069, 99.6]],
+  };
+  const before = structuredClone(g);
+  for (const x of g.x)
+    expect(lookupBranchLoss(g, x, 1).value).toBeCloseTo(lookupGrid(g, x, 1).value, 8);
+  // Convert each endpoint to common Pv before interpolation: Cc = Cb (Qb/Qc)^2 at Ab/Ac=1.
+  const x = 0.05,
+    t = (x - 0.01) / 0.09;
+  expect(lookupBranchLoss(g, x, 1).value * x * x).toBeCloseTo(1.0069 * (1 - t) + 0.996 * t, 10);
+  expect(lookupBranchLoss(g, 0.005, 1).notes.join(" ")).toContain("extrapolated");
+  expect(g).toEqual(before);
+});
+
+it("branch policy follows the first published interval and is continuous at its boundary", () => {
+  const grid = { title: "Cb", xLabel: "Qb/Qc", x: [0.02, 0.2, 0.5], y: [1], grid: [[2500, 25, 4]] };
+  expect(lookupBranchLoss(grid, 0.15, 1).value * 0.15 ** 2).toBeCloseTo(1, 10);
+  expect(lookupBranchLoss(grid, 0.2 - 1e-10, 1).value).toBeCloseTo(25, 6);
+  expect(lookupBranchLoss(grid, 0.2 + 1e-10, 1).value).toBeCloseTo(25, 6);
+  expect(lookupBranchLoss(grid, 0.3, 1)).toEqual(lookupGrid(grid, 0.3, 1));
 });

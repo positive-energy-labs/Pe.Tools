@@ -1,6 +1,8 @@
 ﻿using Pe.Revit.Global.Services.Host;
 using Pe.Revit.Tasks;
 using Serilog;
+using Pe.Shared.HostContracts.Transport;
+using Pe.Shared.Product;
 using System.Threading.Channels;
 
 namespace Pe.App.Host;
@@ -17,6 +19,7 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
     private readonly RevitTaskQueue _revitTaskQueue;
     private int _started;
     private Task? _runTask;
+    private HostStartupReadiness? _hostStartup;
 
     public BridgeConnectionSupervisor(RevitTaskQueue revitTaskQueue) =>
         this._revitTaskQueue = revitTaskQueue;
@@ -25,6 +28,7 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
         if (Interlocked.Exchange(ref this._started, 1) == 1)
             return;
 
+        this.PrepareHostStartup();
         this._runTask = Task.Run(this.RunAsync);
         this.RequestReconnect("startup");
     }
@@ -41,6 +45,7 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
             return;
 
         this._shutdown.Cancel();
+        this._hostStartup?.Fail("The local host supervisor stopped during startup.");
         this._reconnectRequests.Writer.TryComplete();
         this._shutdown.Dispose();
     }
@@ -76,11 +81,14 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
                     this.DrainReconnectRequests(out latestReason);
                     reason = latestReason ?? reason;
                     retryDelay = NextRetryDelay(retryDelay);
+                    this.PrepareHostStartup();
                 }
             }
         } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+            this._hostStartup?.Fail("The local host supervisor stopped during startup.");
             // Expected on shutdown.
         } catch (Exception ex) {
+            this._hostStartup?.Fail(ex.Message);
             Log.Error(ex, "Host bridge supervisor stopped unexpectedly.");
         }
     }
@@ -89,7 +97,7 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
         Log.Information("Host bridge supervisor connect requested: Reason={Reason}", reason);
 
         // Installed host lifetime belongs to login and explicit open, including after Quit or a crash.
-        if (TsHostLauncher.Lane == "installed") {
+        if (Pe.Shared.Product.ProductRuntimeLayout.Current.Lane == Pe.Shared.Product.ProductLane.Installed) {
             var installed = await this.ConnectRuntimeAsync(cancellationToken).ConfigureAwait(false);
             if (installed.Success) {
                 Analytics.RevitReceipts.ReportHostVersion();
@@ -99,6 +107,11 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
         }
 
         var hostLaunchResult = HostBridgeConnector.EnsureTsHostRunning();
+        // Signal before queuing bridge connection: a synchronous caller may hold Revit's UI thread.
+        if (hostLaunchResult.Success)
+            this._hostStartup?.Succeed();
+        else
+            this._hostStartup?.Fail(hostLaunchResult.Message);
         if (!hostLaunchResult.Success)
             Log.Warning("Host bridge supervisor could not ensure a TS host; trying the service file's address anyway: {Message}", hostLaunchResult.Message);
 
@@ -111,6 +124,13 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
         return connect.Success || hostLaunchResult.Success
             ? connect
             : new RuntimeActionResult(false, $"{connect.Message} (host launch: {hostLaunchResult.Message})");
+    }
+
+    private void PrepareHostStartup() {
+        if (ProductRuntimeLayout.Current.Lane != ProductLane.Dev)
+            return;
+        this._hostStartup = new HostStartupReadiness(ProductRuntimeLayout.Current, TsHostLauncher.DevStartupTimeout);
+        HostEndpoint.DevHostStartup = this._hostStartup;
     }
 
     private async Task<RuntimeActionResult> ConnectRuntimeAsync(CancellationToken cancellationToken) {

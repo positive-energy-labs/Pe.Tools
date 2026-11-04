@@ -34,3 +34,8 @@ if (typeof document !== "undefined")
 /* jsdom has no layout, so no scrollIntoView. A rail lane scrolls its focused control into view on
  * focus; the call has nothing to move in jsdom, but it must exist. */
 if (typeof Element !== "undefined") Element.prototype.scrollIntoView ??= () => {};
+
+/* Work journals live for the tab (shell/journal.ts); a test case is a fresh tab. */
+import { afterEach } from "vite-plus/test";
+import { forgetWorkJournals } from "./shell/journal";
+afterEach(forgetWorkJournals);

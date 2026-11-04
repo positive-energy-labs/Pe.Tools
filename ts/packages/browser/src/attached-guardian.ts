@@ -40,7 +40,9 @@ export function guardianClient(pipe: CdpClient): CdpClient {
   ): Promise<unknown> => {
     const requestKey = randomUUID();
     const cancel = () => {
-      void pipe.sendRaw("PeBrowser.cancel", { requestKey }, { timeoutMs: 1000 }).catch(() => {});
+      void pipe.sendRaw("PeBrowser.cancel", { requestKey }, { timeoutMs: 1000 }).catch((error) => {
+        console.error("attached-guardian: asynchronous operation failed", error);
+      });
     };
     options.signal?.addEventListener("abort", cancel, { once: true });
     try {
@@ -105,7 +107,9 @@ export async function runAttachedGuardian(configFile: string): Promise<void> {
         join(directory, "guardian-exit.json"),
         JSON.stringify({ ...exit, exitCode: code, when: new Date().toISOString() }),
       );
-    } catch {}
+    } catch (error) {
+      console.error("attached-guardian: asynchronous operation failed", error);
+    }
   });
   const send = (message: unknown) => {
     if (ending || process.stdout.destroyed) return;
@@ -118,6 +122,7 @@ export async function runAttachedGuardian(configFile: string): Promise<void> {
     }
   };
   const recordOwned = (targetId: string) =>
+    // effect-edge: island, phase 5
     Effect.runPromise(
       serial.withPermit(
         Effect.tryPromise(async () => {

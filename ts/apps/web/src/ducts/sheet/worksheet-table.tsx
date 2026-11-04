@@ -1,3 +1,5 @@
+import { TooltipHint } from "@pe/kit/lang/tooltip";
+import type { SheetInputs } from "./model";
 /**
  * The worksheet (ducts LEDGER 2026-10-29, "TS"): per side, one row per run from the fan to an end,
  * critical first; a row opens into its sections, the stretches of constant flow between
@@ -8,12 +10,11 @@
  * one design value edited where it bites (ducts LEDGER 2026-10-29): the cell writes Work `flows`
  * and shows the resolved source; the host recomputes.
  */
-import { useContext, useState } from "react";
-import type { DuctsInputs, DuctsSheetEdits } from "@pe/agent-contracts";
-import { AttentionDocument, mention, useAttention, type SubjectKey } from "@pe/kit/lang/attention";
-import { SubjectTextContext } from "@pe/kit/lang/reach";
-import { nameOrFallback, SubjectText } from "@pe/kit/lang/subject-text";
+import type { DuctsSheetEdits } from "@pe/agent-contracts";
 import { delivers } from "@pe/ducts-domain/sheet/worksheet";
+import { AttentionDocument, mention, useAttention } from "@pe/kit/lang/attention";
+import { SubjectText } from "@pe/kit/lang/subject-text";
+import { useContext, useState } from "react";
 import { pressure, type Detail } from "./model";
 import { SheetCell } from "./sheet-cell";
 
@@ -26,7 +27,7 @@ const ft = (v: number) => v.toFixed(0);
 
 /** What the table needs to edit a design value: the resolved inputs and the one write. */
 export interface WorksheetEditing {
-  inputs: DuctsInputs | null;
+  inputs: SheetInputs | null;
   changeInputs: (edits: DuctsSheetEdits) => void;
   busy: boolean;
 }
@@ -42,40 +43,39 @@ export function derivedFlowSource(flowSource: string | null): string {
   return "derived";
 }
 
-/**
- * A terminal run's design cfm: the kit cell, typed in place, cleared by emptying; the source reads
- * beside it. A terminal stating no flow of its own still carries what its run delivers (the Chadds
- * louver 14088043 carries 350, its four ERVs' and MUAS-1's draws): the cell shows that flow with
- * where it came from, an estimate, never the alarm "none" (UI5, 2026-10-29). Typing still writes it.
- */
+/** Authored input and computed carried flow are separate values (ADR 0027 rule 8). */
 function CfmCell({ run, ws, editing }: { run: Run; ws: Ws; editing: WorksheetEditing }) {
   if (run.end.kind !== "terminal" || !editing.inputs)
     return <span className={CFM}>{run.cfm ?? "—"}</span>;
   const id = String(run.end.elementId);
   const resolved = editing.inputs.terminals[id]?.cfm;
-  const typed = resolved?.source === "typed";
+  const typed = resolved?.source === "Work";
   const stated = resolved?.value != null;
   const carried = !stated && run.cfm != null;
   const flowSource = ws.legs[run.legIds.at(-1) ?? ""]?.flowSource ?? null;
   return (
-    <SheetCell
-      label={`design cfm at ${id}`}
-      value={stated ? resolved!.value : carried ? run.cfm : null}
-      unit={{ label: "cfm" }}
-      digits={0}
-      source={carried ? derivedFlowSource(flowSource) : (resolved?.source ?? null)}
-      sourceTitle={
-        carried
-          ? `${derivedFlowSource(flowSource) === "consumers" ? "consumers' sum" : derivedFlowSource(flowSource)}: ${flowSource ?? "no source"}`
-          : undefined
-      }
-      refusal={editing.busy ? "Wait for the current read" : null}
-      clearable={typed}
-      className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-1"
-      onValue={(value) =>
-        editing.changeInputs({ flows: { [id]: value == null ? null : { cfm: value } } })
-      }
-    />
+    <>
+      <SheetCell
+        label={`design cfm at ${id}`}
+        value={resolved?.value ?? null}
+        unit={{ label: "cfm" }}
+        digits={0}
+        source={resolved?.source ?? "none"}
+        refusal={editing.busy ? "Wait for the current read" : null}
+        clearable={typed}
+        className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-1"
+        onValue={(value) =>
+          editing.changeInputs({ flows: { [id]: value == null ? null : { cfm: value } } })
+        }
+      />
+      {carried && (
+        <TooltipHint content={flowSource}>
+          <span className="t-small text-ink-2">
+            {run.cfm} cfm computed ? {derivedFlowSource(flowSource)}
+          </span>
+        </TooltipHint>
+      )}
+    </>
   );
 }
 const fpm = (v: number | null) => (v == null ? "—" : v.toFixed(0));
@@ -99,18 +99,6 @@ const END_WORD: Record<Run["end"]["kind"], string> = {
   "joins-other-fan": "joins",
   "sibling-fan": "sibling",
 };
-
-/** The text a row's name shows, for its title when the name gives way. */
-function useEndTitle(): (run: Run) => string {
-  const namer = useContext(SubjectTextContext)?.nameOf;
-  const name = (id: number) => nameOrFallback(namer?.(id));
-  return ({ end, complete }) =>
-    `${
-      end.kind === "terminal"
-        ? `${name(end.elementId)}${end.connector == null ? "" : ` port ${end.connector}`}`
-        : [END_WORD[end.kind], end.fan ? name(end.fan.unitId) : name(end.elementId)].join(" ")
-    }${complete ? "" : " · incomplete"}`;
-}
 
 /**
  * The side's caption counts the rows it shows: the runs that deliver (terminals, other fans'
@@ -168,8 +156,7 @@ function EndName({ run }: { run: Run }) {
 function SectionRows({ ws, run, side, doc }: { ws: Ws; run: Run; side: Side; doc: string }) {
   const byId = new Map(ws[side].sections.map((s) => [s.id, s]));
   let cumulative = 0;
-  const namer = useContext(SubjectTextContext)?.nameOf;
-  const nameOf = (id: number) => nameOrFallback(namer?.(id));
+
   return (
     <>
       {run.sectionIds.map((id) => {
@@ -182,18 +169,12 @@ function SectionRows({ ws, run, side, doc }: { ws: Ws; run: Run; side: Side; doc
             role="row"
             className={`${ROW} t-small`}
             data-section={id}
-            {...mention({ doc, key: `section:${id}` as SubjectKey })}
+            {...mention({ doc, key: `section:${id}` })}
           >
-            <span
-              className="face-mono text-ink-2"
-              title={`${s.runIds.length} runs share this section`}
-            >
+            <span className="face-mono text-ink-2">
               {s.runIds.length > 1 ? `×${s.runIds.length}` : ""}
             </span>
-            <span
-              className={`${NAME} pl-4`}
-              title={`${nameOf(first.elementId)} · ${s.legIds.length} legs`}
-            >
+            <span className={`${NAME} pl-4`}>
               <SubjectText text={[{ id: first.elementId }]} revit={[first.elementId]} owner={id} />
               <span className="text-ink-2">
                 {" "}
@@ -202,15 +183,8 @@ function SectionRows({ ws, run, side, doc }: { ws: Ws; run: Run; side: Side; doc
             </span>
             <span className={CFM}>{s.cfm ?? "—"}</span>
             <span className="face-mono text-right">{ft(s.telFt)}</span>
-            <span className="face-mono text-right" title="known loss of this section, in-wg">
-              {pressure(s.knownInWg)}
-            </span>
-            <span
-              className="face-mono text-right text-ink-2"
-              title="cumulative from the fan, in-wg"
-            >
-              {pressure(cumulative)}
-            </span>
+            <span className="face-mono text-right">{pressure(s.knownInWg)}</span>
+            <span className="face-mono text-right text-ink-2">{pressure(cumulative)}</span>
             <span
               className="face-mono text-right"
               data-tone={s.overLegIds.length ? "alarm" : undefined}
@@ -247,7 +221,7 @@ function SideTable({
     () => new Set(runs.filter((r) => r.critical).map((r) => r.id)),
   );
   const limit = side === "supply" ? ws.limits.supplyFpm : ws.limits.returnFpm;
-  const title = useEndTitle();
+
   if (!runs.length) return null;
   return (
     <section
@@ -269,21 +243,10 @@ function SideTable({
             <span />
             <span className={NAME}>run to</span>
             <span className="block w-[4.5rem] text-right">cfm</span>
-            <span className="text-right" title="total equivalent length, ft">
-              TEL
-            </span>
-            <span className="text-right" title="known loss of the run, in-wg">
-              loss
-            </span>
-            <span
-              className="text-right"
-              title="the worst run's known loss minus this run's: what its balancing must burn"
-            >
-              resid.
-            </span>
-            <span className="text-right" title="max velocity on the run, fpm">
-              fpm
-            </span>
+            <span className="text-right">TEL</span>
+            <span className="text-right">loss</span>
+            <span className="text-right">resid.</span>
+            <span className="text-right">fpm</span>
           </div>
           {runs.map((run) => {
             const isOpen = open.has(run.id) || run === opener;
@@ -295,7 +258,7 @@ function SideTable({
                   data-run={run.id}
                   data-critical={run.critical ? "" : undefined}
                   data-marked={picked.size && holds(run) && run !== opener ? "" : undefined}
-                  {...mention({ doc, key: `run:${run.id}` as SubjectKey })}
+                  {...mention({ doc, key: `run:${run.id}` })}
                   onClick={() =>
                     setOpen((s) => {
                       const next = new Set(s);
@@ -305,28 +268,16 @@ function SideTable({
                     })
                   }
                 >
-                  <span
-                    className="face-mono"
-                    title={
-                      run.critical
-                        ? "critical: the worst known run on this side"
-                        : END_WORD[run.end.kind] || "terminal"
-                    }
-                  >
+                  <span className="face-mono">
                     {run.critical ? "◆" : run.end.kind === "terminal" ? "○" : "·"}
                   </span>
-                  <span className={NAME} title={title(run)}>
+                  <span className={NAME}>
                     <EndName run={run} />
                     {!run.complete && <span className="t-small text-ink-2"> · incomplete</span>}
                   </span>
                   <CfmCell run={run} ws={ws} editing={editing} />
                   <span className="face-mono text-right">{ft(run.telFt)}</span>
-                  <span
-                    className="face-mono text-right"
-                    title={run.complete ? "complete" : "known so far; gaps on this run are below"}
-                  >
-                    {pressure(run.knownInWg)}
-                  </span>
+                  <span className="face-mono text-right">{pressure(run.knownInWg)}</span>
                   <span className="face-mono text-right">
                     {run.residualInWg == null ? "" : pressure(run.residualInWg)}
                   </span>

@@ -16,7 +16,7 @@ import {
 import { firstNonBlank } from "./cli-values.ts";
 
 export { resolveLaneAndRoot } from "@pe/runtime/runtime-owner";
-import { resolveLaneAndRoot } from "@pe/runtime/runtime-owner";
+import { resolveLaneAndRoot, runtimeRoot } from "@pe/runtime/runtime-owner";
 
 /**
  * A non-URL `--host` value is a lane token: `installed`, `dev` (this location's worktree), or a
@@ -53,7 +53,7 @@ function laneTokenBaseUrl(token: string): string | null | undefined {
 }
 
 function discoverOwnHost(expected: ReturnType<typeof resolveLaneAndRoot>): string | null {
-  const live = discoverServiceSync(productRoot(), expected.serviceName);
+  const live = discoverServiceSync(productRoot(expected), expected.serviceName);
   if (!live) return null;
   if (
     expected.lane === "installed" &&
@@ -100,6 +100,29 @@ export function resolveHostBaseUrl(value?: string): string {
   );
 }
 
+/**
+ * `pea mcp`'s host, checked at spawn: a URL only (lane tokens and paths are the operator CLI's way
+ * to pick a checkout), verified against this runtime's receipt before the server starts, so a
+ * mismatch fails once in the host log instead of on every tool call inside Pea's chat.
+ */
+export function verifyMcpHost(value: string | undefined): string {
+  if (value?.trim() && !/^https?:\/\//i.test(value.trim()))
+    throw Error(
+      `pea mcp --host takes the host URL only; '${value.trim()}' is a lane token or path, which only the operator CLI resolves.`,
+    );
+  try {
+    return resolveHostBaseUrl(value);
+  } catch (error) {
+    const cwdRoot = checkoutRootFrom(process.cwd());
+    const moduleRoot = checkoutRootFrom(import.meta.dirname);
+    const differ =
+      cwdRoot && moduleRoot && normalizeSourceRoot(cwdRoot) !== normalizeSourceRoot(moduleRoot);
+    throw Error(
+      `pea mcp cannot start: ${error instanceof Error ? error.message : String(error)}${differ ? ` The cwd checkout is ${cwdRoot}; this module's checkout is ${moduleRoot}.` : ""}`,
+    );
+  }
+}
+
 export function resolveWorkspaceKey(value?: string): string {
   return firstNonBlank(value) ?? scriptingWorkspaceIdentity.defaultWorkspaceKey;
 }
@@ -112,9 +135,13 @@ export function resolveWorkspaceKey(value?: string): string {
 export function adoptTerminalContext() {
   if (process.env[HOST_CONTEXT_VARIABLE]) return;
   try {
-    const token = readFileSync(hostContextTokenPath(resolveLaneAndRoot().serviceName), "utf8");
+    const token = readFileSync(
+      hostContextTokenPath(runtimeRoot(), resolveLaneAndRoot().serviceName),
+      "utf8",
+    );
     if (token.trim()) process.env[HOST_CONTEXT_VARIABLE] = token.trim();
-  } catch {
+  } catch (error) {
+    console.warn("ts/packages/mcps/src/shared/host-config.ts: fallback after failure", error);
     // No host has written a token for this runtime: reads only.
   }
 }

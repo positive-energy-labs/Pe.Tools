@@ -19,7 +19,9 @@ test("borrowed host mode changes only web identity and permits Ducts reads, neve
     vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:12345");
     expect(checkoutServiceName()).toBe(sourceHostServiceName(checkoutRoot));
     expect(readHostRequest("GET", '/pe/resources?keys=[{"kind":"inventory"}]')).toBe(true);
-    expect(readHostRequest("POST", "/call", { key: "ducts.snapshot", request: {} })).toBe(true);
+    expect(readHostRequest("POST", "/call", { key: "ducts.snapshot.roster", request: {} })).toBe(
+      true,
+    );
     expect(readHostRequest("POST", "/call", { key: "ducts.tables", request: {} })).toBe(true);
     for (const [method, path, body] of [
       ["POST", "/call", { key: "ducts.apply" }],
@@ -132,13 +134,13 @@ test("borrowed frontend forwards reads with host origin and refuses mutations be
         headers,
         body: JSON.stringify({ key, request: {} }),
       });
-    expect((await send("ducts.snapshot")).status).toBe(200);
+    expect((await send("ducts.snapshot.roster")).status).toBe(200);
     expect(forwarded).toEqual([
       {
         url: "/call",
         origin: target,
         referer: `${target}/ducts`,
-        body: JSON.stringify({ key: "ducts.snapshot", request: {} }),
+        body: JSON.stringify({ key: "ducts.snapshot.roster", request: {} }),
       },
     ]);
     for (const key of ["ducts.apply", "script.execute", "revit.context.show-elements"]) {
@@ -226,7 +228,7 @@ test("same-checkout no-Revit host is distinct; foreign configured owner refuses"
       {} as never,
     );
     const outgoing = { setHeader: vi.fn() };
-    proxy.emit("proxyReq", outgoing);
+    proxy.emit("proxyReq", outgoing, {}, new EventEmitter());
     expect(outgoing.setHeader).toHaveBeenCalledWith("x-pe-runtime-service", `${base}-no-revit`);
     vi.stubEnv(hostProcessIdentity.serviceNameVariable, "host-foreign");
     expect(() => devHostProxy("http://127.0.0.1:5180")).toThrow("checkout");
@@ -244,7 +246,7 @@ test("every HTTP and websocket proxy request binds this checkout", () => {
     headers: { host: "127.0.0.1:8123" },
     socket: { localPort: 8123 },
   };
-  proxy.emit("proxyReq", outgoing, request);
+  proxy.emit("proxyReq", outgoing, request, new EventEmitter());
   proxy.emit("proxyReqWs", outgoing, request, { end: vi.fn() });
   expect(outgoing.setHeader.mock.calls).toEqual([
     ["x-pe-runtime-service", sourceHostServiceName(checkoutRoot)],
@@ -394,3 +396,94 @@ test("the real proxy forwards Page documents and assets and still refuses unmark
     rmSync(root, { recursive: true, force: true, maxRetries: 5 });
   }
 });
+
+test.each([false, true])(
+  "the dev proxy (borrowed=%s) delivers a 351-second read and forwards leaving to the host",
+  async (borrowed) => {
+    const { createServer: createVite } = await import("vite-plus");
+    const { createServer, request } = await import("node:http");
+    const { once } = await import("node:events");
+    let accepted!: () => void;
+    let entered = new Promise<void>((resolve) => {
+      accepted = resolve;
+    });
+    let left!: () => void;
+    const disconnected = new Promise<void>((resolve) => {
+      left = resolve;
+    });
+    const backend = createServer(async (req, res) => {
+      for await (const _ of req) {
+        /* consume the complete POST before waiting */
+      }
+      if (req.headers["x-leave"]) {
+        res.once("close", left);
+        accepted();
+      } else {
+        setTimeout(() => res.end("scene artifact"), 351_000);
+        accepted();
+      }
+    });
+    backend.setTimeout(0);
+    backend.listen(0, "127.0.0.1");
+    await once(backend, "listening");
+    const target = `http://127.0.0.1:${(backend.address() as { port: number }).port}`;
+    vi.stubEnv("PE_TOOLS_HOST_BASE_URL", target);
+    if (borrowed) vi.stubEnv("PE_WEB_READ_HOST_CHECKOUT", checkoutRoot);
+    const proxy = devHostProxy(target);
+    expect(Object.values(proxy)[0]).toMatchObject({ timeout: 0, proxyTimeout: 0 });
+    const vite = await createVite({
+      configFile: false,
+      plugins: [checkoutIngress()],
+      logLevel: "silent",
+      server: { host: "127.0.0.1", port: 0, proxy },
+    });
+    try {
+      await vite.listen();
+      const origin = `http://127.0.0.1:${(vite.httpServer!.address() as { port: number }).port}`;
+      const send = (leave = false) => {
+        const client = request(`${origin}/call`, {
+          method: "POST",
+          headers: {
+            "x-pe-runtime-service": checkoutServiceName(),
+            ...(leave ? { "x-leave": "yes" } : {}),
+          },
+        });
+        const result = new Promise<string>((resolve, reject) => {
+          client.on("error", reject);
+          client.on("response", (res) => {
+            let body = "";
+            res.on("data", (chunk) => {
+              body += chunk;
+            });
+            res.on("end", () => resolve(body));
+          });
+        });
+        client.end(
+          JSON.stringify({ key: "revit.detail.space-scene", request: { elementIds: [101] } }),
+        );
+        return { client, result };
+      };
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const slow = send();
+      await entered;
+      await vi.advanceTimersByTimeAsync(351_000);
+      expect(await slow.result).toBe("scene artifact");
+      vi.useRealTimers();
+      entered = new Promise<void>((resolve) => {
+        accepted = resolve;
+      });
+      const leaving = send(true);
+      const rejected = expect(leaving.result).rejects.toThrow("left");
+      await entered;
+      leaving.client.destroy(new Error("left"));
+      await rejected;
+      await disconnected;
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+      await vite.close();
+      backend.closeAllConnections();
+      await new Promise<void>((resolve) => backend.close(() => resolve()));
+    }
+  },
+);

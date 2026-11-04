@@ -173,7 +173,9 @@ public static class Rooms
     // FOOTGUN: kaitpw tie-break (rooms LEDGER 2026-09-24), used only when no knee piece is near the region at all.
     private const double ZoneTieBreakSqft = 300.0;
 
-    public static RoomsSnapshotData Snapshot(Document doc)
+    public static RoomsSnapshotData Roster(Document doc) => new(Levels(doc), []);
+
+    private static List<RoomsLevel> Levels(Document doc)
     {
         var views = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
             .Where(v => !v.IsTemplate && v.GenLevel != null).ToList();
@@ -181,10 +183,19 @@ public static class Rooms
             .Select(g => new RoomsLevel(g.Key, g.First().GenLevel.ProjectElevation,
                 g.Select(v => v.Name).OrderBy(n => n, StringComparer.Ordinal).ToList()))
             .OrderBy(l => l.Elevation).ThenBy(l => l.Name, StringComparer.Ordinal).ToList();
-        var byId = views.ToDictionary(v => v.Id.Value());
+        return levels;
+    }
+
+    public static RoomsSnapshotData Snapshot(Document doc, string viewName)
+    {
+        var viewScope = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
+            .Single(v => !v.IsTemplate && v.GenLevel != null && v.Name == viewName);
+        var levels = Levels(doc);
+        var byId = new Dictionary<long, ViewPlan> { [viewScope.Id.Value()] = viewScope };
+
         var ours = new List<(FilledRegion Fr, ViewPlan View, string Role, Guid Guid)>();
         foreach (var fr in new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
-                     .OrderBy(fr => fr.Id.Value()))
+                     .Where(fr => fr.OwnerViewId == viewScope.Id).OrderBy(fr => fr.Id.Value()))
         {
             if (!byId.TryGetValue(fr.OwnerViewId.Value(), out var view)) continue;
             var (role, guid) = TakeoffCarriers.ReadIdentity(fr);
@@ -343,7 +354,7 @@ public static class Rooms
                 var frame = new System.Diagnostics.StackTrace(ex).GetFrames()?.Select(f => f.GetMethod()?.DeclaringType?.Name + "." + f.GetMethod()?.Name)
                     .FirstOrDefault(m => m.StartsWith("Solve.") || m.StartsWith("Rooms."));
                 // Diagnostic dump: the exact solver inputs of the failed zone, replayable without Revit.
-                var dump = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, $"pe-rooms-{zone.Label}.json");
+                var dump = Path.Combine(ProductRuntimeLayout.Current.ScratchPath, $"pe-rooms-{zone.Label}.json");
                 Directory.CreateDirectory(Path.GetDirectoryName(dump)!);
                 File.WriteAllText(dump, Newtonsoft.Json.JsonConvert.SerializeObject(new { input.ZoneLoops, input.Proposals }));
                 failures.Add($"{zone.Label}: {ex.GetType().Name} {ex.Message} at {frame ?? "?"} (inputs {dump})");

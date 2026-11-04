@@ -3,6 +3,7 @@ import type { LossResult } from "./losses.ts";
 import type { SystemScope } from "./system-scope.ts";
 import { terminalCfm } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";
+import { elementLabeler } from "./element-label.ts";
 
 export interface NoRunReason {
   kind:
@@ -13,6 +14,8 @@ export interface NoRunReason {
     | "classification-stop"
     | "no-fan-path";
   at: number;
+  /** The open connector (kind "open"); its text names the element, never `id:index`. */
+  connector?: number;
   text: string;
 }
 export interface NoRunBranch {
@@ -33,6 +36,7 @@ export function noRunBranches(
 ): Map<number, NoRunBranch> {
   const elements = new Map([...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e]));
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
+  const name = elementLabeler(snapshot);
   const flow = (id: number) =>
     (flows.has(id) ? flows.get(id)!.cfm : terminalCfm(nodes.get(id))) ?? 0;
   const stops = new Set(solved.crossClass.map((c) => `${c.id}:${c.from}`));
@@ -95,27 +99,27 @@ export function noRunBranches(
           branch.reasons.push({
             kind: "foreign-terminal",
             at: id,
-            text: `Ends at terminal ${id} on ${e.systemName || "no system"}`,
+            text: `Ends at ${name(id)} on ${e.systemName || "no system"}`,
           });
         else if (flow(id) <= 0)
           branch.reasons.push({
             kind: "flowless-terminal",
             at: id,
-            text: `Ends at terminal ${id} with no design flow`,
+            text: `Ends at ${name(id)} with no design flow`,
           });
       } else if (e.kind === "cap")
-        branch.reasons.push({ kind: "capped", at: id, text: `Ends capped at ${id}` });
+        branch.reasons.push({ kind: "capped", at: id, text: `Ends capped at ${name(id)}` });
       else
         for (const c of e.connectors)
           if (!c.connectedTo && c.kind !== "curve")
-            branch.reasons.push({ kind: "open", at: id, text: `Ends open at ${id}:${c.index}` });
+            branch.reasons.push({ kind: "open", at: id, text: `Ends open at ${name(id)}`, connector: c.index });
     }
     for (const c of solved.crossClass)
       if (branch.elements.includes(c.id) || branch.elements.includes(c.from))
         branch.reasons.push({
           kind: "classification-stop",
           at: c.id,
-          text: `Flow stops at ${c.from} → ${c.id}: ${c.fromClassification} meets ${c.classification}`,
+          text: `Flow stops at ${name(c.from)} → ${name(c.id)}: ${c.fromClassification} meets ${c.classification}`,
         });
     if (!branch.reasons.length)
       branch.reasons.push({

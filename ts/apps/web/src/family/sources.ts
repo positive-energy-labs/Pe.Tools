@@ -2,7 +2,6 @@ import { z } from "zod";
 import {
   actionReceiptSchema,
   actionStatusSchema,
-  parsedDocViewSchema,
   settingsSnapshotSchema,
   workKey,
   type ActionStatus,
@@ -10,12 +9,10 @@ import {
   type PodMember,
   type SettingsSnapshot,
 } from "@pe/agent-contracts";
-import type { PodList } from "@pe/host-contracts/operation-types";
-import { jsonSource, requestJson } from "#/shell/readings-api";
+import { callOp, callCompose, opSource } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource, UseSource } from "#/shell/readings";
 import type { FamilyPage } from "./graph";
-import { assetUrl } from "./spec";
 
 const page = (ctx: ReadingContext) => ctx.page as FamilyPage;
 const member = (ctx: ReadingContext) =>
@@ -77,6 +74,20 @@ function receiptSource(key: string): UseSource {
 
 export function familySources(): Readonly<Record<string, ReadingSource>> {
   return {
+    "family.draft": {
+      kind: "derive",
+      derive: ({ target, work, inputs }) => ({
+        target,
+        draft: work,
+        profile: inputs.profile?.value,
+        captured: inputs.captureReceipt?.value,
+      }),
+    },
+    "family.document": {
+      kind: "derive",
+      derive: ({ target }) =>
+        target.kind === "document" ? [{ id: "current", document: target.ref }] : [],
+    },
     "family.profile": {
       kind: "use",
       dirties: ["pods"],
@@ -85,25 +96,11 @@ export function familySources(): Readonly<Record<string, ReadingSource>> {
         const ref = member(ctx);
         if (!ref) return deliver({ kind: "complete", value: null, revision: 0 });
         try {
-          const read = await requestJson(
-            { path: "/call", body: { key: "pod.member.read", request: ref } },
-            z.object({ content: z.string(), sha256: z.string() }),
-            ctx.signal,
-          );
-          const composed = await requestJson(
-            {
-              path: "/call",
-              body: { key: "pod.member.compose", request: { ...ref, content: read.content } },
-            },
-            z.object({
-              composed: z.string().nullable(),
-              dependencies: settingsSnapshotSchema.shape.dependencies.unwrap(),
-              diagnostics: z.array(
-                z.object({ message: z.string(), severity: z.string() }).passthrough(),
-              ),
-            }),
-            ctx.signal,
-          );
+          const read = await callOp({ signal: ctx.signal }, "pod.member.read", ref);
+          const composed = await callOp({ signal: ctx.signal }, "pod.member.compose", {
+            ...ref,
+            content: read.content,
+          });
           deliver({
             kind: "complete",
             value: settingsSnapshotSchema.parse({
@@ -162,16 +159,14 @@ export function familySources(): Readonly<Record<string, ReadingSource>> {
         const ref = member(ctx);
         if (!ref) return deliver({ kind: "complete", value: null, revision: 0 });
         try {
-          const link = await requestJson(
-            { path: assetUrl(ref.pod, `${ref.path}.spec.json`) },
-            z.object({ path: z.string() }),
-            ctx.signal,
-          );
-          const doc = await requestJson(
-            { path: assetUrl(ref.pod, link.path) },
-            parsedDocViewSchema,
-            ctx.signal,
-          );
+          const link = await callCompose(ctx, "family.spec", {
+            query: { pod: ref.pod, path: `${ref.path}.spec.json` },
+          });
+          if (!("path" in link)) throw Error("Expected a family spec link");
+          const doc = await callCompose(ctx, "family.spec", {
+            query: { pod: ref.pod, path: link.path },
+          });
+          if (!("pages" in doc)) throw Error("Expected a family spec document");
           deliver({
             kind: "complete",
             value: { member: ref, doc } satisfies FamilySpecReading,
@@ -183,11 +178,13 @@ export function familySources(): Readonly<Record<string, ReadingSource>> {
       },
     },
     "family.pods": {
-      ...jsonSource({
-        request: () => ({ path: "/call", body: { key: "pod.list", request: {} } }),
-        schema: z
-          .object({ pods: z.array(z.custom<PodList["pods"][number]>()) })
-          .transform((value) => value.pods),
+      ...opSource({
+        key: "pod.list",
+        request: () => ({}),
+        map: (value) => {
+          if (!("pods" in value)) throw Error("Expected full pod inventory");
+          return value.pods;
+        },
         absent: [],
       }),
       effects: () => [],

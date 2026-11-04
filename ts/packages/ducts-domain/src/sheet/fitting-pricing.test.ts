@@ -172,10 +172,25 @@ it("the resolver reads Work's ruleAssignments and per-path proposed drops with a
       },
     },
   });
+  // ba4fd56c: Work values expose the common provenance contract.
   expect(inputs.assignments).toEqual({
-    "Round Elbow": { value: "elbow-15d-45-le10", source: "typed" },
+    "Round Elbow": {
+      value: "elbow-15d-45-le10",
+      source: "Work",
+      units: null,
+      status: "valid",
+      version: null,
+    },
   });
-  expect(inputs.fittingDrops).toEqual({ "proposed:1:1|2:0>7": { value: 0.04, source: "typed" } });
+  expect(inputs.fittingDrops).toEqual({
+    "proposed:1:1|2:0>7": {
+      value: 0.04,
+      source: "Work",
+      units: "in-wg",
+      status: "valid",
+      version: null,
+    },
+  });
 });
 
 it("a fitting whose flow is unknown stays in the census, unpriced under the rule it matches", () => {

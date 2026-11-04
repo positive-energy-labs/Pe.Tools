@@ -3,8 +3,9 @@
  * Work key -> Work document, as the old kernel resolves them, published as the graph mount's
  * immutable external-store ports plus its host write ports. Routes never supply these.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  actionStatusSchema,
   bindWork,
   OLDER_WORK,
   workKey,
@@ -12,12 +13,14 @@ import {
   type TargetResolution,
   type RouteGraph,
   type RouteStateSpec,
+  type ActionStatus,
   type RouteStateWriteResult,
   type WorkKey,
   type WorkWrite,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
-import { dirty, previousOf, readingAtom, peReadings, targetInventory } from "#/readings";
+import { dirty, peReadings } from "#/readings";
+import { previousOf, readingAtom, targetInventory } from "#/shell/readings-hooks";
 import { useRouteSearchSlice } from "../route/activity";
 import {
   salvageRouteWork,
@@ -46,6 +49,8 @@ export type WorkScopeStatus = Pick<
   ReturnType<typeof useRouteTarget>,
   "resolution" | "bindingLost" | "targetProvenance"
 > & {
+  /** No inventory is acquired by provided mounts. */
+  busy?: boolean;
   /** Readable Work whose document is not live: shown, never armed (no writer, no verb). */
   closed: boolean;
   /** The host holds Work it cannot read: the kernel's start-fresh verb is the one recovery. */
@@ -61,6 +66,8 @@ export interface WorkScopePorts<W> {
   /** Ask the host for this Work again. */
   reread(key: WorkKey): void;
   subscribeAcceptedDeltas(key: WorkKey, onAck: (ack: WorkWriteAck) => void): () => void;
+  /** Every receipt that consumed the current Work, Pea's included: the Timeline hears both clients. */
+  subscribeReceipts?(accept: (receipt: ActionStatus, key: WorkKey | null) => void): () => void;
   status: WorkScopeStatus;
 }
 
@@ -69,7 +76,7 @@ export function useWorkScope<P, W>(
   graph: RouteGraph<P, W>,
   page?: Readonly<Partial<P>>,
   binding?: { target?: string; work?: string; thread?: string; url?: boolean },
-  fixture?: WorkScopePorts<W>,
+  provided?: WorkScopePorts<W>,
 ): WorkScopePorts<W> {
   const carry = useRouteSearchSlice((search) =>
     binding?.url === false
@@ -78,17 +85,17 @@ export function useWorkScope<P, W>(
   );
   const threadAtom = useMemo(
     () =>
-      !fixture && graph.optionalTarget && binding?.thread
+      !provided && graph.optionalTarget && binding?.thread
         ? readingAtom({ kind: "thread-head", thread: binding.thread }, peReadings)
         : null,
-    [graph.optionalTarget, binding?.thread, fixture],
+    [graph.optionalTarget, binding?.thread, provided],
   );
   const threadReading = useOwned(appAtomRegistry, threadAtom);
   const head = threadHeadSchema.safeParse(threadReading && previousOf(threadReading));
   const threadTarget =
     head.success && head.data.targets.length === 1 ? head.data.targets[0]!.request : null;
   const pin = carry.target ?? (threadTarget ? JSON.stringify(threadTarget) : null);
-  const needs = fixture ? undefined : (graph.needs ?? (pin ? graph.optionalTarget : undefined));
+  const needs = provided ? undefined : (graph.needs ?? (pin ? graph.optionalTarget : undefined));
   const sessionAtom = useMemo(
     () => (needs === "session" ? readingAtom({ kind: "inventory" }, peReadings) : null),
     [needs],
@@ -139,7 +146,7 @@ export function useWorkScope<P, W>(
       : undefined;
   const keyText = JSON.stringify(
     bindWork(
-      graph.key,
+      graph.workRoute ?? graph.key,
       graph.needs ? workAddress : null,
       work,
       graph.needs ? (bound ?? workOpen ?? undefined) : undefined,
@@ -148,10 +155,15 @@ export function useWorkScope<P, W>(
   const key = useMemo(() => JSON.parse(keyText) as WorkKey, [keyText]);
   const spec = useMemo(
     (): RouteStateSpec<NonNullable<typeof graph.work>> | null =>
-      graph.work && !fixture
-        ? { route: graph.key, title: graph.name, description: graph.name, schema: graph.work }
+      graph.work && !provided
+        ? {
+            route: graph.workRoute ?? graph.key,
+            title: graph.name,
+            description: graph.name,
+            schema: graph.work,
+          }
         : null,
-    [graph, fixture],
+    [graph, provided],
   );
   // Target-owned Work never falls back to the shared host key while its document is unresolved.
   const readable =
@@ -198,16 +210,14 @@ export function useWorkScope<P, W>(
   }, [resolution, key, reading, graph, unreadable, salvaged, keyText, spec, closed, failure]);
   // The mount captures its ports once; they read this store, so they never go stale.
   const store = useRef({ snapshot, closed, lost: "", listeners: new Set<() => void>() }).current;
-  Object.assign(store, {
-    snapshot,
-    closed,
-    lost: capture
-      ? "Saved captures are read-only; return to the live document to act"
-      : (target.bindingLost?.sentence ?? CLOSED_WORK),
-  });
-  useEffect(() => {
+  const lost = capture
+    ? "Saved captures are read-only; return to the live document to act"
+    : (target.bindingLost?.sentence ?? CLOSED_WORK);
+  useLayoutEffect(() => {
+    // An abandoned render must not replace the committed Work or its write authority.
+    Object.assign(store, { snapshot, closed, lost });
     for (const notify of store.listeners) notify();
-  }, [store, snapshot]);
+  }, [store, snapshot, closed, lost]);
   const ports = useMemo(
     () => ({
       getSnapshot: () => store.snapshot,
@@ -249,19 +259,49 @@ export function useWorkScope<P, W>(
       subscribeAcceptedDeltas: spec
         ? (key: WorkKey, onAck: (ack: WorkWriteAck) => void) => subscribeAcceptedDeltas(key, onAck)
         : noDeltas,
+      subscribeReceipts: (accept: (receipt: ActionStatus, key: WorkKey | null) => void) => {
+        let current = "";
+        let release = () => {};
+        const follow = () => {
+          const key = store.snapshot.workKey;
+          const id = key ? workKey(key) : "";
+          if (id === current) return;
+          current = id;
+          release();
+          release = () => {};
+          if (!key) return;
+          // TODO: docs/features/routes/LEDGER.md#s5-durable-journal prove completed Timeline replay after host restart in the browser.
+          release = peReadings.subscribe(
+            { kind: "receipts", work: key, detail: "status" },
+            (frame) => {
+              if (frame.kind !== "snapshot" || frame.stale) return;
+              const rows = actionStatusSchema.array().safeParse(frame.value);
+              if (!rows.success) return;
+              for (const row of rows.data) accept(row, key);
+            },
+          );
+        };
+        store.listeners.add(follow);
+        follow();
+        return () => {
+          store.listeners.delete(follow);
+          release();
+        };
+      },
     }),
     [store, spec],
   );
   const status = useMemo(
     (): WorkScopeStatus => ({
       resolution,
+      busy: target.busy,
       bindingLost: target.bindingLost,
       targetProvenance: target.targetProvenance,
       closed,
       unreadable,
       failure,
     }),
-    [statusText, closed, unreadable, failure], // eslint-disable-line react-hooks/exhaustive-deps
+    [statusText, target.busy, closed, unreadable, failure], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  return useMemo(() => fixture ?? { ...ports, status }, [ports, status, fixture]);
+  return useMemo(() => provided ?? { ...ports, status }, [ports, status, provided]);
 }

@@ -68,7 +68,7 @@ async function mounted(url = "/grilles") {
 test("the real graph mounts workbook profiles, restores address and supplies pane scopes", async () => {
   const { view, page, reading, router } = await mounted("/grilles?row=row9&sheet=true");
   expect(router.routesByPath["/grilles"]).toBe(grillesRoute);
-  expect(page().rows).toEqual(seedRows());
+  expect(Object.values(page().rows.profiles)).toEqual(seedRows());
   expect(reading().active).toEqual(seedRows()[2]);
   expect(reading().field).toEqual(enumerate(seedRows()[2]!));
   expect(view.getByText("export sheet")).toBeTruthy();
@@ -93,21 +93,21 @@ test("drawing edits solve every row, field picks edit only the active profile, r
     expect(row.rib).toBeCloseTo(Math.max(0, ribToFill(row)));
     expect(row.actualFreeArea).toBe(solve(row).actualFreeArea);
   }
-  const before = page().rows;
+  const before = Object.values(page().rows.profiles);
   const point = view.container.querySelector("[data-pane-id='field'] circle")!;
   fireEvent.click(point);
-  await waitFor(() => expect(page().rows[0]).not.toEqual(before[0]));
-  expect(page().rows.slice(1)).toEqual(before.slice(1));
+  await waitFor(() => expect(Object.values(page().rows.profiles)[0]).not.toEqual(before[0]));
+  expect(Object.values(page().rows.profiles).slice(1)).toEqual(before.slice(1));
   fireEvent.keyDown(view.getByLabelText("Buildable field"), { key: "ArrowRight" });
   await waitFor(() => expect(reading().active?.openings).toBeGreaterThan(1));
   fireEvent.click(view.getByRole("button", { name: "reset" }));
-  await waitFor(() => expect(page().rows).toEqual(seedRows()));
+  await waitFor(() => expect(Object.values(page().rows.profiles)).toEqual(seedRows()));
 });
 
 test("adding a profile and opening and closing export use kernel Page and URL history", async () => {
   const { view, router, page } = await mounted();
   fireEvent.click(view.getByRole("button", { name: "+ profile" }));
-  await waitFor(() => expect(page().rows).toHaveLength(7));
+  await waitFor(() => expect(Object.values(page().rows.profiles)).toHaveLength(7));
   expect(page().row).toBe("new7");
   await waitFor(() => expect(router.state.location.search.row).toBe("new7"));
   fireEvent.click(view.getByRole("button", { name: "export 1 drawing" }));

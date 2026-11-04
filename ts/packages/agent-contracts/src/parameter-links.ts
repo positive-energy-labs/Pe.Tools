@@ -1,3 +1,4 @@
+import { writeIntentSchema } from "./write-intent.ts";
 import { z } from "zod";
 
 export const parameterIdentitySchema = z.object({
@@ -126,6 +127,7 @@ export type ParameterLinksData = z.infer<typeof parameterLinksDataSchema>;
  * fails closed rather than lose its value.
  */
 export const parameterLinksDocumentSchema = z.strictObject({
+  writeIntent: writeIntentSchema.optional(),
   profile: draftCellSchema(parameterLinkProfileSchema).default({}),
 });
 export type ParameterLinksDocument = z.infer<typeof parameterLinksDocumentSchema>;

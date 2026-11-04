@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { field, text, type RouteDeclaration } from "../route-field.ts";
+import { manyField, field, text, type RouteDeclaration } from "../route-field.ts";
 
 /** The home directory: its filters, and which tools' saved Works are folded. */
 export const homeAddress = {
@@ -16,7 +16,7 @@ export const homeAddress = {
       agent: "set",
     }),
     /** Tool paths whose saved Works are folded away. */
-    folded: field(z.array(z.string().max(120)).default([]), { url: "replace", agent: "set" }),
+    folded: manyField("name", { url: "replace", agent: "set" }),
   },
   agent: {
     policy:

@@ -75,7 +75,7 @@ Two first-principles critics (`.artifacts/tmp/unification-2/big-picture-1/`) fou
 ## Open questions for kaitpw
 
 - Q27-Q32 (adversarial review): session writes exempt from Work derivation; TransactRead declared; scripts and `pod.member.compose` under consent as the escape hatch; generated Pea catalog + live availability; split `electrical-circuits`; C# owns the axis enums. Recommendations given in thread.
-- Route splits above (open, takeoff, pods, schedules) and the `/space` region subject: applications of ADR 0027 rule 1, awaiting confirmation.
+- Route splits above (open, takeoff, pods, schedules) and the `/space` region subject: **answered in part, 2026-11-03, kaitpw**: freeze at `u2/families-done` and archive `takeoff`, `takeoffs`, `space`, `rhvac-sync`, `zone-audit`, `schedule-specs`, `pod-admin` and `session-admin` rather than continue their cutover in this wave ([archive ruling](LEDGER.md#decided)); the remaining split details await confirmation.
 - Q33-Q37 (big-picture critics 1): adopt the seven nouns; Pods as route authors in this wave; engine home (host `compose` entry, browser worker only where marked local-ok, C# pricing deleted); stable subject keys (codec refuses `ElementId`); content-hashed readings now as snapshot groundwork.
 
 ## Cutover (ADR 0027 rule 15; reviewers' order)
@@ -89,3 +89,10 @@ Two first-principles critics (`.artifacts/tmp/unification-2/big-picture-1/`) fou
 6. Purge and fold per the list above; ratchets to zero.
 7. Driver thread proves each route in the browser; kaitpw's drive is the final bar.
 Kit has one owner thread per wave; route threads add red `kernel gap:` tests, never local kit patches. Merge main daily.
+
+## Phase 1a checkpoint (2026-11-02)
+
+- Ducts loss, heal and fan commands now accept only a Work handle with `expectedRevision`. The host derives requests, returns an inspectable preview seal, checks the seal on apply, and keeps ActionJournal retirement conditional on captured cells and native receipts. Domain refusals retain the existing journal wire state `failed`, with `notDispatched` and `refusal`; the new Timeline outcome enum remains a later cutover.
+- Sheet reads no longer apply edits or proposals. Data Tables Open is an explicit Work verb. Schedule binding is an explicit ActionJournal command. Pod inventory reads no longer reconcile setup/cleanup; explicit import and activation do.
+- Read-write census survivors: `readSchedule` files immutable evidence through `captures.saveSchedule`; this is observational retention, not authored Work or model mutation. `families/graph.ts` still adopts read results through queryVerb patches; split explicit adoption from the read in the next slice. The census excludes schedule publication inside the explicit command and plugin refresh after the GET return.
+- Owed: migrate the remaining family, schedule, data-table and takeoff ModelWrite contracts to Work-only inputs and preview seals; replace legacy caller-payload forwarding tests. Connect the ducts UI's chosen heal/fan/system scope to the new `stage-write` Work verb before preview; Pea can stage `writeIntent` through the shared Work door. Browser and Revit behavior remain unproven.

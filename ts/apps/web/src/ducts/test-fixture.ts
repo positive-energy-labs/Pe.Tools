@@ -22,7 +22,12 @@ const connectors = (id: number) =>
     }));
 export const snapshot = {
   coordinateEncoding: "native-double",
-  document: { title: "slice", readAt: "2026-10-21T00:00:00Z", elapsedMs: 1 },
+  document: {
+    networkBasedCalculations: false,
+    title: "slice",
+    readAt: "2026-10-21T00:00:00Z",
+    elapsedMs: 1,
+  },
   levels: [{ id: 30, name: "Level 1", elevationFt: 0 }],
   groups: [
     {
@@ -38,6 +43,7 @@ export const snapshot = {
   ],
   nodes: [100, 2, 4, 6].map((id) => ({
     id,
+    flowParameter: "Observed flow",
     kind: id === 100 ? "equipment" : id === 2 ? "fitting" : "terminal",
     category: "duct node",
     point: [id === 100 ? 0 : id, 0, 0],
@@ -45,7 +51,8 @@ export const snapshot = {
     groupId: id === 100 ? null : "g1",
     systemName: id === 100 ? null : "SA",
     connectors: connectors(id),
-    facts: id === 100 ? [{ key: "mark", text: "FC-1" }] : [],
+    facts:
+      id === 100 ? [{ key: "mark", text: "FC-1", unit: "", provenance: "revit-reported" }] : [],
   })),
   segments: [1, 3, 5].map((id) => ({
     id,
@@ -71,6 +78,7 @@ export const snapshot = {
   layers: [],
   systems: [{ id: 900, name: "SA", classification: "Supply Air", criticalPath: [], sections: [] }],
   slots: {
+    terminalDrop: "PE_M_Grd_ExternalStaticPressure",
     fanStatic: "PE_M_Fan_ExternalStaticPressure",
     fanFlow: "PE_M_Fan_AirFlow",
     componentDrop: "Pressure Drop",

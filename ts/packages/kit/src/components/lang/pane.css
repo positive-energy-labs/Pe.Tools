@@ -37,6 +37,18 @@
 [data-slot="pane-title"]::first-letter {
   text-transform: uppercase;
 }
+/* A title that carries help says so once: a dotted foot under the word, the hint on hover. */
+[data-slot="pane-title"][data-help] {
+  cursor: help;
+  text-decoration: underline dotted var(--pe-line-2);
+  text-underline-offset: 0.2em;
+}
+/* The pane head's reading word (ADR 0027 rule 9): quiet beside its refresh, toned only when failed. */
+[data-slot="pane-reading"] {
+  font-size: var(--type-small-size);
+  color: var(--pe-ink-2);
+  white-space: nowrap;
+}
 /* A name takes the display face the route heads wear. */
 [data-slot="pane-title"][data-heading="name"] {
   font-family: var(--font-display);
@@ -126,6 +138,16 @@
     margin-inline-start: auto;
   }
 }
+/* A wrapping header (`fit="wrap"`) flows its controls onto more lines at their own width instead of
+   shrinking them on one: the opt-in for a header whose actions accumulate chips. */
+[data-slot="pane-header"][data-fit="wrap"] [data-slot="pane-actions"] .dl-button-group {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+[data-slot="pane-header"][data-fit="wrap"] [data-slot="pane-actions"] .dl-button-group > * {
+  flex-shrink: 0;
+  max-width: 100%;
+}
 [data-slot="pane-header"][data-title-align="center"] [data-slot="rail-lead"] {
   align-items: center;
   padding-bottom: 0;
@@ -136,6 +158,14 @@
 [data-slot="pane-actions"],
 [data-slot="pane-strip"] {
   gap: calc(var(--space-unit) * 2);
+}
+/* A word control in the head (the subject picker) gives way by a drawn ellipsis; it never paints
+   under the icon beside it (nowrap alone overflowed). Block, because a flex box drops the ellipsis. */
+[data-slot="pane-actions"] [data-list-trigger] {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: calc(var(--control-h) - 2px);
 }
 [data-slot="pane-actions"] > * + *,
 [data-slot="pane-strip"] > * + * {

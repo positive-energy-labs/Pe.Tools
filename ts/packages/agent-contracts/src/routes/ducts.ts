@@ -3,7 +3,13 @@ import { z } from "zod";
 import { orbitLooks, viewportCodec, type OrbitLook } from "../page-keys.ts";
 import { pictureFields } from "./picture.ts";
 import { DUCTS_FINDS } from "../ducts.ts";
-import { field, setKeys, text, type RouteDeclaration } from "../route-field.ts";
+import {
+  field,
+  manyField,
+  manyCodec,
+  setKeys,
+  type RouteDeclaration,
+} from "../route-field.ts";
 
 /** The layer keys the Ducts spatial picture draws. */
 export const DUCTS_LAYERS = [
@@ -29,23 +35,15 @@ const picture = pictureFields(
 const ductsFields = {
   /** The body under the Situation: the network picture (`network`) or the fan sheet (`sheet`). A view; it runs no verb. */
   stage: field(z.enum(["network", "sheet"]).default("network"), { url: "push", agent: "set" }),
-  /** The open fan sheet, unit id and port index; empty closes it. */
-  fan: field(
-    z
-      .string()
-      .regex(/^(?:\d+:\d+)?$/)
-      .default(""),
-    { url: "push", agent: "set" },
-  ),
+  /** The fan route subjects, stable fan mark plus port index; empty closes them. */
+  fan: manyField("UniqueId", { url: "push", agent: "set" }),
   contextRadiusFt: picture.contextRadiusFt,
   sceneView: picture.sceneView,
   /**
    * The subject: the open Revit system names, oldest first, each read across every group it is in;
-   * the last is the active one the write, heal and fan verbs act on. Empty = the whole document.
+   * the last is the active one the write, heal and fan verbs act on. Empty = no picked systems; all resolves the current roster.
    */
-  system: field(z.array(z.string().max(200)).default([]), { url: "push", agent: "set" }),
-  /** A level id; empty = every level. */
-  level: field(text(), { url: "push", agent: "set" }),
+  system: manyField("system-name", { url: "push", agent: "set" }),
   selected: picture.selected,
   systemSearch: field(
     listSearchKey().describe(
@@ -84,12 +82,10 @@ const ductsFields = {
   contextStyle: picture.contextStyle,
   picture: picture.picture,
   viewport: picture.viewport,
-  issue: picture.issue,
 };
 
 type DuctsFacts = {
   systems?: { name: string }[];
-  levels?: { id: string; name: string }[];
   /** The orbit pose the picture shows, fitted or not, as `viewportCodec` writes it. */
   pose?: string;
 };
@@ -106,7 +102,7 @@ const ductsWords = z.object({
  */
 function resolveDucts(input: Record<string, unknown>, facts: Record<string, unknown>) {
   const patch = { ...input } as Record<string, string>;
-  const { systems = [], levels = [], pose } = facts as DuctsFacts;
+  const { systems = [], pose } = facts as DuctsFacts;
   const keys = [...setKeys(ductsFields), ...Object.keys(ductsWords.shape)];
   const stray = Object.keys(patch).filter((key) => !keys.includes(key));
   if (stray.length)
@@ -114,12 +110,11 @@ function resolveDucts(input: Record<string, unknown>, facts: Record<string, unkn
       ok: false as const,
       error: `the Ducts page takes ${keys.join(", ")}, not ${stray.join(", ")}; name the system`,
     };
-  if (patch.system?.trim()) {
+  if (patch.system?.trim() && patch.system !== "all") {
+    const decoded = manyCodec.decode(patch.system);
+    if (!Array.isArray(decoded)) return { ok: false as const, error: "Invalid system names" };
     const named: string[] = [];
-    for (const said of patch.system
-      .split(",")
-      .map((word) => word.trim())
-      .filter(Boolean)) {
+    for (const said of decoded.map((word) => word.trim()).filter(Boolean)) {
       const word = said.toLowerCase();
       const exact = systems.filter((system) => system.name.toLowerCase() === word);
       const near = systems.filter((system) => system.name.toLowerCase().includes(word));
@@ -136,10 +131,8 @@ function resolveDucts(input: Record<string, unknown>, facts: Record<string, unkn
         };
       if (!named.includes(found[0]!.name)) named.push(found[0]!.name);
     }
-    patch.system = named.join(",");
+    patch.system = manyCodec.encode(named);
   }
-  if (patch.level && !levels.some((level) => level.id === patch.level))
-    return { ok: false as const, error: `unknown level '${patch.level}'` };
   if (patch.layers) {
     const known: readonly string[] = DUCTS_LAYERS;
     const unknown = patch.layers.split(",").filter((name) => !known.includes(name.trim()));
@@ -172,7 +165,7 @@ function resolveDucts(input: Record<string, unknown>, facts: Record<string, unkn
   }
   return Object.keys(patch).length
     ? { ok: true as const, patch }
-    : { ok: false as const, error: "name a system, level, selected element, look or viewport" };
+    : { ok: false as const, error: "name a system, selected element, look or viewport" };
 }
 
 export const ductsAddress = {
@@ -180,9 +173,9 @@ export const ductsAddress = {
   title: "Ducts",
   fields: ductsFields,
   agent: {
-    finds: [...DUCTS_FINDS, "system", "level"],
+    finds: [...DUCTS_FINDS, "system"],
     policy:
-      "Move the Ducts page in the person's open browser. Its open fan sheet is fan (unitId:portIndex, with stage=sheet; empty closes it). Its subject: system (the Revit system names the person named, comma separated, such as SA 19 or SA 19,RA 1, as the person said them; each resolves against the view's system names; the last is the active one the write, heal and fan verbs act on, and the page keeps only its newest few, closing the oldest), level and selected element id; an empty string clears the key. The page shows every duct network each system is in, with its owned elements and shared fan-to-terminal paths; unopened branches at equipment, plenums and shared ducts show as short stubs. Set only the systems the person named, and never add one they did not name. Its picture: encoding, layers (comma separated: meshes, system-colours, stub-labels, halo, context, centrelines, no-run, labels, findings; system-colours tints each element by its own system; stub-labels names each stub; halo shows nearby context; context shows all captured context and wins when both are on; meshes, system-colours, stub-labels, halo, no-run, labels and findings are on by default; no-run highlights branches on no fan-to-terminal run; empty = none), picture (model or schematic), and either look (plan, iso, north, south, east or west: the shown picture turned about its pivot) or viewport (orbit:projection:yaw,elev,zoom@x,y,z (projection is perspective or parallel) in feet; empty fits the subject). issue selects one finding by id. Each set is one step the person can go Back from. No Work or Revit read.",
+      "Move the systems subject on /ducts. Set system to the named system keys or all for the current roster. Every picked system stays picked. selected is the single element or finding selection. Fan paths live on /fans, keyed by fan mark plus @portIndex. Page changes do not run verbs or write Work. Geometry and inputs follow the authored subjects.",
     words: ductsWords,
     resolve: resolveDucts,
   },

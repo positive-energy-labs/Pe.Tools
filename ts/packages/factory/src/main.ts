@@ -83,7 +83,7 @@ const cleanupRun = (repo: string, branch: string, worktree: string) => {
   try {
     git(repo, "worktree", "prune");
     git(repo, "branch", "-D", branch);
-  } catch {
+  } catch (error) { console.warn("ts/packages/factory/src/main.ts: fallback after failure", error);
     // Cleanup never changes the recorded run outcome.
   }
 };
@@ -351,7 +351,7 @@ const mergeRun = (
   } catch (error) {
     try {
       git(repo, "merge", "--abort");
-    } catch {
+    } catch (error) { console.warn("ts/packages/factory/src/main.ts: fallback after failure", error);
       // Git has no merge to abort when it failed before writing merge state.
     }
     return fail(error instanceof Error ? error.message : String(error));

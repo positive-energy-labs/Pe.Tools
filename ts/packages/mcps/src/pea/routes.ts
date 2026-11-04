@@ -3,8 +3,8 @@
  * wired. The host composition root registers
  * every entry; nothing else enumerates routes.
  */
-import type { z } from "zod";
-import type { RouteStateSpec, RouteWriteAdmission } from "@pe/agent-contracts";
+import { admittedBuiltinKeys } from "../../../agent-contracts/src/admitted-builtin-keys.ts";
+import type { HostWorkRegistration } from "../../../agent-contracts/src/host-route-admission.ts";
 import { tools } from "@pe/agent-contracts";
 
 import {
@@ -13,16 +13,20 @@ import {
   type LoadedFamilies,
 } from "./families-admission.ts";
 
-export interface RouteRegistration {
-  spec: RouteStateSpec<z.ZodType>;
-  admit?: RouteWriteAdmission;
-}
+export interface RouteRegistration extends HostWorkRegistration {}
 
 export function createRouteRegistrations(
-  options: { hostBaseUrl?: string; loadedFamilies?: LoadedFamilies } = {},
+  options: {
+    hostBaseUrl?: string;
+    loadedFamilies?: LoadedFamilies;
+    admittedKeys?: readonly string[];
+  } = {},
 ): RouteRegistration[] {
   return Object.values(tools)
-    .filter((tool) => "work" in tool)
+    .filter(
+      (tool) =>
+        "work" in tool && !(options.admittedKeys ?? admittedBuiltinKeys).includes(tool.work.route),
+    )
     .map((tool) => ({
       spec: (tool as import("@pe/agent-contracts").Tool).work!,
       ...(tool.name === "families"

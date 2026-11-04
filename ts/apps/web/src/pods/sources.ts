@@ -1,14 +1,6 @@
-import { z } from "zod";
-import { Schema } from "effect";
-import type { ReadEntry, SettingsRouteDocument } from "@pe/agent-contracts";
-import {
-  podListResponseSchema,
-  podMemberComposeResponseSchema,
-  podRunsResponseSchema,
-} from "@pe/host-contracts/operation-types";
-import type { PluginStatus, PodRouteDescriptor } from "@pe/agent-contracts";
-import { peClient } from "#/host/pe-client";
-import { requestJson } from "#/shell/readings-api";
+import type { SettingsRouteDocument } from "@pe/agent-contracts";
+
+import { callOp } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource, ReadingScope } from "#/shell/readings";
 import type { PodsPage } from "./page";
@@ -20,22 +12,8 @@ import {
   type MemberRead,
 } from "./model";
 
-const decode = <S extends Schema.ConstraintDecoder<unknown, never>>(schema: S) =>
-  z.unknown().transform((value) => Schema.decodeUnknownSync(schema)(value));
 const page = (ctx: ReadingContext) => ctx.page as PodsPage;
 const work = (ctx: ReadingContext) => ctx.work as SettingsRouteDocument | null;
-export interface PluginsRead {
-  statuses: PluginStatus[];
-  routes: PodRouteDescriptor[];
-}
-
-/** Activation stays human-only; this is a host RPC, never an agent semantic command. */
-export const activationRpc: ReadEntry<z.ZodObject<{ id: z.ZodString; enabled: z.ZodBoolean }>> = {
-  key: "plugin.update",
-  input: z.object({ id: z.string().min(1), enabled: z.boolean() }),
-  run: ({ id, enabled }) => peClient.call("plugin.update", { params: { id }, body: { enabled } }),
-};
-
 export function podsSources(): Readonly<Record<string, ReadingSource>> {
   return {
     "pods.status": {
@@ -54,11 +32,7 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
       dirties: ["pods"],
       async open(ctx, deliver) {
         try {
-          const result = await requestJson(
-            { path: "/call", body: { key: "pod.list", request: {} } },
-            decode(podListResponseSchema),
-            ctx.signal,
-          );
+          const result = await callOp({ signal: ctx.signal }, "pod.list", {});
           if (!("pods" in result))
             throw Error("pod.list returned identity instead of full inventory");
           deliver({ kind: "complete", value: result.pods, revision: 1 });
@@ -77,11 +51,7 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
         if (!ref || !ref.path.endsWith(".json"))
           return deliver({ kind: "complete", value: null, revision: 0 });
         try {
-          const read = await requestJson(
-            { path: "/call", body: { key: "pod.member.read", request: ref } },
-            z.object({ content: z.string(), sha256: z.string() }),
-            ctx.signal,
-          );
+          const read = await callOp({ signal: ctx.signal }, "pod.member.read", ref);
           deliver({
             kind: "complete",
             value: { member: ref, ...read } satisfies MemberRead,
@@ -110,14 +80,10 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
           return deliver({ kind: "complete", value: null, revision: 0 });
         }
         try {
-          const result = await requestJson(
-            {
-              path: "/call",
-              body: { key: "pod.member.compose", request: { ...ref, content: draft } },
-            },
-            decode(podMemberComposeResponseSchema),
-            ctx.signal,
-          );
+          const result = await callOp({ signal: ctx.signal }, "pod.member.compose", {
+            ...ref,
+            content: draft,
+          });
           deliver({
             kind: "complete",
             value: { member: ref, draft, result } satisfies CompositionRead,
@@ -138,35 +104,11 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
         const path = page(ctx).runs === "pod" || !ref ? undefined : ref.path;
         if (!pod) return deliver({ kind: "complete", value: [], revision: 0 });
         try {
-          const result = await requestJson(
-            {
-              path: "/call",
-              body: { key: "pod.runs", request: { pod, ...(path !== undefined && { path }) } },
-            },
-            decode(podRunsResponseSchema),
-            ctx.signal,
-          );
+          const result = await callOp({ signal: ctx.signal }, "pod.runs", {
+            pod,
+            ...(path !== undefined && { path }),
+          });
           deliver({ kind: "complete", value: result.runs, revision: 1 });
-        } catch (error) {
-          if (!ctx.signal.aborted) deliver({ kind: "failure", error });
-        }
-      },
-    },
-    "pods.plugins": {
-      kind: "use",
-      effects: () => [],
-      async open(ctx, deliver) {
-        try {
-          const [statuses, routes] = await Promise.all([
-            peClient.call("plugins.list", {}),
-            peClient.call("plugins.routes", {}),
-          ]);
-          if (!ctx.signal.aborted)
-            deliver({
-              kind: "complete",
-              value: { statuses, routes } satisfies PluginsRead,
-              revision: 1,
-            });
         } catch (error) {
           if (!ctx.signal.aborted) deliver({ kind: "failure", error });
         }

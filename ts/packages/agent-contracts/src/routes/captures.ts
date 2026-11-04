@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { field, type RouteDeclaration } from "../route-field.ts";
+import { manyField, field, type RouteDeclaration } from "../route-field.ts";
 
 export const capturesAddress = {
   path: "/captures",
@@ -8,7 +8,7 @@ export const capturesAddress = {
     /** The picture the list scrolls to and marks; absent = none. */
     sha: field(z.string().max(64).optional(), { url: "push", agent: "set" }),
     /** The shas whose receipt is unfolded. */
-    open: field(z.array(z.string().max(64)).default([]), { url: "replace", agent: "set" }),
+    open: manyField("name", { url: "replace", agent: "set" }),
   },
   agent: {
     policy:

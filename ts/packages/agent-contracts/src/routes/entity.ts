@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { INVALID, type Codec } from "../page-keys.ts";
-import { field, text } from "../route-field.ts";
+import { field, text, sortField, keyedSetField } from "../route-field.ts";
 
 /**
  * Entity routes (`/schedules`, `/families`, `/family`): stage, pod and path are the address, so
@@ -28,59 +27,6 @@ export const workLinesField = field(z.enum(["suggestions", "edits", "all"]).opti
   agent: "set",
 });
 
-/** Comma-separated names, each with its raw text (escapes kept) and its name (escapes read). */
-const split = (text: string): { raw: string; name: string }[] => {
-  if (text === "") return [];
-  const out: { raw: string; name: string }[] = [];
-  let raw = "";
-  let name = "";
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]!;
-    if (c === "\\" && i + 1 < text.length) {
-      raw += c + text[i + 1]!;
-      name += text[++i]!;
-    } else if (c === ",") {
-      out.push({ raw, name });
-      raw = name = "";
-    } else {
-      raw += c;
-      name += c;
-    }
-  }
-  out.push({ raw, name });
-  return out;
-};
-const escape = (name: string) => name.replace(/[\\,]/g, (c) => `\\${c}`);
-
-/**
- * Names (column keys, parameter names) as one string: comma joined, a name's own `,` or `\`
- * escaped with `\`. The kernel's array codec splits on every comma and drops empty names, which a
- * free-text name (`Width, Nominal`) does not survive.
- */
-const namesCodec: Codec<string[]> = {
-  encode: (names) => names.map(escape).join(","),
-  decode: (text) => split(text).map(({ name }) => name),
-};
-
-const sortsSchema = z
-  .array(z.object({ key: z.string().min(1).max(512), dir: z.enum(["asc", "desc"]) }))
-  .max(8);
-type Sorts = z.output<typeof sortsSchema>;
-
-/** Sorts in order, `-` before a descending key: `-Width,Name`. An ascending key that starts with `-` escapes it. */
-const sortsCodec: Codec<Sorts> = {
-  encode: (sorts) =>
-    sorts
-      .map(({ key, dir }) => (dir === "desc" ? "-" : key.startsWith("-") ? "\\" : "") + escape(key))
-      .join(","),
-  decode: (text) => {
-    const sorts: Sorts = split(text).map(({ raw, name }) =>
-      raw.startsWith("-") ? { key: name.slice(1), dir: "desc" } : { key: name, dir: "asc" },
-    );
-    return sorts.every(({ key }) => key) ? sorts : INVALID;
-  },
-};
-
 /**
  * A table's view (kit `TableState`): the query line, its sorts and its hidden columns, each Pea's
  * to set (MAP ruling 48: Pea shapes the query and the visible columns without asking). The query
@@ -88,10 +34,6 @@ const sortsCodec: Codec<Sorts> = {
  */
 export const tableFields = (query = "") => ({
   query: field(z.string().max(4096).default(query), { url: "push", agent: "set" }),
-  sort: field(sortsSchema.default([]), { url: "replace", agent: "set" }, sortsCodec),
-  hidden: field(
-    z.array(z.string().min(1).max(512)).max(500).default([]),
-    { url: "replace", agent: "set" },
-    namesCodec,
-  ),
+  sort: sortField({ url: "replace", agent: "set" }),
+  hidden: keyedSetField({ url: "replace", agent: "set" }),
 });

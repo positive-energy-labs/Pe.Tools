@@ -57,7 +57,7 @@ export const contributionReferenceSchema = z
     if (kind === "script") return /^src\/.+\.cs$/i.test(path) && path.startsWith("src/");
     if (kind === "page") return /^pages\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(path);
     if (kind === "skill") return /^skills\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(path);
-    if (kind === "route") return /^routes\/[a-z0-9]+(?:-[a-z0-9]+)*\/index\.js$/.test(path);
+    if (kind === "route") return /^routes\/[a-z0-9]+(?:-[a-z0-9]+)*\/route\.artifact$/.test(path);
     return true;
   }, "Contribution kind does not match its namespace or entry path");
 export type ContributionReference = z.infer<typeof contributionReferenceSchema>;

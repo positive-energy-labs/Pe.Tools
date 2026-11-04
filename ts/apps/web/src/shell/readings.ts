@@ -1,4 +1,5 @@
-import { canonicalRouteInput } from "@pe/agent-contracts";
+import { z } from "zod";
+import { canonicalRouteInput, isWritePreviewKey } from "@pe/agent-contracts";
 import { DEFAULT_WAIT_S } from "#/route/waits";
 import type {
   ActionReceipt,
@@ -41,7 +42,13 @@ export interface ReadingState<T = unknown> {
   readonly complete: boolean;
   readonly basis: ReadingBasis | null;
   readonly version: number;
+  /**
+   * Content hash of `value` (ADR 0028 snapshot groundwork): the source's own version when it
+   * declares one, else a hash of the value's canonical JSON. Absent for non-JSON values.
+   */
+  readonly hash?: string;
   readonly error?: string;
+  readonly errorDetails?: string;
 }
 
 export type ReadingPublication<T = unknown> =
@@ -73,6 +80,11 @@ interface SourcePolicy {
   /** Defaults to the attempt's exact document/session. Disk and service sources declare theirs. */
   effects?(context: ReadingContext): readonly Effect[];
   dirties?: readonly string[];
+  /**
+   * A live subject (one transport subscription): a failure is said, but the attempt keeps
+   * listening, so the subject's next answer recovers it without a refresh press.
+   */
+  recovers?: boolean;
 }
 export interface UseSource<T = unknown> extends SourcePolicy {
   kind: "use" | "feed";
@@ -120,6 +132,8 @@ export interface ReadingGraphDeps<P, W> {
   sources: Readonly<Record<string, ReadingSource>>;
   scope: ReadingScope<P, W>;
   log(entry: ReadingLog): void;
+  /** Seconds an attempt may stay silent before it fails; defaults to `DEFAULT_WAIT_S`. */
+  waitS?: number;
 }
 export class ReadingGraphRefusal extends Error {}
 
@@ -231,6 +245,11 @@ export function createReadingGraph<P, W>(
       now.values.every((value, i) => value === node.launched!.values[i])
     );
   };
+  const retained = (node: Node<P>) =>
+    (node.source.kind === "use" || node.source.kind === "feed" || node.source.kind === "derive") &&
+    node.trigger?.kind === "demand" &&
+    node.context !== undefined &&
+    node.state.status !== "failed";
   const owned = (node: Node<P>, attempt: ReadingAttempt) =>
     !disposed && node.context?.attempt === attempt;
   const put = (node: Node<P>, state: Omit<ReadingState, "version">) => {
@@ -248,15 +267,23 @@ export function createReadingGraph<P, W>(
     node.release = undefined;
     release?.();
   };
+  const waitS = deps.waitS ?? DEFAULT_WAIT_S;
   const awaitProgress = (node: Node<P>) => {
     clearTimeout(node.wait);
     node.wait = setTimeout(() => {
+      node.wait = undefined;
+      // A live subject holding evidence is stale, not failed: its transport recovers it.
+      if (node.source.recovers && node.state.value !== undefined) {
+        put(node, { ...node.state, status: "stale", current: false });
+        flush();
+        return;
+      }
       if (node.context)
         deliver(node, node.context, {
           kind: "failure",
-          error: `${node.id} sent no answer after ${DEFAULT_WAIT_S}s; explicitly refresh to retry`,
+          error: `${node.id} sent no answer after ${waitS}s; explicitly refresh to retry`,
         });
-    }, DEFAULT_WAIT_S * 1000);
+    }, waitS * 1000);
   };
   const stale = (node: Node<P>, clearPrior = false) => {
     detach(node);
@@ -278,7 +305,16 @@ export function createReadingGraph<P, W>(
       });
       return;
     }
-    if (node.state.status === "failed") return;
+    if (
+      node.state.status === "failed" &&
+      !(
+        node.source.recovers &&
+        (publication.kind === "part" ||
+          publication.kind === "complete" ||
+          publication.kind === "failure")
+      )
+    )
+      return;
     if (publication.kind === "pending" && node.state.complete) {
       deps.log({
         kind: "drop",
@@ -328,6 +364,7 @@ export function createReadingGraph<P, W>(
       put(node, {
         status: !fresh ? "stale" : complete ? "ready" : "partial",
         value: publication.value,
+        hash: publication.sourceVersion ?? contentHash(publication.value),
         previous: node.state.previous,
         complete,
         current: complete && fresh,
@@ -346,11 +383,14 @@ export function createReadingGraph<P, W>(
       if (complete && fresh) {
         clearTimeout(node.wait);
         node.wait = undefined;
-      } else if (publication.kind === "part" || !node.wait) awaitProgress(node);
+      } else if (!node.wait) awaitProgress(node);
     } else if (publication.kind === "failure") {
-      const error =
-        publication.error instanceof Error ? publication.error.message : String(publication.error);
-      put(node, { ...node.state, status: "failed", complete: false, current: false, error });
+      const mismatch = publication.error instanceof z.ZodError ? publication.error : null;
+      const error = mismatch
+        ? `snapshot contract mismatch: ${mismatch.issues[0]?.path.join(".") || "response"}`
+        : publication.error instanceof Error ? publication.error.message : String(publication.error);
+      put(node, { ...node.state, status: "failed", complete: false, current: false, error,
+        errorDetails: mismatch?.message });
       clearTimeout(node.wait);
       node.wait = undefined;
       deps.log({ kind: "failure", reading: node.id, attempt, message: error });
@@ -360,7 +400,7 @@ export function createReadingGraph<P, W>(
       if (!node.wait) awaitProgress(node);
     }
     flush();
-    if (owned(node, attempt) && publication.kind === "failure") {
+    if (owned(node, attempt) && publication.kind === "failure" && !node.source.recovers) {
       detach(node);
       node.worker?.stop();
       node.worker = undefined;
@@ -466,7 +506,7 @@ export function createReadingGraph<P, W>(
             node.worker?.stop();
             node.worker = undefined;
             node.signature = undefined;
-            put(node, { ...node.state, status: "failed", complete: false, current: false, error });
+            put(node, { ...node.state, status: "failed", complete: false, current: false, error, errorDetails: failed[1].errorDetails });
           }
           continue;
         }
@@ -531,6 +571,12 @@ export function createReadingGraph<P, W>(
         node.demand--;
         if (acquire) node.mounted--;
         if (node.demand || disposed) continue;
+        // Retention by kind (ADR 0027 rule 9, ADR 0028): a hidden pane keeps a demand
+        // subscription's value, signature and live attempt, so revealing it reacquires nothing.
+        // Workers and ports hold real compute/handles, and a verb's capture belongs to its
+        // invocation; those release now. ponytail: undemanded subscriptions live until target/Work
+        // retirement or dispose; add an idle timeout if hidden tabs pile up SSE streams.
+        if (acquire && retained(node)) continue;
         detach(node);
         node.worker?.stop();
         node.worker = undefined;
@@ -556,6 +602,36 @@ export function createReadingGraph<P, W>(
     },
     get(id: string): ReadingState {
       return get(id).state;
+    },
+    /** A pane head's word over its draws and their dependency closure (ADR 0027 rule 9). */
+    status(ids: readonly string[]): "ready" | "pending" | "stale" | `failed:${string}` {
+      const states = closure(ids).map((node) => node.state);
+      const failed = states.find((state) => state.status === "failed");
+      if (failed) return `failed:${failed.error ?? "unknown error"}`;
+      if (states.some((s) => s.status === "pending" || s.status === "partial")) return "pending";
+      return states.some((s) => s.status === "stale") ? "stale" : "ready";
+    },
+    watch(ids: readonly string[], notify: () => void): Release {
+      const watched = closure(ids);
+      for (const node of watched) node.listeners.add(notify);
+      return () => {
+        for (const node of watched) node.listeners.delete(notify);
+      };
+    },
+    /**
+     * The pane head's refresh verb: reacquire each demanded root of the closure once (shared roots
+     * dedupe by node), letting derives follow. Old values stay as `previous` while pending. Ports
+     * and verb captures are excluded: those are explicit presses, never a refresh side effect.
+     */
+    refresh(ids: readonly string[]) {
+      if (disposed) return;
+      for (const node of closure(ids)) {
+        if (node.decl.deps?.length || !node.demand || node.source.kind === "port") continue;
+        if (node.trigger?.kind === "verb") continue;
+        node.signature = undefined;
+        node.receiptHeld = undefined;
+      }
+      flush();
     },
     mount(ids: readonly string[]): Release {
       return retain(ids, true);
@@ -647,10 +723,13 @@ export function createReadingGraph<P, W>(
       flush();
     },
     acceptReceipt(
-      receipt: Pick<ActionReceipt, "id" | "state" | "effects" | "target">,
+      receipt: Pick<ActionReceipt, "id" | "state" | "effects" | "target"> & Partial<Pick<ActionReceipt, "input" | "key">>,
       dirties: readonly string[] = [],
     ) {
       if (disposed) return;
+      // Successful reads and explicit previews with no effects preserve their review evidence.
+      // Unknown or failed execution still falls back to the target when its effects are uncertain.
+      if (receipt.effects.length === 0 && (receipt.state === "succeeded" || (receipt.key !== undefined && isWritePreviewKey(receipt.key)))) return;
       if (receipt.state === "waiting" || receipt.state === "running") return;
       const stamp = canonicalRouteInput([receipt.id, receipt.state, receipt.effects, dirties]);
       if (receiptVersions.has(stamp)) return;
@@ -731,6 +810,27 @@ export function createReadingGraph<P, W>(
 
 export type ReadingGraph<P, W> = ReturnType<typeof createReadingGraph<P, W>>;
 
+/** ponytail: 53-bit cyrb53 over canonical JSON, sync and cheap; full-body cost on large values
+ * that declare no sourceVersion. Swap for SubtleCrypto SHA-256 if snapshots cross a trust line. */
+export function contentHash(value: unknown): string | undefined {
+  let text: string;
+  try {
+    text = canonicalRouteInput(value);
+  } catch (error) { console.warn("ts/apps/web/src/shell/readings.ts: fallback after failure", error);
+    return undefined;
+  }
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+
 function targetEffects(target: ExecutionTarget): readonly Effect[] {
   return target.kind === "document"
     ? [{ kind: "document", ref: target.ref }]
@@ -738,7 +838,7 @@ function targetEffects(target: ExecutionTarget): readonly Effect[] {
       ? [{ kind: "session", session: target.session }]
       : [];
 }
-function overlaps(a: Effect, b: Effect): boolean {
+export function overlaps(a: Effect, b: Effect): boolean {
   if (a.kind === "session" && b.kind === "document") return a.session === b.ref.session;
   if (b.kind === "session" && a.kind === "document") return b.session === a.ref.session;
   if (a.kind === "directory" && (b.kind === "file" || b.kind === "directory")) {

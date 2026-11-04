@@ -21,9 +21,15 @@ import {
 import { z } from "zod";
 import { peClient } from "#/host/pe-client";
 import { peReadings } from "#/readings";
-import { useRouteSearch, useRouteFixture, useRouteNavigate } from "#/route/activity";
-import { ductsGraph } from "#/ducts/graph";
-import { familiesGraph } from "#/families/graph";
+import {
+  useRouteActivity,
+  useRouteSearch,
+  useRouteFixture,
+  useRouteNavigate,
+  type RouteActivityScope,
+} from "#/route/activity";
+import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
+import { familyGraph as familiesGraph } from "#/family/graph";
 import { useGraphRoute } from "#/shell/mount";
 import { graphUrlPage } from "#/shell/mount-page";
 import { queryVerb, workVerb } from "#/shell/verbs";
@@ -44,15 +50,17 @@ const probeLayout = {
 };
 const graph: typeof ductsGraph = {
   ...ductsGraph,
+  subjectField: { ...ductsGraph.subjectField, roster: "testSubject", detail: "testSubject" },
   fields: Object.fromEntries(
     Object.entries(ductsGraph.fields).map(([id, value]) => [id, { ...value, picker: undefined }]),
   ) as typeof ductsGraph.fields,
   ...probeLayout,
+  refresh: undefined,
   needs: undefined,
   optionalTarget: undefined,
   observe: undefined,
   cells: undefined,
-  readings: {},
+  readings: { testSubject: { kind: "derive", source: "testSubject", retire: "never" } },
   workSubject: undefined,
   salvage: undefined,
   verbs: {
@@ -73,6 +81,8 @@ const graph: typeof ductsGraph = {
 };
 const otherGraph: typeof familiesGraph = {
   ...familiesGraph,
+  key: "families",
+  subjectField: { ...familiesGraph.subjectField, roster: "testSubject", detail: "testSubject" },
   fields: Object.fromEntries(
     Object.entries(familiesGraph.fields).map(([id, value]) => [
       id,
@@ -80,6 +90,7 @@ const otherGraph: typeof familiesGraph = {
     ]),
   ) as typeof familiesGraph.fields,
   ...probeLayout,
+  refresh: undefined,
   needs: undefined,
   optionalTarget: undefined,
   observe: undefined,
@@ -87,12 +98,12 @@ const otherGraph: typeof familiesGraph = {
   workSubject: undefined,
   salvage: undefined,
   cells: undefined,
-  readings: {},
+  readings: { testSubject: { kind: "derive", source: "testSubject", retire: "never" } },
   verbs: {},
 };
 const url = graphUrlPage(graph);
 const adapters = {
-  sources: {},
+  sources: { testSubject: { kind: "derive" as const, derive: () => [] } },
   bodies: {},
   binding: (_id: string, row: unknown) => ({ subject: null, args: row ?? {} }),
 };
@@ -658,4 +669,36 @@ test("only visited trees mount and even an extra unpersisted deep link cannot re
   await go("unpersisted");
   expect(document.querySelectorAll("[data-route-tab]")).toHaveLength(12);
   await waitFor(() => expect(first.disposed).toHaveBeenCalledTimes(1));
+});
+
+test("an untabbed route keeps custody across its own history push, before the bank re-renders", async () => {
+  let scope: RouteActivityScope | null = null;
+  function Capture() {
+    scope = useRouteActivity();
+    return null;
+  }
+  function Root() {
+    const location = useRouterState({ select: (state) => state.location });
+    return (
+      <RouteRetention
+        route={location.pathname === "/ducts" ? "ducts" : null}
+        active={null}
+        tabs={[]}
+        ready
+        renderRoute={(body) => body}
+      />
+    );
+  }
+  const root = createRootRoute({ component: Root });
+  const ducts = createRoute({ getParentRoute: () => root, path: "/ducts", component: Capture });
+  const router = createRouter({
+    routeTree: root.addChildren([ducts]),
+    history: createMemoryHistory({ initialEntries: ["/ducts?selected=1"] }),
+  });
+  await router.load();
+  render(<RouterProvider router={router} />);
+  await waitFor(() => expect(scope?.current()).toBe(true));
+  // The route's address port pushes; history updates synchronously, the bank re-renders later.
+  router.history.push("/ducts?selected=2");
+  expect(scope!.current()).toBe(true);
 });

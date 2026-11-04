@@ -1,5 +1,5 @@
 import type { Machine } from "@pe/agent-contracts";
-import { useReading } from "#/readings";
+import { useReading } from "#/shell/readings-hooks";
 import { NoticeCard } from "./notice";
 
 /** Only receipt controls: no panel navigation, route body, attention UI or device pairing. */

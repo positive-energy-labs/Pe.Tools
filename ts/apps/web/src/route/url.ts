@@ -6,9 +6,18 @@
  * and Forward step through what the Situation targeted; a gesture replaces the entry instead.
  * Nothing here hand-rolls `new URL().searchParams`.
  */
-import { routeAddress, type History, type RouteKey, type RoutePage } from "@pe/agent-contracts";
-import { useRouter, type SearchMiddleware } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import {
+  routeAddress,
+  THREAD_TABS_MAX,
+  threadTabSchema,
+  type History,
+  type RouteKey,
+  type RoutePage,
+} from "@pe/agent-contracts";
+import { fromStandardSchema } from "@pe/host-contracts/contracts";
+import { Cause, Exit, Schema } from "effect";
+import { useRouter, useRouterState, type SearchMiddleware } from "@tanstack/react-router";
+import { useEffect, useState, useRef } from "react";
 import { z } from "zod";
 import type { ViewOwner } from "./view-owner";
 import { causeRefusal } from "./refusal";
@@ -129,6 +138,7 @@ export function routeUrlPage<R extends RouteKey>(route: R): UrlPage<RoutePage<R>
 export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
   const router = useRouter({ warn: false });
   const activity = useRouteActivity();
+  const initialLocation = useRef(router?.history.location);
   useEffect(() => {
     if (!router || !url) return;
     const ownsUrl = () => !activity || activity.current();
@@ -146,11 +156,18 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
       (state as Record<string, unknown>)[marker] as
         | { token: string; generation: number }
         | undefined;
-    const restore = () => {
+    const restore = (remember = false) => {
       generation += 1;
       pending = null;
       const next = location();
-      if (ownsUrl() && next.pathname === pathname) owner.move(url.read(next.search), {}, "url");
+      if (ownsUrl() && next.pathname === pathname)
+        owner.move(
+          url.read(
+            restorePageSearch(remember ? url.write(owner.read().page) : undefined, next.search)!,
+          ),
+          {},
+          "url",
+        );
       previous = owner.read();
     };
     const unhistory = router.history.subscribe(({ location: next, action }) => {
@@ -161,7 +178,7 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
         move.generation === generation
       )
         return;
-      restore();
+      restore(action.type === "PUSH" || action.type === "REPLACE");
     });
     const schedule = () => {
       if (queued || writing || !pending || !active) return;
@@ -213,7 +230,11 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
       schedule();
     });
     // Catch navigation between initialization and subscription without rewriting a bare URL.
-    if (url.history(url.read(location().search), previous.page)) restore();
+    if (
+      router.history.location !== initialLocation.current &&
+      url.history(url.read(location().search), previous.page)
+    )
+      restore();
     return () => {
       active = false;
       generation += 1;
@@ -231,12 +252,85 @@ export function useInitialUrlPage<P>(url: UrlPage<P> | null): Partial<P> {
   return useState(() =>
     url
       ? url.read(
-          activity?.search ??
-            router?.state.location.search ??
+          restorePageSearch(
+            activity?.search ??
+              tabPageSearch(
+                router?.state.location.pathname ??
+                  (typeof location === "undefined" ? "" : location.pathname),
+              ),
+            !activity || activity.current() ? router?.state.location.search : undefined,
+          ) ??
             (typeof location === "undefined"
               ? {}
               : Object.fromEntries(new URLSearchParams(location.search))),
         )
       : {},
   )[0];
+}
+
+/** Tab memory as `workbench/tabs.ts` writes it: the window's Places, decoded (ADR 0029 rule 7). */
+const PlacesMemory = Schema.fromJsonString(
+  fromStandardSchema(threadTabSchema.array().max(THREAD_TABS_MAX), "Places"),
+);
+
+/** Defaults are applied by UrlPage.read after merging tab memory and explicit deep-link keys. */
+export function tabPageSearch(pathname: string): Record<string, unknown> | undefined {
+  try {
+    // React caller until phase 5: memory from another build that does not decode restores nothing.
+    const memory = Schema.decodeUnknownExit(PlacesMemory)(
+      sessionStorage.getItem("pe.places") ?? "[]",
+    );
+    if (Exit.isFailure(memory)) {
+      console.warn(
+        "ts/apps/web/src/route/url.ts: tab memory does not decode",
+        Cause.pretty(memory.cause),
+      );
+      return undefined;
+    }
+    const tabs = memory.value;
+    const focused = sessionStorage.getItem("pe.place.focus");
+    const matches = tabs.filter(
+      (tab) => new URL(tab.link, "http://tab.invalid").pathname === pathname,
+    );
+    const tab = matches.find((tab) => tab.id === focused) ?? matches.at(-1);
+    return tab
+      ? Object.fromEntries(new URL(tab.link, "http://tab.invalid").searchParams)
+      : undefined;
+  } catch (error) {
+    console.warn("ts/apps/web/src/route/url.ts: fallback after failure", error);
+    return undefined;
+  }
+}
+
+export function restorePageSearch(memory?: Record<string, unknown>, url?: Record<string, unknown>) {
+  return memory || url
+    ? {
+        ...memory,
+        ...Object.fromEntries(Object.entries(url ?? {}).filter(([, value]) => value !== undefined)),
+      }
+    : undefined;
+}
+
+/** Restore before device admission, so a bare fixture Place never falls into the host lane. */
+export function useRestoreTabPage() {
+  const router = useRouter();
+  const at = useRouterState({ select: (state) => state.location });
+  const explicit = new Set(new URLSearchParams(at.searchStr).keys());
+  const search =
+    restorePageSearch(
+      "__pePageMove" in at.state || "__peRouteTab" in at.state
+        ? undefined
+        : tabPageSearch(at.pathname),
+      Object.fromEntries(Object.entries(at.search).filter(([key]) => explicit.has(key))),
+    ) ?? {};
+  const restoring = Object.keys(search).some((key) => !(key in at.search));
+  useEffect(() => {
+    if (restoring)
+      void router.navigate({
+        to: at.pathname,
+        search,
+        replace: true,
+        ignoreBlocker: true,
+      } as never);
+  }, [restoring, at.href]);
 }

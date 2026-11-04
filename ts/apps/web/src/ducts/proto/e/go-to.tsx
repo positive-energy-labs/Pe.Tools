@@ -1,37 +1,37 @@
 /**
- * Go to a subject: the kit picker over every system and every element of the read snapshot.
- * Type a name, a family, a size, a system or an element id; hovering a row lights the element in
- * the picture, picking one travels there (the canvas's alias flight). `/` in the picture opens it.
- * It replaces the tree's go-to field (`navigate.ts`, deleted 2026-10-22 with no stated reason).
- * Listed: this system's elements, every system, and elsewhere only the parts people name by tag
- * (grilles, units); any other element answers its typed id (the list's create row). Listing all
+ * Go to a subject: the kit picker over every system and the named elements of the read snapshot.
+ * Type a name, a family, a size, a system or an element id; picking an element flies the picture
+ * there, picking a system adds it beside what is open (kaitpw 2026-11-03: it never replaces).
+ * `/` in the picture opens it. Listed: what is open here, every system, and elsewhere only the
+ * parts people name by tag (grilles, units); any other element answers its typed id. Listing all
  * eleven thousand elements of a large model cost a 200 ms open (Chadds, 2026-10-23).
  */
 import { GoToPopup } from "@pe/kit/lang/go-to";
-import { NO_SYSTEM, scopeOf, systemsOf } from "@pe/ducts-domain/system-scope";
+import { NO_SYSTEM, systemsOf } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 export type GoTarget = { system: string; id: number | null };
 type Item = GoTarget & { key: string; name: string; detail: string; group: string; meta: string };
+type Element = DuctSnapshot["nodes"][number] | DuctSnapshot["segments"][number];
 
-const HERE = "In open systems";
+const HERE = "Open here";
 const ELSEWHERE = "Elsewhere";
 const SYSTEMS = "Systems";
 
+/** Its own system, else the first of the network it sits in. */
+const systemOf = (snapshot: DuctSnapshot, e: Element) =>
+  e.systemName || snapshot.groups.find((g) => g.id === e.groupId)?.systemNames[0] || NO_SYSTEM;
+
 function itemsOf(
   snapshot: DuctSnapshot,
-  systems: readonly string[],
+  here: ReadonlySet<number>,
+  opens: (system: string) => boolean,
   nameOf: (id: number) => string,
 ): Item[] {
-  const here =
-    scopeOf(snapshot, systems)?.members ??
-    new Set([...snapshot.nodes, ...snapshot.segments].map((e) => e.id));
-  const systemsOfGroup = new Map(snapshot.groups.map((g) => [g.id, g.systemNames]));
-  const tagged = (e: DuctSnapshot["nodes"][number] | DuctSnapshot["segments"][number]) =>
+  const tagged = (e: Element) =>
     here.has(e.id) || ("kind" in e && (e.kind === "terminal" || e.kind === "equipment"));
   const elements = [...snapshot.nodes, ...snapshot.segments].filter(tagged).map((e): Item => {
-    // Its own system, else the first of the network it sits in (the old go-to's rule).
-    const into = e.systemName || (e.groupId && systemsOfGroup.get(e.groupId)?.[0]) || NO_SYSTEM;
+    const into = systemOf(snapshot, e);
     const kind = ("size" in e ? [e.type, e.size] : [e.family, e.type]).filter(Boolean).join(" · ");
     return {
       key: `e${e.id}`,
@@ -43,58 +43,53 @@ function itemsOf(
       meta: here.has(e.id) ? kind : `${kind} · ${into}`,
     };
   });
-  const entries = systemsOf(snapshot).map(
-    (s): Item => ({
-      key: `s${s.name}`,
-      system: s.name,
-      id: null,
-      name: s.name,
-      detail: s.classification ?? "",
-      group: SYSTEMS,
-      meta: s.classification ?? "",
-    }),
-  );
-  return [...elements, ...entries];
-}
-
-/** The element a typed id names, anywhere in the snapshot, as a go-to target. */
-function byId(snapshot: DuctSnapshot, text: string): GoTarget | null {
-  const id = Number(text.trim());
-  const e = Number.isSafeInteger(id)
-    ? (snapshot.nodes.find((n) => n.id === id) ?? snapshot.segments.find((s) => s.id === id))
-    : undefined;
-  if (!e) return null;
-  const system =
-    e.systemName || snapshot.groups.find((g) => g.id === e.groupId)?.systemNames[0] || NO_SYSTEM;
-  return { system, id: e.id };
+  const systems = systemsOf(snapshot)
+    .filter((s) => opens(s.name))
+    .map(
+      (s): Item => ({
+        key: `s${s.name}`,
+        system: s.name,
+        id: null,
+        name: s.name,
+        detail: s.classification ?? "",
+        group: SYSTEMS,
+        meta: s.classification ?? "",
+      }),
+    );
+  return [...elements, ...systems];
 }
 
 export function GoToSubject({
   snapshot,
-  systems,
+  here,
+  opens,
   nameOf,
   onGo,
-  onHover,
 }: {
   snapshot: DuctSnapshot;
-  systems: readonly string[];
+  /** The elements open here: listed first. */
+  here: ReadonlySet<number>;
+  /** Whether picking this system opens anything; a system that opens nothing is not listed. */
+  opens: (system: string) => boolean;
   nameOf: (id: number) => string;
   onGo: (target: GoTarget) => void;
-  onHover: (id: number | null) => void;
 }) {
   return (
     <GoToPopup<Item>
-      items={() => itemsOf(snapshot, systems, nameOf)}
+      items={() => itemsOf(snapshot, here, opens, nameOf)}
       leadingGroups={[HERE, SYSTEMS, ELSEWHERE]}
       onGo={onGo}
-      hover={(item) => onHover(item?.id ?? null)}
       resolveId={(text) => {
-        const target = byId(snapshot, text);
-        return target
+        const id = Number(text.trim());
+        const e = Number.isSafeInteger(id)
+          ? (snapshot.nodes.find((n) => n.id === id) ?? snapshot.segments.find((s) => s.id === id))
+          : undefined;
+        return e
           ? {
-              ...target,
-              key: `e${target.id}`,
-              name: nameOf(target.id!),
+              key: `e${e.id}`,
+              system: systemOf(snapshot, e),
+              id: e.id,
+              name: nameOf(e.id),
               detail: "",
               group: ELSEWHERE,
               meta: "",

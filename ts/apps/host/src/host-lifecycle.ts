@@ -6,7 +6,7 @@ import { createServer } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { Context, Deferred, Effect, Layer } from "effect";
-import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/unstable/http";
+import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/http";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import {
   discoverService,
@@ -21,13 +21,14 @@ import {
   type ServiceHostDescriptor,
   type ServiceHostHandle,
 } from "@pe/host-contracts/pe-service-host";
-import { hostOwnership, productRoot, type HostOwnership } from "./host-ownership.ts";
-import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
+import { hostOwnership, type HostOwnership } from "./host-ownership.ts";
+import { runtimeOwnerRejection, trayOwnerArguments } from "@pe/host-contracts/service-identity";
 import { currentCaller, writeTerminalContext } from "./control.ts";
 
 // The dev script authorizes same-checkout dev takeover only; the SDK owns cooperative retirement.
 const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
-const installedPort = 5180;
+/** The installed host's preferred port (product.payloads.json `preferredPort`); every client reads the bound port from the service file. */
+export const installedPort = 5180;
 
 type PortOccupant = {
   readonly pid: number;
@@ -151,14 +152,14 @@ function describeOccupant(occupant: PortOccupant): string {
   return `pid ${occupant.pid}, executable ${occupant.executable}${occupant.serviceName ? `, service '${occupant.serviceName}'` : ""}`;
 }
 
-/** Installed reuse/refusal happens before bind. Dev retains SDK port choice and takeover. */
+/** Installed reuse/refusal happens before bind. Dev retains SDK port choice and takeover, never on the installed port. */
 export async function prepareHostBinding(
   open: boolean,
   version: string,
   ownership: HostOwnership = hostOwnership,
   dependencies = bindingDependencies,
 ): Promise<number | ServiceFile> {
-  const appBase = productRoot();
+  const appBase = ownership.rootPath;
   const live =
     ownership.lane === "installed" || open
       ? await dependencies.discover(appBase, ownership.serviceName, { verifyOwner: true })
@@ -172,11 +173,10 @@ export async function prepareHostBinding(
       if (rejection) throw Error(`Dev host reuse refused: ${rejection}`);
     }
     if (open && live?.version === version) return live;
-    return dependencies.choosePort(
-      appBase,
-      ownership.serviceName,
-      Number(new URL(hostProcessIdentity.defaultHostBaseUrl).port),
-    );
+    // A dev host never takes the installed port, even a remembered one: a test Revit's orphaned dev
+    // host held 5180 and the user's installed host refused to start (2026-11-03). 0 = any free port.
+    const port = await dependencies.choosePort(appBase, ownership.serviceName, 0);
+    return port === installedPort ? 0 : port;
   }
   if (live) {
     const owners = await dependencies.occupants(appBase, live.port);
@@ -226,9 +226,13 @@ export async function prepareHostBinding(
   } catch (cause) {
     detail = `owner census unavailable: ${String(cause)}`;
   }
-  throw new Error(
-    `Installed host cannot bind 127.0.0.1:${installedPort}: occupied or inaccessible; ${detail}. No takeover or alternate port.`,
+  // Departs from v0.7.30 (which refused and left the user with no host): a foreign holder of the
+  // preferred port never blocks the installed host. Pe.App, tray, Pea, MCP and the SDK supervisor
+  // read the bound port from the service file; the PWA's origin (and its site data) follows the port.
+  console.warn(
+    `pe-host: 127.0.0.1:${installedPort} is held (${detail}); binding a free port instead. No takeover.`,
   );
+  return 0;
 }
 
 /**
@@ -258,7 +262,7 @@ export class HostLifecycle extends Context.Service<
  */
 export function resolveHostVersion(): string {
   if (hostOwnership.lane !== "installed") return "dev";
-  const manifestPath = join(productRoot(), "product.payloads.json");
+  const manifestPath = join(hostOwnership.rootPath, "product.payloads.json");
   let version: unknown;
   try {
     version = (JSON.parse(readFileSync(manifestPath, "utf8")) as { version?: unknown }).version;
@@ -314,8 +318,8 @@ export const ServiceFileLive = Layer.effectDiscard(
     const server = yield* HttpServer.HttpServer;
     const { handle: handleDeferred, startTray } = yield* HostLifecycle;
     const address = server.address;
-    const port = address._tag === "TcpAddress" ? address.port : 0;
-    const appBase = productRoot();
+    const port = address._tag === "UnixPathAddress" ? 0 : address.port;
+    const appBase = hostOwnership.rootPath;
     // Both variables describe a host that is RUNNING — a spawned child reads them to call back
     // into this process. They become lies the moment the claim releases, so they are scoped to it
     // and restored on the way out. (Unrestored, an in-process host inside a test run leaves its
@@ -445,10 +449,14 @@ export async function openWindow(port: number): Promise<void> {
           "Pe.Host.Tray.exe",
         );
   if (!existsSync(executable)) throw Error("Native PWA launcher is not built for this runtime.");
-  await promisify(execFile)(executable, ["--launch-window", destination.href], {
-    windowsHide: true,
-    timeout: 10_000,
-  });
+  await promisify(execFile)(
+    executable,
+    [...trayOwnerArguments(hostOwnership), "--launch-window", destination.href],
+    {
+      windowsHide: true,
+      timeout: 10_000,
+    },
+  );
 }
 
 /** Same installed-PWA/install flow as the tray and --open, authorized by the claim token. */

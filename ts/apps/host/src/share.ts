@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Effect } from "effect";
-import { HttpRouter, HttpEffect } from "effect/unstable/http";
+import { HttpRouter, HttpEffect } from "effect/http";
 import type { MachineShare } from "@pe/agent-contracts";
 import type { IdentityResult } from "./request-identity.ts";
 

@@ -1,5 +1,5 @@
 /** Lifted from `losses.ts` (ruleRow, ductRows, terminalRow, the implausible guard) and `equivalent-length.ts`; network-free: prices one leg from explicit facts and flows. */
-import { GridError, lookupGrid, type Grids } from "../loss-grid.ts";
+import { GridError, lookupBranchLoss, lookupGrid, type Grids } from "../loss-grid.ts";
 import { friction, sectionOf } from "../loss-physics.ts";
 import { LOSS_RULES, ruleByKey, type FittingFacts, type Leg } from "../loss-rules.ts";
 import { ruleFlows, type LegFlows, type Node, type Segment } from "./fitting-facts.ts";
@@ -165,7 +165,9 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
   let found;
   const rebased: string[] = [];
   try {
-    found = lookupGrid(grid, lookup.x, lookup.y, lookup.z);
+    found = lookup.branchLossInterpolation
+      ? lookupBranchLoss(grid, lookup.x, lookup.y!)
+      : lookupGrid(grid, lookup.x, lookup.y, lookup.z);
     const factor =
       typeof lookup.factor === "function" ? lookup.factor(found.at) : (lookup.factor ?? 1);
     if (typeof lookup.factor === "function" && factor !== 1)

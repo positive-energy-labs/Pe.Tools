@@ -144,7 +144,7 @@ public sealed class SpaceSceneScopeProofTests {
             Assert.That(scoped.Triangles, Is.EqualTo(24));
 
             using var focusBytes = new MemoryStream();
-            var focusScene = Scene.Write(doc, new SceneRequest([focus.Id.Value(), long.MaxValue], FocusOnly: true), focusBytes);
+            var focusScene = Scene.Write(doc, new SceneRequest([focus.Id.Value(), long.MaxValue], FocusOnly: true, ContextRepresentation: SceneContextRepresentation.LinkBoxes), focusBytes);
             Assert.That(focusScene.Phase, Is.EqualTo("focus"));
             Assert.That(focusScene.Elements.Single().Handle.ElementId, Is.EqualTo(focus.Id.Value()));
             Assert.That(focusScene.Triangles, Is.EqualTo(12));
