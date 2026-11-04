@@ -56,14 +56,15 @@ Assert-Outcome 'replacement host fails closed before query' $true
 if ($script:requests -ne $before) { throw 'Replacement host was queried' }
 
 function Assert-Service {
-    param([string]$Name, [string]$ProductHomeOverride, [string]$Expected)
-    $actual = Join-Path (Resolve-ProductRuntimeRoot -Lane installed -Root 'C:\Users\fixture\AppData\Local\Positive Energy\Pe.Tools' -ProductHomeOverride $ProductHomeOverride) 'state/service'
+    param([string]$Name, [string]$ProductHomeOverride, [string]$Expected, [string]$Lane = 'installed', [string]$Root = 'C:\Users\fixture\AppData\Local\Positive Energy\Pe.Tools')
+    $actual = Join-Path (Resolve-ProductRuntimeRoot -Lane $Lane -Root $Root -ProductHomeOverride $ProductHomeOverride) 'state/service'
     if ($actual -ne $Expected) { throw ('Unexpected service directory for ' + $Name + ': ' + $actual) }
     Write-Output ('PASS ' + $Name)
 }
 Assert-Service 'unset override reads the owner machine-local root' $null 'C:\Users\fixture\AppData\Local\Positive Energy\Pe.Tools\state\service'
 Assert-Service 'blank override reads the owner machine-local root' '  ' 'C:\Users\fixture\AppData\Local\Positive Energy\Pe.Tools\state\service'
-Assert-Service 'override roots service files under .local-state' 'C:\Temp\pe-home' 'C:\Temp\pe-home\.local-state\state\service'
+# An override is a dev-lane seam: an installed runtime refuses it (v0.7.30 behaviour).
+Assert-Service 'override roots dev service files under .local-state' 'C:\Temp\pe-home' 'C:\Temp\pe-home\.local-state\state\service' dev 'C:\src\Pe.Tools'
 
 $previousHome = $env:PE_TOOLS_PRODUCT_HOME
 try {

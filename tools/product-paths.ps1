@@ -8,6 +8,10 @@ function Resolve-ProductRuntimeRoot {
         [string]$ProductHomeOverride = $env:PE_TOOLS_PRODUCT_HOME
     )
     if (-not [IO.Path]::IsPathRooted($Root)) { throw "A $Lane runtime needs an absolute owner root." }
+    # v0.7.30 refused an installed runtime under a home override; kept unchanged.
+    if ($Lane -eq 'installed' -and -not [string]::IsNullOrWhiteSpace($ProductHomeOverride)) {
+        throw 'An installed runtime does not run under PE_TOOLS_PRODUCT_HOME.'
+    }
     if (-not [string]::IsNullOrWhiteSpace($ProductHomeOverride)) {
         return [IO.Path]::Combine([IO.Path]::GetFullPath($ProductHomeOverride.Trim()), '.local-state')
     }

@@ -31,7 +31,7 @@ namespace Pe.Host.Tray.Tests {
                 var owner = row.GetProperty("owner");
                 var argv = row.GetProperty("argv").EnumerateArray().Select(value => value.GetString()!).ToArray();
                 var launch = row.GetProperty("launch").EnumerateArray().Select(value => value.GetString()!).ToArray();
-                var (lane, root, rest) = Program.ParseOwner(argv);
+                var (lane, root, rest) = ProductRuntimeLayout.ParseOwnerArguments(argv);
                 var dev = owner.GetProperty("lane").GetString() == "dev";
                 Assert.That(lane, Is.EqualTo(dev ? ProductLane.Dev : ProductLane.Installed), name);
                 Assert.That(root, Is.EqualTo(owner.GetProperty(dev ? "sourceRoot" : "installedRoot").GetString()), name);
@@ -47,6 +47,6 @@ namespace Pe.Host.Tray.Tests {
         [TestCase(@"--lane beta --root C:\src\Pe.Tools --launch-window x")]
         [TestCase(@"--lane dev --root src\Pe.Tools --launch-window x")]
         public void TrayRefusesALaunchThatDoesNotNameItsOwner(string argv) =>
-            Assert.That(() => Program.ParseOwner(argv.Split(' ', StringSplitOptions.RemoveEmptyEntries)), Throws.ArgumentException);
+            Assert.That(() => ProductRuntimeLayout.ParseOwnerArguments(argv.Split(' ', StringSplitOptions.RemoveEmptyEntries)), Throws.ArgumentException);
     }
 }

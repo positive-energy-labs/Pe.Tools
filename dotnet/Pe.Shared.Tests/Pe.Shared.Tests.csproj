@@ -40,6 +40,8 @@
         <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj" />
         <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
         <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj" />
+        <!-- RhvacToolOwnershipTests runs the real tool process: it must be told its owner and resolve scratch under it. -->
+        <ProjectReference Include="..\Pe.Rhvac.Tool\Pe.Rhvac.Tool.csproj" />
         <ProjectReference Include="..\Pe.Shared.RevitAutomation\Pe.Shared.RevitAutomation.csproj" />
         <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj" />
         <ProjectReference Include="..\Pe.Shared.Scripting\Pe.Shared.Scripting.csproj" />

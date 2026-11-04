@@ -10,6 +10,9 @@ internal static class ProductPathing {
     public static string StateRoot(ProductLane lane, string ownerRoot, string? productHome) {
         if (!Path.IsPathRooted(ownerRoot))
             throw new ArgumentException($"A {lane} runtime needs an absolute owner root.", nameof(ownerRoot));
+        // v0.7.30 refused an installed payload under a home override (its root check failed); kept unchanged.
+        if (lane == ProductLane.Installed && !string.IsNullOrWhiteSpace(productHome))
+            throw new ArgumentException($"An installed runtime does not run under {ProductPathNames.ProductHomeVariable}; unset it, or use a dev session.", nameof(productHome));
         if (!string.IsNullOrWhiteSpace(productHome))
             return Path.Combine(Path.GetFullPath(productHome!.Trim()), ProductPathNames.LocalStateDirectoryName);
         // Installed is the SDK's install root verbatim: byte-identical to v0.7.30's LocalApplicationData formula.

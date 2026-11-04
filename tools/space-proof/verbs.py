@@ -29,7 +29,6 @@ import run as R  # noqa: E402  (the scene harness: session, slot, backend host, 
 MIB = 2**20
 VERBS = ["sweep", "probe", "slice", "census"]
 PINS = HERE / "verbs-requests.json"
-PACK_DIR = Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools" / "cache" / "space-linked-geometry"
 
 
 # ---------------------------------------------------------------- requests (pure)
@@ -123,7 +122,8 @@ def dominated(verb, detail):
 # ---------------------------------------------------------------- driving
 
 def pack_state():
-    files = [f for f in PACK_DIR.rglob("*") if f.is_file()] if PACK_DIR.exists() else []
+    pack_dir = R.state_root() / "cache" / "space-linked-geometry"
+    files = [f for f in pack_dir.rglob("*") if f.is_file()] if pack_dir.exists() else []
     return {"files": len(files), "bytes": sum(f.stat().st_size for f in files)}
 
 

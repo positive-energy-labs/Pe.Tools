@@ -37,7 +37,7 @@ def response(d, proc, read):
 
 
 def scene_census(artifact_id):
-    path = R.CACHE / f"{artifact_id}.bin"
+    path = R.cache() / f"{artifact_id}.bin"
     if not path.exists():
         return None
     meta = R.decode_psc1(path.read_bytes())

@@ -28,9 +28,21 @@ DETACHED = ROOT / ".artifacts" / "revit" / "detached"
 LOCK = ROOT / ".artifacts" / "locks" / "revit-slot-1"
 ORDER = LOCK.parent / "ORDER"
 # Custody and isolation come from the environment so an agent with its own session id or acceptance-isolated product home
-# (PE_TOOLS_PRODUCT_HOME, inherited by every child) runs this unchanged: PE_PROOF_SESSION, PE_PROOF_CACHE (the space-scenes
+# (PE_TOOLS_PRODUCT_HOME, inherited by every child) runs this unchanged: PE_PROOF_STATE_ROOT (required), PE_PROOF_SESSION, PE_PROOF_CACHE (the space-scenes
 # dir the host publishes into), PE_PROOF_KEEP_HOST=1 (the caller owns and stops its own host).
-CACHE = Path(os.environ.get("PE_PROOF_CACHE") or Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools" / "cache" / "space-scenes")
+# The dev host's state root is told, never defaulted to the installed root (ISOFIX-R): <checkout>\.artifacts\pe-tools,
+# or <PE_TOOLS_PRODUCT_HOME>\.local-state under an isolated home. Read at use so the offline selftest needs none.
+def state_root():
+    root = os.environ.get("PE_PROOF_STATE_ROOT")
+    if not root:
+        sys.exit(r"Set PE_PROOF_STATE_ROOT to the dev host's state root (<checkout>\.artifacts\pe-tools or <home>\.local-state).")
+    return Path(root)
+
+
+def cache():
+    return Path(os.environ.get("PE_PROOF_CACHE") or state_root() / "cache" / "space-scenes")
+
+
 SID = os.environ.get("PE_PROOF_SESSION", "probe-h")
 MIN_FREE_GIB = float(os.environ.get("PE_PROOF_MIN_FREE_GIB", 10))
 GUARD_FLOOR_GIB = 3
@@ -258,7 +270,7 @@ _BACKEND = None
 
 def service_pid():
     """Live host pid for this checkout from the service files, else None."""
-    svc = Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools" / "state" / "service"
+    svc = state_root() / "state" / "service"
     for f in svc.glob("host-source-*.json"):
         try:
             j = json.loads(f.read_text(encoding="utf8"))
@@ -290,7 +302,7 @@ def stop_dev_host():
     if os.environ.get("PE_PROOF_KEEP_HOST") == "1":
         print("  dev host kept (PE_PROOF_KEEP_HOST=1); the caller stops it", flush=True)
         return []
-    svc = Path(os.environ["LOCALAPPDATA"]) / "Positive Energy" / "Pe.Tools" / "state" / "service"
+    svc = state_root() / "state" / "service"
     stopped = []
     for f in svc.glob("host-source-*.json"):
         try:
@@ -340,7 +352,7 @@ def find_artifact(response):
 
 
 def load_artifact(art):
-    path = CACHE / f'{art["id"]}.bin'
+    path = cache() / f'{art["id"]}.bin'
     blob = path.read_bytes()
     if hashlib.sha256(blob).hexdigest() != art["id"]:
         raise ValueError("artifact bytes do not hash to their id")
@@ -482,7 +494,7 @@ def run_model(name, args, out: Path, fixture, results):
                 mf = ev / f"artifact-{system.replace(' ', '')}.metadata.json"
                 mf.write_text(json.dumps(meta), encoding="utf8")
                 cs2 = ev / f"post-{Path(ps_path).stem}-{system.replace(' ', '')}.cs"
-                text = Path(ps_path).read_text(encoding="utf8").replace("__METADATA__", str(mf)).replace("__CACHE__", str(CACHE))
+                text = Path(ps_path).read_text(encoding="utf8").replace("__METADATA__", str(mf)).replace("__CACHE__", str(cache()))
                 for token in args.post_token:
                     key, _, value = token.partition("=")
                     text = text.replace(f"__{key}__", value)

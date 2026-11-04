@@ -3,13 +3,19 @@ $ErrorActionPreference = 'Stop'
 # The PowerShell resolver asserts the same table as C# ProductPathing.StateRoot and TS stateRoot.
 $table = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../ts/packages/host-contracts/tests/runtime-ownership.fixture.json') -Raw | ConvertFrom-Json
 foreach ($row in $table.stateRoots) {
+    $refused = $null
+    $actual = $null
     try {
         $actual = Resolve-ProductRuntimeRoot -Lane $row.lane -Root $row.ownerRoot -ProductHomeOverride $row.productHome
-        if ($row.error) { throw "$($row.name) expected refusal '$($row.error)', received '$actual'" }
-        if ($actual -ne $row.stateRoot) { throw "$($row.name) expected '$($row.stateRoot)', received '$actual'" }
     } catch {
-        if (-not $row.error -or $_.Exception.Message -notlike "*$($row.error)*") { throw }
+        $refused = $_.Exception.Message
     }
+    # Assert outside the try, so a resolver that stops refusing cannot be caught by its own failure message.
+    if ($row.error) {
+        if ($null -eq $refused) { throw "$($row.name) expected refusal '$($row.error)', received '$actual'" }
+        if ($refused -notlike "*$($row.error)*") { throw "$($row.name) refused with '$refused'" }
+    } elseif ($null -ne $refused) { throw "$($row.name) refused unexpectedly: $refused" }
+    elseif ($actual -ne $row.stateRoot) { throw "$($row.name) expected '$($row.stateRoot)', received '$actual'" }
     Write-Output "PASS $($row.name)"
 }
 # A caller that names no lane is refused rather than defaulted to installed.

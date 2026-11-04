@@ -126,7 +126,7 @@ namespace Pe.Revit.Tests {
             Assert.That(() => ProductRuntimeLayout.For(ProductLane.Dev, @"C:\src\Pe.Tools", Path.Combine(installed, "nested")),
                 Throws.InvalidOperationException.With.Message.Contains("installed product state"));
             Assert.That(() => ProductRuntimeLayout.For(ProductLane.Installed, installed, @"D:\pe-home"),
-                Throws.InvalidOperationException.With.Message.Contains(ProductPathNames.ProductHomeVariable));
+                Throws.ArgumentException.With.Message.Contains(ProductPathNames.ProductHomeVariable));
         }
 
         [Test]

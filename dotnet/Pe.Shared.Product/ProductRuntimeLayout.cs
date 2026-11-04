@@ -14,7 +14,10 @@ public sealed record ProductRuntimeLayout(ProductLane Lane, string OwnerRoot, st
 
     /// <summary>The process's one runtime record. Unset means the shell skipped startup; nothing guesses.</summary>
     public static ProductRuntimeLayout Current => _current ?? throw new InvalidOperationException(
-        "The shell did not configure the product runtime. Pe.App, Pe.Host.Tray and Pe.Dev.Cli call ProductRuntimeLayout.Configure once at startup.");
+        "The shell did not configure the product runtime. Pe.App, Pe.Host.Tray, Pe.Dev.Cli and Pe.Rhvac.Tool call ProductRuntimeLayout.Configure once at startup.");
+
+    /// <summary>For a host that may or may not have run a shell first (a Revit test assembly); shells just Configure.</summary>
+    public static bool IsConfigured => _current is not null;
 
     /// <summary>Set once by the shell from the facts it was told; a second call is a startup bug.</summary>
     public static ProductRuntimeLayout Configure(ProductLane lane, string ownerRoot) {
@@ -26,9 +29,6 @@ public sealed record ProductRuntimeLayout(ProductLane Lane, string OwnerRoot, st
 
     /// <summary>Pure: <paramref name="ownerRoot" /> is the dev checkout or the SDK install root.</summary>
     public static ProductRuntimeLayout For(ProductLane lane, string ownerRoot, string? productHome) {
-        // v0.7.30 refused an installed payload under a home override (its root check failed); kept unchanged.
-        if (lane == ProductLane.Installed && !string.IsNullOrWhiteSpace(productHome))
-            throw new InvalidOperationException($"An installed runtime does not run under {ProductPathNames.ProductHomeVariable}; unset it, or use a dev session.");
         var root = ProductPathing.StateRoot(lane, ownerRoot, productHome);
         // Only an override can aim dev state at the installed namespace; refuse it where the override is read.
         if (lane == ProductLane.Dev && (Path.GetFullPath(root) + Path.DirectorySeparatorChar).StartsWith(
@@ -36,6 +36,26 @@ public sealed record ProductRuntimeLayout(ProductLane Lane, string OwnerRoot, st
             throw new InvalidOperationException($"Dev runtime cannot use installed product state '{root}'.");
         return new ProductRuntimeLayout(lane, ownerRoot, root);
     }
+
+    /// <summary>
+    ///     The one owner argv grammar for child processes: a leading <c>--lane dev|installed --root &lt;absolute
+    ///     checkout or install root&gt;</c>, then the launch arguments. Pure; the shell then calls Configure.
+    /// </summary>
+    public static (ProductLane Lane, string Root, string[] Launch) ParseOwnerArguments(string[] args) {
+        if (args.Length < 4 || args[0] != "--lane" || args[2] != "--root" || !IsFullyQualified(args[3]))
+            throw new ArgumentException("Expected --lane <dev|installed> --root <absolute owner root> before the launch arguments.");
+        var lane = args[1] switch {
+            "dev" => ProductLane.Dev,
+            "installed" => ProductLane.Installed,
+            _ => throw new ArgumentException($"Unknown lane '{args[1]}'.")
+        };
+        return (lane, args[3], args.Skip(4).ToArray());
+    }
+
+    // net48 has no Path.IsPathFullyQualified: a drive-qualified or UNC path.
+    private static bool IsFullyQualified(string path) =>
+        path.Length >= 3 && char.IsLetter(path[0]) && path[1] == ':' && (path[2] == '\\' || path[2] == '/')
+        || path.StartsWith(@"\\", StringComparison.Ordinal);
 
     /// <summary>The wire spelling every receipt, status and SDK call uses.</summary>
     public string LaneName => this.Lane == ProductLane.Dev ? "dev" : "installed";

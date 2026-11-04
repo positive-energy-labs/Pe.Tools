@@ -23,11 +23,11 @@
       "stateRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools"
     },
     {
-      "name": "installed under a home override moves state to .local-state",
+      "name": "installed refuses a home override (v0.7.30 behaviour)",
       "lane": "installed",
       "ownerRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools",
       "productHome": "D:\\pe-home",
-      "stateRoot": "D:\\pe-home\\.local-state"
+      "error": "does not run under PE_TOOLS_PRODUCT_HOME"
     },
     {
       "name": "dev uses its checkout artifacts",

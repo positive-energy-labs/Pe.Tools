@@ -7,7 +7,8 @@ internal static class Program {
     [STAThread]
     private static int Main(string[] args) {
         try {
-            var (lane, root, rest) = ParseOwner(args);
+            // Every launcher (installed host, dev host, dev-tray supervisor and script) tells the tray its owner.
+            var (lane, root, rest) = ProductRuntimeLayout.ParseOwnerArguments(args);
             ProductRuntimeLayout.Configure(lane, root);
             args = rest;
             if (args.Length == 2 && args[0] == "--launch-window")
@@ -35,21 +36,5 @@ internal static class Program {
                                        or OperationCanceledException or System.Security.SecurityException) {
             return 1;
         }
-    }
-
-    /// <summary>
-    ///     Every launcher (installed host, dev host, dev-tray supervisor and script) tells the tray its
-    ///     owner as a leading <c>--lane dev|installed --root &lt;checkout or install root&gt;</c>; the tray
-    ///     never infers it from where its own bytes sit.
-    /// </summary>
-    internal static (ProductLane Lane, string Root, string[] Launch) ParseOwner(string[] args) {
-        if (args.Length < 4 || args[0] != "--lane" || args[2] != "--root" || !Path.IsPathFullyQualified(args[3]))
-            throw new ArgumentException("Expected --lane <dev|installed> --root <absolute owner root> before the launch arguments.");
-        var lane = args[1] switch {
-            "dev" => ProductLane.Dev,
-            "installed" => ProductLane.Installed,
-            _ => throw new ArgumentException($"Unknown tray lane '{args[1]}'.")
-        };
-        return (lane, args[3], args[4..]);
     }
 }

@@ -36,6 +36,9 @@ export type RuntimeOwner = {
  */
 export function stateRoot(lane: HostLane, ownerRoot: string, productHome?: string): string {
   if (!isAbsolute(ownerRoot)) throw Error(`A ${lane} runtime needs an absolute owner root.`);
+  // v0.7.30 refused an installed runtime under a home override; kept unchanged.
+  if (lane === "installed" && productHome?.trim())
+    throw Error(`An installed runtime does not run under ${productPathNames.productHomeVariable}.`);
   if (productHome?.trim())
     return join(resolve(productHome.trim()), productPathNames.localStateDirectoryName);
   return lane === "dev" ? join(resolve(ownerRoot), ".artifacts", "pe-tools") : ownerRoot;
@@ -80,7 +83,6 @@ export const hostContextTokenPath = (root: string, serviceName: string): string 
 /**
  * An installed executable's root is the install its SDK manifest names: strip the manifest's own
  * relative entry path from the executable and require `product.payloads.json` for this product there.
- * v0.7.30 refused an installed runtime under a product home override; that stays.
  */
 export function installedRuntimeRoot(
   app: "host" | "pea",
@@ -99,8 +101,6 @@ export function installedRuntimeRoot(
   const { product, vendor } = JSON.parse(readFileSync(manifest, "utf8")) as Record<string, unknown>;
   if (product !== productIdentity.productName || vendor !== productIdentity.vendorName)
     throw Error(`Installed ${app} manifest '${manifest}' names another product.`);
-  if (process.env[productPathNames.productHomeVariable]?.trim())
-    throw Error(`Installed ${app} does not run under ${productPathNames.productHomeVariable}.`);
   return insideTestRoot(root);
 }
 

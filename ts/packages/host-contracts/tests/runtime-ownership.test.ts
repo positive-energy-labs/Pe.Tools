@@ -84,10 +84,9 @@ test("an installed executable without its SDK manifest, or outside the bundle, r
 });
 
 test("an installed runtime still refuses a product home override (v0.7.30 behaviour)", () => {
-  writeManifest(installed);
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", join(root, "home"));
   expect(() =>
-    installedRuntimeRoot("host", join(installed, productInstallLayout["VersionedApp:host"]), true),
+    productRoot({ lane: "installed", sourceRoot: null, installedRoot: installed }),
   ).toThrow("PE_TOOLS_PRODUCT_HOME");
 });
 
