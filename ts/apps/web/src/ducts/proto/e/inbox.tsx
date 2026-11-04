@@ -2,7 +2,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { cite, citation, citationOwner, elementKey, leaveCitation } from "@pe/kit/lang/attention";
 import { useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { Ban, Check, Eye, EyeOff, Fan, Link, Pencil, X, type LucideIcon } from "lucide-react";
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/agent-contracts";
 import type { LossesWork } from "../../work";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button, ButtonIcon } from "@pe/kit/lang/button";
@@ -43,7 +43,7 @@ import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { RuleAssignment } from "./rule-assignment";
 
 type InboxWork = {
-  doc: DuctsRouteDocument | null;
+  doc: DuctsDesign | null;
   revision: number | null;
   write: LossesWork["write"];
   /** The model's store: its rulings are the base a verdict or role press stages against. */

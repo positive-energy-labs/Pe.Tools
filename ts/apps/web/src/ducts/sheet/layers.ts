@@ -8,7 +8,7 @@
  * The worst complete path draws heavy. Every layer carries `targets` and `findings`, so hover,
  * pick and pins work through the picture's one plumbing.
  */
-import type { DuctsRouteDocument, DuctsSheetOverview } from "@pe/agent-contracts";
+import type { DuctsDesign, DuctsSheetOverview } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { damageLayers } from "#/scene/damage";
 import { inkOf } from "#/scene/ink";
@@ -45,7 +45,7 @@ const CROSS = 0.25;
 
 export interface SheetLayerInput {
   snapshot: DuctSnapshot;
-  work: DuctsRouteDocument | null;
+  work: DuctsDesign | null;
   overview: DuctsSheetOverview;
   inputs: Detail<"inputs"> | null;
   blockers: readonly SheetBlocker[];
@@ -101,7 +101,7 @@ export function sheetIssues(
 /** The face shapes kept to the blockers' elements; a heal box is a ghost until its pair is accepted. */
 export function blockerShapes(
   snapshot: DuctSnapshot,
-  work: DuctsRouteDocument | null,
+  work: DuctsDesign | null,
   blockers: readonly SheetBlocker[],
   inputs: Detail<"inputs"> | null,
   focus: ReadonlySet<number>,

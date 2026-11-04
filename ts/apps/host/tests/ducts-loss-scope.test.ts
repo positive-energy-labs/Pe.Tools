@@ -1,3 +1,5 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vite-plus/test";
 import { lossSnapshot } from "../src/ducts-actions.ts";
@@ -5,7 +7,7 @@ import { mergeSnapshots } from "../src/ducts-walk.ts";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { writeSeal } from "../src/work-write-boundary.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { ductsRouteState } from "@pe/agent-contracts";
+import { ductsDesign, fansDocumentSchema } from "@pe/agent-contracts";
 import { price, applyRequest } from "@pe/ducts-domain/pricing";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 
@@ -21,9 +23,12 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
       ),
     ),
   );
-  const work = ductsRouteState.schema.parse({
-    componentDrops: { "14088043": { edit: { value: { inWg: 0.026 } } } },
-  });
+  const work = ductsDesign(
+    null,
+    fansDocumentSchema.parse({
+      componentDrops: { "14088043": { edit: { value: { inWg: 0.026 } } } },
+    }),
+  );
   const handle = {
     key: {
       binding: "open" as const,
@@ -35,7 +40,7 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
   };
   const seal = (s: typeof snapshot) =>
     writeSeal(
-      applyRequest(s, price(s, {}, work, EMPTY_CATALOGS), "", []),
+      applyRequest(s, price(s, {}, work, (work) ?? neutralFansWork, EMPTY_CATALOGS), "", []),
       work,
       handle,
       { openId: "doc" },
@@ -109,12 +114,15 @@ test("fan loss preparation reads both sides and carries authored drops into prev
     .rejects.toThrow("truncated");
   const node = snapshot.nodes.find((n) => n.id === 14088043)!;
   expect(node).toBeTruthy();
-  const work = ductsRouteState.schema.parse({
-    componentDrops: { [node.id]: { edit: { value: { inWg: 0.026 } } } },
-  });
+  const work = ductsDesign(
+    null,
+    fansDocumentSchema.parse({
+      componentDrops: { [node.id]: { edit: { value: { inWg: 0.026 } } } },
+    }),
+  );
   const request = applyRequest(
     snapshot,
-    price(snapshot, {}, work, EMPTY_CATALOGS),
+    price(snapshot, {}, work, (work) ?? neutralFansWork, EMPTY_CATALOGS),
     "2026-11-02T10:00:00Z",
     [],
   );

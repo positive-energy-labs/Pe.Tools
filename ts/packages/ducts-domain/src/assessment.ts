@@ -2,7 +2,7 @@ import type {
   DuctFinding,
   DuctsAnalysisRequest,
   DuctsAnalysisResponse,
-  DuctsRouteDocument,
+  DuctsDesign,
 } from "@pe/agent-contracts";
 import { transitionGeometry } from "./geometry.ts";
 import { guardFindings, proposedStatic, unitOf, type Priced } from "./pricing.ts";
@@ -19,7 +19,7 @@ const terminal = (node: DuctSnapshot["nodes"][number]) => node.kind === "termina
  * the acquiring adapter; demand completeness does not require a known existing fan capacity. */
 export function assessDucts(
   raw: DuctSnapshot,
-  work: DuctsRouteDocument | null,
+  work: DuctsDesign | null,
   solved: Pick<Priced, "now" | "next"> & {
     readiness: Record<string, GroupReadiness>;
     catalogFindings?: string[];
@@ -179,7 +179,7 @@ export function assessDucts(
     "unknown-terminal-flow",
 
     selectedTerminals.filter((node) => flows.get(node.id)?.cfm == null).length,
-    "Terminal design flow is unknown: no override, load preview share or positive Revit flow",
+    "Terminal design flow is unknown: no override, rooms share or positive Revit flow",
   );
   const selectedNodes = snapshot.nodes.filter((node) => groupIds.has(node.groupId ?? ""));
   const transitions = selectedNodes

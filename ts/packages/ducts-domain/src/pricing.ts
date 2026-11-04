@@ -1,3 +1,5 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
 import { flowWriteSlot } from "./flow-write-slot.ts";
 /**
  * The losses view's model, pure: what Revit holds now (the applied tables), what the person
@@ -6,9 +8,12 @@ import { flowWriteSlot } from "./flow-write-slot.ts";
  */
 import {
   stagedDucts,
+  ductsDesign,
+  type FansDocument,
+  type DuctsRouteDocument,
   type DuctFinding,
   type DuctsApplyInput,
-  type DuctsRouteDocument,
+  type DuctsDesign,
 } from "@pe/agent-contracts";
 
 import { stagedLink, EMPTY_CATALOGS, type Catalogs } from "./catalog.ts";
@@ -72,7 +77,8 @@ const appliedUnits = (raw: DuctSnapshot) => {
   const cached = appliedUnitCache.get(raw);
   if (cached) return cached;
   const stated = equipmentFlows(raw, {});
-  const roles = unitRoles(raw, stated, stagedDucts(withStoredRulings(null, raw.store)).roles);
+  const stored = withStoredRulings(null, raw.store);
+  const roles = unitRoles(raw, stated, stagedDucts(stored, stored ?? neutralFansWork).roles);
   const units = unitOverrides(roles, stated);
   appliedUnitCache.set(raw, units);
   return units;
@@ -180,6 +186,7 @@ const completed = new WeakMap<
     grids: Grids;
     catalogs: Catalogs;
     doc: DuctsRouteDocument | null;
+    fans: FansDocument;
     priced: Priced;
   }
 >();
@@ -191,8 +198,9 @@ export function rememberPrice(
   doc: DuctsRouteDocument | null,
   catalogs: Catalogs,
   priced: Priced,
+  fans: FansDocument,
 ) {
-  completed.set(raw, { grids, doc, catalogs, priced });
+  completed.set(raw, { grids, doc, fans, catalogs, priced });
 }
 
 /**
@@ -204,7 +212,7 @@ interface Solved {
   now: LossResult;
   /** The design friction rate `now` was read at (it only moves a part with no duct on its path). */
   rate: number;
-  last: { doc: DuctsRouteDocument | null; priced: Priced } | null;
+  last: { doc: DuctsRouteDocument | null; fans: FansDocument; priced: Priced } | null;
   fanouts: Map<string, Fanout>;
 }
 
@@ -239,18 +247,22 @@ function solvedFor(
 export function price(
   raw: DuctSnapshot,
   grids: Grids,
-  doc: DuctsRouteDocument | null,
+  ducts: DuctsRouteDocument | null,
+  fans: FansDocument,
   catalogs: Catalogs = EMPTY_CATALOGS,
 ): Priced {
   const hit = completed.get(raw);
-  if (hit?.grids === grids && hit.catalogs === catalogs && hit.doc === doc) return hit.priced;
+  if (hit?.grids === grids && hit.catalogs === catalogs && hit.doc === ducts && hit.fans === fans)
+    return hit.priced;
+  const doc: DuctsDesign = ductsDesign(ducts, fans);
   const surveyed = survey(raw, doc);
   const { snapshot } = surveyed;
   const units = appliedUnits(raw);
   const entry = solvedFor(snapshot, grids, catalogs, surveyed.inferred, units);
-  if (entry.last?.doc === doc) return entry.last.priced;
+  if (entry.last?.doc === ducts && entry.last.fans === fans) return entry.last.priced;
   // The model's stored rulings under Work's pending ones (`rulings.ts`), as the survey read them.
-  const edit = stagedDucts(withStoredRulings(doc, raw.store));
+  const stored = withStoredRulings(doc, raw.store);
+  const edit = stagedDucts(stored, stored ?? fans);
   const rate = edit.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
   if (entry.rate !== rate) {
     entry.now = computeLosses(
@@ -315,8 +327,8 @@ export function price(
     next,
     edit,
   };
-  entry.last = { doc, priced };
-  rememberPrice(raw, grids, doc, catalogs, priced);
+  entry.last = { doc: ducts, fans, priced };
+  rememberPrice(raw, grids, ducts, catalogs, priced, fans);
   return priced;
 }
 const hasDrops = (edit: Priced["edit"]) =>

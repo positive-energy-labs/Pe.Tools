@@ -1,7 +1,7 @@
 import { placeInput } from "../shell/admitted-place.test-fixture";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { ductsDocumentSchema } from "@pe/agent-contracts";
+import { fansDocumentSchema } from "@pe/agent-contracts";
 import type { WorkPatch } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import {
   builtinClosureFingerprint,
@@ -19,19 +19,19 @@ const slot = {
   path: ["parameters", "fanFlow"],
   value: { edit: { value: "PE_M_Fan_AirFlow" } },
 } as const;
-const typedSlot: WorkPatch<typeof ductsDocumentSchema> = slot;
-const drop: WorkPatch<typeof ductsDocumentSchema> = {
+const typedSlot: WorkPatch<typeof fansDocumentSchema> = slot;
+const drop: WorkPatch<typeof fansDocumentSchema> = {
   path: ["componentDrops", "14607308"],
   value: { edit: { value: { inWg: 0.0132 } } },
 };
-const replacement: WorkPatch<typeof ductsDocumentSchema> = {
+const replacement: WorkPatch<typeof fansDocumentSchema> = {
   path: ["parameters"],
   value: { fanFlow: { edit: { value: "PE_M_Fan_AirFlow" } } },
 };
 
 test("drive-7 S0/S8a: finite slot keys are accepted by typed Work patches", () => {
   expect(
-    ductsDocumentSchema.parse({ parameters: { fanFlow: slot.value } }).parameters.fanFlow,
+    fansDocumentSchema.parse({ parameters: { fanFlow: slot.value } }).parameters.fanFlow,
   ).toEqual(slot.value);
   expect(typedSlot).toEqual(slot);
   expect(drop.path).toHaveLength(2);
@@ -42,7 +42,7 @@ test("the real admitted mount accepts the typed finite-key slot", async () => {
   const key = `w1d-slots-${crypto.randomUUID()}`;
   const module = {
     ...captures,
-    schemas: { ...captures.schemas, work: ductsDocumentSchema, none: z.object({}) },
+    schemas: { ...captures.schemas, work: fansDocumentSchema, none: z.object({}) },
     data: {
       ...captures.data,
       key,
@@ -68,7 +68,7 @@ test("the real admitted mount accepts the typed finite-key slot", async () => {
         slot: "verbs.slot.patches",
         kind: "work",
         source: { module: "slot-patch-gap.test.ts", export: "slot" },
-        run: (): readonly WorkPatch<typeof ductsDocumentSchema>[] => [typedSlot],
+        run: (): readonly WorkPatch<typeof fansDocumentSchema>[] => [typedSlot],
       },
       describeSlot: {
         slot: "verbs.slot.describe",
@@ -103,8 +103,8 @@ test("the real admitted mount accepts the typed finite-key slot", async () => {
   const result = (await inventory.prepare("witness", fingerprint)).admitUnknown(module);
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   const door = createFixtureWorkDoor(
-    { route: key, title: "", description: "", schema: ductsDocumentSchema },
-    ductsDocumentSchema.parse({ parameters: { terminalFlow: { edit: { value: "revit:Flow" } } } }),
+    { route: key, title: "", description: "", schema: fansDocumentSchema },
+    fansDocumentSchema.parse({ parameters: { terminalFlow: { edit: { value: "revit:Flow" } } } }),
   );
   const mount = createRouteShell({
     work: door,
@@ -139,7 +139,7 @@ test("the real admitted mount accepts the typed finite-key slot", async () => {
       ),
     );
     expect(outcome.kind).toBe("accepted");
-    expect(ductsDocumentSchema.parse(mount.work()?.value).parameters).toMatchObject({
+    expect(fansDocumentSchema.parse(mount.work()?.value).parameters).toMatchObject({
       terminalFlow: { edit: { value: "revit:Flow" } },
       fanFlow: slot.value,
     });

@@ -301,8 +301,10 @@
   "work": {
     "schema": "work",
     "route": "ducts",
-    "version": 1,
-    "migrations": {}
+    "version": 2,
+    "migrations": {
+      "1": "dropFanCells"
+    }
   },
   "readings": {
     "roster": {
@@ -333,24 +335,14 @@
           "criteria",
           "kinds",
           "writeIntent",
-          "calculation",
           "assumptions",
           "rules",
           "catalogs",
           "ruleAssignments",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "loads",
-          "flows",
-          "parameters",
           "subject",
           "claims",
           "labelParameter",
           "workingPhase",
-          "designFriction",
           "systemColours"
         ],
         "readings": [
@@ -406,24 +398,14 @@
           "criteria",
           "kinds",
           "writeIntent",
-          "calculation",
           "assumptions",
           "rules",
           "catalogs",
           "ruleAssignments",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "loads",
-          "flows",
-          "parameters",
           "subject",
           "claims",
           "labelParameter",
           "workingPhase",
-          "designFriction",
           "systemColours"
         ],
         "readings": [
@@ -449,24 +431,14 @@
           "criteria",
           "kinds",
           "writeIntent",
-          "calculation",
           "assumptions",
           "rules",
           "catalogs",
           "ruleAssignments",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "loads",
-          "flows",
-          "parameters",
           "subject",
           "claims",
           "labelParameter",
           "workingPhase",
-          "designFriction",
           "systemColours"
         ],
         "readings": []
@@ -491,24 +463,14 @@
           "criteria",
           "kinds",
           "writeIntent",
-          "calculation",
           "assumptions",
           "rules",
           "catalogs",
           "ruleAssignments",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "loads",
-          "flows",
-          "parameters",
           "subject",
           "claims",
           "labelParameter",
           "workingPhase",
-          "designFriction",
           "systemColours"
         ],
         "readings": [
@@ -532,24 +494,14 @@
           "criteria",
           "kinds",
           "writeIntent",
-          "calculation",
           "assumptions",
           "rules",
           "catalogs",
           "ruleAssignments",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "loads",
-          "flows",
-          "parameters",
           "subject",
           "claims",
           "labelParameter",
           "workingPhase",
-          "designFriction",
           "systemColours"
         ],
         "readings": [
@@ -666,24 +618,14 @@
           "criteria",
           "kinds",
           "writeIntent",
-          "calculation",
           "assumptions",
           "rules",
           "catalogs",
           "ruleAssignments",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "loads",
-          "flows",
-          "parameters",
           "subject",
           "claims",
           "labelParameter",
           "workingPhase",
-          "designFriction",
           "systemColours"
         ],
         "readings": []
@@ -703,24 +645,14 @@
           "criteria",
           "kinds",
           "writeIntent",
-          "calculation",
           "assumptions",
           "rules",
           "catalogs",
           "ruleAssignments",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "loads",
-          "flows",
-          "parameters",
           "subject",
           "claims",
           "labelParameter",
           "workingPhase",
-          "designFriction",
           "systemColours"
         ],
         "readings": [
@@ -743,24 +675,14 @@
           "criteria",
           "kinds",
           "writeIntent",
-          "calculation",
           "assumptions",
           "rules",
           "catalogs",
           "ruleAssignments",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "loads",
-          "flows",
-          "parameters",
           "subject",
           "claims",
           "labelParameter",
           "workingPhase",
-          "designFriction",
           "systemColours"
         ],
         "readings": []
@@ -784,24 +706,14 @@
           "criteria",
           "kinds",
           "writeIntent",
-          "calculation",
           "assumptions",
           "rules",
           "catalogs",
           "ruleAssignments",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "loads",
-          "flows",
-          "parameters",
           "subject",
           "claims",
           "labelParameter",
           "workingPhase",
-          "designFriction",
           "systemColours"
         ],
         "readings": [
@@ -835,24 +747,14 @@
           "criteria",
           "kinds",
           "writeIntent",
-          "calculation",
           "assumptions",
           "rules",
           "catalogs",
           "ruleAssignments",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "loads",
-          "flows",
-          "parameters",
           "subject",
           "claims",
           "labelParameter",
           "workingPhase",
-          "designFriction",
           "systemColours"
         ],
         "readings": [
@@ -886,24 +788,14 @@
           "criteria",
           "kinds",
           "writeIntent",
-          "calculation",
           "assumptions",
           "rules",
           "catalogs",
           "ruleAssignments",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "loads",
-          "flows",
-          "parameters",
           "subject",
           "claims",
           "labelParameter",
           "workingPhase",
-          "designFriction",
           "systemColours"
         ],
         "readings": [
@@ -1247,17 +1139,6 @@
   },
   "salvage": "salvage",
   "cells": {
-    "calculation": {
-      "segment": "calculation",
-      "value": "calculationCell",
-      "groupOf": "groupcalculation",
-      "label": "labelcalculation",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
     "assumptions": {
       "segment": "assumptions",
       "value": "assumptionsCell",
@@ -1302,83 +1183,6 @@
         "readings": []
       }
     },
-    "terminalDrops": {
-      "segment": "terminalDrops",
-      "value": "terminalDropsCell",
-      "groupOf": "groupterminalDrops",
-      "label": "labelterminalDrops",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "componentDrops": {
-      "segment": "componentDrops",
-      "value": "componentDropsCell",
-      "groupOf": "groupcomponentDrops",
-      "label": "labelcomponentDrops",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "flows": {
-      "segment": "flows",
-      "value": "flowsCell",
-      "groupOf": "groupflows",
-      "label": "labelflows",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "esp": {
-      "segment": "esp",
-      "value": "espCell",
-      "groupOf": "groupesp",
-      "label": "labelesp",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "equipmentFlows": {
-      "segment": "equipmentFlows",
-      "value": "equipmentFlowsCell",
-      "groupOf": "groupequipmentFlows",
-      "label": "labelequipmentFlows",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "roles": {
-      "segment": "roles",
-      "value": "rolesCell",
-      "groupOf": "grouproles",
-      "label": "labelroles",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "parameters": {
-      "segment": "parameters",
-      "value": "parametersCell",
-      "groupOf": "groupparameters",
-      "label": "labelparameters",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
     "kinds": {
       "segment": "kinds",
       "value": "kindsCell",
@@ -1392,10 +1196,6 @@
     }
   },
   "workFields": {
-    "loads": {
-      "label": "loads",
-      "internal": false
-    },
     "subject": {
       "label": "system membership",
       "internal": false
@@ -1410,10 +1210,6 @@
     },
     "workingPhase": {
       "label": "working phase",
-      "internal": false
-    },
-    "designFriction": {
-      "label": "design friction",
       "internal": false
     },
     "systemColours": {

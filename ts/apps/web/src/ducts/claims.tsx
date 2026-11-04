@@ -1,7 +1,7 @@
 /** Claim verdicts and names. SubjectText owns prose references and attention. */
 import {
   transitionPatches,
-  type DuctsRouteDocument,
+  type DuctsDesign,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 
@@ -19,7 +19,7 @@ export const VERDICTS: readonly { value: Verdict; word: string; says: string }[]
 
 /** Edit the complete claim and verdict; the host stamps the shared change's provenance. */
 export const verdictPatches = (
-  doc: DuctsRouteDocument | null,
+  doc: DuctsDesign | null,
   claim: Claim,
   verdict: Verdict,
 ): RouteStatePatch[] =>

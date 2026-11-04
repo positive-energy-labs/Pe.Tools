@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { localId } from "../neutral";
 import type * as Atom from "effect/reactivity/Atom";
 import type { SubjectKey } from "@pe/kit/lang/attention";
-import type { DuctsRouteDocument, OrbitViewport } from "@pe/agent-contracts";
+import type { DuctsDesign, OrbitViewport } from "@pe/agent-contracts";
 import type { price } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { ReactNode } from "react";
@@ -51,7 +51,7 @@ export interface ProtoProps {
   onSelect: (id: number | null) => void;
   /** Work doc and its writer. Every write invokes the kernel Work verb. */
   work: {
-    doc: DuctsRouteDocument | null;
+    doc: DuctsDesign | null;
     revision: number | null;
     write: import("../work").LossesWork["write"];
   };

@@ -9,7 +9,7 @@
  */
 import {
   transitionPatches,
-  type DuctsRouteDocument,
+  type DuctsDesign,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
@@ -91,7 +91,7 @@ export function airflowOptions(
 
 /** The patches choosing a slot makes: stage it on the person-owned `parameters.terminalFlow` (or `fanFlow`) cell. */
 export const airflowPatches = (
-  doc: DuctsRouteDocument | null,
+  doc: DuctsDesign | null,
   slot: string,
   of: AirflowOf = "terminal",
 ): RouteStatePatch[] => {

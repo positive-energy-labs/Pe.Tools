@@ -1,4 +1,6 @@
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/agent-contracts";
 import type { Catalogs } from "@pe/ducts-domain/catalog";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { price, type Priced } from "@pe/ducts-domain/pricing";
@@ -17,7 +19,7 @@ interface PricingBase {
   catalogs: Catalogs;
 }
 export interface PricingInput extends PricingBase {
-  doc: DuctsRouteDocument | null;
+  doc: DuctsDesign | null;
 }
 export interface PricingResult {
   priced: Priced;
@@ -32,7 +34,7 @@ export interface PricingResult {
 export interface PricingRequest {
   id: number;
   base?: PricingBase;
-  doc: DuctsRouteDocument | null;
+  doc: DuctsDesign | null;
 }
 export type PricingPayload = Omit<PricingRequest, "id">;
 export type PricingResponse = { id: number } & (
@@ -68,7 +70,7 @@ export function pricingJob() {
           `${names} has no terminal${outlets.length ? `: its air leaves at open end ${outlets.join(", ")}` : " and no fan-to-terminal path"}; nothing to price`,
         );
       }
-      const priced = price(base.snapshot, base.grids, request.doc, base.catalogs);
+      const priced = price(base.snapshot, base.grids, request.doc, (request.doc) ?? neutralFansWork, base.catalogs);
       const heal = healPlan(base.snapshot, request.doc);
       return {
         id: request.id,

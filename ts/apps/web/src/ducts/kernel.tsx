@@ -1,4 +1,5 @@
 import { jsonCodec } from "../../../../packages/agent-contracts/src/route-kernel-codecs";
+import { ductsDesign, neutralFansWork } from "@pe/agent-contracts";
 import { pricingJob } from "./pricing-job";
 import { createElement } from "react";
 import { identityCodecs } from "../shell/page-port";
@@ -30,8 +31,8 @@ export const bodies = {
           grids: tables.value,
           catalogs: catalogs.value.tables,
         },
-        // readonly at the contract owner after U2 lands
-        doc: ctx.work as import("@pe/agent-contracts").DuctsRouteDocument,
+        // U4 wires the real fans Work here.
+        doc: ductsDesign(ctx.work, neutralFansWork),
       });
       if ("error" in priced) throw Error(priced.error);
       return "result" in priced ? priced.result : null;

@@ -1,3 +1,5 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
 /**
  * What the route runs before any tree or loss (pressure-drop ledger, 2026-10-16): the snapshot
  * read in Work's working phase (`phases.ts`) and tolerated (`proximity.ts`), every terminal's design flow resolved (`terminal-flows.ts`), and
@@ -9,7 +11,7 @@ import {
   stagedDucts,
   workingPhaseOf,
   type DuctFinding,
-  type DuctsRouteDocument,
+  type DuctsDesign,
 } from "@pe/agent-contracts";
 
 import { byFlow, groupFans } from "./fan-sections.ts";
@@ -84,58 +86,19 @@ const ASSUMES = new Set([
   "out-of-phase",
 ]);
 
-const flowFinding = (name: (id: number) => string) => (f: FlowFinding): DuctFinding => {
-  switch (f.kind) {
-    case "tag-without-mark":
-      return {
-        id: `flow:tag:${f.tag}`,
-        kind: f.kind,
-        elementIds: [],
-        note: `load preview "${f.system}" is tagged ${f.tag}; no equipment carries that Mark`,
-        assumed: null,
-        clearer: "person",
-      };
-    case "mark-without-system":
-      return {
-        id: `flow:mark:${f.equipment}`,
-        kind: f.kind,
-        elementIds: [f.equipment],
-        note: `${name(f.equipment)} is marked ${f.mark}; the load preview has no system tagged ${f.mark}`,
-        assumed: null,
-        clearer: "person",
-      };
-    case "no-terminals":
-      return {
-        id: `flow:no-terminals:${f.equipment}`,
-        kind: f.kind,
-        elementIds: [f.equipment],
-        note: `${f.mark} roots no tree with a terminal; its load has nowhere to go`,
-        assumed: null,
-        clearer: "person",
-      };
-    case "no-mark":
-      return {
-        id: `flow:no-mark:${f.equipment}`,
-        kind: f.kind,
-        elementIds: [f.equipment],
-        note: `${f.label} feeds terminals but carries no Mark; no load preview system can match it`,
-        assumed: null,
-        clearer: "person",
-      };
-    case "no-flow":
-      return {
-        id: `flow:no-flow:${f.terminal}`,
-        kind: f.kind,
-        elementIds: [f.terminal],
-        note: `${name(f.terminal)} has no design flow: no override, no load preview share, no positive Revit flow`,
-        assumed: null,
-        clearer: "pea",
-      };
-  }
-};
+const flowFinding =
+  (name: (id: number) => string) =>
+  (f: FlowFinding): DuctFinding => ({
+    id: `flow:no-flow:${f.terminal}`,
+    kind: f.kind,
+    elementIds: [f.terminal],
+    note: `${name(f.terminal)} has no design flow: no override, no rooms share, no positive Revit flow`,
+    assumed: null,
+    clearer: "pea",
+  });
 
 /** The edit verdicts proximity reads (ignore withholds, connect joins across classifications) and the working phase. */
-const verdictKey = (work: DuctsRouteDocument | null) =>
+const verdictKey = (work: DuctsDesign | null) =>
   Object.entries(work?.assumptions ?? {})
     .flatMap(([key, cell]) => {
       const v = cell.edit?.value;
@@ -145,41 +108,12 @@ const verdictKey = (work: DuctsRouteDocument | null) =>
     .concat(`phase=${workingPhaseOf(work) ?? ""}`)
     .join("|");
 
-/**
- * A group several units feed, where exactly one carries a Load Preview system, is that unit's
- * tree; the others sit in series on it (Project A SA 19: an inline dehumidifier on FC-17's supply,
- * kaitpw 2026-10-16 "a dehu does not count"). Their air stays out of the calculation.
- */
-export function series(snapshot: DuctSnapshot, tags: Set<string>) {
-  const nodeById = new Map(snapshot.nodes.map((n) => [n.id, n]));
-  const findings: DuctFinding[] = [];
-  const dropped = new Set<string>();
-  const groups = snapshot.groups.map((g) => {
-    if (g.rootIds.length < 2) return g;
-    const owners = g.rootIds.filter((id) => tags.has(markOf(nodeById.get(id)) ?? ""));
-    if (owners.length !== 1) return g;
-    const inline = g.rootIds.filter((id) => id !== owners[0]);
-    dropped.add(g.id);
-    findings.push({
-      id: `series:${g.id}`,
-      kind: "series-by-inference",
-      elementIds: inline,
-      note: `${inline.join(", ")} sit in series on ${markOf(nodeById.get(owners[0]!))} (${owners[0]}); only it has a load preview system`,
-      assumed: "the inline units move no design air of their own",
-      clearer: "pea",
-    });
-    return { ...g, rootIds: owners };
-  });
-  if (!dropped.size) return { snapshot, findings };
-  return { snapshot: { ...snapshot, groups }, findings };
-}
-
 const cache = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof tolerate>>>();
 /**
  * `tolerate` over the snapshot in Work's working phase, under Work's edit proximity verdicts,
  * the `out-of-phase` findings first; cached per snapshot, verdict set and phase.
  */
-export function tolerated(snapshot: DuctSnapshot, work: DuctsRouteDocument | null) {
+export function tolerated(snapshot: DuctSnapshot, work: DuctsDesign | null) {
   const byVerdicts = cache.get(snapshot) ?? cache.set(snapshot, new Map()).get(snapshot)!;
   const key = verdictKey(work);
   const hit = byVerdicts.get(key);
@@ -192,13 +126,12 @@ export function tolerated(snapshot: DuctSnapshot, work: DuctsRouteDocument | nul
   byVerdicts.set(key, result);
   return result;
 }
-const inSeries = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof series>>>();
 const inline = new WeakMap<DuctSnapshot, Map<string, ReturnType<typeof passThrough>>>();
-const last = new WeakMap<DuctSnapshot, { work: DuctsRouteDocument | null; survey: Survey }>();
+const last = new WeakMap<DuctSnapshot, { work: DuctsDesign | null; survey: Survey }>();
 
 export function survey(
   snapshot: DuctSnapshot,
-  work: DuctsRouteDocument | null,
+  work: DuctsDesign | null,
   roomFlows?: RoomFlows,
 ): Survey {
   // The model's stored rulings are the base under Work's pending ones (`rulings.ts`).
@@ -206,22 +139,16 @@ export function survey(
   const hit = last.get(snapshot);
   if (!roomFlows && hit && hit.work === work) return hit.survey;
   const t = tolerated(snapshot, work);
-  const edit = stagedDucts(work);
-  const tags = (edit.loads.preview?.systems ?? []).flatMap((x) => (x.tag ? [x.tag] : [])).sort();
-  const bySeries = inSeries.get(t.snapshot) ?? inSeries.set(t.snapshot, new Map()).get(t.snapshot)!;
-  const s =
-    bySeries.get(tags.join("|")) ??
-    bySeries.set(tags.join("|"), series(t.snapshot, new Set(tags))).get(tags.join("|"))!;
+  const edit = stagedDucts(work, work ?? neutralFansWork);
   // Roles are proposed on the groups as Revit cuts them; then a passive unit passes air through.
-  const units = equipmentFlows(s.snapshot, edit.equipmentFlows);
-  const roles = unitRoles(s.snapshot, units, edit.roles);
+  const units = equipmentFlows(t.snapshot, edit.equipmentFlows);
+  const roles = unitRoles(t.snapshot, units, edit.roles);
   const passive = passiveOf(roles);
   const key = [...passive].join(",");
-  const byPassive = inline.get(s.snapshot) ?? inline.set(s.snapshot, new Map()).get(s.snapshot)!;
-  const p = byPassive.get(key) ?? byPassive.set(key, passThrough(s.snapshot, passive)).get(key)!;
+  const byPassive = inline.get(t.snapshot) ?? inline.set(t.snapshot, new Map()).get(t.snapshot)!;
+  const p = byPassive.get(key) ?? byPassive.set(key, passThrough(t.snapshot, passive)).get(key)!;
   const m = p.snapshot;
-  const trees = m.groups.map((g) => groupTree(m, g.id));
-  const flows = terminalFlows(m, edit.loads.preview, edit.flows, trees, roomFlows);
+  const flows = terminalFlows(m, edit.flows, roomFlows);
   const noFan = noFanFindings(m, passive);
   // A fan that states no flow takes the sum of the terminal flows it serves in each group (nearest
   // port wins, `groupFans`), shown as derived and never written. The solve prices each group from
@@ -275,7 +202,6 @@ export function survey(
     });
   }
   const findings: DuctFinding[] = [
-    ...s.findings,
     ...noFan,
     ...p.findings,
     ...multiFan,

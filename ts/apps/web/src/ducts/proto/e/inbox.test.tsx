@@ -1,3 +1,4 @@
+import { designOf } from "@pe/ducts-domain/test-design";
 import { emptyListSearch, pickListPill } from "@pe/agent-contracts";
 const search = (keywords = "", pills: Record<string, string> = {}) =>
   Object.entries(pills).reduce((s, [field, value]) => pickListPill(s, field, value), {
@@ -8,7 +9,7 @@ const search = (keywords = "", pills: Record<string, string> = {}) =>
 import { act, cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { ductClaimSchema, ductsDocumentSchema } from "@pe/agent-contracts";
+import { ductClaimSchema } from "@pe/agent-contracts";
 
 import { focusRow, inboxRows, type CellRef, type InboxItem } from "../../inbox-rows";
 import { cellFocus } from "../../inbox-rows";
@@ -390,7 +391,7 @@ test("a no-rule row stages a family-wide price-as choice through Work", async ()
 test("taking back a family assignment clears only its edit rung", async () => {
   const family = "Radius Elbow";
   const suggestion = { value: { rule: "elbow-mitered-vaned" }, note: "check the vanes" };
-  const doc = ductsDocumentSchema.parse({
+  const doc = designOf({
     ruleAssignments: {
       [family]: { suggestion, edit: { value: { rule: "elbow-mitered" } } },
     },

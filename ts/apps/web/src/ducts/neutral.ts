@@ -6,14 +6,17 @@ import {
   applyPatches,
   canonicalRouteInput,
   commands,
+  ductsDesign,
   ductsDocumentSchema,
   ductsRouteState,
+  neutralFansWork,
   ductsRosterResponseSchema,
   ductsSheetOverviewSchema,
   ductsSheetResponseSchema,
   ductCatalogReadingSchema,
   ductsSheetEditsSchema,
   routeStatePatchSchema,
+  dropFanCells,
   salvageDuctsWork,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
@@ -94,24 +97,14 @@ const workKeys = [
   "criteria",
   "kinds",
   "writeIntent",
-  "calculation",
   "assumptions",
   "rules",
   "catalogs",
   "ruleAssignments",
-  "terminalDrops",
-  "componentDrops",
-  "esp",
-  "equipmentFlows",
-  "roles",
-  "loads",
-  "flows",
-  "parameters",
   "subject",
   "claims",
   "labelParameter",
   "workingPhase",
-  "designFriction",
   "systemColours",
 ] as const;
 const fields = { ...threadListFields, ...ductsAddress.fields };
@@ -163,18 +156,10 @@ export const schemas = {
   sheetPath: z.string(),
   networkStage: z.enum(["network"]),
   sheetStage: z.enum(["sheet"]),
-  calculationCell: ductsDocumentSchema.shape.calculation.unwrap().valueType,
   assumptionsCell: ductsDocumentSchema.shape.assumptions.unwrap().valueType,
   rulesCell: ductsDocumentSchema.shape.rules.unwrap().valueType,
   catalogsCell: ductsDocumentSchema.shape.catalogs.unwrap().valueType,
   ruleAssignmentsCell: ductsDocumentSchema.shape.ruleAssignments.unwrap().valueType,
-  terminalDropsCell: ductsDocumentSchema.shape.terminalDrops.unwrap().valueType,
-  componentDropsCell: ductsDocumentSchema.shape.componentDrops.unwrap().valueType,
-  flowsCell: ductsDocumentSchema.shape.flows.unwrap().valueType,
-  espCell: ductsDocumentSchema.shape.esp.unwrap().valueType,
-  equipmentFlowsCell: ductsDocumentSchema.shape.equipmentFlows.unwrap().valueType,
-  rolesCell: ductsDocumentSchema.shape.roles.unwrap().valueType,
-  parametersCell: ductsDocumentSchema.shape.parameters.unwrap().valueType,
   kindsCell: ductsDocumentSchema.shape.kinds.unwrap().valueType,
 
   work: ductsDocumentSchema,
@@ -570,8 +555,8 @@ export const ductsData = {
   work: {
     route: "ducts",
     schema: "work",
-    version: 1,
-    migrations: {},
+    version: 2,
+    migrations: { "1": "dropFanCells" },
   },
   salvage: "salvage",
   readings: {
@@ -1053,17 +1038,6 @@ export const ductsData = {
     system: "hasSystem",
   },
   cells: {
-    calculation: {
-      segment: "calculation",
-      value: "calculationCell",
-      groupOf: "groupcalculation",
-      deps: {
-        page: [],
-        work: [],
-        readings: [],
-      },
-      label: "labelcalculation",
-    },
     assumptions: {
       segment: "assumptions",
       value: "assumptionsCell",
@@ -1108,83 +1082,6 @@ export const ductsData = {
       },
       label: "labelruleAssignments",
     },
-    terminalDrops: {
-      segment: "terminalDrops",
-      value: "terminalDropsCell",
-      groupOf: "groupterminalDrops",
-      deps: {
-        page: [],
-        work: [],
-        readings: [],
-      },
-      label: "labelterminalDrops",
-    },
-    componentDrops: {
-      segment: "componentDrops",
-      value: "componentDropsCell",
-      groupOf: "groupcomponentDrops",
-      deps: {
-        page: [],
-        work: [],
-        readings: [],
-      },
-      label: "labelcomponentDrops",
-    },
-    flows: {
-      segment: "flows",
-      value: "flowsCell",
-      groupOf: "groupflows",
-      deps: {
-        page: [],
-        work: [],
-        readings: [],
-      },
-      label: "labelflows",
-    },
-    esp: {
-      segment: "esp",
-      value: "espCell",
-      groupOf: "groupesp",
-      deps: {
-        page: [],
-        work: [],
-        readings: [],
-      },
-      label: "labelesp",
-    },
-    equipmentFlows: {
-      segment: "equipmentFlows",
-      value: "equipmentFlowsCell",
-      groupOf: "groupequipmentFlows",
-      deps: {
-        page: [],
-        work: [],
-        readings: [],
-      },
-      label: "labelequipmentFlows",
-    },
-    roles: {
-      segment: "roles",
-      value: "rolesCell",
-      groupOf: "grouproles",
-      deps: {
-        page: [],
-        work: [],
-        readings: [],
-      },
-      label: "labelroles",
-    },
-    parameters: {
-      segment: "parameters",
-      value: "parametersCell",
-      groupOf: "groupparameters",
-      deps: {
-        page: [],
-        work: [],
-        readings: [],
-      },
-      label: "labelparameters",
-    },
     kinds: {
       segment: "kinds",
       value: "kindsCell",
@@ -1198,10 +1095,6 @@ export const ductsData = {
     },
   },
   workFields: {
-    loads: {
-      label: "loads",
-      internal: false,
-    },
     subject: {
       label: "system membership",
       internal: false,
@@ -1216,10 +1109,6 @@ export const ductsData = {
     },
     workingPhase: {
       label: "working phase",
-      internal: false,
-    },
-    designFriction: {
-      label: "design friction",
       internal: false,
     },
     systemColours: {
@@ -1262,17 +1151,8 @@ const selectedGroups = (ctx: ScopeEvidence) => {
 };
 const lossReady = (ctx: ScopeEvidence): true | string => {
   const intent = ctx.work.writeIntent.edit?.value;
-  if (ctx.page.stage === "sheet") {
-    const sheet = ctx.readings.sheet;
-    const fan = sheet.value?.open?.overview.fan;
-    return sheet.current &&
-      fan &&
-      (sheet.value?.opened?.length ?? 1) <= 1 &&
-      intent?.walk?.unitId === fan.unitId &&
-      intent.walk.portIndex === fan.portIndex
-      ? true
-      : "Choose this fan's write scope before previewing";
-  }
+  // U4: the fan walk scope is fans Work; until it is wired a sheet preview is never ready.
+  if (ctx.page.stage === "sheet") return "Choose this fan's write scope before previewing";
   const groups = selectedGroups(ctx);
   return groups.length && canonicalRouteInput(intent?.groups) === canonicalRouteInput(groups)
     ? true
@@ -1280,20 +1160,11 @@ const lossReady = (ctx: ScopeEvidence): true | string => {
 };
 const source = { module: "ducts/neutral.ts", export: "neutralBodies" };
 const records = new Set([
-  "calculation",
   "assumptions",
   "rules",
   "catalogs",
   "ruleAssignments",
-  "terminalDrops",
-  "componentDrops",
-  "esp",
-  "equipmentFlows",
-  "roles",
   "kinds",
-  "loads",
-  "flows",
-  "parameters",
   "subject",
   "claims",
 ]);
@@ -1330,14 +1201,15 @@ export function authoredPatches(
     return value === undefined ? { path, op: "delete" } : { path, value };
   }) as unknown as readonly WorkPatch<typeof ductsDocumentSchema>[];
 }
+const dropFanCellsBody = {
+  slot: "work.migrations.1",
+  kind: "migration",
+  source,
+  run: dropFanCells,
+} as const;
 export const neutralBodies = {
+  dropFanCells: dropFanCellsBody,
   browse: { slot: "verbs.browse.patch", kind: "page", source, run: (_ctx, input) => input },
-  labelcalculation: {
-    slot: "cells.calculation.label",
-    kind: "label",
-    source,
-    run: () => "calculation evidence",
-  },
   labelassumptions: {
     slot: "cells.assumptions.label",
     kind: "label",
@@ -1356,40 +1228,7 @@ export const neutralBodies = {
     source,
     run: () => "fitting rule assignments",
   },
-  labelterminalDrops: {
-    slot: "cells.terminalDrops.label",
-    kind: "label",
-    source,
-    run: () => "terminal drops",
-  },
-  labelcomponentDrops: {
-    slot: "cells.componentDrops.label",
-    kind: "label",
-    source,
-    run: () => "component drops",
-  },
-  labelflows: { slot: "cells.flows.label", kind: "label", source, run: () => "terminal flows" },
-  labelesp: { slot: "cells.esp.label", kind: "label", source, run: () => "unit ESP" },
-  labelequipmentFlows: {
-    slot: "cells.equipmentFlows.label",
-    kind: "label",
-    source,
-    run: () => "unit flows",
-  },
-  labelroles: { slot: "cells.roles.label", kind: "label", source, run: () => "unit roles" },
-  labelparameters: {
-    slot: "cells.parameters.label",
-    kind: "label",
-    source,
-    run: () => "parameter slots",
-  },
   labelkinds: { slot: "cells.kinds.label", kind: "label", source, run: () => "unit kinds" },
-  groupcalculation: {
-    slot: "cells.calculation.groupOf",
-    kind: "group",
-    source,
-    run: (key) => [key],
-  },
   groupassumptions: {
     slot: "cells.assumptions.groupOf",
     kind: "group",
@@ -1413,28 +1252,6 @@ export const neutralBodies = {
     source,
     run: (key) => [key],
   },
-  groupterminalDrops: {
-    slot: "cells.terminalDrops.groupOf",
-    kind: "group",
-    source,
-    run: (key) => [key],
-  },
-  groupcomponentDrops: {
-    slot: "cells.componentDrops.groupOf",
-    kind: "group",
-    source,
-    run: (key) => [key],
-  },
-  groupflows: { slot: "cells.flows.groupOf", kind: "group", source, run: (key) => [key] },
-  groupesp: { slot: "cells.esp.groupOf", kind: "group", source, run: (key) => [key] },
-  groupequipmentFlows: {
-    slot: "cells.equipmentFlows.groupOf",
-    kind: "group",
-    source,
-    run: (key) => [key],
-  },
-  grouproles: { slot: "cells.roles.groupOf", kind: "group", source, run: (key) => [key] },
-  groupparameters: { slot: "cells.parameters.groupOf", kind: "group", source, run: (key) => [key] },
   groupkinds: { slot: "cells.kinds.groupOf", kind: "group", source, run: (key) => [key] },
   rosterArgs: { slot: "readings.roster.args", kind: "args", source, run: () => ({}) },
   networksArgs: {
@@ -1513,7 +1330,8 @@ export const neutralBodies = {
     run: (ctx, input) =>
       authoredPatches(
         ctx.work as DuctsRouteDocument,
-        editPatches(input.edits, ctx.work as DuctsRouteDocument),
+        // U4 wires the real fans Work here; a fan-cell edit refuses at the ducts schema until then.
+        editPatches(input.edits, ductsDesign(ctx.work as DuctsRouteDocument, neutralFansWork)),
       ),
   },
   sheetReady: {
@@ -1623,5 +1441,6 @@ export const ductsHostModule = {
   workState: ductsRouteState,
   bodies: {
     salvage: { slot: "salvage", kind: "recovery" as const, source, run: ductsRouteState.salvage },
+    dropFanCells: dropFanCellsBody,
   },
 };

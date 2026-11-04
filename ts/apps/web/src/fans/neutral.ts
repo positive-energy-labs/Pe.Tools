@@ -115,8 +115,10 @@ export const fansData = {
   stageOrder: ["sheet"],
 } as const satisfies RouteGraphJson;
 export const schemas = withWorkOwner(ownerSchemas, { data: ductsData, schemas: ownerSchemas });
+// A presenter runs no migrations: the ducts Work's 1 -> 2 body stays with its owner.
 const {
   pickSystems: _pickSystems,
+  dropFanCells: _dropFanCells,
   ...shared
 } = neutralBodies;
 export const fansNeutralBodies = {

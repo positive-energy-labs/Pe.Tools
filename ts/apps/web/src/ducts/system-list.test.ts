@@ -1,5 +1,7 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
+import { designOf } from "@pe/ducts-domain/test-design";
 import { expect, test } from "vite-plus/test";
-import { ductsRouteState } from "@pe/agent-contracts";
 import { price } from "@pe/ducts-domain/pricing";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -15,11 +17,11 @@ test("two systems sharing a fan retain their own pressure and breakdown terminal
   for (const e of [...snapshot.nodes, ...snapshot.segments])
     if ([12, 22, 31].includes(e.id)) e.systemName = "SA 2";
   const cell = (inWg: number) => ({ edit: { value: { inWg } } });
-  const work = ductsRouteState.schema.parse({
+  const work = designOf({
     terminalDrops: { 30: cell(0.05), 31: cell(0.35) },
     componentDrops: { 21: cell(0.01), 22: cell(0.01) },
   });
-  const priced = price(snapshot, {}, work);
+  const priced = price(snapshot, {}, work, (work) ?? neutralFansWork);
   const rows = systemList(priced.snapshot, priced);
   expect(rows.map((r) => r.key)).toEqual(["SA 1", "SA 2"]);
   expect(rows[0]!.total).toBeLessThan(rows[1]!.total!);

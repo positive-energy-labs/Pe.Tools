@@ -9,7 +9,7 @@ import {
   DUCT_UNIT_KINDS,
   type DuctUnitKind,
   type DuctsInputs,
-  type DuctsRouteDocument,
+  type DuctsDesign,
   type DuctsSheetEdits,
   type Resolved,
 } from "@pe/agent-contracts";
@@ -67,7 +67,7 @@ export type InputRow = {
 
 export interface RowContext {
   snapshot: Pick<DuctSnapshot, "nodes">;
-  doc: DuctsRouteDocument | null;
+  doc: DuctsDesign | null;
   inputs: DuctsInputs | null;
   /** The open fan's unit: its ESP is an input of this sheet; another unit's is not. */
   fanUnitId: number | null;

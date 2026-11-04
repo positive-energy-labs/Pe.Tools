@@ -6,8 +6,9 @@
  * connect verdict, an end anywhere inside a duct's body taps it, and every inference is a finding
  * a person clears (kaitpw 2026-10-19). Points are model feet; the tolerance is inches.
  */
+import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
-import { ductsDocumentSchema, type DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/agent-contracts";
 
 import { axisOf, inferJoints, tolerate, MISSED_JOIN_MAX_IN } from "./proximity.ts";
 import { withHealth } from "./sheet/health.fixture.ts";
@@ -113,8 +114,8 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
     slots: { ...TEST_SLOTS },
   };
 };
-const staging = (id: string, verdict: "ignore" | "connect"): DuctsRouteDocument =>
-  ductsDocumentSchema.parse({
+const staging = (id: string, verdict: "ignore" | "connect"): DuctsDesign =>
+  designOf({
     assumptions: { [id]: { edit: { value: { kind: "verdict", verdict } } } },
   });
 const ignoring = (id: string) => staging(id, "ignore");
@@ -535,7 +536,7 @@ it("a edit connect confirms an inference on its link; a suggestion does not", ()
     { id, between: [1, 2], grade: "stretched", ruled: false },
   ]);
   expect(tolerate(before, staging(id, "connect")).links[0]!.ruled).toBe(true);
-  const proposed = ductsDocumentSchema.parse({
+  const proposed = designOf({
     assumptions: { [id]: { suggestion: { value: { kind: "verdict", verdict: "connect" } } } },
   });
   expect(tolerate(before, proposed).links[0]!.ruled).toBe(false);

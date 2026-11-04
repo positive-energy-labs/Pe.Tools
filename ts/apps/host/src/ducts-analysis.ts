@@ -11,7 +11,10 @@ import {
   addressSchema,
   canonicalRouteInput,
   bindWork,
+  ductsDesign,
   ductsDocumentSchema,
+  fansDocumentSchema,
+  salvageWork,
   ductsApplyRequestArtifactSchema,
   ductsApplyInputSchema,
   ductsApplyRequestProducerSchema,
@@ -22,6 +25,7 @@ import {
   type DuctComponentWitness,
   type DocumentRef,
   type DuctsRouteDocument,
+  type FansRouteDocument,
   type WorkKey,
   type DuctsAnalysisRequest,
   type DuctsAnalysisResponse,
@@ -66,6 +70,8 @@ type EffectiveInputs = {
   snapshot: DuctSnapshot;
   tables: unknown;
   work: DuctsRouteDocument | null;
+  /** The fans Work at the same binding (FANSPLIT); pricing reads both (`ductsDesign`). */
+  fans: FansRouteDocument;
   catalogs?: Catalogs;
   catalogFindings?: string[];
   /** Saved Work segments/cells this version could not read and priced without (see salvageDuctsWork). */
@@ -75,10 +81,12 @@ const solve = ({
   snapshot: raw,
   tables,
   work,
+  fans,
   catalogs = EMPTY_CATALOGS,
   catalogFindings = [],
 }: EffectiveInputs) => {
-  const priced = price(raw, toGrids(tables), work, catalogs);
+  const design = ductsDesign(work, fans);
+  const priced = price(raw, toGrids(tables), design, fans, catalogs);
   // The surveyed snapshot: gaps joined and taps inferred, as the solves saw it.
   const { snapshot } = priced;
   const equipmentIds = [
@@ -91,7 +99,7 @@ const solve = ({
     catalogFindings,
     now: priced.now,
     next: priced.next,
-    readiness: readiness(snapshot, work),
+    readiness: readiness(snapshot, design),
     equipment: equipmentIds.map((id) => ({
       id,
       now: proposedStatic(snapshot, priced.now, id),
@@ -279,7 +287,9 @@ const inputOf = (artifact: Artifact): EffectiveInputs => {
   const json = bytes.toString("utf8");
   if (!Buffer.from(json, "utf8").equals(bytes))
     throw Error("Analysis effective-input UTF8 is invalid");
-  return JSON.parse(json) as EffectiveInputs;
+  const effective = JSON.parse(json) as Omit<EffectiveInputs, "fans"> & { fans: unknown };
+  // The fans Work is decoded once, here; every reader uses the decoded value.
+  return { ...effective, fans: fansDocumentSchema.parse(effective.fans) };
 };
 
 /** Native reads retain the invoking context and pass through the existing admission door. */
@@ -322,7 +332,20 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     const owned = await sources.readWork(key);
     const salvaged = owned ? salvageDuctsWork(owned.doc) : null;
     const work = salvaged?.doc ?? null;
-    const workDropped = salvaged?.dropped ?? [];
+    const fansKey = bindWork(
+      "fans",
+      observation.address ? addressSchema.parse(observation.address) : null,
+      undefined,
+      target,
+    );
+    const fansOwned = await sources.readWork(fansKey);
+    if (!fansOwned) throw Error("Fans Work is unreadable at this binding");
+    const fansSalvaged = salvageWork(fansDocumentSchema, fansOwned.doc);
+    const fans = fansSalvaged.doc;
+    const workDropped = [
+      ...(salvaged?.dropped ?? []),
+      ...fansSalvaged.dropped.map((cell) => `fans:${cell}`),
+    ];
     const acquisition: Artifact["acquisition"] = [];
     async function read(key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables", request: unknown) {
       const response = await sources.call(key, request, target);
@@ -346,7 +369,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       });
       return JSON.parse(bodyUtf8) as unknown;
     }
-    const staged = stagedDucts(work);
+    const staged = stagedDucts(work, fans);
     const slots = staged.parameters;
     const readOptions = {
       ...(Object.keys(slots).length ? { slots } : {}),
@@ -364,6 +387,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
       snapshot,
       tables,
       work,
+      fans,
       catalogs: catalogs.tables,
       catalogFindings: catalogs.findings,
       ...(workDropped.length ? { workDropped } : {}),
@@ -374,12 +398,15 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     const outputs = solve(effective);
     const after = await sources.resolve(target);
     const afterWork = await sources.readWork(key);
+    const afterFans = await sources.readWork(fansKey);
     const changed =
       JSON.stringify(observation) !== JSON.stringify(after) ||
       beforeMark !== sources.marks.changedAt(target) ||
       observedSince !== sources.marks.observedSince ||
       owned?.revision !== afterWork?.revision ||
-      JSON.stringify(owned?.doc) !== JSON.stringify(afterWork?.doc);
+      JSON.stringify(owned?.doc) !== JSON.stringify(afterWork?.doc) ||
+      fansOwned.revision !== afterFans?.revision ||
+      JSON.stringify(fansOwned.doc) !== JSON.stringify(afterFans?.doc);
     const fresh = observedSince !== undefined && observedSince <= began;
     return {
       format: "ducts-analysis-v5",
@@ -457,7 +484,12 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     const group = request.selector.kind === "group" ? request.selector.id : "";
     if (group && !input.snapshot.groups.some((g) => g.id === group))
       throw Error("Apply request group is unavailable");
-    const priced = price(input.snapshot, toGrids(input.tables), work, input.catalogs);
+    const priced = price(
+      input.snapshot,
+      toGrids(input.tables),
+      ductsDesign(work, input.fans), input.fans,
+      input.catalogs,
+    );
     if (
       ![
         priced.edit.rules,
@@ -612,7 +644,7 @@ function project(
   const outputs = hydrateOutputs(artifact);
   const { now, next } = outputs;
   const selector = request.selector;
-  const assessment = assessDucts(input.snapshot, work, outputs, {
+  const assessment = assessDucts(input.snapshot, ductsDesign(work, input.fans), outputs, {
     selector,
     freshness: artifact.freshness,
   });

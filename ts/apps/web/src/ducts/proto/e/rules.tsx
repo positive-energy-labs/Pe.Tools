@@ -6,10 +6,10 @@
 import {
   transitionPatches,
   type DuctDrop,
-  type DuctsRouteDocument,
+  type DuctsDesign,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { useCellTransitions } from "../../pane-context";
+
 import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
 import { ValueDiff } from "@pe/kit/lang/value-diff";
@@ -21,11 +21,7 @@ import { PressureEquivalent } from "./pressure-equivalent";
 // proto: copied from losses-view.tsx
 const fmt = (n: number | null | undefined) => (n == null ? "" : n.toFixed(4));
 /** Stage a rule's table; staging the table already edit takes it back. */
-const tablePatches = (
-  doc: DuctsRouteDocument | null,
-  key: string,
-  table: string,
-): RouteStatePatch[] => {
+const tablePatches = (doc: DuctsDesign | null, key: string, table: string): RouteStatePatch[] => {
   const cell = doc?.rules[key] ?? {};
   return cell.edit?.value.table === table
     ? transitionPatches(["rules"], key, cell, { kind: "clear" })
@@ -46,7 +42,7 @@ export function DropCell({
 }) {
   const key = String(id);
   const cell = work.doc?.[segment][key] ?? {};
-  const transitions = useCellTransitions(segment, key);
+
   const authored = (cell.edit ?? cell.suggestion)?.value as DuctDrop | undefined;
   return (
     <span
@@ -57,29 +53,16 @@ export function DropCell({
       <StateCell
         {...cellFromDraft(cell, {
           value: authored ? String(authored.inWg) : held == null ? "" : String(held),
-          cap: "editable",
+          cap: "locked",
+          capReason: "Fan inputs are unavailable",
           note: authored && held != null ? `Revit holds ${held}` : undefined,
         })}
         scale="row"
         unit={{ label: "in-wg", short: "wg" }}
         numeric={{ min: 0, digits: 4 }}
         placeholder="—"
-        onCommit={(text: string) =>
-          work
-            .write(
-              transitionPatches([segment], key, cell, {
-                kind: "set",
-                rung: {
-                  value: {
-                    inWg: Number(text),
-                    ...(authored?.source ? { source: authored.source } : {}),
-                  },
-                },
-              }),
-            )
-            .then((refusal) => refusal?.message)
-        }
-        transitions={transitions}
+        // U4 restores fan editing through the fans Work.
+        transitions={[]}
       />
       <PressureEquivalent inWg={authored?.inWg ?? held} />
     </span>

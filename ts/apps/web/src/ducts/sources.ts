@@ -1,7 +1,12 @@
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 
-import { stagedDucts, type DuctsSheetRequest, type DuctsSheetOverview } from "@pe/agent-contracts";
+import {
+  neutralFansWork,
+  stagedDucts,
+  type DuctsSheetRequest,
+  type DuctsSheetOverview,
+} from "@pe/agent-contracts";
 
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 
@@ -52,7 +57,8 @@ const captured = (source: UseSource<DuctSnapshot | null>): UseSource<SnapshotRea
 const target = (ctx: ReadingContext) => (ctx.target.kind === "document" ? ctx.target.ref : null);
 
 const slots = (ctx: ReadingContext) => {
-  const edit = stagedDucts(args(ctx).work ?? null);
+  // U4 wires the real fans Work here.
+  const edit = stagedDucts(args(ctx).work ?? null, neutralFansWork);
 
   return { slots: edit.parameters, labelParameter: edit.labelParameter ?? undefined };
 };

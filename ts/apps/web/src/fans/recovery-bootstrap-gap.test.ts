@@ -5,12 +5,12 @@ import { act, cleanup as cleanupView, render, screen } from "@testing-library/re
 import { z } from "zod";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
-  ductsDocumentSchema,
+  fansDocumentSchema,
   bindWork,
   workKey,
   address,
-  ductsRouteState,
-  salvageDuctsWork,
+  fansRouteState,
+  salvageWork,
   type WorkWriteAck,
   documentRequestSchema,
 } from "@pe/agent-contracts";
@@ -88,7 +88,7 @@ const data = {
 } as const;
 const schemas = {
   ...captures.schemas,
-  work: ductsDocumentSchema,
+  work: fansDocumentSchema,
   slot: z.string(),
   names: z.record(z.string(), z.string()),
   historyDetail: inputHistoryMetaSchema,
@@ -140,17 +140,18 @@ const bodies = {
     kind: "salvage",
     source,
     run: (raw) => {
-      const cell = salvageDuctsWork(raw).doc.componentDrops["100"];
+      const cell = salvageWork(fansDocumentSchema, raw).doc.componentDrops["100"];
       return { ok: true, value: cell ? [{ path: ["componentDrops", "100"], value: cell }] : [] };
     },
   },
 } satisfies BodyBindings<typeof data, typeof schemas, typeof captures.entries>;
-const extract = (raw: unknown) => salvageDuctsWork(raw).doc;
+const extract = (raw: unknown) => salvageWork(fansDocumentSchema, raw).doc;
 const neutral = {
   data,
   schemas,
   bodies: { salvage: { slot: "salvage", kind: "recovery" as const, source, run: extract } },
-  workState: { ...ductsRouteState, salvage: extract },
+  // The fan cells are the recovery material (fans Work since FANSPLIT), keyed as this witness route.
+  workState: { ...fansRouteState, route: "ducts", salvage: extract },
 };
 const cleanup: (() => void)[] = [];
 afterEach(() => {
@@ -387,7 +388,7 @@ test("H7: canonical recovery presents named rows from captured evidence and acce
   expect(JSON.stringify({ sentence: review.sentence, rows: review.rows })).not.toMatch(/100|900/);
   await settle(f.mount.confirm("work.salvage") as Observation<WorkWriteOutcome>);
   expect(
-    ductsDocumentSchema.parse(f.mount.work()!.value).componentDrops["100"]?.edit?.value.inWg,
+    fansDocumentSchema.parse(f.mount.work()!.value).componentDrops["100"]?.edit?.value.inWg,
   ).toBe(0.18);
   expect(f.saved.get("ducts:aside:1")).toEqual(unreadable);
 });
@@ -401,7 +402,7 @@ test.each(["throw", "invalid"] as const)(
       failure === "throw" ? /present-threw/ : /present-invalid/,
     );
     expect(f.mount.review("work.salvage")).toBeNull();
-    expect(ductsDocumentSchema.parse(f.mount.work()!.value).componentDrops).toEqual({});
+    expect(fansDocumentSchema.parse(f.mount.work()!.value).componentDrops).toEqual({});
   },
 );
 test("H8: real host history restores labels and undo across a remount", async () => {
@@ -411,7 +412,7 @@ test("H8: real host history restores labels and undo across a remount", async ()
   expect(f.mount.journal()!.moves.map((m) => m.label)).toEqual(["fanFlow → PE_M_Fan_AirFlow"]);
   const next = f.reopen();
   await vi.waitFor(() => expect(next.workBasis()).not.toBeNull());
-  expect(ductsDocumentSchema.parse(next.work()!.value).parameters.fanFlow?.edit?.value).toBe(
+  expect(fansDocumentSchema.parse(next.work()!.value).parameters.fanFlow?.edit?.value).toBe(
     "PE_M_Fan_AirFlow",
   );
   const acks: WorkWriteAck[] = [];
@@ -424,7 +425,7 @@ test("H8: real host history restores labels and undo across a remount", async ()
   );
   expect(next.journal()!.moves.map((m) => m.label)).toEqual(["fanFlow \u2192 PE_M_Fan_AirFlow"]);
   expect(await next.history!.undo()).toMatchObject({ ok: true });
-  expect(ductsDocumentSchema.parse(next.work()!.value).parameters.fanFlow?.edit).toBeUndefined();
+  expect(fansDocumentSchema.parse(next.work()!.value).parameters.fanFlow?.edit).toBeUndefined();
 });
 
 test("H7: a later Work edit hides named recovery evidence and refuses stale confirmation", async () => {
@@ -450,7 +451,7 @@ test("H8: undo then remount retains the undone step and host-issued redo", async
   expect(next.journal()!.redo[0]!.cursor).toBe(0);
   expect(next.journal()!.moves.map((m) => m.kind)).toEqual(["apply", "undo"]);
   expect(await next.history!.redo()).toMatchObject({ ok: true });
-  expect(ductsDocumentSchema.parse(next.work()!.value).parameters.fanFlow?.edit?.value).toBe(
+  expect(fansDocumentSchema.parse(next.work()!.value).parameters.fanFlow?.edit?.value).toBe(
     "PE_M_Fan_AirFlow",
   );
 });
@@ -479,7 +480,7 @@ test("H8: trimmed history cannot undo beyond the retained from boundary", async 
   expect(next.journal()!.undo).toHaveLength(1);
   expect(await next.history!.undo()).toMatchObject({ ok: true });
   expect(await next.history!.undo()).toMatchObject({ ok: false, code: "empty" });
-  expect(ductsDocumentSchema.parse(next.work()!.value).parameters.fanFlow?.edit?.value).toBe("B");
+  expect(fansDocumentSchema.parse(next.work()!.value).parameters.fanFlow?.edit?.value).toBe("B");
 });
 test("H8: a gap reacquires real host history and resets the view", async () => {
   const f = await witness(undefined, undefined, { maxCount: 1, maxBytes: 1_000_000 });
@@ -506,7 +507,7 @@ test("H8: a gap reacquires real host history and resets the view", async () => {
   expect(f.states.filter((s) => s.kind === "ready")).toHaveLength(2);
   expect(f.mount.journal()!.moves.map((m) => m.label)).toEqual(["Second slot"]);
   expect(await f.mount.history!.undo()).toMatchObject({ ok: true });
-  expect(ductsDocumentSchema.parse(f.mount.work()!.value).parameters.fanFlow?.edit?.value).toBe(
+  expect(fansDocumentSchema.parse(f.mount.work()!.value).parameters.fanFlow?.edit?.value).toBe(
     "A",
   );
 });

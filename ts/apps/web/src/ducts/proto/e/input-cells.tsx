@@ -1,18 +1,16 @@
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 /**
  * The inputs that live on the system tree: a terminal's flow and drop, a unit's flow, ESP and role.
- * Each is one kit trichotomy `StateCell` over its Work cell: a person's edit stages, Pea's suggestion
+ * U4 restores writers through the fans Work. Each is one kit trichotomy `StateCell` over its Work cell: a person's edit stages, Pea's suggestion
  * shows as the proposed state with accept and reject, and the value drawn is the one Pe resolved
  * (its rung named beside it in quiet text) until one is edit.
  */
-import { DUCT_UNIT_ROLES, transitionPatches } from "@pe/agent-contracts";
+
 import { storedRuling } from "@pe/ducts-domain/rulings";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
-import { useCellTransitions } from "../../pane-context";
 
-import { rulingPatches } from "../../assumptions";
 import { equipmentInputs, terminalInputs, type Resolved } from "../../inputs";
 import type { CellSegment } from "../../inbox-rows";
 import type { LossesWork } from "../../work";
@@ -90,7 +88,7 @@ function InputCell({
   const key = String(id);
   const cell = work.doc?.[spec.segment][key] ?? {};
   const standing = (cell.edit ?? cell.suggestion)?.value as Rung | undefined;
-  const transitions = useCellTransitions(spec.segment, key);
+
   const word = cell.edit ? "override" : cell.suggestion ? "Pea proposes" : resolved.word;
   const value = spec.text(standing) ?? (resolved.value == null ? "" : String(resolved.value));
   return (
@@ -105,7 +103,8 @@ function InputCell({
           cell,
           {
             value,
-            cap: "editable",
+            cap: "locked",
+            capReason: "Fan inputs are unavailable",
           },
           (value) => spec.text(value as Rung) ?? "",
         )}
@@ -113,17 +112,8 @@ function InputCell({
         damage={damage}
         unit={spec.unit}
         numeric={{ min: 0, digits: spec.digits }}
-        onCommit={(text: string) =>
-          work
-            .write(
-              transitionPatches([spec.segment], key, cell, {
-                kind: "set",
-                rung: { value: spec.rung(text, standing) },
-              }),
-            )
-            .then((refusal) => refusal?.message)
-        }
-        transitions={transitions}
+        // U4 restores fan editing through the fans Work.
+        transitions={[]}
       />
       {spec.unit.label === "in-wg" && value !== "" ? (
         <PressureEquivalent inWg={Number(value)} />
@@ -154,7 +144,7 @@ function RoleCell({
   const key = String(id);
   const cell = work.doc?.roles[key] ?? {};
   const standing = (cell.edit ?? cell.suggestion)?.value;
-  const transitions = useCellTransitions("roles", key);
+
   const stored = storedRuling(store, "roles", key);
   const word =
     cell.edit && stored === cell.edit.value.role
@@ -174,20 +164,17 @@ function RoleCell({
       <StateCell
         {...cellFromDraft(
           cell,
-          { value: standing?.role ?? resolved.value ?? "fan", cap: "editable" },
+          {
+            value: standing?.role ?? resolved.value ?? "fan",
+            cap: "locked",
+            capReason: "Fan inputs are unavailable",
+          },
           (value) => (value as { role?: string } | undefined)?.role ?? "",
         )}
         scale="row"
         placeholder="fan"
-        onCommit={(text: string) => {
-          const role = text.trim().toLowerCase();
-          if (!(DUCT_UNIT_ROLES as readonly string[]).includes(role))
-            return `a role is ${DUCT_UNIT_ROLES.join(" or ")}`;
-          return work
-            .write(rulingPatches(work.doc, store, "roles", key, role) as never)
-            .then((refusal) => refusal?.message);
-        }}
-        transitions={transitions}
+        // U4 restores fan editing through the fans Work.
+        transitions={[]}
       />
       <TooltipHint content={resolved.reason}>
         <span className="dl-cells-note t-small" data-e-source={word ?? ""}>

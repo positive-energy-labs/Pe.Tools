@@ -37,7 +37,7 @@
  */
 import { subjectName } from "./words.ts";
 import { elementLabeler } from "./element-label.ts";
-import type { DuctInferenceGrade, DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctInferenceGrade, DuctsDesign } from "@pe/agent-contracts";
 import { cells } from "./geometry.ts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -442,7 +442,7 @@ function land(face: Face, p: number[], axis: number[]): { d: number; onto: Onto 
  * The edit verdict on a finding id, if any: `ignore` withholds it, `connect` confirms it (and
  * joins it across classifications). Staged only: a suggestion is Pea's and never rules.
  */
-export const verdictOf = (work: DuctsRouteDocument | null, id: string) => {
+export const verdictOf = (work: DuctsDesign | null, id: string) => {
   const value = work?.assumptions[id]?.edit?.value;
   return value?.kind === "verdict" ? value.verdict : null;
 };
@@ -487,7 +487,7 @@ function components(elements: Element[], equipment: ReadonlySet<number>) {
  * Each inference is a finding; one that joins two elements already in one component is also a
  * `loop-by-inference`.
  */
-export const topologyRulingsKey = (work: DuctsRouteDocument | null) =>
+export const topologyRulingsKey = (work: DuctsDesign | null) =>
   JSON.stringify(
     Object.entries(work?.assumptions ?? {})
       .flatMap(([key, cell]) => {
@@ -503,7 +503,7 @@ const inferences = new WeakMap<DuctSnapshot, { key: string; value: Inference }>(
 export function rememberInference(
   snapshot: DuctSnapshot,
   tolIn: number,
-  work: DuctsRouteDocument | null,
+  work: DuctsDesign | null,
   value: Inference,
 ) {
   inferences.set(snapshot, { key: `${tolIn}:${topologyRulingsKey(work)}`, value });
@@ -512,7 +512,7 @@ export function rememberInference(
 export function inferJoints(
   snapshot: DuctSnapshot,
   tolIn = 1,
-  work: DuctsRouteDocument | null = null,
+  work: DuctsDesign | null = null,
 ): Inference {
   const key = `${tolIn}:${topologyRulingsKey(work)}`;
   const hit = inferences.get(snapshot);
@@ -525,7 +525,7 @@ export function inferJoints(
 function infer(
   snapshot: DuctSnapshot,
   tolIn = 1,
-  work: DuctsRouteDocument | null = null,
+  work: DuctsDesign | null = null,
 ): Inference {
   const tol = tolIn / 12;
   const elements: Element[] = [...snapshot.nodes, ...snapshot.segments];
@@ -890,7 +890,7 @@ export interface InferredLink {
  */
 export function tolerate(
   snapshot: DuctSnapshot,
-  work: DuctsRouteDocument | null = null,
+  work: DuctsDesign | null = null,
   tolIn = 1,
 ): Inference & { snapshot: DuctSnapshot; links: InferredLink[] } {
   const inference = inferJoints(snapshot, tolIn, work);

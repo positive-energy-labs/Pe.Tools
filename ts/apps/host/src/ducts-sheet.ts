@@ -4,7 +4,9 @@ import {
   canonicalRouteInput,
   stagedDucts,
   DUCTS_BODY_VERSION_HEADER,
+  ductsDesign,
   ductsDocumentSchema,
+  neutralFansWork,
   type DuctsInputs,
   type WorkKey,
   type WorkAuthor,
@@ -225,7 +227,8 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
   async function loadLayers(target: DocumentRef) {
     const scope = work ? await work.key(target) : null;
     const owned = scope && work ? await work.workspace.readRaw(scope, "ducts") : null;
-    const doc = owned ? ductsDocumentSchema.parse(owned.doc) : null;
+    // U4 wires the real fans Work here; until then the sheet reads the neutral fans Work.
+    const doc = ductsDesign(owned ? ductsDocumentSchema.parse(owned.doc) : null, neutralFansWork);
     const firm = await readFirm();
     return {
       scope,
@@ -385,7 +388,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const tolerances = tolerancesOf(criteria);
       // The Protocol slot is a Work `parameters` cell: without it the read measured terminal flow
       // under the document's stored slot, so switching the sheet's airflow slot repriced nothing.
-      const staged = stagedDucts(saved.doc).parameters;
+      const staged = stagedDucts(saved.doc, (saved.doc) ?? neutralFansWork).parameters;
       const slots = Object.keys(staged).length ? staged : undefined;
       const acquisition: SnapshotRequest = {
         ...(slots ? { slots } : {}),
@@ -500,7 +503,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       // Work's protocol slots ride along as on the sheet's own read: a unit's fanFlow fact (its design
       // flow, and whether the roster proposes it a fan) is read under the person's fan-flow slot.
       const saved = await loadLayers(request.target);
-      const staged = stagedDucts(saved.doc).parameters;
+      const staged = stagedDucts(saved.doc, (saved.doc) ?? neutralFansWork).parameters;
       const acquisition: SnapshotRequest = {
         ...(Object.keys(staged).length ? { slots: staged } : {}),
         selector: { kind: "roster" },

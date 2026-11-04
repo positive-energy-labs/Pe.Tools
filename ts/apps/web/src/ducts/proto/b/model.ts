@@ -7,7 +7,7 @@
  * fan's run, `byGroup.criticalFan`) is always a row a person can see. With no priced result every
  * number is null (never a stand-in figure).
  */
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/agent-contracts";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import { worstRun, type FanResult, type Provisional, type Row } from "@pe/ducts-domain/losses";
 import { groupTree, runsOf } from "@pe/ducts-domain/topology";
@@ -108,7 +108,7 @@ const unpricedOf = (rows: readonly Row[]): TreeNode["unpriced"] => {
 export function buildTree(
   snapshot: DuctSnapshot,
   priced: Priced | null,
-  work: DuctsRouteDocument | null,
+  work: DuctsDesign | null,
   only: readonly string[] = [],
   sectionName?: (group: string) => string,
   members?: ReadonlySet<number>,

@@ -22,7 +22,7 @@ const owner = {
       input: "none",
       label: "Slot",
       review: "none",
-      deps: { page: [], work: ["parameters"], readings: [] },
+      deps: { page: [], work: ["rules"], readings: [] },
       captures: [],
       patches: "slot",
     },
@@ -32,8 +32,8 @@ const presenter = { ...owner, key: "fans", address: "/fans", work: { route: "duc
 const ownerSchemas = { work: ductsDocumentSchema };
 const schemas = withWorkOwner({}, { data: owner, schemas: ownerSchemas });
 const slot = {
-  path: ["parameters", "fanFlow"],
-  value: { edit: { value: "PE_M_Fan_AirFlow" } },
+  path: ["rules", "elbow"],
+  value: { edit: { value: { table: "PE_M_Fan_AirFlow" } } },
 } as const;
 const ownerSlot: WorkPatches<typeof owner, typeof ownerSchemas> = [slot];
 const presenterSlot: WorkPatches<typeof presenter, typeof schemas> = [slot];
@@ -55,7 +55,7 @@ const ownerBody: BodyBindings<typeof owner, typeof ownerSchemas, {}>["slot"] = {
   kind: "work",
   source: { module: "fans/owner-schema-gap.test.ts", export: "ownerBody" },
   run: (ctx) => {
-    const field: string | undefined = ctx.work.parameters.fanFlow?.edit?.value;
+    const field: string | undefined = ctx.work.rules.elbow?.edit?.value.table;
     void field;
     return ownerSlot;
   },
@@ -79,14 +79,14 @@ const describe: BodyBindings<typeof described, typeof schemas, {}>["describe"] =
   slot: "verbs.slot.describe",
   kind: "describe",
   source: { module: "fans/owner-schema-gap.test.ts", export: "describe" },
-  run: (_input, ctx) => ({ label: String(ctx.work.parameters.fanFlow?.edit?.value) }),
+  run: (_input, ctx) => ({ label: String(ctx.work.rules.elbow?.edit?.value.table) }),
 };
 function ownerEvidence(
   ctx: BodyContext<typeof presenter, typeof schemas, {}, typeof presenter.verbs.slot>,
   pane: PaneContext<typeof presenter, typeof schemas, {}, keyof typeof presenter.panes>,
 ) {
-  const value = ctx.work.parameters.fanFlow?.edit?.value;
-  const paneValue = pane.work?.parameters.fanFlow?.edit?.value;
+  const value = ctx.work.rules.elbow?.edit?.value.table;
+  const paneValue = pane.work?.rules.elbow?.edit?.value.table;
   // @ts-expect-error Typed owner callbacks cannot read absent Work fields.
   void ctx.work.notADuctsField;
   return [value, paneValue, pane.workBasis];
@@ -113,6 +113,6 @@ const present: BodyBindings<typeof presented, typeof schemas, {}>["present"] = {
   slot: "verbs.apply.present",
   kind: "present",
   source: { module: "fans/owner-schema-gap.test.ts", export: "present" },
-  run: (_result, evidence) => String(evidence.work.parameters.fanFlow?.edit?.value),
+  run: (_result, evidence) => String(evidence.work.rules.elbow?.edit?.value.table),
 };
 void present;

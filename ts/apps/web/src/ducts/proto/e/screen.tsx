@@ -80,7 +80,12 @@ import { subscribe as knobsChanged } from "#/knobs/knobs";
 
 import { settleWork } from "#/shell/work-door-observation";
 import * as Atom from "effect/reactivity/Atom";
-import { stagedDucts, type DuctsRouteDocument, type RouteStatePatch } from "@pe/agent-contracts";
+import {
+  stagedDucts,
+  ductsDesign,
+  neutralFansWork,
+  type RouteStatePatch,
+} from "@pe/agent-contracts";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { pendingCount } from "@pe/ducts-domain/staged";
@@ -119,8 +124,8 @@ export function NetworkBody({
   ctx: NetworkContext;
   id: keyof typeof ductsData.panes;
 }) {
-  // readonly at the contract owner after U2 lands
-  const workDoc = ctx.work as DuctsRouteDocument | null;
+  // U4 wires the real fans Work here.
+  const workDoc = useMemo(() => ductsDesign(ctx.work, neutralFansWork), [ctx.work]);
   const target = ctx.workBasis?.token.scope.identity.target ?? { kind: "host" as const };
   const authored = ctx.page.read();
   const roster = ctx.readings.roster.value;
@@ -146,7 +151,7 @@ export function NetworkBody({
   // Kernel gap: the pricing derive schema is unknown; its worker result also carries Maps.
   const priced =
     pricing.status !== "failed" ? (pricing.value as PricingResult | undefined) : undefined;
-  const edit = useMemo(() => stagedDucts(workDoc ?? null), [workDoc]);
+  const edit = useMemo(() => stagedDucts(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);
   const seen = useMemo(
     () => withStoredRulings(workDoc ?? null, snapshot?.store),
     [workDoc, snapshot],

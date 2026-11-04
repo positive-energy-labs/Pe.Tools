@@ -1,3 +1,5 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { createPeRoutes } from "../src/pe-routes.ts";
@@ -8,7 +10,10 @@ import { afterEach, expect, test } from "vite-plus/test";
 import {
   ductsAnalysisRequestSchema,
   ductsAnalysisResponseSchema,
+  ductsDesign,
   ductsDocumentSchema,
+  fansDocumentSchema,
+  type WorkKey,
   ductsApplyRequestArtifactSchema,
   ductsApplyInputSchema,
   ductsRouteState,
@@ -158,9 +163,10 @@ function fixture() {
         { headers: { "x-pe-native-request-id": `fixture-${nativeReads}` } },
       );
     },
-    readWork: async () => {
+    // As pe-routes reads: ducts Work absent, fans Work absent reads as its empty document.
+    readWork: async (key) => {
       workReads++;
-      return null;
+      return key.route === "fans" ? { doc: {}, revision: 0 } : null;
     },
   };
   return {
@@ -178,16 +184,20 @@ function fixture() {
 const read = (source: unknown, selector: unknown = (source as { kind: string }).kind === "fresh" ? { kind: "equipment", id: 1 } : { kind: "document" }, extra: object = {}) =>
   ductsAnalysisRequestSchema.parse({ source, selector: (source as { kind: string }).kind === "fresh" && (selector as { kind: string }).kind === "document" ? { kind: "equipment", id: 1 } : selector, ...extra });
 
+/** Each Work at its own binding (FANSPLIT): ducts cells under the ducts key, fan cells under fans. */
+const works =
+  (fans: () => unknown, revision = 1, ducts: () => unknown = () => ({})) =>
+  async (key: WorkKey) => ({ doc: key.route === "fans" ? fans() : ducts(), revision });
+
 test("headless acquisition uses project Work slots", async () => {
   const f = fixture();
-  f.sources.readWork = async () => ({
-    revision: 1,
-    doc: ductsDocumentSchema.parse({
+  f.sources.readWork = works(() =>
+    fansDocumentSchema.parse({
       parameters: Object.fromEntries(
         DUCT_PARAMETER_KEYS.map((key) => [key, { edit: { value: `Project ${key}` } }]),
       ),
     }),
-  });
+  );
   const call = f.sources.call;
   let requested: unknown;
   f.sources.call = async (key, request, target) => {
@@ -289,7 +299,7 @@ test("physical circuits and path pages retain staged evidence and never acquire 
     direction: "bidirectional",
     connectedTo: { id: id === 1 ? 2 : 1, connector: 1, uniqueId: `purpose-${id === 1 ? 2 : 1}` },
   });
-  const doc = ductsDocumentSchema.parse({
+  const doc = fansDocumentSchema.parse({
     calculation: {
       scenario: {
         edit: { value: { kind: "balanced-design", source: "Purpose balanced design" } },
@@ -327,7 +337,7 @@ test("physical circuits and path pages retain staged evidence and never acquire 
       },
     },
   });
-  f.sources.readWork = async () => ({ doc, revision: 9 });
+  f.sources.readWork = works(() => doc, 9);
   const fresh = ductsAnalysisResponseSchema.parse(
     await f.api.read(
       read(
@@ -351,7 +361,7 @@ test("physical circuits and path pages retain staged evidence and never acquire 
   const artifact = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
   expect(artifact.format).toBe("ducts-analysis-v5");
   expect(
-    JSON.parse(gunzipSync(Buffer.from(artifact.input.data, "base64")).toString("utf8")).work,
+    JSON.parse(gunzipSync(Buffer.from(artifact.input.data, "base64")).toString("utf8")).fans,
   ).toEqual(doc);
   expect(artifact.outputs.next.design.graph.ports).toHaveLength(2);
   const counts = f.counts();
@@ -450,7 +460,7 @@ test("canonical staged component constraints drive shared analysis without claim
       },
     };
   };
-  const doc = ductsDocumentSchema.parse({
+  const doc = fansDocumentSchema.parse({
     calculation: {
       scenario: { edit: { value: { kind: "balanced-design", source: "Synthetic design" } } },
       a: {
@@ -495,7 +505,7 @@ test("canonical staged component constraints drive shared analysis without claim
       },
     },
   });
-  f.sources.readWork = async () => ({ doc, revision: 1 });
+  f.sources.readWork = works(() => doc, 1);
   const baseline = await f.api.read(
     read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
   );
@@ -517,16 +527,16 @@ test("canonical staged component constraints drive shared analysis without claim
     ],
     source: "One component design",
   };
-  let staged = ductsDocumentSchema.parse({
+  let staged = fansDocumentSchema.parse({
     ...doc,
     calculation: { ...doc.calculation, flow: { suggestion: { value: design } } },
   });
-  f.sources.readWork = async () => ({ doc: staged, revision: 2 });
+  f.sources.readWork = works(() => staged, 2);
   const proposal = await f.api.read(
     read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
   );
   expect(proposal.rows[0]!.component?.status).toBe("underdetermined");
-  staged = ductsDocumentSchema.parse({
+  staged = fansDocumentSchema.parse({
     ...doc,
     calculation: { ...doc.calculation, flow: { edit: { value: design } } },
   });
@@ -680,7 +690,7 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
       connectedTo: { id: id === 1 ? 2 : 1, uniqueId: `purpose-${id === 1 ? 2 : 1}`, connector: 1 },
     };
   };
-  let doc = ductsDocumentSchema.parse({
+  let doc = fansDocumentSchema.parse({
     calculation: {
       scenario: { edit: { value: { kind: "balanced-design", source: "Purpose design" } } },
       fan: {
@@ -712,7 +722,7 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
       },
     },
   });
-  f.sources.readWork = async () => ({ doc, revision: 1 });
+  f.sources.readWork = works(() => doc, 1);
   const initial = await f.api.read(
     read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
   );
@@ -720,7 +730,7 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
   const witness = first.outputs.next.design.componentFlows[0].witnessElements.map(
     (i: number) => first.witnessElements[i],
   );
-  doc = ductsDocumentSchema.parse({
+  doc = fansDocumentSchema.parse({
     ...doc,
     calculation: {
       ...doc.calculation,
@@ -803,7 +813,7 @@ test("actual analysis handler shares bounded prescribed hydraulic closure and ex
 });
 
 function candidateWork() {
-  return ductsDocumentSchema.parse({
+  return fansDocumentSchema.parse({
     terminalDrops: {
       "2": {
         edit: { value: { inWg: 0.12, source: "Approved purpose point" } },
@@ -840,9 +850,9 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
     customerKeep: { exact: [1, "untouched"] },
   };
   let workReadCalls = 0;
-  f.sources.readWork = async () => {
-    workReadCalls++;
-    return { doc, revision: 7 };
+  f.sources.readWork = async (key) => {
+    if (key.route === "ducts") workReadCalls++;
+    return { doc: key.route === "fans" ? doc : {}, revision: 7 };
   };
   const initial = await f.api.read(read({ kind: "fresh", target: f.target }));
   const original = Buffer.from(await (await f.api.artifact(initial.analysisId)).arrayBuffer());
@@ -870,7 +880,7 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
   const expected = ductsApplyInputSchema.parse(
     applyRequest(
       input.snapshot,
-      price(input.snapshot, toGrids(input.tables), input.work),
+      price(input.snapshot, toGrids(input.tables), ductsDesign(input.work, input.fans), (ductsDesign(input.work, input.fans)) ?? neutralFansWork),
       plan.createdAt,
       [],
     ),
@@ -903,9 +913,34 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
   ).rejects.toThrow("group is unavailable");
 });
 
+test("a fan cell left in the ducts Work is not priced; at the fans binding it is", async () => {
+  const f = fixture();
+  // A v1 ducts Work still holding a fan cell: the 1 -> 2 migration drops it (Q5), and the
+  // analysis reads drops from the fans Work only.
+  const drop = { "2": { edit: { value: { inWg: 0.12, source: "Approved purpose point" } } } };
+  expect(ductsRouteState.migrations[1]({ terminalDrops: drop })).toEqual({});
+  f.sources.readWork = works(() => ({}), 1, () => ({ terminalDrops: drop }));
+  const stale = await f.api.read(read({ kind: "fresh", target: f.target }));
+  expect(stale.findings).toContainEqual(
+    expect.objectContaining({ id: "work:unreadable", note: expect.stringContaining("terminalDrops") }),
+  );
+  f.sources.readWork = works(() => ({ terminalDrops: drop }));
+  const fresh = await f.api.read(read({ kind: "fresh", target: f.target }));
+  const staged = async (id: string) =>
+    ductsAnalysisResponseSchema
+      .parse(await f.api.read(read({ kind: "artifact", id }, { kind: "document" }, { projection: "terminals" })))
+      .rows.map((row) => (row as { requiredEspStagedInWg?: number }).requiredEspStagedInWg);
+  // The 0.12 in-wg drop prices only from the fans binding.
+  expect(await staged(fresh.analysisId)).not.toEqual(await staged(stale.analysisId));
+  const candidate = ductsAnalysisResponseSchema.parse(
+    await f.api.read(candidateRead(fresh.analysisId)),
+  );
+  expect(candidate.applyRequest!.counts.terminals).toBe(1);
+});
+
 test("apply-request refuses changed producer outputs, custody, Work and unsupported formats without acquisitions", async () => {
   const f = fixture();
-  f.sources.readWork = async () => ({ doc: candidateWork(), revision: 1 });
+  f.sources.readWork = works(() => candidateWork(), 1);
   const fresh = await f.api.read(read({ kind: "fresh", target: f.target }));
   const original = JSON.parse(await (await f.api.artifact(fresh.analysisId)).text());
   const before = f.counts();
@@ -971,10 +1006,10 @@ test("apply-request refuses changed producer outputs, custody, Work and unsuppor
 
 test("apply-request cannot turn proposal-only or physical fan required head into native writes", async () => {
   const f = fixture();
-  let doc = ductsDocumentSchema.parse({
+  let doc = fansDocumentSchema.parse({
     terminalDrops: { "2": { suggestion: { value: { inWg: 2, source: "Unaccepted" } } } },
   });
-  f.sources.readWork = async () => ({ doc, revision: 1 });
+  f.sources.readWork = works(() => doc, 1);
   let initial = await f.api.read(read({ kind: "fresh", target: f.target }));
   await expect(f.api.read(candidateRead(initial.analysisId))).rejects.toThrow(
     "No native write values",
@@ -988,7 +1023,7 @@ test("apply-request cannot turn proposal-only or physical fan required head into
   delete f.snapshot.storeError;
   for (const n of f.snapshot.nodes) n.uniqueId = `purpose-${n.id}`;
   f.snapshot.nodes[0]!.connectors[0]!.direction = "out";
-  doc = ductsDocumentSchema.parse({
+  doc = fansDocumentSchema.parse({
     ...candidateWork(),
     esp: { "1": { edit: { value: { inWg: 0.25 } } } },
     calculation: {
@@ -1022,7 +1057,7 @@ test("apply-request cannot turn proposal-only or physical fan required head into
   );
 });
 
-test("the survey joins a sub-tolerance gap, takes the terminal flow from the load preview and emits findings", async () => {
+test("the survey joins a sub-tolerance gap, takes the terminal flow from Revit and emits findings", async () => {
   const f = fixture();
   const [fan, grille] = f.snapshot.nodes as [
     DuctSnapshot["nodes"][number],
@@ -1032,19 +1067,7 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
   fan.connectors[0]!.connectedTo = null;
   grille.connectors[0]!.connectedTo = null;
   grille.connectors[0]!.point = [0.4 / 12, 0, 0];
-  fan.facts.push({ key: "mark", text: "FC-4", unit: "", provenance: "revit-reported" });
-  const doc = ductsDocumentSchema.parse({
-    loads: {
-      preview: {
-        edit: {
-          value: {
-            systems: [{ name: "System 1 Office FC-4", tag: "FC-4", cfm: 250, rooms: [] }],
-          },
-        },
-      },
-    },
-  });
-  f.sources.readWork = async () => ({ doc, revision: 3 });
+  // FANSPLIT (kaitpw 2026-11-03): the Load Preview is deleted; Revit's own grille flow prices.
   const summary = ductsAnalysisResponseSchema.parse(
     await f.api.read(read({ kind: "fresh", target: f.target })),
   );
@@ -1087,31 +1110,10 @@ test("the survey joins a sub-tolerance gap, takes the terminal flow from the loa
       ),
     ),
   );
-  // Revit states 100 cfm on the grille; the staged load preview's 250 wins for the staged solve.
-  expect(terminals.rows).toEqual([
-    expect.objectContaining({
-      id: 2,
-      flowCfm: 250,
-      flowSource: "load-preview:FC-4",
-      requiredEspStagedInWg: 0.08,
-    }),
-  ]);
+  expect(terminals.rows).toEqual([expect.objectContaining({ id: 2, flowCfm: 100 })]);
   expect(terminals.findings).toEqual([]);
   expect(terminals.findingCounts).toEqual(summary.findingCounts);
 
-  // Without a Mark the unit cannot match any preview system, and the survey says so to the person.
-  fan.facts = fan.facts.filter((fact) => fact.key !== "mark");
-  const markless = ductsAnalysisResponseSchema.parse(
-    await f.api.read(read({ kind: "fresh", target: f.target })),
-  );
-  expect(markless.findings.slice(0, 2).map((finding) => finding.clearer)).toEqual([
-    "person",
-    "person",
-  ]);
-  expect(markless.findings).toContainEqual(
-    expect.objectContaining({ kind: "no-mark", elementIds: [1], clearer: "person" }),
-  );
-  expect(markless.findingCounts.byClearer).toEqual({ route: 1, pea: 0, person: 3 });
 });
 
 
@@ -1119,10 +1121,10 @@ test("apply-request refuses a terminal without an observed slot before dispatch"
   const f = fixture();
   const doc = candidateWork();
   f.snapshot.nodes[1]!.flowParameter = null;
-  expect(() => applyRequest(f.snapshot, price(f.snapshot, {}, doc), "fixed", []))
+  expect(() => applyRequest(f.snapshot, price(f.snapshot, {}, ductsDesign(null, doc), (ductsDesign(null, doc)) ?? neutralFansWork), "fixed", []))
     .toThrow("Element 2 has no observed airflow parameter");
   f.snapshot.nodes[1]!.flowParameter = "revit:Flow";
   doc.parameters.terminalFlow = { edit: { value: "PE_M_Grd_AirFlow" } };
-  expect(() => applyRequest(f.snapshot, price(f.snapshot, {}, doc), "fixed", []))
+  expect(() => applyRequest(f.snapshot, price(f.snapshot, {}, ductsDesign(null, doc), (ductsDesign(null, doc)) ?? neutralFansWork), "fixed", []))
     .toThrow("PE_M_Grd_AirFlow");
 });

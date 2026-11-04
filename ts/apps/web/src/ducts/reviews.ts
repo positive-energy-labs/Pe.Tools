@@ -3,7 +3,7 @@ import type { DuctsApply, DuctsAssignFan, DuctsHeal } from "@pe/host-contracts/g
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
-import { ductsHealInputSchema, type DuctsRouteDocument } from "@pe/agent-contracts";
+import { ductsHealInputSchema, ductsDesign, neutralFansWork } from "@pe/agent-contracts";
 import type { BodyContext } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import type { ductsData, schemas, entries } from "./neutral.ts";
 type ReviewContext = BodyContext<
@@ -67,8 +67,8 @@ export function presentHeal(result: unknown, scope: ReviewEvidence) {
   const snapshot = snapshotOf(scope);
   const name = snapshot ? subjectNamer(snapshot) : () => null;
   const plan = snapshot
-    ? // readonly at the contract owner after U2 lands
-      healPlan(snapshot, (scope.work ?? null) as DuctsRouteDocument | null)
+    ? // U4 wires the real fans Work here.
+      healPlan(snapshot, ductsDesign(scope.work ?? null, neutralFansWork))
     : null;
   const targets = response.groups.flatMap((group) =>
     group.items.map((item) => {

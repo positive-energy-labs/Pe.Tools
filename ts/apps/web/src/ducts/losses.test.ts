@@ -1,10 +1,13 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
 /**
  * /ducts loss solver, deterministic. Interpolation is checked on three real ASHRAE grids shipped
  * with Revit (copied to fixtures/ashrae, parsed here by a test-only reader) against the values
  * `.artifacts/pdrop/sa26/ctable.md` lists; friction against handcalc.json; the pipeline on a small
  * synthetic network whose totals were computed independently in Python from the same grids.
  */
-import { ductsRouteState, stagedDucts } from "@pe/agent-contracts";
+import { designOf } from "@pe/ducts-domain/test-design";
+import { stagedDucts } from "@pe/agent-contracts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vite-plus/test";
@@ -275,11 +278,11 @@ it("runs the whole pipeline over W1's synthetic snapshot", () => {
 
 it("prices under the table a person edit in the Work document", () => {
   // The edit cell goes through the route contract, then becomes the solver's choices.
-  const doc = ductsRouteState.schema.parse({
+  const doc = designOf({
     rules: { "elbow-1d-gt10": { edit: { value: { table: "CD3-2" } } } },
   });
   const choices = Object.fromEntries(
-    Object.entries(stagedDucts(doc).rules).map(([key, v]) => [key, v.table]),
+    Object.entries(stagedDucts(doc, doc ?? neutralFansWork).rules).map(([key, v]) => [key, v.table]),
   );
   const r = computeLosses(synthetic as unknown as DuctSnapshot, grids, choices);
   const elbow = r.paths[30]!.rows.find((x) => x.rule === "elbow-1d-gt10")!;
@@ -451,19 +454,19 @@ const lifted = (facing?: number[]) => {
 };
 const JOIN = "proximity:11:2|30:1";
 const verdictDoc = (rung: "edit" | "suggestion") =>
-  ductsRouteState.schema.parse({
+  designOf({
     assumptions: { [JOIN]: { [rung]: { value: { kind: "verdict", verdict: "connect" } } } },
   });
 
 it("only an anomalous join makes a path provisional; a near miss and a stretched join are bridged and final", () => {
   // Facing back down the duct: a near miss, listed, bridged, final.
-  const near = price(lifted([0, -1, 0]), grids, null);
+  const near = price(lifted([0, -1, 0]), grids, null, neutralFansWork);
   expect(near.findings.find((f) => f.id === JOIN)?.grade).toBe("near-miss");
   expect(bin(near.findings.find((f) => f.id === JOIN)!)).toBe("diagnostic");
   expect(near.next.paths[30]).toMatchObject({ inferred: [JOIN], provisional: null });
   expect(near.next.byGroup.g10!.provisional).toBeNull();
   // No captured facing on the grille: stretched, listed, bridged, and the fan stays final.
-  const stretched = price(lifted(), grids, null);
+  const stretched = price(lifted(), grids, null, neutralFansWork);
   expect(stretched.findings.find((f) => f.id === JOIN)?.grade).toBe("stretched");
   expect(bin(stretched.findings.find((f) => f.id === JOIN)!)).toBe("diagnostic");
   expect(stretched.next.paths[30]).toMatchObject({ inferred: [JOIN], provisional: null });
@@ -471,7 +474,7 @@ it("only an anomalous join makes a path provisional; a near miss and a stretched
   expect(stretched.next.provisional).toBeNull();
   // Facing the same way as the duct's end: one is reversed, anomalous, blocking, and the group's fan and
   // the document's rest on it.
-  const anomalous = price(lifted([0, 1, 0]), grids, null);
+  const anomalous = price(lifted([0, 1, 0]), grids, null, neutralFansWork);
   const provisional = { worst: "anomalous", count: 1, findingIds: [JOIN] };
   expect(bin(anomalous.findings.find((f) => f.id === JOIN)!)).toBe("blocking");
   expect(anomalous.next.paths[30]!.provisional).toEqual(provisional);
@@ -482,11 +485,11 @@ it("only an anomalous join makes a path provisional; a near miss and a stretched
 
 it("only a person's edit connect confirms an anomalous join; Pea's proposed connect leaves it provisional", () => {
   const broken = lifted([0, 1, 0]);
-  const edit = price(broken, grids, verdictDoc("edit"));
+  const edit = price(broken, grids, verdictDoc("edit"), (verdictDoc("edit")) ?? neutralFansWork);
   // The leftover: a confirmed same-class join no longer counts on the path.
   expect(edit.next.paths[30]).toMatchObject({ inferred: [], provisional: null });
   expect(edit.next.byGroup.g10!.provisional).toBeNull();
-  expect(price(broken, grids, verdictDoc("suggestion")).next.paths[30]!.provisional).toMatchObject({
+  expect(price(broken, grids, verdictDoc("suggestion"), (verdictDoc("suggestion")) ?? neutralFansWork).next.paths[30]!.provisional).toMatchObject({
     worst: "anomalous",
     findingIds: [JOIN],
   });
