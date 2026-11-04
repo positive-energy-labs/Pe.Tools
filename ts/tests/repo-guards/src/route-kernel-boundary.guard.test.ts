@@ -52,7 +52,7 @@ it("inventories registered, standalone, aliased, namespace and dynamic Pod legac
       import { mountRoute as mount, routeFromGraph as router } from '#/shell/mount';
       import * as shell from '#/shell/mount';
       import { registerLegacyGraph as register } from '#/shell/legacy-route-door';
-      import { makePodRoute as load } from '#/route/pod-view';
+      import { registerLegacyModule as load } from '#/shell/legacy-route-door';
       const alias = mount;
       const body = alias(graph, adapters);
       const route = router(graph, adapters);
