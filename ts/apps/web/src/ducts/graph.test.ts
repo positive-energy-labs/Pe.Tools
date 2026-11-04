@@ -7,7 +7,7 @@ import {
   transitionPatches,
 } from "@pe/agent-contracts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
-import { neutralBodies, authoredPatches, localId, schemas } from "./neutral";
+import { neutralBodies, authoredPatches, localId, schemas, ductsData } from "./neutral";
 import { snapshot } from "./test-fixture";
 import sheet from "./sheet/sheet.fixture.json";
 
@@ -100,7 +100,7 @@ test("criteria edits merge the selected side and lifecycle actions remain bounde
 
 // Q2/Q4: fan walk authorization is read from Fans Work.
 test("a sheet loss preview cannot enter the network-only Ducts command scope", () => {
-  expect(schemas.stage.safeParse("sheet").success).toBe(false);
+  expect(schemas[ductsData.fields.stage.schema].safeParse("sheet").success).toBe(false);
   expect(neutralBodies.lossReady.run(scope(), input)).toMatch(/scope/);
 });
 
