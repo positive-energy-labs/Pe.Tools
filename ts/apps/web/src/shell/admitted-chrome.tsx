@@ -107,6 +107,7 @@ export function subjectOf(mount: AdmittedMount, data: RouteGraphJson) {
     unknown: !all && set.members(open).length < ids.length,
     clear: () => (many ? move({ kind: "ids", ids: [] }) : one(null)),
     toggle: (id: unknown) => (many ? move(set.toggle(open, id)) : one(id)),
+    select: (ids: readonly unknown[]) => (many ? move(set.select(open, ids)) : one(ids.at(-1))),
     add: (more: readonly unknown[]) => (many ? move(set.add(open, more)) : one(more.at(-1))),
     remove: (id: unknown) => (many ? move(set.remove(open, id)) : one(null)),
     setActive: (id: unknown) => (many ? move(set.setActive(open, id)) : one(id)),
@@ -160,6 +161,14 @@ export function AdmittedSubjectPicker({
         empty={`No ${noun} available`}
         row={(o) => ({ label: o.label })}
         onPick={(option) => subject.toggle(option.id)}
+        onSelectedChange={
+          many
+            ? (keys) =>
+                subject.select(
+                  options.filter((o) => keys.includes(identity(o.id))).map((o) => o.id),
+                )
+            : undefined
+        }
       />
       {many && (
         <>

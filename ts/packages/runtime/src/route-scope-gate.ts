@@ -1,4 +1,4 @@
-import { applyPatches, workKey, type WorkKey } from "@pe/agent-contracts";
+import { applyPatches, canonicalRouteInput, workKey, type WorkKey } from "@pe/agent-contracts";
 import type { z } from "zod";
 import type { Immutable, RouteGraphJson } from "../../agent-contracts/src/route-kernel-data.ts";
 import {
@@ -36,7 +36,11 @@ interface WorkServices<W> {
   /** The composition root retains one journal per Work, independently of mounted UI. */
   readonly journal: (key: WorkKey) => WorkJournal;
 }
-export type ScopeGateOptions<G extends RouteGraphJson, S extends SchemaTable, W = Immutable<WorkOf<G, S>>> = (
+export type ScopeGateOptions<
+  G extends RouteGraphJson,
+  S extends SchemaTable,
+  W = Immutable<WorkOf<G, S>>,
+> = (
   | WorkServices<W>
   | { readonly workSchema?: never; readonly hashWork?: never; readonly journal?: never }
 ) & {
@@ -70,9 +74,11 @@ function immutableCopy<T>(value: T): T {
 const refused = (message: string): MoveResult => ({ kind: "refused", code: "acceptance", message });
 
 /** One synchronous acceptance owner below React. UI disposal retires publication, not receipts. */
-export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaTable, W = Immutable<WorkOf<G, S>>>(
-  options: ScopeGateOptions<G, S, W>,
-): AcceptanceOwner<G, S, W> {
+export function createRouteScopeGate<
+  G extends RouteGraphJson,
+  S extends SchemaTable,
+  W = Immutable<WorkOf<G, S>>,
+>(options: ScopeGateOptions<G, S, W>): AcceptanceOwner<G, S, W> {
   const suppliedWork = [options.workSchema, options.hashWork, options.journal].filter(
     Boolean,
   ).length;
@@ -176,7 +182,11 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
             pageEpoch: issuer.pageEpoch(),
             pageRevision: revision,
             page: immutableCopy(page),
-            work: null,
+            // Subject scope retires authority; an unchanged Work identity retains its basis.
+            work:
+              canonicalRouteInput(scope.identity) === canonicalRouteInput(before.scope.identity)
+                ? before.work
+                : null,
           },
           origin,
         );
