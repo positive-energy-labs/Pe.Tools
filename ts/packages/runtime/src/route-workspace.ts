@@ -603,17 +603,21 @@ export class RouteWorkspace {
         history,
       );
       this.#inverses.set(workKey(scope), history);
-      this.#accept(write);
-      await this.#publish({
-        type: "route_workspace",
-        scope,
-        route,
-        ...write,
-        action: kind,
-        revision: landed.envelope.revision,
-        patchCount: patches.length,
-        ok: true,
-      });
+      // COMMON 24: this Promise island guarantees publication with finally.
+      try {
+        this.#accept(write);
+      } finally {
+        await this.#publish({
+          type: "route_workspace",
+          scope,
+          route,
+          ...write,
+          action: kind,
+          revision: landed.envelope.revision,
+          patchCount: patches.length,
+          ok: true,
+        });
+      }
       // The write's own evidence: the doc the patches landed on, so a caller that only sees the
       // outcome (a chat card reading a `pe_do` result) shows what is staged without a second read.
       return {
@@ -734,17 +738,21 @@ export class RouteWorkspace {
       ];
       await this.#persist(scope, route, fresh, history);
       this.#inverses.set(targetKey, history);
-      this.#accept(write);
-      await this.#publish({
-        ...write,
-        type: "route_workspace",
-        scope,
-        route,
-        by,
-        action: "start-fresh",
-        revision: fresh.revision,
-        ok: true,
-      });
+      // COMMON 24: this Promise island guarantees publication with finally.
+      try {
+        this.#accept(write);
+      } finally {
+        await this.#publish({
+          ...write,
+          type: "route_workspace",
+          scope,
+          route,
+          by,
+          action: "start-fresh",
+          revision: fresh.revision,
+          ok: true,
+        });
+      }
       return { ok: true, revision: fresh.revision, write };
     });
   }
@@ -894,8 +902,13 @@ export class RouteWorkspace {
   }
 
   #accept(write: WorkWriteAck) {
-    for (const listener of this.#acceptedListeners.get(workKey(write.key)) ?? [])
-      listener(structuredClone(write));
+    for (const listener of this.#acceptedListeners.get(workKey(write.key)) ?? []) {
+      try {
+        listener(structuredClone(write));
+      } catch (error) {
+        console.error("Work accepted listener failed", error);
+      }
+    }
   }
 
   #load(scope: WorkKey, spec: RouteStateSpec<z.ZodType>): Promise<RouteEnvelope<unknown>>;
@@ -1037,7 +1050,13 @@ export class RouteWorkspace {
   }
 
   async #publish(event: RouteWorkspaceEvent): Promise<void> {
-    for (const listener of this.#listeners) listener(structuredClone(event));
+    for (const listener of this.#listeners) {
+      try {
+        listener(structuredClone(event));
+      } catch (error) {
+        console.error("Work publication listener failed", error);
+      }
+    }
   }
 
   #serialized<T>(work: () => Promise<T>): Promise<T> {

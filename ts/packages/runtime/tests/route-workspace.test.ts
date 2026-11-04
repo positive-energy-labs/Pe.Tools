@@ -1,7 +1,7 @@
 import { observeResources, resourceResponse } from "../src/resource-stream.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { address, routeBindingsSchema } from "@pe/agent-contracts";
+import { address, routeBindingsSchema, workKey } from "@pe/agent-contracts";
 import type { WorkAuthor, RouteStatePatch, RouteStateSpec, WorkKey } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import type {
@@ -63,6 +63,96 @@ const documentB: WorkKey = {
   route: "test-route",
   target: address("C:\\Models\\B.rvt"),
 };
+
+test("throwing accepted and publish listeners cannot fail a committed write or skip peers", async () => {
+  const memory = memoryStore();
+  const module = workspace(memory.store);
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  const accepted = vi.fn();
+  const published = vi.fn();
+  const stops = [
+    module.observeAccepted(
+      documentA,
+      () => {
+        throw Error("accepted listener failed");
+      },
+      undefined,
+      false,
+    ),
+    module.observeAccepted(documentA, accepted, undefined, false),
+    module.subscribe(() => {
+      throw Error("publish listener failed");
+    }),
+    module.subscribe(published),
+  ];
+  try {
+    const result = await bind(module).apply("human", [{ path: ["count"], value: 1 }], 0);
+    expect(result).toMatchObject({ ok: true, revision: 1 });
+    expect(await bind(workspace(memory.store)).read()).toMatchObject({
+      revision: 1,
+      doc: { count: 1 },
+    });
+    expect(accepted).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ revision: 1 }));
+    expect(published).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ ok: true, revision: 1 }),
+    );
+    expect(logged.mock.calls.map(([message]) => message)).toEqual([
+      "Work accepted listener failed",
+      "Work publication listener failed",
+    ]);
+  } finally {
+    stops.forEach((stop) => stop());
+    logged.mockRestore();
+  }
+});
+
+test("start-fresh commits and publishes despite a throwing accepted listener", async () => {
+  const memory = memoryStore();
+  await memory.store.setState({
+    targetKey: workKey(documentA),
+    route: documentA.route,
+    value: { version: 1, schemaVersion: 1, revision: 4, doc: { count: "unreadable" } },
+  });
+  const module = workspace(memory.store);
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  const accepted = vi.fn();
+  const published = vi.fn();
+  const stops = [
+    module.observeAccepted(
+      documentA,
+      () => {
+        throw Error("accepted listener failed");
+      },
+      undefined,
+      false,
+    ),
+    module.observeAccepted(documentA, accepted, undefined, false),
+    module.subscribe(published),
+  ];
+  try {
+    expect(await module.startFresh(documentA, documentA.route, "human")).toMatchObject({
+      ok: true,
+      revision: 5,
+    });
+    expect(await bind(workspace(memory.store)).read()).toMatchObject({
+      revision: 5,
+      doc: { count: 0 },
+    });
+    expect(accepted).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "start-fresh", revision: 5 }),
+    );
+    expect(published).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ ok: true, revision: 5 }),
+    );
+    expect(logged).toHaveBeenCalledExactlyOnceWith(
+      "Work accepted listener failed",
+      expect.any(Error),
+    );
+  } finally {
+    stops.forEach((stop) => stop());
+    logged.mockRestore();
+  }
+});
 
 function bind(module: RouteWorkspace, scope: WorkKey = documentA) {
   return {

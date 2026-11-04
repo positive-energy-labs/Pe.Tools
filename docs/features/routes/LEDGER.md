@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-04, Work accepted/publication listener exceptions are isolated observation faults: log each fault, continue to peers and publish, and keep the committed write successful. Promise-island publication uses `finally` (COMMON 24). Persistence failures still reject before notification. Owner: [RouteWorkspace](../../../ts/packages/runtime/src/route-workspace.ts). (counsel, D5)
+
 - 2026-11-04, each network and sheet pane constructs only its own body; query and semantic landing live in Page. The fake-pane allowance is zero, enforced by [the pane-body law](../../../ts/tests/repo-guards/src/unification-pane-bodies.law.ts). Landing on a locked fan cell focuses the cell root (COMMON 8). (counsel, U1b)
 
 - 2026-11-03, U2r keeps U1's adapter deleted and `PaneContext.cells` unchanged; typed NetworkBody/SheetBody join neutral fans directly. Retain the criteria writer while the current ducts consumer still writes criteria. (counsel, U2r scope)

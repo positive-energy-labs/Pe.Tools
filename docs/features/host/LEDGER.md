@@ -209,6 +209,8 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 
 ## Owed
 
+- After main, finish effect F2's single failure mapper through coherent producer conversions, including [servePeRoute](../../../ts/packages/host-contracts/src/pe-api.ts), before global middleware ownership. Preserve native evidence and SDK opaque success envelopes. D5 isolates Work observation faults only; the mapper half is not implemented. (counsel, 2026-11-04)
+
 
 
 - The host's frontend-origin check refuses the same checkout's production preview origin (vite preview on its own port), so drives on a built web need a disposable preview origin mapping (RAMFIX preview.config.mjs, 2026-11-03). Accept the preview origin of the same checkout. (controller, kaitpw)
