@@ -23,7 +23,7 @@ import { ruleByKey,ruleWords } from "@pe/ducts-domain/loss-rules";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 import { commandCatalogAxes } from "../../../../packages/agent-contracts/src/command-axes.ts";
 import type {
@@ -221,7 +221,7 @@ export const entries = {
     output: schemas.snapshot,
     axes,
   },
-  "ducts.tables": { input: schemas.none, output: schemas.tables, axes },
+  "ducts.tables": { input: nativeRequestSchema("ducts.tables"), output: schemas.tables, axes },
   "ducts.catalogs": { input: schemas.none, output: schemas.catalogs, axes },
   "ducts.fans": {
     input: z.object({ work: schemas.work.nullable(), fanWork: fanInput.optional() }),
