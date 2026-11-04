@@ -8,12 +8,32 @@ import {
   ductsDocumentSchema,
   ductsDesign,
   neutralFansWork,
+  fansDocumentSchema,
   type DuctsSheetEdits,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { expect, test } from "vite-plus/test";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { editPatches, workLayer } from "../src/ducts-inputs.ts";
+import { price } from "@pe/ducts-domain/pricing";
+import { snapshot } from "../../web/src/ducts/test-fixture.ts";
+
+test("joined Fans edits reach the pricing solve and input layer", () => {
+  const fans = fansDocumentSchema.parse({
+    flows: { "4": { edit: { value: { cfm: 250 } } } },
+    terminalDrops: { "4": { edit: { value: { inWg: 0.27 } } } },
+    parameters: { fanFlow: { edit: { value: "Project fan flow" } } },
+  });
+  const joined = ductsDesign(ductsDocumentSchema.parse({}), fans);
+  const layer = workLayer(joined);
+  expect(layer.flows).toEqual({ "4": { cfm: 250 } });
+  expect(layer.terminalDrops).toEqual({ "4": { inWg: 0.27 } });
+  const priced = price(snapshot, {}, joined, joined);
+  expect(priced.edit.parameters.fanFlow).toBe("Project fan flow");
+  expect(priced.flows.get(4)).toMatchObject({ cfm: 250 });
+  expect(priced.next.paths[4]?.rows.find((row) => row.id === 4)).toMatchObject({ dp: 0.27 });
+  expect(priced.overrides.terminalPs).toEqual({ "4": 0.27 });
+});
 
 // U4 supplies a real fans Work; this test owns only ducts edits.
 const design = (raw: unknown) => ductsDesign(ductsDocumentSchema.parse(raw), neutralFansWork);

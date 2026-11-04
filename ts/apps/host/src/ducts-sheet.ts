@@ -7,7 +7,6 @@ import {
   ductsDesign,
   ductsDocumentSchema,
   fansDocumentSchema,
-  neutralFansWork,
   type DuctsInputs,
   type WorkKey,
   type WorkAuthor,
@@ -389,7 +388,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const tolerances = tolerancesOf(criteria);
       // The Protocol slot is a Work `parameters` cell: without it the read measured terminal flow
       // under the document's stored slot, so switching the sheet's airflow slot repriced nothing.
-      const staged = stagedDucts(saved.doc, (saved.doc) ?? neutralFansWork).parameters;
+      const staged = stagedDucts(saved.doc, saved.doc).parameters;
       const slots = Object.keys(staged).length ? staged : undefined;
       const acquisition: SnapshotRequest = {
         ...(slots ? { slots } : {}),
@@ -504,7 +503,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       // Work's protocol slots ride along as on the sheet's own read: a unit's fanFlow fact (its design
       // flow, and whether the roster proposes it a fan) is read under the person's fan-flow slot.
       const saved = await loadLayers(request.target);
-      const staged = stagedDucts(saved.doc, (saved.doc) ?? neutralFansWork).parameters;
+      const staged = stagedDucts(saved.doc, saved.doc).parameters;
       const acquisition: SnapshotRequest = {
         ...(Object.keys(staged).length ? { slots: staged } : {}),
         selector: { kind: "roster" },
