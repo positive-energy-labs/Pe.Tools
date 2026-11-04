@@ -396,6 +396,26 @@ test("URL restore couples subject/selection/pose; history honors only origin ove
   });
   expect(location.writes).toEqual(["push", "replace"]);
 });
+test("a move renders even though its URL push leaves custody stale until the router re-renders", async () => {
+  const location = locationPort();
+  let current = true;
+  const address = {
+    ...location.address,
+    write: (...args: Parameters<typeof location.address.write>) => {
+      location.address.write(...args);
+      current = false; // a retained route's custody lags its own history entry
+    },
+  };
+  const mount = createRouteShell(transports().services).mount(
+    await admitted(),
+    placeInput(address, { custody: { current: () => current } }),
+  );
+  closes.push(mount.close);
+  const before = mount.revision();
+  mount.page.pose({ pose: { x: 1 } }, "named");
+  expect(location.writes).toEqual(["push"]);
+  expect(mount.revision()).toBeGreaterThan(before);
+});
 test.each(["sample", "", "missing"])("fixture %s opens no live service", async (fixture) => {
   const t = transports();
   const acquire = vi.spyOn(t.services.reads, "acquire");
@@ -2603,9 +2623,7 @@ test("AdmittedPane subject picker goes through transition and reloads its accept
   const location = locationPort();
   const t = transports();
   const shell = createRouteShell(t.services);
-  const first = render(
-    createElement(AdmittedPane, { shell, route, address: location.address }),
-  );
+  const first = render(createElement(AdmittedPane, { shell, route, address: location.address }));
   await act(async () => t.frames[0]!(ready("roster")));
   fireEvent.click(screen.getByRole("button", { name: "Choose note" }));
   fireEvent.click(await screen.findByText("Picked note"));

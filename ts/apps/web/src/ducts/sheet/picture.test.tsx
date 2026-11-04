@@ -142,6 +142,7 @@ function mount(
           snapshot={snapshot}
           sheet={open}
           fans={fans}
+          systemFans={() => []}
           blockers={[]}
           renderPane={(body) => body}
         />

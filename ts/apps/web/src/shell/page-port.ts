@@ -268,10 +268,19 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
         const many = z
           .union([
             z.strictObject({ kind: z.literal("all") }),
-            z.strictObject({ kind: z.literal("ids"), ids: z.array(z.unknown()) }),
+            z.strictObject({
+              kind: z.literal("ids"),
+              ids: z.array(z.unknown()),
+              active: z.unknown().optional(),
+            }),
           ])
           .safeParse(parsed.data);
-        if (!many.success || (many.data.kind === "ids" && !many.data.ids.every(check)))
+        if (
+          !many.success ||
+          (many.data.kind === "ids" &&
+            (!many.data.ids.every(check) ||
+              (many.data.active !== undefined && !check(many.data.active))))
+        )
           return failure(`Invalid subject set: ${key}`);
       }
     }

@@ -31,6 +31,8 @@ import { blockerElements, sheetIssues, sheetLayers } from "./layers";
 import type { SheetBlocker } from "./tiers";
 import type { Detail, FanPort } from "./model";
 import type { OpenSheet } from "../neutral.ts";
+import { GoToSubject } from "../proto/e/go-to";
+import { useAdmittedSubject } from "#/shell/subject";
 
 const NONE: readonly never[] = [];
 
@@ -108,11 +110,14 @@ export function SheetPicture({
   jump,
   opened,
   fans,
+  systemFans,
 }: {
   props: ProtoProps;
   snapshot: DuctSnapshot;
   opened?: readonly OpenSheet[];
   fans?: readonly FanPort[];
+  /** The subject ids of a system's fans: what a go-to system pick adds. */
+  systemFans: (system: string) => readonly unknown[];
   sheet: OpenSheet | null;
   blockers: readonly SheetBlocker[];
   renderPane: TeachingPaneRender;
@@ -120,6 +125,7 @@ export function SheetPicture({
   jump?: RefObject<((key: SubjectKey) => void) | null>;
 }) {
   const { page, setPage, work, priced } = props;
+  const subject = useAdmittedSubject();
   const overviewFans =
     fans ??
     (opened ?? (sheet ? [sheet] : [])).flatMap((item) =>
@@ -262,7 +268,7 @@ export function SheetPicture({
   if (!fan)
     return renderPane(
       <p className="t-small p-3 text-ink-2" data-sheet-picture="">
-        Open a fan from the Fans list to draw its walk.
+        Pick a fan in the Fans list, or choose one in its header, to draw its walk.
       </p>,
       { meta: "no fan open" },
     );
@@ -327,6 +333,17 @@ export function SheetPicture({
         capture: { cuts: beyond.cuts },
         overlay,
         readout: { subject: fan.mark, summary },
+        goTo: (jumpTo) => (
+          <GoToSubject
+            snapshot={snapshot}
+            here={focusIds}
+            opens={(system) => systemFans(system).length > 0}
+            nameOf={namer}
+            onGo={({ system, id }) =>
+              id == null ? subject?.add(systemFans(system)) : jumpTo(elementKey(id))
+            }
+          />
+        ),
       }}
     />
   );

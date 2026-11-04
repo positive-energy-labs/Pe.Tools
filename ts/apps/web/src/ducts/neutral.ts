@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { identityCodecs } from "../shell/page-port.ts";
+import { openSet } from "../shell/open-set.neutral.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import {
   applyPatches,
@@ -118,6 +119,14 @@ export const localId = (namespace: string, subject: string) =>
   JSON.stringify([namespace, subject]) as IdentityId<"local">;
 // Identity decoding belongs to the declared local codec. Callers only pass accepted identities.
 export const localSubject = (id: IdentityId<"local">): string => JSON.parse(id)[1];
+/** The open set's active system by name: explicit, else the first open; under all, the roster's first. */
+export const activeName = (value: Many<IdentityId<"local">>, roster: readonly string[]) => {
+  const id = openSet(
+    (id: IdentityId<"local">) => id,
+    roster.map((name) => localId("ducts-system", name)),
+  ).active(value);
+  return id ? localSubject(id) : "";
+};
 export const namesOf = (value: Many<IdentityId<"local">>): string[] | "all" =>
   value.kind === "all" ? "all" : value.ids.map(localSubject);
 const identity = z.string().transform((value, ctx) => {
@@ -127,7 +136,7 @@ const identity = z.string().transform((value, ctx) => {
   return z.NEVER;
 });
 const many = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("ids"), ids: z.array(identity) }),
+  z.strictObject({ kind: z.literal("ids"), ids: z.array(identity), active: identity.optional() }),
   z.strictObject({ kind: z.literal("all") }),
 ]);
 export const schemas = {
@@ -1246,9 +1255,8 @@ type ScopeEvidence = Omit<CommandContext, "page"> & {
   readonly page: Omit<CommandContext["page"], "stage"> & { readonly stage: string };
 };
 const selectedGroups = (ctx: ScopeEvidence) => {
-  const systems = namesOf(ctx.page.system);
   const snapshot = ctx.readings.ducts.value as DuctSnapshot | null;
-  const active = systems === "all" ? snapshot?.systems.at(-1)?.name : systems.at(-1);
+  const active = activeName(ctx.page.system, snapshot?.systems.map((system) => system.name) ?? []);
   return snapshot && active ? systemScope(snapshot, active).groups : [];
 };
 const lossReady = (ctx: ScopeEvidence): true | string => {
@@ -1554,8 +1562,10 @@ export const neutralBodies = {
     run: (ctx: ScopeEvidence) => {
       const fan = ctx.work.writeIntent.edit?.value.fan;
       const snapshot = ctx.readings.ducts.value;
-      const systems = namesOf(ctx.page.system);
-      const active = systems === "all" ? snapshot?.systems.at(-1)?.name : systems.at(-1);
+      const active = activeName(
+        ctx.page.system,
+        snapshot?.systems.map((system) => system.name) ?? [],
+      );
       return fan && snapshot?.systems.find((system) => system.id === fan.systemId)?.name === active
         ? true
         : "Choose the fan and active system";

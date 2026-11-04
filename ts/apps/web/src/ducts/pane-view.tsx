@@ -15,7 +15,7 @@ import type {
   WorkWriteOutcome,
   Observation,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
-import { ductsData, schemas, entries, localId, localSubject, namesOf } from "./neutral";
+import { activeName, ductsData, schemas, entries, localId, localSubject, namesOf } from "./neutral";
 import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 import { NetworkPane, NetworkProvider } from "./proto/e/screen";
 import { SheetPane, SheetProvider } from "./sheet/mount";
@@ -29,7 +29,6 @@ import { systemReadCoverage } from "./system-reads";
 import { Button } from "@pe/kit/lang/button";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { healTarget, offeredFan } from "@pe/ducts-domain/action-targets";
-import { activeSystem } from "./selection";
 import { elementNamer } from "./claims";
 
 type KernelContext = PaneContext<
@@ -81,6 +80,10 @@ export function DuctsPane({ ctx, id }: { ctx: DuctsViewContext; id: string }) {
     ...authored,
     stage: id.startsWith("sheet-") ? "sheet" : "network",
     system: system === "all" ? (roster?.systems ?? []).map((system) => system.name) : system,
+    active: activeName(
+      authored.system,
+      (roster?.systems ?? []).map((system) => system.name),
+    ),
     fan: namesOf(authored.fan),
     selected: authored.selected.map((item) => localSubject(item.id)).join(","),
     heal: null,
@@ -220,7 +223,7 @@ export function DuctsPane({ ctx, id }: { ctx: DuctsViewContext; id: string }) {
     systemId?: number;
   }) => {
     if (!ctx.workBasis || !snapshot) return;
-    const active = activeSystem(page);
+    const active = page.active;
     switch (row.kind) {
       case "price": {
         const sheet = read("sheet").value as import("./neutral").SheetReading | null;

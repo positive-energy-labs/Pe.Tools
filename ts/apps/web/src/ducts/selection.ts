@@ -2,7 +2,7 @@
  * Several systems open at once (kaitpw 2026-10-24: "do what you recommmend and then re ask me
  * after i can feel it"). The page's `system` key is the open list, oldest first; everything that
  * reads groups, terminals or units takes their union (`scopeOf`), and the verbs that need one
- * system (write, heal, fan, the header's fan static) take the active one, `activeSystem`.
+ * system (write, heal, fan, the header's fan static) take the active one, `page.active`.
  */
 import type { Neighbour, Hop } from "@pe/ducts-domain/neighbours";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -26,10 +26,6 @@ export const DUCTS_MULTI = defineKnobs("ducts", "ts/apps/web/src/ducts/selection
     ),
   },
 });
-
-/** The active system: the most recently opened, the one write, heal and fan act on; "" with none. */
-export const activeSystem = (page: { readonly system: readonly string[] | "all" }) =>
-  page.system === "all" ? "" : (page.system.at(-1) ?? "");
 
 /** The neighbours' stub elements that are not already open. */
 export const stubIdsOf = (neighbours: readonly Neighbour[], open: ReadonlySet<number>) =>

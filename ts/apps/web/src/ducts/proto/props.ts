@@ -39,7 +39,12 @@ export interface ProtoProps {
   /** The claim cells keyed by id as the Work (or the `?fixture=scene` fixture) holds them. */
   claimCells: Record<string, DuctClaim>;
   /** Route page state (selected, issue, system, level, layers, encoding, picture, viewport, ...). */
-  page: Omit<DuctsPage, "system"> & { system: string[]; heal: HealReview | null };
+  page: Omit<DuctsPage, "system"> & {
+    system: string[];
+    /** The open system write, heal and fan act on; "" with none (`activeName`). */
+    active: string;
+    heal: HealReview | null;
+  };
   /** A named move pushes, a gesture replaces (`PageMove`). */
   setPage: (
     next: Partial<Omit<DuctsPage, "system" | "fan" | "stage" | "heal">>,

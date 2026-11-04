@@ -1479,6 +1479,10 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       };
       try {
         if (route.data.transition) schedule();
+        // Schedule before the address transport hears a move: its URL push makes retained-route
+        // custody stale until the router re-renders, so a later listener would see no custody and
+        // drop the move (every subject, query and pose move rendered nothing; 2026-11-03).
+        unsubscribeOwner = owner.subscribe(schedule);
         transport = createAdmittedAddress({
           route,
           registry,
@@ -1490,7 +1494,6 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         });
         if (transport.initial.kind === "refused" && !route.data.transition)
           throw Error(transport.initial.message);
-        unsubscribeOwner = owner.subscribe(schedule);
         schedule();
       } catch (error) {
         close();

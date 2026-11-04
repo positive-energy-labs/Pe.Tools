@@ -17,6 +17,7 @@ type Furniture = Pick<
   | "title"
   | "meta"
   | "actions"
+  | "fit"
   | "leadingActions"
   | "tabs"
   | "modes"

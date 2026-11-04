@@ -55,7 +55,7 @@ export type SelectionItem<G extends RouteGraphJson> = {
  * Focus and hover are ephemeral attention, not another selected domain object. */
 export type Selection<G extends RouteGraphJson> = readonly SelectionItem<G>[];
 export type Many<T> =
-  | { readonly kind: "ids"; readonly ids: readonly T[] }
+  | { readonly kind: "ids"; readonly ids: readonly T[]; readonly active?: T }
   | { readonly kind: "all" };
 type FieldValue<G extends RouteGraphJson, S extends SchemaTable, F> = F extends {
   role: "selection";
