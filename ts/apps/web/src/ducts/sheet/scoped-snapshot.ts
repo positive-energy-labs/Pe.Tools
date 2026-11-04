@@ -49,3 +49,11 @@ export function sheetSnapshot(raw: DuctSnapshot): DuctSnapshot {
     segments: raw.segments.map((segment) => ({ ...segment, groupId: SHEET_GROUP })),
   };
 }
+
+/** Bounded ids reads have no system roster; their elements still carry system names. */
+export function sheetSystems(snapshot: DuctSnapshot): string[] {
+  return [...new Set([
+    ...snapshot.systems.map(system => system.name),
+    ...[...snapshot.nodes, ...snapshot.segments].map(element => element.systemName),
+  ].filter((name): name is string => !!name))];
+}

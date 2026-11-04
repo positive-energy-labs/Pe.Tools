@@ -36,6 +36,7 @@ import { InputsSurface } from "./inputs-surface";
 import { rosterOrder,stableFanKey,withComputed,type FanPort } from "./model";
 import { SheetPicture } from "./picture";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { sheetSystems } from "./scoped-snapshot.ts";
 import { EMPTY_SHEET_STATE } from "./state";
 import { Ledger,Roster } from "./view";
 type SheetContext = PaneContext<
@@ -120,13 +121,7 @@ export function RosterBody({
           loading: fans.status === "pending",
         }}
       />
-      {[
-        ...new Set(
-          ("kind" in snapshot ? [] : [...snapshot.nodes, ...snapshot.segments])
-            .map((row) => row.systemName)
-            .filter((name): name is string => !!name),
-        ),
-      ].map((name) => (
+      {("kind" in snapshot ? [] : sheetSystems(snapshot)).map((name) => (
         <a key={name} href={ductsLink([name], search)}>
           {name}
         </a>
@@ -225,7 +220,7 @@ function InputsContent({ ctx, snapshot }: {
         })}
       </section>
     <InputsSurface
-      ductsHref={ductsLink(snapshot.systems.map(system => system.name), search)}
+      ductsHref={destination => ductsLink(sheetSystems(snapshot), search, destination)}
       ctx={{
         snapshot,
         doc: workDoc,
