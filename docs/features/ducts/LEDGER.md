@@ -170,6 +170,8 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 
 ## Owed
 
+- The SD5-10/tap-std owner crossing (/fans rule row → /ducts) is proven deterministically only; the real-host recheck (FX-REDRIVE, 2026-11-04) crossed CR3-6/elbow-mitered because the isolated profile lacked the prior assignment. Re-drive on a profile that has it.
+
 - RHVAC Load Preview integration: re-enter through /rooms once the rooms split is built and 'cfm comes from equipment' has mileage. (kaitpw)
 - apply-request custody (`source.work`) names only the ducts Work revision; U4 must seal the fans Work revision with it. (counsel, 2026-11-03)
 - v5 analysis artifacts saved before U2 lack `input.fans` and now refuse on historical reads. (U2 finding, 2026-11-03)

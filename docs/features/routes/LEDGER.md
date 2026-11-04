@@ -111,6 +111,12 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
+- RATCHET-GREEN, 2026-11-04: `src/neutral-imports.guard.test.ts > neutral modules never import web UI, React, web aliases or styles` remains Owed. Remove forbidden UI/transitive imports from the ducts and fans neutral modules. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/catalog-reads.guard.test.ts > web callers cannot use raw JSON transport or hand response objects` remains Owed. Remove the route-local ids/all transport decoders in ts/apps/web/src/captures/kernel.ts through the admitted read boundary. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/action-authority.guard.test.ts > every catalog operation has a renderer or an explicit raw receipt decision` remains Owed. Choose a renderer or an explicit raw receipt for ducts.apply.preview, ducts.assign-fan.preview, ducts.heal.preview, revit.apply.parameter-links.preview, revit.catalog.electrical-circuits.roster, revit.detail.electrical-circuits.walk and rooms.roster. Keep the law; do not raise its allowance.
+
 
 - Manual D must prove that after reload or re-entry, Fans pricing uses the new Ducts rule and read-only Ducts rows link to their rule. Browser proof is UNPROVEN; the U4 fixture did not reach admission. (counsel, U4, 2026-11-04)
 
@@ -158,11 +164,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - Before S2 cutover, promote phase 5 F's `StopCapability` (`ts/packages/host-internal/src/request-contracts.d.ts`, t3/u2-p5-f 42f76253) to agent-contracts so the shared shell can Stop an in-flight native command. Native commands get a Stop capability, never "release means stop": ADR 0029 rule 10 moves ownership to the journal at submission, so a departing mount must not cancel a Revit write a user started; only a deliberate Stop may, with F's policy and descendant semantics. Reads keep "release means stop" (`NativeReadDoor` unsubscribe). Agreed with counsel 2026-11-03.
 - Superseded native reads are not cancelled in Revit (FALSIFIED live at 3d0c1f04, `.artifacts/accept/u2-regate-3d0c1f04/REPORT.md` item 7): the browser aborts, but the host never sees the request close, so `call-route.ts` `sharedRead` never sends `op.cancel`; a changed-mind Read detailed still costs the full read (Chadds SA 7: 66.7 s, +5.6 GiB retained). Fix: detect `close`/`aborted` on the real Node request/socket through the dev proxy and the packaged server, with a live test; owner: ADR 0029 phase 5 slice B (counsel); live acceptance aborts through the dev proxy and the packaged server and asserts `op.cancel` is sent and Revit stops before natural completion.
 
-- Decide receipt rendering for `ducts.apply.preview`, `ducts.assign-fan.preview`, `ducts.heal.preview`, `revit.apply.parameter-links.preview`, `revit.catalog.electrical-circuits.roster`, `revit.detail.electrical-circuits.walk`, and `rooms.roster` (`action-authority.guard.test.ts`, renderer or explicit raw receipt decision).
 - Move `ts/apps/web/src/revit/element-menu.tsx` native submissions through the observation-scoped kernel door (`host-door.guard.test.ts`, host door bypasses can only shrink).
 - Provide the shared observation-scoped Select and Section Box kernel verb door (`host-door.guard.test.ts`, kernel gap assertion); coordinate with the `element-menu.tsx` submission migration.
-- Replace raw-id fallback presentation in `ts/apps/web/src/space/facts.tsx` with the admitted subject display identity (`kit-census.guard.test.ts`, `subject-fallback-ids`).
-- Use the shared Reading/List projection in `ts/apps/web/src/ops/route.tsx` and `ts/apps/web/src/sessions/route.tsx`, then prove row behavior (`kit-census.guard.test.ts`, `reading-list-adapter`).
 - Revisit the Reject UX after the kernel rudiments land (kaitpw 2026-11-02): judge it in a real, space-constrained route with a live Pea thread, not a fixture lineup with open space; the protoui guided story stalls at step 3. Open questions: how a rejection feels and functions in practice, whether Reject should touch Work at all, where auto-approve re-arms, and house rule BÂ·3 in `docs/design/SURFACE-PHILOSOPHY.md`.
 - Geometry law not yet enforced: Revit read priority (a user read never waits behind a background read) and real host-side cancel of an abandoned reading.
 - Merge gate before `t3/unification-2` reaches main: the perf thread re-runs `tools/space-proof/verbs.py` on Chadds, Cleremont and Manuella and `/ducts` `fan` = 1, 3, `all` on Chadds, on the sha the orchestrator names.

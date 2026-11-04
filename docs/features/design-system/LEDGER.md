@@ -695,14 +695,26 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 
 ## Owed
 
-- Reconcile `dl-button` contextual overrides in `ts/apps/web/src/shell/situation-band.css` and `ts/apps/web/src/workbench/route-tabs.css` with the component owner (`design-guard.test.ts`, contextual override reasons).
-- Replace or explicitly admit `text-xs` in `ts/apps/web/src/shell/mount-reading.tsx` (`design-guard.test.ts`, unregistered classes).
-- Remove the `teachText(title) || id` machine-id fallback in `ts/packages/kit/src/components/lang/pane.tsx` and prove meaningful Tutorial region naming when the title is absent (`kit-census.guard.test.ts`, `tutorial-no-machine-region-title`).
-- Visually confirm scene ground and contrast in `ts/apps/web/src/scene/levels.ts`, `marks.ts`, `strands.ts`, and `veil.ts` against house tokens before changing paint (`kit-census.guard.test.ts`, `scene-ground-presets`).
-- Reconcile `ts/apps/web/src/scene/picture/picture.tsx` furniture with the Picture owner and verify placement behavior (`kit-census.guard.test.ts`, `picture-furniture-floater`).
-- Move hover ownership from `ts/apps/web/src/ducts/sheet/blocker-row.tsx` to the shared row interaction primitive while preserving hit testing (`kit-census.guard.test.ts`, `web-hover-handler`).
-- Review the move from `duct/charts.tsx` to `duct-loss/duct/charts.tsx` and transfer or remove its prose allowance; the failure establishes identity drift, not changed prose behavior (`kit-census.guard.test.ts`, `t-prose-ratchet`).
-- Inspect list ownership in `ts/apps/web/src/ducts/proto/e/screen.tsx`, `ducts/sheet/view.tsx`, `shell/mount-timeline.tsx`, and `shell/mount-verbs.tsx`; remove the stale `ducts/proto/e/preview-lines.tsx` allowance only with structural replacement (`kit-census.guard.test.ts`, `nav-list-kit`).
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'reading-list-adapter' ('N6')` remains Owed. Use the shared Reading/List projection in apps/web/src/ops/route.tsx and apps/web/src/sessions/route.tsx; prove row behavior. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'nav-list-kit' ('N3')` remains Owed. Replace local navigation lists in ducts/sheet/view.tsx and shell chrome/timeline/verbs/review with the kit owner; remove the stale ducts/proto/e/preview-lines.tsx allowance. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 't-prose-ratchet' ('I6')` remains Owed. Review the move from duct/charts.tsx to duct-loss/duct/charts.tsx; transfer or remove the stale prose allowance. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'web-hover-handler' ('N7')` remains Owed. Move ducts/sheet/blocker-row.tsx hover through the shared row interaction primitive; retain hit testing. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'picture-furniture-floater' ('L2')` remains Owed. Reconcile scene/picture/picture.tsx furniture with the Picture owner and check placement. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'subject-fallback-ids' ('I1')` remains Owed. Replace raw-id fallback presentation in apps/web/src/space/facts.tsx with the admitted subject display identity. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'scene-ground-presets' ('L4')` remains Owed. Visually check scene/levels.ts, marks.ts, strands.ts and veil.ts against house tokens before changing paint. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/kit-census.guard.test.ts > 'tutorial-no-machine-region-title' ('I1')` remains Owed. Remove the teachText(title) || id machine-id fallback in packages/kit/src/components/lang/pane.tsx; retain meaningful Tutorial region names. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/design-guard.test.ts > design checks — code holds the boundary > unregistered classes — hard zero (1 true unregistered)` remains Owed. Replace or explicitly admit text-xs in shell/mount-reading.tsx. Keep the law; do not raise its allowance.
+
+- RATCHET-GREEN, 2026-11-04: `src/design-guard.test.ts > CSS ownership across the compiled entry graph > requires a reason for every contextual override of kit vocabulary` remains Owed. Reconcile dl-button contextual overrides in shell/situation-band.css and workbench/route-tabs.css with the component owner. Keep the law; do not raise its allowance.
+
 
 - An "indirectly hovered" tier, one step lighter than hovered (kaitpw 2026-11-02): marks every place the hovered thing also appears (list row, picture, card).
 - The picture seam (Decided 2026-10-28), after `3a0be1cd` (/ducts and the fan sheet mount `scene/picture/` `Picture`):
