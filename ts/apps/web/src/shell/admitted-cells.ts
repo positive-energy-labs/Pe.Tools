@@ -6,7 +6,7 @@ import type { SchemaTable } from "../../../../packages/agent-contracts/src/route
 import { freezePage } from "./page-port";
 
 export function admittedWorkPatches(
-  data: RouteGraphJson,
+  data: Pick<RouteGraphJson, "work" | "cells">,
   schemas: SchemaTable,
   value: unknown,
   ownerSchema?: z.ZodType,
@@ -54,7 +54,7 @@ export function admittedWorkPatches(
 
 /** Cell display is cached at publication; focus/take remain explicit actions on the shared owners. */
 export function createAdmittedCells(
-  data: RouteGraphJson,
+  data: Pick<RouteGraphJson, "work" | "cells">,
   schemas: SchemaTable,
   bodies: Readonly<Record<string, { run: (...args: any[]) => unknown }>>,
   ownerSchema?: z.ZodType,
@@ -82,7 +82,9 @@ export function createAdmittedCells(
           const segment = cell.segment === null ? work : work?.[cell.segment];
           return [
             id,
-            Object.entries((segment ?? {}) as Record<string, unknown>).map(([key, value]) => {
+            Object.entries((segment ?? {}) as Record<string, unknown>)
+              .filter(([key]) => cell.segment !== null || (cell.key ? schemas[cell.key]!.safeParse(key).success : key === id))
+              .map(([key, value]) => {
               const parsed = keyFor(id, key);
               const group = z.array(z.string()).parse(bodies[cell.groupOf]!.run(parsed));
               const labels = cell.label
@@ -135,3 +137,65 @@ export function createAdmittedCells(
     },
   };
 }
+
+
+/** Invocation and transition share the cell owner; mount supplies only accepted state and write. */
+export function createAdmittedCellActions<W extends Record<string, unknown>>({
+  route, owner, read, work, cells, snapshots, action, resolve,
+}: {
+  route: import("../../../../packages/agent-contracts/src/route-kernel-admission.ts").AdmittedRoute<import("../../../../packages/agent-contracts/src/route-kernel-data.ts").RouteGraphJson, SchemaTable, import("../../../../packages/agent-contracts/src/route-kernel-bodies.ts").EntryTable, unknown, W>;
+  owner: import("../../../../packages/agent-contracts/src/route-kernel-page.ts").AcceptanceOwner<RouteGraphJson, SchemaTable, W>;
+  read(): import("../../../../packages/agent-contracts/src/route-kernel-page.ts").AcceptanceSnapshot<RouteGraphJson, SchemaTable, W>;
+  work: ReturnType<typeof import("./admitted-work.ts").createAdmittedWork>;
+  cells: ReturnType<typeof createAdmittedCells>;
+  snapshots(): Readonly<Record<string, import("../../../../packages/agent-contracts/src/route-kernel-bodies.ts").ReadingSnapshot<unknown>>>;
+  action(): void;
+  resolve(): unknown;
+}) {
+  const project = (keys: readonly string[], value: Readonly<Record<string, unknown>>) =>
+    freezePage(Object.fromEntries(keys.map((key) => [key, value[key]])));
+  const readingHash = (reading: import("../../../../packages/agent-contracts/src/route-kernel-bodies.ts").ReadingSnapshot<unknown> | undefined) => {
+    if (!reading?.current) throw Error("Reading unavailable");
+    return reading.hash;
+  };
+  return (kind: "take" | "unsuggest" | "clear", id: string, key: unknown) => {
+        action();
+        resolve();
+        const declaration = route.data.cells[id];
+        if (!declaration) throw Error(`Unknown cell: ${id}`);
+        const context = () => {
+          const snapshot = read();
+          if (!work.ready() || !snapshot?.work) throw Error("Work unavailable");
+          for (const reading of declaration.deps.readings)
+            if (!snapshots()[reading]?.current) throw Error(`Reading unavailable: ${reading}`);
+          return freezePage({
+            page: project(declaration.deps.page, snapshot.page),
+            work: project(declaration.deps.work, snapshot.work.value),
+            readings: Object.fromEntries(
+              declaration.deps.readings.map((key) => [key, snapshots()[key]]),
+            ),
+          });
+        };
+        context();
+        const issued = owner.invocation(
+          owner.capture(`cell-${kind}:${id}`),
+          Object.fromEntries(
+            declaration.deps.readings.map((key) => [key, readingHash(snapshots()[key])]),
+          ),
+        );
+        if (!issued.ok) throw Error(issued.reason);
+        return work.write(
+          () => {
+            const snapshot = read();
+            if (!snapshot?.work) throw Error("Work unavailable");
+            return cells.transition(kind, id, key, context(), snapshot.work.value);
+          },
+          issued.value,
+          issued.value.id,
+          {
+            label: `${kind === "take" ? "Take" : kind === "unsuggest" ? "Unsuggest" : "Clear"} ${id}`,
+          },
+        );
+      };
+}
+

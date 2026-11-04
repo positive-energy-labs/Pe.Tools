@@ -10,7 +10,7 @@ import { peReadings } from "../readings";
 import { OLDER_WORK, UNREADABLE_WORK } from "@pe/agent-contracts";
 import { startFreshRouteWork, salvageRouteWork } from "../route/host";
 import { admittedWorkPatches } from "./admitted-cells";
-import { createAdmittedCells } from "./admitted-cells";
+import { createAdmittedCells, createAdmittedCellActions } from "./admitted-cells";
 import { z } from "zod";
 import { placeAdmittedVerbs } from "./admitted-placement";
 import { createAdmittedObservers } from "./admitted-observers";
@@ -1500,45 +1500,8 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         close();
         throw error;
       }
-      const transitionCell = (kind: "take" | "unsuggest" | "clear", id: string, key: unknown) => {
-        action();
-        resolve();
-        const declaration = route.data.cells[id];
-        if (!declaration) throw Error(`Unknown cell: ${id}`);
-        const context = () => {
-          const snapshot = owner.read();
-          if (!work.ready() || !snapshot?.work) throw Error("Work unavailable");
-          for (const reading of declaration.deps.readings)
-            if (!readings[reading]?.current) throw Error(`Reading unavailable: ${reading}`);
-          return freezePage({
-            page: project(declaration.deps.page, snapshot.page),
-            work: project(declaration.deps.work, snapshot.work.value),
-            readings: Object.fromEntries(
-              declaration.deps.readings.map((key) => [key, readings[key]]),
-            ),
-          });
-        };
-        context();
-        const issued = owner.invocation(
-          owner.capture(`cell-${kind}:${id}`),
-          Object.fromEntries(
-            declaration.deps.readings.map((key) => [key, (readings[key] as { hash: string }).hash]),
-          ),
-        );
-        if (!issued.ok) throw Error(issued.reason);
-        return work.write(
-          () => {
-            const snapshot = owner.read();
-            if (!snapshot?.work) throw Error("Work unavailable");
-            return cells.transition(kind, id, key, context(), snapshot.work.value);
-          },
-          issued.value,
-          issued.value.id,
-          {
-            label: `${kind === "take" ? "Take" : kind === "unsuggest" ? "Unsuggest" : "Clear"} ${id}`,
-          },
-        );
-      };
+      const transitionCell = createAdmittedCellActions({route, owner, read, work, cells,
+        snapshots: () => readings, action, resolve});
       return {
         // The exact admission supplies both these schemas and field roles.
         page: ports.page as PagePort<G, S>,
