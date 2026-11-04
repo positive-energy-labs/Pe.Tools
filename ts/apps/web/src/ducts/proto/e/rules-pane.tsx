@@ -83,6 +83,8 @@ export const RulesTree = memo(function RulesTree({
     const ids = new Map<string, Set<number>>();
     for (const [id, key] of ruleOf)
       if (inScope(id)) (ids.get(key) ?? ids.set(key, new Set()).get(key)!).add(id);
+    // Owner crossings retain their rule even when this scope has no matching fittings.
+    if (focus && ruleByKey(focus) && !ids.has(focus)) ids.set(focus, new Set());
     const overrides = [
       ...new Set([
         ...Object.keys(priced.edit.componentDrops).map(Number),
@@ -104,7 +106,7 @@ export const RulesTree = memo(function RulesTree({
         .filter((id) => !ruleOf.has(id))
         .map((id): RuleNode => ({ kind: "override", key: `o${id}`, id })),
     ];
-  }, [priced, ruleOf, groupOf, groups, wide, landing]);
+  }, [priced, ruleOf, groupOf, groups, wide, landing, focus]);
 
   // What staging each rule's table would move, known before anything is edit: the grilles
   // downstream of its instances and the systems they sit in, document-wide whatever `wide` says.

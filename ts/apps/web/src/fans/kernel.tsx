@@ -58,8 +58,10 @@ export const bodies = {
   price: { slot: "readings.pricing.derive", kind: "derive", source, run: (ctx) => {
     const { sheetSnapshot, ductsWork, tables, catalogs } = ctx.readings;
     if (!sheetSnapshot.value || !ductsWork.value || !tables.value || !catalogs.value) return null;
+    const snapshot = snapshotOf(sheetSnapshot);
+    if ("kind" in snapshot) return null;
     const priced = pricingJob()({ id: 0, base: {
-      snapshot: snapshotOf(sheetSnapshot), grids: tables.value, catalogs: catalogs.value.tables,
+      snapshot, grids: tables.value, catalogs: catalogs.value.tables,
     }, doc: ductsDesign(ductsWork.value, ctx.work) });
     if ("error" in priced) throw Error(priced.error);
     return "result" in priced ? priced.result : null;

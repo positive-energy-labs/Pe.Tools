@@ -213,6 +213,8 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 
 ## Owed
 
+- A late dev-host exit after readiness is unmonitored: the supervisor awaits UI work with no liveness signal, so callers see 'No running host-source' until retry. Capture the host's terminal stderr on recurrence. (REVITSUITE/HOSTSUITE, 2026-11-04)
+
 
 - After main, retire competing failure mappers through the closed `DoorFailure` path (Effect audit P3); finish effect F2's single failure mapper through coherent producer conversions, including [servePeRoute](../../../ts/packages/host-contracts/src/pe-api.ts), before global middleware ownership. Preserve native evidence and SDK opaque success envelopes. D5 isolates Work observation faults only; the mapper half is not implemented. (counsel, 2026-11-04)
 

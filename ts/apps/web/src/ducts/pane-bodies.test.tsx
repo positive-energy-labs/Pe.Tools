@@ -8,8 +8,9 @@ import { createWitness } from "../fans/cutover.test-support";
 import type { AdmittedMount } from "../shell/admitted-mount";
 import { makeAtomRegistry } from "../shell/owner";
 import { cellFocusOf,cellFocusSubject } from "./cell-focus";
-import { localId,localSubject } from "./neutral";
+import { ductsLink,localId,localSubject } from "./neutral";
 import { snapshot } from "./test-fixture";
+import sheetFixture from "./sheet/sheet.fixture.json";
 
 const leaves = vi.hoisted(() => ({ tree: vi.fn(), picture: vi.fn(), inbox: vi.fn() }));
 vi.mock("./proto/e/tree-sidebar", () => ({
@@ -148,4 +149,70 @@ test("a restored semantic cell selection lands on that fitting cell through the 
   expect(document.activeElement?.closest("[data-e-cell]")?.getAttribute("data-e-cell")).toBe(
     `componentDrops:${fitting.id}`,
   );
+});
+
+
+test("no open fan is absence and every sheet pane renders without a native decode error", async () => {
+  const f = await createWitness(closes, new Map(), {
+    "ducts.sheet-snapshot": { kind: "use", open(_ctx, deliver) {
+      deliver({ kind: "complete", value: { kind: "absent" }, revision: 0 });
+    } },
+  });
+  for (const pane of ["sheet-roster", "sheet-inputs", "sheet-picture", "sheet-ledger"]) {
+    f.fans.setPaneDemand(pane, true);
+    await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
+    const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, pane)}</RegistryContext>);
+    if (pane === "sheet-roster") expect(view.container.textContent).toContain("FC-23");
+    else expect(screen.getByText("Open a fan from the roster.")).toBeTruthy();
+    expect(view.container.textContent).not.toContain("readAt");
+    view.unmount();
+  }
+});
+
+
+
+test("a read-only fan rule link restores its rule and bounded system context on ducts", async () => {
+  const f = await createWitness(closes, new Map(), {
+    "ducts.sheet": { kind: "use", open(_ctx, deliver) {
+      deliver({ kind: "complete", revision: 1, value: {
+        rows: sheetFixture.roster.rows, progress: null, opened: [],
+        open: { overview: sheetFixture.overview, elements: null, legs: null, worstLegs: [], worksheet: null,
+          inputs: { ...sheetFixture.inputs, inputs: { ...sheetFixture.inputs.inputs,
+            tables: { "tap-std": { value: "SD5-10", source: "Work", units: null, version: null, status: "valid" } },
+          } },
+        },
+      } });
+    } },
+    "ducts.sheet-snapshot": { kind: "use", open(_ctx, deliver) {
+      deliver({ kind: "complete", value: { ...snapshot, systems: [] }, revision: 1 });
+    } },
+  });
+  await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
+  const source = render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
+  const link = source.container.querySelector<HTMLAnchorElement>('[data-fitting-group^="rule:"] a');
+  if (!link) throw Error("The pinned fan has no rule owner link");
+  const group = link.closest("[data-fitting-group]")?.getAttribute("data-fitting-group");
+  if (!group) throw Error("The owner link has no rule identity");
+  const url = new URL(link.href);
+  const destination = f.mount(f.admitted.owner, url.searchParams, "rule-crossing");
+  expect(destination.page.read().selected.map(item => localSubject(item.id))).toEqual([group]);
+  expect(destination.page.read().system).toEqual({ kind: "ids", ids: [localId("ducts-system", "SA")] });
+  source.unmount();
+  await vi.waitFor(() => expect(destination.readingStatus("pricing").snapshot.current).toBe(true));
+  const view = render(<RegistryContext value={registry()}>{nodeFor(destination, "e-rules-all")}</RegistryContext>);
+  const row = view.container.querySelector(`[data-key="${group.slice(5)}"]`);
+  expect(row).not.toBeNull();
+  expect(row?.hasAttribute("data-landed")).toBe(true);
+});
+
+test("a rule owner crossing without system context still lands on its rule", async () => {
+  const f = await createWitness(closes);
+  const url = new URL(ductsLink([], { fixture: "scene" }, { kind: "rule", key: "tap-std" }), "http://127.0.0.1");
+  const destination = f.mount(f.admitted.owner, url.searchParams, "rule-no-system");
+  expect(destination.page.read().selected.map(item => localSubject(item.id))).toEqual(["rule:tap-std"]);
+  await vi.waitFor(() => expect(destination.readingStatus("pricing").snapshot.current).toBe(true));
+  const view = render(<RegistryContext value={registry()}>{nodeFor(destination, "e-rules-all")}</RegistryContext>);
+  const row = view.container.querySelector('[data-key="tap-std"]');
+  expect(row).not.toBeNull();
+  expect(row?.hasAttribute("data-landed")).toBe(true);
 });

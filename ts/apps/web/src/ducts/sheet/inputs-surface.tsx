@@ -3,6 +3,7 @@ DuctsDesign,
 DuctsSheetEdits,
 Resolved,
 } from "@pe/agent-contracts";
+import type { DuctsDestination } from "../neutral.ts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { SubjectText } from "@pe/kit/lang/subject-text";
@@ -269,7 +270,7 @@ function RowVerb({
   );
 }
 
-function FittingGroupRows({ group, ductsHref }: { group: FittingGroup; ductsHref: string }) {
+function FittingGroupRows({ group, ductsHref }: { group: FittingGroup; ductsHref: (destination: DuctsDestination) => string }) {
   const [open, setOpen] = useState(group.unpriced > 0 || group.members.length <= 3);
   return (
     <div className="contents" data-fitting-group={group.key} data-fitting-source={group.source}>
@@ -299,7 +300,7 @@ function FittingGroupRows({ group, ductsHref }: { group: FittingGroup; ductsHref
       ) : (
         <span className="t-small text-ink-2">none on this fan</span>
       )}
-      <a href={ductsHref}>{group.table ?? "Choose a duct rule"}</a>
+      <a href={ductsHref(group.kind === "rule" ? { kind: "rule", key: group.key.slice(5) } : { kind: "route" })}>{group.table ?? "Choose a duct rule"}</a>
       <span className="t-small min-w-0 truncate text-ink-2" data-input-source={group.source}>
         {group.source}
       </span>
@@ -437,7 +438,7 @@ export function InputsSurface({
   act,
   ductsHref,
 }: {
-  ductsHref: string;
+  ductsHref: (destination: DuctsDestination) => string;
   ctx: InputContext;
   busy: boolean;
   elementName: string | null;
@@ -503,7 +504,7 @@ export function InputsSurface({
           {fields.criteria.map((row) => (
             <div key={row.key} className="contents" data-input-field={row.key}>
               <span className="min-w-0 break-words text-ink-2">{row.label}</span>
-              <a href={ductsHref}>{String(row.value ?? "—")}</a>
+              <a href={ductsHref({ kind: "route" })}>{String(row.value ?? "—")}</a>
               <span className="text-ink-2">{row.source}</span>
               <span />
             </div>

@@ -193,6 +193,7 @@ export const schemas = {
   }),
   scope: ductsDocumentSchema.shape.writeIntent.unwrap().shape.edit.unwrap().unwrap().shape.value,
   snapshot: snapshotReadingSchema.nullable(),
+  sheetSnapshot: z.union([z.object({ kind: z.literal("absent") }), snapshotReadingSchema]),
   sheet: sheetReadingSchema.nullable(),
   fansWork: fansDocumentSchema,
   pricing: z.unknown().nullable(),
@@ -240,7 +241,7 @@ export const entries = {
   "ducts.sheet-snapshot": {
     input: z.object({ work: schemas.work.nullable(),
       fanWork: fanInput.optional(), sheet: schemas.sheet }),
-    output: schemas.snapshot,
+    output: schemas.sheetSnapshot,
     axes,
   },
   "ducts.preview-losses": {
@@ -1432,10 +1433,12 @@ export const ductsHostModule = {
 };
 
 /** Carry only the destination subject and the document/fixture binding. */
-export function ductsLink(ids: readonly string[], search: Readonly<Record<string, unknown>>) {
+export type DuctsDestination = { kind: "route" } | { kind: "rule"; key: string };
+export function ductsLink(ids: readonly string[], search: Readonly<Record<string, unknown>>, destination: DuctsDestination = { kind: "route" }) {
   const params = new URLSearchParams();
   for (const key of ["target", "fixture", "thread"])
     if (typeof search[key] === "string") params.set(key, search[key]);
-  params.set("system", JSON.stringify({ kind: "ids", ids: ids.map(id => localId("ducts-system", id)) }));
+  if (ids.length) params.set("system", JSON.stringify({ kind: "ids", ids: ids.map(id => localId("ducts-system", id)) }));
+  if (destination.kind === "rule") params.set("selected", JSON.stringify([{ kind: "focus", id: localId("ducts-focus", `rule:${destination.key}`) }]));
   return `/ducts?${params}`;
 }

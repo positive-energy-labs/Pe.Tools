@@ -320,7 +320,7 @@ export const schemas = {
   sheet: sharedSchemas.sheet,
   sheetPath: sharedSchemas.sheetPath,
   sheetStage: sharedSchemas.sheetStage,
-  snapshot: sharedSchemas.snapshot,
+  snapshot: sharedSchemas.sheetSnapshot.nullable(),
   pricing: sharedSchemas.pricing,
   ductsWork: ductsDocumentSchema,
   viewport: sharedSchemas.viewport,

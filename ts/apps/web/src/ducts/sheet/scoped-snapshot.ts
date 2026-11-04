@@ -8,7 +8,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 export const SHEET_GROUP = "sheet";
 
-/** No fan open, or the read not back yet: names fall back to the roster's marks. */
+/** Empty geometry for legacy unbound network views, never a native sheet reading. */
 export const EMPTY_SNAPSHOT: DuctSnapshot = {
   document: { title: "", readAt: "", elapsedMs: 0, networkBasedCalculations: false },
   coordinateEncoding: "native-double",
@@ -30,8 +30,7 @@ export const EMPTY_SNAPSHOT: DuctSnapshot = {
   },
 };
 
-export function sheetSnapshot(raw: DuctSnapshot | null): DuctSnapshot {
-  if (!raw) return EMPTY_SNAPSHOT;
+export function sheetSnapshot(raw: DuctSnapshot): DuctSnapshot {
   return {
     ...raw,
     groups: [
@@ -49,4 +48,12 @@ export function sheetSnapshot(raw: DuctSnapshot | null): DuctSnapshot {
     nodes: raw.nodes.map((node) => ({ ...node, groupId: SHEET_GROUP })),
     segments: raw.segments.map((segment) => ({ ...segment, groupId: SHEET_GROUP })),
   };
+}
+
+/** Bounded ids reads have no system roster; their elements still carry system names. */
+export function sheetSystems(snapshot: DuctSnapshot): string[] {
+  return [...new Set([
+    ...snapshot.systems.map(system => system.name),
+    ...[...snapshot.nodes, ...snapshot.segments].map(element => element.systemName),
+  ].filter((name): name is string => !!name))];
 }

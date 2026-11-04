@@ -54,6 +54,17 @@ const captured = (source: UseSource<DuctSnapshot | null>): UseSource<SnapshotRea
   },
 });
 
+function sheetCapture(source: UseSource<DuctSnapshot | null>): UseSource<SnapshotReading | { kind: "absent" }> {
+  const native = captured(source);
+  return { ...native, open(ctx, deliver) {
+    return native.open(ctx, frame => {
+      if (frame.kind === "complete" || frame.kind === "part")
+        deliver({ ...frame, value: frame.value ?? { kind: "absent" } });
+      else if (frame.kind === "failure" || frame.kind === "pending" || frame.kind === "stale" || frame.kind === "log") deliver(frame);
+    });
+  } };
+}
+
 const target = (ctx: ReadingContext) => (ctx.target.kind === "document" ? ctx.target.ref : null);
 
 const slots = (ctx: ReadingContext) => {
@@ -317,7 +328,7 @@ export function ductsSources(): Readonly<Record<string, UseSource | DeriveSource
     "ducts.sheet": sheets(),
 
     "ducts.sheet-snapshot": {
-      ...captured(
+      ...sheetCapture(
         ductsBodySource({
           request: (ctx) => {
             const open = (args(ctx).sheet ?? undefined)?.open;
@@ -349,7 +360,7 @@ export function ductsSources(): Readonly<Record<string, UseSource | DeriveSource
             };
           },
           decode: (value) => sheetSnapshot(snapshotSchema.parse(value)),
-          absent: EMPTY_SNAPSHOT,
+          absent: null,
         }),
       ),
       key: slots,

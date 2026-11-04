@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-04, no open fan is explicit sheet-reading absence, never a native snapshot; native timestamp validation stays strict. Rule owner links preserve their semantic rule selection and available system context. (FX-SHEET)
+
 - 2026-11-04, scene selects the existing layout fixture composition on Ducts and Fans; the original Project A trace remains an ungrouped trace without system metadata. Fixture systems are synthetic and do not certify real Revit behavior. [Pairing law](../../../ts/apps/web/src/ducts/fixtures.test.ts). (FIXTURE0)
 
 - 2026-11-04, cross-route Work dependencies are read-only admitted readings, authenticated by the caller fingerprint and declared edge; only owner verbs write cells. (counsel, U4)

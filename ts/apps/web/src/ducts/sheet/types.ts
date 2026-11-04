@@ -1,5 +1,4 @@
 import type { DuctsSheetEdits } from "@pe/agent-contracts";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { ListPersist } from "@pe/kit/lang/collection";
 import type { OpenSheet } from "../neutral";
 import type { Closer } from "./closer";
@@ -14,7 +13,7 @@ export interface SheetFirm {
 }
 /** Presentation leaves receive only the data their own pane draws. */
 export interface RosterProps {
-  snapshot: DuctSnapshot;
+  nameOf: (id: number) => string;
   address?: ListPersist<"name">;
   roster: readonly FanPort[];
   picked?: readonly string[];

@@ -35,7 +35,8 @@ import { editLabel,presentInputHistory,type EditMeta } from "./input-history.neu
 import { InputsSurface } from "./inputs-surface";
 import { rosterOrder,stableFanKey,withComputed,type FanPort } from "./model";
 import { SheetPicture } from "./picture";
-import { EMPTY_SNAPSHOT } from "./scoped-snapshot";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { sheetSystems } from "./scoped-snapshot.ts";
 import { EMPTY_SHEET_STATE } from "./state";
 import { Ledger,Roster } from "./view";
 type SheetContext = PaneContext<
@@ -48,9 +49,9 @@ function useSheetData(
   ctx: Pick<SheetContext, "page" | "verbs" | "workBasis"> & {
     readings: Pick<SheetContext["readings"], "fans" | "sheet" | "sheetSnapshot">;
   },
+  snapshot: DuctSnapshot,
 ) {
   const authored = ctx.page.read();
-  const snapshot = sheetSnapshot(ctx.readings.sheetSnapshot);
   const reading = ctx.readings.sheet;
   const value = reading.value;
   const sheet = value?.open ?? null;
@@ -92,7 +93,12 @@ export function RosterBody({
 }: {
   ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-roster">;
 }) {
-  const { authored, snapshot, fans, roster, nameOf, busy } = useSheetData(ctx);
+  const authored = ctx.page.read();
+  const snapshot = sheetSnapshot(ctx.readings.sheetSnapshot);
+  const fans = ctx.readings.fans;
+  const roster = rosterOrder(withComputed(fans.value?.rows ?? [], ctx.readings.sheet.value?.rows ?? []));
+  const busy = ctx.readings.sheet.status === "pending";
+  const nameOf = useMemo(() => "kind" in snapshot ? (id: number) => String(id) : subjectNamer(snapshot), [snapshot]);
   const subject = useAdmittedSubject();
   const open = (row: FanPort) => subject?.toggle(localId("ducts-fan", stableFanKey(row)));
   const pickedFans = namesOf(authored.fan);
@@ -107,7 +113,7 @@ export function RosterBody({
             sort: authored.rosterSort,
             onChange: (rosterSearch, rosterSort) => ctx.verbs.browse({ rosterSearch, rosterSort }),
           },
-          snapshot: snapshot,
+          nameOf,
           roster: roster,
           picked: pickedFans === "all" ? roster.map(stableFanKey) : pickedFans,
           open: open,
@@ -115,13 +121,7 @@ export function RosterBody({
           loading: fans.status === "pending",
         }}
       />
-      {[
-        ...new Set(
-          [...snapshot.nodes, ...snapshot.segments]
-            .map((row) => row.systemName)
-            .filter((name): name is string => !!name),
-        ),
-      ].map((name) => (
+      {("kind" in snapshot ? [] : sheetSystems(snapshot)).map((name) => (
         <a key={name} href={ductsLink([name], search)}>
           {name}
         </a>
@@ -134,12 +134,20 @@ export function RosterBody({
     </SheetFrame>
   );
 }
-export function InputsBody({
-  ctx,
-}: {
+function SheetEmpty({ readings }: { readings: Pick<SheetContext["readings"], "sheetSnapshot" | "sheet"> }) {
+  if (readings.sheetSnapshot.status === "failed") return <p role="alert">{readings.sheetSnapshot.reason}</p>;
+  return readings.sheetSnapshot.status === "pending" || readings.sheet.status === "pending"
+    ? <p role="status">computing</p> : <p>Open a fan from the roster.</p>;
+}
+export function InputsBody({ ctx }: { ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-inputs"> }) {
+  const snapshot = sheetSnapshot(ctx.readings.sheetSnapshot);
+  return "kind" in snapshot ? <SheetEmpty readings={ctx.readings} /> : <InputsContent ctx={ctx} snapshot={snapshot} />;
+}
+function InputsContent({ ctx, snapshot }: {
   ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-inputs">;
+  snapshot: DuctSnapshot;
 }) {
-  const { snapshot, sheet, fans, nameOf, selected, changeInputs, busy } = useSheetData(ctx);
+  const { sheet, fans, nameOf, selected, changeInputs, busy } = useSheetData(ctx, snapshot);
   const workDoc = sheetWork(ctx);
   const write = async (patches: RouteStatePatch[], history?: EditMeta) => {
     if (!ctx.workBasis)
@@ -212,7 +220,7 @@ export function InputsBody({
         })}
       </section>
     <InputsSurface
-      ductsHref={ductsLink(snapshot.systems.map(system => system.name), search)}
+      ductsHref={destination => ductsLink(sheetSystems(snapshot), search, destination)}
       ctx={{
         snapshot,
         doc: workDoc,
@@ -256,12 +264,15 @@ export function InputsBody({
     </SheetFrame>
   );
 }
-export function PictureBody({
-  ctx,
-}: {
+export function PictureBody({ ctx }: { ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-picture"> }) {
+  const snapshot = sheetSnapshot(ctx.readings.sheetSnapshot);
+  return "kind" in snapshot ? <SheetEmpty readings={ctx.readings} /> : <PictureContent ctx={ctx} snapshot={snapshot} />;
+}
+function PictureContent({ ctx, snapshot }: {
   ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-picture">;
+  snapshot: DuctSnapshot;
 }) {
-  const { authored, snapshot, value, sheet, fans, roster, nameOf, selected } = useSheetData(ctx);
+  const { authored, value, sheet, fans, roster, nameOf, selected } = useSheetData(ctx, snapshot);
   const target = ctx.workBasis?.token.scope.identity.target;
   const doc = target?.kind === "document" ? target.ref : null;
   const workDoc = sheetWork(ctx);
@@ -276,9 +287,10 @@ export function PictureBody({
     [authored.selected],
   );
   const pickedFans = namesOf(authored.fan);
+  const nativeSnapshot = ctx.readings.sheetSnapshot.value;
   const captureSource =
-    ctx.readings.fans.current && doc && ctx.readings.sheetSnapshot.value?.sourceVersion
-      ? { document: doc, version: ctx.readings.sheetSnapshot.value.sourceVersion }
+    ctx.readings.fans.current && doc && nativeSnapshot && !("kind" in nativeSnapshot) && nativeSnapshot.sourceVersion
+      ? { document: doc, version: nativeSnapshot.sourceVersion }
       : null;
   const state = ctx.readings.sheetView.value ?? EMPTY_SHEET_STATE;
   const jump = useRef<((key: SubjectKey) => void) | null>(null);
@@ -319,13 +331,16 @@ export function PictureBody({
     </SheetFrame>
   );
 }
-export function LedgerBody({
-  ctx,
-}: {
+export function LedgerBody({ ctx }: { ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-ledger"> }) {
+  const snapshot = sheetSnapshot(ctx.readings.sheetSnapshot);
+  return "kind" in snapshot ? <SheetEmpty readings={ctx.readings} /> : <LedgerContent ctx={ctx} snapshot={snapshot} />;
+}
+function LedgerContent({ ctx, snapshot }: {
   ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-ledger">;
+  snapshot: DuctSnapshot;
 }) {
-  const { snapshot, reading, sheet, fans, roster, nameOf, selected, changeInputs, busy } =
-    useSheetData(ctx);
+  const { reading, sheet, fans, roster, nameOf, selected, changeInputs, busy } =
+    useSheetData(ctx, snapshot);
   const select = (selected: string) =>
     ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
   const state = ctx.readings.sheetView.value ?? EMPTY_SHEET_STATE;
@@ -429,9 +444,11 @@ export function LedgerBody({
     </SheetFrame>
   );
 }
-export function sheetSnapshot(reading: SheetContext["readings"]["sheetSnapshot"]) {
-  // Domain readonly sweep reached 28 files; picture consumers still require mutable arrays.
-  return (reading.value ?? EMPTY_SNAPSHOT) as import("@pe/ducts-domain/types").DuctSnapshot;
+/** Drawing consumers own a mutable clone; the kernel retains immutable evidence. */
+export function sheetSnapshot(reading: SheetContext["readings"]["sheetSnapshot"]):
+  (DuctSnapshot & { sourceVersion?: string }) | { kind: "absent" };
+export function sheetSnapshot(reading: { value?: unknown }): unknown {
+  return structuredClone(reading.value ?? { kind: "absent" });
 }
 function sheetWork(ctx: SheetContext) {
   return ctx.work && ctx.readings.ductsWork.value ? ductsDesign(ctx.readings.ductsWork.value, ctx.work) : null;
@@ -446,7 +463,7 @@ function SheetFrame({
   ctx: Pick<SheetContext, "page" | "workBasis"> & {
     readings: Pick<SheetContext["readings"], "sheetSnapshot">;
   };
-  snapshot: import("@pe/ducts-domain/types").DuctSnapshot;
+  snapshot: DuctSnapshot | { kind: "absent" };
   nameOf: ReturnType<typeof subjectNamer>;
   jump?: import("react").RefObject<((key: SubjectKey) => void) | null>;
   children: import("react").ReactNode;
@@ -468,7 +485,7 @@ function SheetFrame({
               document: ctx.readings.sheetSnapshot.current ? document : null,
               source: "native",
             },
-            references: [...snapshot.nodes, ...snapshot.segments].map(({ id, uniqueId }) => ({
+            references: ("kind" in snapshot ? [] : [...snapshot.nodes, ...snapshot.segments]).map(({ id, uniqueId }) => ({
               elementId: id,
               uniqueId,
             })),
