@@ -11,7 +11,7 @@ import { cellFromDraft, StateCell, type CellOption, type CellTransition } from "
 /** Run one Pea-suggestion transition on a Work cell; resolves to a refusal, or null when it landed. */
 export type CellPath =
   | readonly ["criteria"]
-  | readonly ["rules" | "ruleAssignments" | "kinds" | "parameters", string];
+  | readonly ["rules" | "ruleAssignments" | "kinds" | "parameters" | "roles", string];
 export type CellAct = (
   path: CellPath,
   cell: CellLike,

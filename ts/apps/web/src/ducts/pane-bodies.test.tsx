@@ -48,6 +48,29 @@ function registry() {
   return value;
 }
 
+test("Q2a keeps kind and colour editors on ducts and fan settings on fans", async () => {
+  const f = await createWitness(closes);
+  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
+  f.owner.controls.subject({ kind: "ids", ids: [localId("ducts-system", "SA")] });
+  await vi.waitFor(() => expect(f.owner.readingStatus("ducts").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
+  const view = render(<RegistryContext value={registry()}>
+    {nodeFor(f.owner, "e-systems")}{nodeFor(f.owner, "e-rules-all")}
+  </RegistryContext>);
+  expect(screen.getAllByRole("region", { name: "System colours" })).toHaveLength(1);
+  expect(screen.getAllByRole("region", { name: "Unit kinds" })).toHaveLength(1);
+  expect(screen.queryByRole("region", { name: "Fan settings" })).toBeNull();
+  view.unmount();
+  render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
+  expect(screen.getAllByRole("region", { name: "Fan settings" })).toHaveLength(1);
+  expect(document.querySelectorAll('[data-sheet-cell="Design friction"]')).toHaveLength(1);
+  expect(screen.queryByRole("region", { name: "System colours" })).toBeNull();
+  expect(screen.queryByRole("region", { name: "Unit kinds" })).toBeNull();
+  expect(document.querySelectorAll('[data-choice-cell^="Unit role "]').length).toBe(
+    snapshot.nodes.filter(node => node.kind === "equipment").length,
+  );
+});
+
 test("an admitted network pane runs no sibling body when another pane is hidden", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));

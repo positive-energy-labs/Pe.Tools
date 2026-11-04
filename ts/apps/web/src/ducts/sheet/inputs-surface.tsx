@@ -402,7 +402,8 @@ function InputRowView({
       )}
       <RowVerb
         rowKey={row.key}
-        clear={row.clear}
+        // Q2a: kinds belong to /ducts; the role selector above owns role edits on /fans.
+        clear={c.kind === "number" ? row.clear : null}
         history={history}
         refusal={refusal}
         apply={apply}

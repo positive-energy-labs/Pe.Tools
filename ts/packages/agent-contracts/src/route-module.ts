@@ -426,7 +426,7 @@ export class AdmittedRoute<
     this.resolvedWork = workSpec?.schema
       ? Object.freeze({
           spec: workSpec,
-          // Admission links this exact schema before constructing the nominal receipt.
+          // nominal boundary: string-keyed schema registry; admission at :568 proved identity; no Work value is cast
           schema: bindings.schemas[workSpec.schema] as z.ZodType<W>,
         })
       : undefined;

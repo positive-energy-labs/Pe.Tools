@@ -1,3 +1,9 @@
+import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
+import { StateCell, cellFromDraft } from "@pe/kit/lang/cell";
+import { SheetCell } from "./sheet-cell";
+import { ChoiceCell } from "./choice-cell.tsx";
+import { Button } from "@pe/kit/lang/button";
+import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
 import { AttentionRoot } from "#/attention";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { NativeObservationScope } from "#/revit/observation";
@@ -168,7 +174,37 @@ export function InputsBody({
   };
   const search = useRouteSearchSlice(search => search);
   const fanReading = fans.value;
+  const friction = ctx.work?.designFriction ?? {};
   const ownPane = (
+    <>
+      <section aria-label="Fan settings" className="flex flex-col gap-2 p-1">
+        <SheetCell className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2" label="Design friction" value={friction.edit?.value ?? DEFAULT_DESIGN_FRICTION_RATE}
+          unit={{ label: "in-wg/100 ft" }} digits={3} source={friction.edit ? "Work" : "default"}
+          cell={friction} positive clearable={!!friction.edit} refusal={ctx.workBasis ? null : "Read Work before editing"}
+          onValue={value => write(transitionPatches([], "designFriction", friction,
+            value === null ? { kind: "clear" } : { kind: "set", rung: { value } }), { label: "Design friction" })} />
+        {([["fanStatic", "Unit ESP"], ["terminalDrop", "Grille drop"], ["componentDrop", "Component drop"], ["fittingCoefficient", "Fitting coefficient"]] as const).map(([key, label]) => {
+          const cell = ctx.work?.parameters[key] ?? {};
+          return <label key={key} className="flex items-baseline gap-2"><span>{label}</span>
+            <StateCell {...cellFromDraft(cell, { value: snapshot.slots[key], cap: "editable" }, String)} scale="row"
+              onCommit={(value: string) => write(transitionPatches(["parameters"], key, cell, { kind: "set", rung: { value } }), { label }).then(result => result?.message)} />
+          </label>;
+        })}
+        {snapshot.nodes.filter(node => node.kind === "equipment").map(node => {
+          const key = String(node.id);
+          const cell = ctx.work?.roles[key] ?? {};
+          const label = `Unit role ${nameOf(node.id)}`;
+          return <label key={key} className="flex items-baseline gap-2"><span>{label}</span>
+            <ChoiceCell label={label} cell={cell} path={["roles", key]} show={JSON.stringify}
+              current={cell.edit?.value.role ?? sheet?.inputs?.inputs.units[key]?.role.value ?? suggestRole(node, suggestKind(node).kind)}
+              options={[{ key: "fan", label: "Fan" }, { key: "passive", label: "Passive" }]}
+              refusal={ctx.workBasis ? null : "Read Work before editing"}
+              pick={role => void write(transitionPatches(["roles"], key, cell, { kind: "set", rung: { value: { role } } }), { label })}
+              act={async (_path, cell, kind) => write(transitionPatches(["roles"], key, cell, { kind }), { label })} />
+            {cell.edit && <Button label="Clear unit role" onClick={() => void write(transitionPatches(["roles"], key, cell, { kind: "clear" }), { label })}>Clear unit role</Button>}
+          </label>;
+        })}
+      </section>
     <InputsSurface
       ductsHref={ductsLink(snapshot.systems.map(system => system.name), search)}
       ctx={{
@@ -206,6 +242,7 @@ export function InputsBody({
         });
       }}
     />
+    </>
   );
   return (
     <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf}>

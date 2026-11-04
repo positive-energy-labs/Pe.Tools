@@ -302,9 +302,9 @@ test("the legacy Ducts/Fans pane, reading and write census cannot shrink with th
     "treeSort",
     "viewport",
   ]);
+  // Q2: fan-owned inputs moved to /fans, so Ducts has no Inputs pane.
   expect(Object.keys(ductsData.panes).sort()).toEqual([
     "e-inbox",
-    "e-inputs",
     "e-picture",
     "e-rules",
     "e-rules-all",

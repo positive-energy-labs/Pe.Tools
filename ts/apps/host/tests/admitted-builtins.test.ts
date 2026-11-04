@@ -182,7 +182,7 @@ test("fans enrolls alone with its own Work registration", async () => {
     expect(run.service?.routes.get("fans")?.resolvedWork?.spec.route).toBe("fans");
     expect(run.service?.routes.has("ducts")).toBe(false);
     const key = bindWork("fans", null);
-    expect(await f.workspace.admitFeed(key, { routeKey: "fans", fingerprint: workFingerprintSchema.parse(`builtin-closure:${fan.closure.fingerprint}`) })).toBeUndefined();
+    expect(await f.workspace.admitFeed(key, { routeKey: "fans", fingerprint: workFingerprintSchema.parse(`builtin-closure:${fan.closure.fingerprint}`) })).toBeNull();
   } finally { await close(run.scope); }
 });
 test("partial startup failure unwinds prior Work registration with a typed failure", async () => {
