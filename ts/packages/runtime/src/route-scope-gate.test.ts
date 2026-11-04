@@ -47,6 +47,45 @@ const snapshot = (revision = 0, amount = revision) => ({
   hash: canonicalRouteInput({ amount, note: "" }),
 });
 
+test("a subject move preserves the same Work but retires prior scope authority", () => {
+  const owner = createRouteScopeGate<typeof builtinData, typeof schemas>({
+    workSchema: schemas.work,
+    hashWork: canonicalRouteInput,
+    journal: createWorkJournal,
+    dependencies: () => ({}),
+    scopeFields: ["search"],
+    identityForPage: (next) => ({ target: null, work: next.search === "other Work" ? other : key }),
+    preparePage: (current, patch) => ({
+      ok: true,
+      value: {
+        page: { ...current, ...patch },
+        changed: true,
+        membership: "verified",
+      },
+    }),
+  });
+  owner.enter({ target: null, work: key }, page);
+  const feed = owner.capture("work");
+  expect(owner.acceptWork(feed, snapshot(1, 9)).kind).toBe("published");
+  const before = owner.read()?.work;
+  expect(
+    owner.movePage(
+      { search: "next subject" },
+      {
+        kind: "human",
+        source: "subject",
+        history: "push",
+      },
+    ).kind,
+  ).toBe("accepted");
+  expect(owner.read()?.work).toBe(before);
+  expect(owner.current(feed)).toBe(false);
+  expect(owner.acceptWork(feed, snapshot(2)).kind).toBe("refused");
+  owner.movePage({ search: "other Work" }, { kind: "human", source: "subject", history: "push" });
+  expect(owner.read()?.work).toBeNull();
+  owner.close();
+});
+
 test("current is read-only and follows accepted Page and Work continuations", () => {
   let preparations = 0;
   const f = fixture((current, patch) => {
