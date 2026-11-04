@@ -12,7 +12,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import { airflowOptions, type AirflowOption } from "../airflow";
-import { ChoiceCell, type CellAct } from "./choice-cell";
+import { ChoiceCell, type CellAct, type CellPath } from "./choice-cell";
 import { criterionLabel } from "./criterion-words";
 import { editLabel } from "./input-history";
 import { fittingGroups, memberSubject, type FittingGroup } from "./fitting-groups";
@@ -270,9 +270,7 @@ function HistoryLine({ history, refusal }: { history: InputsHistory; refusal: st
         kind="framed"
         icon={Redo2}
         label={history.redoLabel ? `Redo ${history.redoLabel}` : "Redo"}
-        refusal={
-          refusal ?? (history.redoLabel ? null : "Nothing to redo")
-        }
+        refusal={refusal ?? (history.redoLabel ? null : "Nothing to redo")}
         onPress={history.redo}
       >
         redo
@@ -352,7 +350,7 @@ function GroupPicker({
     return <span className="face-mono text-right">{group.table ?? "—"}</span>;
   const name = group.key.slice(group.key.indexOf(":") + 1);
   // The Work cell a choice here writes: the rule's table, or the family's assigned rule.
-  const path = group.kind === "rule" ? ["rules", name] : ["ruleAssignments", name];
+  const path: CellPath = group.kind === "rule" ? ["rules", name] : ["ruleAssignments", name];
   const cell = group.kind === "rule" ? doc?.rules[name] : doc?.ruleAssignments[name];
   const label = (key: string | undefined) =>
     group.choices.find((c) => c.key === key || c.key.startsWith(`${key}|`))?.label ?? key ?? "—";

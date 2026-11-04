@@ -4,14 +4,23 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 import { ductsHealInputSchema, type DuctsRouteDocument } from "@pe/agent-contracts";
-interface ReviewScope {
-  readonly page?: { readonly stage?: string };
-  readonly readings: {
-    readonly ducts?: { readonly value?: unknown };
-    readonly sheetSnapshot?: { readonly value?: unknown };
+import type { BodyContext } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { ductsData, schemas, entries } from "./neutral";
+type ReviewContext = BodyContext<
+  typeof ductsData,
+  typeof schemas,
+  typeof entries,
+  typeof ductsData.verbs.losses
+>;
+type ReviewEvidence = {
+  readonly page?: Partial<Omit<ReviewContext["page"], "stage">> & {
+    readonly stage?: "network" | "sheet";
   };
-  readonly work?: unknown;
-}
+  readonly work?: ReviewContext["work"] | null;
+  readonly readings: {
+    readonly [K in keyof ReviewContext["readings"]]?: Pick<ReviewContext["readings"][K], "value">;
+  };
+};
 import { elementLabeler as subjectNamer } from "@pe/ducts-domain/element-label";
 
 export const healReviewSchema = z.object({
@@ -47,17 +56,19 @@ const responseOf = <T>(result: unknown): T => {
   const envelope = result as { response?: T; value?: T };
   return envelope.response ?? envelope.value ?? (result as T);
 };
-const snapshotOf = (scope: ReviewScope) =>
+// Domain readonly sweep reached 28 files; domain snapshot inputs remain mutable.
+const snapshotOf = (scope: ReviewEvidence) =>
   (scope.page?.stage === "sheet"
     ? scope.readings.sheetSnapshot?.value
     : scope.readings.ducts?.value) as DuctSnapshot | undefined;
 
-export function presentHeal(result: unknown, scope: ReviewScope) {
+export function presentHeal(result: unknown, scope: ReviewEvidence) {
   const response = responseOf<DuctsHeal.Res.Response>(result);
   const snapshot = snapshotOf(scope);
   const name = snapshot ? subjectNamer(snapshot) : () => null;
   const plan = snapshot
-    ? healPlan(snapshot, (scope.work ?? null) as DuctsRouteDocument | null)
+    ? // readonly at the contract owner after U2 lands
+      healPlan(snapshot, (scope.work ?? null) as DuctsRouteDocument | null)
     : null;
   const targets = response.groups.flatMap((group) =>
     group.items.map((item) => {
@@ -137,7 +148,7 @@ const spoken = (value: string | null | undefined) =>
     (m) => METHODS[m]!,
   );
 
-export function presentLosses(result: unknown, scope: ReviewScope) {
+export function presentLosses(result: unknown, scope: ReviewEvidence) {
   const response = responseOf<DuctsApply.Res.Response>(result);
   const envelope = result as {
     derivedRequest?: import("@pe/agent-contracts").DuctsApplyInput;
@@ -213,7 +224,7 @@ export const fanWords = (response: DuctsAssignFan.Res.Response) =>
   response.outcome === "refused"
     ? `refused: ${response.reason ?? "refused"}`
     : (response.check ?? response.outcome);
-export function presentFan(result: unknown, scope: ReviewScope) {
+export function presentFan(result: unknown, scope: ReviewEvidence) {
   const response = responseOf<DuctsAssignFan.Res.Response>(result);
   const snapshot = snapshotOf(scope);
   const system = snapshot?.systems.find((s) => s.id === response.systemId)?.name ?? "Duct system";

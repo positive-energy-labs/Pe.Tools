@@ -58,15 +58,15 @@ export function worksheetPicture(ws: Detail<"worksheet"> | null) {
     for (const run of ws[side].runs) {
       const path = keys(run.legIds);
       if (side === "return") path.reverse();
-      strands.push({ key: `run:${run.id}` as SubjectKey, path, heavy: run.critical });
-      members.set(`run:${run.id}` as SubjectKey, path);
+      strands.push({ key: `run:${run.id}`, path, heavy: run.critical });
+      members.set(`run:${run.id}`, path);
       for (const k of keys(run.overLegIds)) over.add(k);
     }
     for (const section of ws[side].sections)
-      members.set(`section:${section.id}` as SubjectKey, keys(section.legIds));
+      members.set(`section:${section.id}`, keys(section.legIds));
     for (const [elementId, sections] of Object.entries(ws[side].elementSections))
       if (sections[0] && !sectionOf.has(elementKey(Number(elementId))))
-        sectionOf.set(elementKey(Number(elementId)), `section:${sections[0]}` as SubjectKey);
+        sectionOf.set(elementKey(Number(elementId)), `section:${sections[0]}`);
   }
   const widen = (key: SubjectKey) => {
     const section = sectionOf.get(key);
@@ -112,7 +112,18 @@ export function SheetPicture({
   fans,
   systemFans,
 }: {
-  props: ProtoProps;
+  props: Pick<
+    ProtoProps,
+    | "page"
+    | "setPage"
+    | "work"
+    | "priced"
+    | "selection"
+    | "captureSource"
+    | "doc"
+    | "reading"
+    | "onPose"
+  >;
   snapshot: DuctSnapshot;
   opened?: readonly OpenSheet[];
   fans?: readonly FanPort[];
@@ -172,17 +183,11 @@ export function SheetPicture({
         ...runs.members,
         ...(sheet?.worstLegs ?? []).map(
           (path) =>
-            [
-              `path:${path.pathId}` as SubjectKey,
-              path.legs.map((leg) => elementKey(leg.elementId)),
-            ] as const,
+            [`path:${path.pathId}`, path.legs.map((leg) => elementKey(leg.elementId))] as const,
         ),
         ...blockers.map(
           (blocker) =>
-            [
-              `issue:${blocker.id}` as SubjectKey,
-              blockerElements(blocker).map((id) => elementKey(id)),
-            ] as const,
+            [`issue:${blocker.id}`, blockerElements(blocker).map((id) => elementKey(id))] as const,
         ),
       ]),
     [sheet, blockers, runs],

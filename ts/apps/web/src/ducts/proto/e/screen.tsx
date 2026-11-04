@@ -55,7 +55,7 @@ import type { LossesWork } from "../../work";
 import { buildTree, type TreeNode } from "../b/model";
 import type { systemList } from "../../system-list";
 import type { SystemNote } from "../../system-list-search";
-import type { ProtoProps } from "../props";
+import { useProtoPage, type ProtoProps } from "../props";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { BarRules, systemNoteCount, systemRowParts } from "./bar";
 
@@ -74,10 +74,295 @@ import { useGroupEncoding } from "../encoding/use-encoding";
 import { EMPTY_SNAPSHOT } from "../../sheet/scoped-snapshot";
 import { LoadingContext } from "#/route/loading-context";
 import { DUCTS_MULTI } from "../../selection";
-import { localId } from "../../neutral";
 import { useAdmittedSubject } from "#/shell/subject";
 import { PaneActions } from "#/shell/pane-actions";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
+
+import { settleWork } from "#/shell/work-door-observation";
+import * as Atom from "effect/reactivity/Atom";
+import { stagedDucts, type DuctsRouteDocument, type RouteStatePatch } from "@pe/agent-contracts";
+import { withStoredRulings } from "@pe/ducts-domain/rulings";
+import { claimsForGroup } from "@pe/ducts-domain/claims";
+import { pendingCount } from "@pe/ducts-domain/staged";
+import type { PaneContext } from "../../../../../../packages/agent-contracts/src/route-kernel-bodies";
+import {
+  activeName,
+  ductsData,
+  schemas,
+  entries,
+  localId,
+  localSubject,
+  namesOf,
+} from "../../neutral";
+import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
+import { DuctsOwner, commands } from "../../pane-context";
+import { claimsOf, type Claim } from "../../legs";
+import { verdictPatches } from "../../claims";
+import { rememberAnalysis, type PricingResult } from "../../pricing-job";
+import type { EditMeta } from "../../sheet/input-history";
+import { systemReadCoverage } from "../../system-reads";
+import { Button } from "@pe/kit/lang/button";
+import { healTarget, offeredFan } from "@pe/ducts-domain/action-targets";
+import { elementNamer } from "../../claims";
+
+type NetworkContext = PaneContext<
+  typeof ductsData,
+  typeof schemas,
+  typeof entries,
+  keyof typeof ductsData.panes
+>;
+
+export function NetworkBody({
+  ctx,
+  id,
+}: {
+  ctx: NetworkContext;
+  id: keyof typeof ductsData.panes;
+}) {
+  // readonly at the contract owner after U2 lands
+  const workDoc = ctx.work as DuctsRouteDocument | null;
+  const target = ctx.workBasis?.token.scope.identity.target ?? { kind: "host" as const };
+  const authored = ctx.page.read();
+  const roster = ctx.readings.roster.value;
+  const system = namesOf(authored.system);
+  // readonly at the contract owner after U2 lands; U1b removes the remaining picture Page shape.
+  const page = {
+    ...authored,
+    stage: "network",
+    system: system === "all" ? (roster?.systems ?? []).map((system) => system.name) : system,
+    active: activeName(
+      authored.system,
+      (roster?.systems ?? []).map((system) => system.name),
+    ),
+    fan: namesOf(authored.fan),
+    selected: authored.selected.map((item) => localSubject(item.id)).join(","),
+    heal: null,
+  } as ProtoProps["page"];
+  const doc = target.kind === "document" ? target.ref : null;
+  const networkRead = ctx.readings.ducts;
+  // Domain readonly sweep reached 28 files; snapshot consumers still require mutable arrays.
+  const snapshot = (networkRead.value ?? null) as import("../../neutral").SnapshotReading | null;
+  const pricing = ctx.readings.pricing;
+  // Kernel gap: the pricing derive schema is unknown; its worker result also carries Maps.
+  const priced =
+    pricing.status !== "failed" ? (pricing.value as PricingResult | undefined) : undefined;
+  const edit = useMemo(() => stagedDucts(workDoc ?? null), [workDoc]);
+  const seen = useMemo(
+    () => withStoredRulings(workDoc ?? null, snapshot?.store),
+    [workDoc, snapshot],
+  );
+  const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "ducts:unbound";
+  const selection = useMemo(
+    () =>
+      Atom.make<ReadonlySet<SubjectKey>>(
+        new Set<SubjectKey>(
+          authored.selected.map(({ id }): SubjectKey => {
+            const name = localSubject(id);
+            if (/^\d+$/.test(name)) return elementKey(name);
+            const colon = name.indexOf(":");
+            return colon < 0 ? `issue:${name}` : `${name.slice(0, colon)}:${name.slice(colon + 1)}`;
+          }),
+        ),
+      ),
+    [authored.selected],
+  );
+  const setPage = useProtoPage(ctx.page, ctx.verbs.browse);
+  const write = useCallback(
+    async (patches: RouteStatePatch[], history?: EditMeta) => {
+      if (!ctx.workBasis)
+        return { code: "unavailable", message: "Read this document's Work before editing" };
+      const result = await settleWork(ctx.verbs.edit({ patches, history }, ctx.workBasis));
+      return result.kind === "refused" ? { code: "refused", message: result.refusal.error } : null;
+    },
+    [ctx],
+  );
+  const onVerdict = useCallback(
+    (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => {
+      void write(verdictPatches(workDoc, claim, verdict));
+    },
+    [workDoc, write],
+  );
+  const claimCells = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(workDoc?.claims ?? {}).flatMap(([id, cell]) => {
+          const value = cell.edit?.value ?? cell.suggestion?.value;
+          return value ? [[id, value]] : [];
+        }),
+      ),
+    [workDoc],
+  );
+  const scope = useMemo(
+    () => (snapshot ? scopeOf(snapshot, page.system) : null),
+    [snapshot, page.system],
+  );
+  const claims = useMemo(
+    () => claimsOf(scope ? claimsForGroup(claimCells, [...scope.members]) : claimCells),
+    [scope, claimCells],
+  );
+  const subjectIds = scope?.groups
+    .map((group) => edit.subject[group] ?? workDoc?.subject[group]?.suggestion?.value)
+    .find((ids) => ids != null);
+  const current = networkRead.current;
+  const version = snapshot?.sourceVersion;
+  const observation = useMemo<NativeObservation>(
+    () => ({
+      scope: { document: current ? doc : null, source: "native" },
+      references: [...(snapshot?.nodes ?? []), ...(snapshot?.segments ?? [])].map((element) => ({
+        elementId: element.id,
+        uniqueId: element.uniqueId,
+      })),
+    }),
+    [current, doc?.session, doc?.openId, snapshot],
+  );
+  // Install the worker's exact analysis before any pane asks cached domain projections for it.
+  if (
+    priced &&
+    snapshot &&
+    pricing.current &&
+    ctx.readings.tables.value &&
+    ctx.readings.catalogs.value
+  ) {
+    const grids = ctx.readings.tables.value;
+    const catalog = ctx.readings.catalogs.value;
+    rememberAnalysis(
+      {
+        snapshot,
+        grids: grids!,
+        catalogs: catalog!.tables,
+        doc: workDoc ?? null,
+      },
+      priced,
+    );
+  }
+  // Domain readonly sweep reached 28 files; coverage still accepts the mutable snapshot alias.
+  const coverage = roster
+    ? systemReadCoverage(snapshot, roster as import("@pe/ducts-domain/types").DuctSnapshot)
+    : null;
+  const stageScope = async (row: {
+    kind?: string;
+    group?: string;
+    unitId?: number;
+    systemId?: number;
+  }) => {
+    if (!ctx.workBasis || !snapshot) return;
+    const active = page.active;
+    switch (row.kind) {
+      case "price": {
+        const groups = active ? systemScope(snapshot, active).groups : [];
+        if (groups.length) return ctx.verbs.scope({ groups: [...groups] }, ctx.workBasis);
+        return;
+      }
+      case "heal":
+      case "heal-preview": {
+        const group = row.group ?? healTarget(snapshot, workDoc, active, page.selected, null);
+        if (active && systemScope(snapshot, active).groups.includes(group))
+          return ctx.verbs.scope({ groups: [group] }, ctx.workBasis);
+        return;
+      }
+      case "assign-fan": {
+        const fan =
+          row.unitId != null && row.systemId != null
+            ? { unitId: row.unitId, systemId: row.systemId }
+            : offeredFan(
+                snapshot,
+                workDoc,
+                ctx.readings.tables.value ?? {},
+                ctx.readings.catalogs.value?.tables ?? {},
+                active,
+                page.selected,
+                null,
+                elementNamer(snapshot, null),
+              );
+        if (snapshot.systems.find((system) => system.id === fan.systemId)?.name === active)
+          return ctx.verbs.scope({ fan }, ctx.workBasis);
+        return;
+      }
+    }
+  };
+  const scopeCommand = (row?: unknown) => {
+    const choice = row as
+      | { kind?: string; group?: string; unitId?: number; systemId?: number }
+      | undefined;
+    return choice?.kind && ["price", "heal", "heal-preview", "assign-fan"].includes(choice.kind) ? (
+      <Button
+        label="Choose write scope"
+        onClick={() => {
+          void stageScope(choice);
+        }}
+      >
+        Choose write scope
+      </Button>
+    ) : null;
+  };
+  const props: ProtoProps = {
+    attentionDoc,
+    selection,
+    snapshot,
+    priced: priced?.priced ?? null,
+    pricing: !!snapshot?.groups.length && !priced && pricing.status === "pending",
+    analysis: priced?.analysis ?? null,
+    subject: subjectIds ? { ids: subjectIds, claims, work: workDoc ?? null, onVerdict } : null,
+    claims,
+    onVerdict,
+    page,
+    setPage,
+    onSelect: (id) => setPage({ selected: id == null ? "" : String(id) }),
+    work: {
+      doc: seen,
+      revision: ctx.workBasis?.workRevision ?? null,
+      write: (patches) => write(patches),
+    },
+    empty: !doc
+      ? { says: "No document bound", exit: "Choose an open project document" }
+      : !snapshot
+        ? { says: "Reading ducts", exit: "Wait for this document's snapshot" }
+        : null,
+    doc,
+    // Fan overview depends on the roster, not the optional sheet detail reads.
+    captureSource: networkRead.current && doc && version ? { document: doc, version } : null,
+    reading: {
+      pending: networkRead.status === "pending",
+      error:
+        (ctx.readings.roster.status === "failed" ? "System roster failed" : null) ??
+        (networkRead.status === "failed" ? networkRead.reason : null) ??
+        (ctx.readings.tables.status === "failed" ? "Tables failed" : null) ??
+        (ctx.readings.catalogs.status === "failed" ? "Catalogs failed" : null) ??
+        (pricing.status === "failed" ? pricing.reason : null) ??
+        null,
+      refreshing:
+        (!networkRead.current || (pricing.status !== "failed" && !pricing.current)) && !!snapshot,
+    },
+    commands,
+    cells: commands,
+    edit: pendingCount(workDoc ?? null, snapshot?.store),
+    coverage: coverage
+      ? {
+          ...coverage,
+          reading: networkRead.status === "pending" ? page.system : [],
+        }
+      : null,
+  };
+
+  const fanRead = ctx.readings.fans;
+  return (
+    <DuctsOwner
+      value={{
+        selected: page.selected,
+        cells: ctx.cells,
+        select: (selected) => setPage({ selected }),
+        commands: scopeCommand,
+        fanRoster: fanRead.value?.rows ?? [],
+      }}
+    >
+      <NativeObservationScope value={observation}>
+        <NetworkProvider props={props}>
+          <NetworkPane id={id} />
+        </NetworkProvider>
+      </NativeObservationScope>
+    </DuctsOwner>
+  );
+}
 
 const NO_GROUPS: readonly string[] = [];
 const NO_NEIGHBOURS: readonly Neighbour[] = [];
@@ -89,11 +374,11 @@ const NO_SYSTEMS: ReturnType<typeof systemList> = [];
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 const NetworkPanes = createContext<Readonly<Record<string, ReactNode>>>({});
-export function NetworkPane({ id }: { id: string }) {
+function NetworkPane({ id }: { id: string }) {
   return useContext(NetworkPanes)[id] ?? null;
 }
 
-export function NetworkProvider({ props, children }: { props: ProtoProps; children: ReactNode }) {
+function NetworkProvider({ props, children }: { props: ProtoProps; children: ReactNode }) {
   return (
     <AttentionRoot doc={props.attentionDoc}>
       <LoadedScreenBody
@@ -150,14 +435,7 @@ function LoadedScreenBody({
 }) {
   const { snapshot, priced, page, setPage } = props;
   const doc = props.work.doc;
-  const work = useMemo<LossesWork>(
-    () => ({
-      doc,
-      revision: props.work.revision,
-      write: props.work.write as unknown as LossesWork["write"],
-    }),
-    [doc, props.work.revision, props.work.write],
-  );
+  const work: LossesWork = props.work;
   const inboxWork = useMemo(
     () => ({
       doc,
@@ -466,8 +744,7 @@ function LoadedScreenBody({
       const ids = [
         ...new Set([...(node.id == null ? [] : [node.id]), ...node.children.flatMap(walk)]),
       ];
-      if (node.kind !== "element")
-        map.set(`${node.kind}:${node.key}` as SubjectKey, ids.map(elementKey));
+      if (node.kind !== "element") map.set(`${node.kind}:${node.key}`, ids.map(elementKey));
       return ids;
     };
     trees.forEach(walk);

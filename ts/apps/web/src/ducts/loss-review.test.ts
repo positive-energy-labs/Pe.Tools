@@ -1,6 +1,5 @@
 import { expect, test } from "vite-plus/test";
 import { presentLosses } from "./reviews";
-import type { VerbScope } from "#/shell/verbs";
 
 test("fan review exposes refused targets with their requested value, slot, unit and source", () => {
   const review = presentLosses(
@@ -26,7 +25,7 @@ test("fan review exposes refused targets with their requested value, slot, unit 
         },
       },
     },
-    { readings: {} } as VerbScope,
+    { readings: {} },
   );
   expect(review.rows[0]).not.toContain("14088043");
   expect(review.sentence).toContain("1 Revit target:");
@@ -35,7 +34,7 @@ test("fan review exposes refused targets with their requested value, slot, unit 
 });
 
 test("empty native preview explains why there is nothing to write", () => {
-  const review = presentLosses({ writes: [], counts: {} }, { readings: {} } as VerbScope);
+  const review = presentLosses({ writes: [], counts: {} }, { readings: {} });
   expect(review.sentence).toMatch(/Nothing to write:.*no native targets.*selected scope/);
 });
 
@@ -45,12 +44,18 @@ test("review rows speak Revit's words: no loss-method tokens, no store machine w
       response: {
         counts: { planned: 2, written: 0, refused: 0, unchanged: 0 },
         writes: [
-          { id: 7, kind: "component", outcome: "planned", before: "no server", after: "specific-loss 0.18 in-wg" },
+          {
+            id: 7,
+            kind: "component",
+            outcome: "planned",
+            before: "no server",
+            after: "specific-loss 0.18 in-wg",
+          },
           { id: null, kind: "store", outcome: "planned", before: "absent", after: null },
         ],
       },
     },
-    { readings: {} } as VerbScope,
+    { readings: {} },
   );
   expect(review.rows[0]).toContain("Specific Loss: no loss method → Specific Loss 0.18 in-wg");
   expect(review.rows[1]).toBe("Pe loss record (Project Information): none yet → created · planned");

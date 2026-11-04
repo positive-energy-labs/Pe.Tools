@@ -12,7 +12,6 @@ import { module as captures } from "../captures/kernel";
 import { createRouteShell } from "../shell/admitted-mount";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 import { presentLosses, presentFan } from "../ducts/reviews";
-import type { VerbScope } from "../shell/verbs";
 import { snapshot } from "../ducts/test-fixture";
 
 const source = { module: "fans/presentation-gap.test.ts", export: "witness" };
@@ -164,7 +163,7 @@ test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)
       const evidence = args[1] as { readings: { names: ReadingSnapshot<typeof snapshot> } };
       return presentLosses(args[0], {
         readings: { sheetSnapshot: evidence.readings.names },
-      } as unknown as VerbScope);
+      });
     });
     const route = await witness(present, () => names);
     const frames = new Map<string, (value: ReadingSnapshot<unknown>) => void>();
@@ -320,10 +319,10 @@ test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)
 
 test("assign-fan review also needs its declared snapshot to name the system and fan", () => {
   const response = { unitId: 100, systemId: snapshot.systems[0]!.id, outcome: "planned" };
-  const bare = presentFan(response, { readings: {} } as VerbScope);
+  const bare = presentFan(response, { readings: {} });
   const named = presentFan(response, {
     readings: { ducts: { value: snapshot } },
-  } as unknown as VerbScope);
+  });
   expect(bare.rows[0]).not.toContain("FC-1");
   expect(named.rows[0]).toContain("FC-1");
 });

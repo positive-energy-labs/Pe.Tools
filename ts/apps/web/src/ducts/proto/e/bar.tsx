@@ -408,7 +408,7 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
   const attentionDoc = useContext(AttentionDocument) ?? "";
   const [expanded, setExpanded] = useState(false);
   const owner = useContext(DuctsOwner);
-  const selected = owner?.props.page.selected;
+  const selected = owner?.selected;
   const entries = useMemo(
     () => barRows(split, scale, context?.nodes ?? new Map()),
     [split, scale, context?.nodes],
@@ -451,9 +451,7 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
   const barCol = Math.min(144, Math.max(96, barW));
 
   const choose = (row: BarRow) =>
-    row.key === "other"
-      ? setExpanded(true)
-      : owner?.props.setPage({ selected: `elements:${row.ids.join(",")}` });
+    row.key === "other" ? setExpanded(true) : owner?.select(`elements:${row.ids.join(",")}`);
   const columns: Column<BarRow>[] = [
     {
       key: "loss",
@@ -585,7 +583,7 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
             label="Collapse small loss groups"
             onClick={() => {
               setExpanded(false);
-              owner?.props.setPage({ selected: "" });
+              owner?.select("");
             }}
           >
             collapse groups under 3%

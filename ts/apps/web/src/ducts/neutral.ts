@@ -1255,6 +1255,7 @@ type ScopeEvidence = Omit<CommandContext, "page"> & {
   readonly page: Omit<CommandContext["page"], "stage"> & { readonly stage: string };
 };
 const selectedGroups = (ctx: ScopeEvidence) => {
+  // Domain readonly sweep reached 28 files; DuctSnapshot still requires mutable arrays.
   const snapshot = ctx.readings.ducts.value as DuctSnapshot | null;
   const active = activeName(ctx.page.system, snapshot?.systems.map((system) => system.name) ?? []);
   return snapshot && active ? systemScope(snapshot, active).groups : [];
@@ -1440,6 +1441,7 @@ export const neutralBodies = {
     slot: "readings.ducts.args",
     kind: "args",
     source,
+    // readonly at the contract owner after U2 lands
     run: (ctx) =>
       ({
         system: namesOf(ctx.page.system),
@@ -1453,12 +1455,14 @@ export const neutralBodies = {
     slot: "readings.fans.args",
     kind: "args",
     source,
+    // readonly at the contract owner after U2 lands
     run: (ctx) => ({ work: ctx.work }) as z.output<(typeof entries)["ducts.fans"]["input"]>,
   },
   sheetArgs: {
     slot: "readings.sheet.args",
     kind: "args",
     source,
+    // readonly at the contract owner after U2 lands
     run: (ctx) =>
       ({
         fan: namesOf(ctx.page.fan),
@@ -1471,6 +1475,7 @@ export const neutralBodies = {
     slot: "readings.sheetSnapshot.args",
     kind: "args",
     source,
+    // readonly at the contract owner after U2 lands
     run: (ctx) =>
       ({ work: ctx.work, sheet: ctx.readings.sheet.value ?? null }) as z.output<
         (typeof entries)["ducts.sheet-snapshot"]["input"]
@@ -1491,6 +1496,7 @@ export const neutralBodies = {
     slot: "verbs.edit.patches",
     kind: "work",
     source,
+    // readonly at the contract owner after U2 lands
     run: (ctx, input) => authoredPatches(ctx.work as DuctsRouteDocument, input.patches),
   },
   describeEdit: {
@@ -1503,6 +1509,7 @@ export const neutralBodies = {
     slot: "verbs.sheetEdit.patches",
     kind: "work",
     source,
+    // readonly at the contract owner after U2 lands
     run: (ctx, input) =>
       authoredPatches(
         ctx.work as DuctsRouteDocument,
@@ -1522,7 +1529,8 @@ export const neutralBodies = {
     slot: "verbs.sheetEdit.describe",
     kind: "describe",
     source,
-    run: (input) => describeInputHistory(input.history ?? { label: editLabel(input.edits, () => null) }),
+    run: (input) =>
+      describeInputHistory(input.history ?? { label: editLabel(input.edits, () => null) }),
   },
   scope: {
     slot: "verbs.scope.patches",

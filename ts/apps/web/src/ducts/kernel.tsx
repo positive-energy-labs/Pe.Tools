@@ -7,7 +7,7 @@ import type {
   CodecBindings,
 } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import { ductsData, schemas, entries, neutralBodies } from "./neutral";
-import { DuctsPane } from "./pane-view";
+import { NetworkBody } from "./proto/e/screen";
 import { ductsSources } from "./sources";
 import { presentLosses, presentHeal, presentFan } from "./reviews";
 import { seedBodies } from "./fixtures";
@@ -42,43 +42,43 @@ export const bodies = {
     slot: "panes.e-systems.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-systems" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-systems" }),
   },
   "e-sidebar": {
     slot: "panes.e-sidebar.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-sidebar" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-sidebar" }),
   },
   "e-inputs": {
     slot: "panes.e-inputs.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-inputs" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-inputs" }),
   },
   "e-rules-all": {
     slot: "panes.e-rules-all.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-rules-all" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-rules-all" }),
   },
   "e-rules": {
     slot: "panes.e-rules.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-rules" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-rules" }),
   },
   "e-picture": {
     slot: "panes.e-picture.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-picture" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-picture" }),
   },
   "e-inbox": {
     slot: "panes.e-inbox.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-inbox" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-inbox" }),
   },
   presentLosses: {
     slot: "verbs.losses.present",

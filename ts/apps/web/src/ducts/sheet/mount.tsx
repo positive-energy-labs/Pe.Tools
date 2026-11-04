@@ -1,16 +1,15 @@
 import { subjectLink } from "../subject-link";
 import { useRouteSearchSlice } from "#/route/activity";
-import { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
+import { useMemo, useRef } from "react";
+import * as Atom from "effect/reactivity/Atom";
 import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { transitionPatches } from "@pe/agent-contracts";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { AttentionRoot } from "#/attention";
 import { useRevitSubjectProps } from "#/revit/element-menu";
-import { DuctsOwner } from "../pane-context";
 import { systemScope } from "@pe/ducts-domain/system-scope";
-import { useAdmittedSubject } from "#/shell/subject";
 import { PaneActions } from "#/shell/pane-actions";
-import type { ProtoProps } from "../proto/props";
+import { useProtoPage, type ProtoProps } from "../proto/props";
 import { subjectNamer } from "../subject-text";
 import { rosterOrder, stableFanKey, withComputed, type FanPort } from "./model";
 import { EMPTY_SNAPSHOT } from "./scoped-snapshot";
@@ -21,29 +20,118 @@ import { Roster, Ledger } from "./view";
 import { sheetState } from "./state";
 import { describeCloser, type Closer } from "./closer";
 import type { DuctsSheetEdits } from "@pe/agent-contracts";
-import { localId, type SheetReading } from "../neutral.ts";
+import { localId, localSubject, namesOf, activeName } from "../neutral.ts";
+import { fansData, schemas, entries } from "../../fans/neutral";
+import type { PaneContext } from "../../../../../packages/agent-contracts/src/route-kernel-bodies";
+import { settleWork } from "#/shell/work-door-observation";
+import type { DuctsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
+import { NativeObservationScope } from "#/revit/observation";
 import { editLabel, presentInputHistory, type EditMeta } from "./input-history";
 
-const SheetPanes = createContext<Readonly<Record<string, ReactNode>>>({});
-export function SheetPane({ id }: { id: string }) {
-  return useContext(SheetPanes)[id] ?? null;
-}
-/** Shared spine only. The kernel owns reading demand, Work, Page, controls and layout. */
-export function SheetProvider({ props, children }: { props: ProtoProps; children: ReactNode }) {
-  const owner = useContext(DuctsOwner)!;
+type SheetContext = PaneContext<
+  typeof fansData,
+  typeof schemas,
+  typeof entries,
+  keyof typeof fansData.panes
+>;
+/** Shared spine only. U1b replaces this dictionary with bodies for each pane. */
+export function SheetBody({
+  ctx,
+  id,
+  open,
+}: {
+  ctx: SheetContext;
+  id: keyof typeof fansData.panes;
+  open: SheetViewProps["open"];
+}) {
+  const authored = ctx.page.read();
+  const target = ctx.workBasis?.token.scope.identity.target;
+  const doc = target?.kind === "document" ? target.ref : null;
+  const snapshotRead = ctx.readings.sheetSnapshot;
+  // Domain readonly sweep reached 28 files; picture consumers still require mutable arrays.
+  const snapshot = (snapshotRead.value ??
+    EMPTY_SNAPSHOT) as import("@pe/ducts-domain/types").DuctSnapshot;
+  // readonly at the contract owner after U2 lands
+  const workDoc = ctx.work as DuctsRouteDocument | null;
+  const setPage = useProtoPage(ctx.page, ctx.verbs.browse);
+  const write = async (patches: RouteStatePatch[], history?: EditMeta) => {
+    if (!ctx.workBasis)
+      return { code: "unavailable", message: "Read this document's Work before editing" };
+    const result = await settleWork(ctx.verbs.edit({ patches, history }, ctx.workBasis));
+    return result.kind === "refused" ? { code: "refused", message: result.refusal.error } : null;
+  };
+  const selected = authored.selected.map(({ id }) => localSubject(id)).join(",");
+  const selection = useMemo(
+    () =>
+      Atom.make<ReadonlySet<SubjectKey>>(
+        new Set<SubjectKey>(
+          authored.selected.map(({ id }): SubjectKey => {
+            const name = localSubject(id);
+            if (/^\d+$/.test(name)) return elementKey(name);
+            const colon = name.indexOf(":");
+            return colon < 0 ? `issue:${name}` : `${name.slice(0, colon)}:${name.slice(colon + 1)}`;
+          }),
+        ),
+      ),
+    [authored.selected],
+  );
+  const system = namesOf(authored.system);
+  const props: Pick<
+    ProtoProps,
+    | "page"
+    | "setPage"
+    | "snapshot"
+    | "attentionDoc"
+    | "onSelect"
+    | "work"
+    | "selection"
+    | "captureSource"
+    | "doc"
+    | "reading"
+    | "priced"
+  > = {
+    // readonly at the contract owner after U2 lands; U1b removes the remaining picture Page shape.
+    page: {
+      ...authored,
+      stage: "sheet",
+      system: system === "all" ? [] : system,
+      active: activeName(authored.system, []),
+      fan: namesOf(authored.fan),
+      selected,
+      heal: null,
+    } as ProtoProps["page"],
+    setPage,
+    snapshot,
+    attentionDoc: doc ? `${doc.session}/${doc.openId}` : "fans:unbound",
+    onSelect: (id) => setPage({ selected: id === null ? "" : String(id) }),
+    work: {
+      doc: workDoc,
+      revision: ctx.workBasis?.workRevision ?? null,
+      write: (patches) => write(patches),
+    },
+    selection,
+    doc,
+    priced: null,
+    captureSource:
+      ctx.readings.fans.current && doc && snapshotRead.value?.sourceVersion
+        ? { document: doc, version: snapshotRead.value.sourceVersion }
+        : null,
+    reading: {
+      pending: snapshotRead.status === "pending",
+      error: snapshotRead.status === "failed" ? snapshotRead.reason : null,
+      refreshing: !ctx.readings.fans.current,
+    },
+  };
   const search = useRouteSearchSlice((search) => search);
-  const reading = owner.sheetRead;
-  const value = reading.value as SheetReading | undefined;
+  const reading = ctx.readings.sheet;
+  // readonly at the contract owner after U2 lands
+  const value = reading.value as import("../neutral").SheetReading | undefined;
   const sheet = value?.open ?? null;
-  const fans = owner.fanRead;
+  const fans = ctx.readings.fans;
   // One computation: the roster's status reads the same sheet value the ledger draws.
   const roster = rosterOrder(
-    withComputed(
-      (fans.value as { rows: import("./model").FanPort[] } | null)?.rows ?? value?.rows ?? [],
-      value?.rows ?? [],
-    ),
+    withComputed(fans.value?.rows ?? value?.rows ?? [], value?.rows ?? []),
   );
-  const snapshot = props.snapshot ?? EMPTY_SNAPSHOT;
   const state = useMemo(() => sheetState(sheet), [sheet]);
   const nameOf = useMemo(() => subjectNamer(snapshot), [snapshot]);
   const refProps = useRevitSubjectProps();
@@ -57,16 +145,21 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     }),
     [props.attentionDoc, nameOf, props.onSelect, refProps],
   );
-  const subject = useAdmittedSubject();
   const fanId = (row: FanPort) => localId("ducts-fan", stableFanKey(row));
-  const busy = ["pending", "partial"].includes(reading.status);
+  const busy = reading.status === "pending";
   const changeInputs = async (
     edits: DuctsSheetEdits,
     history: EditMeta = { label: editLabel(edits, nameOf) },
   ) => {
-    return (await owner.sheetEdit(edits, history, sheet?.overview.basis ?? null)) ?? undefined;
+    if (!ctx.workBasis)
+      return { code: "unavailable", message: "Read this document's Work before editing" };
+    const result = await settleWork(
+      ctx.verbs.sheetEdit({ edits, history, basis: sheet?.overview.basis ?? null }, ctx.workBasis),
+    );
+    return result.kind === "refused"
+      ? { code: "refused", message: result.refusal.error }
+      : undefined;
   };
-  const write: typeof owner.write = (...args) => owner.write(...args);
   const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null) =>
     describeCloser(blocker, typed, {
       terminalDrop: state.inputs?.criteria.terminalDropInWg ?? null,
@@ -151,10 +244,11 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
           };
       }
     }, {});
-  const selected = Number(props.page.selected.replaceAll('"', ""));
+  const selectedNumber = Number(props.page.selected.replaceAll('"', ""));
   const focused = state.blockers.find((blocker) => blocker.id === props.page.selected);
   const elementId =
-    focused?.elementId ?? (Number.isInteger(selected) && selected > 0 ? selected : null);
+    focused?.elementId ??
+    (Number.isInteger(selectedNumber) && selectedNumber > 0 ? selectedNumber : null);
   const element =
     elementId == null
       ? null
@@ -163,24 +257,24 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
           family: snapshot.nodes.find((node) => node.id === elementId)?.family ?? null,
         };
   const history = {
-    ...presentInputHistory(owner.history?.entries ?? [], null),
+    ...presentInputHistory(ctx.history?.entries ?? [], null),
     undo: () => {
-      void owner.history?.undo();
+      void ctx.history?.undo();
     },
     redo: () => {
-      void owner.history?.redo();
+      void ctx.history?.redo();
     },
     restore: (press: string) => {
-      void owner.history?.undo(press);
+      void ctx.history?.undo(press);
     },
   };
-  const fanReading = fans.value as { slots: SheetViewProps["slots"]; activeSlot: string } | null;
+  const fanReading = fans.value;
   const spine: SheetViewProps = {
     ...state,
     snapshot,
     roster,
     picked: props.page.fan === "all" ? roster.map(stableFanKey) : props.page.fan,
-    open: (row) => subject?.toggle(fanId(row)),
+    open,
     sheet,
     slots: fanReading?.slots ?? [],
     activeSlot: fanReading?.activeSlot ?? "",
@@ -253,11 +347,18 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
         apply={changeInputs}
         history={history}
         nameOf={nameOf}
-        act={(path, cell, kind, label) =>
-          write(transitionPatches(path.slice(0, -1), path.at(-1)!, cell, { kind }), {
-            label: `${kind === "take" ? "take" : "unsuggest"} Pea's ${label}`,
-          })
-        }
+        act={async (path, cell, kind, label) => {
+          if (path.length === 1) {
+            // temporary: criteria writer moves to fans with its cells (U2/U3, Q2a)
+            return write(transitionPatches([], path[0], cell, { kind }), {
+              label: `${kind} Pea's ${label}`,
+            });
+          }
+          const result = await settleWork(ctx.cells[kind](path[0], path[1]));
+          return result.kind === "refused"
+            ? { code: "refused", message: result.refusal.error }
+            : null;
+        }}
       />
     ),
   };
@@ -290,7 +391,17 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
   return (
     <AttentionRoot doc={props.attentionDoc}>
       <SubjectTextContext.Provider value={subjects}>
-        <SheetPanes value={panes}>{children}</SheetPanes>
+        <NativeObservationScope
+          value={{
+            scope: { document: snapshotRead.current ? doc : null, source: "native" },
+            references: [...snapshot.nodes, ...snapshot.segments].map(({ id, uniqueId }) => ({
+              elementId: id,
+              uniqueId,
+            })),
+          }}
+        >
+          {panes[id]}
+        </NativeObservationScope>
       </SubjectTextContext.Provider>
     </AttentionRoot>
   );

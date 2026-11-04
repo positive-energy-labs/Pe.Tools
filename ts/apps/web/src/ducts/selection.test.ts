@@ -5,7 +5,7 @@ import type { SceneInstance } from "#/scene/types";
 import { paintOf } from "#/scene/grounds";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
 import { DUCTS_MULTI, paintOfDucts } from "./selection";
-import { ductsFocus } from "./page";
+import { ductsFocus } from "./proto/e/picture";
 import { captureRequest } from "#/scene/picture/picture";
 afterEach(() => resetKnob());
 
