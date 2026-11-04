@@ -1,52 +1,52 @@
-import { z } from "zod";
-import { identityCodecs } from "../shell/page-port.ts";
-import { openSet } from "../shell/open-set.neutral.ts";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import {
-  applyPatches,
-  canonicalRouteInput,
-  commands,
-  ductsDesign,
-  ductsDocumentSchema,
-  ductsRouteState,
-  neutralFansWork,
-  ductsRosterResponseSchema,
-  ductsSheetOverviewSchema,
-  ductsSheetResponseSchema,
-  ductCatalogReadingSchema,
-  ductsSheetEditsSchema,
-  routeStatePatchSchema,
-  dropFanCells,
-  salvageDuctsWork,
-  type RouteStatePatch,
-} from "@pe/agent-contracts";
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
-import { systemScope } from "@pe/ducts-domain/system-scope";
+import {
+applyPatches,
+canonicalRouteInput,
+commands,
+dropFanCells,
+ductCatalogReadingSchema,
+ductsDesign,
+ductsDocumentSchema,
+ductsRosterResponseSchema,
+ductsRouteState,
+ductsSheetEditsSchema,
+ductsSheetOverviewSchema,
+ductsSheetResponseSchema,
+neutralFansWork,
+routeStatePatchSchema,
+salvageDuctsWork,
+type RouteStatePatch,
+} from "@pe/agent-contracts";
+import { ruleByKey,ruleWords } from "@pe/ducts-domain/loss-rules";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
+import { systemScope } from "@pe/ducts-domain/system-scope";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { z } from "zod";
 import { commandCatalogAxes } from "../../../../packages/agent-contracts/src/command-axes.ts";
-import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
 import type {
-  BodyBindings,
-  BodyContext,
-  WorkPatch,
+BodyBindings,
+BodyContext,
+WorkPatch,
 } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
+import type { Immutable,RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
 import type {
-  IdentityId,
-  Many,
+IdentityId,
+Many,
 } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
 import { ductsAddress } from "../../../../packages/agent-contracts/src/routes/ducts.ts";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared.ts";
+import { openSet } from "../shell/open-set.neutral.ts";
+import { identityCodecs } from "../shell/page-port.ts";
 import {
-  describeInputHistory,
-  editLabel,
-  editMetaSchema,
-  inputHistoryMetaSchema,
+describeInputHistory,
+editLabel,
+editMetaSchema,
+inputHistoryMetaSchema,
 } from "./sheet/input-history.ts";
 
 const detail = ductsSheetResponseSchema.options;
-const openSheetSchema = z.object({
+export const openSheetSchema = z.object({
   overview: ductsSheetOverviewSchema,
   inputs: detail[4].nullable(),
   elements: detail[2].nullable(),
@@ -54,7 +54,7 @@ const openSheetSchema = z.object({
   worstLegs: z.array(detail[1]),
   worksheet: detail[3].nullable(),
 });
-export type OpenSheet = z.output<typeof openSheetSchema>;
+export type OpenSheet = Immutable<z.output<typeof openSheetSchema>>;
 const sheetReadingSchema = z.object({
   open: openSheetSchema.nullable(),
   opened: z.array(openSheetSchema).optional(),
@@ -63,7 +63,7 @@ const sheetReadingSchema = z.object({
     .object({ done: z.number(), total: z.number(), mark: z.string(), stopped: z.boolean() })
     .nullable(),
 });
-export type SheetReading = z.output<typeof sheetReadingSchema>;
+export type SheetReading = Immutable<z.output<typeof sheetReadingSchema>>;
 const snapshotReadingSchema = z
   .preprocess(
     (raw) => {

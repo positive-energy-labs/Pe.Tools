@@ -4,9 +4,11 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-04, each network and sheet pane constructs only its own body; query and semantic landing live in Page. The fake-pane allowance is zero, enforced by [the pane-body law](../../../ts/tests/repo-guards/src/unification-pane-bodies.law.ts). Landing on a locked fan cell focuses the cell root (COMMON 8). (counsel, U1b)
+
 - 2026-11-03, U2r keeps U1's adapter deleted and `PaneContext.cells` unchanged; typed NetworkBody/SheetBody join neutral fans directly. Retain the criteria writer while the current ducts consumer still writes criteria. (counsel, U2r scope)
 
-- 2026-11-04, U1 leaves narrowed `ProtoProps` for the pictures, `SystemsList` and `DuctsOwner`; U1b owns removing those consumers and the remaining legacy Page schema/callback. (counsel)
+- 2026-11-04, U1b removes `ProtoProps`, its pictures/`SystemsList`/`DuctsOwner` adapter consumers, and the remaining legacy Page schema/callback. Each pane owns its typed body. (counsel, U1b)
 - 2026-11-03, a route's declared verbs render once, at route level (the situation band the shell already owns); a pane header carries only pane-owned controls (the `PaneActions` slot) and the subject chips. A pane's declared verbs are what its body may invoke, never header buttons. The subject pane's header opts into the kit `Pane fit="wrap"`, so chips keep their label width and the header grows lines instead of truncating. Final placement of the route verbs is owed to a kaitpw protoui. (kaitpw: "it never should've been this way to begin with, repeating all the stuff")
 - 2026-11-03, selection and active are two explicit concepts in the subject seam: the open set plus one active member, carried in the existing subject field (`active` on the ids form, omitted while it is the first). `add` never moves the active member except the first into an empty set; `remove` of the active hands it to the next neighbour, else the previous; `toggle`; `setActive` (`shell/open-set.ts`). Go-to system picks and list-row opens add into the background. Navigation between open subjects is owed, to be designed with the fans/ducts split. (kaitpw)
 - 2026-11-03, kaitpw: /fans is its own product, not a ducts presenter. The shared ducts Work is an artifact of the old single route. Target shape: two Works. /fans owns the fan-side cells (terminalDrops, componentDrops, esp, flows, equipmentFlows, roles, parameters slots, calculation, designFriction); /ducts owns pricing and model reading (rules, catalogs, ruleAssignments, kinds, assumptions, subject, claims, labelParameter, workingPhase, systemColours, criteria). /fans reads ducts pricing as a reading that goes stale when a rule changes. The current cutover finishes as one Work; the split is the first /fans product work, preceded by a read-only census of which pane writes which cell, and deletes `{...ductsGraph}`.
@@ -69,6 +71,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Tried & rejected
 
+- 2026-11-04, schema-level `ListSearch.readonly`: it changes Pea metadata. Keep readonly at the TypeScript display owners in [ListSearch](../../../ts/packages/agent-contracts/src/list-search.ts), [PicturePage](../../../ts/packages/agent-contracts/src/routes/picture.ts) and sheet display types. (counsel, U1b)
+
 - 2026-11-03, a `moved` host branch that births fans Work from ducts Work (FANSPLIT 3A) was superseded by Q5: delete the old fan edits. (counsel)
 - 2026-11-03, dropped parity: /ducts history ESP effect on undo/redo. After an undo or redo the line shows the label only ('undid X' / 'redid X'), no numbers; numbers show only for a forward edit. `last` is not added to PaneContext.history. (kaitpw: 'this was an unnecessary feature')
 - 2026-11-01, a stage per subject inside one route (spike A, `t3/kernel-stage-subject` @ 6010929e, `StageDecl.subject`): it fixed the wrong picker and the URL leak, but it grew the kernel to serve one route's two products and dropped the other stage's subject on a switch. Replaced by the route split (ADR 0027 rule 1).
@@ -81,6 +85,10 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-09-09, the claim that document keys and receipts alone prevent every stale read or duplicate mutation: keys separate open lifetimes; Effect refresh orders reads within one lifetime; host admission and request identity govern retries.
 
 ## Owed
+
+- U3: type `resolvedWork.schema` as `ZodType<W>`, remove admitted Work assertions, and give `PricingResult` a typed kernel output. Owners: [admitted mount](../../../ts/apps/web/src/shell/admitted-mount.ts), [kernel bodies](../../../ts/packages/agent-contracts/src/route-kernel-bodies.ts). (counsel, U1b)
+- Kernel owner: make completion/`settleWork` failure terminal and subscription lifetime scoped; census [the admitted mount](../../../ts/apps/web/src/shell/admitted-mount.ts) as its own kernel unit at aggregate review 1. The existing Common 15 rejection gap below remains. (counsel, U1b)
+- Manual D: finish opened-network-pane, Set-row and pending browser checks against a repaired fixture/native-schema lane. U1b browser observations cover older bytes, not the integrated tip; current behavior is UNPROVEN in that lane. Evidence: [U1b report](C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-b85d72ee/.artifacts/tmp/u1b/REPORT.md). (counsel, U1b)
 
 - Main is blocked while any `U4: fan cells reach apply-losses only through the fans Work` marker remains. U4 restores the eleven tests below without dropping their assertions; the two harness cases must read the actual fans binding instead of neutral fans before unskip. (counsel, 2026-11-03)
 - /ducts pricing reads the neutral fans Work until U4 wires the real one. (counsel, 2026-11-03)
@@ -99,9 +107,9 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - U4 re-enables `unknown outcome blocks a new invocation from dispatching the same write` in [unification-write-boundary.test.ts:372](../../../ts/apps/host/tests/unification-write-boundary.test.ts#L372); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
 
 - `shell/work-door-observation.ts`: completion rejection can strand waiting cell transitions; replace observation/completion ownership with typed terminals on success/failure/interruption and scoped subscription release. U1 has no rejection proof. (counsel/Common 15, 2026-11-04)
-- The readonly `DuctSnapshot` input sweep reached 28 files (16 production, 12 tests) and stopped; the alias was restored. Page viewport/`ListSearch` and `SheetReading` readonly inputs remain documented casts for U1b; U2r removes the Work casts at its four typed joins. `Grids`/`Catalogs` were narrowed in two domain files. (counsel, 2026-11-04)
+- The readonly `DuctSnapshot` input sweep reached 28 files (16 production, 12 tests) and stopped; the alias was restored. U1b closes the Page viewport/`ListSearch` and `SheetReading` display casts with readonly display contracts. The broader snapshot sweep remains Owed. `Grids`/`Catalogs` were narrowed in two domain files. (counsel, 2026-11-04)
 - `source-route-services`/`ReadingContext` erases catalog input types before ducts sources; the one `ReadArgs` cast names the kernel gap. No per-reader decode was added. (counsel, 2026-11-04)
-- `SheetBody` retains one raw take/unsuggest path for root criteria: "temporary: criteria writer moves to fans with its cells (U2/U3, Q2a)". Declared keyed ChoiceCell paths use `ctx.cells`; reconcile U2's read-only sheet edit. (counsel/Q2a, 2026-11-04)
+- The sheet criteria pane retains the root criteria writer; other fan-owned cells stay locked until their Work is wired. Declared keyed ChoiceCell paths use `ctx.cells`. U1b deletes the aggregate `SheetBody`, not this writer. (counsel/Q2a, U1b, 2026-11-04)
 
 - Tag preservation across the route's own URL write is UNPROVEN; no dedicated test (fans-pick df93f1d2).
 

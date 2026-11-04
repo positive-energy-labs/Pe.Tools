@@ -1,9 +1,9 @@
-import { useContext, useCallback } from "react";
 import { AttentionDocument, elementKey, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { useCallback, useContext } from "react";
 /**
  * THROWAWAY (protoui round 3, E2): the Rules section, "the table is the product" (pressure-drop
  * ledger, 2026-10-04): a person edits a fitting type's table, never a raw coefficient; the rule is
@@ -12,16 +12,16 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * instance count and the table choice inline (the one decision, on the rule's own line). A fitting with a stated drop is an exception:
  * an override row under its type's rule, its drop editable. The tree's element rows jump here.
  */
-import { memo, useMemo } from "react";
-import type { LossResult } from "@pe/ducts-domain/losses";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
+import type { LossResult } from "@pe/ducts-domain/losses";
 import { unpriced, type Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { memo, useMemo } from "react";
 
 import { fanOutWords, ruleFanOut } from "../../inputs";
 import type { LossesWork } from "../../work";
-import { Chips, DropCell, StagedRules } from "./rules";
 import { RuleAssignment } from "./rule-assignment";
+import { Chips, DropCell, StagedRules } from "./rules";
 
 type RuleNode =
   | { kind: "rule"; key: string; ids: number[] }
@@ -55,6 +55,7 @@ export const RulesTree = memo(function RulesTree({
   work,
   focus,
   onFocus,
+  landing,
   nameOf,
 }: {
   snapshot: DuctSnapshot;
@@ -65,6 +66,7 @@ export const RulesTree = memo(function RulesTree({
   work: LossesWork;
   /** The rule key the tree last jumped to; it is the cursor and scrolls into view. */
   focus: string | null;
+  landing?: { readonly id: number; readonly key: string } | null;
   onFocus: (key: string | null) => void;
   nameOf: (id: number) => string;
 }) {
@@ -81,7 +83,12 @@ export const RulesTree = memo(function RulesTree({
     const ids = new Map<string, Set<number>>();
     for (const [id, key] of ruleOf)
       if (inScope(id)) (ids.get(key) ?? ids.set(key, new Set()).get(key)!).add(id);
-    const overrides = Object.keys(priced.edit.componentDrops).map(Number).filter(inScope);
+    const overrides = [
+      ...new Set([
+        ...Object.keys(priced.edit.componentDrops).map(Number),
+        ...(landing && ruleOf.has(landing.id) ? [landing.id] : []),
+      ]),
+    ].filter(inScope);
     const rules = [...ids]
       .sort(([, a], [, b]) => b.size - a.size)
       .flatMap(([key, set]): RuleNode[] => [
@@ -97,7 +104,7 @@ export const RulesTree = memo(function RulesTree({
         .filter((id) => !ruleOf.has(id))
         .map((id): RuleNode => ({ kind: "override", key: `o${id}`, id })),
     ];
-  }, [priced, ruleOf, groupOf, groups, wide]);
+  }, [priced, ruleOf, groupOf, groups, wide, landing]);
 
   // What staging each rule's table would move, known before anything is edit: the grilles
   // downstream of its instances and the systems they sit in, document-wide whatever `wide` says.
@@ -150,11 +157,18 @@ export const RulesTree = memo(function RulesTree({
       const rule = ruleByKey(n.key);
       return { text: [n.key, rule?.family, rule?.type, rule?.cond], ids: n.ids };
     },
-    followSelection: { key: focus },
+    followSelection: {
+      key: landing
+        ? (roots.find((node) => node.kind === "override" && node.id === landing.id)?.key ?? focus)
+        : focus,
+    },
     onPick: (n) => onFocus(n.key),
   });
   const unassigned = useList({
     items: unruled,
+    followSelection: {
+      key: landing ? (unruled.find((row) => row.ids.has(landing.id))?.family ?? null) : null,
+    },
     subjectOf: useCallback((n: (typeof unruled)[number]) => ({ doc, key: familyKey(n) }), [doc]),
     keyOf: (n) => n.family ?? `#${[...n.ids][0]}`,
     search: (n) => ({ text: [n.family], ids: [...n.ids] }),
@@ -178,6 +192,7 @@ export const RulesTree = memo(function RulesTree({
                 <DropCell
                   segment="componentDrops"
                   id={n.id}
+                  land={landing?.id === n.id ? landing.key : undefined}
                   held={snapshot.nodes.find((x) => x.id === n.id)?.loss?.revitPressureDropInWg}
                   work={work}
                   label={`stated drop on ${nameOrFallback(nameOf(n.id))}`}
@@ -215,7 +230,7 @@ export const RulesTree = memo(function RulesTree({
             empty={{ message: "No unassigned families", exit: "Read another system" }}
             row={(n) => {
               const { family, ids } = n;
-              const first = [...ids][0];
+              const first = landing && ids.has(landing.id) ? landing.id : ids.values().next().value;
               const picked = family
                 ? work.doc?.ruleAssignments?.[family]?.edit?.value?.rule
                 : undefined;
@@ -233,6 +248,7 @@ export const RulesTree = memo(function RulesTree({
                       <DropCell
                         segment="componentDrops"
                         id={first}
+                        land={landing?.id === first ? landing.key : undefined}
                         held={
                           snapshot.nodes.find((x) => x.id === first)?.loss?.revitPressureDropInWg
                         }

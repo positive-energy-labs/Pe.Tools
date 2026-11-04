@@ -5,23 +5,23 @@
  * worst path lights its legs. Fails if the
  * sheet ever mounts its picture without them again (the 2026-10-28 defect).
  */
-import { createElement, type ComponentProps } from "react";
-import * as Atom from "effect/reactivity/Atom";
-import { RegistryContext } from "@effect/atom-react";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vite-plus/test";
-import { attention, elementKey, setHovered, type SubjectKey } from "@pe/kit/lang/attention";
-import { makeAtomRegistry } from "#/shell/owner";
 import { AttentionRoot } from "#/attention";
+import { boundsOfPoints } from "#/scene/orbit";
 import type { ModelPicture } from "#/scene/picture/model";
 import type { PictureStage } from "#/scene/stage-controller";
 import { SceneMeshes } from "#/scene/types";
-import { boundsOfPoints } from "#/scene/orbit";
+import { makeAtomRegistry } from "#/shell/owner";
+import { RegistryContext } from "@effect/atom-react";
+import { routeAddress } from "@pe/agent-contracts";
+import { attention, elementKey, setHovered, type SubjectKey } from "@pe/kit/lang/attention";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
+import * as Atom from "effect/reactivity/Atom";
+import { createElement, type ComponentProps } from "react";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 import { NAVIGATION_FIXTURE } from "../navigation.fixture";
-import type { ProtoProps } from "../proto/props";
 import type { OpenSheet } from "../neutral.ts";
 import { selectedFans, type FanPort } from "./model";
-import { routeAddress } from "@pe/agent-contracts";
+import type { SheetPictureProps } from "./picture";
 import { beyondPicture, SheetPicture } from "./picture";
 
 const io = vi.hoisted(() => ({ call: vi.fn() }));
@@ -93,14 +93,23 @@ function mount(
   if (typeof ResizeObserver === "undefined")
     vi.stubGlobal(
       "ResizeObserver",
-      class {
+      class implements ResizeObserver {
         constructor(private callback: ResizeObserverCallback) {}
         observe(target: Element) {
           this.callback(
-            [{ target, contentRect: { width: 640, height: 480 } } as ResizeObserverEntry],
-            this as unknown as ResizeObserver,
+            [
+              {
+                target,
+                contentRect: new DOMRectReadOnly(0, 0, 640, 480),
+                borderBoxSize: [],
+                contentBoxSize: [],
+                devicePixelContentBoxSize: [],
+              },
+            ],
+            this,
           );
         }
+        unobserve() {}
         disconnect() {}
       },
     );
@@ -115,25 +124,23 @@ function mount(
     ...registry.get(page),
     viewport: null,
     layers,
-    sceneView: { preset: "all", section: null },
+    sceneView: { preset: "all" as const, section: null },
     contextRadiusFt: 10,
-    contextStyle: "glass",
-    picture: "model",
+    contextStyle: "glass" as const,
+    picture: "model" as const,
     encoding: "health",
   });
-  const props = () =>
-    ({
-      page: pageOf(),
-      setPage,
-      selection,
-      work: { doc: null, revision: null, write: () => {}, preview: null },
-      priced: null,
-      captureSource: fans
-        ? { document: { session: sceneSession, openId: "doc" }, version: "roster-1" }
-        : null,
-      doc: fans ? { session: sceneSession, openId: "doc" } : null,
-      reading: { pending: false, error: null, refreshing: false },
-    }) as unknown as ProtoProps;
+  const props = (): SheetPictureProps => ({
+    page: pageOf(),
+    setPage,
+    selection,
+    work: { doc: null },
+    captureSource: fans
+      ? { document: { session: sceneSession, openId: "doc" }, version: "roster-1" }
+      : null,
+    doc: fans ? { session: sceneSession, openId: "doc" } : null,
+    refreshing: false,
+  });
   const tree = () => (
     <RegistryContext value={registry}>
       <AttentionRoot doc="d">

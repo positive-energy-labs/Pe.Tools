@@ -1,23 +1,24 @@
 /** Picture findings share domain identity and numbering with the inbox. */
 import { useMemo } from "react";
 
-import { healPlan, healFindings } from "@pe/ducts-domain/heal";
+import { healFindings, healPlan } from "@pe/ducts-domain/heal";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import { survey } from "@pe/ducts-domain/survey";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 
+import type { Priced } from "@pe/ducts-domain/pricing";
+import { SubjectText } from "@pe/kit/lang/subject-text";
 import type { Label, Ruling } from "../../annotations";
 import { VERDICTS } from "../../claims";
 import { FindingsList, ISSUE_KINDS } from "../../issues";
 import type { Claim } from "../../legs";
 import type { Scene } from "../../scene";
-import type { ProtoProps } from "../props";
+import type { LossesWork } from "../../work";
 import { fmtFt } from "./bar";
-import { SubjectText } from "@pe/kit/lang/subject-text";
 
 /** Cumulative effective length from the fan to each element, in equivalent feet, along priced paths. */
-function cumulativeOf(priced: ProtoProps["priced"]): Map<number, number> {
+function cumulativeOf(priced: Priced | null): Map<number, number> {
   const out = new Map<number, number>();
   if (!priced) return out;
   for (const path of Object.values(priced.next.paths)) {
@@ -42,10 +43,10 @@ export function useMarks({
   pointOf,
 }: {
   snapshot: DuctSnapshot;
-  priced: ProtoProps["priced"];
+  priced: Priced | null;
   scene: Scene;
   claims: readonly Claim[];
-  work: ProtoProps["work"];
+  work: LossesWork;
   issueScope: ReadonlySet<string> | null;
   annotated: ReadonlySet<string>;
   pointOf: (id: number) => readonly number[] | null;
@@ -71,8 +72,10 @@ export function useMarks({
         f.findingIds.some((id) => annotated.has(id)) &&
         f.elementIds.some((id) => drawn.has(id)),
     );
-    for (const finding of findings)
-      out.push({ kind: "inferred", at: finding.elementIds.find((id) => drawn.has(id))!, finding });
+    for (const finding of findings) {
+      const at = finding.elementIds.find((id) => drawn.has(id));
+      if (at != null) out.push({ kind: "inferred", at, finding });
+    }
     for (const issue of snapshot.issues)
       if (
         !findings.some((f) => f.findingIds.includes(issue.id)) &&
@@ -84,7 +87,7 @@ export function useMarks({
         out.push({ kind: "issue", at: issue.elementId, issue });
     return out.flatMap((r, i) =>
       (r.kind === "inferred" ? r.finding.elementIds.filter((id) => drawn.has(id)) : [r.at]).map(
-        (at) => ({ ...r, at, n: i + 1 }) as Ruling,
+        (at) => ({ ...r, at, n: i + 1 }),
       ),
     );
   }, [claims, priced, snapshot, work.doc, drawn, issueScope, annotated]);

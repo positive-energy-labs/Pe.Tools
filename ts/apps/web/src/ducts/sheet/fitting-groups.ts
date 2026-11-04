@@ -1,3 +1,4 @@
+import type { SheetFitting, SheetInputs } from "./model";
 /**
  * The Fittings census grouped by what a choice keys on (kaitpw 2026-10-30: "fittings list should
  * probably be grouped"). A table choice is per rule and document-wide (Work `rules`), so a matched
@@ -7,7 +8,7 @@
  * so it can still be seen, cleared and restored. Each option says what it means (the ASHRAE
  * fitting the table describes), never the mechanism.
  */
-import type { DuctsInputs, DuctsSheetEdits, FittingPricing } from "@pe/agent-contracts";
+import type { DuctsSheetEdits } from "@pe/agent-contracts";
 import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import type { SubjectPart } from "@pe/kit/lang/subject-text";
 
@@ -65,7 +66,7 @@ const endOf = (end: string) => {
   const [id, connector] = end.split(":").map(Number);
   return { id: id!, connector: connector! };
 };
-export function memberSubject(f: FittingPricing): SubjectPart[] {
+export function memberSubject(f: SheetFitting): SubjectPart[] {
   if (!f.proposed) return [{ id: f.elementId! }];
   const [a, b] = f.proposed.pair.map(endOf);
   const toward = f.proposed.toward;
@@ -77,13 +78,13 @@ const idsOf = (parts: readonly SubjectPart[]) =>
 const ORDER = { proposed: 0, family: 1, rule: 2 } as const;
 
 export function fittingGroups(
-  fittings: readonly FittingPricing[],
-  inputs: Pick<DuctsInputs, "tables" | "assignments"> | null,
+  fittings: readonly SheetFitting[],
+  inputs: Pick<SheetInputs, "tables" | "assignments"> | null,
   titles: Readonly<Record<string, string>> = {},
 ): FittingGroup[] {
   const groups = new Map<
     string,
-    { kind: FittingGroup["kind"]; rows: FittingPricing[]; name: string }
+    { kind: FittingGroup["kind"]; rows: SheetFitting[]; name: string }
   >();
   for (const f of fittings) {
     const [kind, name] =

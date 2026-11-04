@@ -1,4 +1,5 @@
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import type { SheetInputs } from "./model";
 /**
  * The worksheet (ducts LEDGER 2026-10-29, "TS"): per side, one row per run from the fan to an end,
  * critical first; a row opens into its sections, the stretches of constant flow between
@@ -9,11 +10,11 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * one design value edited where it bites (ducts LEDGER 2026-10-29): the cell writes Work `flows`
  * and shows the resolved source; the host recomputes.
  */
-import { useContext, useState } from "react";
-import type { DuctsInputs, DuctsSheetEdits } from "@pe/agent-contracts";
+import type { DuctsSheetEdits } from "@pe/agent-contracts";
+import { delivers } from "@pe/ducts-domain/sheet/worksheet";
 import { AttentionDocument, mention, useAttention } from "@pe/kit/lang/attention";
 import { SubjectText } from "@pe/kit/lang/subject-text";
-import { delivers } from "@pe/ducts-domain/sheet/worksheet";
+import { useContext, useState } from "react";
 import { pressure, type Detail } from "./model";
 import { SheetCell } from "./sheet-cell";
 
@@ -26,7 +27,7 @@ const ft = (v: number) => v.toFixed(0);
 
 /** What the table needs to edit a design value: the resolved inputs and the one write. */
 export interface WorksheetEditing {
-  inputs: DuctsInputs | null;
+  inputs: SheetInputs | null;
   changeInputs: (edits: DuctsSheetEdits) => void;
   busy: boolean;
 }

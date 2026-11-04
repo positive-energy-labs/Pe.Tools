@@ -1,152 +1,59 @@
-import { subjectLink } from "../subject-link";
-import { useRouteSearchSlice } from "#/route/activity";
-import { useMemo, useRef } from "react";
-import * as Atom from "effect/reactivity/Atom";
-import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
-import { transitionPatches } from "@pe/agent-contracts";
-import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { AttentionRoot } from "#/attention";
 import { useRevitSubjectProps } from "#/revit/element-menu";
-import { systemScope } from "@pe/ducts-domain/system-scope";
-import { PaneActions } from "#/shell/pane-actions";
-import { useProtoPage, type ProtoProps } from "../proto/props";
-import { subjectNamer } from "../subject-text";
-import { rosterOrder, stableFanKey, withComputed, type FanPort } from "./model";
-import { EMPTY_SNAPSHOT } from "./scoped-snapshot";
-import { InputsSurface } from "./inputs-surface";
-import { SheetPicture } from "./picture";
-import type { SheetViewProps } from "./types";
-import { Roster, Ledger } from "./view";
-import { sheetState } from "./state";
-import { describeCloser, type Closer } from "./closer";
-import type { DuctsSheetEdits } from "@pe/agent-contracts";
-import { localId, localSubject, namesOf, activeName } from "../neutral.ts";
-import { fansData, schemas, entries } from "../../fans/neutral";
-import type { PaneContext } from "../../../../../packages/agent-contracts/src/route-kernel-bodies";
-import { settleWork } from "#/shell/work-door-observation";
-import { ductsDesign, neutralFansWork, type RouteStatePatch } from "@pe/agent-contracts";
 import { NativeObservationScope } from "#/revit/observation";
-import { editLabel, presentInputHistory, type EditMeta } from "./input-history";
-
+import { useRouteSearchSlice } from "#/route/activity";
+import { PaneActions } from "#/shell/pane-actions";
+import { picturePageMove } from "#/shell/picture-page";
+import { useAdmittedSubject } from "#/shell/subject";
+import { settleWork } from "#/shell/work-door-observation";
+import type {
+DuctsSheetEdits,
+PicturePage,
+RouteStatePatch,
+} from "@pe/agent-contracts";
+import { ductsDesign,neutralFansWork,transitionPatches } from "@pe/agent-contracts";
+import { systemScope } from "@pe/ducts-domain/system-scope";
+import { elementKey,type SubjectKey } from "@pe/kit/lang/attention";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
+import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
+import * as Atom from "effect/reactivity/Atom";
+import { useMemo,useRef } from "react";
+import type { PaneContext } from "../../../../../packages/agent-contracts/src/route-kernel-bodies";
+import { entries,fansData,schemas } from "../../fans/neutral";
+import { attentionSubjects } from "../cell-focus";
+import { localId,localSubject,namesOf } from "../neutral.ts";
+import { subjectLink } from "../subject-link";
+import { subjectNamer } from "../subject-text";
+import { describeCloser,type Closer } from "./closer";
+import { editLabel,presentInputHistory,type EditMeta } from "./input-history";
+import { InputsSurface } from "./inputs-surface";
+import { rosterOrder,stableFanKey,withComputed,type FanPort } from "./model";
+import { SheetPicture } from "./picture";
+import { EMPTY_SNAPSHOT } from "./scoped-snapshot";
+import { EMPTY_SHEET_STATE } from "./state";
+import { Ledger,Roster } from "./view";
 type SheetContext = PaneContext<
   typeof fansData,
   typeof schemas,
   typeof entries,
   keyof typeof fansData.panes
 >;
-/** Shared spine only. U1b replaces this dictionary with bodies for each pane. */
-export function SheetBody({
-  ctx,
-  id,
-  open,
-}: {
-  ctx: SheetContext;
-  id: keyof typeof fansData.panes;
-  open: SheetViewProps["open"];
-}) {
+function useSheetData(
+  ctx: Pick<SheetContext, "page" | "verbs" | "workBasis"> & {
+    readings: Pick<SheetContext["readings"], "fans" | "sheet" | "sheetSnapshot">;
+  },
+) {
   const authored = ctx.page.read();
-  const target = ctx.workBasis?.token.scope.identity.target;
-  const doc = target?.kind === "document" ? target.ref : null;
-  const snapshotRead = ctx.readings.sheetSnapshot;
-  // Domain readonly sweep reached 28 files; picture consumers still require mutable arrays.
-  const snapshot = (snapshotRead.value ??
-    EMPTY_SNAPSHOT) as import("@pe/ducts-domain/types").DuctSnapshot;
-  // U4 wires the real fans Work here.
-  const workDoc = useMemo(() => ductsDesign(ctx.work, neutralFansWork), [ctx.work]);
-  const setPage = useProtoPage(ctx.page, ctx.verbs.browse);
-  const write = async (patches: RouteStatePatch[], history?: EditMeta) => {
-    if (!ctx.workBasis)
-      return { code: "unavailable", message: "Read this document's Work before editing" };
-    const result = await settleWork(ctx.verbs.edit({ patches, history }, ctx.workBasis));
-    return result.kind === "refused" ? { code: "refused", message: result.refusal.error } : null;
-  };
-  const selected = authored.selected.map(({ id }) => localSubject(id)).join(",");
-  const selection = useMemo(
-    () =>
-      Atom.make<ReadonlySet<SubjectKey>>(
-        new Set<SubjectKey>(
-          authored.selected.map(({ id }): SubjectKey => {
-            const name = localSubject(id);
-            if (/^\d+$/.test(name)) return elementKey(name);
-            const colon = name.indexOf(":");
-            return colon < 0 ? `issue:${name}` : `${name.slice(0, colon)}:${name.slice(colon + 1)}`;
-          }),
-        ),
-      ),
-    [authored.selected],
-  );
-  const system = namesOf(authored.system);
-  const props: Pick<
-    ProtoProps,
-    | "page"
-    | "setPage"
-    | "snapshot"
-    | "attentionDoc"
-    | "onSelect"
-    | "work"
-    | "selection"
-    | "captureSource"
-    | "doc"
-    | "reading"
-    | "priced"
-  > = {
-    // readonly at the contract owner after U2 lands; U1b removes the remaining picture Page shape.
-    page: {
-      ...authored,
-      stage: "sheet",
-      system: system === "all" ? [] : system,
-      active: activeName(authored.system, []),
-      fan: namesOf(authored.fan),
-      selected,
-      heal: null,
-    } as ProtoProps["page"],
-    setPage,
-    snapshot,
-    attentionDoc: doc ? `${doc.session}/${doc.openId}` : "fans:unbound",
-    onSelect: (id) => setPage({ selected: id === null ? "" : String(id) }),
-    work: {
-      doc: workDoc,
-      revision: ctx.workBasis?.workRevision ?? null,
-      write: (patches) => write(patches),
-    },
-    selection,
-    doc,
-    priced: null,
-    captureSource:
-      ctx.readings.fans.current && doc && snapshotRead.value?.sourceVersion
-        ? { document: doc, version: snapshotRead.value.sourceVersion }
-        : null,
-    reading: {
-      pending: snapshotRead.status === "pending",
-      error: snapshotRead.status === "failed" ? snapshotRead.reason : null,
-      refreshing: !ctx.readings.fans.current,
-    },
-  };
-  const search = useRouteSearchSlice((search) => search);
+  const snapshot = sheetSnapshot(ctx.readings.sheetSnapshot);
   const reading = ctx.readings.sheet;
-  // readonly at the contract owner after U2 lands
-  const value = reading.value as import("../neutral").SheetReading | undefined;
+  const value = reading.value;
   const sheet = value?.open ?? null;
   const fans = ctx.readings.fans;
-  // One computation: the roster's status reads the same sheet value the ledger draws.
   const roster = rosterOrder(
     withComputed(fans.value?.rows ?? value?.rows ?? [], value?.rows ?? []),
   );
-  const state = useMemo(() => sheetState(sheet), [sheet]);
   const nameOf = useMemo(() => subjectNamer(snapshot), [snapshot]);
-  const refProps = useRevitSubjectProps();
-  const jump = useRef<((key: SubjectKey) => void) | null>(null);
-  const subjects = useMemo(
-    () => ({
-      doc: props.attentionDoc,
-      nameOf,
-      go: (id: number) => (jump.current ? jump.current(elementKey(id)) : props.onSelect(id)),
-      refProps,
-    }),
-    [props.attentionDoc, nameOf, props.onSelect, refProps],
-  );
-  const fanId = (row: FanPort) => localId("ducts-fan", stableFanKey(row));
-  const busy = reading.status === "pending";
+  const selected = authored.selected.map(({ id }) => localSubject(id)).join(",");
   const changeInputs = async (
     edits: DuctsSheetEdits,
     history: EditMeta = { label: editLabel(edits, nameOf) },
@@ -160,6 +67,230 @@ export function SheetBody({
       ? { code: "refused", message: result.refusal.error }
       : undefined;
   };
+  return {
+    authored,
+    snapshot,
+    reading,
+    value,
+    sheet,
+    fans,
+    roster,
+    nameOf,
+    selected,
+    changeInputs,
+    busy: reading.status === "pending",
+  };
+}
+export function RosterBody({
+  ctx,
+}: {
+  ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-roster">;
+}) {
+  const { authored, snapshot, fans, roster, nameOf, busy } = useSheetData(ctx);
+  const subject = useAdmittedSubject();
+  const open = (row: FanPort) => subject?.toggle(localId("ducts-fan", stableFanKey(row)));
+  const pickedFans = namesOf(authored.fan);
+  const search = useRouteSearchSlice((search) => search);
+  const ownPane = (
+    <>
+      <Roster
+        props={{
+          address: {
+            scope: "fans",
+            search: authored.rosterSearch,
+            sort: authored.rosterSort,
+            onChange: (rosterSearch, rosterSort) => ctx.verbs.browse({ rosterSearch, rosterSort }),
+          },
+          snapshot: snapshot,
+          roster: roster,
+          picked: pickedFans === "all" ? roster.map(stableFanKey) : pickedFans,
+          open: open,
+          busy: busy,
+          loading: fans.status === "pending",
+        }}
+      />
+      {[
+        ...new Set(
+          [...snapshot.nodes, ...snapshot.segments]
+            .map((row) => row.systemName)
+            .filter((name): name is string => !!name),
+        ),
+      ].map((name) => (
+        <a key={name} href={subjectLink("ducts", [name], search)}>
+          {name}
+        </a>
+      ))}
+    </>
+  );
+  return (
+    <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf}>
+      {ownPane}
+    </SheetFrame>
+  );
+}
+export function InputsBody({
+  ctx,
+}: {
+  ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-inputs">;
+}) {
+  const { snapshot, sheet, fans, nameOf, selected, changeInputs, busy } = useSheetData(ctx);
+  const workDoc = sheetWork(ctx.work);
+  const write = async (patches: RouteStatePatch[], history?: EditMeta) => {
+    if (!ctx.workBasis)
+      return { code: "unavailable", message: "Read this document's Work before editing" };
+    const result = await settleWork(ctx.verbs.edit({ patches, history }, ctx.workBasis));
+    return result.kind === "refused" ? { code: "refused", message: result.refusal.error } : null;
+  };
+  const state = ctx.readings.sheetView.value ?? EMPTY_SHEET_STATE;
+  const selectedNumber = Number(selected.replaceAll('"', ""));
+  const focused = state.blockers.find((blocker) => blocker.id === selected);
+  const elementId =
+    focused?.elementId ??
+    (Number.isInteger(selectedNumber) && selectedNumber > 0 ? selectedNumber : null);
+  const element =
+    elementId == null
+      ? null
+      : {
+          id: elementId,
+          family: snapshot.nodes.find((node) => node.id === elementId)?.family ?? null,
+        };
+  const history = {
+    ...presentInputHistory(ctx.history?.entries ?? [], null),
+    undo: () => {
+      void ctx.history?.undo();
+    },
+    redo: () => {
+      void ctx.history?.redo();
+    },
+    restore: (press: string) => {
+      void ctx.history?.undo(press);
+    },
+  };
+  const fanReading = fans.value;
+  const ownPane = (
+    <InputsSurface
+      ctx={{
+        snapshot,
+        doc: workDoc,
+        revision: ctx.workBasis?.workRevision ?? null,
+        sheet,
+        inputs: state.inputs,
+        firm: state.firm,
+        fittings: sheet?.inputs?.fittings ?? [],
+        tableTitles: sheet?.inputs?.tableTitles ?? {},
+        slots: fanReading?.slots ?? [],
+        activeSlot: fanReading?.activeSlot ?? "",
+        element,
+      }}
+      busy={busy}
+      elementName={element ? nameOf(element.id) : null}
+      onSlot={(key, slot) => {
+        void write(
+          transitionPatches(["parameters"], key, workDoc?.parameters[key] ?? {}, {
+            kind: "set",
+            rung: { value: slot },
+          }),
+          { label: `${key} → ${slot}` },
+        );
+      }}
+      apply={changeInputs}
+      history={history}
+      nameOf={nameOf}
+      act={async (path, cell, kind, label) => {
+        if (path.length === 1) {
+          // temporary: criteria writer moves to fans with its cells (U2/U3, Q2a)
+          return write(transitionPatches([], path[0], cell, { kind }), {
+            label: `${kind} Pea's ${label}`,
+          });
+        }
+        // U4 moves parameter cells and their writer to the fans Work.
+        if (path[0] === "parameters") return { code: "unavailable", message: "Fan parameter editing is unavailable" };
+        const result = await settleWork(ctx.cells[kind](path[0], path[1]));
+        return result.kind === "refused"
+          ? { code: "refused", message: result.refusal.error }
+          : null;
+      }}
+    />
+  );
+  return (
+    <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf}>
+      {ownPane}
+    </SheetFrame>
+  );
+}
+export function PictureBody({
+  ctx,
+}: {
+  ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-picture">;
+}) {
+  const { authored, snapshot, value, sheet, fans, roster, nameOf, selected } = useSheetData(ctx);
+  const target = ctx.workBasis?.token.scope.identity.target;
+  const doc = target?.kind === "document" ? target.ref : null;
+  const workDoc = sheetWork(ctx.work);
+  const select = (selected: string) =>
+    ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
+  const setPage = picturePageMove<PicturePage<string, "schematic">>(
+    (patch, intent) => ctx.page.pose(patch, intent),
+    select,
+  );
+  const selection = useMemo(
+    () => Atom.make(attentionSubjects(authored.selected.map(({ id }) => localSubject(id)))),
+    [authored.selected],
+  );
+  const pickedFans = namesOf(authored.fan);
+  const captureSource =
+    ctx.readings.fans.current && doc && ctx.readings.sheetSnapshot.value?.sourceVersion
+      ? { document: doc, version: ctx.readings.sheetSnapshot.value.sourceVersion }
+      : null;
+  const state = ctx.readings.sheetView.value ?? EMPTY_SHEET_STATE;
+  const jump = useRef<((key: SubjectKey) => void) | null>(null);
+  const fanId = (row: FanPort) => localId("ducts-fan", stableFanKey(row));
+  const ownPane = ((renderPane: TeachingPaneRender) => (
+    <SheetPicture
+      props={{
+        page: { ...authored, selected, issue: selected },
+        setPage,
+        work: { doc: workDoc },
+        selection,
+        captureSource,
+        doc,
+        refreshing: !fans.current,
+      }}
+      snapshot={snapshot}
+      sheet={sheet}
+      opened={value?.opened}
+      fans={roster.filter((row) => pickedFans === "all" || pickedFans.includes(stableFanKey(row)))}
+      blockers={state.blockers}
+      systemFans={(system) => {
+        // A system's fans: the units on the runs that price it, or the roster's own word.
+        const units = systemScope(snapshot, system).units;
+        return roster.filter((row) => row.system === system || units.has(row.unitId)).map(fanId);
+      }}
+      renderPane={renderPane}
+      jump={jump}
+    />
+  ))((body, furniture) => (
+    <>
+      {body}
+      <PaneActions pane="sheet-picture">{furniture?.actions}</PaneActions>
+    </>
+  ));
+  return (
+    <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf} jump={jump}>
+      {ownPane}
+    </SheetFrame>
+  );
+}
+export function LedgerBody({
+  ctx,
+}: {
+  ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-ledger">;
+}) {
+  const { snapshot, reading, sheet, fans, roster, nameOf, selected, changeInputs, busy } =
+    useSheetData(ctx);
+  const select = (selected: string) =>
+    ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
+  const state = ctx.readings.sheetView.value ?? EMPTY_SHEET_STATE;
   const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null) =>
     describeCloser(blocker, typed, {
       terminalDrop: state.inputs?.criteria.terminalDropInWg ?? null,
@@ -197,7 +328,10 @@ export function SheetBody({
         case "rule":
           return {
             ...edits,
-            joins: [...(edits.joins ?? []), { pair: action.pair, verdict: "accept" }],
+            joins: [
+              ...(edits.joins ?? []),
+              { pair: [action.pair[0], action.pair[1]], verdict: "accept" },
+            ],
           };
         case "cap":
           return {
@@ -244,166 +378,82 @@ export function SheetBody({
           };
       }
     }, {});
-  const selectedNumber = Number(props.page.selected.replaceAll('"', ""));
-  const focused = state.blockers.find((blocker) => blocker.id === props.page.selected);
-  const elementId =
-    focused?.elementId ??
-    (Number.isInteger(selectedNumber) && selectedNumber > 0 ? selectedNumber : null);
-  const element =
-    elementId == null
-      ? null
-      : {
-          id: elementId,
-          family: snapshot.nodes.find((node) => node.id === elementId)?.family ?? null,
-        };
-  const history = {
-    ...presentInputHistory(ctx.history?.entries ?? [], null),
-    undo: () => {
-      void ctx.history?.undo();
-    },
-    redo: () => {
-      void ctx.history?.redo();
-    },
-    restore: (press: string) => {
-      void ctx.history?.undo(press);
-    },
-  };
-  const fanReading = fans.value;
-  const spine: SheetViewProps = {
-    ...state,
-    snapshot,
-    roster,
-    picked: props.page.fan === "all" ? roster.map(stableFanKey) : props.page.fan,
-    open,
-    sheet,
-    slots: fanReading?.slots ?? [],
-    activeSlot: fanReading?.activeSlot ?? "",
-    busy,
-    loading: fans.status === "pending",
-    error:
-      (reading.status === "failed" ? reading.reason : null) ??
-      (fans.status === "failed" ? fans.reason : null),
-    progress: value?.progress ?? null,
-    refresh: () => {
-      props.setPage({ sheetPath: props.page.sheetPath });
-    },
-    changeInputs,
-    rule: (proposal) => changeInputs({ joins: [proposal] }),
-    pickPath: (sheetPath) => {
-      props.setPage({ sheetPath });
-    },
-    closerOf,
-    close: (closer) => changeInputs(editsFor([closer]), { label: closer.verb }),
-    closeMany: (closers) => changeInputs(editsFor(closers)),
-    focusedBlocker: props.page.selected || null,
-    focusBlocker: (issue) => {
-      props.setPage({ selected: issue ?? "" }, { history: "push" });
-    },
-    picture: (renderPane) => (
-      <SheetPicture
-        props={props}
-        snapshot={snapshot}
-        sheet={sheet}
-        opened={value?.opened}
-        fans={roster.filter(
-          (row) => props.page.fan === "all" || props.page.fan.includes(stableFanKey(row)),
-        )}
-        blockers={state.blockers}
-        systemFans={(system) => {
-          // A system's fans: the units on the runs that price it, or the roster's own word.
-          const units = systemScope(snapshot, system).units;
-          return roster.filter((row) => row.system === system || units.has(row.unitId)).map(fanId);
-        }}
-        renderPane={renderPane}
-        jump={jump}
-      />
-    ),
-    inputsSurface: (
-      <InputsSurface
-        ctx={{
-          snapshot,
-          doc: props.work.doc,
-          revision: props.work.revision,
-          sheet,
-          inputs: state.inputs,
-          firm: state.firm,
-          fittings: sheet?.inputs?.fittings ?? [],
-          tableTitles: sheet?.inputs?.tableTitles ?? {},
-          slots: fanReading?.slots ?? [],
-          activeSlot: fanReading?.activeSlot ?? "",
-          element,
-        }}
-        busy={busy}
-        elementName={element ? nameOf(element.id) : null}
-        onSlot={(key, slot) => {
-          void write(
-            transitionPatches(["parameters"], key, props.work.doc?.parameters[key] ?? {}, {
-              kind: "set",
-              rung: { value: slot },
-            }),
-            { label: `${key} → ${slot}` },
-          );
-        }}
-        apply={changeInputs}
-        history={history}
-        nameOf={nameOf}
-        act={async (path, cell, kind, label) => {
-          if (path.length === 1) {
-            // temporary: criteria writer moves to fans with its cells (U2/U3, Q2a)
-            return write(transitionPatches([], path[0], cell, { kind }), {
-              label: `${kind} Pea's ${label}`,
-            });
-          }
-          // U4 moves parameter cells and their writer to the fans Work.
-          if (path[0] === "parameters")
-            return { code: "unavailable", message: "Fan parameter editing is unavailable" };
-          const result = await settleWork(ctx.cells[kind](path[0], path[1]));
-          return result.kind === "refused"
-            ? { code: "refused", message: result.refusal.error }
-            : null;
-        }}
-      />
-    ),
-  };
-  const panes = {
-    "sheet-roster": (
-      <>
-        <Roster props={spine} />
-        {[
-          ...new Set(
-            [...snapshot.nodes, ...snapshot.segments]
-              .map((row) => row.systemName)
-              .filter((name): name is string => !!name),
-          ),
-        ].map((name) => (
-          <a key={name} href={subjectLink("ducts", [name], search)}>
-            {name}
-          </a>
-        ))}
-      </>
-    ),
-    "sheet-inputs": spine.inputsSurface,
-    "sheet-picture": spine.picture((body, furniture) => (
-      <>
-        {body}
-        <PaneActions pane="sheet-picture">{furniture?.actions}</PaneActions>
-      </>
-    )),
-    "sheet-ledger": <Ledger props={spine} />,
-  };
+  const ownPane = (
+    <Ledger
+      props={{
+        sheet: sheet,
+        blockers: state.blockers,
+        taken: state.taken,
+        inputs: state.inputs,
+        busy: busy,
+        loading: fans.status === "pending",
+        error:
+          (reading.status === "failed" ? reading.reason : null) ??
+          (fans.status === "failed" ? fans.reason : null),
+        changeInputs: changeInputs,
+        closerOf: closerOf,
+        close: (closer: Closer) => changeInputs(editsFor([closer]), { label: closer.verb }),
+        closeMany: (closers: readonly Closer[]) => changeInputs(editsFor(closers)),
+        focusedBlocker: selected || null,
+        focusBlocker: (issue: string | null) => {
+          select(issue ?? "");
+        },
+      }}
+    />
+  );
   return (
-    <AttentionRoot doc={props.attentionDoc}>
-      <SubjectTextContext.Provider value={subjects}>
+    <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf}>
+      {ownPane}
+    </SheetFrame>
+  );
+}
+function sheetSnapshot(reading: SheetContext["readings"]["sheetSnapshot"]) {
+  // Domain readonly sweep reached 28 files; picture consumers still require mutable arrays.
+  return (reading.value ?? EMPTY_SNAPSHOT) as import("@pe/ducts-domain/types").DuctSnapshot;
+}
+function sheetWork(value: SheetContext["work"]) {
+  // U4 wires the real fans Work here.
+  return ductsDesign(value, neutralFansWork);
+}
+function SheetFrame({
+  ctx,
+  snapshot,
+  nameOf,
+  jump,
+  children,
+}: {
+  ctx: Pick<SheetContext, "page" | "workBasis"> & {
+    readings: Pick<SheetContext["readings"], "sheetSnapshot">;
+  };
+  snapshot: import("@pe/ducts-domain/types").DuctSnapshot;
+  nameOf: ReturnType<typeof subjectNamer>;
+  jump?: import("react").RefObject<((key: SubjectKey) => void) | null>;
+  children: import("react").ReactNode;
+}) {
+  const target = ctx.workBasis?.token.scope.identity.target;
+  const document = target?.kind === "document" ? target.ref : null;
+  const attentionDoc = document ? `${document.session}/${document.openId}` : "fans:unbound";
+  const refProps = useRevitSubjectProps();
+  const go = (id: number) =>
+    jump?.current
+      ? jump.current(elementKey(id))
+      : ctx.page.select([{ kind: "focus", id: localId("ducts-focus", String(id)) }]);
+  return (
+    <AttentionRoot doc={attentionDoc}>
+      <SubjectTextContext.Provider value={{ doc: attentionDoc, nameOf, go, refProps }}>
         <NativeObservationScope
           value={{
-            scope: { document: snapshotRead.current ? doc : null, source: "native" },
+            scope: {
+              document: ctx.readings.sheetSnapshot.current ? document : null,
+              source: "native",
+            },
             references: [...snapshot.nodes, ...snapshot.segments].map(({ id, uniqueId }) => ({
               elementId: id,
               uniqueId,
             })),
           }}
         >
-          {panes[id]}
+          {children}
         </NativeObservationScope>
       </SubjectTextContext.Provider>
     </AttentionRoot>

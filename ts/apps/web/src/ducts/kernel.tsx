@@ -1,17 +1,25 @@
-import { jsonCodec } from "../../../../packages/agent-contracts/src/route-kernel-codecs";
-import { ductsDesign, neutralFansWork } from "@pe/agent-contracts";
-import { pricingJob } from "./pricing-job";
 import { createElement } from "react";
-import { identityCodecs } from "../shell/page-port";
+import { ductsDesign, neutralFansWork } from "@pe/agent-contracts";
 import type {
-  BodyBindings,
-  CodecBindings,
+BodyBindings,
+CodecBindings,
 } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import { ductsData, schemas, entries, neutralBodies } from "./neutral";
-import { NetworkBody } from "./proto/e/screen";
-import { ductsSources } from "./sources";
-import { presentLosses, presentHeal, presentFan } from "./reviews";
+import { jsonCodec } from "../../../../packages/agent-contracts/src/route-kernel-codecs";
+import { identityCodecs } from "../shell/page-port";
 import { seedBodies } from "./fixtures";
+import { ductsData,entries,neutralBodies,schemas } from "./neutral";
+import { pricingJob,rememberAnalysis } from "./pricing-job";
+import {
+AllRulesBody,
+InboxBody,
+InputsBody,
+PictureBody,
+RulesBody,
+SystemsPane,
+TreePane,
+} from "./proto/e/screen";
+import { presentFan,presentHeal,presentLosses } from "./reviews";
+import { ductsSources } from "./sources";
 const source = { module: "ducts/kernel.tsx", export: "bodies" };
 export const bodies = {
   ...neutralBodies,
@@ -23,19 +31,21 @@ export const bodies = {
     run: (ctx) => {
       const { ducts, tables, catalogs } = ctx.readings;
       if (!ducts.value || !tables.value || !catalogs.value) return null;
-      const priced = pricingJob()({
-        id: 0,
-        base: {
-          // Domain readonly sweep reached 28 files; DuctSnapshot still requires mutable arrays.
-          snapshot: ducts.value as import("@pe/ducts-domain/types").DuctSnapshot,
-          grids: tables.value,
-          catalogs: catalogs.value.tables,
-        },
-        // U4 wires the real fans Work here.
-        doc: ductsDesign(ctx.work, neutralFansWork),
-      });
+      const base = {
+        // Domain readonly sweep reached 28 files; DuctSnapshot still requires mutable arrays.
+        snapshot: ducts.value as import("@pe/ducts-domain/types").DuctSnapshot,
+        grids: tables.value,
+        catalogs: catalogs.value.tables,
+      };
+      // U4 wires the real fans Work here.
+      const doc = ductsDesign(ctx.work, neutralFansWork);
+      const priced = pricingJob()({ id: 0, base, doc });
       if ("error" in priced) throw Error(priced.error);
-      return "result" in priced ? priced.result : null;
+      if ("result" in priced) {
+        rememberAnalysis({ ...base, doc }, priced.result);
+        return priced.result;
+      }
+      return null;
     },
   },
 
@@ -43,43 +53,43 @@ export const bodies = {
     slot: "panes.e-systems.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-systems" }),
+    run: (ctx) => createElement(SystemsPane, { ctx }),
   },
   "e-sidebar": {
     slot: "panes.e-sidebar.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-sidebar" }),
+    run: (ctx) => createElement(TreePane, { ctx }),
   },
   "e-inputs": {
     slot: "panes.e-inputs.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-inputs" }),
+    run: (ctx) => createElement(InputsBody, { ctx }),
   },
   "e-rules-all": {
     slot: "panes.e-rules-all.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-rules-all" }),
+    run: (ctx) => createElement(AllRulesBody, { ctx }),
   },
   "e-rules": {
     slot: "panes.e-rules.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-rules" }),
+    run: (ctx) => createElement(RulesBody, { ctx }),
   },
   "e-picture": {
     slot: "panes.e-picture.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-picture" }),
+    run: (ctx) => createElement(PictureBody, { ctx }),
   },
   "e-inbox": {
     slot: "panes.e-inbox.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-inbox" }),
+    run: (ctx) => createElement(InboxBody, { ctx }),
   },
   presentLosses: {
     slot: "verbs.losses.present",

@@ -1,11 +1,11 @@
-import { describe, expect, it } from "vite-plus/test";
-import { routeAddress } from "@pe/agent-contracts";
-import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
-import { ductsPageSchema } from "#/ducts/page";
-import { graphUrlPage } from "#/shell/mount-page";
 import { familyGraph, familyPageSchema } from "#/family/graph";
 import { podsGraph } from "#/pods/graph";
 import { podsPageSchema } from "#/pods/page";
+import { graphUrlPage } from "#/shell/mount-page";
+import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
+import { routeAddress } from "@pe/agent-contracts";
+import { describe, expect, it } from "vite-plus/test";
+const ductsPageSchema = routeAddress("ducts").schema;
 
 /** A route's contract fields are its Page's: the URL carries its url keys, Pea's lease its agent keys. */
 describe("route addresses match their manifests", () => {

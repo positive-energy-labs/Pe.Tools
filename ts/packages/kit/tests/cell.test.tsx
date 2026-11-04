@@ -261,3 +261,18 @@ test("an acknowledged retry clears the previous cell refusal", async () => {
   view.rerender(<StateCell value="new" scale="row" onCommit={onCommit} />);
   expect(screen.queryByText("Work moved to r3")).toBeNull();
 });
+
+test("semantic landing focuses only its own input and survives remount", () => {
+  const view = render(
+    <>
+      <StateCell value="1" cap="editable" onCommit={() => {}} scale="row" />
+      <StateCell value="2" cap="editable" onCommit={() => {}} scale="row" land="cell:second" />
+    </>,
+  );
+  expect(document.activeElement).toHaveProperty("value", "2");
+  view.rerender(<>{null}</>);
+  view.rerender(
+    <StateCell value="2" cap="editable" onCommit={() => {}} scale="row" land="cell:second" />,
+  );
+  expect(document.activeElement).toHaveProperty("value", "2");
+});

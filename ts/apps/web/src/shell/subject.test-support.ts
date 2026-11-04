@@ -1,15 +1,18 @@
-import { z } from "zod";
 import {
   defineRouteGraph,
+  ductsDocumentSchema,
   field,
   pane,
-  ductsDocumentSchema,
-  type RouteGraph,
   type DuctsRouteDocument,
+  type RouteGraph,
 } from "@pe/agent-contracts";
+import { z } from "zod";
 import { ductsAddress } from "../../../../packages/agent-contracts/src/routes/ducts";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
-import type { DuctsPage } from "../ducts/page";
+type LegacyDuctFields = typeof threadListFields & typeof ductsAddress.fields;
+type DuctsPage = { [K in keyof LegacyDuctFields]: z.output<LegacyDuctFields[K]["schema"]> } & {
+  sheetPath: string;
+};
 
 // Generic legacy-owner tests need their old Page shape. This fixture has no domain
 // sources, commands, cells or registration; production Ducts/Fans use admitted modules.

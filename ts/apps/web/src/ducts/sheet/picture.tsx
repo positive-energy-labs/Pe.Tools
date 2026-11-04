@@ -4,13 +4,8 @@
  * its). The focused blocker is the page's `issue`, so a mark picked here focuses its row and a
  * row's hover lights its mark. Rendered through the layout's pane renderer, as `e-picture` is.
  */
-import { sceneRequest } from "#/scene/host";
-import { useMemo, type RefObject } from "react";
-import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
-import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
-import { snapshotById } from "@pe/ducts-domain/readiness";
 import { useElementAttention } from "#/attention";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { sceneRequest } from "#/scene/host";
 import {
   idOf,
   Picture,
@@ -19,20 +14,40 @@ import {
   type PictureOverlayFrame,
   type PictureStrand,
 } from "#/scene/picture/picture";
+import { useAdmittedSubject } from "#/shell/subject";
+import type { OrbitViewport, PicturePage } from "@pe/agent-contracts";
+import { snapshotById } from "@pe/ducts-domain/readiness";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
+import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
+import type * as Atom from "effect/reactivity/Atom";
+import { useMemo, type RefObject } from "react";
 import { coloursOf } from "../colours";
 import { encodingFor } from "../encoding";
+import type { OpenSheet } from "../neutral.ts";
 import { DuctsOverlay, linesOf, useEquipment } from "../picture-content";
-import type { ProtoProps } from "../proto/props";
+import { GoToSubject } from "../proto/e/go-to";
 import { DUCTS_LAYER_OPTIONS } from "../proto/e/teaching";
 import { indexOf, sceneOf } from "../scene";
 import { paintOfDucts } from "../selection";
 import { subjectNamer } from "../subject-text";
+import type { LossesWork } from "../work";
 import { blockerElements, sheetIssues, sheetLayers } from "./layers";
-import type { SheetBlocker } from "./tiers";
 import type { Detail, FanPort } from "./model";
-import type { OpenSheet } from "../neutral.ts";
-import { GoToSubject } from "../proto/e/go-to";
-import { useAdmittedSubject } from "#/shell/subject";
+import type { SheetBlocker } from "./tiers";
+export interface SheetPictureProps {
+  page: PicturePage<string, "schematic">;
+  setPage(
+    next: Partial<PicturePage<string, "schematic">>,
+    move?: { readonly history?: "push" | "replace" },
+  ): void;
+  work: Pick<LossesWork, "doc">;
+  selection: Atom.Atom<ReadonlySet<SubjectKey>>;
+  captureSource?: { document: { session: string; openId: string }; version: string } | null;
+  doc: { session: string; openId: string } | null;
+  refreshing: boolean;
+  onPose?: (pose: OrbitViewport | null) => void;
+}
 
 const NONE: readonly never[] = [];
 
@@ -112,18 +127,7 @@ export function SheetPicture({
   fans,
   systemFans,
 }: {
-  props: Pick<
-    ProtoProps,
-    | "page"
-    | "setPage"
-    | "work"
-    | "priced"
-    | "selection"
-    | "captureSource"
-    | "doc"
-    | "reading"
-    | "onPose"
-  >;
+  props: SheetPictureProps;
   snapshot: DuctSnapshot;
   opened?: readonly OpenSheet[];
   fans?: readonly FanPort[];
@@ -135,7 +139,7 @@ export function SheetPicture({
   /** Filled by the picture: a footnote press selects and flies to its subject. */
   jump?: RefObject<((key: SubjectKey) => void) | null>;
 }) {
-  const { page, setPage, work, priced } = props;
+  const { page, setPage, work } = props;
   const subject = useAdmittedSubject();
   const overviewFans =
     fans ??
@@ -195,12 +199,12 @@ export function SheetPicture({
   const scene = useMemo(
     () =>
       sceneOf(
-        indexOf(snapshot, priced),
+        indexOf(snapshot, null),
         snapshot.groups.map((g) => g.id),
         () => true,
         focusIds,
       ),
-    [snapshot, priced, focusIds],
+    [snapshot, focusIds],
   );
   const lines = useMemo(() => linesOf(scene), [scene]);
   const routePaint = useMemo(
@@ -305,7 +309,7 @@ export function SheetPicture({
         doc: props.doc,
         version: props.captureSource?.version ?? "",
         label: "fan sheet",
-        refreshing: props.reading.refreshing,
+        refreshing: props.refreshing,
       }}
       page={{ ...page, issue: page.selected }}
       setPage={setPage}

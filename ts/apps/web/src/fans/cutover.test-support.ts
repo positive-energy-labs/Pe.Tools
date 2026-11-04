@@ -1,19 +1,23 @@
-import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-module";
+import { RouteWorkspace, observeResources } from "@pe/runtime";
+import type { EntryTable } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import type { SchemaTable } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import type { EntryTable } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import { RouteWorkspace, observeResources } from "@pe/runtime";
-import { createRouteShell } from "../shell/admitted-mount";
-import { createWorkFeedClient } from "../shell/work-feed-client";
-import { sourceRouteServices } from "../shell/source-route-services";
-import { placeInput } from "../shell/admitted-place.test-fixture";
-import { snapshot } from "../ducts/test-fixture";
+import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-module";
 import sheet from "../ducts/sheet/sheet.fixture.json";
+import { snapshot } from "../ducts/test-fixture";
+import { createRouteShell } from "../shell/admitted-mount";
+import { placeInput } from "../shell/admitted-place.test-fixture";
 import type { ReadingSource } from "../shell/readings";
+import { sourceRouteServices } from "../shell/source-route-services";
+import { createWorkFeedClient } from "../shell/work-feed-client";
 
 import { admit } from "./admission.fixture";
 
-export async function createWitness(closes: (() => void)[], saved = new Map<string, unknown>()) {
+export async function createWitness(
+  closes: (() => void)[],
+  saved = new Map<string, unknown>(),
+  overrides: Readonly<Record<string, ReadingSource>> = {},
+) {
   const admitted = await admit();
   const ws = new RouteWorkspace({
     registrations: [],
@@ -86,7 +90,7 @@ export async function createWitness(closes: (() => void)[], saved = new Map<stri
         deliver({ kind: "complete", value, revision: 1 });
       },
     };
-  const services = { ...sourceRouteServices(native), work: feed };
+  const services = { ...sourceRouteServices({ ...native, ...overrides }), work: feed };
   const places = new Map<string, ReturnType<typeof placeInput>>();
   function mount<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, R>(
     route: AdmittedRoute<G, S, E, R>,

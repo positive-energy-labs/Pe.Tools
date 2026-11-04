@@ -1,3 +1,6 @@
+import type { Immutable } from "../../../../../packages/agent-contracts/src/route-kernel-data";
+import { type Tier } from "./model";
+export { TIERS, type Tier } from "./model";
 /**
  * Consent tiers (ducts MAP, protoui round 1): every gap on a fan sheet sits at one tier.
  * `taken`: the engine closed it silently (an auto-join within the candidate box, a firm default
@@ -8,11 +11,8 @@
 import type { DuctsSheetOverview, DuctsSheetResponse, SheetNote } from "@pe/agent-contracts";
 import { verdictInk } from "@pe/kit/table/cells";
 
-export type Tier = "taken" | "accept" | "preview";
-export const TIERS: readonly Tier[] = ["taken", "accept", "preview"];
-
-type Compact = DuctsSheetOverview["blockers"][number];
-type Detailed = Extract<DuctsSheetResponse, { kind: "inputs" }>["blockers"][number];
+type Compact = Immutable<DuctsSheetOverview["blockers"][number]>;
+type Detailed = Immutable<Extract<DuctsSheetResponse, { kind: "inputs" }>["blockers"][number]>;
 /** A blocker as the page holds it: the overview's compact row, filled in once inputs detail lands. */
 export type SheetBlocker = Detailed;
 
@@ -23,7 +23,7 @@ export const closerKind = (blocker: Pick<Closer, "closer">) =>
   typeof blocker.closer === "string" ? blocker.closer : blocker.closer.kind;
 
 /** The join or heal pair a closer would rule on: the engine's proposal, else the detail's candidate. */
-export const healPair = (blocker: Closer): [string, string] | null =>
+export const healPair = (blocker: Closer): readonly [string, string] | null =>
   blocker.proposal?.pair ??
   (typeof blocker.closer === "string" ? null : (blocker.closer.candidate?.pair ?? null));
 

@@ -1,7 +1,4 @@
 // @vitest-environment jsdom
-import { expect, it, vi, afterEach } from "vite-plus/test";
-import { createElement } from "react";
-import { cleanup, fireEvent, render } from "@testing-library/react";
 import {
   ductsInputsSchema,
   ductsSheetEditsSchema,
@@ -9,6 +6,10 @@ import {
   type Resolved,
 } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { createElement } from "react";
+import { afterEach, expect, it, vi } from "vite-plus/test";
+import { snapshot as networkSnapshot } from "../test-fixture";
 import {
   InputsSurface,
   inputFields,
@@ -44,7 +45,7 @@ const inputs = (): DuctsInputs =>
     fittingDrops: {},
     rulings: { joins: [], ends: [] },
   });
-const context = (): InputContext => ({
+const context = (): Omit<InputContext, "inputs"> & { inputs: DuctsInputs } => ({
   snapshot: EMPTY_SNAPSHOT,
   doc: null,
   revision: 3,
@@ -64,7 +65,7 @@ it("puts the model/walked conflict in the fan airflow cell without changing its 
     esp: firm(null),
     role: firm("fan"),
     kind: firm("fan-coil"),
-  } as DuctsInputs["units"][string];
+  };
   ctx.sheet = {
     overview: { fan: { unitId: 13760867 } },
     inputs: {
@@ -75,17 +76,31 @@ it("puts the model/walked conflict in the fan airflow cell without changing its 
         },
       ],
     },
-  } as InputContext["sheet"];
+  };
   const row = inputFields(ctx).rows.find((r) => r.key === "unit:13760867:cfm")!;
   expect(row.control).toMatchObject({ value: 1200 });
   expect(row.source).toBe(
     "Conflict: 1200 cfm (model:PE_M_Fan_AirFlow) conflicts with 942 cfm (walked end sum); 2 open ends",
   );
-  const view = render(createElement(InputsSurface, {
-    ctx, busy: false, elementName: null, onSlot: vi.fn(), apply: vi.fn(), nameOf: () => "FC-23",
-    history: { undoLabel: null, redoLabel: null,
-      last: null, cleared: null, undo: vi.fn(), redo: vi.fn(), restore: vi.fn() },
-  }));
+  const view = render(
+    createElement(InputsSurface, {
+      ctx,
+      busy: false,
+      elementName: null,
+      onSlot: vi.fn(),
+      apply: vi.fn(),
+      nameOf: () => "FC-23",
+      history: {
+        undoLabel: null,
+        redoLabel: null,
+        last: null,
+        cleared: null,
+        undo: vi.fn(),
+        redo: vi.fn(),
+        restore: vi.fn(),
+      },
+    }),
+  );
   const source = view.getByText(row.source);
   expect(source.closest('[data-input-field="unit:13760867:cfm"]')).not.toBeNull();
   expect(source.className).toContain("whitespace-normal");
@@ -143,16 +158,17 @@ it("edits criteria through the contract, writing and clearing only the edited si
 it("protocol: the fan-flow slot is a picker beside the terminal one, its candidates covered over the walk's units", () => {
   // Chadds (2026-10-29): the C# default PE_M_Fan_AirFlowDesign is empty on every unit; the model's
   // design flows are in PE_M_Fan_AirFlow.
-  const unit = (id: number) => ({
+  const unit = (id: number): DuctSnapshot["nodes"][number] => ({
+    ...networkSnapshot.nodes[0]!,
     id,
     kind: "equipment",
     connectors: [],
     facts: [],
     flowParameter: null,
   });
-  const snapshot = {
+  const snapshot: DuctSnapshot = {
     ...EMPTY_SNAPSHOT,
-    slots: { fanFlow: "PE_M_Fan_AirFlowDesign", terminalFlow: "Airflow" },
+    slots: { ...EMPTY_SNAPSHOT.slots, fanFlow: "PE_M_Fan_AirFlowDesign", terminalFlow: "Airflow" },
     nodes: [unit(1), unit(2), unit(3)],
     fanFlowCandidates: [
       { slot: "PE_M_Fan_AirFlow", where: "instance", shared: true, have: 3, of: 3, groups: [] },
@@ -165,7 +181,7 @@ it("protocol: the fan-flow slot is a picker beside the terminal one, its candida
         groups: [],
       },
     ],
-  } as unknown as DuctSnapshot;
+  };
   const [terminal, fan] = protocolPickers({ ...context(), snapshot });
   expect(terminal).toMatchObject({ key: "terminalFlow", current: "Airflow" });
   expect(fan).toMatchObject({ key: "fanFlow", current: "PE_M_Fan_AirFlowDesign", noun: "units" });
@@ -180,7 +196,7 @@ it.each(["terminal:7:cfm", "join:1:0|2:0"])(
   "cleared %s keeps Restore under typed-only until the next edit",
   (rowKey) => {
     const ctx = context();
-    ctx.sheet = { overview: { fan: null } } as unknown as NonNullable<InputContext["sheet"]>;
+    ctx.sheet = { overview: { fan: null }, inputs: null };
     ctx.inputs!.terminals["7"] = {
       cfm: { value: 80, source: "model", units: null, version: null, status: "valid" },
       drop: firm(0.03),
@@ -219,20 +235,36 @@ it.each(["terminal:7:cfm", "join:1:0|2:0"])(
   },
 );
 
-
 it("labels the undoable row action Revert and records the same History name", () => {
   const ctx = context();
-  ctx.sheet = { overview: { fan: null } } as NonNullable<InputContext["sheet"]>;
+  ctx.sheet = { overview: { fan: null }, inputs: null };
   ctx.inputs!.terminals["7"] = { cfm: { ...firm(100), source: "Work" }, drop: firm(0.03) };
   const apply = vi.fn();
-  const { getAllByRole } = render(createElement(InputsSurface, {
-    ctx, apply, busy: false, elementName: null, onSlot: vi.fn(), nameOf: () => "Terminal",
-    history: { undoLabel: null, redoLabel: null, last: null, cleared: null,
-      undo: vi.fn(), redo: vi.fn(), restore: vi.fn() },
-  }));
-  const button = getAllByRole("button").find(b => b.textContent === "Revert");
+  const { getAllByRole } = render(
+    createElement(InputsSurface, {
+      ctx,
+      apply,
+      busy: false,
+      elementName: null,
+      onSlot: vi.fn(),
+      nameOf: () => "Terminal",
+      history: {
+        undoLabel: null,
+        redoLabel: null,
+        last: null,
+        cleared: null,
+        undo: vi.fn(),
+        redo: vi.fn(),
+        restore: vi.fn(),
+      },
+    }),
+  );
+  const button = getAllByRole("button").find((b) => b.textContent === "Revert");
   expect(button).toBeTruthy();
   expect(button!.getAttribute("aria-label")).toMatch(/^Revert /);
   fireEvent.click(button!);
-  expect(apply).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ label: expect.stringMatching(/^Revert /), clear: true }));
+  expect(apply).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ label: expect.stringMatching(/^Revert /), clear: true }),
+  );
 });

@@ -1,25 +1,16 @@
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { sceneRequest } from "#/scene/host";
+import { picturePageMove } from "#/shell/picture-page";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+
 /**
  * E's picture content: what the ducts picture is of and what it marks. Every picture behaviour
  * (capture, camera, selection, hover, readout and pane furniture) is the shared `Picture`'s; this
  * file only produces content for it.
- */
-import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
-import { useContext, useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
+ */ import { elementKey, type Members, type SubjectKey } from "@pe/kit/lang/attention";
+import { useContext, useMemo, type ReactNode, type RefObject } from "react";
 
-import { emptyListSearch } from "@pe/agent-contracts";
-import { snapshotById } from "@pe/ducts-domain/readiness";
-import { noRunBranches } from "@pe/ducts-domain/no-runs";
-import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
-import { worstRun } from "@pe/ducts-domain/losses";
-import type { Neighbour } from "@pe/ducts-domain/neighbours";
-import { TooltipHint } from "@pe/kit/lang/tooltip";
-import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
-import { SubjectText } from "@pe/kit/lang/subject-text";
-import { SubjectTextContext } from "@pe/kit/lang/reach";
+import { VisibleRouteResource } from "#/route/activity";
 import { damageLayers } from "#/scene/damage";
-import type { Layer3D, SceneMeshes } from "#/scene/types";
 import {
   idOf,
   Picture,
@@ -27,38 +18,75 @@ import {
   type PictureLayer,
   type PictureOverlayFrame,
 } from "#/scene/picture/picture";
-import { DuctsOwner } from "../../pane-context";
-import { VisibleRouteResource } from "#/route/activity";
+import type { Layer3D, SceneMeshes } from "#/scene/types";
+import { emptyListSearch } from "@pe/agent-contracts";
+import { worstRun } from "@pe/ducts-domain/losses";
+import type { Neighbour } from "@pe/ducts-domain/neighbours";
+import { noRunBranches } from "@pe/ducts-domain/no-runs";
+import { snapshotById } from "@pe/ducts-domain/readiness";
+import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
+import { SubjectTextContext } from "@pe/kit/lang/reach";
+import { SubjectText } from "@pe/kit/lang/subject-text";
+import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 
-import type { Ruling } from "../../annotations";
-import { DuctsOverlay, linesOf, useEquipment } from "../../picture-content";
-import { elementNamer } from "../../claims";
-import { NodeFactsView, SegmentFactsView } from "../../facts";
-import { labelOfNode, legsOf } from "../../legs";
-import { paintOfDucts, stubIdsOf } from "../../selection";
-import { healReviewLayers, findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
-import { RunDetail, runOf } from "./run-detail";
-import { GoToSubject } from "./go-to";
-import { localId } from "../../neutral";
 import { useAdmittedSubject } from "#/shell/subject";
+import type { OrbitViewport, PicturePage } from "@pe/agent-contracts";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
+import type { Priced } from "@pe/ducts-domain/pricing";
+import type * as Atom from "effect/reactivity/Atom";
+import type { PaneContext } from "../../../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { Ruling } from "../../annotations";
+import { elementNamer } from "../../claims";
+import { coloursOf } from "../../colours";
+import { NodeFactsView, SegmentFactsView } from "../../facts";
+import { findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
+import type { StageIssue } from "../../inbox-rows";
+import type { Claim, Run } from "../../legs";
+import { labelOfNode, legsOf } from "../../legs";
+import type { Split } from "../../loss-split";
+import {
+  activeName,
+  ductsData,
+  entries,
+  localId,
+  localSubject,
+  namesOf,
+  schemas,
+} from "../../neutral";
+import { DuctsOverlay, linesOf, useEquipment } from "../../picture-content";
 import { ProvisionalNote } from "../../provisional";
 import { indexOf, sceneOf, subjectScene } from "../../scene";
 import { Schematic } from "../../schematic";
+import { paintOfDucts, stubIdsOf } from "../../selection";
+import { stubLabels } from "../../stub-labels";
+import { noRunParts } from "../../subject-text";
+import type { systemList } from "../../system-list";
+import type { SystemNote } from "../../system-list-search";
+import type { LossesWork } from "../../work";
 import { EncodingPicker } from "../encoding/picker";
 import { ScaleLegend } from "../encoding/scale-legend";
 import type { GroupEncoding } from "../encoding/use-encoding";
-import type { ProtoProps } from "../props";
 import { BarPopover, fmtFt, SystemMark, systemNoteCount } from "./bar";
-import type { SystemNote } from "../../system-list-search";
-import type { Split } from "../../loss-split";
-import type { systemList } from "../../system-list";
-import type { StageIssue } from "../../inbox-rows";
-import { DUCTS_FLAT, DUCTS_LAYER_OPTIONS } from "./teaching";
+import { GoToSubject } from "./go-to";
 import { RulingBody, useMarks } from "./rulings";
-import { noRunParts } from "../../subject-text";
-import { stubLabels } from "../../stub-labels";
-import { coloursOf } from "../../colours";
+import { RunDetail, runOf } from "./run-detail";
+import { DUCTS_FLAT, DUCTS_LAYER_OPTIONS } from "./teaching";
+
+type PictureContext = PaneContext<typeof ductsData, typeof schemas, typeof entries, "e-picture">;
+interface DuctsPictureProps {
+  ctx: PictureContext;
+  snapshot: DuctSnapshot | null;
+  captureSource?: { document: { session: string; openId: string }; version: string } | null;
+  doc: { session: string; openId: string } | null;
+  priced: Priced | null;
+  subject: Run | null;
+  claims: readonly Claim[];
+  onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
+  work: LossesWork;
+  selection: Atom.Atom<ReadonlySet<SubjectKey>>;
+  onPose?: (pose: OrbitViewport | null) => void;
+}
 
 const fmt = (n: number | null | undefined, d = 3) => (n == null ? "—" : n.toFixed(d));
 const NO_FOCUS: PictureContent["focus"] = { walked: [], near: [] };
@@ -117,12 +145,18 @@ export const ductsFocus = (
   };
 };
 
-export function DuctsPicture(props: ProtoProps & DuctsPictureExtra) {
+function rulingIssue(r: Ruling, issues: readonly StageIssue[]) {
+  const finding =
+    r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
+  return issues.find((issue) => issue.findings.includes(finding))?.key ?? finding;
+}
+
+export function DuctsPicture(props: DuctsPictureProps & DuctsPictureExtra) {
   const { snapshot } = props;
   if (!snapshot)
     return (
       <p className="p-3 text-ink-2">
-        {props.empty?.says ?? (props.reading.pending ? "reading ducts…" : "no snapshot")}
+        {props.ctx.readings.ducts.status === "pending" ? "Reading ducts..." : "No snapshot"}
       </p>
     );
   // Route UI stays retained; capture buffers, clipped meshes and layer descriptors do not.
@@ -139,7 +173,7 @@ function Content({
   captureSource,
   doc,
   priced,
-  page,
+  ctx,
   subject,
   claims,
   onVerdict,
@@ -157,9 +191,29 @@ function Content({
   identity,
   jump,
   selection,
-  setPage,
   onPose,
-}: ProtoProps & DuctsPictureExtra & { snapshot: NonNullable<ProtoProps["snapshot"]> }) {
+}: DuctsPictureProps & DuctsPictureExtra & { snapshot: DuctSnapshot }) {
+  const authored = ctx.page.read();
+  const openedSystems = namesOf(authored.system);
+  const page = {
+    ...authored,
+    system: openedSystems === "all" ? snapshot.systems.map((row) => row.name) : openedSystems,
+    active: activeName(
+      authored.system,
+      snapshot.systems.map((row) => row.name),
+    ),
+    selected: authored.selected.map((item) => localSubject(item.id)).join(","),
+  };
+  const select = (selected: string) =>
+    ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
+  const pickIssue = (selected: string) => {
+    select(selected);
+    ctx.verbs.browse({ rulingSearch: emptyListSearch() });
+  };
+  const movePicture = picturePageMove<PicturePage<string, "schematic">>(
+    (patch, intent) => ctx.page.pose(patch, intent),
+    select,
+  );
   const index = useMemo(() => indexOf(snapshot, priced), [snapshot, priced]);
   const door = useAdmittedSubject();
   const scope = useMemo(() => scopeOf(snapshot, page.system), [snapshot, page.system]);
@@ -195,8 +249,7 @@ function Content({
     () => stubLabels(snapshot, neighbours, opened),
     [snapshot, neighbours, opened],
   );
-  const owner = useContext(DuctsOwner);
-  const meshes = owner?.meshes;
+
   const meshCuts = useMemo(() => {
     const cuts = new Map<number, (typeof neighbours)[number]["cuts"]>();
     for (const id of stubs) {
@@ -212,16 +265,15 @@ function Content({
   const capture = useMemo(
     () => ({
       cuts: meshCuts,
-      meshes,
     }),
-    [meshCuts, meshes],
+    [meshCuts],
   );
   const lines = useMemo(() => linesOf(scene), [scene]);
 
   const sub = scene.subject ?? null;
   const nameOfId = useMemo(() => elementNamer(snapshot, sub), [snapshot, sub]);
   const byId = useMemo(() => snapshotById(snapshot), [snapshot]);
-  const [openRuling, setOpenRuling] = useState<number | null>(null);
+
   const pointOf = (id: number): readonly number[] | null => {
     const node = byId.nodes.get(id);
     if (node) return node.point ?? null;
@@ -251,28 +303,11 @@ function Content({
         : new Map(),
     [priced, page.system],
   );
-  const heal3d = useMemo(
-    () => healReviewLayers(snapshot, work.doc, page.heal),
-    [snapshot, work.doc, page.heal],
-  );
-  const reviewTargets = useMemo(
-    () =>
-      new Set(
-        page.heal?.targets
-          .filter((t) => t.outcome === "planned" || t.outcome === "healed")
-          .flatMap((t) => t.ids) ?? [],
-      ),
-    [page.heal],
-  );
+  const heal3d: Layer3D[] = [];
+  const reviewTargets = new Set<number>();
   const findings3d = useMemo(
-    () =>
-      findingLayers(findingShapes(snapshot, annotated, work.doc, scope?.members), issues).filter(
-        (layer) =>
-          !layer.findings?.some((finding) =>
-            page.heal?.targets.some((target) => target.findings.includes(finding)),
-          ),
-      ),
-    [snapshot, annotated, work.doc, scope, issues, page.heal],
+    () => findingLayers(findingShapes(snapshot, annotated, work.doc, scope?.members), issues),
+    [snapshot, annotated, work.doc, scope, issues],
   );
   // Damage follows the shown meshes; the layer and the overlay's covered pins share one per read.
   const damageOf = useMemo(() => {
@@ -347,12 +382,8 @@ function Content({
 
   // A page write, as the tree's: the picture registers the selection it becomes.
   const pick = (id: number | null) => {
-    setOpenRuling(null);
-    setPage({ selected: id == null ? "" : String(id) }, { history: "push" });
+    select(id == null ? "" : String(id));
   };
-  useEffect(() => {
-    if (!page.selected) setOpenRuling(null);
-  }, [page.selected]);
   const widen = useMemo(
     () =>
       sub
@@ -362,11 +393,8 @@ function Content({
   );
 
   const ruling = (r: Ruling) => {
-    const finding =
-      r.kind === "claim" ? `claim:${r.claim.id}` : r.kind === "issue" ? r.issue.id : r.finding.id;
-    const issue = issues.find((i) => i.findings.includes(finding))?.key ?? finding;
-    setPage({ selected: issue, rulingSearch: emptyListSearch() }, { history: "push" });
-    setOpenRuling(r.n);
+    const issue = rulingIssue(r, issues);
+    pickIssue(issue);
   };
   const schematic = (size: "main" | "inset", readout: ReactNode = null) => (
     <Schematic
@@ -381,7 +409,7 @@ function Content({
     />
   );
 
-  const ruled = openRuling == null ? null : (rulings.find((r) => r.n === openRuling) ?? null);
+  const ruled = rulings.find((r) => rulingIssue(r, issues) === page.selected) ?? null;
   const subjects = useContext(SubjectTextContext);
   const systemState = identity.system
     ? systemNoteCount(identity.system, identity.system.note)
@@ -535,7 +563,7 @@ function Content({
         refreshing: identity.refreshing,
       }}
       page={{ ...page, issue: page.selected }}
-      setPage={setPage}
+      setPage={movePicture}
       renderPane={renderPane}
       onPose={onPose}
       jump={jump}
@@ -563,12 +591,7 @@ function Content({
         overlay,
         readout: {
           subject: systemName ?? undefined,
-          summary: (
-            <>
-              {summary}
-              {page.heal && <output aria-label="Heal in picture"> · {page.heal.sentence}</output>}
-            </>
-          ),
+          summary: <>{summary}</>,
           idle,
           facts,
         },
@@ -589,7 +612,7 @@ function Content({
           actions: (
             <EncodingPicker
               value={scale.encoding.key}
-              onPick={(key) => setPage({ encoding: key })}
+              onPick={(key) => ctx.page.pose({ encoding: key }, "named")}
             />
           ),
           legend: (
@@ -602,15 +625,7 @@ function Content({
             />
           ),
         },
-        onIssuePick: (target) =>
-          setPage(
-            {
-              selected: target.key,
-              rulingSearch: emptyListSearch(),
-            },
-            { history: "push" },
-          ),
-        onPick: () => setOpenRuling(null),
+        onIssuePick: (target) => pickIssue(target.key),
       }}
     />
   );
