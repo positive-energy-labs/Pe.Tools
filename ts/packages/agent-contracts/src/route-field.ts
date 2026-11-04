@@ -75,12 +75,23 @@ const CODECS: Record<string, Codec<unknown>> = {
 
 /** Top-level collection values require a collection constructor. Objects may contain arrays. */
 export type ScalarSchema<S extends z.ZodType> =
-  S extends z.ZodType<string | number | boolean | bigint | symbol | null | undefined>
-    ? S
-    : Extract<z.output<S>, readonly unknown[]> extends never ? S : never;
-/** One field: a plain string, enum, number or boolean needs no codec; any other value brings one. */
+  Extract<z.output<S>, readonly unknown[]> extends never ? S : never;
+type Primitive = string | number | boolean | bigint | symbol | null | undefined;
+
+/** Primitive assignability also preserves schemas whose enum keys are still generic. */
+export function field<S extends z.ZodType<Primitive>, const A extends Access>(
+  schema: S,
+  access: A,
+  codec?: Codec<z.output<S>>,
+): RouteField<S> & A;
+/** Structured scalar values bring a codec; top-level collections use their own constructors. */
 export function field<S extends z.ZodType, const A extends Access>(
   schema: ScalarSchema<S>,
+  access: A,
+  codec?: Codec<z.output<S>>,
+): RouteField<S> & A;
+export function field<S extends z.ZodType, const A extends Access>(
+  schema: S,
   access: A,
   codec?: Codec<z.output<S>>,
 ): RouteField<S> & A {
