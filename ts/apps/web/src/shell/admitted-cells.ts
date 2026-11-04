@@ -162,7 +162,7 @@ export function createAdmittedCellActions<W extends Record<string, unknown>>(
   const work = context.work(),
     snapshots = context.readings().snapshots;
 
-  return (kind: "take" | "unsuggest" | "clear", id: string, key: unknown) => {
+  const transitionCell = (kind: "take" | "unsuggest" | "clear", id: string, key: unknown) => {
     action();
     resolve();
     const declaration = route.data.cells[id];
@@ -192,5 +192,22 @@ export function createAdmittedCellActions<W extends Record<string, unknown>>(
         label: `${kind === "take" ? "Take" : kind === "unsuggest" ? "Unsuggest" : "Clear"} ${id}`,
       },
     );
+  };
+  return {
+    public: {
+      takeCell: (id: string, key: unknown) => transitionCell("take", id, key),
+      unsuggestCell: (id: string, key: unknown) => transitionCell("unsuggest", id, key),
+      clearCell: (id: string, key: unknown) => transitionCell("clear", id, key),
+      focusCell(id: string, key: unknown) {
+        action();
+        resolve();
+        const issued = owner.invocation(owner.capture(`cell-focus:${id}`), {});
+        if (!issued.ok) throw Error(issued.reason);
+        return owner.acceptPage(
+          issued.value,
+          cells.focus(id, key) as Parameters<typeof owner.acceptPage>[1],
+        );
+      },
+    },
   };
 }

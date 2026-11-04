@@ -65,7 +65,11 @@ export type MountContext<W extends Record<string, unknown>> = ReturnType<
   available(this: void): boolean;
   beforeSync(this: void): void;
   duringDraw<T>(this: void, draw: () => T): T;
-  logEvidence(this: void, readingId: string, value: unknown): void;
+  sourceTimeline: WeakMap<
+    object,
+    import("../../../../packages/runtime/src/work-journal.ts").TimelineEntry[]
+  >;
+  now: import("../../../../packages/agent-contracts/src/route-kernel-environment.ts").KernelServices["clock"]["now"];
 };
 
 export function projectEvidence(

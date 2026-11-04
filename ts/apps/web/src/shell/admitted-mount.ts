@@ -15,7 +15,6 @@ import {
   createAdmittedRouteRegistry,
   resolveRouteBindings,
 } from "../../../../packages/agent-contracts/src/route-module.ts";
-import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import * as recoveryHost from "../route/host.ts";
 import { createAdmittedAddress } from "./admitted-address.ts";
 import { createAdmittedBody } from "./admitted-body.ts";
@@ -32,7 +31,7 @@ import { createAdmittedWork } from "./admitted-work.ts";
 import { createApplicationWorkRegistry } from "./application-work-registry.ts";
 import { fixtureGeometryDoor } from "./fixture-geometry-door.ts";
 import { createNamedFixtureRouteEnvironment } from "./fixture-lane.ts";
-import { createPagePorts, freezePage } from "./page-port.ts";
+import { createPagePorts } from "./page-port.ts";
 import { createRouteEnvironment } from "./route-environment.ts";
 import { sourceReadingEvidence } from "./source-route-services.ts";
 import { createWorkFeedClient } from "./work-feed-client.ts";
@@ -94,8 +93,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         observeReceipts: () => readings.observeReceipts(),
         notify: () => notify(),
       });
-      const { registry, registration, resolve, bindings, policy, issuer, owner, read, entryFor } =
-        scope;
+      const { registry, registration, bindings, policy, issuer, owner, read, entryFor } = scope;
       const observers = createAdmittedObservers(route.data, bindings.bodies);
       const cells = createAdmittedCells(
         route.data,
@@ -118,6 +116,14 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       };
       const schedule = (): void => readings.sync();
       const evidence = sourceReadingEvidence(services);
+      const submitNative: NonNullable<KernelServices["submitNative"]> = (command) => {
+        if (!door) throw Error("Native commands unavailable");
+        return fixture === null
+          ? services.submitNative
+            ? services.submitNative(command)
+            : (services.nativeWrite ?? door).submit(command)
+          : door.submit(command);
+      };
       const context: MountContext<W> = {
         ...scope,
         route,
@@ -154,30 +160,9 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           dependencies: evidence?.dependencies.bind(evidence),
           observe: fixture === null ? evidence?.observe.bind(evidence) : undefined,
         },
-        submitNative(command) {
-          if (!door) throw Error("Native commands unavailable");
-          return fixture === null
-            ? services.submitNative
-              ? services.submitNative(command)
-              : (services.nativeWrite ?? door).submit(command)
-            : door.submit(command);
-        },
-        logEvidence: (readingId, value) => {
-          const key = read().scope.identity.work;
-          if (!key) return;
-          const entry = entryFor(key);
-          const rows = sourceTimeline.get(entry) ?? [];
-          rows.push(
-            freezePage({
-              kind: "feed",
-              at: services.clock.now(),
-              subject: readingId,
-              basis: value,
-            }),
-          );
-          if (rows.length > 200) rows.shift();
-          sourceTimeline.set(entry, rows);
-        },
+        submitNative,
+        sourceTimeline,
+        now: services.clock.now.bind(services.clock),
       };
       const readings = createAdmittedReadings(context);
       const plan = readings.plan;
@@ -190,10 +175,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
               ports: {
                 ...services,
                 work: route.data.work ? { read: liveDoor, submit: liveDoor } : undefined,
-                submitNative: (command) =>
-                  services.submitNative
-                    ? services.submitNative(command)
-                    : (services.nativeWrite ?? liveDoor).submit(command),
+                submitNative,
                 geometry: undefined,
               },
             })
@@ -241,7 +223,6 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       const invocation = createAdmittedInvocation(context);
       const { invoke, place, workBasis } = invocation;
       const historyOwner = createAdmittedHistory(context);
-      const { history, salvage, recovery, startFresh, restore, journal } = historyOwner;
       let transport: ReturnType<typeof createAdmittedAddress> | undefined;
       let unsubscribeOwner = () => {};
       const close = () => {
@@ -311,26 +292,12 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         subjectDisplay: observers.subject,
         subjectText: observers.text,
         cells: cells.rows,
-        salvage,
-        recovery,
-        startFresh,
-        takeCell: (id: string, key: unknown) => transitionCell("take", id, key),
-        unsuggestCell: (id: string, key: unknown) => transitionCell("unsuggest", id, key),
-        clearCell: (id: string, key: unknown) => transitionCell("clear", id, key),
-        focusCell(id: string, key: unknown) {
-          action();
-          resolve();
-          const issued = owner.invocation(owner.capture(`cell-focus:${id}`), {});
-          if (!issued.ok) throw Error(issued.reason);
-          return owner.acceptPage(
-            issued.value,
-            cells.focus(id, key) as Parameters<typeof owner.acceptPage>[1],
-          );
-        },
+        ...transitionCell.public,
         predicates: observers.predicates,
         visible: observers.visible,
         initialRestore: transport.initial,
         ...invocation.public,
+        ...historyOwner.public,
         work: () => owner.read()?.work ?? null,
         workBasis,
         queryLanding: (readingId: string) => queryLandings.get(readingId) ?? null,
@@ -341,39 +308,9 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           ),
         workProblem: work.problem,
         workFailure: work.failure,
-        history,
         refusedEdits: work.refused,
         retryEdit: (id: string, basis: InvocationToken) => work.retry(id, basis),
         discardEdit: (id: string) => work.discard(id),
-        stopCommand(id: string) {
-          action();
-          const key = owner.read()?.scope.identity.work;
-          const receipt = key
-            ? entryFor(key)
-                .activity()
-                .find((row) => row.id === id)
-            : undefined;
-          if (!receipt || !["waiting", "running", "unknown"].includes(receipt.state))
-            throw Error("Command is not pending in this Work");
-          return cancelAction(id);
-        },
-        timeline: () => {
-          const key = owner.read()?.scope.identity.work;
-          if (!key) return [];
-          const entry = entryFor(key);
-          return freezePage(
-            [...entry.timeline(), ...(sourceTimeline.get(entry) ?? [])].sort(
-              (a, b) => Number(new Date(a.at)) - Number(new Date(b.at)),
-            ),
-          );
-        },
-        activity: () => {
-          const key = owner.read()?.scope.identity.work;
-          return key ? entryFor(key).activity() : [];
-        },
-        journal: () => journal()?.read() ?? null,
-        journalRefusal: historyOwner.journalRefusal,
-        restoreWork: restore,
         refreshable: Object.values(route.data.readings).some(
           (reading) => reading.refresh === "explicit",
         ),

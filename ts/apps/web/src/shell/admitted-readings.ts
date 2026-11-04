@@ -46,7 +46,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
     available,
     closed,
     entryFor,
-    logEvidence,
     resolve,
   } = context;
 
@@ -157,7 +156,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
     return evidence.observe?.(request, record.token, (event) => {
       if (closed() || active.get(readingId) !== record) return;
       if (event.kind === "log") {
-        logEvidence(readingId, event.value);
+        context.history().logEvidence(readingId, event.value);
         notify();
       } else {
         const had = hostGenerations.has(readingId);

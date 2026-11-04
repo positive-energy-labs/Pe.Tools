@@ -1,5 +1,6 @@
 import { OLDER_WORK, UNREADABLE_WORK } from "@pe/agent-contracts";
 import { z } from "zod";
+import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import type { createWorkJournal } from "../../../../packages/runtime/src/work-journal.ts";
 import { peReadings } from "../readings.ts";
 import { admittedWorkPatches } from "./admitted-cells.ts";
@@ -263,20 +264,66 @@ export function createAdmittedHistory<W extends Record<string, unknown>>(context
     }
   };
 
+  const journalRefusal = () =>
+    !work.ready()
+      ? "Work unavailable"
+      : journalProblem?.journal === journal() &&
+          journalProblem?.revision === journal()?.read().revision
+        ? (journalProblem?.message ?? null)
+        : null;
+  const { entryFor, sourceTimeline, now } = context;
   return {
     sync: syncRecovery,
-    history,
-    salvage,
-    recovery,
-    startFresh,
-    restore,
-    journal,
-    journalRefusal: () =>
-      !work.ready()
-        ? "Work unavailable"
-        : journalProblem?.journal === journal() &&
-            journalProblem?.revision === journal()?.read().revision
-          ? (journalProblem?.message ?? null)
-          : null,
+    logEvidence: (readingId: string, value: unknown) => {
+      const key = read().scope.identity.work;
+      if (!key) return;
+      const entry = entryFor(key);
+      const rows = sourceTimeline.get(entry) ?? [];
+      rows.push(
+        freezePage({
+          kind: "feed",
+          at: now(),
+          subject: readingId,
+          basis: value,
+        }),
+      );
+      if (rows.length > 200) rows.shift();
+      sourceTimeline.set(entry, rows);
+    },
+    public: {
+      history,
+      salvage,
+      recovery,
+      startFresh,
+      stopCommand(id: string) {
+        action();
+        const key = owner.read()?.scope.identity.work;
+        const receipt = key
+          ? entryFor(key)
+              .activity()
+              .find((row) => row.id === id)
+          : undefined;
+        if (!receipt || !["waiting", "running", "unknown"].includes(receipt.state))
+          throw Error("Command is not pending in this Work");
+        return cancelAction(id);
+      },
+      timeline: () => {
+        const key = owner.read()?.scope.identity.work;
+        if (!key) return [];
+        const entry = entryFor(key);
+        return freezePage(
+          [...entry.timeline(), ...(sourceTimeline.get(entry) ?? [])].sort(
+            (a, b) => Number(new Date(a.at)) - Number(new Date(b.at)),
+          ),
+        );
+      },
+      activity: () => {
+        const key = owner.read()?.scope.identity.work;
+        return key ? entryFor(key).activity() : [];
+      },
+      journal: () => journal()?.read() ?? null,
+      journalRefusal: journalRefusal,
+      restoreWork: restore,
+    },
   };
 }

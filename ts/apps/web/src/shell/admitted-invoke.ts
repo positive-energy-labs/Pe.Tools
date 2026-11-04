@@ -392,7 +392,9 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       }
     },
     landings: () => [...landings.values()],
-    commandLanding: (id: string) =>
+    commandLanding: (
+      id: string,
+    ): CommandResultDecode | { kind: "gap"; reason: string; receiptId: string } =>
       landings.get(id) ?? { kind: "gap", reason: "Read the durable action receipt", receiptId: id },
     public: {
       review: (id: string) => {
