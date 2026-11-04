@@ -17,6 +17,7 @@ import {
   bindWork,
   commands,
   ductsRouteState,
+  fansRouteState,
   type WorkKey,
   type DuctsActionKey,
   type DuctsApplyInput,
@@ -80,7 +81,7 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
     const { bridge, incoming, outgoing, target } = yield* connectTestBridge();
     const rows = new Map<string, unknown>();
     const work = new RouteWorkspace({
-      registrations: [{ spec: ductsRouteState }],
+      registrations: [{ spec: ductsRouteState }, { spec: fansRouteState }],
       store: {
         getState: async ({ targetKey, route }) => rows.get(targetKey + route),
         setState: async ({ targetKey, route, value }) => {
@@ -197,6 +198,12 @@ const edit = (cfm: number) => [
   { path: ["flows", "31", "edit"], value: { value: { cfm } } },
   { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
 ];
+async function stage(work: RouteWorkspace, key: WorkKey, patches: import("@pe/agent-contracts").RouteStatePatch[], revision: number) {
+  const fans = await work.view({ ...key, route: "fans" }, "fans");
+  const result = await work.apply({ ...key, route: "fans" }, "fans", "human", patches.filter((p) => p.path[0] !== "writeIntent"), fans?.revision ?? 0);
+  if (!result.ok) throw Error(JSON.stringify(result));
+  return work.apply(key, "ducts", "human", patches.filter((p) => p.path[0] === "writeIntent"), revision);
+}
 const rawDispatchOrReceipt = (owner: ActionJournal, outgoing: Harness["outgoing"], id: string) =>
   Effect.race(
     Queue.take(outgoing).pipe(Effect.map((frame) => ({ kind: "dispatch" as const, frame }))),
@@ -225,14 +232,13 @@ const dispatchOrReceipt = (
   });
 
 for (const foreign of [false, true])
-  // "U4: fan cells reach apply-losses only through the fans Work"
-  test.skip(`kernel gap: ${foreign ? "Work A cannot write document B" : "native payload must derive from Work, not caller"}`, () =>
+    test(`kernel gap: ${foreign ? "Work A cannot write document B" : "native payload must derive from Work, not caller"}`, () =>
     lane(({ owner, outgoing, post, answer, intent, work, workKey, target }) =>
       Effect.gen(function* () {
         const key = foreign
           ? bindWork("ducts", null, undefined, { session: target.session, openId: "other-open" })
           : workKey;
-        const staged = yield* Effect.promise(() => work.apply(key, "ducts", "human", edit(200), 0));
+        const staged = yield* Effect.promise(() => stage(work, key, edit(200), 0));
         if (!staged.ok) throw Error("Expected accepted staged Work");
         const submitted = yield* post(
           intent(
@@ -280,21 +286,21 @@ for (const foreign of [false, true])
     ));
 
 test("kernel gap: sheet read cannot overwrite Work at the server revision", async () => {
-  let stored: any = null;
+  const stored = new Map<string, unknown>();
   const work = new RouteWorkspace({
-    registrations: [{ spec: ductsRouteState }],
+    registrations: [{ spec: ductsRouteState }, { spec: fansRouteState }],
     store: {
-      getState: async () => structuredClone(stored),
-      setState: async ({ value }) => {
-        stored = structuredClone(value);
+      getState: async ({ route }) => structuredClone(stored.get(route)),
+      setState: async ({ route, value }) => {
+        stored.set(route, structuredClone(value));
       },
     },
   });
   const target = { session: "s", openId: "o" };
   const key = bindWork("ducts", null, undefined, target);
   await work.apply(
-    key,
-    "ducts",
+    { ...key, route: "fans" },
+    "fans",
     "human",
     [{ path: ["flows", "101", "edit"], value: { value: { cfm: 200 } } }],
     0,
@@ -323,12 +329,11 @@ test("kernel gap: sheet read cannot overwrite Work at the server revision", asyn
   );
 });
 
-// "U4: fan cells reach apply-losses only through the fans Work"
-test.skip("kernel gap: preview seal refuses apply after Work changes", () =>
+test("kernel gap: preview seal refuses apply after Work changes", () =>
   lane(({ owner, outgoing, post, answer, intent, work, workKey }) =>
     Effect.gen(function* () {
       const staged = yield* Effect.promise(() =>
-        work.apply(workKey, "ducts", "human", edit(200), 0),
+        stage(work, workKey, edit(200), 0),
       );
       if (!staged.ok) throw Error("Expected accepted staged Work");
       yield* post(
@@ -341,7 +346,7 @@ test.skip("kernel gap: preview seal refuses apply after Work changes", () =>
       yield* answer(preview.frame.request!.requestId, { ...response, previewOnly: true });
       expect((yield* Effect.promise(() => owner.wait("preview")))?.state).toBe("succeeded");
       const changed = yield* Effect.promise(() =>
-        work.apply(workKey, "ducts", "human", edit(300), staged.revision),
+        stage(work, workKey, edit(300), staged.revision),
       );
       if (!changed.ok) throw Error("Expected accepted changed Work");
       yield* post(
@@ -368,12 +373,11 @@ test.skip("kernel gap: preview seal refuses apply after Work changes", () =>
 
 // Falsified audit premise: ActionJournal's effect overlap already prevents this duplicate.
 // Keep this green regression; turning it red artificially would misstate the missing primitive.
-// "U4: fan cells reach apply-losses only through the fans Work"
-test.skip("unknown outcome blocks a new invocation from dispatching the same write", () =>
+test("unknown outcome blocks a new invocation from dispatching the same write", () =>
   lane(({ owner, outgoing, post, answer, intent, work, workKey }) =>
     Effect.gen(function* () {
       const staged = yield* Effect.promise(() =>
-        work.apply(workKey, "ducts", "human", edit(200), 0),
+        stage(work, workKey, edit(200), 0),
       );
       if (!staged.ok) throw Error("Expected accepted staged Work");
       const payload = { work: { key: workKey, revision: staged.revision } };
@@ -394,15 +398,12 @@ test.skip("unknown outcome blocks a new invocation from dispatching the same wri
     }),
   ));
 
-// "U4: fan cells reach apply-losses only through the fans Work"
-test.skip("host-derived preview and apply send the captured Work flow and retire only confirmed cells", () =>
+test("host-derived preview and apply send the captured Work flow and retire only confirmed cells", () =>
   lane(({ owner, outgoing, post, answer, intent, work, workKey }) =>
     Effect.gen(function* () {
       const staged = yield* Effect.promise(() =>
-        work.apply(
-          workKey,
-          "ducts",
-          "human",
+        stage(
+          work, workKey,
           [
             { path: ["flows", "4", "edit"], value: { value: { cfm: 200 } } },
             { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
@@ -435,7 +436,7 @@ test.skip("host-derived preview and apply send the captured Work flow and retire
         expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
         expect((receipt as any).result.seal.requestHash).toMatch(/^[a-f0-9]{64}$/);
       }
-      const view = yield* Effect.promise(() => work.view(workKey, "ducts"));
+      const view = yield* Effect.promise(() => work.view({ ...workKey, route: "fans" }, "fans"));
       expect((view!.doc as any).flows["4"].edit).toBeNull();
     }),
   ));

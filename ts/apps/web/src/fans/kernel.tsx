@@ -4,15 +4,16 @@ import { COLOURS_FIXTURE } from "../ducts/colours.fixture.ts";
 import { NAVIGATION_FIXTURE } from "../ducts/navigation.fixture.ts";
 import sheetFixture from "../ducts/sheet/sheet.fixture.json";
 import { SCENE_FIXTURE } from "../ducts/scene.fixture.ts";
-import { fansDocumentSchema } from "@pe/agent-contracts";
+import { ductsDesign, fansDocumentSchema } from "@pe/agent-contracts";
 import { createElement } from "react";
 import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import { jsonCodec } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
-import { InputsBody, LedgerBody, PictureBody, RosterBody } from "../ducts/sheet/mount.tsx";
+import { InputsBody, LedgerBody, PictureBody, RosterBody, sheetSnapshot as snapshotOf } from "../ducts/sheet/mount.tsx";
 import { sheetState } from "../ducts/sheet/state.ts";
 import { ductsSources } from "../ducts/sources.ts";
 import { identityCodecs } from "../shell/page-port.ts";
 import { entries, fansData, fansNeutralBodies, schemas } from "./neutral.ts";
+import { pricingJob } from "../ducts/pricing-job.ts";
 const source = { module: "fans/kernel.tsx", export: "bodies" };
 const seed = <const K extends string>(name: K, snapshot: DuctSnapshot) => ({
   slot: `seeds.${name}.load` as const,
@@ -47,8 +48,15 @@ export const bodies = {
   seedLayout: seed("layout", LAYOUT_FIXTURE.snapshot),
   seedColours: seed("colours", COLOURS_FIXTURE.snapshot),
   seedNavigation: seed("navigation", NAVIGATION_FIXTURE.snapshot),
-  // SHIM: U4 replaces this dormant derive with pricing that reads both Works.
-  price: { slot: "readings.pricing.derive", kind: "derive", source, run: () => null },
+  price: { slot: "readings.pricing.derive", kind: "derive", source, run: (ctx) => {
+    const { sheetSnapshot, ductsWork, tables, catalogs } = ctx.readings;
+    if (!sheetSnapshot.value || !ductsWork.value || !tables.value || !catalogs.value) return null;
+    const priced = pricingJob()({ id: 0, base: {
+      snapshot: snapshotOf(sheetSnapshot), grids: tables.value, catalogs: catalogs.value.tables,
+    }, doc: ductsDesign(ductsWork.value, ctx.work) });
+    if ("error" in priced) throw Error(priced.error);
+    return "result" in priced ? priced.result : null;
+  } },
   sheetView: {
     slot: "readings.sheetView.derive",
     kind: "derive",

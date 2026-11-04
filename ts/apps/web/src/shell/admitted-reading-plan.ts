@@ -45,6 +45,7 @@ export function receiptHitsReading(
 export interface ReadingPlanContext {
   readonly page: Readonly<Record<string, unknown>>;
   readonly work: Readonly<Record<string, unknown>> | null;
+  readonly workReadings?: Readonly<Record<string, ReadingSnapshot<unknown>>>;
 }
 const unavailable = (reason: string): ReadingSnapshot<unknown> => ({
   status: "unavailable",
@@ -92,7 +93,8 @@ export function createAdmittedReadingPlan(options: {
     invocation?: { readonly input: unknown },
   ): ResolvedRead<unknown> | null => {
     const reading = declaration(id);
-    if (reading.kind === "derive") throw Error(`Derived reading has no source: ${id}`);
+    if (reading.kind === "derive" || reading.kind === "work")
+      throw Error(`Derived reading has no source: ${id}`);
     if (reading.kind === "use" && reading.geometry)
       throw Error("Geometry requires its prepared descriptor");
     const linked = bindings();
@@ -115,6 +117,12 @@ export function createAdmittedReadingPlan(options: {
   };
   return {
     route: options.route,
+    workSchemas: () =>
+      Object.fromEntries(
+        Object.entries(options.route.data.readings).flatMap(([id, reading]) =>
+          reading.kind === "work" ? [[id, bindings().schemas[reading.output]]] : [],
+        ),
+      ),
     request,
     seed(name: string) {
       const linked = bindings();
@@ -134,6 +142,7 @@ export function createAdmittedReadingPlan(options: {
       const reading = declaration(id);
       if (
         reading.kind === "derive" ||
+        reading.kind === "work" ||
         descriptor.route !== options.route ||
         descriptor.key.op !== reading.entry ||
         descriptor.output !== bindings().entries[reading.entry]!.output ||
@@ -172,7 +181,9 @@ export function createAdmittedReadingPlan(options: {
         });
         let result: ReadingSnapshot<unknown>;
         try {
-          if (reading.kind === "derive") {
+          if (reading.kind === "work") {
+            result = state.workReadings?.[id] ?? unavailable("Work reading unavailable");
+          } else if (reading.kind === "derive") {
             const linked = bindings();
             const value = freeze(
               linked.schemas[reading.output]!.parse(linked.bodies[reading.derive]!.run(context)),

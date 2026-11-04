@@ -112,7 +112,7 @@ export function createFixtureRouteEnvironment(
       ...(declaresWork
         ? {
             work: (() => {
-              const door = createFixtureWorkDoor(options.workSpec!, capturedSeed?.work);
+              const door = createFixtureWorkDoor(options.workSpec!, capturedSeed?.work, options.plan.workSchemas());
               return { read: door, submit: door };
             })(),
           }

@@ -215,6 +215,54 @@
     "migrations": {}
   },
   "readings": {
+    "ductsWork": {
+      "kind": "work",
+      "route": "ducts",
+      "output": "ductsWork",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    },
+    "tables": {
+      "kind": "use",
+      "entry": "ducts.tables",
+      "args": "tablesArgs",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    },
+    "catalogs": {
+      "kind": "use",
+      "entry": "ducts.catalogs",
+      "args": "catalogsArgs",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    },
     "fans": {
       "kind": "use",
       "entry": "ducts.fans",
@@ -277,15 +325,18 @@
           "designFriction"
         ],
         "readings": [
-          "sheet"
+          "sheetSnapshot",
+          "ductsWork",
+          "tables",
+          "catalogs"
         ]
       },
-      "demand": "visible",
+      "demand": "explicit",
       "retain": {
         "evidence": "scope",
         "resource": "scope"
       },
-      "refresh": "dependencies"
+      "refresh": "explicit"
     },
     "sheet": {
       "kind": "use",
@@ -475,7 +526,9 @@
         "fans",
         "sheet",
         "sheetSnapshot",
-        "sheetView"
+        "sheetView",
+        "ductsWork",
+        "pricing"
       ],
       "verbs": [
         "browse",
@@ -492,7 +545,9 @@
         "fans",
         "sheet",
         "sheetSnapshot",
-        "sheetView"
+        "sheetView",
+        "ductsWork",
+        "pricing"
       ],
       "verbs": [
         "browse",
@@ -509,7 +564,9 @@
         "fans",
         "sheet",
         "sheetSnapshot",
-        "sheetView"
+        "sheetView",
+        "ductsWork",
+        "pricing"
       ],
       "verbs": [
         "browse",
@@ -526,7 +583,9 @@
         "fans",
         "sheet",
         "sheetSnapshot",
-        "sheetView"
+        "sheetView",
+        "ductsWork",
+        "pricing"
       ],
       "verbs": [
         "browse",

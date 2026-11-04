@@ -62,6 +62,7 @@ export async function createWitness(
         }, end),
     }),
   };
+  const calls = new Map<string, number>();
   const native: Record<string, ReadingSource> = {};
   for (const [entry, value] of Object.entries({
     "ducts.roster": snapshot,
@@ -90,7 +91,15 @@ export async function createWitness(
         deliver({ kind: "complete", value, revision: 1 });
       },
     };
-  const services = { ...sourceRouteServices({ ...native, ...overrides }), work: feed };
+  const baseServices = sourceRouteServices({ ...native, ...overrides });
+  const services: typeof baseServices = { ...baseServices, work: feed, reads: {
+    ...baseServices.reads,
+    acquire(request, token) {
+      const call = `${request.route.data.key}:${request.key.op}`;
+      calls.set(call, (calls.get(call) ?? 0) + 1);
+      return baseServices.reads.acquire(request, token);
+    },
+  } };
   const places = new Map<string, ReturnType<typeof placeInput>>();
   function mount<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, R>(
     route: AdmittedRoute<G, S, E, R>,
@@ -126,6 +135,7 @@ export async function createWitness(
   }
   return {
     admitted,
+    calls,
     saved,
     ws,
     mount,

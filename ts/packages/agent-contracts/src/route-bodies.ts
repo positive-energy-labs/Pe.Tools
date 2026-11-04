@@ -382,7 +382,9 @@ export function linkRouteBodies(
   for (const [key, reading] of Object.entries(data.readings)) {
     const path = `readings.${key}`;
     deps(reading.deps, `${path}.deps`);
-    if (reading.kind === "derive") {
+    if (reading.kind === "work") {
+      schemaRef(reading.output, `${path}.output`);
+    } else if (reading.kind === "derive") {
       schemaRef(reading.output, `${path}.output`);
       body(reading.derive, `${path}.derive`, "derive");
     } else {
@@ -427,7 +429,7 @@ export function linkRouteBodies(
   for (const [key, reading] of Object.entries(data.readings)) {
     const closure = visit(key, new Set());
     if (
-      reading.kind !== "derive" &&
+      reading.kind !== "derive" && reading.kind !== "work" &&
       geometryEntry(reading.entry) &&
       (reading.kind !== "use" || !reading.geometry)
     )

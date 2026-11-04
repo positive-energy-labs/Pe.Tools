@@ -2,6 +2,7 @@ import { designOf } from "@pe/ducts-domain/test-design";
 import { expect, test } from "vite-plus/test";
 import {
   ductsRouteState,
+  fansDocumentSchema,
   applyPatches,
   transitionPatches,
 } from "@pe/agent-contracts";
@@ -27,6 +28,7 @@ const scope = (stage: "network" | "sheet" = "network"): Scope =>
     },
     work: work(),
     readings: {
+      fansWork: ready(fansDocumentSchema.parse({})),
       ducts: ready(snapshot),
       sheetSnapshot: ready(snapshot),
       sheet: ready({
@@ -106,8 +108,8 @@ test("criteria edits merge the selected side and lifecycle actions remain bounde
   expect(clear).toEqual([{ path: ["criteria"], value: { edit: null } }]);
 });
 
-// FANSPLIT: the fan walk scope is fans Work, so the chosen-walk and combined-sheet cases wait for U4.
-test("a sheet loss preview refuses while the fan walk scope is not wired", () => {
+// Q2/Q4: fan walk authorization is read from Fans Work.
+test("a sheet loss preview refuses without a Fans Work walk", () => {
   expect(neutralBodies.lossReady.run(scope("sheet"))).toMatch(/scope/);
 });
 

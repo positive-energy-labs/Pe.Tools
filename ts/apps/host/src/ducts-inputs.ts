@@ -1,4 +1,3 @@
-// U4 wires the real fans Work for callers without one.
 import { neutralFansWork } from "@pe/agent-contracts";
 /**
  * The host side of the inputs resolver (ducts LEDGER 2026-10-29): load the layers the pure

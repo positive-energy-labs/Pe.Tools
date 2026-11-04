@@ -23,6 +23,8 @@ export type JournalCommandId = JournalCommandHandle["id"] & {
 export interface WorkScope {
   readonly route: AdmittedRoute["data"]["key"];
   readonly fingerprint: RouteFingerprint;
+  /** Read-only edge declared by this admitted route. Never used by submitWork. */
+  readonly reading?: string;
   readonly key: WorkKey;
   readonly target: ScopeIdentity["target"];
   readonly subject: IdentityId<IdentityKind> | Many<IdentityId<IdentityKind>> | null;
@@ -68,6 +70,7 @@ export const workFeedFailureMessage = (failure: WorkFeedFailure): string =>
 export const workAdmissionSchema = z.strictObject({
   routeKey: z.string(),
   fingerprint: workFingerprintSchema,
+  reading: z.string().optional(),
 });
 export type WorkAdmission = z.infer<typeof workAdmissionSchema>;
 

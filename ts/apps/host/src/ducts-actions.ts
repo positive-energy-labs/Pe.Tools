@@ -4,7 +4,7 @@ import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { ductsDesign, neutralFansWork, stagedDucts } from "@pe/agent-contracts";
+import { ductsDesign, neutralFansWork, stagedDucts, workHandleSchema } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
 import { invokeBridge, type RevitBridge } from "./bridge.ts";
@@ -107,8 +107,16 @@ export function ductsExecutors(
       facts: [["workingPhase"]],
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
     }));
-    // U4 wires the real fans Work here; until then a fan walk scope refuses as unstaged.
-    const fans = neutralFansWork;
+    const fansKey = { ...raw.key, route: "fans" };
+    const fanView = await ctx.work.view(fansKey, "fans");
+    if (!fanView) throw refused("Fans Work is unavailable", "work.unavailable");
+    const readWorks = z.record(z.string(), workHandleSchema).optional().parse(ctx.admission.input.readWorks);
+    if (readWorks?.fans && canonicalRouteInput(readWorks.fans.key) !== canonicalRouteInput(fansKey))
+      throw refused("Fans Work belongs to another document", "work.target");
+    const fans = await ctx.selectWork(tools.fans.work, readWorks?.fans ?? { key: fansKey, revision: fanView.revision }, (_doc, cells) => ({
+      edits: tools.fans.work.editable,
+      cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
+    }));
     const design = ductsDesign(doc, fans);
     const preview = ctx.read
       .receipts()
@@ -280,9 +288,10 @@ export function ductsExecutors(
     );
     const handle = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
     const paths = entry.retires(p.input, value);
-    const retired = paths.length
-      ? await execution.retireWork(handle.key, "ducts", paths)
-      : undefined;
+    const fanPaths = paths.filter((path) => tools.fans.work.editable.some((pattern) => pattern[0] === path[0]));
+    const ductPaths = paths.filter((path) => !fanPaths.includes(path));
+    const retired = ductPaths.length ? await execution.retireWork(handle.key, "ducts", ductPaths) : undefined;
+    if (fanPaths.length) await execution.retireWork({ ...handle.key, route: "fans" }, "fans", fanPaths);
     return {
       value,
       derivedRequest: p.input,

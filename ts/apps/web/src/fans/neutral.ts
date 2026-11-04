@@ -2,6 +2,7 @@ import {
   applyPatches,
   ductsSheetEditsSchema,
   fansDocumentSchema,
+  ductsDocumentSchema,
   fansRouteState,
   listSearchSchema,
   type FansRouteDocument,
@@ -43,7 +44,7 @@ const pane = <const K extends string>(body: K, label: string, purpose: string) =
     body,
     label,
     purpose,
-    draws: ["fans", "sheet", "sheetSnapshot", "sheetView"],
+    draws: ["fans", "sheet", "sheetSnapshot", "sheetView", "ductsWork", "pricing"],
     verbs: ["browse", "edit", "scope", "sheetEdit"],
   }) as const;
 
@@ -198,6 +199,9 @@ export const fansData = {
     "sheet-roster": pane("sheet-roster", "Fans", "Open fan ports"),
   },
   readings: {
+    ductsWork: { kind: "work", route: "ducts", output: "ductsWork", ...readPolicy, deps: { page: [], work: [], readings: [] } },
+    tables: { ...readPolicy, kind: "use", entry: "ducts.tables", args: "tablesArgs", deps: { page: [], work: [], readings: [] } },
+    catalogs: { ...readPolicy, kind: "use", entry: "ducts.catalogs", args: "catalogsArgs", deps: { page: [], work: [], readings: [] } },
     fans: {
       args: "fansArgs",
       ...readPolicy,
@@ -214,7 +218,8 @@ export const fansData = {
     },
     pricing: {
       ...readPolicy,
-      deps: { page: [], work: workKeys, readings: ["sheet"] },
+      demand: "explicit", refresh: "explicit",
+      deps: { page: [], work: workKeys, readings: ["sheetSnapshot", "ductsWork", "tables", "catalogs"] },
       derive: "price",
       kind: "derive",
       output: "pricing",
@@ -315,6 +320,7 @@ export const schemas = {
   sheetStage: sharedSchemas.sheetStage,
   snapshot: sharedSchemas.snapshot,
   pricing: sharedSchemas.pricing,
+  ductsWork: ductsDocumentSchema,
   viewport: sharedSchemas.viewport,
   edit: sharedSchemas.edit,
   sheetEdit: sharedSchemas.sheetEdit.extend({
@@ -362,7 +368,9 @@ const fanReadingSchema: z.ZodType<
 const sheetReadingSchema: z.ZodType<Immutable<z.output<typeof sharedSchemas.sheet>>> =
   sharedSchemas.sheet;
 export const entries = {
-  "ducts.fans": { ...ductEntries["ducts.fans"], input: z.object({ work: workSchema.nullable() }) },
+  "ducts.tables": ductEntries["ducts.tables"],
+  "ducts.catalogs": ductEntries["ducts.catalogs"],
+  "ducts.fans": { ...ductEntries["ducts.fans"], input: z.object({ work: workSchema.nullable(), fanWork: workSchema.optional() }) },
   "ducts.sheet": {
     ...ductEntries["ducts.sheet"],
     input: ductEntries["ducts.sheet"].input.extend({
@@ -415,6 +423,8 @@ const group = <const K extends string>(segment: K) => ({
   run: (key: string) => [key],
 });
 export const fansNeutralBodies = {
+  tablesArgs: { slot: "readings.tables.args", kind: "args", source, run: () => ({}) },
+  catalogsArgs: { slot: "readings.catalogs.args", kind: "args", source, run: () => ({}) },
   groupdesignFriction: group("designFriction"),
   groupparameters: group("parameters"),
   groupflows: group("flows"),
@@ -475,7 +485,7 @@ export const fansNeutralBodies = {
     slot: "readings.fans.args",
     kind: "args",
     source,
-    run: (ctx) => ({ work: ctx.work }),
+    run: (ctx) => ({ work: ctx.work, fanWork: ctx.work }),
   },
   sheetArgs: {
     slot: "readings.sheet.args",
@@ -486,13 +496,14 @@ export const fansNeutralBodies = {
       sheetPath: ctx.page.sheetPath,
       fans: ctx.readings.fans.value ?? null,
       work: ctx.work,
+      fanWork: ctx.work,
     }),
   },
   sheetSnapshotArgs: {
     slot: "readings.sheetSnapshot.args",
     kind: "args",
     source,
-    run: (ctx) => ({ sheet: ctx.readings.sheet.value ?? null, work: ctx.work }),
+    run: (ctx) => ({ sheet: ctx.readings.sheet.value ?? null, work: ctx.work, fanWork: ctx.work }),
   },
   meshes: { slot: "readings.meshes.derive", kind: "derive", source, run: () => null },
   pickFans: {

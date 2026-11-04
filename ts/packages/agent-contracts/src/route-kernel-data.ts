@@ -60,6 +60,7 @@ export const geometryDemandSchema = z.discriminatedUnion("representation", [
 // Detail demand/refresh are coupled at the outer reading, not advisory nested flags.
 const useReading = { kind: z.literal("use"), entry: ref, args: ref.optional(), ...readingPolicy };
 export const routeReadingJsonSchema = z.union([
+  z.strictObject({ kind: z.literal("work"), route: ref, output: ref, ...readingPolicy }),
   z.strictObject({ ...useReading, geometry: geometryDemandSchema.options[0].optional() }),
   z.strictObject({
     ...useReading,

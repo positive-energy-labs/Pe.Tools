@@ -211,7 +211,7 @@ export function createWorkFeedClient(
           let stopAcks = () => {};
           let stopSnapshot = () => {};
           const buffered: WorkWriteAck[] = [];
-          const admission = { routeKey: scope.route, fingerprint: scope.fingerprint };
+          const admission = { routeKey: scope.route, fingerprint: scope.fingerprint, ...(scope.reading ? { reading: scope.reading } : {}) };
           const request = { ...scope.key, kind: "work" as const, admission };
           const stop = () => {
             if (closed) return;

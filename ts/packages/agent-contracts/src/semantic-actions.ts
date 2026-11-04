@@ -1,3 +1,4 @@
+import { fansRouteState } from "./fans.ts";
 import { stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
 import { workIntent, workWriteCommands, writeIntentSchema } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
@@ -190,12 +191,10 @@ import { parameterLinksRouteState } from "./parameter-links.ts";
 import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
-import { stagedDucts, ductsRouteState } from "./ducts.ts";
-import { neutralFansWork } from "./fans.ts";
+import { ductsRouteState } from "./ducts.ts";
 /** Ducts derives its native request from the whole staged Work, not one writeIntent cell. */
 const ductsDerive = (work: unknown) =>
-  // U4 wires the real fans Work here.
-  stagedDucts(ductsRouteState.schema.parse(work), neutralFansWork);
+  ductsRouteState.schema.parse(work);
 export const dataTableDraftSchema = z.object({
   name: z.string(),
   isNew: z.boolean(),
@@ -349,6 +348,13 @@ export const tools = {
       ...workWriteCommands("rooms", "rooms.merge", definitions["rooms.merge"]),
     },
   },
+  fans: {
+    name: "fans", says: fansRouteState.description,
+    work: { ...fansRouteState, editable: [
+      ["writeIntent"], ["calculation", "*"], ["terminalDrops", "*"], ["componentDrops", "*"],
+      ["esp", "*"], ["equipmentFlows", "*"], ["roles", "*"], ["flows", "*"], ["parameters", "*"], ["designFriction"],
+    ] }, commands: {},
+  },
   ducts: {
     name: "ducts",
     says: ductsRouteState.description,
@@ -356,24 +362,14 @@ export const tools = {
       ...ductsRouteState,
       editable: [
         ["writeIntent"],
-        ["calculation", "*"],
         ["assumptions", "*"],
         ["rules", "*"],
         ["catalogs", "*"],
         ["ruleAssignments", "*"],
-        ["terminalDrops", "*"],
-        ["componentDrops", "*"],
-        ["esp", "*"],
-        ["equipmentFlows", "*"],
-        ["roles", "*"],
-        ["loads", "*"],
-        ["flows", "*"],
-        ["parameters", "*"],
         ["subject", "*"],
         ["claims", "*"],
         ["labelParameter"],
         ["workingPhase"],
-        ["designFriction"],
         ["systemColours"],
         ["kinds", "*"],
         ["criteria"],

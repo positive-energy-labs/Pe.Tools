@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import type { Caller } from "@pe/agent-contracts";
+import { type Caller } from "@pe/agent-contracts";
 import { nativeFixture } from "./fans-native.fixture.ts";
 import { presentLosses } from "../../web/src/ducts/reviews.ts";
 import { snapshot } from "../../web/src/ducts/test-fixture.ts";
@@ -20,18 +20,20 @@ const fixture = async (snapshotFor?: Parameters<typeof nativeFixture>[1]) => {
 };
 async function stage(f: Awaited<ReturnType<typeof nativeFixture>>) {
   const staged = await f.saved.apply(
-    f.key,
-    "ducts",
+    { ...f.key, route: "fans" },
+    "fans",
     "human",
     [
       { path: ["flows", "4", "edit"], value: { value: { cfm: 250 } } },
       { path: ["parameters", "terminalFlow", "edit"], value: { value: "PE_M_Grd_AirFlow" } },
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+
     ],
     0,
   );
   if (!staged.ok) throw Error(JSON.stringify(staged));
-  return { key: f.key, revision: staged.revision };
+  const ducts = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } }], 0);
+  if (!ducts.ok) throw Error(JSON.stringify(ducts));
+  return { key: f.key, revision: ducts.revision };
 }
 async function command(
   f: Awaited<ReturnType<typeof nativeFixture>>,
@@ -45,8 +47,7 @@ async function command(
     throw Error(`Fixture command ${key}: ${response.status} ${await response.text()}`);
 }
 
-// "U4: fan cells reach apply-losses only through the fans Work"
-test.skip("fixture HTTP roster uses the real sheet service and strict open-document inventory", async () => {
+test("fixture HTTP roster uses the real sheet service and strict open-document inventory", async () => {
   const roster = nativeResponseSchema("ducts.snapshot.walk").parse(rosterCapture);
   const fan = nativeResponseSchema("ducts.snapshot.walk").parse(fanCapture);
   const f = await fixture((key) => (key === "ducts.snapshot.roster" ? roster : fan));
@@ -88,7 +89,7 @@ test.skip("fixture HTTP roster uses the real sheet service and strict open-docum
         peRouteUrl(
           "work.apply",
           {
-            params: { route: "ducts" },
+            params: { route: "fans" },
             query: { open: `${f.target.ref.session}/${f.target.ref.openId}` },
           },
           "http://fixture",
@@ -156,8 +157,7 @@ test.skip("fixture HTTP roster uses the real sheet service and strict open-docum
   release();
 });
 
-// "U4: fan cells reach apply-losses only through the fans Work"
-test.skip("D03/C07: admitted losses preview is read-only, names sealed rows and commits only its scope", async () => {
+test("D03/C07: admitted losses preview is read-only, names sealed rows and commits only its scope", async () => {
   const f = await fixture();
   const work = await stage(f);
   const before = [...f.native];
@@ -177,8 +177,7 @@ test.skip("D03/C07: admitted losses preview is read-only, names sealed rows and 
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toHaveLength(1);
 });
 
-// "U4: fan cells reach apply-losses only through the fans Work"
-test.skip.each(["reject", "deadline"] as const)(
+test.each(["reject", "deadline"] as const)(
   "W11: real Pea %s controls the admitted sealed write",
   async (mode) => {
     const f = await fixture();
@@ -216,3 +215,34 @@ test.skip.each(["reject", "deadline"] as const)(
     expect(f.native.get(999)).toBe(777);
   },
 );
+
+
+test("a stale Fans revision refuses sealed apply before native dispatch", async () => {
+  const f = await fixture();
+  const work = await stage(f);
+  await command(f, "preview-two", "ducts.preview-losses", work);
+  expect(await f.journal.wait("preview-two")).toMatchObject({ state: "succeeded", result: { seal: { work: {
+    consumed: expect.arrayContaining(["ducts", "fans"].map((route) => expect.objectContaining({
+      kind: "work", probe: expect.objectContaining({ handle: expect.objectContaining({ key: expect.objectContaining({ route }) }) }),
+    }))),
+  } } } });
+  const fansKey = { ...f.key, route: "fans" };
+  const fans = await f.saved.view(fansKey, "fans");
+  if (!fans) throw Error("Fans Work missing");
+  const changed = await f.saved.apply(fansKey, "fans", "human", [
+    { path: ["flows", "4", "edit"], value: { value: { cfm: 300 } } },
+  ], fans.revision);
+  expect(changed.ok).toBe(true);
+  await f.post("/actions", { id: "stale-fans", key: "ducts.apply-losses", target: f.target,
+    input: { work, readWorks: { fans: { key: fansKey, revision: fans.revision } } },
+  });
+  const receipt = await f.journal.wait("stale-fans");
+  expect(receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "stale_revision" } });
+  expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
+  expect(f.native.get(4)).toBe(200);
+  await command(f, "changed-fans", "ducts.apply-losses", work);
+  const changedSeal = await f.journal.wait("changed-fans");
+  expect(changedSeal).toMatchObject({ state: "failed", notDispatched: true,
+    refusal: { kind: "domain", code: "preview.stale" } });
+  expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
+});

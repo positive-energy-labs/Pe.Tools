@@ -1,4 +1,3 @@
-// U4 wires the real fans Work for callers without one.
 import { neutralFansWork } from "@pe/agent-contracts";
 import { designOf } from "@pe/ducts-domain/test-design";
 import { expect, test } from "vite-plus/test";

@@ -6,6 +6,7 @@ import {
   DUCTS_BODY_VERSION_HEADER,
   ductsDesign,
   ductsDocumentSchema,
+  fansDocumentSchema,
   neutralFansWork,
   type DuctsInputs,
   type WorkKey,
@@ -227,8 +228,8 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
   async function loadLayers(target: DocumentRef) {
     const scope = work ? await work.key(target) : null;
     const owned = scope && work ? await work.workspace.readRaw(scope, "ducts") : null;
-    // U4 wires the real fans Work here; until then the sheet reads the neutral fans Work.
-    const doc = ductsDesign(owned ? ductsDocumentSchema.parse(owned.doc) : null, neutralFansWork);
+    const fans = scope && work ? await work.workspace.view({ ...scope, route: "fans" }, "fans") : null;
+    const doc = ductsDesign(owned ? ductsDocumentSchema.parse(owned.doc) : null, fansDocumentSchema.parse(fans?.doc ?? {}));
     const firm = await readFirm();
     return {
       scope,
@@ -237,7 +238,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       work: workLayer(doc),
       firm,
       /** Any Work change or firm change renames the layers, so every cached sheet over them goes stale. */
-      layers: `${owned?.revision ?? 0}:${firm.firm.version}`,
+      layers: `${owned?.revision ?? 0}:${fans?.revision ?? 0}:${firm.firm.version}`,
     };
   }
   type Layers = Awaited<ReturnType<typeof loadLayers>>;

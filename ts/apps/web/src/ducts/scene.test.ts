@@ -1,4 +1,3 @@
-// U4 wires the real fans Work for callers without one.
 import { neutralFansWork } from "@pe/agent-contracts";
 import { expect, test, vi } from "vite-plus/test";
 import { readFileSync } from "node:fs";
