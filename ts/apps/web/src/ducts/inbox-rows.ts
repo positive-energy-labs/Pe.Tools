@@ -1,5 +1,5 @@
 /** Derived inbox in loop order. Off-system findings stay in Diagnostics and never hold the ESP. */
-import type { DuctFinding, DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctFinding, DuctsDesign } from "@pe/agent-contracts";
 import { bin } from "@pe/ducts-domain/bins";
 import { fanCandidates, type FanAssignment } from "@pe/ducts-domain/fan-assignment";
 import { healFindings, type HealGroup, type HealItem, type HealPlan } from "@pe/ducts-domain/heal";
@@ -113,7 +113,7 @@ export interface TriageInput {
   findings: readonly DuctFinding[];
   flows: ReadonlyMap<number, { cfm: number | null }>;
   equipmentFlows: ReadonlyMap<number, { cfm: number | null }>;
-  doc: DuctsRouteDocument | null;
+  doc: DuctsDesign | null;
   nameOf?: (id: number) => string;
   groupLabel?: (id: string) => string;
   heal?: HealPlan | null;
@@ -183,16 +183,16 @@ function healRow(
   };
 }
 
-const verdictOf = (doc: DuctsRouteDocument | null, key: string) => {
+const verdictOf = (doc: DuctsDesign | null, key: string) => {
   const value = doc?.assumptions[key]?.edit?.value;
   return value?.kind === "verdict" ? value.verdict : null;
 };
-const roleOf = (doc: DuctsRouteDocument | null, id: number) =>
+const roleOf = (doc: DuctsDesign | null, id: number) =>
   doc?.roles[String(id)]?.edit?.value.role ?? null;
 
 const select = (ids: readonly number[]): RowVerb => ({ kind: "select", ids });
 const verdict = (
-  doc: DuctsRouteDocument | null,
+  doc: DuctsDesign | null,
   key: string,
   which: "capped" | "connect" | "ignore",
   label: string,
@@ -608,7 +608,7 @@ export function triage(input: TriageInput) {
       title: name(n.id),
       status: "no flow",
       ids: [n.id],
-      note: "No override, load preview share or positive Revit flow reaches this terminal.",
+      note: "No override, rooms share or positive Revit flow reaches this terminal.",
       verbs: [
         {
           kind: "focus",

@@ -190,8 +190,9 @@ export async function runCapability(
     const saved = await response.json() as { revision: number; doc: unknown };
     if (saved.revision !== handle.revision) throw Error("Ducts Work changed; read its current revision before preview");
     const scope = ductsDocumentSchema.parse(saved.doc).writeIntent.edit?.value;
-    if (!scope?.walk && !scope?.groups?.length)
-      throw Error('Preview needs a scope. Read route:ducts.roster, then stage writeIntent.edit = {"value":{"walk":{"unitId":<unitId>,"portIndex":<portIndex>},"cells":[["equipmentFlows","<unitId>"]]}} for a fan-flow write. Retry with the accepted Work revision. No preview was submitted.');
+    // The fan walk scope is fans Work since FANSPLIT; U4 wires it into this preflight.
+    if (!scope?.groups?.length)
+      throw Error('Preview needs a scope. Read route:ducts.analysis, then stage writeIntent.edit = {"value":{"groups":["<group id>"]}} in route:ducts Work. Retry with the accepted Work revision. No preview was submitted.');
   }
   const id = context.actionId ?? crypto.randomUUID();
   await context.beforeAdmission?.(id);

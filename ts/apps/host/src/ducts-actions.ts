@@ -4,7 +4,7 @@ import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { stagedDucts } from "@pe/agent-contracts";
+import { ductsDesign, neutralFansWork, stagedDucts } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
 import { invokeBridge, type RevitBridge } from "./bridge.ts";
@@ -58,7 +58,7 @@ export async function healSnapshot(
 
 /** A fan preview acquires both sides, as its worksheet does; networks acquire their authored groups. */
 export async function lossSnapshot(
-  intent: { walk?: { unitId: number; portIndex: number }; groups?: string[] } | undefined,
+  intent: { walk?: { unitId: number; portIndex: number }; groups?: readonly string[] } | undefined,
   read: (selector: Record<string, unknown>) => Promise<DuctSnapshot>,
 ): Promise<DuctSnapshot> {
   if (!intent?.walk && !intent?.groups?.length)
@@ -107,6 +107,9 @@ export function ductsExecutors(
       facts: [["workingPhase"]],
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
     }));
+    // U4 wires the real fans Work here; until then a fan walk scope refuses as unstaged.
+    const fans = neutralFansWork;
+    const design = ductsDesign(doc, fans);
     const preview = ctx.read
       .receipts()
       .filter(
@@ -137,9 +140,15 @@ export function ductsExecutors(
       ],
       effects: previewOnly ? [] : [{ kind: "document" as const, ref: target }],
       prepare: async () => {
-        const intent = doc.writeIntent.edit?.value;
+        const ductsScope = doc.writeIntent.edit?.value;
+        const fanScope = fans.writeIntent.edit?.value;
+        const cells =
+          ductsScope?.cells || fanScope?.cells
+            ? [...(ductsScope?.cells ?? []), ...(fanScope?.cells ?? [])]
+            : undefined;
+        const intent = { ...ductsScope, walk: fanScope?.walk, cells };
         const { firm } = await readFirm();
-        const criteria = resolveCriteria(workLayer(doc), null, firm);
+        const criteria = resolveCriteria(workLayer(design), null, firm);
         const read = (selector: Record<string, unknown>) =>
           invokeBridge<DuctSnapshot>(
             bridge,
@@ -151,7 +160,7 @@ export function ductsExecutors(
                 autoJoinGapIn: criteria.autoJoinGapIn.value,
                 candidateBoxIn: criteria.healBoxIn.value,
               } : selector,
-              slots: stagedDucts(doc).parameters,
+              slots: stagedDucts(design, (design) ?? neutralFansWork).parameters,
             },
           );
         let snapshot = await {
@@ -171,7 +180,7 @@ export function ductsExecutors(
               snapshot,
               firm,
               store: snapshot.store ?? undefined,
-              work: workLayer(doc),
+              work: workLayer(design),
               catalogs: catalogs.tables,
             });
             if (intent?.walk)
@@ -185,7 +194,7 @@ export function ductsExecutors(
             // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
             const request = applyRequest(
               snapshot,
-              price(snapshot, grids, doc, catalogs.tables),
+              price(snapshot, grids, design, (design) ?? neutralFansWork, catalogs.tables),
               appliedAt ?? "",
               intent?.groups ?? [],
             );
@@ -224,7 +233,7 @@ export function ductsExecutors(
           heal: async () => {
             if (!intent?.groups?.length)
               throw refused("Stage writeIntent.groups in Work before healing");
-            const plan = healPlan(snapshot, doc);
+            const plan = healPlan(snapshot, design);
             const input = {
               groups: intent.groups.map((group) => {
                 const found = plan.groups.find((item) => item.group === group);

@@ -1,10 +1,13 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
 /**
  * The rulings the model keeps (pressure-drop ledger, 2026-10-20): the store's `ignore` verdicts
  * and `passive` roles are the base every reader sees, Work holds only the deltas, and a person can
  * take a stored ruling back. Deterministic; the store is a literal.
  */
+import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
-import { ductsDocumentSchema, stagedDucts } from "@pe/agent-contracts";
+import { stagedDucts } from "@pe/agent-contracts";
 
 import { pendingRulings, storeRulings, withStoredRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -21,12 +24,12 @@ const store = {
   roles: { "900": { role: "passive", ruledAt: AT } },
   workRevision: 3,
 } satisfies NonNullable<DuctSnapshot["store"]>;
-const doc = (raw: unknown) => ductsDocumentSchema.parse(raw);
+const doc = designOf;
 
 it("reads the stored rulings as edit cells, and Work's own over them", () => {
   const work = doc({ roles: { "901": { edit: { value: { role: "passive" } } } } });
   const seen = withStoredRulings(work, store)!;
-  const edit = stagedDucts(seen);
+  const edit = stagedDucts(seen, (seen) ?? neutralFansWork);
 
   expect(edit.assumptions["open-end:101:1"]).toEqual({ kind: "verdict", verdict: "ignore" });
   expect(edit.roles).toEqual({ "900": { role: "passive" }, "901": { role: "passive" } });
@@ -41,7 +44,8 @@ it("takes a stored verdict back with a edit delete, and a stored passive is rule
     assumptions: { "open-end:101:1": { edit: { delete: true } } },
     roles: { "900": { edit: { value: { role: "fan" } } } },
   });
-  const edit = stagedDucts(withStoredRulings(work, store));
+  const seen = withStoredRulings(work, store);
+  const edit = stagedDucts(seen, seen ?? neutralFansWork);
 
   expect(edit.assumptions).toEqual({});
   expect(edit.roles).toEqual({ "900": { role: "fan" } });
@@ -62,7 +66,8 @@ it("writes the stored rulings with their own time and new ones with the write's"
       "flex-roughness:Flex": { edit: { value: { kind: "flex-roughness", ft: 0.003 } } },
     },
   });
-  const edit = stagedDucts(withStoredRulings(work, store));
+  const seen = withStoredRulings(work, store);
+  const edit = stagedDucts(seen, seen ?? neutralFansWork);
 
   expect(storeRulings(edit, store, "later")).toEqual({
     verdicts: {

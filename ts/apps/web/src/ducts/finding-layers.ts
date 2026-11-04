@@ -9,7 +9,7 @@
  */
 import * as THREE from "three";
 
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/agent-contracts";
 import { edgesOf, outlineOf, overhang, type Edge, type Outline } from "@pe/ducts-domain/faces";
 import { healPlan, type HealItem } from "@pe/ducts-domain/heal";
 import {
@@ -78,13 +78,13 @@ const unit = (p: number[]) => {
 // System and diagnostic changes reuse the same model-wide inference, which is the expensive part.
 const inferences = new WeakMap<
   DuctSnapshot,
-  { work: DuctsRouteDocument | null; value: ReturnType<typeof inferJoints> }
+  { work: DuctsDesign | null; value: ReturnType<typeof inferJoints> }
 >();
 
 export function findingShapes(
   snapshot: DuctSnapshot,
   annotated: ReadonlySet<string>,
-  work: DuctsRouteDocument | null,
+  work: DuctsDesign | null,
   /** The raw system's mesh-capture scope, not its priced tree's shared equipment and other ports. */
   members?: ReadonlySet<number>,
   repairs?: readonly Pick<HealItem, "end" | "other" | "how" | "covers">[],
@@ -375,7 +375,7 @@ export function noRunLayers(
 /** A review draws only its admitted repairs; preview geometry remains a ghost. */
 export function healReviewLayers(
   snapshot: DuctSnapshot,
-  work: DuctsRouteDocument | null,
+  work: DuctsDesign | null,
   review: import("./reviews").HealReview | null,
 ): Layer3D[] {
   if (!review) return [];

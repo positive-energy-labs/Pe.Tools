@@ -1,5 +1,5 @@
 /** Ordered subject cuts. Snapshot connectivity owns omissions; tolerated connectivity owns inferences. */
-import type { DuctClaim, DuctInferenceGrade, DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctClaim, DuctInferenceGrade, DuctsDesign } from "@pe/agent-contracts";
 import { subjectName } from "@pe/ducts-domain/words";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { verdictOf } from "@pe/ducts-domain/proximity";
@@ -15,14 +15,14 @@ type Element = Node | Segment;
 export type Claim = Omit<DuctClaim, "ids"> & { id: string; at: number[] };
 
 export const claimsOf = (cells: Readonly<Record<string, DuctClaim>>): Claim[] =>
-  Object.entries(cells).map(([id, { ids, ...rest }]) => ({ id, at: ids, ...rest }));
+  Object.entries(cells).map(([id, { ids, ...rest }]) => ({ id, at: [...ids], ...rest }));
 
 export interface Run {
   ids: readonly number[];
   claims: readonly Claim[];
   onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
   /** The Work whose edit ignore verdicts the cut's proximity inferences honor; null honors none. */
-  work?: DuctsRouteDocument | null;
+  work?: DuctsDesign | null;
 }
 
 export interface Place {
@@ -121,7 +121,7 @@ export function legsOf(
   snapshot: DuctSnapshot,
   ids: readonly number[],
   labelOf: (id: number) => string | null = () => null,
-  work: DuctsRouteDocument | null = null,
+  work: DuctsDesign | null = null,
 ): SubjectCut {
   const { nodes: nodeById, segments: segmentById } = snapshotById(snapshot);
   const levelName = new Map(snapshot.levels.map((level) => [level.id, level.name]));

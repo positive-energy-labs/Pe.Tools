@@ -107,7 +107,7 @@ const row = z.strictObject({
   requiredEspStagedInWg: z.number().nullable(),
   availableFanStaticInWg: z.number().nullable(),
   flowCfm: z.number().nullable(),
-  /** Where a terminal row's `flowCfm` came from: "override" | "load-preview:<tag>" | "revit:<airflow slot>". */
+  /** Where a terminal row's `flowCfm` came from: "override" | "rooms:<source>" | "revit:<airflow slot>". */
   flowSource: z.string().nullable(),
   spaceText: z.string().nullable(),
   detail: z.string().nullable(),

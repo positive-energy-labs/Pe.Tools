@@ -24,7 +24,7 @@ import { localId, localSubject, namesOf, activeName } from "../neutral.ts";
 import { fansData, schemas, entries } from "../../fans/neutral";
 import type { PaneContext } from "../../../../../packages/agent-contracts/src/route-kernel-bodies";
 import { settleWork } from "#/shell/work-door-observation";
-import type { DuctsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
+import { ductsDesign, neutralFansWork, type RouteStatePatch } from "@pe/agent-contracts";
 import { NativeObservationScope } from "#/revit/observation";
 import { editLabel, presentInputHistory, type EditMeta } from "./input-history";
 
@@ -51,8 +51,8 @@ export function SheetBody({
   // Domain readonly sweep reached 28 files; picture consumers still require mutable arrays.
   const snapshot = (snapshotRead.value ??
     EMPTY_SNAPSHOT) as import("@pe/ducts-domain/types").DuctSnapshot;
-  // readonly at the contract owner after U2 lands
-  const workDoc = ctx.work as DuctsRouteDocument | null;
+  // U4 wires the real fans Work here.
+  const workDoc = useMemo(() => ductsDesign(ctx.work, neutralFansWork), [ctx.work]);
   const setPage = useProtoPage(ctx.page, ctx.verbs.browse);
   const write = async (patches: RouteStatePatch[], history?: EditMeta) => {
     if (!ctx.workBasis)
@@ -354,6 +354,9 @@ export function SheetBody({
               label: `${kind} Pea's ${label}`,
             });
           }
+          // U4 moves parameter cells and their writer to the fans Work.
+          if (path[0] === "parameters")
+            return { code: "unavailable", message: "Fan parameter editing is unavailable" };
           const result = await settleWork(ctx.cells[kind](path[0], path[1]));
           return result.kind === "refused"
             ? { code: "refused", message: result.refusal.error }

@@ -1,3 +1,5 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
 import { expect, test, vi } from "vite-plus/test";
 import { readFileSync } from "node:fs";
 import type { Row } from "@pe/ducts-domain/losses";
@@ -33,7 +35,7 @@ test("both Scene builders retain stub connector facts without admitting stubs to
 
 test("scopes share immutable loss projections, preserving interval sums and alternative legs", () => {
   const raw = structuredClone(saved) as DuctSnapshot;
-  const priced = price(raw, {}, null);
+  const priced = price(raw, {}, null, neutralFansWork);
   const path = Object.values(priced.next.paths)[0]!;
   const rows: Row[] = [
     { id: 10, kind: "friction", dp: 2, desc: "first interval" },
@@ -83,7 +85,7 @@ test("saved pricing reuses losses across scopes and replaces them when the resul
   const raw: DuctSnapshot = process.env.PE_DUCTS_CACHE_FIXTURE
     ? JSON.parse(readFileSync(process.env.PE_DUCTS_CACHE_FIXTURE, "utf8"))
     : (structuredClone(saved) as DuctSnapshot);
-  const priced = price(raw, {}, null);
+  const priced = price(raw, {}, null, neutralFansWork);
   const original = indexOf(priced.snapshot, priced);
   expect(original.loss.size).toBeGreaterThan(0);
   expect(indexOf(priced.snapshot, priced).loss).toBe(original.loss);

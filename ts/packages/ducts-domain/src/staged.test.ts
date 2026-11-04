@@ -1,10 +1,11 @@
+import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
-import { ductsRouteState, ductsApplyInputSchema } from "@pe/agent-contracts";
+import { ductsApplyInputSchema } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
 import { appliedCellPaths, pendingCount, stagedCells, stagedEsp } from "./staged.ts";
 
-const doc = ductsRouteState.schema.parse({
+const doc = designOf({
   esp: { "100": { edit: { value: { inWg: 0.5 } } } },
   flows: { "4": { edit: { value: { cfm: 100 } } }, "5": {} },
 });

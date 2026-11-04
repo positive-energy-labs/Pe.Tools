@@ -1,5 +1,6 @@
+import { designOf } from "@pe/ducts-domain/test-design";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { ductsDocumentSchema, stagedDucts } from "@pe/agent-contracts";
+import { stagedDucts } from "@pe/agent-contracts";
 import { resolveCriteria } from "@pe/ducts-domain/sheet/index";
 import { createWitness } from "../../fans/cutover.test-support";
 import type {
@@ -45,9 +46,10 @@ test("the admitted criteria editor resolves Work, and host Undo resolves the fir
       allowanceInWg: { supply: 0.1, return: 0.2 },
     },
   };
-  const current = () =>
-    resolveCriteria(stagedDucts(ductsDocumentSchema.parse(f.fans.work()!.value)), null, firm)
-      .allowanceInWg.return;
+  const current = () => {
+    const work = designOf(f.fans.work()!.value as Record<string, unknown>);
+    return resolveCriteria(stagedDucts(work, work), null, firm).allowanceInWg.return;
+  };
   expect(current()).toMatchObject({ value: 0.35, source: "Work" });
   expect(await f.fans.history!.undo()).toMatchObject({ ok: true });
   expect(current()).toMatchObject({ value: 0.2, source: "firm" });

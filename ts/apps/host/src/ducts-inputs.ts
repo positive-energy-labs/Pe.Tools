@@ -1,3 +1,5 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
 /**
  * The host side of the inputs resolver (ducts LEDGER 2026-10-29): load the layers the pure
  * `resolveInputs` reads (Work's staged edits, the firm file) and turn a sheet's `edits` into Work
@@ -10,7 +12,7 @@ import {
   ductsFirmSchema,
   stagedDucts,
   type DuctsFirm,
-  type DuctsRouteDocument,
+  type DuctsDesign,
 } from "@pe/agent-contracts";
 import { type WorkLayer } from "@pe/ducts-domain/sheet/index";
 import { productUserContentRootPath } from "./product-paths.ts";
@@ -56,8 +58,8 @@ export async function readFirm(path = firmFilePath()): Promise<FirmReading> {
 }
 
 /** Work's staged edits as the resolver reads them. */
-export function workLayer(doc: DuctsRouteDocument | null): WorkLayer {
-  const staged = stagedDucts(doc);
+export function workLayer(doc: DuctsDesign | null): WorkLayer {
+  const staged = stagedDucts(doc, doc ?? neutralFansWork);
   return {
     flows: staged.flows,
     terminalDrops: staged.terminalDrops,

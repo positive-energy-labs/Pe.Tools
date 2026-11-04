@@ -1,8 +1,10 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
 import { expect, it } from "vite-plus/test";
 import {
   applyPatches,
   transitionPatches,
-  ductsRouteState,
+  fansRouteState,
   type DuctCalculation,
   type DuctHydraulics,
   ductHydraulicsSchema,
@@ -12,6 +14,7 @@ import {
 import { applyRequest, price, proposedStatic } from "@pe/ducts-domain/pricing";
 import { friction, roundSection } from "@pe/ducts-domain/loss-physics";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { designOf } from "@pe/ducts-domain/test-design";
 
 const port = (index: number, owner: number, connector: number, direction = "bidirectional") => ({
   index,
@@ -172,7 +175,7 @@ function evidence(s: DuctSnapshot): Record<string, DuctCalculation> {
   };
 }
 const work = (values: Record<string, DuctCalculation>, edit = true) =>
-  ductsRouteState.schema.parse({
+  designOf({
     calculation: Object.fromEntries(
       Object.entries(values).map(([key, value]) => [
         key,
@@ -183,10 +186,10 @@ const work = (values: Record<string, DuctCalculation>, edit = true) =>
 
 it("charges a edit passive once on the actual fan circuit while retaining legacy arithmetic", () => {
   const s = fixture(),
-    baseline = price(s, {}, null);
+    baseline = price(s, {}, null, neutralFansWork);
   expect(proposedStatic(s, baseline.now, 100)).toBeNull();
   expect(proposedStatic(s, baseline.now, 200)).not.toBeNull();
-  const priced = price(s, {}, work(evidence(s)));
+  const priced = price(s, {}, work(evidence(s)), (work(evidence(s))) ?? neutralFansWork);
   expect(priced.now.paths).toEqual(baseline.now.paths);
   const circuit = priced.next.design.circuits[0]!;
   expect(circuit.status).toBe("complete-for-declared-design");
@@ -210,7 +213,7 @@ it("charges a edit passive once on the actual fan circuit while retaining legacy
   );
   expect(priced.next.design.circuits.map((c) => c.equipmentId)).toEqual([100]);
   expect(proposedStatic(s, priced.next, 200)).toBeNull();
-  expect(price(s, {}, work(evidence(s), false)).next.design.circuits).toEqual([]);
+  expect(price(s, {}, work(evidence(s), false), (work(evidence(s), false)) ?? neutralFansWork).next.design.circuits).toEqual([]);
 });
 
 it("keeps sourced zero losses valid at zero flow, and refuses assigned default-zero catalog authority", () => {
@@ -221,12 +224,12 @@ it("keeps sourced zero losses valid at zero flow, and refuses assigned default-z
     throw Error("Purpose fixture kind");
   e.filter.loss = { flowCfm: 0, totalLossInWg: 0, source: "Purpose explicit zero-flow loss" };
   e.grille.loss = { flowCfm: 0, totalLossInWg: 0, source: "Purpose explicit zero-flow loss" };
-  const c = price(s, {}, work(e)).next.design.circuits[0]!;
+  const c = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.circuits[0]!;
   expect(c.status).toBe("complete-for-declared-design");
   expect(c.requiredExternalTotalPressureInWg).toBe(0);
   e.filter.loss.totalLossInWg = 0.1;
   expect(
-    price(s, {}, work(e)).next.design.circuits[0]!.reasons.some(
+    price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.circuits[0]!.reasons.some(
       (r) => r.code === "nonzero-loss-at-zero-flow",
     ),
   ).toBe(true);
@@ -240,7 +243,7 @@ it("keeps sourced zero losses valid at zero flow, and refuses assigned default-z
     connectorLossMethod: "ConnectorLossMethodNotDefined",
     writable: false,
   };
-  const partial = price(unknown, {}, work(u)).next.design.circuits[0]!;
+  const partial = price(unknown, {}, work(u), (work(u)) ?? neutralFansWork).next.design.circuits[0]!;
   expect(partial.requiredExternalTotalPressureInWg).toBeNull();
   expect(partial.reasons.some((r) => r.code === "terminal-total-loss-unknown")).toBe(true);
 });
@@ -253,7 +256,7 @@ it("keeps contradictory native fan direction and repeated passive ports unadmitt
       s.nodes.find((n) => n.id === 100)!.connectors[0]!.direction = "in";
       e.fan.outlet = pin(s, 100, 0);
     } else if (e.filter?.kind === "passive") e.filter.ports[1] = e.filter.ports[0];
-    const result = price(s, {}, work(e)).next.design;
+    const result = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design;
     expect(result.circuits.every((c) => c.requiredExternalTotalPressureInWg === null)).toBe(true);
     expect(
       result.reasons.some(
@@ -266,26 +269,26 @@ it("keeps contradictory native fan direction and repeated passive ports unadmitt
 it("both authors share revision-fenced Work edits and refuses lossy scalar unit writes", () => {
   const s = fixture(),
     value = evidence(s).filter!;
-  const env = { version: 1 as const, revision: 3, doc: ductsRouteState.schema.parse({}) };
+  const env = { version: 1 as const, revision: 3, doc: fansRouteState.schema.parse({}) };
   const propose = transitionPatches(
     ["calculation"],
     "filter",
     {},
     { kind: "suggest", rung: { value } },
   );
-  expect(applyPatches(ductsRouteState, env, "pea", propose, 3)).toMatchObject({ ok: true });
+  expect(applyPatches(fansRouteState, env, "pea", propose, 3)).toMatchObject({ ok: true });
   const stage = transitionPatches(["calculation"], "filter", {}, { kind: "set", rung: { value } });
-  expect(applyPatches(ductsRouteState, env, "pea", stage, 3)).toMatchObject({ ok: true });
-  expect(applyPatches(ductsRouteState, env, "human", stage, 3)).toMatchObject({ ok: true });
-  expect(applyPatches(ductsRouteState, env, "human", stage, 2)).toMatchObject({ ok: false });
+  expect(applyPatches(fansRouteState, env, "pea", stage, 3)).toMatchObject({ ok: true });
+  expect(applyPatches(fansRouteState, env, "human", stage, 3)).toMatchObject({ ok: true });
+  expect(applyPatches(fansRouteState, env, "human", stage, 2)).toMatchObject({ ok: false });
   const doc = work(evidence(s));
   doc.esp["100"] = { edit: { value: { inWg: 0.2 } } };
-  expect(() => applyRequest(s, price(s, {}, doc), "purpose-time", [])).toThrow(
+  expect(() => applyRequest(s, price(s, {}, doc, (doc) ?? neutralFansWork), "purpose-time", [])).toThrow(
     "no admitted manufacturer scalar ESP mapping",
   );
   delete doc.esp["100"];
   doc.esp["200"] = { edit: { value: { inWg: 0.2 } } };
-  expect(() => applyRequest(s, price(s, {}, structuredClone(doc)), "purpose-time", [])).toThrow(
+  expect(() => applyRequest(s, price(s, {}, structuredClone(doc), (structuredClone(doc)) ?? neutralFansWork), "purpose-time", [])).toThrow(
     "no admitted manufacturer scalar ESP mapping",
   );
 });
@@ -295,12 +298,12 @@ it("writes a edit unit flow for any unit rooted in the group, not only the basel
   const doc = work(evidence(s));
   doc.equipmentFlows["200"] = { edit: { value: { cfm: 825 } } };
   doc.equipmentFlows["100"] = { edit: { value: { cfm: 400 } } };
-  const ids = applyRequest(s, price(s, {}, doc), "purpose-time", ["upstream"]).equipmentFlows.map(
+  const ids = applyRequest(s, price(s, {}, doc, (doc) ?? neutralFansWork), "purpose-time", ["upstream"]).equipmentFlows.map(
     (f) => f.id,
   );
   expect(ids).toEqual([100, 200]);
   expect(
-    applyRequest(s, price(s, {}, doc), "purpose-time", ["downstream"]).equipmentFlows.map(
+    applyRequest(s, price(s, {}, doc, (doc) ?? neutralFansWork), "purpose-time", ["downstream"]).equipmentFlows.map(
       (f) => f.id,
     ),
   ).toEqual([200]);
@@ -355,7 +358,7 @@ it("pairs two independent ERV fans by exact ports instead of classifications", (
       },
       source: "Purpose pressure boundary",
     };
-  const circuits = price(s, {}, work(e)).next.design.circuits;
+  const circuits = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.circuits;
   expect(circuits.map((c) => c.status)).toEqual([
     "complete-for-declared-design",
     "complete-for-declared-design",
@@ -387,7 +390,7 @@ it("refuses stale/contradictory pins, off-point losses, missing identity, scenar
     if (mode === "identity") s.segments[0]!.uniqueId = null;
     if (mode === "scenario") delete e.scenario;
     if (mode === "unknown-flow") s.nodes.find((n) => n.id === 300)!.facts = [];
-    const result = price(s, {}, work(e)).next.design;
+    const result = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design;
     expect(
       result.circuits.every((c) => c.requiredExternalTotalPressureInWg === null),
       mode,
@@ -419,7 +422,7 @@ it("retains parallel joints and refuses mesh/multiple fan allocation without cut
         source: "Purpose second fan",
       };
     }
-    const result = price(s, {}, work(e)).next.design;
+    const result = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design;
     expect(result.circuits.every((c) => c.requiredExternalTotalPressureInWg === null)).toBe(true);
     expect(
       result.circuits
@@ -436,7 +439,7 @@ it("refuses unqualified legacy static input and accepts only caller-converted ex
   if (e.grille?.kind !== "terminal") throw Error("Purpose fixture kind");
   e.grille.loss = null;
   s.nodes.find((n) => n.id === 300)!.terminalDrop!.catalogDropInWg = 0.05;
-  const unknown = price(s, {}, work(e)).next.design.circuits[0]!;
+  const unknown = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.circuits[0]!;
   expect(unknown.requiredExternalTotalPressureInWg).toBeNull();
   expect(unknown.reasons.some((r) => r.code === "terminal-total-loss-unknown")).toBe(true);
   const callerTotal = 0.05 + 0.02 - 0.01;
@@ -447,7 +450,7 @@ it("refuses unqualified legacy static input and accepts only caller-converted ex
     source:
       "Purpose caller conversion: static loss .05, upstream Pv .02, downstream Pv .01 at explicitly declared planes",
   };
-  const solved = price(s, {}, work(e)).next.design.circuits[0]!;
+  const solved = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.circuits[0]!;
   expect(solved.status).toBe("complete-for-declared-design");
   expect(solved.outlet.paths[0]!.rows.find((r) => r.id === 300)?.dp).toBeCloseTo(0.06, 12);
   expect(solved.requiredExternalTotalPressureInWg).toBeCloseTo(
@@ -521,7 +524,7 @@ function sharedFlowFixture() {
 }
 it("solves shared component flow once without claiming shared pressure completion", () => {
   const { s, e } = sharedFlowFixture();
-  const d = price(s, {}, work(e)).next.design;
+  const d = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design;
   const c = d.componentFlows.find((c) => c.elementIds.includes(100))!;
   expect(c.status).toBe("unique");
   expect(c.maxResidualCfm).toBe(0);
@@ -548,14 +551,14 @@ it("does not invent a shared fan split or silently repair imbalanced demand", ()
   e.a.designFlowCfm = null;
   e.b.designFlowCfm = null;
   expect(
-    price(s, {}, work(e)).next.design.componentFlows.find((c) => c.elementIds.includes(100))!
+    price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.find((c) => c.elementIds.includes(100))!
       .status,
   ).toBe("underdetermined");
   e.a.designFlowCfm = 100;
   e.b.designFlowCfm = 200;
   e.t.flowCfm = 290;
   expect(
-    price(s, {}, work(e)).next.design.componentFlows.find((c) => c.elementIds.includes(100))!
+    price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.find((c) => c.elementIds.includes(100))!
       .status,
   ).toBe("inconsistent");
 });
@@ -609,7 +612,7 @@ function parallelFlowFixture() {
 }
 it("admits sourced cycle allocation by conservation while pressure and KVL remain partial", () => {
   const { s, e } = parallelFlowFixture();
-  const before = price(s, {}, work(e)).next.design.componentFlows[0]!;
+  const before = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows[0]!;
   expect(before.cycleRank).toBe(1);
   expect(before.status).toBe("underdetermined");
   const constraint = {
@@ -625,7 +628,7 @@ it("admits sourced cycle allocation by conservation while pressure and KVL remai
     constraints: [constraint],
     source: "Synthetic single component design",
   };
-  const d = price(s, {}, work(e)).next.design,
+  const d = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design,
     c = d.componentFlows[0]!;
   expect(c.status).toBe("unique");
   expect(c.edges.filter((e) => e.kind === "duct-subrun").map((e) => e.signedCfm)).toEqual([
@@ -636,10 +639,10 @@ it("admits sourced cycle allocation by conservation while pressure and KVL remai
   expect(d.circuits[0]!.reasons.some((r) => r.code === "mesh-not-solved")).toBe(true);
   const edit = work(e);
   s.document.readAt = "2099-01-01";
-  expect(price(s, {}, edit).next.design.componentFlows[0]!.status).toBe("unique");
+  expect(price(s, {}, edit, (edit) ?? neutralFansWork).next.design.componentFlows[0]!.status).toBe("unique");
   s.segments[0]!.lengthFt = 6;
   expect(
-    price(s, {}, edit).next.design.componentFlows[0]!.reasons.some(
+    price(s, {}, edit, (edit) ?? neutralFansWork).next.design.componentFlows[0]!.reasons.some(
       (r) => r.code === "stale-component-flow",
     ),
   ).toBe(true);
@@ -647,7 +650,7 @@ it("admits sourced cycle allocation by conservation while pressure and KVL remai
   if (e.flow.kind !== "component-flow") throw Error("flow fixture");
   e.flow.constraints.push({ ...constraint, signedCfm: -150 });
   expect(
-    price(s, {}, work(e)).next.design.componentFlows[0]!.reasons.some(
+    price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows[0]!.reasons.some(
       (r) => r.code === "conflicting-flow-constraint",
     ),
   ).toBe(true);
@@ -660,7 +663,7 @@ it("duplicate constraints do not close a second independent cycle", () => {
     b = port(1, 600, 3);
   b.point = [5, 0, 0];
   s.segments.push({ ...s.segments[0]!, id: 30, uniqueId: "purpose-30", connectors: [a, b] });
-  const baseline = price(s, {}, work(e)).next.design.componentFlows[0]!;
+  const baseline = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows[0]!;
   expect(baseline.cycleRank).toBe(2);
   const constraint = {
     element: identity(10),
@@ -675,7 +678,7 @@ it("duplicate constraints do not close a second independent cycle", () => {
     constraints: [constraint, constraint],
     source: "Dependent constraints",
   };
-  expect(price(s, {}, work(e)).next.design.componentFlows[0]!.status).toBe("underdetermined");
+  expect(price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows[0]!.status).toBe("underdetermined");
 });
 it("reports real mid-duct subruns4ft at300CFM and6ft at200CFM", () => {
   const { s, e } = sharedFlowFixture(),
@@ -727,7 +730,7 @@ it("reports real mid-duct subruns4ft at300CFM and6ft at200CFM", () => {
   e.t.flowCfm = 200;
   e.t.port = pin(s, 300, 0);
   e.branch = { ...e.t, element: identity(600), port: pin(s, 600, 0), flowCfm: 100 };
-  const c = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+  const c = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.find((c) =>
     c.elementIds.includes(100),
   )!;
   expect(c.status).toBe("unique");
@@ -745,7 +748,7 @@ it("requires sourced signed sense for a bidirectional terminal and refuses forei
   s.nodes.find((n) => n.id === 300)!.connectors[0]!.direction = "bidirectional";
   if (e.t?.kind !== "terminal") throw Error("fixture terminal");
   e.t.port = pin(s, 300, 0);
-  const baseline = price(s, {}, work(e)).next.design.componentFlows[0]!;
+  const baseline = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows[0]!;
   expect(baseline.status).toBe("underdetermined");
   const constraint = {
     element: identity(300),
@@ -760,10 +763,10 @@ it("requires sourced signed sense for a bidirectional terminal and refuses forei
     constraints: [constraint],
     source: "Known signed terminal sense",
   };
-  expect(price(s, {}, work(e)).next.design.componentFlows[0]!.status).toBe("unique");
+  expect(price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows[0]!.status).toBe("unique");
   constraint.element.uniqueId = "foreign";
   expect(
-    price(s, {}, work(e)).next.design.componentFlows[0]!.reasons.some(
+    price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows[0]!.reasons.some(
       (r) => r.code === "stale-flow-constraint",
     ),
   ).toBe(true);
@@ -771,7 +774,7 @@ it("requires sourced signed sense for a bidirectional terminal and refuses forei
 
 it("never treats a KCL-compatible sourced equal split as KVL/pressure certification or native apply input", () => {
   const { s, e } = parallelFlowFixture();
-  const witness = price(s, {}, work(e)).next.design.componentFlows[0]!.componentWitness;
+  const witness = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows[0]!.componentWitness;
   e.flow = {
     kind: "component-flow",
     hydraulics: null,
@@ -786,7 +789,7 @@ it("never treats a KCL-compatible sourced equal split as KVL/pressure certificat
     ],
     source: "Sourced conditional design",
   };
-  const p = price(s, {}, work(e)),
+  const p = price(s, {}, work(e), (work(e)) ?? neutralFansWork),
     c = p.next.design.componentFlows[0]!;
   expect(c.status).toBe("unique");
   expect(c.edges.filter((e) => e.kind === "duct-subrun").map((e) => e.signedCfm)).toEqual([
@@ -825,7 +828,7 @@ it("does not allow independently derived inlet/outlet demands to leak mass throu
   e.t.port = pin(s, 300, 0);
   e.t.flowCfm = 100;
   e.other = { ...e.t, element: identity(600), port: pin(s, 600, 0), flowCfm: 200 };
-  const cs = price(s, {}, work(e)).next.design.componentFlows;
+  const cs = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows;
   expect(cs.every((c) => c.status === "inconsistent")).toBe(true);
   expect(cs.every((c) => c.reasons.some((r) => r.code === "fan-mass-continuity"))).toBe(true);
 });
@@ -841,7 +844,7 @@ it("stale component-flow evidence cannot leave a previously complete tree pressu
   e.t.port = pin(s, 300, 0);
   e.t.flowCfm = 100;
   e.t.loss = { flowCfm: 100, totalLossInWg: 0.03, source: "Explicit synthetic TOTAL loss" };
-  const before = price(s, {}, work(e)).next.design;
+  const before = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design;
   expect(before.circuits[0]!.status).toBe("complete-for-declared-design");
   const witness = structuredClone(before.componentFlows[0]!.componentWitness);
   witness[0]!.family = "stale family";
@@ -854,7 +857,7 @@ it("stale component-flow evidence cannot leave a previously complete tree pressu
     ],
     source: "Old component witness",
   };
-  const after = price(s, {}, work(e)).next.design;
+  const after = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design;
   expect(after.componentFlows[0]!.status).toBe("inconsistent");
   expect(after.circuits[0]!.status).toBe("partial");
   expect(after.circuits[0]!.requiredExternalTotalPressureInWg).toBeNull();
@@ -888,7 +891,7 @@ it("retains shared tap station continuity without inventing a zero-length fricti
       connectors: [back],
     });
   }
-  const before = price(s, {}, work(e)).next.design;
+  const before = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design;
   e.flow = {
     kind: "component-flow",
     hydraulics: null,
@@ -904,7 +907,7 @@ it("retains shared tap station continuity without inventing a zero-length fricti
     ],
     source: "Synthetic coincident taps",
   };
-  const d = price(s, {}, work(e)).next.design;
+  const d = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design;
   expect(
     d.componentFlows.flatMap((c) => c.edges).filter((e) => e.kind === "station-arm"),
   ).toHaveLength(2);
@@ -927,7 +930,7 @@ it("retains shared tap station continuity without inventing a zero-length fricti
 it("refuses duct connector projection outside derived native arithmetic error", () => {
   const { s, e } = parallelFlowFixture();
   s.segments[0]!.connectors[0]!.point = [0, 0.005, 0];
-  const d = price(s, {}, work(e)).next.design;
+  const d = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design;
   expect(
     d.componentFlows.flatMap((c) => c.reasons).some((r) => r.code === "flow-subrun-geometry"),
   ).toBe(true);
@@ -938,7 +941,7 @@ it("allows projection residual within derived native arithmetic error", () => {
   const { s, e } = parallelFlowFixture();
   s.segments[0]!.connectors[0]!.point = [0, 1e-14, 0];
   expect(
-    price(s, {}, work(e))
+    price(s, {}, work(e), (work(e)) ?? neutralFansWork)
       .next.design.componentFlows.flatMap((c) => c.reasons)
       .some((r) => r.code === "flow-subrun-geometry"),
   ).toBe(false);
@@ -985,7 +988,7 @@ it.each(["unknown-encoding", "missing-polyline", "off-polyline"])(
     if (failure === "unknown-encoding") Reflect.deleteProperty(s, "coordinateEncoding");
     if (failure === "missing-polyline") s.segments[0]!.polyline = [];
     if (failure === "off-polyline") s.segments[0]!.connectors[2]!.point = [4, 1, 0];
-    const cs = price(s, {}, work({})).next.design.componentFlows;
+    const cs = price(s, {}, work({}), (work({})) ?? neutralFansWork).next.design.componentFlows;
     const joints = cs.flatMap((c) => c.edges.filter((e) => e.kind === "joint"));
     expect(joints).toHaveLength(4);
     expect(joints.every((e) => e.signedCfm === null && e.source === null)).toBe(true);
@@ -1009,7 +1012,7 @@ it("preserves independently stated boundary/constraint flows and legitimate cap 
       source: "Explicit125CFM boundary",
     },
   };
-  const baseline = price(s, {}, work(e)).next.design.componentFlows;
+  const baseline = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows;
   e.flow = {
     kind: "component-flow",
     hydraulics: null,
@@ -1024,7 +1027,7 @@ it("preserves independently stated boundary/constraint flows and legitimate cap 
     ],
     source: "Independent joint design",
   };
-  const cs = price(s, {}, work(e)).next.design.componentFlows;
+  const cs = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows;
   const joint = (id: number) =>
     cs
       .flatMap((c) => c.edges)
@@ -1091,7 +1094,7 @@ function sharedStationFixture(spacing = 0) {
 }
 it("retains opposing shared-station tap ports in a flow-only continuity hub", () => {
   const { s, e } = sharedStationFixture(6e-14);
-  const d = price(s, {}, work(e)).next.design,
+  const d = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design,
     c = d.componentFlows.find((c) => c.elementIds.includes(100))!;
   expect(c.status).toBe("unique");
   expect(c.maxResidualCfm).toBe(0);
@@ -1116,7 +1119,7 @@ it("retains opposing shared-station tap ports in a flow-only continuity hub", ()
   s.segments[0]!.connectors.reverse();
   s.nodes.reverse();
   expect(
-    price(s, {}, work(e))
+    price(s, {}, work(e), (work(e)) ?? neutralFansWork)
       .next.design.componentFlows.find((c) => c.elementIds.includes(100))!
       .edges.slice()
       .sort((a, b) => a.id.localeCompare(b.id)),
@@ -1130,7 +1133,7 @@ it.each([
   0.0032141193888493014,
 ])("preserves genuinely ordered native station spacing %s feet", (spacing) => {
   const { s, e } = sharedStationFixture(spacing),
-    c = price(s, {}, work(e)).next.design.componentFlows.find((c) => c.elementIds.includes(100))!;
+    c = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.find((c) => c.elementIds.includes(100))!;
   expect(c.status).toBe("unique");
   expect(c.edges.some((e) => e.kind === "station-arm")).toBe(false);
   const runs = c.edges.filter((e) => e.kind === "duct-subrun");
@@ -1142,7 +1145,7 @@ it.each([undefined, "rounded-3", "foreign"])(
   (encoding) => {
     const { s, e } = sharedStationFixture();
     Reflect.set(s, "coordinateEncoding", encoding);
-    const cs = price(s, {}, work(e)).next.design.componentFlows;
+    const cs = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows;
     expect(cs.every((c) => c.status !== "unique")).toBe(true);
     expect(cs.flatMap((c) => c.reasons).some((r) => r.code === "flow-coordinate-encoding")).toBe(
       true,
@@ -1159,7 +1162,7 @@ it("refuses malformed/nonfinite geometry and unsupported curve length", () => {
     if (mutation === "nonfinite") s.segments[0]!.connectors[2]!.point[0] = Infinity;
     if (mutation === "malformed") s.segments[0]!.polyline[0] = [1, 2];
     if (mutation === "curve") s.segments[0]!.lengthFt = 12;
-    const cs = price(s, {}, edit).next.design.componentFlows;
+    const cs = price(s, {}, edit, (edit) ?? neutralFansWork).next.design.componentFlows;
     expect(cs.every((c) => c.status !== "unique")).toBe(true);
     expect(cs.flatMap((c) => c.reasons).some((r) => r.code === "flow-subrun-geometry")).toBe(true);
   }
@@ -1202,7 +1205,7 @@ it("preserves all six ports and two actual native shared stations from retained9
     if (t?.kind !== "terminal") throw Error("fixture terminal");
     t.port = pin(s, id, 0);
   }
-  const c = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+  const c = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.find((c) =>
     c.elementIds.includes(100),
   )!;
   expect(c.status).toBe("unique");
@@ -1222,7 +1225,7 @@ it("preserves all six ports and two actual native shared stations from retained9
 });
 it("binds component flow Work freshness to coordinate encoding without legacy normalization", () => {
   const { s, e } = sharedStationFixture(),
-    w = price(s, {}, work(e)).next.design.componentFlows[0]!.componentWitness;
+    w = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows[0]!.componentWitness;
   expect(w.every((e) => e.coordinateEncoding === "native-double")).toBe(true);
   const old = structuredClone(w);
   for (const e of old) e.coordinateEncoding = null;
@@ -1236,7 +1239,7 @@ it("binds component flow Work freshness to coordinate encoding without legacy no
     source: "Historical encoding unavailable",
   };
   expect(
-    price(s, {}, work(e)).next.design.componentFlows.some((c) =>
+    price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.some((c) =>
       c.reasons.some((r) => r.code === "stale-component-flow"),
     ),
   ).toBe(true);
@@ -1250,7 +1253,7 @@ it.each([undefined, "arc", "flex-polyline", "other"])(
     const { s, e } = sharedStationFixture();
     Reflect.set(s.segments[0]!, "curveKind", kind);
     const before = structuredClone(s.segments[0]!.polyline),
-      cs = price(s, {}, work(e)).next.design.componentFlows;
+      cs = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows;
     expect(cs.every((c) => c.status !== "unique")).toBe(true);
     expect(cs.flatMap((c) => c.reasons).some((r) => r.code === "flow-subrun-geometry")).toBe(true);
     expect(s.segments[0]!.polyline).toEqual(before);
@@ -1273,7 +1276,7 @@ it("refuses chained overlapping station envelopes rather than merging numericall
     kind: "cap",
     connectors: [{ ...port(0, 10, 4), point }],
   });
-  const cs = price(s, {}, null).next.design.componentFlows;
+  const cs = price(s, {}, null, neutralFansWork).next.design.componentFlows;
   expect(cs.flatMap((c) => c.reasons).some((r) => r.code === "ambiguous-flow-stations")).toBe(true);
   expect(
     cs.flatMap((c) => c.edges).some((e) => e.kind === "duct-subrun" || e.kind === "station-arm"),
@@ -1299,7 +1302,7 @@ it("keeps very short positive native line subruns positive without scalar length
     s.nodes[i]!.kind = "cap";
     s.nodes[i]!.connectors[0]!.point = points[i]!;
   }
-  const c = price(s, {}, null).next.design.componentFlows.find((c) => c.elementIds.includes(10))!;
+  const c = price(s, {}, null, neutralFansWork).next.design.componentFlows.find((c) => c.elementIds.includes(10))!;
   expect(c.status).toBe("unique");
   const runs = c.edges.filter((e) => e.kind === "duct-subrun");
   expect(runs).toHaveLength(2);
@@ -1320,7 +1323,7 @@ it.each(["arc", "flex-polyline"] as const)(
     const t = e["terminal:200"];
     if (t?.kind !== "terminal") throw Error("fixture terminal");
     t.flowCfm = 1500;
-    const c = price(s, {}, work(e)).next.design.componentFlows[0]!;
+    const c = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows[0]!;
     expect(c.status).toBe("unique");
     expect(c.maxResidualCfm).toBe(0);
     expect(
@@ -1329,13 +1332,13 @@ it.each(["arc", "flex-polyline"] as const)(
         .map((e) => ({ q: Math.abs(e.signedCfm!), length: e.lengthFt })),
     ).toEqual([{ q: 1500, length: null }]);
     expect(c.edges.some((e) => e.kind === "duct-subrun")).toBe(false);
-    const unknown = price(s, {}, null).next.design.componentFlows[0]!;
+    const unknown = price(s, {}, null, neutralFansWork).next.design.componentFlows[0]!;
     expect(unknown.status).toBe("underdetermined");
     expect(unknown.edges.every((e) => e.signedCfm === null)).toBe(true);
     const duplicate = structuredClone(s);
     duplicate.segments[0]!.connectors[1]!.kind = "curve";
     expect(
-      price(duplicate, {}, null)
+      price(duplicate, {}, null, neutralFansWork)
         .next.design.componentFlows.flatMap((c) => c.edges)
         .some((e) => e.kind === "curve-continuity"),
     ).toBe(false);
@@ -1345,7 +1348,7 @@ it("retains nonlinear two-port continuity as a loop leg without claiming hydraul
   const { s, e } = parallelFlowFixture();
   s.segments[0]!.curveKind = "arc";
   s.segments[0]!.lengthFt = 12;
-  const d = price(s, {}, work(e)).next.design;
+  const d = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design;
   expect(
     d.componentFlows.some(
       (c) => c.cycleRank === 1 && c.edges.some((e) => e.kind === "curve-continuity"),
@@ -1369,7 +1372,7 @@ it("closes prescribed-flow pressure over all physical parts without a new fan op
   }
   s.nodes.find((n) => n.id === 300)!.connectors[0]!.direction = "in";
   const e = evidence(s);
-  const c = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+  const c = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.find((c) =>
     c.elementIds.includes(10),
   )!;
   e.closure = {
@@ -1386,7 +1389,7 @@ it("closes prescribed-flow pressure over all physical parts without a new fan op
     },
     source: "Purpose closure",
   };
-  const result = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+  const result = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.find((c) =>
     c.elementIds.includes(10),
   )!;
   expect(result.hydraulics?.status).toBe("complete-for-prescribed-flow");
@@ -1424,7 +1427,7 @@ function pressureResult(
   h = emptyHydraulics(),
 ) {
   delete e.closure;
-  const c = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+  const c = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.find((c) =>
     c.elementIds.includes(100),
   )!;
   e.closure = {
@@ -1434,7 +1437,7 @@ function pressureResult(
     constraints: [],
     source: "Purpose complete physical component",
   };
-  return price(s, {}, work(e)).next.design.componentFlows.find((c) => c.elementIds.includes(100))!
+  return price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.find((c) => c.elementIds.includes(100))!
     .hydraulics!;
 }
 it("withholds unknown flow and pressure law rather than manufacturing zero", () => {
@@ -1684,7 +1687,7 @@ it("keeps pressure residuals scoped to the physical pressure network", () => {
   s.nodes.push(...other.s.nodes);
   for (const [k, v] of Object.entries(other.e)) if (k !== "scenario") e[`other:${k}`] = v;
   other.h.laws.push({ ...structuredClone(other.h.laws[0]!), totalPressureDifferenceInWg: 1.1 });
-  const bad = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+  const bad = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.find((c) =>
     c.elementIds.includes(1100),
   )!;
   e.badClosure = {
@@ -1697,7 +1700,7 @@ it("keeps pressure residuals scoped to the physical pressure network", () => {
   const valid = pressureResult(s, e, h);
   expect(valid.status).toBe("complete-for-prescribed-flow");
   expect(valid.maxPressureResidualInWg).toBeCloseTo(0, 12);
-  const invalid = price(s, {}, work(e)).next.design.componentFlows.find((c) =>
+  const invalid = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.find((c) =>
     c.elementIds.includes(1100),
   )!.hydraulics!;
   expect(invalid.status).toBe("inconsistent");
@@ -1821,7 +1824,7 @@ it("retains unrequested fan-side dependency evidence once and refuses its missin
   const head = pressureResult(s, e);
   expect(head.status).toBe("complete-for-prescribed-flow");
   expect(head.physicalComponentIds).toHaveLength(2);
-  const components = price(s, {}, work(e)).next.design.componentFlows.filter((c) =>
+  const components = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows.filter((c) =>
     head.physicalComponentIds.includes(c.id),
   );
   expect(components.every((c) => c.hydraulics !== null)).toBe(true);
@@ -1968,7 +1971,7 @@ function openPhysicalFanPurpose(flow: number | null = 300) {
       source: "Purpose demand",
     },
   };
-  const components = price(s, {}, work(e)).next.design.componentFlows;
+  const components = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows;
   for (const c of components)
     e[`hyd:${c.id}`] = {
       kind: "component-flow",
@@ -1994,7 +1997,7 @@ function openPhysicalFanPurpose(flow: number | null = 300) {
 }
 it("binds an actual open fan face and transfers only qualified same-fan flow", () => {
   const { s, e } = openPhysicalFanPurpose();
-  const result = price(s, {}, work(e)).next.design;
+  const result = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design;
   const open = result.componentFlows.find((c) => c.boundaries.some((b) => b.port === "100:3"))!;
   expect(open.status).toBe("unique");
   expect(open.edges).toEqual([]);
@@ -2046,7 +2049,7 @@ it("keeps separate open ERV fan streams on one cabinet without exchanging their 
     loss: { totalLossInWg: 0.1, flowCfm: 75, source: "Purpose" },
     source: "Purpose",
   };
-  const result = price(s, {}, work(e)).next.design.componentFlows;
+  const result = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows;
   const boundaries = result.flatMap((c) => c.boundaries);
   expect(boundaries.find((b) => b.port === "100:3")?.externalExchange?.ownerOutwardCfm).toBe(-300);
   expect(boundaries.find((b) => b.port === "100:5")?.externalExchange?.ownerOutwardCfm).toBe(-75);
@@ -2059,7 +2062,7 @@ it("does not turn unknown exterior flow or missing face pressure into a known he
     if (mode === "pressure")
       for (const value of Object.values(e))
         if (value.kind === "component-flow" && value.hydraulics) value.hydraulics.anchors = [];
-    const components = price(s, {}, work(e)).next.design.componentFlows;
+    const components = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows;
     const open = components.find((c) => c.boundaries.some((b) => b.port === "100:3"))!;
     if (mode === "unknown") {
       expect(open.status).toBe("underdetermined");
@@ -2085,7 +2088,7 @@ it("invalidates exact open fan pins when native identity, geometry, sense or pee
     if (mode === "point") p.point = [0, 0, -2];
     if (mode === "width") p.widthIn = 18;
     if (mode === "direction") p.direction = "out";
-    const result = price(s, {}, work(e)).next.design;
+    const result = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design;
     expect(result.reasons.some((r) => r.code === "stale-port-evidence")).toBe(true);
     expect(
       result.componentFlows
@@ -2099,7 +2102,7 @@ it("refuses contradictory fan design flow and leaves unclaimed open equipment un
   const { s, e } = openPhysicalFanPurpose();
   if (e.fan?.kind !== "fan") throw Error("Purpose fan");
   e.fan.designFlowCfm = 200;
-  let components = price(s, {}, work(e)).next.design.componentFlows;
+  let components = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows;
   expect(components.some((c) => c.status === "inconsistent")).toBe(true);
   expect(
     components
@@ -2108,7 +2111,7 @@ it("refuses contradictory fan design flow and leaves unclaimed open equipment un
   ).toBe(true);
   delete e.fan;
   for (const name of Object.keys(e)) if (name.startsWith("hyd:")) delete e[name];
-  components = price(s, {}, work(e)).next.design.componentFlows;
+  components = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows;
   const open = components.find((c) => c.boundaries.some((b) => b.port === "100:3"))!;
   expect(open.status).toBe("underdetermined");
   expect(open.boundaries[0]!.injectionCfm).toBeNull();
@@ -2117,9 +2120,9 @@ it("refuses contradictory fan design flow and leaves unclaimed open equipment un
 
 it("keeps component joint constraints connected-only while admitting exact open fan pins", () => {
   const { s, inlet } = openPhysicalFanPurpose();
-  const componentWitness = price(s, {}, work({})).next.design.componentFlows[0]!.componentWitness;
+  const componentWitness = price(s, {}, work({}), (work({})) ?? neutralFansWork).next.design.componentFlows[0]!.componentWitness;
   expect(() =>
-    ductsRouteState.schema.parse({
+    designOf({
       calculation: {
         bad: {
           edit: {
@@ -2158,7 +2161,7 @@ it("never promotes an open passive face into an automatic exterior premise", () 
     source: "Purpose passive open equipment",
   };
   for (const name of Object.keys(e)) if (name.startsWith("hyd:")) delete e[name];
-  const components = price(s, {}, work(e)).next.design.componentFlows;
+  const components = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows;
   const open = components.flatMap((c) => c.boundaries).find((b) => b.port === "100:3")!;
   expect(open.injectionCfm).toBeNull();
   expect(open.externalExchange).toBeUndefined();
@@ -2170,7 +2173,7 @@ it("uses explicit fan design flow including stated zero without reading native p
     const { s, e } = openPhysicalFanPurpose(q);
     if (e.fan?.kind !== "fan") throw Error("Purpose fan");
     e.fan.designFlowCfm = q;
-    const result = price(s, {}, work(e)).next.design.componentFlows;
+    const result = price(s, {}, work(e), (work(e)) ?? neutralFansWork).next.design.componentFlows;
     const open = result.find((c) => c.boundaries.some((b) => b.port === "100:3"))!;
     expect(open.status).toBe("unique");
     expect(open.boundaries[0]!.externalExchange).toMatchObject({

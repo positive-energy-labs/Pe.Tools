@@ -2,7 +2,7 @@ import { useState, type JSX, type ReactNode } from "react";
 import { Redo2, Undo2 } from "lucide-react";
 import type {
   DuctsInputs,
-  DuctsRouteDocument,
+  DuctsDesign,
   DuctsSheetEdits,
   DuctUnitKind,
   FittingPricing,
@@ -23,7 +23,7 @@ import type { OpenSheet } from "../neutral.ts";
 
 export interface InputContext {
   snapshot: DuctSnapshot;
-  doc: DuctsRouteDocument | null;
+  doc: DuctsDesign | null;
   revision: number | null;
   sheet: OpenSheet | null;
   inputs: DuctsInputs | null;
@@ -171,7 +171,7 @@ function CriterionControl({
   row: Criterion;
   refusal: string | null;
   changeInputs: (edits: DuctsSheetEdits) => void | Promise<unknown>;
-  cell?: DuctsRouteDocument["criteria"];
+  cell?: DuctsDesign["criteria"];
   act?: CellAct;
 }) {
   if (row.kind === "split")
@@ -341,7 +341,7 @@ function GroupPicker({
   act,
 }: {
   group: FittingGroup;
-  doc: DuctsRouteDocument | null;
+  doc: DuctsDesign | null;
   refusal: string | null;
   apply: (edits: DuctsSheetEdits, meta: EditMeta) => void;
   act?: CellAct;
@@ -392,7 +392,7 @@ function FittingGroupRows({
   act,
 }: {
   group: FittingGroup;
-  doc: DuctsRouteDocument | null;
+  doc: DuctsDesign | null;
   history: InputsHistory;
   refusal: string | null;
   apply: (edits: DuctsSheetEdits, meta: EditMeta) => void;

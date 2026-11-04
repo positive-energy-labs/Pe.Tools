@@ -1,5 +1,7 @@
 import {
+  ductsDesign,
   ductsRouteState,
+  neutralFansWork,
   ductsRosterResponseSchema,
   ductsSheetOverviewSchema,
   ductsSheetResponseSchema,
@@ -48,7 +50,7 @@ function seed(name: keyof typeof fixtures) {
   const pricing = pricingJob()({
     id: 0,
     base: { snapshot: fixture.snapshot, grids: {}, catalogs: {} },
-    doc: work,
+    doc: ductsDesign(work, neutralFansWork),
   });
   return {
     work,

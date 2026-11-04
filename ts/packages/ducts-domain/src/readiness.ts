@@ -7,7 +7,7 @@
  *   overridden). Flex on the rigid default roughness needs an override
  *   or an ignore.
  */
-import { ductOverrideKey, type DuctAssumption, type DuctsRouteDocument } from "@pe/agent-contracts";
+import { ductOverrideKey, type DuctAssumption, type DuctsDesign } from "@pe/agent-contracts";
 
 import { ISSUE_BLOCKS } from "./issues.ts";
 import { withStoredRulings } from "./rulings.ts";
@@ -25,7 +25,7 @@ export interface GroupReadiness {
 }
 
 /** The current edit at a key; optional suggestions do not affect readiness. */
-const edit = (doc: DuctsRouteDocument | null, key: string): DuctAssumption | undefined =>
+const edit = (doc: DuctsDesign | null, key: string): DuctAssumption | undefined =>
   doc?.assumptions[key]?.edit?.value;
 
 interface ById {
@@ -52,7 +52,7 @@ export function snapshotById(snapshot: DuctSnapshot): ById {
 
 export function readiness(
   snapshot: DuctSnapshot,
-  work: DuctsRouteDocument | null,
+  work: DuctsDesign | null,
 ): Record<string, GroupReadiness> {
   const doc = withStoredRulings(work, snapshot.store);
   const { issues, nodes, segments } = snapshotById(snapshot);

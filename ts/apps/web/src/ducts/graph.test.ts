@@ -1,6 +1,6 @@
+import { designOf } from "@pe/ducts-domain/test-design";
 import { expect, test } from "vite-plus/test";
 import {
-  ductsDocumentSchema,
   ductsRouteState,
   applyPatches,
   transitionPatches,
@@ -10,7 +10,7 @@ import { ductsData, schemas, neutralBodies, authoredPatches, localId } from "./n
 import { snapshot } from "./test-fixture";
 import sheet from "./sheet/sheet.fixture.json";
 
-const work = () => ductsDocumentSchema.parse({});
+const work = () => designOf({});
 type Scope = Parameters<typeof neutralBodies.lossReady.run>[0];
 const ready = <T>(value: T) => ({
   status: "ready" as const,
@@ -44,11 +44,10 @@ const scope = (stage: "network" | "sheet" = "network"): Scope =>
     },
   }) as Scope;
 
-test("the admitted declaration keeps Ducts Work, thirteen record families and the criteria root editor", () => {
+test("the admitted declaration keeps Ducts Work, five record families and the criteria root editor", () => {
   expect(schemas.work).toBe(ductsRouteState.schema);
-  expect(Object.keys(ductsData.cells)).toHaveLength(13);
+  expect(Object.keys(ductsData.cells)).toHaveLength(5);
   expect(ductsData.workFields.criteria.label).toBe("design criteria");
-  expect(ductsData.cells.parameters.segment).toBe("parameters");
   expect(ductsData.fields).not.toHaveProperty("terminalFlow");
   expect(ductsData.stageOrder).toEqual(["network"]);
   expect(ductsData.fields.system.cardinality).toBe("many");
@@ -61,39 +60,38 @@ test("the admitted declaration keeps Ducts Work, thirteen record families and th
 });
 
 test("bounded record-entry edits preserve siblings, encode deletion and reject invalid authored values", () => {
-  const doc = ductsDocumentSchema.parse({
-    componentDrops: {
-      "7": { edit: { value: { inWg: 0.18 } } },
-      "8": { edit: { value: { inWg: 0.25 } } },
+  // Rules are the ducts record segment since FANSPLIT; drops are fans Work.
+  const doc = ductsRouteState.schema.parse({
+    rules: {
+      "7": { edit: { value: { table: "CD3-9" } } },
+      "8": { edit: { value: { table: "CD3-1" } } },
     },
   });
-  const patches = authoredPatches(doc, [{ path: ["componentDrops", "7"] }]);
-  expect(patches).toEqual([{ path: ["componentDrops", "7"], op: "delete" }]);
+  const patches = authoredPatches(doc, [{ path: ["rules", "7"] }]);
+  expect(patches).toEqual([{ path: ["rules", "7"], op: "delete" }]);
   const changed = applyPatches(
     ductsRouteState,
     { version: 1, revision: 0, doc },
     "human",
-    [{ path: ["componentDrops", "7"] }],
+    [{ path: ["rules", "7"] }],
     0,
   );
   expect(changed).toMatchObject({
     ok: true,
-    envelope: { doc: { componentDrops: { "8": doc.componentDrops["8"] } } },
+    envelope: { doc: { rules: { "8": doc.rules["8"] } } },
   });
   expect(() =>
-    authoredPatches(doc, [
-      { path: ["componentDrops", "7", "edit"], value: { value: { inWg: "wrong" } } },
-    ]),
+    authoredPatches(doc, [{ path: ["rules", "7", "edit"], value: { value: { table: 7 } } }]),
   ).toThrow();
 });
 
 test("criteria edits merge the selected side and lifecycle actions remain bounded root patches", () => {
-  const doc = ductsDocumentSchema.parse({
+  const doc = ductsRouteState.schema.parse({
     criteria: { edit: { value: { allowanceInWg: { supply: 0.1, return: 0.2 } } } },
   });
   const patches = authoredPatches(
     doc,
-    editPatches({ criteria: { allowanceInWg: { return: 0.35 } } }, doc),
+    editPatches({ criteria: { allowanceInWg: { return: 0.35 } } }, designOf(doc)),
   );
   expect(patches).toEqual([
     {
@@ -108,38 +106,9 @@ test("criteria edits merge the selected side and lifecycle actions remain bounde
   expect(clear).toEqual([{ path: ["criteria"], value: { edit: null } }]);
 });
 
-test("loss preview refuses the previous fan scope and a combined multi-fan sheet", () => {
-  const ctx = scope("sheet");
-  expect(neutralBodies.lossReady.run(ctx)).toMatch(/scope/);
-  const fan = sheet.overview.fan;
-  const chosen = {
-    ...ctx,
-    work: {
-      ...ctx.work,
-      writeIntent: { edit: { value: { walk: { unitId: fan.unitId, portIndex: fan.portIndex } } } },
-    },
-  } as Scope;
-  expect(neutralBodies.lossReady.run(chosen)).toBe(true);
-  expect(
-    neutralBodies.lossReady.run({
-      ...chosen,
-      work: {
-        ...ctx.work,
-        writeIntent: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } },
-      },
-    } as Scope),
-  ).toMatch(/scope/);
-  const combined = {
-    ...chosen,
-    readings: {
-      ...chosen.readings,
-      sheet: ready({
-        ...chosen.readings.sheet.value,
-        opened: [chosen.readings.sheet.value!.open, chosen.readings.sheet.value!.open],
-      }),
-    },
-  } as Scope;
-  expect(neutralBodies.lossReady.run(combined)).toMatch(/scope/);
+// FANSPLIT: the fan walk scope is fans Work, so the chosen-walk and combined-sheet cases wait for U4.
+test("a sheet loss preview refuses while the fan walk scope is not wired", () => {
+  expect(neutralBodies.lossReady.run(scope("sheet"))).toMatch(/scope/);
 });
 
 test("native loss and repair scopes stay inside the active system", () => {

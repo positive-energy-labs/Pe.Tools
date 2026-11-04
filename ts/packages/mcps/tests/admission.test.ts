@@ -384,7 +384,7 @@ test.each(["open", "address", "workspace", "host"] as const)("loss preview reads
         : binding === "open" ? {open: "A/open-A"}
         : binding === "workspace" ? {work: "draft"} : {};
       expect(Object.fromEntries(url.searchParams)).toEqual(expected);
-      return Response.json({revision: 3, doc: ductsDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {walk: {unitId: 14577391, portIndex: 2}, cells: [["equipmentFlows", "14577391"]]}}}} : {})});
+      return Response.json({revision: 3, doc: ductsDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {groups: ["g14577391"]}}}} : {})});
     }
     if (url.pathname === "/actions" && init?.method === "POST") {
       const body = JSON.parse(String(init.body)); posts.push(body);

@@ -1,7 +1,7 @@
 import type {
   DuctsCriteriaEdits,
   DuctsCriteriaLayer,
-  DuctsRouteDocument,
+  DuctsDesign,
   DuctsSheetEdits,
   RouteStatePatch,
 } from "@pe/agent-contracts";
@@ -39,7 +39,7 @@ export function mergeCriteria(
  */
 export function editPatches(
   edits: DuctsSheetEdits,
-  doc: DuctsRouteDocument | null,
+  doc: DuctsDesign | null,
 ): RouteStatePatch[] {
   const patches: RouteStatePatch[] = [];
   for (const [field, segment] of Object.entries(EDIT_SEGMENTS) as [

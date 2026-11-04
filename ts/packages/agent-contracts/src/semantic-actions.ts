@@ -124,7 +124,7 @@ export const ductsActions = {
   },
   "ducts.preview-losses": {
     native: ["ducts.apply.preview"],
-    says: "First stage writeIntent with walk from route:ducts.roster or groups, and cells naming exactly the Work cells requested (for one fan flow use equipmentFlows plus the unit id). Then plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
+    says: "First stage writeIntent.groups from route:ducts.analysis, and cells naming exactly the rule cells requested (the fan walk and fan cells are /fans Work). Then plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
     needs: "project-document",
     effect: "query",
     input: z.strictObject({}),
@@ -132,7 +132,7 @@ export const ductsActions = {
   },
   "ducts.apply-losses": {
     native: ["ducts.apply"],
-    says: "Stage writeIntent.cells to limit this write to the requested Work cells. Omit cells only for a whole-network write that was explicitly reviewed. Write the staged duct loss values to Revit (fitting coefficients, terminal and component drops, fan static) and record their provenance in Project Information.",
+    says: "Stage writeIntent.cells to limit this write to the requested rule cells. Omit cells only for a whole-network write that was explicitly reviewed. Write the staged duct loss values to Revit (fitting coefficients, terminal and component drops, fan static) and record their provenance in Project Information.",
     needs: "project-document",
     effect: "command",
     input: z.strictObject({}),
@@ -191,8 +191,11 @@ import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
 import { stagedDucts, ductsRouteState } from "./ducts.ts";
+import { neutralFansWork } from "./fans.ts";
 /** Ducts derives its native request from the whole staged Work, not one writeIntent cell. */
-const ductsDerive = (work: unknown) => stagedDucts(ductsRouteState.schema.parse(work));
+const ductsDerive = (work: unknown) =>
+  // U4 wires the real fans Work here.
+  stagedDucts(ductsRouteState.schema.parse(work), neutralFansWork);
 export const dataTableDraftSchema = z.object({
   name: z.string(),
   isNew: z.boolean(),

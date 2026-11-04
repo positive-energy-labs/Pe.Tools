@@ -12,9 +12,10 @@
  * what a person's choice stages.
  */
 import {
-  ductsDocumentSchema,
+  ductsDesign,
+  neutralFansWork,
   type DuctAssumption,
-  type DuctsRouteDocument,
+  type DuctsDesign,
 } from "@pe/agent-contracts";
 
 import type { DuctSnapshot } from "./types.ts";
@@ -56,15 +57,15 @@ const keeps = (verdict: string | undefined | null) =>
 export const storedRuling = (store: Store, segment: RulingSegment, key: string) =>
   (segment === "assumptions" ? store?.verdicts?.[key]?.verdict : store?.roles?.[key]?.role) ?? null;
 
-const EMPTY = ductsDocumentSchema.parse({});
-const memo = new WeakMap<object, WeakMap<object, DuctsRouteDocument>>();
+const EMPTY = ductsDesign(null, neutralFansWork);
+const memo = new WeakMap<object, WeakMap<object, DuctsDesign>>();
 const NO_STORE = {};
 
 /** The Work as every reader sees it: stored rulings under Work's own deltas. Identity-stable. */
 export function withStoredRulings(
-  doc: DuctsRouteDocument | null,
+  doc: DuctsDesign | null,
   store: Store,
-): DuctsRouteDocument | null {
+): DuctsDesign | null {
   const verdicts = Object.entries(store?.verdicts ?? {});
   const roles = Object.entries(store?.roles ?? {});
   const deletes = Object.values(doc?.assumptions ?? {}).some((cell) => cell.edit?.delete);
@@ -89,13 +90,13 @@ export function withStoredRulings(
   for (const [id, { role }] of roles)
     if (isRole(role) && !base.roles[id]?.edit)
       rolesOut[id] = { ...base.roles[id], edit: { value: { role } } };
-  const effective = { ...base, assumptions, roles: rolesOut } as DuctsRouteDocument;
+  const effective = { ...base, assumptions, roles: rolesOut } as DuctsDesign;
   byStore.set(store ?? NO_STORE, effective);
   return effective;
 }
 
 /** What a write would change in the store's rulings: Work's edit deltas that differ from it. */
-export function pendingRulings(doc: DuctsRouteDocument | null, store: Store): RulingDelta[] {
+export function pendingRulings(doc: DuctsDesign | null, store: Store): RulingDelta[] {
   const out: RulingDelta[] = [];
   for (const [key, cell] of Object.entries(doc?.assumptions ?? {})) {
     if (!cell.edit) continue;

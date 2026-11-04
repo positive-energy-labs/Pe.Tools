@@ -1,5 +1,5 @@
 /** Heal proposals only; the native op re-checks and post-checks. Model feet, limits inches. */
-import type { DuctFinding, DuctsRouteDocument } from "@pe/agent-contracts";
+import type { DuctFinding, DuctsDesign } from "@pe/agent-contracts";
 import { tolerate, topologyRulingsKey, verdictOf } from "./proximity.ts";
 import { subjectName } from "./words.ts";
 import { withStoredRulings } from "./rulings.ts";
@@ -106,14 +106,14 @@ const plans = new WeakMap<DuctSnapshot, { key: string; plan: HealPlan }>();
 
 export function rememberHealPlan(
   snapshot: DuctSnapshot,
-  work: DuctsRouteDocument | null,
+  work: DuctsDesign | null,
   plan: HealPlan,
 ) {
   plans.set(snapshot, { key: topologyRulingsKey(withStoredRulings(work, snapshot.store)), plan });
 }
 
 /** Only edit topology verdicts affect healing; a unit-flow edit cannot rebuild it. */
-export function healPlan(snapshot: DuctSnapshot, work: DuctsRouteDocument | null = null): HealPlan {
+export function healPlan(snapshot: DuctSnapshot, work: DuctsDesign | null = null): HealPlan {
   const key = topologyRulingsKey(withStoredRulings(work, snapshot.store));
   const hit = plans.get(snapshot);
   if (hit?.key === key) return hit.plan;
@@ -122,7 +122,7 @@ export function healPlan(snapshot: DuctSnapshot, work: DuctsRouteDocument | null
   return plan;
 }
 
-function build(snapshot: DuctSnapshot, raw: DuctsRouteDocument | null): HealPlan {
+function build(snapshot: DuctSnapshot, raw: DuctsDesign | null): HealPlan {
   // A stored ruling (an end left out) holds like a edit one (`rulings.ts`).
   const work = withStoredRulings(raw, snapshot.store);
   const tolerated = tolerate(snapshot, work);

@@ -1,6 +1,6 @@
 /** Deterministic heal proposals. Points are model feet. */
+import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
-import { ductsDocumentSchema } from "@pe/agent-contracts";
 
 import { HEAL_JOIN_GAP_IN, healPlan, healRequestGroup, proximityId } from "./heal.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -206,7 +206,7 @@ it("leaves size changes, two systems, long or skewed gaps and terminals to a per
 it("caps a dangling fitting end, never one a person ignored", () => {
   const tee = node(50, "fitting", [conn(0, [0, 0, 0], [-1, 0, 0])]);
   expect(items(snap([], [tee]))).toMatchObject([{ kind: "cap", end: "50:0" }]);
-  const work = ductsDocumentSchema.parse({
+  const work = designOf({
     assumptions: {
       "open-end:50:0": { edit: { value: { kind: "verdict", verdict: "ignore" } } },
     },

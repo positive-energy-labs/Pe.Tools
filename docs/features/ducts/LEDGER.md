@@ -4,6 +4,10 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 
 ## Decided
 
+- 2026-11-03, Ducts Work v2 drops fan cells and Load Preview at migration 1→2 (`dropFanCells`); fan edits are deleted, not moved, and fans Work starts empty. The host persists the migrated record with history `[]`. (kaitpw, Q5/Q1)
+- 2026-11-03, each route declares its own `writeIntent`: ducts holds groups, fan and rules cells; fans holds walk and fan cells. Pricing receives both Works as required inputs and keys its cache by both. (kaitpw, Q3/Q4)
+- 2026-11-03, Load Preview is deleted: the loads cell, Pea paste path and terminalFlows source. Flow precedence is edit, then rooms split, then Revit. (kaitpw)
+
 - 2026-11-03, kaitpw (CONVERGENCE (i) M9): no terminal class keys off family. A terminal's family is a placeholder chosen for what the architect wants to see in 3D, and most Chadds terminals are custom, so the family classifies nothing: "louvers are not special"; the default drop rule is uniform, and a per-terminal typed drop and catalog data remain the options.
 - 2026-11-02, kaitpw (ADR 0027): `/ducts` splits in two. `/ducts` prices systems; `/fans` prices a fan's air path ("with the fan-first approach it does feel distinctly different from systems"). Deep links between them carry the subject. `fan` is a `many` field (`all` token); `allFans`, `readAll` and `level` go. Pea may apply every ducts command, assign-fan included. `ducts-domain` is the one loss engine.
 - 2026-10-30, kaitpw, accepted the sheet thread's leans: label parameter is project (a Work cell); implausible-loss limits are a firm criterion (firm file); overview path cap is a per-user setting; system colours stay a shared Work cell (one palette per project). Slot choices (`parameters`) stay Work; `DEFAULT_SLOT` is a firm-default constant or deleted, never a setting.
@@ -162,12 +166,16 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 - 2026-11-03, Drop route-specific named recovery-row expansion; shared carry-over confirmation, canonical salvage and host-owned Restore remain. (dropped; kaitpw confirmed 2026-11-03)
 
 ## Owed
+
+- RHVAC Load Preview integration: re-enter through /rooms once the rooms split is built and 'cfm comes from equipment' has mileage. (kaitpw)
+- apply-request custody (`source.work`) names only the ducts Work revision; U4 must seal the fans Work revision with it. (counsel, 2026-11-03)
+- v5 analysis artifacts saved before U2 lack `input.fans` and now refuse on historical reads. (U2 finding, 2026-11-03)
 - Fans and Ducts are multi-subject: the person opens several fans or systems and deactivates each. Open: clicking Fans-list rows (multi-select). Deactivate: every selection shows in the pane header with its own × (kaitpw 2026-11-03). The old chip bar is rejected for its placement and integration, not its function. Direction only; FANS-PICK builds it.
 - Go-to search returns (kaitpw 2026-11-03): the `/` type-ahead over systems and elements, including a typed element id; picking flies the picture there. Direction only; FANS-PICK builds it.
 - Direction, fan-coil flow truth (kaitpw 2026-11-03, CONVERGENCE (i) M3): push the fan's airflow into its grilles' airflow parameters, "so that setting airflow is purely an equipment edit". The split rule across grilles is open and evolves with the future rooms product.
 - Direction, topology checks C1 to C3 surface TBD (kaitpw 2026-11-03, CONVERGENCE (i)): "something like the duct network's small 'fix x' notification, and in 3D would be nice"; muse it extensively later with layers and keyed layers in the mix, since many semantic distinctions must stay intuitive.
 - C7 cap-tap auto-accept (kaitpw 2026-11-03, CONVERGENCE (i)): build it only if a Chadds census shows it is not niche; "if it is niche, it is resolved by hand. Count it before building." Witness: louver plenum 14106988, end cap 14107111, MUAS-1 intake duct 14122436, 2.63 in gap (UNPROVEN, no live read). Hap: you cannot model a sheet-metal duct box in Revit, and firms model plenum boxes this way routinely.
-- [M] Split /fans Work from /ducts Work per the routes ledger 2026-11-03 kaitpw direction; census first, then a persisted-Work migration that loses no saved cell.
+- [M] Finish the /fans Work split: U3 registers its Work and U4 seals both revisions for writers. Q5 deletes the old fan edits; the ducts cells stay byte-equal through migration. (kaitpw, 2026-11-03)
 
 - S9 native consumption: prove host result matching against Revit velocity pressure for elbows, transitions and both tap legs; changed or ambiguous bases must refuse. See `PeLossServer.Calculate` TODO. No Revit session was authorized for S9.
 

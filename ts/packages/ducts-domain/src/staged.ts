@@ -1,5 +1,5 @@
 /** What the Work has edit for a write, counted from the document alone. */
-import type { DuctsApplyInput, DuctsRouteDocument, WorkPath } from "@pe/agent-contracts";
+import type { DuctsApplyInput, DuctsDesign, WorkPath } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
 import { pendingRulings } from "./rulings.ts";
@@ -19,7 +19,7 @@ export const WRITTEN = [
   "parameters",
 ] as const;
 
-export const stagedCells = (doc: DuctsRouteDocument | null) =>
+export const stagedCells = (doc: DuctsDesign | null) =>
   ([...WRITTEN, "catalogs", "ruleAssignments"] as const).flatMap((segment) =>
     Object.entries(doc?.[segment] ?? {}).flatMap(([key, cell]) =>
       cell?.edit ? [{ segment, key, cell }] : [],
@@ -27,11 +27,11 @@ export const stagedCells = (doc: DuctsRouteDocument | null) =>
   );
 
 /** How many changes a write would carry: edit cells, and rulings that differ from the store's. */
-export const pendingCount = (doc: DuctsRouteDocument | null, store: DuctSnapshot["store"]) =>
+export const pendingCount = (doc: DuctsDesign | null, store: DuctSnapshot["store"]) =>
   stagedCells(doc).length + pendingRulings(doc, store).length;
 
 /** Staged ESP cells: the one write that waits for a clean calc. */
-export const stagedEsp = (doc: DuctsRouteDocument | null) =>
+export const stagedEsp = (doc: DuctsDesign | null) =>
   Object.values(doc?.esp ?? {}).filter((cell) => cell?.edit).length;
 
 /** Retire only cells whose transmitted native writes succeeded; held and refused cells stay edit. */

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
+import { designOf } from "@pe/ducts-domain/test-design";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { ductsDocumentSchema } from "@pe/agent-contracts";
 import type { Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { RulesTree } from "./rules-pane";
@@ -38,7 +38,7 @@ test("rule rows keep native ids and editable cells keep their arrow and Enter ke
       priced={priced}
       groups={[]}
       wide
-      work={{ doc: ductsDocumentSchema.parse({}), revision: null, write: vi.fn() }}
+      work={{ doc: designOf({}), revision: null, write: vi.fn() }}
       focus={null}
       onFocus={onFocus}
       nameOf={(id) => `Fitting ${id}`}

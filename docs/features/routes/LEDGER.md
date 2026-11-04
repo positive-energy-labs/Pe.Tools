@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-03, U2r keeps U1's adapter deleted and `PaneContext.cells` unchanged; typed NetworkBody/SheetBody join neutral fans directly. Retain the criteria writer while the current ducts consumer still writes criteria. (counsel, U2r scope)
+
 - 2026-11-04, U1 leaves narrowed `ProtoProps` for the pictures, `SystemsList` and `DuctsOwner`; U1b owns removing those consumers and the remaining legacy Page schema/callback. (counsel)
 - 2026-11-03, a route's declared verbs render once, at route level (the situation band the shell already owns); a pane header carries only pane-owned controls (the `PaneActions` slot) and the subject chips. A pane's declared verbs are what its body may invoke, never header buttons. The subject pane's header opts into the kit `Pane fit="wrap"`, so chips keep their label width and the header grows lines instead of truncating. Final placement of the route verbs is owed to a kaitpw protoui. (kaitpw: "it never should've been this way to begin with, repeating all the stuff")
 - 2026-11-03, selection and active are two explicit concepts in the subject seam: the open set plus one active member, carried in the existing subject field (`active` on the ids form, omitted while it is the first). `add` never moves the active member except the first into an empty set; `remove` of the active hands it to the next neighbour, else the previous; `toggle`; `setActive` (`shell/open-set.ts`). Go-to system picks and list-row opens add into the background. Navigation between open subjects is owed, to be designed with the fans/ducts split. (kaitpw)
@@ -66,6 +68,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-11-03 runtime ownership derives from the Revit SDK (PePayloadContext / installer manifest); no process infers its lane from where its bytes sit. Supersedes ISOFIX-2/3. (kaitpw; ISOFIX-R, `t3/u2-isofix-r`: `ProductRuntimeLayout.Configure` once per shell, tray told by `--lane --root`, one state-root table `runtime-ownership.fixture.json` for C#, TS and PowerShell.)
 
 ## Tried & rejected
+
+- 2026-11-03, a `moved` host branch that births fans Work from ducts Work (FANSPLIT 3A) was superseded by Q5: delete the old fan edits. (counsel)
 - 2026-11-03, dropped parity: /ducts history ESP effect on undo/redo. After an undo or redo the line shows the label only ('undid X' / 'redid X'), no numbers; numbers show only for a forward edit. `last` is not added to PaneContext.history. (kaitpw: 'this was an unnecessary feature')
 - 2026-11-01, a stage per subject inside one route (spike A, `t3/kernel-stage-subject` @ 6010929e, `StageDecl.subject`): it fixed the wrong picker and the URL leak, but it grew the kernel to serve one route's two products and dropped the other stage's subject on a switch. Replaced by the route split (ADR 0027 rule 1).
 - 2026-11-01, keeping readings alive by keeping every source: hiding a tab released readings through React `Activity` (red test `shell/readings-retention.test.tsx`, spike B), but holding every source would keep workers, ports and GPU resources. Retention must be decided per reading kind.
@@ -78,8 +82,24 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
+- Main is blocked while any `U4: fan cells reach apply-losses only through the fans Work` marker remains. U4 restores the eleven tests below without dropping their assertions; the two harness cases must read the actual fans binding instead of neutral fans before unskip. (counsel, 2026-11-03)
+- /ducts pricing reads the neutral fans Work until U4 wires the real one. (counsel, 2026-11-03)
+- U3 makes an absent fans Work an error when the fans route registers; remove the sole `pe-routes.ts` readWork fallback. (counsel B, 2026-11-03)
+- closure/route-directory hash cycle: closures embed `route-directory.ts`, and the directory holds the closure fingerprints, so both can never be fresh; the closure check stays green over a stale directory. (finding, U2r, 2026-11-03)
+- U4 re-enables `D03/C07: admitted losses preview is read-only, names sealed rows and commits only its scope` in [fans-native.test.ts:160](../../../ts/apps/host/tests/fans-native.test.ts#L160); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
+- U4 re-enables `W11: real Pea deadline controls the admitted sealed write` in [fans-native.test.ts:181](../../../ts/apps/host/tests/fans-native.test.ts#L181); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
+- U4 re-enables `W11: real Pea reject controls the admitted sealed write` in [fans-native.test.ts:181](../../../ts/apps/host/tests/fans-native.test.ts#L181); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
+- U4 re-enables `fixture HTTP roster uses the real sheet service and strict open-document inventory` in [fans-native.test.ts:49](../../../ts/apps/host/tests/fans-native.test.ts#L49); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
+- U4 re-enables `claude: canonical Address Work joins find, stage, sealed preview, 60-second consent, journal apply and receipt in one chain` in [harness-threads.test.ts:193](../../../ts/apps/host/tests/harness-threads.test.ts#L193); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
+- U4 re-enables `codex: canonical Address Work joins find, stage, sealed preview, 60-second consent, journal apply and receipt in one chain` in [harness-threads.test.ts:193](../../../ts/apps/host/tests/harness-threads.test.ts#L193); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
+- U4 re-enables `host-derived preview and apply send the captured Work flow and retire only confirmed cells` in [unification-write-boundary.test.ts:398](../../../ts/apps/host/tests/unification-write-boundary.test.ts#L398); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
+- U4 re-enables `kernel gap: Work A cannot write document B` in [unification-write-boundary.test.ts:229](../../../ts/apps/host/tests/unification-write-boundary.test.ts#L229); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
+- U4 re-enables `kernel gap: native payload must derive from Work, not caller` in [unification-write-boundary.test.ts:229](../../../ts/apps/host/tests/unification-write-boundary.test.ts#L229); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
+- U4 re-enables `kernel gap: preview seal refuses apply after Work changes` in [unification-write-boundary.test.ts:327](../../../ts/apps/host/tests/unification-write-boundary.test.ts#L327); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
+- U4 re-enables `unknown outcome blocks a new invocation from dispatching the same write` in [unification-write-boundary.test.ts:372](../../../ts/apps/host/tests/unification-write-boundary.test.ts#L372); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
+
 - `shell/work-door-observation.ts`: completion rejection can strand waiting cell transitions; replace observation/completion ownership with typed terminals on success/failure/interruption and scoped subscription release. U1 has no rejection proof. (counsel/Common 15, 2026-11-04)
-- The readonly `DuctSnapshot` input sweep reached 28 files (16 production, 12 tests) and stopped; the alias was restored. Contract-owned Work, Page viewport/`ListSearch` and `SheetReading` readonly inputs remain documented casts until U2/U1b. `Grids`/`Catalogs` were narrowed in two domain files. (counsel, 2026-11-04)
+- The readonly `DuctSnapshot` input sweep reached 28 files (16 production, 12 tests) and stopped; the alias was restored. Page viewport/`ListSearch` and `SheetReading` readonly inputs remain documented casts for U1b; U2r removes the Work casts at its four typed joins. `Grids`/`Catalogs` were narrowed in two domain files. (counsel, 2026-11-04)
 - `source-route-services`/`ReadingContext` erases catalog input types before ducts sources; the one `ReadArgs` cast names the kernel gap. No per-reader decode was added. (counsel, 2026-11-04)
 - `SheetBody` retains one raw take/unsuggest path for root criteria: "temporary: criteria writer moves to fans with its cells (U2/U3, Q2a)". Declared keyed ChoiceCell paths use `ctx.cells`; reconcile U2's read-only sheet edit. (counsel/Q2a, 2026-11-04)
 

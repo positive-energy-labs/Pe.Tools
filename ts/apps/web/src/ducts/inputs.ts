@@ -18,9 +18,7 @@ const flowSourceWord = (source: FlowSource | "override" | "revit" | null) =>
       ? "override"
       : source === "revit"
         ? "Revit"
-        : source.startsWith("rooms")
-          ? "rooms"
-          : "load preview";
+        : "rooms";
 
 export interface Resolved<T> {
   /** The value Pe would use now; null when no rung holds one. */

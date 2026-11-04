@@ -147,7 +147,7 @@ interface LossError {
 export type Choices = Readonly<Record<string, string>>;
 
 export interface Overrides {
-  /** Design flow per terminal id, cfm; beats the snapshot's `flow` fact (survey: override > load preview > Revit). */
+  /** Design flow per terminal id, cfm; beats the snapshot's `flow` fact (survey: override > rooms > Revit). */
   terminalCfm?: Readonly<Record<number, number>>;
   /** Explicit manual drop per terminal id, in-wg. Native scalar drops do not attest a catalog total. */
   terminalPs?: Readonly<Record<number, number>>;

@@ -1,8 +1,8 @@
 /** Deterministic connector and proximity cuts, with optional saved Project A coverage. */
+import { designOf } from "@pe/ducts-domain/test-design";
 import { existsSync, readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 
-import { ductsDocumentSchema } from "@pe/agent-contracts";
 import { groupTree } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -173,14 +173,14 @@ it("a break the builder bridges by proximity is inferred, not a gap, until a ver
   expect(cut.inferred).toEqual([
     { after: 14107111, before: 14122436, findingId: finding, grade: "stretched", confirmed: false },
   ]);
-  const work = ductsDocumentSchema.parse({
+  const work = designOf({
     assumptions: { [finding]: { edit: { value: { kind: "verdict", verdict: "ignore" } } } },
   });
   const ruled = legsOf(snapshot, ids, undefined, work);
   expect(ruled.inferred).toEqual([]);
   expect(ruled.gaps).toEqual([{ after: 14107111, before: 14122436 }]);
   // A person's edit connect confirms it; the break stays drawn, ruled.
-  const confirmed = ductsDocumentSchema.parse({
+  const confirmed = designOf({
     assumptions: { [finding]: { edit: { value: { kind: "verdict", verdict: "connect" } } } },
   });
   expect(legsOf(snapshot, ids, undefined, confirmed).inferred).toMatchObject([

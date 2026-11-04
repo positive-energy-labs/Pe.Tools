@@ -1,3 +1,5 @@
+// U4 wires the real fans Work for callers without one.
+import { neutralFansWork } from "@pe/agent-contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { bin } from "./bins.ts";
@@ -168,7 +170,7 @@ describe("implausible loss", () => {
   });
 
   it("raises a blocking implausible-loss finding naming the element, rule, table and flow", () => {
-    const priced = price(collarSnapshot(), grids, null);
+    const priced = price(collarSnapshot(), grids, null, neutralFansWork);
     const found = priced.findings.filter((f) => f.kind === "implausible-loss");
     expect(found).toHaveLength(1);
     expect(found[0]!.elementIds).toEqual([50]);
@@ -197,12 +199,12 @@ describe("cross-classification flow", () => {
     // 12 in round is 0.7854 ft2: 100 cfm reads 127 fpm; with the welded 500 cfm it would read 764.
     expect(trunk.fpm).toBeCloseTo(100 / 0.7854, 0);
     expect(r.crossClass).toEqual([expect.objectContaining({ id: 50, from: 12, cfm: 500 })]);
-    const found = price(welded(), {}, null).now.crossClass;
+    const found = price(welded(), {}, null, neutralFansWork).now.crossClass;
     expect(found).toHaveLength(1);
   });
 
   it("raises mixed-classification on the element", () => {
-    const found = price(welded(), {}, null).findings.filter(
+    const found = price(welded(), {}, null, neutralFansWork).findings.filter(
       (f) => f.kind === "mixed-classification" && f.elementIds.includes(50),
     );
     expect(found).toHaveLength(1);

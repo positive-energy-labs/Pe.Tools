@@ -59,9 +59,7 @@ import {
   type TargetInventory,
   type DocumentRef,
   type ThreadHead,
-  transitionPatches,
 } from "@pe/agent-contracts";
-import { parseLoadPreview } from "@pe/ducts-domain/load-preview";
 import {
   HostRpcCaller,
   type HostOperationCallResult,
@@ -1026,26 +1024,11 @@ async function dispatch(
           throw new Error(
             "route:ducts.edit needs an exact document. Pass target {kind: open, ref: {session, openId}} or set a thread default, then read its Work revision before editing.",
           );
-        // Ducts: a raw Load Preview paste is parsed here and proposed as loads/preview.
-        const loads =
-          parsed.route === "ducts" && typeof payload.loadsText === "string"
-            ? transitionPatches(
-                ["loads"],
-                "preview",
-                {},
-                {
-                  kind: "set",
-                  rung: { value: { systems: parseLoadPreview(payload.loadsText).systems } },
-                },
-              )
-            : [];
         return routeWrite(
           parsed.route,
           workTarget,
           input.expectedRevision,
-          {
-            patches: [...(Array.isArray(payload.patches) ? payload.patches : []), ...loads],
-          },
+          { patches: Array.isArray(payload.patches) ? payload.patches : [] },
           workspaceId,
         );
       }
