@@ -113,6 +113,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
+- After root integrates testing-world, retire the campaign checkouts and schedule-worktree residue named in the [delivery report](C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/deterministic-20261104-testing-world-implementation/pillar/REPORT.md). Worker processes are stopped; Git removed the schedule registration but left files, and automatic approval review blocked residue deletion.
+
 - RATCHET-GREEN, 2026-11-04: `src/neutral-imports.guard.test.ts > neutral modules never import web UI, React, web aliases or styles` remains Owed. Remove forbidden UI/transitive imports from the ducts and fans neutral modules. Keep the law; do not raise its allowance.
 
 - RATCHET-GREEN, 2026-11-04: `src/catalog-reads.guard.test.ts > web callers cannot use raw JSON transport or hand response objects` remains Owed. Remove the route-local ids/all transport decoders in ts/apps/web/src/captures/kernel.ts through the admitted read boundary. Keep the law; do not raise its allowance.
