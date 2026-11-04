@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-04, browser fixture Work uses `RouteWorkspace` with mount-local storage, including its retained envelope history; fixture adapters do not author acknowledgements or inverse patches. Native fixture commands still refuse. Shared reducer lifecycle witnesses live in `runtime/tests/work-journal.test.ts`; web keeps mount, metadata and conflict witnesses. (testing-world)
+
 - 2026-11-04, An open route sees another route's Work edits only on reload or re-entry; there is no cross-route push invalidation (F8, REDRIVE). kaitpw ruled the push unnecessary.
 
 - 2026-11-04, no open fan is explicit sheet-reading absence, never a native snapshot; native timestamp validation stays strict. Rule owner links preserve their semantic rule selection and available system context. (FX-SHEET)

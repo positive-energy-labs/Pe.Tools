@@ -132,7 +132,7 @@ test("missing recovery preserves unknown; exact cancellation joins the original 
     readNativeReceipt(step, originalProcess, async () =>
       sdkEnvelope(
         outcome === "missing"
-          ? { state: "missing", requestId: step.id }
+          ? { state: "missing", requestId: step.id, dialogs: null }
           : {
               state: "cancelled",
               requestId: step.id,

@@ -5,6 +5,7 @@ import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { bindWork, workKey, type ReadingFrame, type ReadingRequest } from "@pe/agent-contracts";
 import {
   builtinClosureFingerprint,
+  captureAdmittedHostBindings,
   type BuiltinClosure,
 } from "../../../packages/agent-contracts/src/route-module.ts";
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
@@ -19,9 +20,7 @@ import { builtinEnrollments, type BuiltinEnrollment } from "../src/builtin-enrol
 import { ductsRouteState } from "@pe/agent-contracts";
 import { fixture } from "./fixtures/builtin.neutral.ts";
 
-async function entry(
-  module = fixture,
-): Promise<BuiltinEnrollment> {
+async function entry(module = fixture): Promise<BuiltinEnrollment> {
   const envelope: BuiltinClosure = {
     source: "builtin-closure",
     version: 1,
@@ -95,6 +94,48 @@ test("Ducts and Fans own independent canonical host Work registrations", async (
   const run = await open(f.workspace);
   try {
     if (!run.service) throw Error(JSON.stringify(run.result));
+    // These paths drive unfinished-Work census; neutral specs alone omit the legacy overlay.
+    for (const [key, paths] of Object.entries({
+      families: [["writeIntent", "*"], ["cells", "*"], ["patch"], ["scope"]],
+      schedules: [
+        ["writeIntent", "*"],
+        ["cells", "*"],
+      ],
+      fans: [
+        ["writeIntent"],
+        ["calculation", "*"],
+        ["terminalDrops", "*"],
+        ["componentDrops", "*"],
+        ["esp", "*"],
+        ["equipmentFlows", "*"],
+        ["roles", "*"],
+        ["flows", "*"],
+        ["parameters", "*"],
+        ["designFriction"],
+      ],
+      ducts: [
+        ["writeIntent"],
+        ["assumptions", "*"],
+        ["rules", "*"],
+        ["catalogs", "*"],
+        ["ruleAssignments", "*"],
+        ["subject", "*"],
+        ["claims", "*"],
+        ["labelParameter"],
+        ["workingPhase"],
+        ["systemColours"],
+        ["kinds", "*"],
+        ["criteria"],
+      ],
+    })) {
+      const registration = captureAdmittedHostBindings(run.service.routes.get(key)!);
+      try {
+        if (!("workState" in registration.bindings)) throw Error("Expected host Work registration");
+        expect(registration.bindings.workState!.editable, key).toEqual(paths);
+      } finally {
+        registration.deactivate();
+      }
+    }
     const owner = run.service.routes.get("ducts")!;
     const presenter = run.service.routes.get("fans")!;
     // Q2: each admitted route owns its Work fingerprint.
@@ -182,8 +223,15 @@ test("fans enrolls alone with its own Work registration", async () => {
     expect(run.service?.routes.get("fans")?.resolvedWork?.spec.route).toBe("fans");
     expect(run.service?.routes.has("ducts")).toBe(false);
     const key = bindWork("fans", null);
-    expect(await f.workspace.admitFeed(key, { routeKey: "fans", fingerprint: workFingerprintSchema.parse(`builtin-closure:${fan.closure.fingerprint}`) })).toBeNull();
-  } finally { await close(run.scope); }
+    expect(
+      await f.workspace.admitFeed(key, {
+        routeKey: "fans",
+        fingerprint: workFingerprintSchema.parse(`builtin-closure:${fan.closure.fingerprint}`),
+      }),
+    ).toBeNull();
+  } finally {
+    await close(run.scope);
+  }
 });
 test("partial startup failure unwinds prior Work registration with a typed failure", async () => {
   const f = workspace();
@@ -256,7 +304,16 @@ test("startup refuses a stale committed pin with the typed regeneration instruct
   // Model the producer finding changed source while the deployment pin remains old.
   const stale = {
     ...good,
-    closure: { ...good.closure, envelope: { ...good.closure.envelope, modules: good.closure.envelope.modules.map(member => ({ ...member, sha256: "b".repeat(64) })) } },
+    closure: {
+      ...good.closure,
+      envelope: {
+        ...good.closure.envelope,
+        modules: good.closure.envelope.modules.map((member) => ({
+          ...member,
+          sha256: "b".repeat(64),
+        })),
+      },
+    },
   };
   const run = await open(workspace().workspace, [stale]);
   expect(Exit.isFailure(run.result)).toBe(true);

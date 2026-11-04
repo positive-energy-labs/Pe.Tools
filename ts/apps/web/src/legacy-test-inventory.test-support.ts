@@ -1,14 +1,17 @@
+import { admittedBuiltinKeys } from "../../../packages/agent-contracts/src/admitted-builtin-keys";
 import type { RouteGraph } from "@pe/agent-contracts";
-import { legacyInventory } from "../../../tests/repo-guards/src/unification-2-census";
 
-// Match codegen:routes' module convention; the source census removes migrated JSON modules.
+// Match codegen:routes export discovery; admitted builtins use their closure witness.
 const modules = import.meta.glob<Record<string, unknown>>("./*/graph.ts", { eager: true });
-export const legacyGraphs = legacyInventory().graphs.map(({ file, symbol }) => {
-  const module = modules[`./${file.split("/src/")[1]}`];
-  if (!module || !(symbol in module)) throw Error(`Missing inventoried graph: ${file}#${symbol}`);
-  const exported = module[symbol];
-  const graph = typeof exported === "function" ? exported(() => ({ thread: "" })) : exported;
-  if (!graph || typeof graph !== "object" || !("key" in graph))
-    throw Error(`Invalid inventoried graph: ${file}#${symbol}`);
-  return graph as RouteGraph<any, any>;
-});
+export const legacyGraphs = Object.values(modules)
+  .flatMap((module) =>
+    Object.entries(module)
+      .filter(([symbol]) => symbol.endsWith("Graph"))
+      .map(([, exported]) => {
+        const graph = typeof exported === "function" ? exported(() => ({ thread: "" })) : exported;
+        if (!graph || typeof graph !== "object" || !("key" in graph))
+          throw Error("Invalid exported route graph");
+        return graph as RouteGraph<any, any>;
+      }),
+  )
+  .filter((graph) => !(admittedBuiltinKeys as readonly string[]).includes(graph.key));

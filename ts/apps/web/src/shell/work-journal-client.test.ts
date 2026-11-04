@@ -74,13 +74,11 @@ test("Work submits authentic ack, refusal and current stale revision without jou
   expect(submit).not.toHaveBeenCalled();
 });
 test("native command survives observer departure and expires outside bounded replay", async () => {
-  const submit = vi
-    .fn()
-    .mockImplementation(async (command) => ({
-      state: "succeeded",
-      id: command.id,
-      result: { saved: command.id },
-    }));
+  const submit = vi.fn().mockImplementation(async (command) => ({
+    state: "succeeded",
+    id: command.id,
+    result: { saved: command.id },
+  }));
   const door = createWorkFeedClient(
     { subscribe: () => () => {}, dirty: () => {} },
     { write: vi.fn(), submit },
@@ -132,22 +130,51 @@ test("fixture Work stores are isolated and native commands refuse", async () => 
     (v) => other.push(v),
     () => {},
   );
-  expect(other.at(-1)).toMatchObject({
-    kind: "ready",
-    snapshot: { revision: 0, value: { amount: 0 } },
+  await expect
+    .poll(() => other.at(-1))
+    .toMatchObject({
+      kind: "ready",
+      snapshot: { revision: 0, value: { amount: 0 } },
+    });
+  expect(await finish(a.submitWork(scope, write, invocation))).toMatchObject({
+    kind: "refused",
+    refusal: { code: "stale_revision", revision: 1 },
   });
+  const reopened: unknown[] = [];
+  const stop = a.open(scope).subscribe(
+    (value) => reopened.push(value),
+    () => {},
+  );
+  await expect
+    .poll(() => reopened.at(-1))
+    .toMatchObject({
+      kind: "ready",
+      snapshot: { revision: 1, value: { amount: 2 } },
+      history: { acks: [{ base: 0, revision: 1, inverse: [{ path: ["amount"], value: 0 }] }] },
+    });
+  expect(
+    await finish(
+      a.submitWork(
+        scope,
+        {
+          kind: "restore",
+          press: null,
+          expectedRevision: 1,
+          restoreOf: 1,
+          patches: [{ path: ["amount"], value: 0 }],
+        },
+        invocation,
+      ),
+    ),
+  ).toMatchObject({ kind: "accepted", ack: { base: 1, revision: 2, restoreOf: 1 } });
+  expect(reopened.at(-1)).toMatchObject({
+    kind: "ack",
+    ack: { patches: [{ path: ["amount"], value: 0 }] },
+  });
+  stop();
   expect(
     await finish(
       a.submit({ id: "native", key: "test", target: { kind: "host" }, input: {} }).accepted,
     ),
   ).toMatchObject({ kind: "rejected", failure: "unavailable" });
-});
-
-import { checkRevision } from "../../../../packages/agent-contracts/src/route-doc";
-test("the actual stale-base refusal carries the current revision", () => {
-  expect(checkRevision({ revision: 12 }, 4)).toMatchObject({
-    ok: false,
-    code: "stale_revision",
-    revision: 12,
-  });
 });

@@ -274,6 +274,12 @@ test("dev startup and HMR select pin regeneration; build and tests select read-o
     const plugin = routeModuleHash(generate);
     (plugin.configResolved as Function)({ command, mode });
     await (plugin.buildStart as Function).call({ addWatchFile: vi.fn() });
+    if (expected === "test") {
+      const count = generate.mock.calls.length;
+      await (plugin.load as Function)(id);
+      expect(generate).toHaveBeenCalledTimes(count);
+      await (plugin.load as Function)(id.replace("graph.ts", "source-closure.generated.json"));
+    }
     expect(generate).toHaveBeenLastCalledWith(expected);
     await (plugin.handleHotUpdate as Function)({
       server: { moduleGraph: { invalidateAll: vi.fn() }, ws: { send: vi.fn() } },

@@ -1,7 +1,7 @@
-import { invokeCommand } from "./command-fixture.ts";
+import { z } from "zod";
+import { readFile, writeFile } from "node:fs/promises";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { chmod, mkdtemp, rm } from "node:fs/promises";
-import { readJournal } from "./journal-fixture.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -38,30 +38,40 @@ test("subscribers read one durable action authority, retain opaque ids across re
   });
   let dispatches = 0,
     preparations = 0;
-  await invokeCommand(
-    owner,
-    admission(),
-    async () => {
-      preparations++;
-      return { original: true };
+  const output = join(path, "..", "result.txt");
+  owner.bindCommands({
+    probe: async () => {
+      throw Error("No dependency probe expected");
     },
-    async (ex) =>
-      ex.step("native", "test.native", {}, async () => {
-        dispatches++;
-        return 1;
+    resolve: () => ({
+      definition: {
+        says: "Write file",
+        needs: "nothing",
+        effect: "command",
+        dirties: [],
+        input: z.object({ frozen: z.literal("exact") }),
+      },
+      bind: async () => ({
+        effects: [{ kind: "file", path: output }],
+        prepare: async () => {
+          preparations++;
+          return { bytes: "original bytes" };
+        },
       }),
-  );
-  const settled = await owner.wait(admission().id);
-  await invokeCommand(
-    owner,
-    admission(),
-    async () => {
-      throw Error("duplicate prepare");
-    },
-    async () => {
-      throw Error("duplicate dispatch");
-    },
-  );
+      prepared: z.object({ bytes: z.string() }),
+      run: async (_context, ex) =>
+        ex.step("file", "write", {}, async () => {
+          dispatches++;
+          await writeFile(output, (ex.prepared as { bytes: string }).bytes);
+          return { path: output };
+        }),
+    }),
+  });
+  const { caller, basis, effects: _effects, ...request } = admission();
+  await owner.invoke(request, { caller, basis });
+  const settled = await owner.wait(request.id);
+  await owner.invoke(request, { caller, basis });
+  expect(await readFile(output, "utf8")).toBe("original bytes");
   const [receipt] = await owner.read({ kinds: ["action"] });
   expect(dispatches).toBe(1);
   expect(preparations).toBe(1);
@@ -69,8 +79,8 @@ test("subscribers read one durable action authority, retain opaque ids across re
   expect(receipt!.join.actionId).not.toBe(admission().id);
   expect(received.at(-1)).toEqual(receipt);
   expect(new Set(received.map((r) => `${r.id}/${r.revision}`)).size).toBe(received.length);
-  const disk = await readJournal(path);
-  expect(disk.receipts.filter((r: Receipt) => r.body.kind === "action")).toEqual([receipt]);
+  const disk = await new ActionJournal(path).read({});
+  expect(disk.filter((r: Receipt) => r.body.kind === "action")).toEqual([receipt]);
   const restarted = new ActionJournal(path, () => ({ ...stamp, build: "successor" }));
   expect(await restarted.read({})).toEqual(await owner.read({}));
   const leaf = await restarted.requestJoin(settled.steps[0]!.id);
@@ -94,7 +104,7 @@ test("facts publish after commit, isolate listeners, and detach caller data", as
   });
   const body = { kind: "usage" as const, event: "app_boot" as const, counters: {} };
   const r = await owner.recordFact(body);
-  expect((await readJournal(path)).receipts).toContainEqual(r);
+  expect(await new ActionJournal(path).read({})).toContainEqual(r);
   expect(seen).toEqual([r]);
   expect(r.stamp).toEqual(stamp);
   // A journal the host cannot append to: the commit fails and publishes nothing.

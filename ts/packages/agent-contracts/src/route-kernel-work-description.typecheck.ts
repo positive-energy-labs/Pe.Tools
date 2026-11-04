@@ -1,4 +1,3 @@
-import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import type { BodyBindings, PaneContext } from "./route-kernel-bodies.ts";
 import { builtinData, schemas, entries } from "./route-kernel.fixtures.ts";
@@ -39,9 +38,6 @@ export const untypedMeta: Describe = {
   // @ts-expect-error A route without a history-detail schema sends no meta.
   run: () => ({ label: "Row edit", meta: { row: "row-1" } }),
 };
-test("description slot keeps its input-first synchronous signature", () => {
-  expect(describe.slot).toBe("verbs.edit.describe");
-});
 
 const typedData = { ...data, historyDetail: "detail" } as const;
 const typedSchemas = { ...schemas, detail: z.strictObject({ row: z.string() }) };

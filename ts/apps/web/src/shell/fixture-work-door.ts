@@ -1,10 +1,8 @@
-import { routeDocDelta } from "../../../../packages/agent-contracts/src/route-doc";
-import { applyPatches, workKey, type RouteStateSpec, type WorkWriteAck } from "@pe/agent-contracts";
+import { type RouteStateSpec } from "@pe/agent-contracts";
+import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import type { z } from "zod";
 import type {
   WorkJournalDoor,
-  WorkFeedState,
-  WorkScope,
   WorkWriteOutcome,
   AcceptedResult,
   JournalCommandId,
@@ -18,31 +16,24 @@ export function createFixtureWorkDoor(
   seed: unknown,
   readings: Readonly<Record<string, z.ZodType | undefined>> = {},
 ): WorkJournalDoor {
-  const states = new Map<
-    string,
-    {
-      revision: number;
-      value: unknown;
-      acks: WorkWriteAck[];
-      listeners: Set<(state: WorkFeedState) => void>;
-    }
-  >();
-  const stateFor = (scope: WorkScope) => {
-    const schema = scope.reading ? readings[scope.reading] : spec.schema;
-    if (!schema) throw Error("Undeclared fixture Work reading");
-    const id = workKey(scope.key);
-    let state = states.get(id);
-    if (!state) {
-      state = {
-        revision: 0,
-        acks: [],
-        value: schema.parse(scope.reading ? {} : structuredClone(seed)),
-        listeners: new Set(),
-      };
-      states.set(id, state);
-    }
-    return state;
-  };
+  const stored = new Map<string, unknown>();
+  const workspace = new RouteWorkspace({
+    registrations: [{ spec }],
+    store: {
+      getState: async ({ targetKey }) =>
+        structuredClone(
+          stored.get(targetKey) ?? {
+            version: 1,
+            schemaVersion: spec.schemaVersion ?? 1,
+            revision: 0,
+            doc: seed,
+          },
+        ),
+      setState: async ({ targetKey, value }) => {
+        stored.set(targetKey, structuredClone(value));
+      },
+    },
+  });
   return {
     lifetime: "subscription",
     receipts: () => ({
@@ -62,78 +53,54 @@ export function createFixtureWorkDoor(
     open: (scope) => ({
       subscribe(deliver, end) {
         deliver({ kind: "pending" });
-        try {
-          const state = stateFor(scope);
-          state.listeners.add(deliver);
-          deliver({
-            kind: "ready",
-            history: {
-              from: state.acks[0]?.revision ?? state.revision + 1,
-              acks: structuredClone(state.acks),
-            },
-            snapshot: {
-              key: scope.key,
-              revision: state.revision,
-              value: structuredClone(state.value),
-            },
-          });
-          return () => {
-            state.listeners.delete(deliver);
-          };
-        } catch (error) {
-          deliver({
-            kind: "failed",
-            failure: { kind: "failed", code: "FixtureWorkUnavailable", message: String(error) },
-          });
-          end();
+        if (scope.reading) {
+          try {
+            const schema = readings[scope.reading];
+            if (!schema) throw Error("Undeclared fixture Work reading");
+            deliver({
+              kind: "ready",
+              history: { from: 1, acks: [] },
+              snapshot: { key: scope.key, revision: 0, value: schema.parse({}) },
+            });
+          } catch (error) {
+            deliver({
+              kind: "failed",
+              failure: { kind: "failed", code: "FixtureWorkUnavailable", message: String(error) },
+            });
+            end();
+          }
           return () => {};
         }
+        return workspace.observeFeed(
+          scope.key,
+          (value) => {
+            const snapshot = value as {
+              doc: unknown;
+              revision: number;
+              history: { from: number; acks: import("@pe/agent-contracts").WorkWriteAck[] };
+            };
+            deliver({
+              kind: "ready",
+              history: snapshot.history,
+              snapshot: { key: scope.key, revision: snapshot.revision, value: snapshot.doc },
+            });
+          },
+          (ack) => deliver({ kind: "ack", ack }),
+          (error) => {
+            deliver({
+              kind: "failed",
+              failure: { kind: "failed", code: "FixtureWorkUnavailable", message: String(error) },
+            });
+            end();
+          },
+        );
       },
     }),
     submitWork: (scope, write) =>
       completion<WorkWriteOutcome>({ kind: "pending" }, async () => {
         try {
           if (scope.reading) throw Error("A Work reading is read-only");
-          const state = stateFor(scope);
-          const prior = state.value;
-          const result = applyPatches(
-            spec,
-            { version: 1, revision: state.revision, doc: prior },
-            "human",
-            write.patches,
-            write.expectedRevision,
-            write.kind === "restore",
-            write.kind === "restore",
-          );
-          if (!result.ok) return workOutcome(result);
-          const ack: WorkWriteAck = {
-            key: scope.key,
-            kind: write.kind,
-            by: "human",
-            press: write.press,
-            ...(write.label && { label: write.label }),
-            base: state.revision,
-            revision: result.envelope.revision,
-            patches: routeDocDelta(
-              prior,
-              result.envelope.doc,
-              [],
-              write.patches.filter((p) => p.path.length > 1).map((p) => String(p.path[0])),
-            ),
-            inverse: routeDocDelta(
-              result.envelope.doc,
-              prior,
-              [],
-              write.patches.filter((p) => p.path.length > 1).map((p) => String(p.path[0])),
-            ),
-            undoable: true,
-            ...(write.restoreOf !== undefined && { restoreOf: write.restoreOf }),
-          };
-          state.acks.push(ack);
-          state.revision = ack.revision;
-          state.value = result.envelope.doc;
-          state.listeners.forEach((deliver) => deliver({ kind: "ack", ack }));
-          return { kind: "accepted", ack };
+          return workOutcome(await workspace.write(scope.key, spec.route, "human", write));
         } catch (error) {
           return failedWrite(error);
         }

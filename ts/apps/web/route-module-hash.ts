@@ -162,13 +162,17 @@ async function runtimeRoutes(mode: "dev" | "build" | "test") {
 export function routeModuleHash(
   generate?: (mode: "dev" | "build" | "test") => Promise<Record<string, string> | void>,
 ): Plugin {
-  let mode: "dev" | "build" | "test" = "test";
+  let mode: "dev" | "build" | "test" = "dev";
   let projections: Record<string, string> = {};
   let pending: Promise<void> = Promise.resolve();
+  let started = false;
   const update = async () => {
     projections = (await (generate ? generate(mode) : runtimeRoutes(mode))) ?? {};
   };
-  const refresh = () => (pending = pending.then(update, update));
+  const refresh = () => {
+    started = true;
+    return (pending = pending.then(update, update));
+  };
   const watchFiles = () =>
     Object.entries(projections)
       .filter(([id]) => id.endsWith("source-closure.generated.json"))
@@ -190,13 +194,22 @@ export function routeModuleHash(
       mode = config.command === "build" ? "build" : config.mode === "test" ? "test" : "dev";
     },
     async buildStart() {
+      // Pure tests need no route closures. Admission imports trigger the same read-only projection.
+      if (mode === "test") return;
       await refresh();
       // Watch current resolved inputs, even when the committed inventory is stale or missing.
       for (const file of watchFiles()) this.addWatchFile(file);
     },
     async load(id) {
-      await pending;
       const filename = id.split("?")[0]!;
+      if (
+        mode === "test" &&
+        !started &&
+        (/[/\\]source-closure\.generated\.json$/.test(filename) ||
+          /[/\\]generated[/\\](?:route-directory\.ts|[^/\\]+-graph\.json)$/.test(filename))
+      )
+        await refresh();
+      await pending;
       return projections[filename] ?? projections[filename.replaceAll("/", "\\")];
     },
     async handleHotUpdate({ server }) {

@@ -1,15 +1,13 @@
+import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import { legacyVerbEnvironment } from "./legacy-environment-bridge";
 import { createFixtureHost } from "../../../../packages/host-contracts/src/fixture-host";
 import {
   routeSettingsSnapshotSchema,
   address,
-  applyPatches,
   bindWork,
-  routeDocDelta,
   workKey,
   type RouteGraph,
   type GraphSeedData,
-  type WorkWriteAck,
 } from "@pe/agent-contracts";
 import { createGraphMount, type MountAdapters, type MountScope } from "./mount-owner";
 import type { ReadingSource } from "./readings";
@@ -71,7 +69,43 @@ export function pendingFixtureEnvironment<P, W>(
   let snapshot: MountScope<W> = { target, work: null, workKey: key, failure };
   const stored = new Map<string, MountScope<W>>();
   const listeners = new Set<() => void>();
-  const accepted = new Set<{ key: string; notify(ack: WorkWriteAck): void }>();
+  const envelopes = new Map<string, unknown>();
+  const workspace = graph.work
+    ? new RouteWorkspace({
+        registrations: [
+          {
+            spec: {
+              route: key.route,
+              title: graph.name,
+              description: graph.name,
+              schema: graph.work,
+            },
+          },
+        ],
+        store: {
+          getState: async ({ targetKey }) => {
+            if (envelopes.has(targetKey)) return structuredClone(envelopes.get(targetKey));
+            const work = stored.get(targetKey)?.work;
+            return work ? { version: 1, revision: work.handle.revision, doc: work.doc } : null;
+          },
+          setState: async ({ targetKey, value }) => {
+            envelopes.set(targetKey, structuredClone(value));
+            const envelope = value as { revision: number; doc: W };
+            const previous = stored.get(targetKey)!;
+            const next = {
+              ...previous,
+              work: {
+                handle: { key: previous.workKey!, revision: envelope.revision },
+                doc: envelope.doc,
+              },
+            };
+            stored.set(targetKey, next);
+            if (targetKey === workKey(key)) snapshot = next;
+            for (const notify of listeners) notify();
+          },
+        },
+      })
+    : null;
   const select = (page: P) => {
     const subject = graph.workSubject ? String(page[graph.workSubject] || name) : name;
     const nextKey = bindWork(`${graph.key}.${fixtureId}`, isolatedAddress, subject);
@@ -113,44 +147,12 @@ export function pendingFixtureEnvironment<P, W>(
     async write(requestKey, request) {
       if (!graph.work || !snapshot.work || snapshot.failure || workKey(requestKey) !== workKey(key))
         return refuse(snapshot.failure ?? "Fixture Work is unavailable");
-      const before = snapshot.work.doc;
-      const result = applyPatches(
-        { route: graph.key, title: graph.name, description: graph.name, schema: graph.work },
-        { version: 1, revision: snapshot.work.handle.revision, doc: before },
-        "human",
-        request.patches,
-        request.expectedRevision,
-        false,
-        request.kind === "restore",
-      );
-      if (!result.ok) return result;
-      const { doc, revision } = result.envelope;
-      const ack: WorkWriteAck = {
-        key,
-        kind: request.kind,
-        by: "human",
-        press: request.press,
-        base: request.expectedRevision,
-        revision,
-        patches: routeDocDelta(before, doc),
-        inverse: routeDocDelta(doc, before),
-        undoable: true,
-        ...(request.kind === "restore" ? { restoreOf: request.restoreOf } : {}),
-      };
-      snapshot = { ...snapshot, work: { handle: { key, revision }, doc } };
-      stored.set(workKey(key), snapshot);
-      for (const notify of listeners) notify();
-      for (const entry of accepted) if (entry.key === workKey(ack.key)) entry.notify(ack);
-      return { ok: true, revision, write: ack };
+      return workspace!.write(requestKey, key.route, "human", request);
     },
     startFresh: async () => refuse("Fixture Work is already in memory"),
     reread() {},
     subscribeAcceptedDeltas(key, notify) {
-      const entry = { key: workKey(key), notify };
-      accepted.add(entry);
-      return () => {
-        accepted.delete(entry);
-      };
+      return workspace?.observeAccepted(key, notify) ?? (() => {});
     },
     status: {
       resolution: { kind: "resolved", target },

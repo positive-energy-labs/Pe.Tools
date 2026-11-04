@@ -10,7 +10,7 @@ import { BridgeError } from "../src/bridge.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { crossingOf } from "./callers.ts";
-import { readJournal, writeJournal } from "./journal-fixture.ts";
+import { writeJournal } from "./journal-fixture.ts";
 import type { StepRecovery } from "../src/command-executor.ts";
 
 type Outcome = "succeeded" | "failed" | "dispatchedFailure" | "cancelled" | "unknown";
@@ -72,7 +72,7 @@ async function restart(steps: ActionStep["state"][], prepared: boolean) {
   await writeJournal(path, [row]);
   const journal = new ActionJournal(path);
   const reloaded = (await journal.list(undefined, id))[0]!;
-  const [stored] = (await readJournal(path)).receipts;
+  const [stored] = await new ActionJournal(path).read({});
   expect(stored!.body.kind === "action" && stored!.body.value.state).toBe(reloaded.state);
   return reloaded;
 }

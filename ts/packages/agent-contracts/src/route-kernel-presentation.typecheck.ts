@@ -1,4 +1,3 @@
-import { expect, test } from "vite-plus/test";
 import type { BodyBindings } from "./route-kernel-bodies.ts";
 import { builtinData, schemas, entries } from "./route-kernel.fixtures.ts";
 const data = {
@@ -43,9 +42,6 @@ export const asyncPresenter: Present = {
   // @ts-expect-error Presenters must return synchronously.
   run: async () => "late",
 };
-test("presentation declares an evidence argument without ports or invocation authority", () => {
-  expect(present.run.length).toBe(2);
-});
 
 const recoveryData = {
   ...builtinData,

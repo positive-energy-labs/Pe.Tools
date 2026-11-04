@@ -1,5 +1,4 @@
 import { placeInput } from "./admitted-place.test-fixture";
-import { expect, test } from "vite-plus/test";
 import type { HostAdmittedRoute } from "../../../../packages/agent-contracts/src/host-route-admission";
 import { createRouteShell } from "./admitted-mount";
 
@@ -11,9 +10,7 @@ function hostCannotMount(host: HostAdmittedRoute, shell: ReturnType<typeof creat
   );
 }
 
-test("host admission has a distinct nominal authority", () => {
-  expect(typeof hostCannotMount).toBe("function");
-});
+void hostCannotMount;
 
 function inputIsRequired(
   route: Parameters<ReturnType<typeof createRouteShell>["mount"]>[0],

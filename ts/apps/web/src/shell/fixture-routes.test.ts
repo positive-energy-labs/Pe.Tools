@@ -57,7 +57,7 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
       );
       try {
         expect(isValidElement(mount.read("main"))).toBe(true);
-        expect(mount.work()).not.toBeNull();
+        await expect.poll(() => mount.work()).not.toBeNull();
       } finally {
         mount.close();
       }
@@ -91,10 +91,12 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
       try {
         // The grid owns DOM portals; schedules/kernel.test.tsx renders it under jsdom.
         expect(isValidElement(mount.read("grid"))).toBe(true);
-        expect(mount.workBasis()?.token.scope.identity.work).toMatchObject({
-          binding: "workspace",
-          work: "schedule:fixture",
-        });
+        await expect
+          .poll(() => mount.workBasis()?.token.scope.identity.work)
+          .toMatchObject({
+            binding: "workspace",
+            work: "schedule:fixture",
+          });
         expect(mount.picker("workspaceId")).toEqual([
           { id: scheduleIdentity("schedule:fixture"), label: "Mechanical equipment" },
         ]);
@@ -131,7 +133,9 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
           }),
         );
         try {
-          expect(mount.workBasis(), `${key}/${name} Work`).not.toBeNull();
+          await expect
+            .poll(() => mount.workBasis(), { message: `${key}/${name} Work` })
+            .not.toBeNull();
           mount.read(route.data.subject.pane);
           // Every fixture supports the All subject, including fixtures with no matching fan rows.
           expect(mount.controls.subject({ kind: "all" }).kind).toBe("accepted");

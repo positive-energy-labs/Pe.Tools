@@ -12,6 +12,9 @@ export default defineConfig({
       // host-typegen owns these checked-in artifacts; codegen:check compares exact bytes
       "**/host-ops.generated.ts",
       "**/host-catalog.generated.ts",
+      // Canonical closure pins and SDK shape projections are compared byte-for-byte by their producers.
+      "**/source-closure.generated.json",
+      "**/pe-revit-wire.ts",
       // `pe-revit context product` writes this file ("DO NOT EDIT"); regeneration undoes any reformat
       "**/product.g.ts",
       // Pe.Revit.Sdk owns these files byte-for-byte and `pe-revit doctor`'s ts-client-drift check

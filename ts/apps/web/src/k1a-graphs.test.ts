@@ -11,14 +11,6 @@ test.each(graphs.map((graph) => [graph.key, graph] as const))(
   },
 );
 
-test.each(graphs.map((graph) => [graph.key, graph] as const))(
-  "%s binds its subject to declared readings",
-  (_, graph) => {
-    const errors = validateRouteGraph(graph as RouteGraph<any, any>);
-    expect(errors.filter((error) => error.path.startsWith("subjectField"))).toEqual([]);
-  },
-);
-
 test("singleton catalogue keys cannot become an undeclared subject picker", () => {
   const subject = indexGraph.subjectField;
   const broken = { ...indexGraph, subjectField: { ...subject, cardinality: "many" as const } };
