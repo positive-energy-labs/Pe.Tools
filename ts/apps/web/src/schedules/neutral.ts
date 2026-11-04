@@ -540,13 +540,14 @@ export const neutralBodies = {
     slot: "verbs.edit.describe",
     kind: "describe",
     source,
-    run: (input) =>
-      input.patches
+    run: (input) => ({
+      label: input.patches
         .map(
           (patch) =>
             `Cell ${patch.path[1]} \u2192 ${"value" in patch ? showCellValue(patch.value) : "unstage"}`,
         )
         .join(", "),
+    }),
   },
   seed: {
     slot: "seeds.read.load",

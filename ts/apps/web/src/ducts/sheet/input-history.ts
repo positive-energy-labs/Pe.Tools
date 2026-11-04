@@ -1,13 +1,8 @@
 /** Sheet presentation on the kernel's in-memory Work journal; the route owns no undo stack. */
 import { z } from "zod";
-import { ductsSheetOverviewSchema } from "@pe/agent-contracts";
-import type { DuctsSheetEdits, DuctsSheetOverview } from "@pe/agent-contracts";
-import type { Immutable } from "../../../../../packages/agent-contracts/src/route-kernel-data.ts";
+import type { DuctsSheetEdits } from "@pe/agent-contracts";
 import type { WorkHistoryEntry } from "../../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
-import type { SheetReading } from "../neutral.ts";
 import { CRITERION_WORDS } from "./criterion-words.ts";
-
-export type Totals = DuctsSheetOverview["totals"];
 
 export const editMetaSchema = z.strictObject({
   label: z.string(),
@@ -24,27 +19,10 @@ export const editMetaSchema = z.strictObject({
     .optional(),
 });
 export type EditMeta = z.infer<typeof editMetaSchema>;
-export const inputHistoryMetaSchema = editMetaSchema.omit({ label: true }).extend({
-  kind: z.literal("ducts-input"),
-  effect: z.object({
-    before: ductsSheetOverviewSchema.shape.totals,
-    after: ductsSheetOverviewSchema.shape.totals.optional(),
-  }),
-});
-type Readings = { readonly sheet?: { readonly value?: Immutable<SheetReading> | null } };
-const totals = (readings: Readings): Totals =>
-  (readings.sheet?.value?.open?.overview.totals ?? null) as Totals;
+export const inputHistoryMetaSchema = editMetaSchema.omit({ label: true });
 
-export function describeInputHistory(before: Readings, detail: EditMeta, after?: Readings) {
-  const { label, ...meta } = detail;
-  return {
-    label,
-    meta: {
-      ...meta,
-      kind: "ducts-input" as const,
-      effect: { before: totals(before), ...(after && { after: totals(after) }) },
-    },
-  };
+export function describeInputHistory({ label, ...meta }: EditMeta) {
+  return { label, meta };
 }
 
 export function presentInputHistory(

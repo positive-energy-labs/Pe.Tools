@@ -79,7 +79,7 @@ const describe: BodyBindings<typeof described, typeof schemas, {}>["describe"] =
   slot: "verbs.slot.describe",
   kind: "describe",
   source: { module: "fans/owner-schema-gap.test.ts", export: "describe" },
-  run: (_input, ctx) => String(ctx.work.parameters.fanFlow?.edit?.value),
+  run: (_input, ctx) => ({ label: String(ctx.work.parameters.fanFlow?.edit?.value) }),
 };
 function ownerEvidence(
   ctx: BodyContext<typeof presenter, typeof schemas, {}, typeof presenter.verbs.slot>,

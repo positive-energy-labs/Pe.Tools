@@ -35,6 +35,8 @@ import {
   type WorkWrite,
   type WorkWriteAck,
   workWriteAckSchema,
+  HISTORY_META_MAX_BYTES,
+  type HistoryMetaRefusalCode,
 } from "@pe/agent-contracts";
 import type { RouteStateSpec } from "@pe/agent-contracts";
 
@@ -446,25 +448,20 @@ export class RouteWorkspace {
     // Decode untrusted presentation once, before any Work mutation or history retention.
     let meta = context.meta;
     if (meta !== undefined) {
-      const invalid = (
-        code: "invalid_meta" | "meta_too_large",
-        error: string,
-      ): RouteStateWriteResult => ({
+      const invalid = (code: HistoryMetaRefusalCode, error: string): RouteStateWriteResult => ({
         ok: false,
         kind: "refused",
         code,
         error,
-        hint: "Submit detail matching the admitted route schema within 4 KiB.",
+        hint: `Submit detail matching the admitted route schema within ${HISTORY_META_MAX_BYTES} bytes.`,
       });
-      const json = z.json().safeParse(meta);
-      if (!json.success) return invalid("invalid_meta", "History detail must be serializable JSON");
-      if (new TextEncoder().encode(JSON.stringify(json.data)).byteLength > 4096)
-        return invalid("meta_too_large", "History detail exceeds 4 KiB");
-      const decoded = registration.historyDetail?.safeParse(json.data);
-      if (!decoded?.success)
+      // `meta` is typed JSON already (workWriteSchema); the door checks size and the route schema.
+      if (new TextEncoder().encode(JSON.stringify(meta)).byteLength > HISTORY_META_MAX_BYTES)
+        return invalid("meta_too_large", `History detail exceeds ${HISTORY_META_MAX_BYTES} bytes`);
+      if (!registration.historyDetail?.safeParse(meta).success)
         return invalid("invalid_meta", "History detail does not match the admitted schema");
       // Capture submitted JSON before waiting on the write tail. Schema transforms never rewrite history.
-      meta = structuredClone(json.data);
+      meta = structuredClone(meta);
     }
     return this.#serialized(async () => {
       const envelope = await this.#load(scope, registration.spec).catch(unreadable);
@@ -829,9 +826,7 @@ export class RouteWorkspace {
       this.#inverses.set(
         key,
         this.#retain(
-          historySchema
-            .parse((raw as { history?: unknown } | null)?.history ?? [])
-            .map((record) => ({ ...record, write: { ...record.write, key: scope } })),
+          this.#stored((raw as { history?: unknown } | null)?.history, scope),
           (raw as { revision?: number } | null)?.revision ?? 0,
         ),
       );
@@ -922,9 +917,7 @@ export class RouteWorkspace {
     this.#inverses.set(
       workKey(scope),
       this.#retain(
-        historySchema
-          .parse((raw as { history?: unknown }).history ?? [])
-          .map((record) => ({ ...record, write: { ...record.write, key: scope } })),
+        this.#stored((raw as { history?: unknown }).history, scope),
         (raw as { revision: number }).revision,
       ),
     );
@@ -998,6 +991,21 @@ export class RouteWorkspace {
       route,
       value: { ...envelope, history },
     });
+  }
+
+  /** Persisted history crosses into the host here; its detail is decoded once, under the admitted
+   * schema. Stored bytes stay as saved: a step whose detail no longer decodes is marked, not rewritten. */
+  #stored(history: unknown, scope: WorkKey): z.infer<typeof historySchema> {
+    const schema = this.#registry.get(scope.route)?.historyDetail;
+    return historySchema.parse(history ?? []).map(({ write: { detail: _, ...write }, ...record }) => ({
+      ...record,
+      write: {
+        ...write,
+        key: scope,
+        ...(write.meta !== undefined &&
+          !schema?.safeParse(write.meta).success && { detail: "unavailable" as const }),
+      },
+    }));
   }
 
   #retain(records: z.infer<typeof historySchema>, revision: number) {

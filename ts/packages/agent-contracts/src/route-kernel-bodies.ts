@@ -337,12 +337,10 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         (
           input: VerbInput<G, S, K>,
           ctx: BodyContext<G, S, E, G["verbs"][K]>,
-        ) => G extends { historyDetail: string }
-          ? {
-              readonly label: string;
-              readonly meta: HistoryMeta<G, S> & import("./route-graph.ts").GraphJsonValue;
-            }
-          : string
+        ) => {
+          readonly label: string;
+          readonly meta?: HistoryMeta<G, S> & import("./route-graph.ts").GraphJsonValue;
+        }
       >
     | Slot<
         At<G["verbs"][K], "patch">,

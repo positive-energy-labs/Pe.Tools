@@ -6,7 +6,6 @@ import { z } from "zod";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   ductsDocumentSchema,
-  ductsSheetOverviewSchema,
   bindWork,
   workKey,
   address,
@@ -36,7 +35,6 @@ import {
   inputHistoryMetaSchema,
   presentInputHistory,
 } from "../ducts/sheet/input-history";
-import sheetFixture from "../ducts/sheet/sheet.fixture.json";
 import { sourceRouteServices } from "../shell/source-route-services";
 import * as recoveryHost from "../route/host";
 import { peClient } from "../host/pe-client";
@@ -115,10 +113,7 @@ const bodies = {
     slot: "verbs.slot.describe",
     kind: "describe",
     source,
-    run: () => ({
-      label: "fanFlow → PE_M_Fan_AirFlow",
-      meta: { kind: "ducts-input" as const, effect: { before: null } },
-    }),
+    run: () => ({ label: "fanFlow → PE_M_Fan_AirFlow" }),
   },
   names: { slot: "readings.names.derive", kind: "derive", source, run: () => ({ "100": "FC-1" }) },
   salvagePresent: {
@@ -179,7 +174,7 @@ async function witness(
   raw?: unknown,
   failure?: "throw" | "invalid",
   limits?: { maxCount: number; maxBytes: number },
-  description?: ReturnType<typeof describeInputHistory>,
+  description?: { label: string; meta?: z.output<typeof inputHistoryMetaSchema> },
   onHistory?: (history: Parameters<typeof bodies.main.run>[0]["history"]) => void,
 ) {
   const module = {
@@ -785,14 +780,10 @@ test.each(["current", "departed"] as const)(
 );
 
 test("W04: a Ducts input edit retains the existing history detail", async () => {
-  const description = describeInputHistory(
-    {},
-    {
-      label: "fanFlow → PE_M_Fan_AirFlow",
-      rowKey: "parameters:fanFlow",
-    },
-    {},
-  );
+  const description = describeInputHistory({
+    label: "fanFlow → PE_M_Fan_AirFlow",
+    rowKey: "parameters:fanFlow",
+  });
   const f = await witness(undefined, undefined, undefined, description);
   await vi.waitFor(() => expect(f.mount.workBasis()).not.toBeNull());
   const edit = f.mount.invoke("slot", "PE_M_Fan_AirFlow");
@@ -802,11 +793,7 @@ test("W04: a Ducts input edit retains the existing history detail", async () => 
 });
 
 test("W04: PaneContext history reacquires metadata from the canonical host after feed departure", async () => {
-  const description = describeInputHistory(
-    {},
-    { label: "Flow slot", rowKey: "parameters:fanFlow" },
-    {},
-  );
+  const description = describeInputHistory({ label: "Flow slot", rowKey: "parameters:fanFlow" });
   let paneHistory: Parameters<typeof bodies.main.run>[0]["history"];
   const f = await witness(undefined, undefined, undefined, description, (history) => {
     paneHistory = history;
@@ -859,7 +846,7 @@ test("W04: old metadata that no longer decodes shows detail unavailable and neve
 test.each(["invalid_meta", "meta_too_large"] as const)(
   "W04: the canonical host preserves typed %s refusal through submitWork observers",
   async (code) => {
-    const description = describeInputHistory({}, { label: "Bad detail", rowKey: "fanFlow" }, {});
+    const description = describeInputHistory({ label: "Bad detail", rowKey: "fanFlow" });
     const meta =
       code === "invalid_meta"
         ? { ...description.meta, kind: "not-ducts-input" }
@@ -878,17 +865,7 @@ test.each(["invalid_meta", "meta_too_large"] as const)(
 );
 
 test("W04: equal-Work Undo/Redo paths render the same label-only history", async () => {
-  const before = ductsSheetOverviewSchema.parse(sheetFixture.overview).totals!;
-  const description = {
-    label: "Fan flow",
-    meta: {
-      kind: "ducts-input" as const,
-      effect: {
-        before,
-        after: { ...before, requiredEspInWg: (before.requiredEspInWg ?? 0) + 0.1 },
-      },
-    },
-  };
+  const description = { label: "Fan flow" };
   let undoHistory: Parameters<typeof bodies.main.run>[0]["history"];
   let redoHistory: Parameters<typeof bodies.main.run>[0]["history"];
   const a = await witness(undefined, undefined, undefined, description, (history) => {

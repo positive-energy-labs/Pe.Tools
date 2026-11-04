@@ -1489,7 +1489,7 @@ export const neutralBodies = {
     slot: "verbs.edit.describe",
     kind: "describe",
     source,
-    run: (input) => describeInputHistory({}, input.history ?? { label: "Edit" }),
+    run: (input) => describeInputHistory(input.history ?? { label: "Edit" }),
   },
   sheetEdit: {
     slot: "verbs.sheetEdit.patches",
@@ -1514,11 +1514,7 @@ export const neutralBodies = {
     slot: "verbs.sheetEdit.describe",
     kind: "describe",
     source,
-    run: (input, ctx) =>
-      describeInputHistory(
-        ctx.readings,
-        input.history ?? { label: editLabel(input.edits, () => null) },
-      ),
+    run: (input) => describeInputHistory(input.history ?? { label: editLabel(input.edits, () => null) }),
   },
   scope: {
     slot: "verbs.scope.patches",
@@ -1530,10 +1526,7 @@ export const neutralBodies = {
     slot: "verbs.scope.describe",
     kind: "describe",
     source,
-    run: () => ({
-      label: "Choose write scope",
-      meta: { kind: "ducts-input" as const, effect: { before: null } },
-    }),
+    run: () => ({ label: "Choose write scope" }),
   },
   lossArgs: { slot: "readings.lossPreview.args", kind: "args", source, run: () => null },
   healArgs: { slot: "readings.healPreview.args", kind: "args", source, run: () => null },

@@ -74,7 +74,7 @@ test("the real admitted mount accepts the typed finite-key slot", async () => {
         slot: "verbs.slot.describe",
         kind: "describe",
         source: { module: "slot-patch-gap.test.ts", export: "describe" },
-        run: () => "fanFlow → PE_M_Fan_AirFlow",
+        run: () => ({ label: "fanFlow → PE_M_Fan_AirFlow" }),
       },
     },
   };

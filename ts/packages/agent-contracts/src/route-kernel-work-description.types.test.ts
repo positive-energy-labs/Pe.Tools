@@ -21,18 +21,23 @@ export const describe: Describe = {
     void ctx.work.hidden;
     // @ts-expect-error Only declared readings are available.
     void ctx.readings.hidden;
-    return `Amount ${amount}`;
+    return { label: `Amount ${amount}` };
   },
 };
 export const asyncDescription: Describe = {
   ...describe,
-  // @ts-expect-error Description must synchronously return a string.
-  run: async () => "late",
+  // @ts-expect-error Description must synchronously return its label.
+  run: async () => ({ label: "late" }),
 };
 export const numberDescription: Describe = {
   ...describe,
   // @ts-expect-error Numeric labels cannot be persisted.
-  run: () => 42,
+  run: () => ({ label: 42 }),
+};
+export const untypedMeta: Describe = {
+  ...describe,
+  // @ts-expect-error A route without a history-detail schema sends no meta.
+  run: () => ({ label: "Row edit", meta: { row: "row-1" } }),
 };
 test("description slot keeps its input-first synchronous signature", () => {
   expect(describe.slot).toBe("verbs.edit.describe");
@@ -82,15 +87,10 @@ type MetaRefusalCode = Exclude<
   >["refusal"]["code"],
   import("./families.ts").FamiliesRefusalCode | "stale_revision" | undefined
 >;
-function exhaustiveMetaRefusal(code: MetaRefusalCode) {
-  switch (code) {
-    case "invalid_meta":
-    case "meta_too_large":
-      return;
-    default: {
-      const unexpected: never = code;
-      return unexpected;
-    }
-  }
-}
-void exhaustiveMetaRefusal;
+type Code = import("./route-state.ts").HistoryMetaRefusalCode;
+const metaRefusalsAreTheList: [MetaRefusalCode] extends [Code]
+  ? [Code] extends [MetaRefusalCode]
+    ? true
+    : false
+  : false = true;
+void metaRefusalsAreTheList;
