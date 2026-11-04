@@ -20,20 +20,20 @@
     </ItemGroup>
 
     <ItemGroup>
-        <None Include="../../ts/packages/host-contracts/src/generated/host-catalog.generated.ts" Link="host-catalog.generated.ts" CopyToOutputDirectory="PreserveNewest" />
         <None Include="../../ts/packages/host-contracts/tests/runtime-ownership.fixture.json" Link="runtime-ownership.fixture.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>
         <!-- The dev bridge supervisor's real appBase derivation, compiled in so a test reads it without Revit. -->
         <Compile Include="..\Pe.App\Host\TsHostLauncher.cs" Link="Product\TsHostLauncher.cs" />
+        <!-- Portable receipt producer uses the owning build configuration, without a runtime compiler. -->
+        <Compile Include="..\Pe.App\Analytics\ReceiptEventIds.cs" Link="Operations\ReceiptEventIds.cs" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj" />
         <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj" />
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj" />
-        <ProjectReference Include="..\Pe.Revit.Space\Pe.Revit.Space.csproj" />
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj" />
         <ProjectReference Include="..\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj" />
         <!-- Pe.Host retired — HostOperationExecutorTests.cs removed with it. -->

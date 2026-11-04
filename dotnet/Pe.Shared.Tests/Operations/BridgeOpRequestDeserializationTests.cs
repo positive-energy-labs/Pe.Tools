@@ -1,5 +1,7 @@
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.RevitData.Schedules;
+using Pe.Shared.RevitData.Ducts;
+using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Tests;
 
@@ -160,4 +162,53 @@ public sealed class BridgeOpRequestDeserializationTests {
     [Test]
     public void The_catalog_carries_the_parameter_write_cap() =>
         Assert.That(HostOpsCatalogData.ReadConstants()["parameterValueApplyBounds"]["maxEditsPerCall"], Is.EqualTo(500));
+
+    private sealed record DefaultsProbe(int Count = 9, bool Enabled = true, string Label = "label",
+        OpTier Tier = OpTier.Expert, DefaultsProbe? Nested = null);
+
+    [Op("test.constructor-defaults", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Echo bound constructor defaults.")]
+    private static DefaultsProbe Echo(DefaultsProbe request) => request;
+
+    [Test]
+    public async Task Dispatch_populates_nested_defaults_and_preserves_explicit_values() {
+        OpRegistry.RegisterFrom(typeof(BridgeOpRequestDeserializationTests).Assembly);
+        Assert.That(OpRegistry.TryGet("test.constructor-defaults", out var op), Is.True);
+        var omitted = await op.ExecuteAsync("{}", null, CancellationToken.None);
+        Assert.That(omitted, Is.EqualTo(new DefaultsProbe(9, true, "label", OpTier.Expert, null)));
+        var supplied = await op.ExecuteAsync(
+            """{"count":0,"enabled":false,"label":"","tier":"Default","nested":{}}""",
+            null, CancellationToken.None);
+        Assert.That(supplied, Is.EqualTo(new DefaultsProbe(0, false, "", OpTier.Default, new DefaultsProbe(9, true, "label", OpTier.Expert, null))));
+    }
+
+    [Op("test.duct-slot-defaults", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Resolve dispatched duct slot overrides.")]
+    private static DuctParameterSlots ResolveSlots(DuctParameterSlotOverrides request) =>
+        request.Resolve(new DuctParameterSlotOverrides(FanFlow: "PE_M_Fan_AirFlow", TerminalFlow: "revit:Flow"));
+
+    [TestCase("{}", "Pressure Drop")]
+    [TestCase("""{"componentDrop":"Damper Drop"}""", "Damper Drop")]
+    [TestCase("""{"fanFlow":null,"terminalFlow":null}""", "Pressure Drop")]
+    public async Task Dispatched_slot_overrides_preserve_stored_names_before_engine_defaults(string json, string expectedDrop) {
+        var resolved = (DuctParameterSlots)(await Probe("test.duct-slot-defaults").ExecuteAsync(json, null, CancellationToken.None))!;
+        Assert.Multiple(() => {
+            Assert.That(resolved.FanFlow, Is.EqualTo("PE_M_Fan_AirFlow"));
+            Assert.That(resolved.TerminalFlow, Is.EqualTo("revit:Flow"));
+            Assert.That(resolved.ComponentDrop, Is.EqualTo(expectedDrop));
+        });
+    }
+
+    [Op("test.matrix-defaults", OpSubject.None, OpTouches.Metadata, OpEffect.Read, Does = "Bind the real matrix read options.")]
+    private static LoadedFamiliesMatrixRequest EchoMatrix(LoadedFamiliesMatrixRequest request) => request;
+
+    [TestCase("{}", true, LoadedFamiliesReadPhase.Matrix)]
+    [TestCase("""{"includeTempPlacement":false,"phase":"Prepare"}""", false, LoadedFamiliesReadPhase.Prepare)]
+    public async Task Matrix_dispatch_keeps_the_temp_placement_default_and_explicit_read_phase(
+        string json, bool expectedPlacement, LoadedFamiliesReadPhase expectedPhase) {
+        var request = (LoadedFamiliesMatrixRequest)(await Probe("test.matrix-defaults").ExecuteAsync(json, null, CancellationToken.None))!;
+        Assert.That(request.IncludeTempPlacement, Is.EqualTo(expectedPlacement));
+        Assert.That(request.Phase, Is.EqualTo(expectedPhase));
+        Assert.That(request.Filter, Is.Null);
+        Assert.That(request.Snapshots, Is.Null);
+    }
+
 }

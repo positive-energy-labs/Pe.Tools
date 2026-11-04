@@ -2,88 +2,32 @@ using Pe.Shared.StorageRuntime.Capabilities;
 using Newtonsoft.Json.Linq;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.RevitData;
+using Pe.Shared.RevitData.Schedules;
 
 namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class BridgeOpSchemaGeneratorTests {
-    private sealed record ProbeChild(string Name, string? Nickname);
-
-    private sealed record ProbeContract(
-        string Title,
-        string? Subtitle,
-        int Count,
-        IReadOnlyList<string> Tags,
-        ProbeChild Child,
-        ProbeChild? OptionalChild
-    );
-
-    private sealed record ProbeTarget(string Id, string? Label = null);
-
-    private sealed record ProbeRequest(
-        string SchemaUrl,
-        ProbeTarget Target,
-        string? Filter = null,
-        bool IncludeHidden = false,
-        int Depth = 2,
-        IReadOnlyList<ProbeTarget>? ExtraTargets = null
-    );
-
+    // Use the same mutation contract the dispatch tests bind; these expected names are authored independently.
     [Test]
-    public void Response_non_nullable_properties_are_required_and_nullable_ones_are_not() {
-        var schema = JObject.Parse(BridgeOpSchemaGenerator.GetResponseSchemaJson(typeof(ProbeContract)));
-
-        var required = schema["required"]!.Select(token => (string)token!).ToArray();
-        Assert.That(required, Does.Contain("title"));
-        Assert.That(required, Does.Contain("count"));
-        Assert.That(required, Does.Contain("tags"));
-        Assert.That(required, Does.Contain("child"));
-        Assert.That(required, Does.Not.Contain("subtitle"));
-        Assert.That(required, Does.Not.Contain("optionalChild"));
+    public void Reviewed_cell_schema_requires_evidence_but_leaves_defaulted_options_optional() {
+        var schema = JObject.Parse(BridgeOpSchemaGenerator.GetRequestSchemaJson(typeof(ScheduleCellApplyRequest)));
+        Assert.That(schema["required"]!.Values<string>(),
+            Is.EquivalentTo(new[] { "scheduleId", "scheduleUniqueId", "edits" }));
+        Assert.That(schema.SelectToken("$.definitions.ScheduleCellEdit.required")!.Values<string>(),
+            Is.EquivalentTo(new[] { "rowNumber", "columnNumber", "expectedBinding" }));
+        Assert.That(schema.SelectToken("$.definitions.ParameterTarget.required")!.Values<string>(),
+            Is.EquivalentTo(new[] { "elementId", "parameterId", "storageType", "isReadOnly", "hasValue", "rawValue" }));
     }
 
     [Test]
-    public void Response_nested_definitions_get_required_too_and_names_are_camel_cased() {
-        var schema = JObject.Parse(BridgeOpSchemaGenerator.GetResponseSchemaJson(typeof(ProbeContract)));
-
-        var child = schema.SelectToken("$.definitions.ProbeChild") as JObject;
-        Assert.That(child, Is.Not.Null);
-        var childRequired = child!["required"]!.Select(token => (string)token!).ToArray();
-        Assert.That(childRequired, Does.Contain("name"));
-        Assert.That(childRequired, Does.Not.Contain("nickname"));
-    }
-
-    [Test]
-    public void Request_requires_only_non_nullable_parameters_without_defaults() {
-        var schema = JObject.Parse(BridgeOpSchemaGenerator.GetRequestSchemaJson(typeof(ProbeRequest)));
-
-        var required = (schema["required"] ?? new JArray()).Select(token => (string)token!).ToArray();
-        Assert.That(required, Does.Contain("schemaUrl"));
-        Assert.That(required, Does.Contain("target"));
-        Assert.That(required, Does.Not.Contain("filter"));
-        Assert.That(required, Does.Not.Contain("includeHidden"));
-        Assert.That(required, Does.Not.Contain("depth"));
-        Assert.That(required, Does.Not.Contain("extraTargets"));
-    }
-
-    [Test]
-    public void Request_nested_definitions_follow_the_same_rule() {
-        var schema = JObject.Parse(BridgeOpSchemaGenerator.GetRequestSchemaJson(typeof(ProbeRequest)));
-
-        var target = schema.SelectToken("$.definitions.ProbeTarget") as JObject;
-        Assert.That(target, Is.Not.Null);
-        var targetRequired = (target!["required"] ?? new JArray()).Select(token => (string)token!).ToArray();
-        Assert.That(targetRequired, Does.Contain("id"));
-        Assert.That(targetRequired, Does.Not.Contain("label"));
-    }
-
-    [Test]
-    public void Request_required_list_is_exactly_the_non_defaulted_parameters() {
-        var schema = JObject.Parse(BridgeOpSchemaGenerator.GetRequestSchemaJson(typeof(ProbeTarget)));
-
-        var required = (schema["required"] ?? new JArray()).Select(token => (string)token!).ToArray();
-        Assert.That(required, Does.Contain("id"));
-        Assert.That(required, Has.Length.EqualTo(1));
+    public void Catalog_response_requires_nested_non_nullable_values_and_omits_nullable_metadata() {
+        var schema = JObject.Parse(BridgeOpSchemaGenerator.GetResponseSchemaJson(typeof(LoadedFamiliesCatalogData)));
+        Assert.That(schema["required"]!.Values<string>(), Is.EquivalentTo(new[] { "summary", "families", "issues" }));
+        Assert.That(schema.SelectToken("$.definitions.LoadedFamilyCatalogEntry.required")!.Values<string>(),
+            Is.EquivalentTo(new[] { "familyId", "familyUniqueId", "familyName", "typeCount", "placedInstanceCount", "types" }));
+        Assert.That(schema.SelectToken("$.definitions.LoadedFamilyTypeEntry.required")!.Values<string>(),
+            Is.EquivalentTo(new[] { "typeName" }));
     }
 
     [Test]

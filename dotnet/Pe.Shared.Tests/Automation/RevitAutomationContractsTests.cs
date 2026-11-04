@@ -173,16 +173,10 @@ public sealed class RevitAutomationContractsTests {
     }
 
     [Test]
-    public void Schedule_collection_batch_manifest_loads_default_request_and_entry_override() {
-        var manifestPath = Path.Combine(
-            Path.GetTempPath(),
-            $"pe-da-schedule-batch-{Guid.NewGuid():N}.json"
-        );
-
+    public void Schedule_batch_options_inherit_defaults_and_preserve_each_explicit_entry_override() {
+        var path = Path.Combine(Path.GetTempPath(), $"pe-da-schedule-batch-{Guid.NewGuid():N}.json");
         try {
-            File.WriteAllText(
-                manifestPath,
-                """
+            File.WriteAllText(path, """
                 {
                   "engine": "Autodesk.Revit+2025",
                   "timeoutSeconds": 900,
@@ -190,15 +184,12 @@ public sealed class RevitAutomationContractsTests {
                   "request": {
                     "primaryCatalogRequest": {
                       "customParameterFilters": [
-                        {
-                          "parameter": { "name": "Discipline" },
-                          "expectedValue": "Mechanical",
-                          "matchKind": "Equals"
-                        }
+                        { "parameter": { "name": "Discipline" }, "expectedValue": "Mechanical", "matchKind": "Equals" }
                       ]
                     },
                     "fallbackCatalogRequest": {
-                      "categoryNames": [ "Mechanical Equipment", "Duct Accessories" ]
+                      "categoryNames": [ "Mechanical Equipment", "Duct Accessories" ],
+                      "includeTemplates": true
                     }
                   },
                   "models": [
@@ -209,193 +200,51 @@ public sealed class RevitAutomationContractsTests {
                     },
                     {
                       "region": "US",
-                      "projectGuid": "33333333-3333-3333-3333-333333333333",
-                      "modelGuid": "44444444-4444-4444-4444-444444444444",
-                      "request": {
-                        "fallbackCatalogRequest": {
-                          "categoryNames": [ "Mechanical Equipment" ]
-                        }
-                      }
-                    }
-                  ]
-                }
-                """
-            );
-
-            var manifest = ScheduleCollectionBatchManifest.LoadFromFile(manifestPath);
-            var defaultOptions = manifest.Models[0].ToOptions(manifest, manifest.Models[0].ResolveSpec(manifest.Engine).DesignAutomationEngine);
-            var overrideOptions = manifest.Models[1].ToOptions(manifest, manifest.Models[1].ResolveSpec(manifest.Engine).DesignAutomationEngine);
-
-            Assert.Multiple(() => {
-                Assert.That(manifest.Engine, Is.EqualTo("Autodesk.Revit+2025"));
-                Assert.That(manifest.MaxConcurrency, Is.EqualTo(2));
-                Assert.That(defaultOptions.Request, Is.Not.Null);
-                Assert.That(defaultOptions.Request!.PrimaryCatalogRequest, Is.Not.Null);
-                Assert.That(defaultOptions.Request.PrimaryCatalogRequest!.CustomParameterFilters.Count, Is.EqualTo(1));
-                Assert.That(overrideOptions.Request, Is.Not.Null);
-                Assert.That(overrideOptions.Request!.PrimaryCatalogRequest, Is.Not.Null);
-                Assert.That(overrideOptions.Request.PrimaryCatalogRequest!.CustomParameterFilters.Count, Is.EqualTo(1));
-                Assert.That(overrideOptions.Request!.FallbackCatalogRequest, Is.Not.Null);
-                Assert.That(
-                    overrideOptions.Request.FallbackCatalogRequest!.CategoryNames,
-                    Is.EqualTo(new[] { "Mechanical Equipment" })
-                );
-            });
-        } finally {
-            if (File.Exists(manifestPath))
-                File.Delete(manifestPath);
-        }
-    }
-
-    [Test]
-    public void Schedule_collection_batch_manifest_entry_primary_request_overrides_manifest_primary_request() {
-        var manifestPath = Path.Combine(
-            Path.GetTempPath(),
-            $"pe-da-schedule-primary-override-{Guid.NewGuid():N}.json"
-        );
-
-        try {
-            File.WriteAllText(
-                manifestPath,
-                """
-                {
-                  "engine": "Autodesk.Revit+2025",
-                  "request": {
-                    "primaryCatalogRequest": {
-                      "customParameterFilters": [
-                        {
-                          "parameter": { "name": "Discipline" },
-                          "expectedValue": "Mechanical",
-                          "matchKind": "Equals"
-                        }
-                      ]
-                    }
-                  },
-                  "models": [
+                      "projectGuid": "11111111-1111-1111-1111-111111111111",
+                      "modelGuid": "33333333-3333-3333-3333-333333333333",
+                      "request": { "fallbackCatalogRequest": { "categoryNames": [ "Mechanical Equipment" ] } }
+                    },
                     {
                       "region": "US",
                       "projectGuid": "11111111-1111-1111-1111-111111111111",
-                      "modelGuid": "22222222-2222-2222-2222-222222222222",
+                      "modelGuid": "44444444-4444-4444-4444-444444444444",
                       "request": {
                         "primaryCatalogRequest": {
                           "customParameterFilters": [
-                            {
-                              "parameter": { "name": "Discipline" },
-                              "expectedValue": "Electrical",
-                              "matchKind": "Equals"
-                            }
+                            { "parameter": { "name": "Discipline" }, "expectedValue": "Electrical", "matchKind": "Equals" }
                           ]
                         }
                       }
-                    }
-                  ]
-                }
-                """
-            );
-
-            var manifest = ScheduleCollectionBatchManifest.LoadFromFile(manifestPath);
-            var entry = manifest.Models.Single();
-            var options = entry.ToOptions(manifest, entry.ResolveSpec(manifest.Engine).DesignAutomationEngine);
-
-            Assert.That(
-                options.Request!.PrimaryCatalogRequest!.CustomParameterFilters.Single().ExpectedValue,
-                Is.EqualTo("Electrical")
-            );
-        } finally {
-            if (File.Exists(manifestPath))
-                File.Delete(manifestPath);
-        }
-    }
-
-    [Test]
-    public void Schedule_collection_batch_manifest_preserves_manifest_include_templates_when_entry_leaves_it_unset() {
-        var manifestPath = Path.Combine(
-            Path.GetTempPath(),
-            $"pe-da-schedule-include-templates-default-{Guid.NewGuid():N}.json"
-        );
-
-        try {
-            File.WriteAllText(
-                manifestPath,
-                """
-                {
-                  "engine": "Autodesk.Revit+2025",
-                  "request": {
-                    "fallbackCatalogRequest": {
-                      "categoryNames": [ "Mechanical Equipment", "Duct Accessories" ],
-                      "includeTemplates": true
-                    }
-                  },
-                  "models": [
+                    },
                     {
                       "region": "US",
                       "projectGuid": "11111111-1111-1111-1111-111111111111",
-                      "modelGuid": "22222222-2222-2222-2222-222222222222",
-                      "request": {
-                        "fallbackCatalogRequest": {
-                          "categoryNames": [ "Mechanical Equipment" ]
-                        }
-                      }
+                      "modelGuid": "55555555-5555-5555-5555-555555555555",
+                      "request": { "fallbackCatalogRequest": { "includeTemplates": false } }
                     }
                   ]
                 }
-                """
-            );
-
-            var manifest = ScheduleCollectionBatchManifest.LoadFromFile(manifestPath);
-            var entry = manifest.Models.Single();
-            var options = entry.ToOptions(manifest, entry.ResolveSpec(manifest.Engine).DesignAutomationEngine);
-
-            Assert.That(options.Request!.FallbackCatalogRequest!.IncludeTemplates, Is.True);
+                """);
+            var manifest = ScheduleCollectionBatchManifest.LoadFromFile(path);
+            var options = manifest.Models.Select(entry =>
+                entry.ToOptions(manifest, entry.ResolveSpec(manifest.Engine).DesignAutomationEngine)).ToArray();
+            Assert.Multiple(() => {
+                Assert.That(manifest.Engine, Is.EqualTo("Autodesk.Revit+2025"));
+                Assert.That(manifest.MaxConcurrency, Is.EqualTo(2));
+                Assert.That(options, Has.Length.EqualTo(4));
+                Assert.That(options.Select(option => option.Request!.PrimaryCatalogRequest!.CustomParameterFilters.Single().ExpectedValue),
+                    Is.EqualTo(new[] { "Mechanical", "Mechanical", "Electrical", "Mechanical" }));
+                Assert.That(options[0].Request!.PrimaryCatalogRequest!.CustomParameterFilters.Single().Parameter.Name, Is.EqualTo("Discipline"));
+                Assert.That(options[0].Request!.FallbackCatalogRequest!.CategoryNames,
+                    Is.EqualTo(new[] { "Mechanical Equipment", "Duct Accessories" }));
+                Assert.That(options[1].Request!.FallbackCatalogRequest!.CategoryNames, Is.EqualTo(new[] { "Mechanical Equipment" }));
+                Assert.That(options.Select(option => option.Request!.FallbackCatalogRequest!.IncludeTemplates),
+                    Is.EqualTo(new[] { true, true, true, false }), "An omitted entry flag inherits true; explicit false must survive.");
+                Assert.That(options[3].Request!.FallbackCatalogRequest!.CategoryNames,
+                    Is.EqualTo(new[] { "Mechanical Equipment", "Duct Accessories" }), "Changing the flag must not erase inherited categories.");
+            });
         } finally {
-            if (File.Exists(manifestPath))
-                File.Delete(manifestPath);
-        }
-    }
-
-    [Test]
-    public void Schedule_collection_batch_manifest_entry_can_disable_include_templates() {
-        var manifestPath = Path.Combine(
-            Path.GetTempPath(),
-            $"pe-da-schedule-include-templates-override-{Guid.NewGuid():N}.json"
-        );
-
-        try {
-            File.WriteAllText(
-                manifestPath,
-                """
-                {
-                  "engine": "Autodesk.Revit+2025",
-                  "request": {
-                    "fallbackCatalogRequest": {
-                      "categoryNames": [ "Mechanical Equipment", "Duct Accessories" ],
-                      "includeTemplates": true
-                    }
-                  },
-                  "models": [
-                    {
-                      "region": "US",
-                      "projectGuid": "11111111-1111-1111-1111-111111111111",
-                      "modelGuid": "22222222-2222-2222-2222-222222222222",
-                      "request": {
-                        "fallbackCatalogRequest": {
-                          "includeTemplates": false
-                        }
-                      }
-                    }
-                  ]
-                }
-                """
-            );
-
-            var manifest = ScheduleCollectionBatchManifest.LoadFromFile(manifestPath);
-            var entry = manifest.Models.Single();
-            var options = entry.ToOptions(manifest, entry.ResolveSpec(manifest.Engine).DesignAutomationEngine);
-
-            Assert.That(options.Request!.FallbackCatalogRequest!.IncludeTemplates, Is.False);
-        } finally {
-            if (File.Exists(manifestPath))
-                File.Delete(manifestPath);
+            File.Delete(path);
         }
     }
 
