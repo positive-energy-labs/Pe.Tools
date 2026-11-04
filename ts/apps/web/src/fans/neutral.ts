@@ -8,6 +8,8 @@ import {
   type FansRouteDocument,
 } from "@pe/agent-contracts";
 import { z } from "zod";
+import { TABLE_IDS } from "@pe/ducts-domain/pricing";
+import { nativeRequestSchema } from "@pe/host-contracts/decoders";
 import type {
   BodyBindings,
   WorkPatch,
@@ -368,7 +370,7 @@ const fanReadingSchema: z.ZodType<
 const sheetReadingSchema: z.ZodType<Immutable<z.output<typeof sharedSchemas.sheet>>> =
   sharedSchemas.sheet;
 export const entries = {
-  "ducts.tables": ductEntries["ducts.tables"],
+  "ducts.tables": { ...ductEntries["ducts.tables"], input: nativeRequestSchema("ducts.tables") },
   "ducts.catalogs": ductEntries["ducts.catalogs"],
   "ducts.fans": { ...ductEntries["ducts.fans"], input: z.object({ work: workSchema.nullable(), fanWork: workSchema.optional() }) },
   "ducts.sheet": {
@@ -423,7 +425,7 @@ const group = <const K extends string>(segment: K) => ({
   run: (key: string) => [key],
 });
 export const fansNeutralBodies = {
-  tablesArgs: { slot: "readings.tables.args", kind: "args", source, run: () => ({}) },
+  tablesArgs: { slot: "readings.tables.args", kind: "args", source, run: () => ({ ids: [...TABLE_IDS] }) },
   catalogsArgs: { slot: "readings.catalogs.args", kind: "args", source, run: () => ({}) },
   groupdesignFriction: group("designFriction"),
   groupparameters: group("parameters"),
