@@ -26,6 +26,20 @@ test.each([
   const options = subjectOf(mount, data)?.options;
   const first = options?.[0];
   if (!first) throw Error("Need a canonical subject");
+  if (name === "fans") {
+    const key = f.fans.workBasis()?.token.scope.identity.work;
+    if (!key) throw Error("No accepted Work key");
+    expect(
+      await f.ws.apply(
+        key,
+        "fans",
+        "human",
+        [{ path: ["designFriction"], value: { edit: { value: 0.09 } } }],
+        0,
+      ),
+    ).toMatchObject({ ok: true });
+    await waitFor(() => expect(f.fans.work()?.revision).toBe(1));
+  }
   render(<AdmittedSubjectPicker mount={mount} data={data} />);
   fireEvent.click(screen.getByRole("button", { name: `Choose ${data.subject.noun}` }));
   const option = await screen.findByRole("option", { name: first.label });
@@ -36,5 +50,24 @@ test.each([
     fireEvent.keyDown(search, { key: "ArrowDown" });
     fireEvent.keyDown(search, { key: "Enter" });
   }
-  expect(mount.page.read()[data.subject.field]).toEqual({ kind: "ids", ids: [first.id] });
+  expect(name === "owner" ? f.owner.page.read().system : f.fans.page.read().fan).toEqual({
+    kind: "ids",
+    ids: [first.id],
+  });
+  if (name === "fans") {
+    expect(f.fans.work()).toMatchObject({
+      revision: 1,
+      value: { designFriction: { edit: { value: 0.09 } } },
+    });
+    await waitFor(() => expect(f.fans.workBasis()).not.toBeNull());
+    f.fans.invoke("edit", {
+      patches: [{ path: ["designFriction"], value: { edit: { value: 0.1 } } }],
+    });
+    await waitFor(() =>
+      expect(f.fans.work()).toMatchObject({
+        revision: 2,
+        value: { designFriction: { edit: { value: 0.1 } } },
+      }),
+    );
+  }
 });
