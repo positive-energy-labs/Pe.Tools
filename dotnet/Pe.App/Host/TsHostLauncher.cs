@@ -17,7 +17,7 @@ internal static class TsHostLauncher {
     private const string SourceRootEnvironmentVariable = "PE_TOOLS_SOURCE_ROOT";
     /// <summary>The checkout's TS workspace, where the dev host runs. Mirror: TS <c>checkoutLayout.ts</c>.</summary>
     private const string TsWorkspaceDirectory = "ts";
-    private static readonly TimeSpan DevStartupTimeout = TimeSpan.FromSeconds(90); // vite cold-starts in 40-60 s
+    internal static readonly TimeSpan DevStartupTimeout = TimeSpan.FromSeconds(90); // vite cold-starts in 40-60 s
 
     public static string Lane => ProductRuntimeLayout.Current.LaneName;
 
@@ -96,9 +96,7 @@ internal static class TsHostLauncher {
         start.EnvironmentVariables[HostEndpoint.ServiceNameVariable] = ServiceName;
         start.EnvironmentVariables[SourceRootEnvironmentVariable] = sourceRoot;
 
-        // TODO: the dev host this starts outlives `pe-revit session stop`, and nothing authorized can stop it
-        // (/admin/shutdown needs the service token; `pe-revit service` only lists and sweeps). SDK Owed in
-        // docs/features/host/LEDGER.md (2026-11-02, Manual D defect 11).
+        // SDK beta.216 binds a dev companion's lifetime to its Revit process.
         return InstalledProduct.EnsureRunning(
             ServiceAppBase, ServiceName, spec, start, Lane, null,
             file => file.Lane == "dev" && PathsEqual(file.SourceRoot, sourceRoot),

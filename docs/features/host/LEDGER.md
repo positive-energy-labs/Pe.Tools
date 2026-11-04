@@ -6,6 +6,8 @@ design-system ledger, not restated here.
 
 ## Decided
 
+- 2026-11-04, dev endpoint callers wait for their local supervisor's launch result before receipt discovery. Readiness settles before Revit UI bridge work, so a caller on that UI thread can wait safely; the existing launcher budget and ownership checks remain authoritative. With no matching supervisor the caller fails fast. (HOSTREADY, counsel)
+
 - 2026-11-02, [ADR 0029 amendment (2)](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md), rule 14: admission durably establishes owner capability, causal parent id, cancellation policy and terminal state before acknowledgment. Stop addresses the owner and its defined descendants. Submit, join, observe and stop are separate capabilities because request lifetime cannot define cross-process ownership.
 - 2026-11-02, ADR 0029 rule 15: scoped services retain active runs only. Indexed durable storage owns terminal history and cursor reads. Every cache, queue and subscriber list names entry and byte bounds with eviction or overload behavior. `host-log.ts:17` supplies the bounded-storage model. Flat retained counts remain UNPROVEN until the memory acceptance run.
 - 2026-11-02, ADR 0029 API corrections against effect 4.0.2: no `FiberRef` module exists. Required `Context.Service` request identity uses `Effect.provideService` once at admission. Durable work captures causal identity and journal ownership explicitly. The process entrypoint is `effect/process`. HttpRouter is already adopted, so phase 5 deletes its Web-handler island and per-route error mapping rather than adding another router.
@@ -207,7 +209,6 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 
 ## Owed
 
-- cold dev host: a call before the service receipt fails instead of waiting; masked by orphan hosts until SDK beta.216. (counsel, kaitpw main thread, 2026-11-03)
 
 
 - The host's frontend-origin check refuses the same checkout's production preview origin (vite preview on its own port), so drives on a built web need a disposable preview origin mapping (RAMFIX preview.config.mjs, 2026-11-03). Accept the preview origin of the same checkout. (controller, kaitpw)

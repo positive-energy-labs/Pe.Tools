@@ -12,6 +12,9 @@ namespace Pe.Shared.HostContracts.Transport;
 ///     manifest's business, not this type's.
 /// </summary>
 public static class HostEndpoint {
+    /// <summary>Set by the process's dev supervisor before scheduling its first launch.</summary>
+    public static HostStartupReadiness? DevHostStartup { get; set; }
+
     // The installed service is "host"; source hosts derive a stable key from their checkout root.
     // HealthPath/ShutdownPath are the loopback routes the SDK primitive probes and authorizes.
     public const string ServiceName = "host";
@@ -35,6 +38,8 @@ public static class HostEndpoint {
 
     /// <summary>The configured runtime's host, verified against its receipt and its live status.</summary>
     public static string ResolveHostBaseUrl(ProductRuntimeLayout runtime, string? installedExecutable, string? overrideValue) {
+        if (runtime.Lane == ProductLane.Dev && DevHostStartup is { } startup && startup.Runtime == runtime)
+            startup.Wait();
         var serviceName = ResolveServiceName(runtime);
         var installed = runtime.Lane == ProductLane.Installed;
         if (installed && string.IsNullOrWhiteSpace(installedExecutable))
