@@ -159,7 +159,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       W extends Record<string, unknown>,
     >(admitted: AdmittedRoute<G, S, E, Render, W>, input: PlaceInput) {
       const { address, fixture, target, memory } = input;
-      const route: AdmittedRoute<RouteGraphJson, SchemaTable, EntryTable, unknown, W> = admitted;
+      const route = admitted;
       const registry = createAdmittedRouteRegistry();
       const registration = registry.register(route);
       const resolve = () => {
@@ -315,7 +315,12 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           : ownerOptions,
       );
       owner.enter(identityForPage(initial.value), initial.value);
-      const ports = createPagePorts(route.data, { ...owner, readPage: () => owner.read()!.page });
+      const read = () => {
+        const snapshot = owner.read();
+        if (!snapshot) throw Error("Mount has no accepted snapshot");
+        return snapshot;
+      };
+      const ports = createPagePorts(route.data, { ...owner, readPage: () => read().page });
       const environmentIssuer = createRouteEnvironmentIssuer();
       const generations = new Map<string, number>();
       const plan = createAdmittedReadingPlan({
@@ -583,7 +588,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       >();
       const queryLandings = new Map<string, CommandResultDecode>();
       const subjectField = route.data.subject.field;
-      let evidenceScope = owner.read()!.scope;
+      let evidenceScope = read().scope;
       let drawing = false;
       let scheduling = false;
       let again = false;
@@ -601,8 +606,8 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
             resolve();
             work.sync();
             syncRecovery();
-            if (evidenceScope !== owner.read()!.scope) {
-              evidenceScope = owner.read()!.scope;
+            if (evidenceScope !== read().scope) {
+              evidenceScope = read().scope;
               for (const [id, reading] of Object.entries(route.data.readings))
                 if (reading.retain.evidence === "scope") {
                   retire(id);
@@ -626,8 +631,8 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
             }
             const used = new Set<string>();
             observers.update({
-              page: owner.read()!.page,
-              work: owner.read()!.work?.value ?? null,
+              page: read().page,
+              work: read().work?.value ?? null,
               readings,
             });
             const wanted = wantedReadings();
@@ -639,7 +644,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
                 (declaration.demand === "explicit" &&
                   !(declaration.kind === "use" && declaration.geometry) &&
                   !demanded.has(id)) ||
-                (declaration.demand === "subject" && owner.read()!.page[subjectField] === null)
+                (declaration.demand === "subject" && read().page[subjectField] === null)
               ) {
                 next[id] = {
                   status: "unavailable",
@@ -665,7 +670,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
               next[id] = plan.read(
                 id,
                 {
-                  page: owner.read()!.page,
+                  page: read().page,
                   work: owner.read()?.work?.value ?? null,
                 },
                 (request) => {
@@ -795,10 +800,10 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
               again = true;
               continue;
             }
-            cells.update(owner.read()!.work?.value ?? null);
+            cells.update(read().work?.value ?? null);
             observers.update({
-              page: owner.read()!.page,
-              work: owner.read()!.work?.value ?? null,
+              page: read().page,
+              work: read().work?.value ?? null,
               readings,
             });
             const afterDemand = wantedReadings();
@@ -837,7 +842,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
               if (!landing.ok) continue;
               const patch = bindings.bodies[query.landing]!.run(
                 freezePage(decoded.data),
-                owner.read()!.page,
+                read().page,
               );
               owner.acceptPage(landing.value, patch as Parameters<typeof owner.acceptPage>[1]);
             }
@@ -981,7 +986,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         const edit = basis === undefined ? undefined : editBases.get(basis);
         if (basis !== undefined && (!edit || edit.scope !== owner.read()?.scope))
           throw Error("Stale or foreign accepted Work basis");
-        if (declaration.deps.work.length && (!work.ready() || !owner.read()!.work))
+        if (declaration.deps.work.length && (!work.ready() || !read().work))
           throw Error("Work unavailable");
         const dependencies: Record<string, string> = {};
         for (const key of declaration.deps.readings) {
@@ -994,8 +999,8 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         const invocation = issued.value;
         const context = () => ({
           workBasis: basis ?? (owner.read()?.work ? invocation : null),
-          page: project(declaration.deps.page, owner.read()!.page),
-          work: project(declaration.deps.work, (edit?.work ?? owner.read()!.work)?.value ?? {}),
+          page: project(declaration.deps.page, read().page),
+          work: project(declaration.deps.work, (edit?.work ?? read().work)?.value ?? {}),
           readings: freezePage(
             Object.fromEntries(declaration.deps.readings.map((key) => [key, readings[key]])),
           ),
@@ -1066,7 +1071,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
               readings: captured.readings,
             }),
           );
-          const accepted = owner.read()!;
+          const accepted = read();
           if (modelWrite && basis && basis.workRevision !== accepted.work?.revision)
             throw Error("Stale accepted Work basis; prepare from the current revision");
           if (modelWrite && (!work.ready() || !accepted.work || !accepted.scope.identity.work))
@@ -1120,7 +1125,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
                   const result = decode(outcome);
                   landings.set(submission.handle.id, result);
                   if (result.kind === "decoded" && owner.current(invocation)) {
-                    const patch = land(freezePage(result.value), owner.read()!.page);
+                    const patch = land(freezePage(result.value), read().page);
                     owner.acceptPage(invocation, patch as Parameters<typeof owner.acceptPage>[1]);
                   }
                   notify();
@@ -1214,7 +1219,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
                     bindings.bodies[declaration.args]!.run(
                       {
                         ...context(),
-                        work: project(declaration.deps.work, owner.read()!.work?.value ?? {}),
+                        work: project(declaration.deps.work, read().work?.value ?? {}),
                       },
                       parsed,
                     ),
@@ -1291,7 +1296,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         const result = await work.submit(
           {
             kind: "apply",
-            expectedRevision: owner.read()!.work!.revision,
+            expectedRevision: read().work!.revision,
             press: basis.value.id,
             label: `Revert ${step.label}`,
             patches: step.transitions
@@ -1340,8 +1345,8 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         // Display evidence only: the invocation owns freshness, never a second write seal.
         const evidence = freezePage(
           structuredClone({
-            page: project(deps.page, owner.read()!.page),
-            work: project(deps.work, owner.read()!.work!.value),
+            page: project(deps.page, read().page),
+            work: project(deps.work, read().work!.value),
             readings: Object.fromEntries(deps.readings.map((id) => [id, readings[id]])),
           }),
         );
@@ -1356,7 +1361,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           .parse(
             bindings.bodies[route.data.salvage]!.run(
               freezePage(saved.value),
-              freezePage({ page: owner.read()!.page, work: owner.read()!.work!.value, readings }),
+              freezePage({ page: read().page, work: read().work!.value, readings }),
             ),
           );
         if (!decoded.ok) throw Error(decoded.reason);
@@ -1415,7 +1420,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         resolve();
         if (!recovery().startFresh || recoveryBusy) throw Error("Start fresh unavailable");
         const captured = owner.capture("work-recovery");
-        const scope = owner.read()!.scope;
+        const scope = read().scope;
         const key = scope.identity.work!;
         recoverySentence = work.problem();
         recoveryBusy = true;
@@ -1707,7 +1712,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
             return current.bodies[declaration.body]!.run({
               place: (row: unknown, input: unknown) => place(pane, row, input, basis),
               page: ports.page,
-              work: owner.read()!.work?.value ?? null,
+              work: read().work?.value ?? null,
               workBasis: basis,
               history,
               cells: {
