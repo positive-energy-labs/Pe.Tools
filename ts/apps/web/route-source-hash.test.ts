@@ -83,6 +83,29 @@ test("drift checks are read-only", async () => {
   expect(() => checkBuiltinClosure(path, changed)).toThrow("drifted");
   expect(readFileSync(path)).toEqual(before);
 });
+
+test("shared client entries resolve once and retain both client identities", async () => {
+  const f = fixture();
+  const before = await f.build();
+  const resolved: string[] = [];
+  const closure = await buildBuiltinClosure({
+    ...f.options,
+    config: {
+      plugins: [
+        {
+          name: "count-entry-builds",
+          transform(_code, id) {
+            if (id === join(f.root, "entry.ts").replaceAll("\\", "/")) resolved.push(id);
+          },
+        },
+      ],
+    },
+  });
+  expect(resolved).toHaveLength(1);
+  expect(closure).toEqual(before);
+  expect(closure.envelope.variants.map((variant) => variant.client)).toEqual(["pea", "web"]);
+});
+
 test("explicit roots are portable and producer works in another process cwd", async () => {
   const f = fixture();
   const first = await f.build();
