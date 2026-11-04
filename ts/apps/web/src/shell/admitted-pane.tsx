@@ -215,17 +215,11 @@ export function AdmittedPlacePane({
   return mounted?.shell === shell ? createElement(Pane, { mount: mounted.mount, route }) : null;
 }
 
-/** Router search stays codec text; field names and types come from the admitted declaration. */
+/** Preserve router values; the address reads codec text from raw history. */
 export function admittedRouteSearch<
   G extends import("../../../../packages/agent-contracts/src/route-kernel-data").RouteGraphJson,
 >(_data: G) {
-  return (search: Record<string, unknown>) =>
-    Object.fromEntries(
-      Object.entries(search).map(([key, value]) => [
-        key,
-        typeof value === "string" ? value : JSON.stringify(value),
-      ]),
-    ) as { [K in keyof G["fields"]]?: string } & { fixture?: string };
+  return (search: Record<string, unknown>): { [K in keyof G["fields"]]?: unknown } & { fixture?: unknown } => search;
 }
 
 /** Shared async admission/router boundary. Domain routes supply only a loader. */
