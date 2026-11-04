@@ -42,20 +42,16 @@ export function mountAdmittedRoute(route: AdmittedRoute, expectedFingerprint: st
   const registry = createAdmittedRouteRegistry();
   const receipt = registry.register(route);
   return {
+    registry,
+    registration: receipt,
     resolve() {
       const bindings = resolveRouteBindings(registry, route);
       if (!bindings || route.fingerprint !== expectedFingerprint)
         throw Error("Stale or foreign route admission at mount");
-      return { route, bindings };
+      return bindings;
     },
     close: () => receipt.deactivate(),
   };
-}
-
-/** Evaluate only the bytes the artifact verifier has checked. No URL remains owned. */
-export async function evaluateRouteBytes(bytes: Uint8Array): Promise<unknown> {
-  const url = `data:text/javascript;base64,${btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""))}`;
-  return import(/* @vite-ignore */ url);
 }
 
 export class PlaceWriteRefusal extends Error {
@@ -85,6 +81,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       const { address, fixture, memory } = input;
       const route = admitted;
       const scope = createAdmittedScope({
+        admission: mountAdmittedRoute(route, route.fingerprint),
         route,
         input,
         workRegistry: fixture === null ? workRegistry : createApplicationWorkRegistry(),

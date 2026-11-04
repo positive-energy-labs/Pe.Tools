@@ -5,10 +5,6 @@ import {
   createRouteTokenIssuer,
   type SchemaTable,
 } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
-import {
-  createAdmittedRouteRegistry,
-  resolveRouteBindings,
-} from "../../../../packages/agent-contracts/src/route-module.ts";
 import { routeWorkSubject } from "../../../../packages/agent-contracts/src/route-work-subject.ts";
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate.ts";
 import type {
@@ -25,6 +21,7 @@ import { createPagePolicy } from "./page-port.ts";
 import { createRouteEnvironment, type EnvironmentValidation } from "./route-environment.ts";
 export function createAdmittedScope<W extends Record<string, unknown>>({
   route,
+  admission,
   input,
   workRegistry,
   snapshots,
@@ -33,6 +30,7 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
   notify,
 }: {
   route: MountedRoute<W>;
+  admission: ReturnType<typeof import("./admitted-mount.ts").mountAdmittedRoute>;
   input: PlaceInput;
   workRegistry: ReturnType<typeof createApplicationWorkRegistry>;
   snapshots(): Snapshots;
@@ -41,13 +39,7 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
   notify(): void;
 }) {
   const { address, target } = input;
-  const registry = createAdmittedRouteRegistry();
-  const registration = registry.register(route);
-  const resolve = () => {
-    const bindings = resolveRouteBindings(registry, route);
-    if (!bindings) throw Error("Foreign or retired mount admission");
-    return bindings;
-  };
+  const { registry, registration, resolve } = admission;
   const bindings = resolve();
   // COMMON 3: admission owns slot/kind checks. A linked cell admission is valid but
   // this shell cannot execute it; retain that capability refusal before acquisition.
