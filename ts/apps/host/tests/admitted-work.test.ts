@@ -27,7 +27,7 @@ afterEach(() => {
 async function route(
   migrate?: (doc: unknown) => unknown,
   source: "builtin-closure" | "pod-bytes" = "builtin-closure",
-  hostVersion = "test",
+  sourceBytes = "test",
 ) {
   const migrations: Record<string, string> = migrate ? { "1": "upgrade" } : {};
   const data = {
@@ -63,9 +63,8 @@ async function route(
     source: "builtin-closure",
     version: 1,
     data,
-    hostVersion,
     variants: [{ client: "web", entry: "bodies.js" }],
-    modules: [{ id: "bodies.js", sha256: "a".repeat(64) }],
+    modules: [{ id: "bodies.js", sha256: createHash("sha256").update(sourceBytes).digest("hex") }],
     inputs: [],
     externals: [],
   };
@@ -333,7 +332,7 @@ test("retirement during a disk census never runs the retired migration bodies", 
 test("a foreign route cannot reference another route's Work", async () => {
   const f = await setup();
   const module = { ...builtinModule, data: { ...builtinModule.data, key: "foreign", address: "/foreign", work: { ...builtinModule.data.work, route: "tiny" } } };
-  const envelope: BuiltinClosure = { source: "builtin-closure", version: 1, data: module.data, hostVersion: "test", variants: [{ client: "web", entry: "bodies.js" }], modules: [{ id: "bodies.js", sha256: "a".repeat(64) }], inputs: [], externals: [] };
+  const envelope: BuiltinClosure = { source: "builtin-closure", version: 1, data: module.data, variants: [{ client: "web", entry: "bodies.js" }], modules: [{ id: "bodies.js", sha256: "a".repeat(64) }], inputs: [], externals: [] };
   const fingerprint = await builtinClosureFingerprint(envelope);
   const inventory = createBuiltinRouteInventory({ foreign: { module, closure: { envelope, fingerprint }, catalog: [] } });
   expect((await inventory.prepare("foreign", fingerprint)).admitUnknown(module).ok).toBe(false);

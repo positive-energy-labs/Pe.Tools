@@ -34,11 +34,8 @@ export interface BuiltinClosureOptions {
   readonly identityRoot: string;
   readonly variants: readonly { readonly client: "web" | "pea"; readonly entry: string }[];
   readonly data: unknown;
-  readonly hostVersion: string;
   /** Resolver/transform config is passed directly to Vite. Never discover config from cwd. */
   readonly config?: InlineConfig;
-  /** Config, lockfile, catalog and toolchain contracts not reachable by runtime imports. */
-  readonly inputs: readonly string[];
   readonly externals?: readonly { readonly id: string; readonly bytes: Uint8Array }[];
 }
 
@@ -50,7 +47,6 @@ export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
   for (const path of [
     options.root,
     options.identityRoot,
-    ...options.inputs,
     ...options.variants.map((v) => v.entry),
   ])
     if (!isAbsolute(path)) throw Error(`Closure requires an absolute path: ${path}`);
@@ -73,7 +69,6 @@ export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
     };
   };
   const modules = new Map<string, SourceMember>();
-  const inputs = new Map(options.inputs.map((path) => [idFor(path), member(path)]));
   const externals = new Map(
     (options.externals ?? []).map((e) => [e.id, { id: e.id, sha256: exactHash(e.bytes) }]),
   );
@@ -83,24 +78,6 @@ export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
     const capture: Plugin = {
       name: "builtin-source-closure",
       enforce: "pre",
-      configResolved(config) {
-        const resolution = canonicalRouteJson({
-          mode: config.mode,
-          define: config.define ?? {},
-          resolve: {
-            conditions: config.resolve.conditions,
-            mainFields: config.resolve.mainFields,
-            dedupe: config.resolve.dedupe,
-            preserveSymlinks: config.resolve.preserveSymlinks,
-          },
-          plugins: config.plugins.map((p) => p.name),
-        });
-        inputs.set("build:resolved-config", {
-          id: "build:resolved-config",
-          sha256: routeSourceHash(resolution),
-        });
-        for (const path of config.configFileDependencies) inputs.set(idFor(path), member(path));
-      },
       load(id) {
         const path = id.split("?")[0]!;
         if (isAbsolute(path)) {
@@ -171,12 +148,12 @@ export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
     source: "builtin-closure",
     version: 1,
     data: RouteGraphJson.parse(options.data),
-    hostVersion: options.hostVersion,
     variants: options.variants
       .map((v) => ({ client: v.client, entry: idFor(v.entry) }))
       .sort((a, b) => (a.client < b.client ? -1 : 1)),
     modules: sorted(modules),
-    inputs: sorted(inputs),
+    // COMMON 27: resolver-loaded modules own identity; config-only files are not members.
+    inputs: [],
     externals: sorted(externals),
   };
   return { envelope, fingerprint: fingerprintRouteSource(envelope) };

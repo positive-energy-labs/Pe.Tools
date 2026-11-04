@@ -212,7 +212,6 @@ export interface BuiltinClosure {
   readonly source: "builtin-closure";
   readonly version: 1;
   readonly data: KernelGraph;
-  readonly hostVersion: string;
   readonly variants: readonly { readonly client: "web" | "pea"; readonly entry: string }[];
   readonly modules: readonly { readonly id: string; readonly sha256: string }[];
   readonly inputs: readonly { readonly id: string; readonly sha256: string }[];

@@ -841,7 +841,7 @@ it.each(["missing", "malformed"])(
 
 it("the closure pin alone admits builtin identity and refuses a stale pin or replaced body", async () => {
   const envelope: BuiltinClosure = {
-    source: "builtin-closure", version: 1, data: builtinData, hostVersion: "test",
+    source: "builtin-closure", version: 1, data: builtinData,
     variants: [{ client: "web", entry: "builtin.ts" }],
     modules: [{ id: "builtin.ts", sha256: digest(bytes) }], inputs: [], externals: [],
   };

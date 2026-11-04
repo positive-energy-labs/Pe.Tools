@@ -26,7 +26,7 @@ async function entry(
     source: "builtin-closure",
     version: 1,
     data: module.data,
-    hostVersion: "u8b",
+
     modules: [{ id: "builtin.neutral.ts", sha256: "a".repeat(64) }],
     variants: [{ client: "web", entry: "builtin.neutral.ts" }],
     inputs: [],
@@ -256,7 +256,7 @@ test("startup refuses a stale committed pin with the typed regeneration instruct
   // Model the producer finding changed source while the deployment pin remains old.
   const stale = {
     ...good,
-    closure: { ...good.closure, envelope: { ...good.closure.envelope, hostVersion: "changed" } },
+    closure: { ...good.closure, envelope: { ...good.closure.envelope, modules: good.closure.envelope.modules.map(member => ({ ...member, sha256: "b".repeat(64) })) } },
   };
   const run = await open(workspace().workspace, [stale]);
   expect(Exit.isFailure(run.result)).toBe(true);

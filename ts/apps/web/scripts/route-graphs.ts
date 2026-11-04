@@ -76,9 +76,6 @@ const { admittedBuiltinKeys } = await jiti.import<
   typeof import("../../../packages/agent-contracts/src/admitted-builtin-keys.ts")
 >("../../../packages/agent-contracts/src/admitted-builtin-keys.ts");
 const root = fileURLToPath(new URL("../", import.meta.url));
-const host = JSON.parse(
-  await readFile(new URL("../../host/package.json", import.meta.url), "utf8"),
-);
 const builtinOptions = [];
 for (const key of admittedBuiltinKeys) {
   const files = await readdir(new URL(`../src/${key}/`, import.meta.url));
@@ -89,24 +86,12 @@ for (const key of admittedBuiltinKeys) {
     root,
     identityRoot: fileURLToPath(new URL("../../../../", import.meta.url)),
     data: module.data,
-    hostVersion: host.version,
     variants: (["web", "pea"] as const).map((client) => ({
       client,
       entry,
     })),
     config: { resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] } },
-    inputs: [
-      "../vite.config.ts",
-      "../tsconfig.json",
-      "../route-source-hash.ts",
-      "../route-module-hash.ts",
-      "../../host/package.json",
-      "../../../pnpm-lock.yaml",
-      "../../../package.json",
-      "../../../packages/agent-contracts/src/route-kernel-data.ts",
-      "../../../packages/agent-contracts/src/route-module.ts",
-      "../../../packages/agent-contracts/src/admitted-builtin-keys.ts",
-    ].map((path) => fileURLToPath(new URL(path, import.meta.url))),
+
   });
 }
 const closures = await buildBuiltinClosures(builtinOptions);
