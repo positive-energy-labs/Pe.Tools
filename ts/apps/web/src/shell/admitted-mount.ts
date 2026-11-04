@@ -1,13 +1,12 @@
 import { bindWork,OLDER_WORK,UNREADABLE_WORK,workKey } from "@pe/agent-contracts";
 import { z } from "zod";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
-import type { EntryTable,ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { EntryTable } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import {
 canonicalEnvironmentInput,
 createRouteEnvironmentIssuer,
-type KernelServices,
-type ReadHandle,
+type KernelServices
 } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import type { FieldControls,InvocationToken,PagePort,SchemaTable } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src/route-kernel-page";
@@ -23,18 +22,12 @@ import { peReadings } from "../readings";
 import { salvageRouteWork,startFreshRouteWork } from "../route/host";
 import { createAdmittedAddress } from "./admitted-address";
 import { admittedWorkPatches,createAdmittedCellActions,createAdmittedCells } from "./admitted-cells";
-import { type CommandResultDecode } from "./admitted-command-result";
-import { project } from "./admitted-context.ts";
+import { project,type MountedOwner,type MountedSnapshot } from "./admitted-context.ts";
 import { createAdmittedGeometry } from "./admitted-geometry";
 import { createAdmittedInvocation } from "./admitted-invoke.ts";
 import { createAdmittedObservers } from "./admitted-observers";
 import type { PlaceInput } from "./admitted-place";
-import {
-createAdmittedReadingPlan,
-readingClosure,
-receiptHitsReading,
-type AdmittedReadingStatus,
-} from "./admitted-reading-plan";
+import { createAdmittedReadings } from "./admitted-readings.ts";
 import { createAdmittedWork } from "./admitted-work";
 import {
 applicationWorkRegistry,
@@ -44,7 +37,6 @@ import { fixtureGeometryDoor } from "./fixture-geometry-door";
 import { createNamedFixtureRouteEnvironment } from "./fixture-lane";
 import { createPagePolicy,createPagePorts,freezePage } from "./page-port";
 import { createRouteEnvironment,type EnvironmentValidation } from "./route-environment";
-import { sourceReadingEvidence } from "./source-route-services";
 import { createWorkFeedClient } from "./work-feed-client";
 export { ReviewRefusal } from "./admitted-invoke.ts";
 
@@ -166,7 +158,6 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         bindings.bodies,
         route.resolvedWork?.schema,
       );
-      let readings: Record<string, ReadingSnapshot<unknown>> = {};
       const policy = createPagePolicy<RouteGraphJson, SchemaTable>(
         route.data,
         bindings.schemas,
@@ -174,12 +165,12 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         route.data.transition
           ? (current, patch, origin) => {
               const deps = route.data.transitionDeps ?? { page: [], work: [], readings: [] };
-              if (deps.readings.some((id) => !readings[id]?.current))
+              if (deps.readings.some((id) => !readings.snapshots()[id]?.current))
                 return { ok: false, reason: "Transition reading evidence unavailable or stale" };
               const acceptedWork = owner.read()?.work?.value;
               if (deps.work.length && !acceptedWork)
                 return { ok: false, reason: "Transition Work unavailable" };
-              const evidence = Object.fromEntries(deps.readings.map((id) => [id, readings[id]]));
+              const evidence = Object.fromEntries(deps.readings.map((id) => [id, readings.snapshots()[id]]));
               const result = resolve().bodies[route.data.transition!]!.run(
                 current,
                 patch,
@@ -192,7 +183,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
               ) as import("../../../../packages/agent-contracts/src/route-kernel-page").DecodeResult<unknown>;
               // Re-entrant publication cannot decide on the evidence captured above.
               if (
-                deps.readings.some((id) => readings[id] !== evidence[id] || !readings[id]?.current)
+                deps.readings.some((id) => readings.snapshots()[id] !== evidence[id] || !readings.snapshots()[id]?.current)
               )
                 return { ok: false, reason: "Transition reading evidence changed" };
               return result;
@@ -263,7 +254,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       const ownerOptions = {
         dependencies: () =>
           Object.fromEntries(
-            Object.entries(readings)
+            Object.entries(readings.snapshots())
               .filter(([, value]) => value.current)
               .map(([id, value]) => [id, value.current ? value.hash : ""]),
           ),
@@ -275,7 +266,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         preparePage: policy.prepare,
         issuer,
       };
-      const owner = createRouteScopeGate<RouteGraphJson, SchemaTable, W>(
+      const owner: MountedOwner<W> = createRouteScopeGate<RouteGraphJson, SchemaTable, W>(
         workSpec
           ? {
               ...ownerOptions,
@@ -286,26 +277,17 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           : ownerOptions,
       );
       owner.enter(identityForPage(initial.value), initial.value);
-      const read = () => {
+      const read = (): MountedSnapshot<W> => {
         const snapshot = owner.read();
         if (!snapshot) throw Error("Mount has no accepted snapshot");
         return snapshot;
       };
       const ports = createPagePorts(route.data, { ...owner, readPage: () => read().page });
       const environmentIssuer = createRouteEnvironmentIssuer();
-      const generations = new Map<string, number>();
-      const plan = createAdmittedReadingPlan({
-        route,
-        issuer: environmentIssuer,
-        key: (id) => ({
-          processIncarnation: "application",
-          documentLifetime: "none",
-          freshnessGeneration: generations.get(id) ?? 0,
-        }),
-      });
       let closed = false;
       let resources: "held" | "released" = "held";
       const listeners = new Set<() => void>();
+      let drawing = false;
       let revision = 0;
       const notify = () => {
         if (!closed) {
@@ -313,94 +295,35 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           listeners.forEach((listener) => listener());
         }
       };
+      const schedule = (): void => readings.sync();
+      const readings: ReturnType<typeof createAdmittedReadings<W>> = createAdmittedReadings({ route, owner, read, bindings, input, services,
+        environmentIssuer, observers, cells, geometry: () => geometry, environment: () => environment,
+        schedule, notify, settle: () => {resolve(); work.sync(); syncRecovery();},
+        syncInvocation: () => invocation.sync(),
+        beforeSync: () => {if (drawing) throw Error("Admitted observers cannot run during render");},
+        available: () => !closed && resources === "held" && input.custody.current(), closed: () => closed,
+        entryFor, resolve, logEvidence: (readingId, value) => {
+          const key = read().scope.identity.work;
+          if (!key) return;
+          const entry = entryFor(key);
+          const rows = sourceTimeline.get(entry) ?? [];
+          rows.push(freezePage({kind: "feed", at: services.clock.now(), subject: readingId, basis: value}));
+          if (rows.length > 200) rows.shift();
+          sourceTimeline.set(entry, rows);
+        },
+      });
+      const {plan, observeReceipts, queryInputs, queryLandings, demanded, generations, retire} = readings;
       const validate: EnvironmentValidation = {
         admitted: (candidate) => candidate === route && registry.resolve(route) === route,
         token: (token) => owner.current(token),
         scope: (scope) => owner.current(scope),
         invocation: (invocation) => owner.current(invocation),
         key: (key) =>
-          Array.from(active.values()).some((read) => read.handle?.key === key || read.key === key),
+          readings.ownsKey(key),
         detail: () => false,
         geometryScope: () => false,
       };
-      type Active = {
-        signature: string;
-        key: import("../../../../packages/agent-contracts/src/route-kernel-environment").ResolvedReadKey;
-        token: ReturnType<typeof owner.capture>;
-        snapshot: ReadingSnapshot<unknown>;
-        handle?: ReadHandle<unknown>;
-        unsubscribe?: () => void;
-      };
-      const active = new Map<string, Active>();
-      const retained = new Map<string, { signature: string; snapshot: ReadingSnapshot<unknown> }>();
-      const previous = new Map<string, unknown>();
-      const dependencies = new Map<string, readonly import("@pe/agent-contracts").Effect[]>();
-      const hostGenerations = new Map<string, string | null>();
-      const seenReceipts = new Map<string, string>();
-      const paneDemand = new Map<string, boolean>();
-      const evidence = sourceReadingEvidence(services);
-      const invalidate = (id: string) => {
-        generations.set(id, (generations.get(id) ?? 0) + 1);
-        retire(id);
-        retained.delete(id);
-        geometry.invalidate(id);
-        const stale = new Set([id]);
-        for (let changed = true; changed; ) {
-          changed = false;
-          for (const [key, reading] of Object.entries(route.data.readings))
-            if (!stale.has(key) && reading.deps.readings.some((dep) => stale.has(dep))) {
-              stale.add(key);
-              changed = true;
-            }
-        }
-        readings = Object.freeze({
-          ...readings,
-          ...Object.fromEntries(
-            [...stale].map((key) => [
-              key,
-              Object.freeze({
-                status: "unavailable" as const,
-                current: false as const,
-                value: previous.get(key),
-                reason: "Host evidence changed",
-              }),
-            ]),
-          ),
-        });
-      };
-      function observeReceipts() {
-        const key = owner.read()?.scope.identity.work;
-        if (!key) return;
-        const receipts = entryFor(key).activity();
-        const ids = new Set(receipts.map((receipt) => receipt.id));
-        for (const id of seenReceipts.keys()) if (!ids.has(id)) seenReceipts.delete(id);
-        for (const receipt of receipts) {
-          const stamp = canonicalEnvironmentInput([receipt.state, receipt.effects]);
-          if (seenReceipts.get(receipt.id) === stamp) continue;
-          seenReceipts.set(receipt.id, stamp);
-          for (const [id, effects] of dependencies)
-            if (receiptHitsReading(receipt, effects)) invalidate(id);
-        }
-        schedule();
-      }
-      const wantedReadings = () => {
-        const roots = new Set<string>(route.data.observe);
-        for (const [id, pane] of Object.entries(route.data.panes))
-          if (input.custody.current() && paneDemand.get(id) !== false && observers.visible(id))
-            pane.draws.forEach((reading) => roots.add(reading));
-        // Picker/observers and active invocations are consumers too.
-        for (const field of Object.values(route.data.fields))
-          if (
-            field.role === "subject" &&
-            input.custody.current() &&
-            paneDemand.get(route.data.subject.pane) !== false &&
-            observers.visible(route.data.subject.pane)
-          )
-            roots.add(field.picker.reading);
-        for (const id of queryInputs.keys()) roots.add(id);
-        return readingClosure(route, roots);
-      };
-      const environment = (() => {
+      const environment: ReturnType<typeof createRouteEnvironment> = (() => {
         try {
           return fixture === null
             ? createRouteEnvironment({
@@ -497,339 +420,6 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         door: fixture === null ? services.geometry : fixtureGeometryDoor(plan.seed(fixture)),
         notify: () => schedule(),
       });
-      const retire = (id: string) => {
-        const read = active.get(id);
-        if (!read) return;
-        owner.retire(read.token);
-        active.delete(id);
-        if (read.snapshot.current)
-          retained.set(id, { signature: read.signature, snapshot: read.snapshot });
-        read.unsubscribe?.();
-        read.handle?.release();
-      };
-      const watchEvidence = (
-        readingId: string,
-        request: import("../../../../packages/agent-contracts/src/route-kernel-environment").ResolvedRead<unknown>,
-        record: Active,
-      ) => {
-        return fixture === null
-          ? evidence?.observe(request, record.token, (event) => {
-              if (closed || active.get(readingId) !== record) return;
-              if (event.kind === "log") {
-                const key = owner.read()?.scope.identity.work;
-                if (key) {
-                  const entry = entryFor(key);
-                  const rows = sourceTimeline.get(entry) ?? [];
-                  rows.push(
-                    freezePage({
-                      kind: "feed",
-                      at: services.clock.now(),
-                      subject: readingId,
-                      basis: event.value,
-                    }),
-                  );
-                  if (rows.length > 200) rows.shift();
-                  sourceTimeline.set(entry, rows);
-                }
-                notify();
-              } else {
-                const had = hostGenerations.has(readingId);
-                const prior = hostGenerations.get(readingId);
-                hostGenerations.set(readingId, event.value);
-                if (had && prior !== event.value) {
-                  invalidate(readingId);
-                  schedule();
-                }
-              }
-            })
-          : undefined;
-      };
-      const pickerOptions: Record<string, unknown> = {};
-      const demanded = new Set<string>();
-      // Invocation arguments belong to the attempt, never to Page or selection.
-      const queryInputs = new Map<
-        string,
-        {
-          input: unknown;
-          landing?: string;
-          landed?: boolean;
-          inputsCurrent?: () => boolean;
-          invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
-        }
-      >();
-      const queryLandings = new Map<string, CommandResultDecode>();
-      const subjectField = route.data.subject.field;
-      let evidenceScope = read().scope;
-      let drawing = false;
-      let scheduling = false;
-      let again = false;
-      const schedule = () => {
-        if (drawing) throw Error("Admitted observers cannot run during render");
-        if (closed || resources === "released" || !input.custody.current()) return;
-        if (scheduling) {
-          again = true;
-          return;
-        }
-        scheduling = true;
-        try {
-          do {
-            again = false;
-            resolve();
-            work.sync();
-            syncRecovery();
-            if (evidenceScope !== read().scope) {
-              evidenceScope = read().scope;
-              for (const [id, reading] of Object.entries(route.data.readings))
-                if (reading.retain.evidence === "scope") {
-                  retire(id);
-                  retained.delete(id);
-                  previous.delete(id);
-                }
-            }
-            geometry.syncSubject();
-            for (const [id, query] of queryInputs) {
-              // Read currency follows declared arguments; previews keep their exact basis.
-              if (
-                query.inputsCurrent
-                  ? owner.current(query.invocation.token) && query.inputsCurrent()
-                  : owner.current(query.invocation)
-              )
-                continue;
-              queryInputs.delete(id);
-              demanded.delete(id);
-              retire(id);
-              geometry.cancel(id);
-            }
-            const used = new Set<string>();
-            observers.update({
-              page: read().page,
-              work: read().work?.value ?? null,
-              readings,
-            });
-            const wanted = wantedReadings();
-            const cache = new Map<string, ReadingSnapshot<unknown>>();
-            const next: typeof readings = {};
-            for (const id of Object.keys(route.data.readings)) {
-              const declaration = route.data.readings[id]!;
-              if (
-                (declaration.demand === "explicit" &&
-                  !(declaration.kind === "use" && declaration.geometry) &&
-                  !demanded.has(id)) ||
-                (declaration.demand === "subject" && read().page[subjectField] === null)
-              ) {
-                next[id] = {
-                  status: "unavailable",
-                  current: false,
-                  reason: "Explicit demand required",
-                };
-                continue;
-              }
-              if (!wanted.has(id)) {
-                next[id] = readings[id] ?? {
-                  status: "unavailable",
-                  current: false,
-                  reason: "Pane hidden",
-                };
-                geometry.suspend(id);
-                continue;
-              }
-              if (declaration.kind === "use" && declaration.geometry)
-                dependencies.set(
-                  id,
-                  target?.kind === "document" ? [{ kind: "document", ref: target.ref }] : [],
-                );
-              next[id] = plan.read(
-                id,
-                {
-                  page: read().page,
-                  work: owner.read()?.work?.value ?? null,
-                },
-                (request) => {
-                  const readingId = plan.readingId(request)!;
-                  if (
-                    route.data.readings[readingId]!.demand === "explicit" &&
-                    !demanded.has(readingId)
-                  )
-                    return {
-                      status: "unavailable",
-                      current: false,
-                      reason: "Explicit demand required",
-                    };
-                  used.add(readingId);
-                  const signature = canonicalEnvironmentInput(request.key);
-                  dependencies.set(
-                    readingId,
-                    evidence?.dependencies(request, owner.capture(`dependencies:${readingId}`)) ??
-                      (target?.kind === "document" ? [{ kind: "document", ref: target.ref }] : []),
-                  );
-                  const saved = retained.get(readingId);
-                  if (
-                    saved?.signature === signature &&
-                    !active.has(readingId) &&
-                    route.data.readings[readingId]!.kind === "use"
-                  ) {
-                    const record: Active = {
-                      signature,
-                      key: request.key,
-                      token: owner.capture(readingId),
-                      snapshot: saved.snapshot,
-                    };
-                    active.set(readingId, record);
-                    record.unsubscribe = watchEvidence(readingId, request, record);
-                    return saved.snapshot;
-                  }
-                  let read = active.get(readingId);
-                  if (read?.signature !== signature) {
-                    retire(readingId);
-                    read = undefined;
-                  }
-                  if (!read) {
-                    const record: Active = {
-                      signature,
-                      key: request.key,
-                      token: owner.capture(readingId),
-                      snapshot: {
-                        status: "pending",
-                        current: false,
-                        value: previous.get(readingId),
-                        reason: "Reading pending",
-                      },
-                    };
-                    active.set(readingId, record);
-                    record.handle = environment.environment.reads.acquire(request, record.token);
-                    const accept = (snapshot: ReadingSnapshot<unknown>) => {
-                      if (
-                        closed ||
-                        active.get(readingId) !== record ||
-                        !owner.current(record.token)
-                      )
-                        return;
-                      if (!snapshot.current) {
-                        record.snapshot = freezePage({
-                          ...snapshot,
-                          value: snapshot.value ?? previous.get(readingId),
-                        });
-                        return;
-                      }
-                      const parsed = request.output.safeParse(snapshot.value);
-                      if (!parsed.success) {
-                        const query = queryInputs.get(readingId);
-                        if (query?.landing)
-                          queryLandings.set(readingId, {
-                            kind: "result-undecodable",
-                            key: request.key.op,
-                            receiptId: query.invocation.id,
-                            problem: parsed.error.message,
-                          });
-                      }
-                      if (parsed.success) previous.set(readingId, freezePage(parsed.data));
-                      record.snapshot = parsed.success
-                        ? freezePage({ ...snapshot, value: parsed.data })
-                        : { status: "failed", current: false, reason: parsed.error.message };
-                    };
-                    accept(record.handle.read());
-                    const stopEvidence = watchEvidence(readingId, request, record);
-                    const stopReading = environment.environment.readings.subscribe(
-                      request,
-                      record.token,
-                      (snapshot) => {
-                        accept(snapshot);
-                        schedule();
-                      },
-                    );
-                    record.unsubscribe = () => {
-                      stopEvidence?.();
-                      stopReading();
-                    };
-                    read = record;
-                  }
-                  return read.snapshot;
-                },
-                geometry.read,
-                (key) => queryInputs.get(key),
-                cache,
-              );
-            }
-            for (const id of active.keys()) if (!used.has(id)) retire(id);
-            for (const [id, snapshot] of Object.entries(next)) {
-              if (snapshot.current) previous.set(id, snapshot.value);
-              else if (snapshot.value === undefined && previous.has(id))
-                next[id] = { ...snapshot, value: previous.get(id) };
-            }
-            readings = Object.freeze(
-              Object.fromEntries(
-                Object.entries(next).map(([id, snapshot]) => [id, Object.freeze(snapshot)]),
-              ),
-            );
-            // Derived dependencies can change during this pass. Retire their dependent
-            // query before publishing or landing a result against the previous inputs.
-            if (
-              Array.from(queryInputs.values()).some(
-                (query) => query.inputsCurrent && !query.inputsCurrent(),
-              )
-            ) {
-              again = true;
-              continue;
-            }
-            cells.update(read().work?.value ?? null);
-            observers.update({
-              page: read().page,
-              work: read().work?.value ?? null,
-              readings,
-            });
-            const afterDemand = wantedReadings();
-            if ([...afterDemand].some((id) => !wanted.has(id))) again = true;
-            for (const [readingId, query] of queryInputs) {
-              const result = readings[readingId];
-              if (
-                !query.landing ||
-                query.landed ||
-                !result?.current ||
-                result.status !== "ready" ||
-                !owner.current(query.invocation.token)
-              )
-                continue;
-              const declaration = route.data.readings[readingId]!;
-              if (declaration.kind === "derive") continue;
-              const value =
-                declaration.kind === "use" && declaration.geometry
-                  ? (result.value as { kind: string; value?: unknown }).value
-                  : result.value;
-              const decoded = bindings.entries[declaration.entry]!.output.safeParse(value);
-              query.landed = true;
-              if (!decoded.success) {
-                queryLandings.set(readingId, {
-                  kind: "result-undecodable",
-                  key: declaration.entry,
-                  receiptId: query.invocation.id,
-                  problem: decoded.error.message,
-                });
-                continue;
-              }
-              queryLandings.set(readingId, { kind: "decoded", value: decoded.data });
-              // A current read publishes Page against the accepted state at completion.
-              // Its original Work revision remains unchanged for query patch writes.
-              const landing = owner.invocation(query.invocation.token, {});
-              if (!landing.ok) continue;
-              const patch = bindings.bodies[query.landing]!.run(
-                freezePage(decoded.data),
-                read().page,
-              );
-              owner.acceptPage(landing.value, patch as Parameters<typeof owner.acceptPage>[1]);
-            }
-            for (const [key, field] of Object.entries(route.data.fields)) {
-              if (field.role === "subject")
-                pickerOptions[key] = freezePage(
-                  bindings.bodies[field.picker.options]!.run(readings[field.picker.reading]),
-                );
-            }
-            invocation.sync();
-          } while (again && !closed);
-        } finally {
-          scheduling = false;
-        }
-        notify();
-      };
       const action = () => {
         if (drawing) throw Error("Admitted action cannot run during render");
         if (invocation.presenting()) throw Error("Admitted action cannot run during presentation");
@@ -838,7 +428,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       };
       const invocation = createAdmittedInvocation({ route, owner, read, work, bindings, door,
         fixture, target, services, action, resolve, notify, schedule,
-        snapshots: () => readings, queryInputs, queryLandings, demanded, generations, retire, geometry });
+        snapshots: readings.snapshots, queryInputs, queryLandings, demanded, generations, retire, geometry });
       const { invoke, place, workBasis, present, reviews } = invocation;
       const journal = () => {
         const key = owner.read()?.scope.identity.work;
@@ -925,7 +515,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         const issued = owner.invocation(
           owner.capture("work-salvage"),
           Object.fromEntries(
-            Object.entries(readings)
+            Object.entries(readings.snapshots())
               .filter(([, reading]) => reading.current)
               .map(([id, reading]) => [id, (reading as { hash: string }).hash]),
           ),
@@ -933,13 +523,13 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         if (!issued.ok) throw Error(issued.reason);
         const deps = route.data.salvageDeps ?? { page: [], work: [], readings: [] };
         for (const id of deps.readings)
-          if (!readings[id]?.current) throw Error(`Reading unavailable: ${id}`);
+          if (!readings.snapshots()[id]?.current) throw Error(`Reading unavailable: ${id}`);
         // Display evidence only: the invocation owns freshness, never a second write seal.
         const evidence = freezePage(
           structuredClone({
             page: project(deps.page, read().page),
             work: project(deps.work, read().work!.value),
-            readings: Object.fromEntries(deps.readings.map((id) => [id, readings[id]])),
+            readings: Object.fromEntries(deps.readings.map((id) => [id, readings.snapshots()[id]])),
           }),
         );
         const saved = await salvageRouteWork(key);
@@ -1044,15 +634,6 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           notify();
         }
       };
-      const refreshReadings = (roots: Iterable<string>) => {
-        for (const id of readingClosure(route, roots)) {
-          demanded.add(id);
-          invalidate(id);
-          if (route.data.readings[id]?.kind === "use" && route.data.readings[id]?.geometry)
-            geometry.refresh(id, false);
-        }
-        schedule();
-      };
       let transport: ReturnType<typeof createAdmittedAddress> | undefined;
       let unsubscribeOwner = () => {};
       const close = () => {
@@ -1061,7 +642,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         owner.close();
         unsubscribeOwner();
         transport?.close();
-        for (const id of active.keys()) retire(id);
+        readings.suspend();
         geometry.close();
         work.close();
         environment.close();
@@ -1093,7 +674,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         throw error;
       }
       const transitionCell = createAdmittedCellActions({route, owner, read, work, cells,
-        snapshots: () => readings, action, resolve});
+        snapshots: readings.snapshots, action, resolve});
       return {
         // The exact admission supplies both these schemas and field roles.
         page: ports.page as PagePort<G, S>,
@@ -1113,13 +694,13 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         release() {
           if (closed) return;
           resources = "released";
-          for (const id of active.keys()) retire(id);
+          readings.suspend();
           for (const id of Object.keys(route.data.readings)) geometry.suspend(id);
         },
         dispose: close,
         invoke,
         place,
-        picker: (field: string) => pickerOptions[field],
+        picker: readings.picker,
         subjectDisplay: observers.subject,
         subjectText: observers.text,
         cells: cells.rows,
@@ -1196,32 +777,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           (reading) => reading.refresh === "explicit",
         ),
         restore: () => transport!.restore(),
-        setPaneDemand(pane: string, next: boolean) {
-          if (!route.data.panes[pane]) throw Error(`Unknown pane: ${pane}`);
-          paneDemand.set(pane, next);
-          schedule();
-        },
-        readingStatus(id: string): AdmittedReadingStatus {
-          if (!route.data.readings[id]) throw Error(`Unknown reading: ${id}`);
-          return Object.freeze({
-            snapshot: readings[id] ?? {
-              status: "unavailable" as const,
-              current: false as const,
-              reason: "Not read",
-            },
-            previous: previous.get(id),
-            demanded: input.custody.current() && wantedReadings().has(id),
-            leased: !!active.get(id)?.handle || geometry.leased(id),
-          });
-        },
-        refreshPane(pane: string) {
-          if (!route.data.panes[pane]) throw Error(`Unknown pane: ${pane}`);
-          refreshReadings(route.data.panes[pane]!.draws);
-        },
-        refresh(id?: string) {
-          resolve();
-          refreshReadings(id === undefined ? wantedReadings() : [id]);
-        },
+        ...readings.public,
         read(pane: string) {
           const current = resolve();
           if (!Object.hasOwn(route.data.panes, pane)) throw Error(`Unknown pane: ${pane}`);
@@ -1245,7 +801,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
                 ? { state: recovery, startFresh, carryOver: salvage }
                 : undefined,
               readings: Object.freeze(
-                Object.fromEntries(declaration.draws.map((id) => [id, readings[id]])),
+                Object.fromEntries(declaration.draws.map((id) => [id, readings.snapshots()[id]])),
               ),
               readingActions: Object.fromEntries(
                 declaration.draws
