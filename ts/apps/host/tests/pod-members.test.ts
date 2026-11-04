@@ -10,7 +10,7 @@ import { memberWork, settingsRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
-import { invokeFamily } from "./domain-fixture.ts";
+import { bindCommandRuntime } from "../src/command-registry.ts";
 import { writeFileStringAtomic } from "../src/files/index.ts";
 import {
   composeMember,
@@ -192,8 +192,11 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
   if (!authored.ok) throw Error("Expected accepted authored Work");
   const owner = new ActionJournal(join(root, "journal.json"));
   const bridge = {} as RevitBridge["Service"];
+  bindCommandRuntime(owner, bridge, captureStore(join(root, "captures")), { workspace: work, podsRoot: root }, async () => {
+    throw Error("settings.write owns its writer");
+  });
   const admit = (id: string, input: Record<string, unknown>, revision: number) =>
-    invokeFamily(
+    owner.invoke(
       {
         id,
         key: "settings.write",
@@ -204,10 +207,6 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
         },
       },
       crossingOf("human"),
-      owner,
-      captureStore(join(root, "captures")),
-      bridge,
-      { workspace: work, podsRoot: root },
     ).then((row) => owner.wait(row.id));
   const destination = { pod: member.pod, path: "settings/copy.json" };
   const copied = await admit("copy", { destination }, authored.revision);

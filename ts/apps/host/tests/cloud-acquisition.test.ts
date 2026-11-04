@@ -7,11 +7,13 @@ import { instancesLaunchSchema } from "@pe/agent-contracts";
 import { acquiredOpenIds, foldAcquisitions, planAcquisition } from "../src/acquisition.ts";
 import { downloadCloudVersion } from "../src/cloud-version.ts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { invokeInstances, fixtureAction } from "./domain-fixture.ts";
+import { bindCommandRuntime } from "../src/command-registry.ts";
+import { Effect } from "effect";
+import type { RevitBridge } from "../src/bridge.ts";
 import { crossingOf } from "./callers.ts";
 import { replay } from "./sdk-replay.ts";
 import { unavailableShare } from "../src/machine.ts";
-import { machineOwner } from "./effect-test.ts";
+import { captureStore, machineOwner } from "./effect-test.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 const folders: string[] = [];
 afterEach(async () => {
@@ -130,7 +132,7 @@ test("a changed version or model identity refuses before download and allocation
 });
 test("recorded SDK envelopes: only the downloaded local work file crosses the acquisition open boundary", async () => {
   const dir = await folder();
-  let owner = new ActionJournal(join(dir, "actions.json"));
+  const owner = new ActionJournal(join(dir, "actions.json"));
   const base = JSON.parse(replay("session-list"));
   const row = base.result.sessions.find(
     (row: { case: string }) => row.case === "controlled-active",
@@ -176,43 +178,13 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
     },
   });
   const peaWork = join(dir, "pea-work");
-  const started = await fixtureAction(
-    owner,
-    {
-      id: "process",
-      key: "instances.start",
-      ...crossingOf("human"),
-      effects: [{ kind: "session", session: "new:process" }],
-      target: { kind: "host" },
-      input: {
-        ...(into.start as Record<string, unknown>),
-      },
-    },
-    async () => ({
-      target: null,
-      acquisition: planAcquisition(
-        "process",
-        peaWork,
-        { kind: "create", year: "2025" },
-        null,
-        false,
-      ),
-    }),
-    (execution) =>
-      execution.step(
-        "native",
-        "instances.start",
-        { argv: [] },
-        async () => JSON.parse(replay("session-start", { result: { session: row } })).result,
-      ),
-  );
-  await owner.wait(started.id);
-  // The seed runtime has one witness executor; the product runtime binds its real entries once.
-  owner = new ActionJournal(join(dir, "actions.json"));
   const calls: string[][] = [];
   const sdk = async (args: readonly string[]) => {
     calls.push([...args]);
-    if (args[0] === "session") return replay("session-list", { result: { sessions: [row] } });
+    if (args[0] === "session")
+      return args[1] === "list"
+        ? replay("session-list", { result: { sessions: [row] } })
+        : replay("session-start", { result: { session: row } });
     if (args[0] !== "doc" || args[1] !== "open")
       throw Error(`unexpected SDK effect ${args.join(" ")}`);
     expect(await readFile(args[2]!, "utf8")).toBe("immutable-version-seven");
@@ -225,20 +197,8 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
     expect(args[2]).not.toContain("cld:");
     return replay("doc-open", { result: { document: { path: args[2], openId: "e".repeat(32) } } });
   };
-  const admitted = await invokeInstances(
-    {
-      id: "version",
-      key: "instances.open",
-      target: { kind: "sdk-session", selection: { id: row.id } },
-      input: {
-        source,
-        cloudVersion: version,
-        into: { session: { id: row.id } },
-      },
-    },
-    crossingOf("human"),
-    owner,
-    {
+  const bridge = { list: Effect.succeed([]) } as unknown as RevitBridge["Service"];
+  bindCommandRuntime(owner, bridge, captureStore(join(dir, "captures")), {
       sdk,
       peaWork,
       downloadVersion: (source, version, to) =>
@@ -246,7 +206,22 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
           token: async () => "test-bearer",
           fetch: apsResponses(),
         }),
+    }, async () => {
+    throw Error("Instances must dispatch through the SDK");
+  });
+  const started = await owner.invoke({
+    id: "process", key: "instances.start", target: { kind: "host" }, input: into.start,
+  }, crossingOf("human"));
+  expect((await owner.wait(started.id)).state).toBe("succeeded");
+  calls.length = 0;
+  const admitted = await owner.invoke(
+    {
+      id: "version",
+      key: "instances.open",
+      target: { kind: "sdk-session", selection: { id: row.id } },
+      input: { source, cloudVersion: version, into: { session: { id: row.id } } },
     },
+    crossingOf("human"),
   );
   const receipt = await owner.wait(admitted.id);
   expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded" });

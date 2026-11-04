@@ -1,18 +1,13 @@
 import { Effect } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { instancesSessionSelection } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { HOST_CONTEXT_HEADER, HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
-import {
-  invokeInstances,
-  recoverInstances,
-  bindInstancesFixture,
-  afterDomainBind,
-} from "./domain-fixture.ts";
+import { bindCommandRuntime } from "../src/command-registry.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
@@ -25,12 +20,10 @@ import { docListArgv, type SessionObservation } from "@pe/host-contracts/pe-revi
 import { unreadLeg } from "../src/update-reader.ts";
 import { crossingOf } from "./callers.ts";
 import { serveRoutes } from "./real-server.ts";
-import { writeJournal } from "./journal-fixture.ts";
 import {
   acquiredOpenIds,
   acquisitionSessionId,
   foldAcquisitions,
-  planAcquisition,
 } from "../src/acquisition.ts";
 import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 // Instances owns its SDK transport. These HTTP witnesses expose no bridge attachment or dispatch.
@@ -122,13 +115,17 @@ async function setup(
     if (args[0] === "doc" && args[1] === "list") {
       const { pid, processStartUtc } =
         census.process ?? (args.includes("--pid") ? observed.process : originalProcess);
-      return replayAnswer(args, {
+      const reply = replayAnswer(args, {
         result: {
           state: "ok",
           documents: census.documents.map((id) => ({ openId: id, isModified: census.modified })),
         },
         resolved: { pid, processStartUtc, id: "dev" },
       });
+      const changed = census.afterDocuments;
+      census.afterDocuments = null;
+      changed?.();
+      return reply;
     }
     // The SDK's own rule (DocRoutes.ValidateOpen): unsynced belongs to a cloud source open only.
     const unsyncedMisplaced =
@@ -144,7 +141,9 @@ async function setup(
             { code: "doc.bad-body", detail: "unsynced belongs to a cloud open.", fix: null },
           ],
         }
-      : await answer(args);
+      : peaLaunchWitness && args[0] === "session" && args[1] === "start"
+        ? { result: { ...startedAnswer.result, session: sessionRows[0] } }
+        : await answer(args);
     if (reply instanceof Error) throw reply;
     return replayAnswer(args, {
       result: reply.result,
@@ -154,44 +153,9 @@ async function setup(
     });
   };
   const owner = new ActionJournal(join(dir, "actions.json"));
+  cleanup.push(() => owner.close());
   const peaWork = join(dir, "pea-work");
   const deps = { sdk, peaWork };
-  if (peaLaunchWitness)
-    bindInstancesFixture(
-      owner,
-      deps,
-      peaLaunchWitness
-        ? {
-            "instances.start": {
-              bind: async ({ admission }) => {
-                if (admission.id !== "pea-launch")
-                  throw Error("This runtime declares only the pea-launch witness");
-                return {
-                  effects: [],
-                  prepare: async () => ({
-                    target: null,
-                    project: null,
-                    acquisition: planAcquisition(
-                      "pea-launch",
-                      peaWork,
-                      { kind: "create", year: "2025" },
-                      null,
-                      false,
-                    ),
-                  }),
-                };
-              },
-              run: (_ctx, execution) =>
-                execution.step(
-                  "native",
-                  "instances.start",
-                  { argv: [] },
-                  async () => startedAnswer.result,
-                ),
-            },
-          }
-        : {},
-    );
   const census = {
     documents: [openId],
     reads: 0,
@@ -205,6 +169,8 @@ async function setup(
     modified: false,
     /** The bridge snapshot's SDK identity marker; null is a payload that did not attest. */
     identity: "sdk-open-v1" as "sdk-open-v1" | null,
+    /** Change external facts after one SDK document response, before its next freshness probe. */
+    afterDocuments: null as null | (() => void),
     /** The incarnation `doc list` resolves; the default fixture process when null. */
     process: null as null | {
       pid: number;
@@ -282,23 +248,29 @@ async function setup(
     bindControl({ heads: null, acquired: () => null, acquiredSession: () => null });
   });
   let serial = 0;
+  let bound = false;
   const admit = async (
     key: string,
     input: Record<string, unknown>,
     resume?: string,
     actor: "human" | "agent" = "human",
+    id?: string,
   ) => {
+    if (!bound) {
+      bindCommandRuntime(owner, sdkOnlyBridge, captureStore(join(dir, "captures")), deps, async () => {
+        throw Error("Instances must dispatch through the SDK");
+      });
+      bound = true;
+    }
     const selection = instancesSessionSelection(input);
-    const row = await invokeInstances(
+    const row = await owner.invoke(
       {
-        id: resume ?? `${key}-${++serial}`,
+        id: resume ?? id ?? `${key}-${++serial}`,
         key,
         target: selection ? { kind: "sdk-session", selection } : { kind: "host" },
         input,
       },
       crossingOf(actor),
-      owner,
-      deps,
       resume !== undefined,
     );
     return owner.wait(row.id);
@@ -310,19 +282,6 @@ async function setup(
     return path;
   };
   return { calls, owner, deps, admit, dir, peaWork, file, census, machine };
-}
-/** A held process acquisition, as `instances.start` with owner pea records it. */
-async function recordPeaLaunch(owner: ActionJournal, _peaWork?: string) {
-  const row = await owner.invoke(
-    {
-      id: "pea-launch",
-      key: "instances.start",
-      target: { kind: "host" },
-      input: { year: "2025", owner: "pea", addins: "on" },
-    },
-    crossingOf("human"),
-  );
-  await owner.wait(row.id);
 }
 const into = (id = "dev") => ({ session: { id } });
 const newRevit = (over: Record<string, unknown> = {}) => ({
@@ -474,7 +433,7 @@ test("an agent opens a new copy into the Revit an acquisition started; a reload 
   expect(
     (await f.admit("instances.open", { source, into: into() }, undefined, "agent")).state,
   ).toBe("succeeded");
-  await recordPeaLaunch(f.owner, f.peaWork);
+  await f.admit("instances.start", { year: "2025", owner: "pea", addins: "on" }, undefined, "human", "pea-launch");
   const copy = await f.admit("instances.open", { source, into: into() }, undefined, "agent");
   expect(copy).toMatchObject({
     basis: { kind: "acquisition", id: "pea-launch", scope: { kind: "process" } },
@@ -518,7 +477,7 @@ test("a Pea launch of a workshared model copies first, then opens the copy detac
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
     true,
   );
-  await recordPeaLaunch(f.owner);
+  await f.admit("instances.start", { year: "2025", owner: "pea", addins: "on" }, undefined, "human", "pea-launch");
   const source = await f.file("Central.rvt", "Worksharing: Local");
   const before = await readFile(source);
   const receipt = await f.admit("instances.open", { source, into: into("pea-bg") });
@@ -545,7 +504,7 @@ test("Pea refuses, undispatched, a file whose worksharing it cannot read or a so
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
     true,
   );
-  await recordPeaLaunch(f.owner);
+  await f.admit("instances.start", { year: "2025", owner: "pea", addins: "on" }, undefined, "human", "pea-launch");
   const unread = await f.file("Unknown.rvt", "no marker here");
   for (const source of [unread, "recent:Tower.rvt"]) {
     const receipt = await f.admit("instances.open", { source, into: into("pea-bg") });
@@ -630,7 +589,19 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
   );
   const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
   const before = await readFile(source);
+  const crashes = new Map<number, string>();
+  const unsubscribe = f.owner.subscribe({}, (receipt) => {
+    if (receipt.body.kind !== "action") return;
+    const row = receipt.body.value;
+    if (row.state !== "running" || row.prepared.state !== "ready") return;
+    const last = row.steps.at(-1);
+    if (last?.state === "running")
+      crashes.set(row.steps.length - 1, readFileSync(join(f.dir, "actions.json"), "utf8"));
+    else if (row.steps.every((step) => step.state === "succeeded"))
+      crashes.set(row.steps.length, readFileSync(join(f.dir, "actions.json"), "utf8"));
+  });
   const done = await f.admit("instances.open", { source, into: newRevit({ owner: "pea" }) });
+  unsubscribe();
   expect(done.state).toBe("succeeded");
   const intent = foldAcquisitions([done])[0]!.intent;
   // Every path the action created was frozen in its preparation before the first step ran.
@@ -664,19 +635,9 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
   // The host died at each boundary: the step was recorded running, its outcome never persisted
   // (also the case "the effect landed, then persistence failed").
   for (let k = 0; k <= done.steps.length; k++) {
-    const crashed = {
-      ...done,
-      state: "running",
-      result: undefined,
-      steps: [
-        ...done.steps.slice(0, k),
-        ...(k < done.steps.length
-          ? [{ ...done.steps[k]!, state: "running", result: undefined }]
-          : []),
-      ],
-    };
     const path = join(f.dir, `crash-${k}.json`);
-    await writeJournal(path, [crashed]);
+    expect(crashes.has(k), `missing committed crash boundary ${k}`).toBe(true);
+    await writeFile(path, crashes.get(k)!);
     const restarted = await new ActionJournal(path).list();
     const [acquisition] = foldAcquisitions(restarted);
     if (k === done.steps.length) {
@@ -701,7 +662,7 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
   const reads: string[][] = [];
   // The SDK's recorded op response carries the bridge's document itself (acceptance R4d journal).
   const response = { openId, path: opened, title: "Tower" };
-  await recoverInstances(done.id, journal, {
+  bindCommandRuntime(journal, sdkOnlyBridge, captureStore(join(f.dir, "recovery-captures")), {
     sdk: async (args) => {
       reads.push([...args]);
       return replayAnswer(args, {
@@ -719,7 +680,8 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
         },
       });
     },
-  });
+  }, async () => { throw Error("No local dispatch during recovery"); });
+  await journal.recover(done.id);
   expect(reads).toEqual([
     ["op", "result", openStep.id, "--json"],
     ["session", "list", "--json"],
@@ -1143,7 +1105,7 @@ test("W2 20 (a): a start whose pe-revit died with no session is not done; resume
   expect(lost.state).toBe("unknown");
   const start = lost.steps.at(-1)!;
   world.ops[start.id] = abandonedOp(start.id, "session.start", { pid: 37744 });
-  const recovered = await recoverInstances(lost.id, f.owner, f.deps);
+  const recovered = await f.owner.recover(lost.id);
   expect(stepStates(recovered)).toEqual([
     "acquisition.baseline:succeeded",
     "acquisition.work:succeeded",
@@ -1178,7 +1140,7 @@ test("W2 20 (a'): a start whose pe-revit died after its Revit came up is done fr
       shape: shape("background"),
     }),
   );
-  const recovered = await recoverInstances(lost.id, f.owner, f.deps);
+  const recovered = await f.owner.recover(lost.id);
   expect(recovered.steps.at(-1)).toMatchObject({
     state: "succeeded",
     result: { id, session: { process: { pid: 77 } } },
@@ -1196,7 +1158,7 @@ test("W2 20 (b): resume redoes a start whose Revit died, never reusing it", asyn
   const first = row(acquisitionSessionId(lost.id))!;
   die();
   // The open's pe-revit died before the SDK admitted it: recovery proves it never ran.
-  const recovered = await recoverInstances(lost.id, f.owner, f.deps);
+  const recovered = await f.owner.recover(lost.id);
   expect(recovered.steps.at(-1)).toMatchObject({ state: "failed", notDispatched: true });
   const resumed = await f.admit("instances.open", input, lost.id);
   expect(resumed.state, JSON.stringify(resumed)).toBe("succeeded");
@@ -1228,7 +1190,7 @@ test("W2 20 (c): an open whose Revit died is not done, and cleanup releases what
   const revit = row(acquisitionSessionId(lost.id))!.process;
   die();
   world.ops[open.id] = abandonedOp(open.id, "doc.open", revit);
-  const recovered = await recoverInstances(lost.id, f.owner, f.deps);
+  const recovered = await f.owner.recover(lost.id);
   expect(recovered.steps.at(-1)).toMatchObject({ state: "failed" });
   expect(recovered.steps.at(-1)).not.toHaveProperty("notDispatched");
   const [acquisition] = foldAcquisitions(await f.owner.list());
@@ -1364,7 +1326,7 @@ test.each(["running", "missing-response", "wrong-request", "wrong-key", "conflic
       return { result };
     }, []);
     const lost = await f.admit("instances.start", { year: "2025", owner: "you", addins: "on" });
-    const settled = await recoverInstances(lost.id, f.owner, f.deps);
+    const settled = await f.owner.recover(lost.id);
     expect(settled.steps[0]!.state).toBe("unknown");
     expect(f.calls.at(-1)).toEqual(["op", "result", lost.steps[0]!.id, "--json"]);
     expect(f.calls.filter((args) => args[1] === "start")).toHaveLength(1);
@@ -1411,9 +1373,9 @@ test("restart, stop and close run for a human; stop and close require an unsaved
 test("a document arriving after admission refuses stop at effect entry", async () => {
   const f = await setup(() => ({ result: { state: "ok" } }));
   f.census.documents = [];
-  afterDomainBind(f.owner, () => {
+  f.census.afterDocuments = () => {
     f.census.documents = [openId];
-  });
+  };
   expect(
     await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent"),
   ).toMatchObject({
@@ -1425,11 +1387,11 @@ test("a document arriving after admission refuses stop at effect entry", async (
 });
 test("a user document opened in Pea's Revit after admission refuses Pea's stop at effect entry", async () => {
   const f = await setup(() => ({ result: { state: "ok" } }), [controlledRow()], true);
-  await recordPeaLaunch(f.owner);
+  await f.admit("instances.start", { year: "2025", owner: "pea", addins: "on" }, undefined, "human", "pea-launch");
   f.census.documents = [];
-  afterDomainBind(f.owner, () => {
+  f.census.afterDocuments = () => {
     f.census.documents = [openId];
-  });
+  };
   expect(
     await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent"),
   ).toMatchObject({
