@@ -10,9 +10,9 @@ import { Redo2,Undo2 } from "lucide-react";
 import { useState,type JSX,type ReactNode } from "react";
 import { airflowOptions,type AirflowOption } from "../airflow";
 import { ChoiceCell,type CellAct } from "./choice-cell";
-import { criterionLabel } from "./criterion-words";
+import { criterionLabel } from "./criterion-words.neutral";
 import { fittingGroups,memberSubject,type FittingGroup } from "./fitting-groups";
-import type { EditMeta } from "./input-history";
+import type { EditMeta } from "./input-history.neutral";
 import { inputRows,SECTION_WORDS,type InputRow,type InputSection } from "./input-rows";
 import type { SheetFitting,SheetInputs } from "./model";
 import { SheetCell,type WorkCell } from "./sheet-cell";
@@ -37,7 +37,7 @@ export interface InputContext {
 }
 
 /** What an edit is, for the history line and the row that offers its restore. */
-export type { EditMeta } from "./input-history";
+export type { EditMeta } from "./input-history.neutral";
 
 /** The kernel's Work journal as the Inputs surface draws it. */
 export interface InputsHistory {

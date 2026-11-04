@@ -3,7 +3,7 @@ import { bindWork, type WorkWriteAck } from "@pe/agent-contracts";
 import { createWorkJournal } from "#/shell/journal";
 import { writeLabel } from "#/shell/work-writes";
 import { ductsData } from "../neutral";
-import { editLabel, presentInputHistory } from "./input-history";
+import { editLabel, presentInputHistory } from "./input-history.neutral";
 
 test("staging the write scope is named in History and never shown in Inputs", () => {
   const key = bindWork("ducts", null, "inputs-internal");

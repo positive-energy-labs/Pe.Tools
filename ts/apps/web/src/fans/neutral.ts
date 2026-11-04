@@ -23,7 +23,7 @@ import {
   schemas as sharedSchemas,
 } from "../ducts/neutral.ts";
 import { fanLabel, TIERS } from "../ducts/sheet/model.ts";
-import { describeInputHistory, editLabel } from "../ducts/sheet/input-history.ts";
+import { describeInputHistory, editLabel } from "../ducts/sheet/input-history.neutral.ts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
 
 const workKeys = [

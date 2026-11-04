@@ -4,7 +4,7 @@ import type {
   Observation,
   WorkWriteOutcome,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
-import { presentInputHistory } from "../ducts/sheet/input-history";
+import { presentInputHistory } from "../ducts/sheet/input-history.neutral";
 import { createWitness } from "./cutover.test-support";
 import { admit } from "./admission.fixture";
 const closes: (() => void)[] = [];

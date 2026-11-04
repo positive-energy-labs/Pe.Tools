@@ -68,7 +68,7 @@ schemas,
 import { DuctsOwner,commands } from "../../pane-context";
 import { type PricingResult } from "../../pricing-job";
 import { DUCTS_MULTI } from "../../selection";
-import type { EditMeta } from "../../sheet/input-history";
+import type { EditMeta } from "../../sheet/input-history.neutral";
 import { EMPTY_SNAPSHOT } from "../../sheet/scoped-snapshot";
 import { noRunParts,subjectNamer } from "../../subject-text";
 import type { systemList } from "../../system-list";

@@ -31,7 +31,7 @@ import { localId,localSubject,namesOf } from "../neutral.ts";
 import { ductsLink } from "../neutral.ts";
 import { subjectNamer } from "../subject-text";
 import { describeCloser,type Closer } from "./closer";
-import { editLabel,presentInputHistory,type EditMeta } from "./input-history";
+import { editLabel,presentInputHistory,type EditMeta } from "./input-history.neutral";
 import { InputsSurface } from "./inputs-surface";
 import { rosterOrder,stableFanKey,withComputed,type FanPort } from "./model";
 import { SheetPicture } from "./picture";
