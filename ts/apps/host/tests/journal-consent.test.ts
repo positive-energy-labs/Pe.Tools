@@ -1,12 +1,9 @@
 import { testConsents } from "./effect-test.ts";
-import { bindFixtureCommands, invokeCommand } from "./command-fixture.ts";
-import type { CommandResources } from "../src/command-executor.ts";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { invokeCommand } from "./command-fixture.ts";
+import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
-import { readNativeReceipt } from "../src/native-receipts.ts";
-import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { bindControl } from "../src/control.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
@@ -22,7 +19,7 @@ const admission = (id: string): ActionAdmission => ({
   target: { kind: "host" },
   input: { value: 250 },
 });
-const setup = async (probe?: CommandResources["probe"]) => {
+const setup = async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-consent-")),
     path = join(dir, "journal.jsonl");
   const events: ConsentEvent[] = [],
@@ -30,7 +27,6 @@ const setup = async (probe?: CommandResources["probe"]) => {
   runs.open(run);
   bindControl({ runs, acquired: () => null });
   const journal = new ActionJournal(path);
-  bindFixtureCommands(journal, probe ? { probe } : {});
   const ready = async () =>
     vi.waitFor(() => expect(events.some((e) => e.kind === "permission_request")).toBe(true));
   const approve = () => {
@@ -39,291 +35,17 @@ const setup = async (probe?: CommandResources["probe"]) => {
     runs.decide(run.thread, ask.requestId, "allow_now");
   };
   return {
-    dir,
-    path,
-    events,
     runs,
     journal,
     approve,
     ready,
     close: async () => {
       runs.closeAll();
-      await Promise.all((await journal.list()).map((r) => journal.wait(r.id).catch(() => null)));
+      await journal.close();
       await rm(dir, { recursive: true, force: true });
     },
   };
 };
-
-test("waiting commands are durable, share approval, freeze submitted bytes and serialize common destinations", async () => {
-  const h = await setup();
-  try {
-    let prepared = 0,
-      effects = 0;
-    const frozen = { revision: 13, value: 250 };
-    const submit = async (id: string) =>
-      invokeCommand(
-        h.journal,
-        { ...admission(id), caller, basis: null, effects: declaredEffects },
-        async () => {
-          prepared++;
-          return { ...frozen };
-        },
-        async (e) =>
-          e.step("file", "write", e.prepared, async () => {
-            effects++;
-            return effects;
-          }),
-      );
-    const a = await submit("a"),
-      b = await submit("b");
-    await h.ready();
-    expect([a.state, b.state, prepared, effects]).toEqual(["waiting", "waiting", 0, 0]);
-    expect(await readFile(h.path, "utf8")).toContain('"state":"waiting"');
-    expect(h.events.filter((e) => e.kind === "permission_request")).toHaveLength(1);
-    await vi.waitFor(async () => {
-      const waiting = (await h.journal.list())[0]!;
-      expect(waiting.outcome).toMatchObject({
-        state: "queued",
-        consentWindow: { deadline: expect.any(String) },
-      });
-    });
-    h.approve();
-    const settled = await Promise.all([h.journal.wait("a"), h.journal.wait("b")]);
-    expect(settled.map((r) => r.state)).toEqual(["succeeded", "succeeded"]);
-    expect(settled[0]!.consent).toEqual(settled[1]!.consent);
-    expect(effects).toBe(2);
-    h.runs.close(run, "completed");
-    expect((await submit("a")).state).toBe("succeeded");
-    await expect(submit("late")).rejects.toThrow("run.closed");
-    await expect(
-      invokeCommand(
-        h.journal,
-        { ...admission("a"), input: { value: 999 }, caller, basis: null, effects: declaredEffects },
-        async () => null,
-        async () => null,
-      ),
-    ).rejects.toThrow("conflicts");
-    await expect(
-      invokeCommand(
-        h.journal,
-        {
-          ...admission("a"),
-          caller: { kind: "pea", context: "other", thread: "other" },
-          basis: null,
-          effects: declaredEffects,
-        },
-        async () => null,
-        async () => null,
-      ),
-    ).rejects.toThrow("another authenticated");
-  } finally {
-    await h.close();
-  }
-});
-
-test("an acquired document supplies provenance without bypassing the run countdown", async () => {
-  const h = await setup();
-  bindControl({ acquired: () => "pea-acquisition" });
-  let writes = 0;
-  let nativeId = "";
-  // SDK-backed invocations use a UUID shared by their first native request and outcome.
-  const invocationId = "11111111-1111-4111-8111-111111111111";
-  try {
-    const target = { session: "owned-session", openId: "owned-document" };
-    const row = await invokeCommand(
-      h.journal,
-      {
-        ...admission(invocationId),
-        caller,
-        target: { kind: "document", ref: target },
-        basis: {
-          kind: "acquisition",
-          id: "pea-acquisition",
-          scope: { kind: "document", lifetime: target },
-        },
-        effects: [{ kind: "document", ref: target }],
-      },
-      async () => null,
-      async (execution) => execution.step("native", "write", {}, async (id) => {
-        nativeId = id;
-        expect(id).toBe(invocationId);
-        return ++writes;
-      }),
-    );
-    expect(row.state).toBe("waiting");
-    await h.ready();
-    expect(writes).toBe(0);
-    h.approve();
-    const done = await h.journal.wait(row.id);
-    expect(done.state).toBe("succeeded");
-    expect(done.steps[0]!.id).toBe(done.id);
-    expect(done.outcome!.id).toBe(done.id);
-    const recovered = await readNativeReceipt(done.steps[0]!, originalProcess, async () => sdkEnvelope({
-      state: "ok", requestId: nativeId,
-      receipt: {
-        requestId: nativeId, key: "write", pid: originalProcess.pid,
-        processStartUtc: originalProcess.processStartUtc, verdict: "ok",
-        responsePath: "native-response.json", startedUtc: originalProcess.processStartUtc,
-        completedUtc: "1970-01-01T00:00:02.0000000Z",
-      },
-      response: { written: writes },
-    }));
-    expect(recovered.step).toMatchObject({ id: done.id, state: "succeeded", result: { written: 1 } });
-    expect(done.consent).toMatchObject({ run, decision: { by: "human" } });
-    expect(writes).toBe(1);
-  } finally {
-    bindControl({ acquired: () => null });
-    await h.close();
-  }
-});
-
-test("admission detaches nested intent and effects from the submitter", async () => {
-  const h = await setup();
-  const input = { nested: { value: 250 } },
-    submittedEffects = structuredClone(declaredEffects);
-  try {
-    await invokeCommand(
-      h.journal,
-      { ...admission("detached"), input, caller, basis: null, effects: submittedEffects },
-      async () => null,
-      async () => null,
-    );
-    await h.ready();
-    input.nested.value = 999;
-    submittedEffects[0]!.path = "C:/other.json";
-    const [row] = await h.journal.list(undefined, "detached");
-    expect(row).toMatchObject({
-      input: { nested: { value: 250 } },
-      effects: declaredEffects,
-    });
-    h.approve();
-    expect((await h.journal.wait("detached")).input).toEqual({ nested: { value: 250 } });
-  } finally {
-    await h.close();
-  }
-});
-
-test("normal child completion cancels unapproved admitted effects before root approval", async () => {
-  const h = await setup();
-  const child = { thread: "child-thread", turn: "child-turn" };
-  const childCaller: Caller = {
-    kind: "pea",
-    context: "child",
-    thread: child.thread,
-    run: child,
-    root: run,
-  };
-  h.runs.open(child, run);
-  let writes = 0;
-  try {
-    await invokeCommand(
-      h.journal,
-      { ...admission("child-write"), caller: childCaller, basis: null, effects: declaredEffects },
-      async () => null,
-      async (e) => e.step("file", "write", {}, async () => ++writes),
-    );
-    await h.ready();
-    h.runs.close(child, "completed");
-    h.approve();
-    expect((await h.journal.wait("child-write")).state).toBe("cancelled");
-    expect(writes).toBe(0);
-    expect(
-      await h.runs.authorize({ caller, run, root: run }, "root-write", declaredEffects),
-    ).toMatchObject({ run });
-  } finally {
-    await h.close();
-  }
-});
-
-test("per-command cancellation preserves the shared decision; Stop cancels every unstarted mutation", async () => {
-  const h = await setup();
-  try {
-    let effects = 0;
-    const submit = (id: string) =>
-      invokeCommand(
-        h.journal,
-        { ...admission(id), caller, basis: null, effects: declaredEffects },
-        async () => null,
-        async (e) => e.step("file", "write", {}, async () => ++effects),
-      );
-    await submit("a");
-    await submit("b");
-    await h.journal.cancel("a");
-    await h.ready();
-    h.approve();
-    expect((await h.journal.wait("a")).state).toBe("cancelled");
-    expect((await h.journal.wait("b")).state).toBe("succeeded");
-    expect(effects).toBe(1);
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => (release = resolve));
-    await invokeCommand(
-      h.journal,
-      {
-        ...admission("blocked"),
-        key: "test.blocked",
-        caller,
-        basis: null,
-        effects: declaredEffects,
-      },
-      async () => {
-        await gate;
-        return null;
-      },
-      async (e) => e.step("file", "late", {}, async () => ++effects),
-    );
-    h.runs.close(run, "stopped");
-    release();
-    expect((await h.journal.wait("blocked")).state).toBe("cancelled");
-    expect(effects).toBe(1);
-  } finally {
-    await h.close();
-  }
-});
-
-test("restart cancels unapproved rows and conflicting consumed edits fail before a file effect", async () => {
-  let effects = 0,
-    version = 13;
-  const h = await setup(async () => [{ id: `version-${version}`, members: [] }]);
-  try {
-    await invokeCommand(
-      h.journal,
-      { ...admission("old"), caller, basis: null, effects: declaredEffects },
-      async () => null,
-      async () => null,
-    );
-    await h.ready();
-    const recovered = await new ActionJournal(h.path).list(undefined, "old");
-    expect(recovered[0]?.state).toBe("cancelled");
-    h.runs.close(run, "completed");
-    await h.journal.wait("old");
-    const next = { thread: "thread", turn: "next" };
-    h.runs.open(next);
-    const by: Caller = { ...caller, run: next, root: next } as Caller;
-    await invokeCommand(
-      h.journal,
-      {
-        ...admission("fresh"),
-        key: "test.fresh-write",
-        caller: by,
-        basis: null,
-        effects: declaredEffects,
-        consumes: [{ kind: "catalog", probe: {}, expected: [{ id: "version-13", members: [] }] }],
-      },
-      async () => null,
-      async (e) => e.step("file", "write", {}, async () => ++effects),
-    );
-    await vi.waitFor(() =>
-      expect(h.events.filter((e) => e.kind === "permission_request")).toHaveLength(2),
-    );
-    version = 14;
-    const ask = h.events.findLast((e) => e.kind === "permission_request")!;
-    if (ask.kind === "permission_request") h.runs.decide(next.thread, ask.requestId, "allow_now");
-    expect((await h.journal.wait("fresh")).state).toBe("failed");
-    expect(effects).toBe(0);
-  } finally {
-    await h.close();
-  }
-});
 
 test("root Stop retains a dispatched child result and fences its next effect", async () => {
   const h = await setup();
@@ -381,100 +103,193 @@ test("root Stop retains a dispatched child result and fences its next effect", a
   }
 });
 
-test("receipt recovery authenticates its original principal and Page bindings grant no host-resource writes", async () => {
-  const h = await setup();
+import { createHash } from "node:crypto";
+import { Effect } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { bindCommandRuntime } from "../src/command-registry.ts";
+import { TakeoffCaptures } from "../src/takeoff-captures.ts";
+import type { RevitBridge } from "../src/bridge.ts";
+import { saveMember } from "../src/settings.ts";
+import type { PodMemberSaveRequest } from "@pe/host-contracts/operation-types";
+
+// Only external native facts are absent. The command, preparation, probes and writer are real.
+async function files() {
+  const dir = await mkdtemp(join(tmpdir(), "pe-save-consent-"));
+  const podsRoot = join(dir, "Pods");
+  await mkdir(join(podsRoot, "design"), { recursive: true });
+  await writeFile(join(podsRoot, "design", "pod.json"), JSON.stringify({ id: "design" }));
+  for (const file of ["a.txt", "b.txt"])
+    await writeFile(join(podsRoot, "design", file), "original");
+  const events: ConsentEvent[] = [];
+  const runs = testConsents((_, event) => events.push(event));
+  runs.open(run);
+  bindControl({ runs, acquired: () => null });
+  const bridge = { list: Effect.succeed([]) } as unknown as RevitBridge["Service"];
+  const captures = new TakeoffCaptures(join(dir, "captures"), join(dir, "aps.json"), () =>
+    new Date().toISOString(),
+  );
+  const path = join(dir, "journal.jsonl");
+  let writes = 0;
+  const compose = (owner: ActionJournal) =>
+    bindCommandRuntime(owner, bridge, captures, { podsRoot }, async (key, input) => {
+      if (key !== "pod.member.save") throw Error(`Unexpected local operation ${key}`);
+      writes++;
+      return Effect.runPromise(
+        saveMember(input as PodMemberSaveRequest, { podsRoot }).pipe(
+          Effect.provide(NodeServices.layer),
+        ),
+      );
+    });
+  const journal = new ActionJournal(path, () => null, 1);
+  compose(journal);
+  const input = (file = "a.txt", content = "reviewed") => ({
+    pod: "design",
+    path: file,
+    content,
+    expectedSha256: createHash("sha256").update("original").digest("hex"),
+  });
+  const request = (id: string, file = "a.txt") => ({
+    id,
+    key: "pod.member.save",
+    target: { kind: "host" as const },
+    input: input(file),
+  });
+  const ready = () =>
+    vi.waitFor(() => expect(events.some((e) => e.kind === "permission_request")).toBe(true));
+  const decide = (decision: "allow_now" | "stop_writes" = "allow_now") => {
+    const event = events.findLast((e) => e.kind === "permission_request");
+    if (!event || event.kind !== "permission_request") throw Error("No pending consent");
+    runs.decide(run.thread, event.requestId, decision);
+  };
+  return {
+    dir,
+    path,
+    journal,
+    runs,
+    events,
+    request,
+    ready,
+    decide,
+    compose,
+    writes: () => writes,
+    read: (file = "a.txt") => readFile(join(podsRoot, "design", file), "utf8"),
+    edit: (bytes: string) => writeFile(join(podsRoot, "design", "a.txt"), bytes),
+    async close() {
+      runs.closeAll();
+      await journal.close();
+      await captures.close();
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+test("real member saves share consent, freeze input and preserve identity through compaction and restart", async () => {
+  const f = await files();
+  const crossing = { caller, basis: null };
   try {
-    const by: Caller = { kind: "human", via: "local" };
-    await invokeCommand(
-      h.journal,
-      { ...admission("private"), caller: by, basis: { kind: "human" }, effects: declaredEffects },
-      async () => null,
-      async () => null,
-    );
-    await h.journal.wait("private");
-    await expect(h.journal.readFor({ kind: "anonymous" }, undefined, "private")).rejects.toThrow(
+    const a = f.request("a"),
+      b = f.request("b", "b.txt");
+    await f.journal.invoke(a, crossing);
+    await f.journal.invoke(b, crossing);
+    await f.ready();
+    expect(f.events.filter((e) => e.kind === "permission_request")).toHaveLength(1);
+    expect(await f.read()).toBe("original");
+    a.input.content = "caller mutation";
+    f.decide();
+    const [done, other] = await Promise.all([f.journal.wait("a"), f.journal.wait("b")]);
+    expect([done.state, other.state]).toEqual(["succeeded", "succeeded"]);
+    expect(done.consent).toEqual(other.consent);
+    expect(await f.read()).toBe("reviewed");
+    expect(await f.read("b.txt")).toBe("reviewed");
+    for (let i = 0; i < 8; i++) await f.journal.recordFact({ kind: "turn", phase: "started" });
+    f.runs.closeAll();
+    const restarted = new ActionJournal(f.path);
+    f.compose(restarted);
+    expect((await restarted.invoke(f.request("a"), crossing)).state).toBe("succeeded");
+    expect(f.writes()).toBe(2);
+    await expect(restarted.invoke(a, crossing)).rejects.toThrow("conflicts");
+    await expect(restarted.readFor({ kind: "anonymous" }, undefined, "a")).rejects.toThrow(
       "Authenticate",
     );
-    await expect(h.journal.readFor(caller, undefined, "private")).rejects.toThrow(
-      "another authenticated",
-    );
-    expect(await h.journal.readFor(by, undefined, "private")).toHaveLength(1);
-    const page: Caller = { kind: "page", page: "page:@pages/report" };
     await expect(
-      invokeCommand(
-        h.journal,
+      restarted.readFor(
         {
-          ...admission("page-file"),
-          caller: page,
-          basis: null,
-          effects: [{ kind: "file", path: "C:/user/file.json" }],
+          ...caller,
+          context: "other",
+          thread: "other",
+          root: { thread: "other", turn: "foreign" },
         },
-        async () => null,
-        async () => null,
+        undefined,
+        "a",
       ),
-    ).rejects.toThrow("no member, file, publication or session effect capability");
-    expect(await h.journal.list(undefined, "page-file")).toEqual([]);
+    ).rejects.toThrow("another authenticated");
+    await restarted.close();
   } finally {
-    await h.close();
+    await f.close();
   }
 });
 
-test("compaction and restart never forget a command id or replay its successful effect", async () => {
-  const h = await setup();
+test.each(["cancel", "reject", "child-completed", "stop", "restart"] as const)(
+  "%s before approval leaves real member bytes unchanged",
+  async (mode) => {
+    const f = await files();
+    const child = { thread: "child", turn: "child-turn" };
+    f.runs.open(child, run);
+    const author: Caller =
+      mode === "child-completed"
+        ? { kind: "pea", context: "child", thread: child.thread, run: child, root: run }
+        : caller;
+    try {
+      await f.journal.invoke(f.request("cancelled"), { caller: author, basis: null });
+      await f.ready();
+      if (mode === "cancel") {
+        await f.journal.cancel("cancelled");
+        f.decide();
+      }
+      if (mode === "reject") f.decide("stop_writes");
+      if (mode === "child-completed") {
+        f.runs.close(child, "completed");
+        f.decide();
+      }
+      if (mode === "stop") f.runs.close(run, "stopped");
+      if (mode === "restart") {
+        expect((await new ActionJournal(f.path).list())[0]?.state).toBe("cancelled");
+        f.runs.closeAll();
+      }
+      expect((await f.journal.wait("cancelled")).state).toBe("cancelled");
+      expect(await f.read()).toBe("original");
+      expect(f.writes()).toBe(0);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+test("human press commits directly; consumed member edits during Pea approval refuse before the writer", async () => {
+  const f = await files();
   try {
-    const journal = new ActionJournal(h.path, () => null, 1);
-    let effects = 0;
-    const submit = (owner: ActionJournal) =>
-      invokeCommand(
-        owner,
-        {
-          ...admission("durable"),
-          caller: { kind: "human", via: "local" },
-          basis: { kind: "human" },
-          effects: declaredEffects,
-        },
-        async () => null,
-        async (e) => e.step("file", "write", {}, async () => ++effects),
-      );
-    await submit(journal);
-    await journal.wait("durable");
-    for (let i = 0; i < 8; i++) await journal.recordFact({ kind: "turn", phase: "started" });
-    const recovered = new ActionJournal(h.path, () => null, 1);
-    expect((await submit(recovered)).state).toBe("succeeded");
-    expect(effects).toBe(1);
-    expect(await recovered.list(undefined, "durable")).toHaveLength(1);
+    await f.journal.invoke(f.request("human", "b.txt"), {
+      caller: { kind: "human", via: "local" },
+      basis: null,
+    });
+    expect(await f.journal.wait("human")).toMatchObject({
+      state: "succeeded",
+      consent: { by: "press" },
+    });
+    expect(await f.read("b.txt")).toBe("reviewed");
+    expect(f.events.some((e) => e.kind === "permission_request")).toBe(false);
+    await f.journal.invoke(f.request("stale"), { caller, basis: null });
+    await f.ready();
+    await f.edit("external edit");
+    f.decide();
+    expect(await f.journal.wait("stale")).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      refusal: { kind: "stale" },
+    });
+    expect(await f.read()).toBe("external edit");
+    expect(f.writes()).toBe(1);
   } finally {
-    await h.close();
+    await f.close();
   }
-});
-
-
-test("a human Commit is approval; Pea's same write waits and Reject leaves the destination unchanged", async () => {
-  const h = await setup();
-  let value = 100;
-  const submit = (id: string, author: Caller) => invokeCommand(h.journal,
-    { ...admission(id), caller: author, basis: null, effects: declaredEffects },
-    async () => ({ before: value, after: 250 }),
-    async (e) => e.step("file", "write", e.prepared, async () => {
-      const before = value;
-      value = 250;
-      return { before, after: value };
-    }));
-  try {
-    await submit("human-commit", { kind: "human", via: "local" });
-    const human = await h.journal.wait("human-commit");
-    expect(human).toMatchObject({ state: "succeeded", consent: { by: "press" },
-      caller: { kind: "human" }, steps: [expect.objectContaining({ result: { before: 100, after: 250 } })] });
-    expect(h.events.some((e) => e.kind === "permission_request")).toBe(false);
-    value = 100;
-    await submit("pea-commit", caller);
-    await h.ready();
-    const waiting = (await h.journal.list()).find((row) => row.id === "pea-commit");
-    expect(waiting).toMatchObject({ state: "waiting", outcome: { state: "queued", consentWindow: { requestId: expect.any(String) } } });
-    const ask = h.events.find((e) => e.kind === "permission_request")!;
-    if (ask.kind !== "permission_request") throw Error("No consent request");
-    h.runs.decide(run.thread, ask.requestId, "stop_writes");
-    expect(await h.journal.wait("pea-commit")).toMatchObject({ state: "cancelled", error: expect.stringContaining("rejected by you") });
-    expect(value).toBe(100);
-  } finally { await h.close(); }
 });

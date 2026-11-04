@@ -17,7 +17,8 @@ vi.mock("node:fs/promises", async (original) => {
   return { ...fs, appendFile: counted(fs.appendFile), writeFile: counted(fs.writeFile) };
 });
 import { ActionJournal } from "../src/action-journal.ts";
-import { writeJournal } from "./journal-fixture.ts";
+import { invokeCommand } from "./command-fixture.ts";
+import { StepFailure } from "../src/command-executor.ts";
 import { human } from "./callers.ts";
 
 const dirs: string[] = [];
@@ -47,32 +48,30 @@ test("the journal stays linear at 10k receipts: the last thousand write what the
   expect((await new ActionJournal(path).read({})).length).toBe(10_000);
 }, 120_000);
 
-const action = (id: string, state: "running" | "succeeded") => ({
-  id,
-  key: "probe.read",
-  caller: human,
-  basis: null,
-  target: { kind: "host" },
-  input: {},
-  consumes: [],
-  claims: [],
-  effects: [],
-  // An in-flight native step: a restart cannot know its outcome, so the attempt stays unknown.
-  steps:
-    state === "running"
-      ? [{ id: `${id}-step`, key: "probe", kind: "native" as const, input: {}, state }]
-      : [],
-  prepared: { state: "ready", value: null },
-  recovery: [],
-  startedAt: new Date().toISOString(),
-  state,
-  ...(state === "succeeded" ? { result: null } : {}),
-});
-
 test("retention expires telemetry facts while preserving every command identity and outcome", async () => {
   const path = file();
-  await writeJournal(path, [action("open", "running"), action("old", "succeeded")]);
   const journal = new ActionJournal(path, () => null, 100);
+  for (const id of ["open", "old"]) {
+    await invokeCommand(
+      journal,
+      {
+        id,
+        key: `probe.${id}`,
+        caller: human,
+        basis: null,
+        target: { kind: "host" },
+        input: {},
+        effects: [],
+      },
+      async () => null,
+      (execution) =>
+        execution.step("native", "probe", {}, async () => {
+          if (id === "open") throw new StepFailure("Lost reply", 503, "unknown");
+          return null;
+        }),
+    );
+    await journal.wait(id);
+  }
   for (let i = 0; i < 500; i++) await journal.recordFact({ kind: "turn", phase: "started" });
   const reloaded = new ActionJournal(path, () => null, 100);
   const receipts = await reloaded.read({});

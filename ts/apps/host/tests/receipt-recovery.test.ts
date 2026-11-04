@@ -10,7 +10,6 @@ import { BridgeError } from "../src/bridge.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { crossingOf } from "./callers.ts";
-import { writeJournal } from "./journal-fixture.ts";
 import { z } from "zod";
 import type { CommandExecutor } from "../src/command-executor.ts";
 
@@ -104,6 +103,7 @@ async function fixture() {
     component: "host",
   }));
   let dispatches = 0;
+  let crash = "";
   await invokeCommand(
     owner,
     intent,
@@ -111,11 +111,12 @@ async function fixture() {
     (ex) =>
       ex.step("native", "test.native", { bytes: "exact" }, async () => {
         dispatches++;
+        crash = await readFile(path, "utf8");
         throw new BridgeError("lost transport", 503);
       }),
   );
   const action = await owner.wait(intent.id);
-  return { path, owner, intent, action, dispatches: () => dispatches };
+  return { path, owner, intent, action, crash, dispatches: () => dispatches };
 }
 
 test("missing recovery preserves unknown; exact cancellation joins the original native UUID without dispatch", async () => {
@@ -204,29 +205,23 @@ test("missing recovery preserves unknown; exact cancellation joins the original 
 });
 
 test("restart converts running to unknown once; a malformed journal is never overwritten", async () => {
-  const { path, action } = await fixture();
-  const {
-    error: _error,
-    status: _status,
-    ...attempt
-  } = action as typeof action & { error?: string; status?: number };
-  const {
-    error: _stepError,
-    status: _stepStatus,
-    ...step
-  } = action.steps[0] as (typeof action.steps)[0] & { error?: string; status?: number };
-  await writeJournal(path, [
-    { ...attempt, state: "running", steps: [{ ...step, state: "running" }] },
-  ]);
+  const { path, owner, crash } = await fixture();
+  await owner.close();
+  await writeFile(path, crash);
   const restarted = new ActionJournal(path);
   expect((await restarted.list())[0]!.state).toBe("unknown");
   const receipts = await restarted.read({});
   expect(await new ActionJournal(path).read({})).toEqual(receipts);
-  for (const malformed of [
-    { version: 4, actions: [], extra: true },
-    { version: 4, receipts: [...receipts, ...receipts], mappings: {} },
+  const valid = await readFile(path, "utf8");
+  const lines = valid.trimEnd().split("\n");
+  const last = JSON.parse(lines.at(-1)!);
+  const forged = structuredClone(last);
+  forged.receipt.join.actionId = "00000000-0000-4000-8000-000000000000";
+  for (const bytes of [
+    `${valid}${JSON.stringify(last)}\n`, // Duplicate committed revision.
+    `${lines.slice(0, -1).join("\n")}\n${JSON.stringify(forged)}\n`, // Valid UUID, wrong authority.
+    `${valid}{"receipt":{}}\n{}\n`, // Malformed interior record cannot be treated as a torn tail.
   ]) {
-    const bytes = JSON.stringify(malformed);
     await writeFile(path, bytes);
     await expect(new ActionJournal(path).read({})).rejects.toThrow();
     expect(await readFile(path, "utf8")).toBe(bytes);

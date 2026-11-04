@@ -1,3 +1,5 @@
+import type { ActionJournal } from "./action-journal.ts";
+import { commandResources } from "./command-reads.ts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { workIntentBoundary, workWriteBoundary } from "./work-write-boundary.ts";
 import { catalogCommandContext } from "./catalog-command-context.ts";
@@ -135,4 +137,19 @@ export function commandRegistry(
       throw Error(`Pod command unavailable: ${key}`);
     return (implementations[key] ??= complete(gatewayExecutor(key, bridge, local, deps.sdk)));
   };
+}
+
+/** The HTTP host and embedded runtimes acquire the same registry and resource authority. */
+export function bindCommandRuntime(
+  owner: ActionJournal,
+  bridge: RevitBridge["Service"],
+  captures: TakeoffCaptures,
+  deps: FamilyActionDependencies,
+  local: (key: string, input: unknown) => Promise<unknown>,
+  origin?: () => string,
+): void {
+  owner.bindCommands({
+    ...commandResources(bridge, deps, async (id) => (await owner.list(undefined, id))[0]),
+    resolve: commandRegistry(bridge, captures, deps, local, origin),
+  });
 }

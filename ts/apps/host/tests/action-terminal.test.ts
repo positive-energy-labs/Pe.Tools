@@ -1,5 +1,5 @@
 import { invokeCommand } from "./command-fixture.ts";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -10,7 +10,6 @@ import { BridgeError } from "../src/bridge.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { crossingOf } from "./callers.ts";
-import { writeJournal } from "./journal-fixture.ts";
 import type { StepRecovery } from "../src/command-executor.ts";
 
 type Outcome = "succeeded" | "failed" | "dispatchedFailure" | "cancelled" | "unknown";
@@ -51,25 +50,36 @@ const terminal = (row: ActionReceipt): Terminal => ({
 async function restart(steps: ActionStep["state"][], prepared: boolean) {
   const path = await journalPath();
   const id = randomUUID();
-  const row = {
-    ...admission(id),
-    input: {},
-    steps: steps.map((state, index) => ({
-      id: randomUUID(),
-      kind: "native",
-      key: `step-${index}`,
-      input: { index },
-      state,
-      ...(state === "succeeded" ? { result: { ok: true } } : {}),
-    })),
-    prepared: prepared ? { state: "ready", value: {} } : { state: "unprepared" },
-    recovery: [],
-
-    startedAt: new Date().toISOString(),
-    state: "running",
-  };
-
-  await writeJournal(path, [row]);
+  const owner = new ActionJournal(path);
+  let crash = "";
+  await invokeCommand(
+    owner,
+    admission(id),
+    async () => {
+      if (!prepared) {
+        crash = await readFile(path, "utf8");
+        throw Error("Host stopped before preparation");
+      }
+      return {};
+    },
+    async (execution) => {
+      for (const [index, state] of steps.entries()) {
+        await execution.step("native", `step-${index}`, { index }, async () => {
+          if (state === "running") {
+            crash = await readFile(path, "utf8");
+            throw new BridgeError("Host stopped in dispatch", 503);
+          }
+          return { ok: true };
+        });
+      }
+      crash = await readFile(path, "utf8");
+      throw Error("Host stopped between steps");
+    },
+  );
+  await owner.wait(id);
+  await owner.close();
+  // Restore bytes captured at the real persistence boundary, never synthesize current records.
+  await writeFile(path, crash);
   const journal = new ActionJournal(path);
   const reloaded = (await journal.list(undefined, id))[0]!;
   const [stored] = await new ActionJournal(path).read({});

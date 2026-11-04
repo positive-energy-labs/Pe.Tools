@@ -50,8 +50,7 @@ import {
 import type { OpResponseOf } from "@pe/host-contracts/operation-types";
 import { CommandRejected, StepFailure } from "./command-executor.ts";
 import { ActionJournal } from "./action-journal.ts";
-import { commandRegistry } from "./command-registry.ts";
-import { commandResources } from "./command-reads.ts";
+import { bindCommandRuntime } from "./command-registry.ts";
 import {
   captureOrigin,
   hostCaptures,
@@ -1110,22 +1109,16 @@ export function makeCallRoute(
             ),
             (release) => Effect.sync(release),
           );
-          operations.bindCommands({
-            ...commandResources(
-              bridge,
-              actionDeps,
-              async (id) => (await operations.list(undefined, id))[0],
-            ),
-            resolve: commandRegistry(
-              bridge,
-              observations(),
-              { ...actionDeps, families: composition?.families },
-              composition?.local ??
-                ((key, input) =>
-                  executeGatewayLocal(key, input, bridge, observations(), actionDeps.launchShell)),
-              composition?.origin,
-            ),
-          });
+          bindCommandRuntime(
+            operations,
+            bridge,
+            observations(),
+            { ...actionDeps, families: composition?.families },
+            composition?.local ??
+              ((key, input) =>
+                executeGatewayLocal(key, input, bridge, observations(), actionDeps.launchShell)),
+            composition?.origin,
+          );
         }),
       ),
     ),
