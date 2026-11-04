@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { projectRouteGraph } from "@pe/agent-contracts";
+import { projectRouteGraph, validateRouteGraph } from "@pe/agent-contracts";
 import { legacyGraphs } from "./legacy-test-inventory.test-support";
 
 const projections = import.meta.glob<{ default: unknown }>(
@@ -7,8 +7,9 @@ const projections = import.meta.glob<{ default: unknown }>(
   { eager: true },
 );
 test.each(legacyGraphs.map((graph) => [graph.key, graph] as const))(
-  "%s Pea projection matches its inventoried legacy graph (codegen:graphs)",
+  "%s admits and publishes the same legacy graph to Pea (codegen:graphs)",
   (_, graph) => {
+    expect(validateRouteGraph(graph)).toEqual([]);
     const projection =
       projections[`../../../packages/mcps/src/pea/generated/${graph.key}-graph.json`];
     expect(projection, `Missing projection for ${graph.key}`).toBeDefined();

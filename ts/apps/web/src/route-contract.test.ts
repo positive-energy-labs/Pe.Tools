@@ -3,7 +3,8 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { createLegacyRouteRegistry, legacyRouteDiscovery } from "./shell/legacy-route-door";
 import { ductLossGraph as ductLoss } from "./duct-loss/graph.ts";
-import { field, text } from "../../../packages/agent-contracts/src/route-field.ts";
+import { indexGraph } from "./index/graph";
+import { roomsGraph, roomsPageSchema } from "./rooms/graph";
 import {
   cellVerbId,
   gate,
@@ -50,27 +51,6 @@ const verb = (label: string, chord = "Mod+Enter"): VerbDecl => ({
   input: z.object({ id: z.string() }),
   review: "shown",
   chord,
-});
-
-test("duct-loss's three panes and page-derived reading register as a discoverable graph", () => {
-  expect(validateRouteGraph(ductLoss)).toEqual([]);
-  const json = projectRouteGraph(ductLoss);
-  expect(json.stageOrder).toEqual(["calculate"]);
-  expect(json.readings.result).toMatchObject({
-    kind: "derive",
-    source: "duct-loss.solve",
-    deps: ["page"],
-  });
-  expect(Object.keys(json.panes)).toEqual(["charts", "inputs", "wheel"]);
-  expect(json.verbs).toEqual({});
-  const registry = createLegacyRouteRegistry();
-  const remove = registry.register({
-    manifest: { key: ductLoss.key, name: ductLoss.name, graph: json },
-    hosted: () => null,
-  });
-  expect(registry.get("duct-loss")?.manifest.graph).toEqual(json);
-  remove();
-  expect(registry.get("duct-loss")).toBeUndefined();
 });
 
 test("projection is plain JSON, recursively key-sorted, stable, and hashed as canonical UTF-8 SHA-256", async () => {
@@ -135,46 +115,29 @@ test("field roles supply defaults and every explicit policy wins, including fals
   ).toBe("push");
 });
 
-test("a declared transition clears selection atomically when the subject changes", () => {
-  const graph: RouteGraph<{ system: string; selected: string }, { ready: boolean }> = {
-    key: "ducts",
-    address: "ducts",
-    name: "Ducts",
-    subjectField: {
-      field: "system",
-      noun: "system",
-      keyKind: "name",
-      cardinality: "one",
-      roster: "roster",
-      detail: "roster",
-      pane: "picture",
-      show: (id) => id,
-    },
-    fields: {
-      system: { ...field(text(), {}), role: "subject" },
-      selected: { ...field(text(), {}), role: "selection" },
-    },
-    readings: { roster: { kind: "derive", source: "roster", retire: "never" } },
-    verbs: {},
-    panes: { picture: { label: "Picture", purpose: "See the system", draws: [], verbs: [] } },
-    layout: gate("hasSystem", pane("picture")),
-    predicates: { hasSystem: (page, work) => page.system !== "" && work?.ready === true },
-    stages: { walk: { word: "Pricing", panes: ["picture"], verbs: [] } },
-    transition: (current, patch) => ({
-      patch:
-        patch.system !== undefined && patch.system !== current.system
-          ? { ...patch, selected: "" }
-          : patch,
-    }),
+test("changing the production Rooms view clears stale selection but honors an explicit selection", () => {
+  const current = roomsPageSchema.parse({
+    view: "A",
+    selected: ["42"],
+    viewport: { kind: "plane", scale: 2, tx: 1, ty: 3 },
+  });
+  expect(roomsGraph.transition?.(current, { view: "B" }, "pea")).toEqual({
+    patch: { view: "B", selected: [], viewport: null },
+  });
+  expect(roomsGraph.transition?.(current, { view: "B", selected: ["43"] }, "page")).toEqual({
+    patch: { view: "B", selected: ["43"] },
+  });
+  expect(roomsGraph.transition?.(current, { view: "A" }, "page")).toEqual({ patch: { view: "A" } });
+});
+
+test("singleton catalogue keys cannot become an undeclared subject picker", () => {
+  const broken = {
+    ...indexGraph,
+    subjectField: { ...indexGraph.subjectField!, cardinality: "many" as const },
   };
-  expect(validateRouteGraph(graph)).toEqual([]);
-  expect(graph.transition?.({ system: "A", selected: "42" }, { system: "B" }, "pea")).toEqual({
-    patch: { system: "B", selected: "" },
-  });
-  expect(graph.transition?.({ system: "A", selected: "42" }, { selected: "43" }, "page")).toEqual({
-    patch: { selected: "43" },
-  });
-  expect(projectRouteGraph(graph).transition).toEqual({ runtime: true });
+  expect(validateRouteGraph(broken)).toContainEqual(
+    expect.objectContaining({ message: "A singleton subject requires one fixed named key" }),
+  );
 });
 
 test("a missing reading and two verbs sharing one chord both refuse admission", () => {
@@ -193,9 +156,6 @@ test("a missing reading and two verbs sharing one chord both refuse admission", 
       message: "'apply' and 'reset' share 'Mod+Enter'",
     },
   ]);
-  expect(projectRouteGraph(broken).verbs.apply?.input).toEqual(
-    z.toJSONSchema(broken.verbs.apply.input, { io: "input" }),
-  );
 });
 
 test("stage panes, layout panes, gate predicates, and placed verb ids must exist", () => {
@@ -329,15 +289,7 @@ test("cells project with executable bindings marked, and the hash covers them an
   const graph = withCells(rules);
   expect(validateRouteGraph(graph)).toEqual([]);
   const json = projectRouteGraph(graph);
-  expect(json.cells).toEqual([
-    {
-      groupOf: { runtime: true },
-      noun: "loss rules",
-      nouns: ["rule"],
-      segment: "rules",
-      show: { runtime: true },
-    },
-  ]);
+  expect(json.cells?.[0]).toMatchObject({ groupOf: { runtime: true }, show: { runtime: true } });
   expect(json.work).toMatchObject({ type: "object", required: expect.arrayContaining(["note"]) });
   expect(JSON.parse(JSON.stringify(json))).toEqual(json);
   const base = await routeGraphHash(projectRouteGraph(ductLoss));

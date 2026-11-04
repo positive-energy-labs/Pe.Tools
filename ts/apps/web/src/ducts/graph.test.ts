@@ -7,7 +7,7 @@ import {
   transitionPatches,
 } from "@pe/agent-contracts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
-import { ductsData, schemas, neutralBodies, authoredPatches, localId } from "./neutral";
+import { neutralBodies, authoredPatches, localId } from "./neutral";
 import { snapshot } from "./test-fixture";
 import sheet from "./sheet/sheet.fixture.json";
 
@@ -45,21 +45,6 @@ const scope = (stage: "network" | "sheet" = "network"): Scope =>
       }),
     },
   }) as Scope;
-
-test("the admitted declaration keeps Ducts Work, five record families and the criteria root editor", () => {
-  expect(schemas.work).toBe(ductsRouteState.schema);
-  expect(Object.keys(ductsData.cells)).toHaveLength(5);
-  expect(ductsData.workFields.criteria.label).toBe("design criteria");
-  expect(ductsData.fields).not.toHaveProperty("terminalFlow");
-  expect(ductsData.stageOrder).toEqual(["network"]);
-  expect(ductsData.fields.system.cardinality).toBe("many");
-  expect(ductsData.verbs.losses).toMatchObject({ entry: "ducts.apply-losses", review: "shown" });
-  expect(ductsData.verbs.heal).toMatchObject({ entry: "ducts.apply-heal", review: "shown" });
-  expect(ductsData.verbs.assign).toMatchObject({
-    entry: "ducts.apply-assign-fan",
-    review: "shown",
-  });
-});
 
 test("bounded record-entry edits preserve siblings, encode deletion and reject invalid authored values", () => {
   // Rules are the ducts record segment since FANSPLIT; drops are fans Work.

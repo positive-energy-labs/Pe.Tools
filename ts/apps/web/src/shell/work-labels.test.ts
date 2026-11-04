@@ -11,7 +11,6 @@ import { workPathName } from "./work-writes";
 
 const graphs = [
   dataTablesGraph,
-
   familyGraph,
   parameterLinksGraph,
   podsGraph,
@@ -19,22 +18,10 @@ const graphs = [
   takeoffGraph,
 ] as RouteGraph<unknown, unknown>[];
 
-const fieldsOf = (schema: z.ZodType): string[] => {
-  let inner: z.ZodType = schema;
-  // Unwrap pipes, defaults and optionals down to the object the Work document is.
-  for (let i = 0; i < 8 && !(inner instanceof z.ZodObject); i++) {
-    const def = (
-      inner as unknown as { def: { in?: z.ZodType; innerType?: z.ZodType; schema?: z.ZodType } }
-    ).def;
-    inner = def.in ?? def.innerType ?? def.schema ?? inner;
-  }
-  return inner instanceof z.ZodObject ? Object.keys(inner.shape) : [];
-};
-
 test("every Work field a route can write has a declared name for History and Inputs", () => {
   const unnamed: string[] = [];
   for (const graph of graphs) {
-    const fields = fieldsOf(graph.work!);
+    const fields = Object.keys(z.toJSONSchema(graph.work!, { io: "input" }).properties ?? {});
     expect(fields.length, `${graph.key} Work schema is an object`).toBeGreaterThan(0);
     for (const field of fields) {
       const family = graph.cells?.find((cell) => (cell.segment ?? cell.key) === field);
@@ -49,8 +36,14 @@ test("every Work field a route can write has a declared name for History and Inp
 test("admitted ducts and fans name every Work field for history", async () => {
   const ducts = await import("../ducts/neutral.ts");
   const fans = await import("../fans/neutral.ts");
-  for (const { data, schemas } of [{ data: ducts.ductsData, schemas: ducts.schemas }, { data: fans.fansData, schemas: fans.schemas }]) {
+  for (const { data, schemas } of [
+    { data: ducts.ductsData, schemas: ducts.schemas },
+    { data: fans.fansData, schemas: fans.schemas },
+  ]) {
     const declared = new Set([...Object.keys(data.cells), ...Object.keys(data.workFields)]);
-    expect(Object.keys(schemas.work.shape).filter(key => !declared.has(key)), data.key).toEqual([]);
+    expect(
+      Object.keys(schemas.work.shape).filter((key) => !declared.has(key)),
+      data.key,
+    ).toEqual([]);
   }
 });
