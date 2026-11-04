@@ -20,17 +20,24 @@ import type { AdmittedAddressPort } from "./admitted-address";
 
 /** The router's existing history is the only URL owner; writes also notify Back/Forward listeners. */
 export function admittedRouterAddress(history: {
-  readonly location: { readonly search: string; readonly pathname: string; readonly hash: string };
-  push(href: string): void;
-  replace(href: string): void;
+  readonly location: {
+    readonly search: string;
+    readonly pathname: string;
+    readonly hash: string;
+    readonly state?: unknown;
+  };
+  push(href: string, state?: unknown): void;
+  replace(href: string, state?: unknown): void;
   subscribe(listener: () => void): () => void;
 }): AdmittedAddressPort {
   return {
     read: () => new URLSearchParams(history.location.search),
     write(search, mode) {
       const query = search.toString();
+      // Carry the entry's state: a dropped route-tab tag left the tab without custody until re-render.
       history[mode](
         `${history.location.pathname}${query ? `?${query}` : ""}${history.location.hash}`,
+        history.location.state,
       );
     },
     subscribe: (listener) => history.subscribe(listener),

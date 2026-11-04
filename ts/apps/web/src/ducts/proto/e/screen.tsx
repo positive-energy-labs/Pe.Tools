@@ -73,7 +73,7 @@ import { useGroupEncoding } from "../encoding/use-encoding";
 
 import { EMPTY_SNAPSHOT } from "../../sheet/scoped-snapshot";
 import { LoadingContext } from "#/route/loading-context";
-import { activeSystem, DUCTS_MULTI } from "../../selection";
+import { DUCTS_MULTI } from "../../selection";
 import { localId } from "../../neutral";
 import { useAdmittedSubject } from "#/shell/subject";
 import { PaneActions } from "#/shell/pane-actions";
@@ -174,7 +174,7 @@ function LoadedScreenBody({
   // The subject is a Revit system: every group it is in, over the snapshot that was priced.
   // Several open systems are one scope: their groups in open order, a shared one once.
   const scope = useMemo(() => (drawn ? scopeOf(drawn, page.system) : null), [drawn, page.system]);
-  const active = activeSystem(page);
+  const active = page.active;
   const activeScope = useMemo(
     () => (drawn && active ? systemScope(drawn, active) : null),
     [drawn, active],
@@ -284,7 +284,7 @@ function LoadedScreenBody({
     };
   }, [systems, notes, partial]);
   const chosenRow = useMemo(() => {
-    const row = systems.find((s) => s.key === activeSystem(page));
+    const row = systems.find((s) => s.key === page.active);
     return row ? { ...row, note: notes.get(row.key) } : null;
   }, [systems, page.system, notes]); // eslint-disable-line react-hooks/exhaustive-deps
   const noRunRows = useMemo<InboxItem[]>(() => {
@@ -455,8 +455,8 @@ function LoadedScreenBody({
   const { system, systemSearch, systemSort } = page;
   const version = props.captureSource?.version ?? "";
   const systemKeys = useMemo(
-    () => ({ version, system, systemSearch, systemSort }),
-    [version, system, systemSearch, systemSort],
+    () => ({ version, system, active, systemSearch, systemSort }),
+    [version, system, active, systemSearch, systemSort],
   );
   const [ruleFocus, setRuleFocus] = useState<string | null>(null);
   const membership = useMemo(() => {
@@ -840,7 +840,7 @@ function LoadedScreenBody({
           renderPane={(body, furniture) => (
             <>
               {body}
-              <PaneActions>{furniture?.actions}</PaneActions>
+              <PaneActions pane="e-picture">{furniture?.actions}</PaneActions>
             </>
           )}
           {...props}
@@ -945,7 +945,9 @@ const SystemsList = memo(function SystemsList({
   nameOf: (id: number) => string;
   notes: ReadonlyMap<string, SystemNote>;
   drawn: ProtoProps["snapshot"];
-  page: Pick<ProtoProps["page"], "system" | "systemSearch" | "systemSort"> & { version: string };
+  page: Pick<ProtoProps["page"], "system" | "active" | "systemSearch" | "systemSort"> & {
+    version: string;
+  };
   setPage: ProtoProps["setPage"];
   coverage: ProtoProps["coverage"];
 }) {
@@ -1019,10 +1021,9 @@ const SystemsList = memo(function SystemsList({
       if (next.search !== page.systemSearch || next.sort !== page.systemSort)
         setPage({ systemSearch: next.search, systemSort: next.sort }, { history: "replace" });
     },
-    // A pick opens the system beside the others, or closes it when it is open.
     onPick: (system) => door?.toggle(systemId(system.key)),
   });
-  const active = activeSystem(page);
+  const active = page.active;
   useEffect(() => {
     if (systemListView.target && systemListView.rows.some((row) => row.key === active))
       systemListView.reveal(active);
@@ -1037,7 +1038,7 @@ const SystemsList = memo(function SystemsList({
         const fans = fansOf(system);
         return systemRowParts(
           system,
-          () => door?.add([systemId(system.key)]),
+          () => door?.toggle(systemId(system.key)),
           notes.get(system.key),
           fans.map((f) => `${nameOf(f.unit)} ${f.role}: ${f.says}`),
           () => <FanFacts facts={fans} nameOf={nameOf} />,

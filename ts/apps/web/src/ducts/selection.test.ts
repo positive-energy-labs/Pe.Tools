@@ -4,19 +4,10 @@ import { scopeOf, sectionsOf, systemScope } from "@pe/ducts-domain/system-scope"
 import type { SceneInstance } from "#/scene/types";
 import { paintOf } from "#/scene/grounds";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
-import {
-  activeSystem,
-  DUCTS_MULTI,
-  paintOfDucts,
-} from "./selection";
+import { DUCTS_MULTI, paintOfDucts } from "./selection";
 import { ductsFocus } from "./page";
 import { captureRequest } from "#/scene/picture/picture";
 afterEach(() => resetKnob());
-
-test("active system is the last opened subject or empty", () => {
-  expect(activeSystem({ system: ["A", "B"] })).toBe("B");
-  expect(activeSystem({ system: [] })).toBe("");
-});
 
 test("selection knobs change admission and disclose the capture cost", () => {
   const spec = knobModules().find((module) => module.name === "ducts")!.spec.selection!;

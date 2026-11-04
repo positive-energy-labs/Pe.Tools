@@ -119,6 +119,8 @@ export function admittedSubject(
 export interface AdmittedSubject {
   toggle(id: unknown): void;
   add(ids: readonly unknown[]): void;
+  remove(id: unknown): void;
+  setActive(id: unknown): void;
 }
 export const SubjectDoor = createContext<AdmittedSubject | null>(null);
 export const useAdmittedSubject = () => useContext(SubjectDoor);

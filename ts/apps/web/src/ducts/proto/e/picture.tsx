@@ -35,7 +35,7 @@ import { elementNamer } from "../../claims";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
 import { ductsFocus } from "../../page";
-import { activeSystem, paintOfDucts, stubIdsOf } from "../../selection";
+import { paintOfDucts, stubIdsOf } from "../../selection";
 import { healReviewLayers, findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import { RunDetail, runOf } from "./run-detail";
 import { GoToSubject } from "./go-to";
@@ -299,7 +299,7 @@ function Content({
     (firstId == null
       ? ""
       : (byId.segments.get(firstId)?.groupId ?? byId.nodes.get(firstId)?.groupId ?? ""));
-  const active = activeSystem(page);
+  const active = page.active;
   const activeScope = priced && active ? systemScope(priced.snapshot, active) : null;
   const worst =
     priced && activeScope ? worstRun(priced.next, activeScope.groups, activeScope.terminals) : null;

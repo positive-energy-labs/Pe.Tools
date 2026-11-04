@@ -154,6 +154,8 @@ interface PaneProps extends VariantProps<typeof paneRecipe>, PaneStripProps {
   meta?: ReactNode;
   help?: ReactNode;
   actions?: ReactNode;
+  /** `wrap` drops the actions under the title and flows them at their own width (a header of chips). */
+  fit?: "line" | "wrap";
   leadingActions?: ReactNode;
   titleAlign?: "start" | "center";
   /** Pane-view tabs replace the title line; the title stays the accessible name. */
@@ -227,6 +229,7 @@ export function Pane({
   meta,
   help,
   actions,
+  fit,
   leadingActions,
   titleAlign = "start",
   tabs,
@@ -368,8 +371,14 @@ export function Pane({
                   className={root()}
                 >
                   {[title, meta, actions, leadingActions, tabs, strip].some(hasContent) && (
-                    <div data-slot="pane-header" data-title-align={titleAlign} className="shrink-0">
+                    <div
+                      data-slot="pane-header"
+                      data-title-align={titleAlign}
+                      data-fit={fit}
+                      className="shrink-0"
+                    >
                       <Rail
+                        fit={fit}
                         lead={
                           <>
                             {leadingActions}

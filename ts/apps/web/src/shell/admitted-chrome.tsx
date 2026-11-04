@@ -29,8 +29,9 @@ import { worksharingOf } from "./verbs";
 import type { TimelineEntry } from "./timeline";
 
 import { RouteVisibility } from "../route/activity";
-import { PaneActionsSlot } from "./pane-actions";
 import { SubjectDoor, type AdmittedSubject } from "./subject";
+import { PaneActionSlots, usePaneActionSlot } from "./pane-actions";
+import { openSet, type OpenSet } from "./open-set";
 
 /** K4 owns reading state and deduplicated pane closure refresh. */
 const rosterSchema = z.array(z.object({ id: z.unknown(), label: z.string() }));
@@ -65,42 +66,50 @@ function DocumentKeys({ keys }: { keys: readonly ScopeKey[] }) {
   useScopeKeys(keys, typeof document === "undefined" ? null : document.documentElement);
   return null;
 }
-/** The subject field as one read: its roster, what is open, and the moves every door shares. */
-function subjectOf(mount: AdmittedMount, data: RouteGraphJson) {
+/** The subject field as one read: its roster, what is open, which member is active, and the
+ * moves every door shares (`openSet`). */
+export function subjectOf(mount: AdmittedMount, data: RouteGraphJson) {
   const field = data.fields[data.subject.field];
   if (field?.role !== "subject") return null;
   const options = rosterSchema.parse(mount.picker(data.subject.field) ?? []);
   const value = mount.page.read()[data.subject.field];
   const many = field.cardinality === "many";
-  const all = many && (value as { kind: string })?.kind === "all";
-  const ids = many
-    ? ((value as { ids?: readonly unknown[] })?.ids ?? [])
-    : value == null
-      ? []
-      : [value];
-  const available = (all ? options.map((o) => o.id) : ids).filter((id) =>
-    options.some((o) => identity(o.id) === identity(id)),
+  const known = (id: unknown) => options.some((o) => identity(o.id) === identity(id));
+  const set = openSet(
+    identity,
+    options.map((o) => o.id),
   );
-  const selected = available.map(identity);
-  const set = (next: readonly unknown[]) =>
-    mount.controls.subject(many ? { kind: "ids", ids: [...next] } : next.at(-1));
+  const current = (
+    many ? value : { kind: "ids", ids: value == null ? [] : [value] }
+  ) as OpenSet<unknown>;
+  const all = current.kind === "all";
+  const ids = set.members(current);
+  // Ids outside the roster stay out of every move; the alert below names that they were dropped.
+  const open: OpenSet<unknown> =
+    current.kind === "all"
+      ? current
+      : {
+          kind: "ids",
+          ids: ids.filter(known),
+          ...(current.active !== undefined && known(current.active)
+            ? { active: current.active }
+            : {}),
+        };
+  const move = (next: OpenSet<unknown>) =>
+    next === open ? undefined : mount.controls.subject(next);
+  const one = (id: unknown) => mount.controls.subject(id ?? null);
   return {
     options,
     many,
     all,
-    selected,
-    unknown: !all && available.length < ids.length,
-    set,
-    toggle: (id: unknown) =>
-      set(
-        !many
-          ? [id]
-          : selected.includes(identity(id))
-            ? available.filter((open) => identity(open) !== identity(id))
-            : [...available, id],
-      ),
-    add: (more: readonly unknown[]) =>
-      set([...available, ...more.filter((id) => !selected.includes(identity(id)))]),
+    selected: set.members(open).map(identity),
+    active: set.active(open) === undefined ? null : identity(set.active(open)),
+    unknown: !all && set.members(open).length < ids.length,
+    clear: () => (many ? move({ kind: "ids", ids: [] }) : one(null)),
+    toggle: (id: unknown) => (many ? move(set.toggle(open, id)) : one(id)),
+    add: (more: readonly unknown[]) => (many ? move(set.add(open, more)) : one(more.at(-1))),
+    remove: (id: unknown) => (many ? move(set.remove(open, id)) : one(null)),
+    setActive: (id: unknown) => (many ? move(set.setActive(open, id)) : one(id)),
   };
 }
 export function AdmittedSubjectPicker({
@@ -112,7 +121,7 @@ export function AdmittedSubjectPicker({
 }) {
   const subject = subjectOf(mount, data);
   if (!subject) return null;
-  const { options, many, all, selected, unknown } = subject;
+  const { options, many, all, selected, active, unknown } = subject;
   const noun = data.subject.noun;
   const open = options.filter((o) => selected.includes(identity(o.id)));
   return (
@@ -123,15 +132,16 @@ export function AdmittedSubjectPicker({
           <NarrowChip
             label={`All ${noun}`}
             title={`Every ${noun} is open`}
-            onRemove={() => subject.set([])}
+            onRemove={subject.clear}
           />
         ) : (
           open.map((o) => (
             <NarrowChip
               key={identity(o.id)}
               label={o.label}
+              selected={identity(o.id) === active}
               title={`Close this ${noun}; the others stay open`}
-              onRemove={() => subject.toggle(o.id)}
+              onRemove={() => subject.remove(o.id)}
             />
           ))
         ))}
@@ -156,7 +166,7 @@ export function AdmittedSubjectPicker({
           <Button label={`All ${noun}`} onClick={() => mount.controls.subject({ kind: "all" })}>
             All
           </Button>
-          <Button label={`No ${noun}`} onClick={() => subject.set([])}>
+          <Button label={`No ${noun}`} onClick={subject.clear}>
             None
           </Button>
         </>
@@ -290,6 +300,7 @@ function Chrome({
 }) {
   const element = useRef<HTMLDivElement>(null);
   const visible = useContext(RouteVisibility);
+  const slot = usePaneActionSlot();
   const storage = `pe.route.${data.key}.layout`;
   const [panes, setPanes] = useState<GraphLayoutState>(() => readLayoutState(storage));
   const layout = admittedLayout(data, mount);
@@ -324,14 +335,6 @@ function Chrome({
           : [];
       }),
     );
-  // Read at call time, so the door never holds a stale subject.
-  const door = useMemo<AdmittedSubject>(
-    () => ({
-      toggle: (id) => subjectOf(mount, data)?.toggle(id),
-      add: (ids) => subjectOf(mount, data)?.add(ids),
-    }),
-    [mount, data],
-  );
   const demand = JSON.stringify(
     Object.keys(data.panes).map((id) => [
       id,
@@ -344,145 +347,131 @@ function Chrome({
   }, [mount, demand]);
   return (
     <KeyScope id={data.key} hidden={!visible}>
-      <SubjectDoor.Provider value={door}>
-        <DocumentKeys keys={keys} />
-        <div
-          ref={element}
-          data-route-mount={data.key}
-          data-route-journal={mount.work() ? "" : undefined}
-          className="flex h-full min-h-0 flex-col"
-        >
-          <ScopeKeys keys={actionKeys(stage?.verbs ?? [])} />
-          <SituationPortal route={data.key} portal={portal}>
-            <SituationBand
-              name={data.name}
-              context={
-                <>
-                  {data.stageOrder.length > 1 && (
-                    <ListPopup
-                      anchor="trigger"
-                      face="control"
-                      trigger={stage?.word ?? "Choose stage"}
-                      triggerLabel="Choose stage"
-                      aria-label="Stage"
-                      empty="No stages"
-                      items={data.stageOrder}
-                      keyOf={(id) => id}
-                      labelOf={(id) => data.stages[id]!.word}
-                      row={(id) => ({ label: data.stages[id]!.word })}
-                      select="single"
-                      selected={[stageId]}
-                      onPick={(id) => mount.controls.stage(id)}
-                    />
-                  )}
-                  <span>{mount.subjectDisplay()}</span>
-                </>
-              }
-              alerts={children}
-              verbs={(stage?.verbs ?? []).map((id) => (
-                <AdmittedActions key={id} mount={mount} data={data} ids={[id]} />
-              ))}
-              timeline={
-                <TimelineHead
-                  owner={mount}
-                  verbs={verbs}
-                  history={<History mount={mount} data={data} />}
-                />
-              }
-            />
-          </SituationPortal>
-          {layout && (
-            <GraphLayoutView
-              layout={layout}
-              panes={Object.fromEntries(
-                Object.entries(data.panes).map(([id, pane]) => [
-                  id,
-                  { ...pane, verbs: [], draws: [] },
-                ]),
-              )}
-              active={() => true}
-              state={{
-                panes,
-                onChange: (next) => {
-                  setPanes(next);
-                  writeLayoutState(storage, next);
-                },
-              }}
-              bodies={Object.fromEntries(
-                Object.entries(data.panes).map(([id, declaration]) => [
-                  id,
-                  (pane) => (
-                    <PaneActionsSlot key={id}>
-                      {(slot, provide) =>
-                        pane(
-                          provide(
-                            <>
-                              <ScopeKeys
-                                keys={actionKeys(
-                                  Array.isArray(declaration.verbs) ? declaration.verbs : [],
-                                )}
-                              />
-                              {declaration.history ? (
-                                <History mount={mount} data={data} />
-                              ) : (
-                                (mount.read(id) as ReactNode)
-                              )}
-                            </>,
-                          ),
-                          {
-                            actions: (
-                              <>
-                                {id === data.subject.pane && (
-                                  <AdmittedSubjectPicker mount={mount} data={data} />
-                                )}
-                                {slot}
-                                <PaneStatus mount={mount} draws={declaration.draws} />
-                                {declaration.draws.length > 0 && (
-                                  <Button
-                                    label={`Refresh ${declaration.label}`}
-                                    onClick={() => {
-                                      mount.refreshPane(id);
-                                    }}
-                                  >
-                                    Refresh
-                                  </Button>
-                                )}
-                                {Array.isArray(declaration.verbs) && (
-                                  <AdmittedActions
-                                    mount={mount}
-                                    data={data}
-                                    ids={declaration.verbs}
-                                  />
-                                )}
-                              </>
-                            ),
-                          },
-                        )
-                      }
-                    </PaneActionsSlot>
-                  ),
-                ]),
-              )}
-            />
-          )}
-          {mount.reviewIds().map((id) => {
-            const review = mount.review(id)!;
-            return (
-              <ReviewSurface
-                key={id}
-                label={data.verbs[id]?.label ?? "Carry over"}
-                sentence={review.sentence}
-                rows={review.rows}
-                worksharing={worksharingOf(review.preview)}
-                enabled
-                refusal={review.stale ? "Review is stale; prepare it again" : null}
-                confirm={() => void mount.confirm(id)}
-                cancel={() => mount.cancelReview(id)}
+      <DocumentKeys keys={keys} />
+      <div
+        ref={element}
+        data-route-mount={data.key}
+        data-route-journal={mount.work() ? "" : undefined}
+        className="flex h-full min-h-0 flex-col"
+      >
+        <ScopeKeys keys={actionKeys(stage?.verbs ?? [])} />
+        <SituationPortal route={data.key} portal={portal}>
+          <SituationBand
+            name={data.name}
+            context={
+              <>
+                {data.stageOrder.length > 1 && (
+                  <ListPopup
+                    anchor="trigger"
+                    face="control"
+                    trigger={stage?.word ?? "Choose stage"}
+                    triggerLabel="Choose stage"
+                    aria-label="Stage"
+                    empty="No stages"
+                    items={data.stageOrder}
+                    keyOf={(id) => id}
+                    labelOf={(id) => data.stages[id]!.word}
+                    row={(id) => ({ label: data.stages[id]!.word })}
+                    select="single"
+                    selected={[stageId]}
+                    onPick={(id) => mount.controls.stage(id)}
+                  />
+                )}
+                <span>{mount.subjectDisplay()}</span>
+              </>
+            }
+            alerts={children}
+            verbs={(stage?.verbs ?? []).map((id) => (
+              <AdmittedActions key={id} mount={mount} data={data} ids={[id]} />
+            ))}
+            timeline={
+              <TimelineHead
+                owner={mount}
+                verbs={verbs}
+                history={<History mount={mount} data={data} />}
               />
-            );
-          })}
-        </div>
-      </SubjectDoor.Provider>
+            }
+          />
+        </SituationPortal>
+        {layout && (
+          <GraphLayoutView
+            layout={layout}
+            panes={Object.fromEntries(
+              Object.entries(data.panes).map(([id, pane]) => [
+                id,
+                { ...pane, verbs: [], draws: [] },
+              ]),
+            )}
+            active={() => true}
+            state={{
+              panes,
+              onChange: (next) => {
+                setPanes(next);
+                writeLayoutState(storage, next);
+              },
+            }}
+            bodies={Object.fromEntries(
+              Object.entries(data.panes).map(([id, declaration]) => [
+                id,
+                (pane) =>
+                  pane(
+                    <>
+                      <ScopeKeys
+                        keys={actionKeys(Array.isArray(declaration.verbs) ? declaration.verbs : [])}
+                      />
+                      {declaration.history ? (
+                        <History mount={mount} data={data} />
+                      ) : (
+                        (mount.read(id) as ReactNode)
+                      )}
+                    </>,
+                    {
+                      // Open-subject chips need their label width; the title keeps its floor.
+                      fit: id === data.subject.pane ? "wrap" : undefined,
+                      actions: (
+                        <>
+                          {id === data.subject.pane && (
+                            <AdmittedSubjectPicker mount={mount} data={data} />
+                          )}
+                          {/* Pane-owned controls only: route verbs render once, in the situation band
+                           * (kaitpw 2026-11-03); a pane's declared verbs are what its body may invoke. */}
+                          {slot(id)}
+                          <PaneStatus mount={mount} draws={declaration.draws} />
+                          {declaration.draws.length > 0 && (
+                            <Button
+                              label={`Refresh ${declaration.label}`}
+                              onClick={() => {
+                                mount.refreshPane(id);
+                              }}
+                            >
+                              Refresh
+                            </Button>
+                          )}
+                        </>
+                      ),
+                    },
+                  ),
+              ]),
+            )}
+          />
+        )}
+        {mount.reviewIds().map((id) => {
+          const review = mount.review(id)!;
+          return (
+            <ReviewSurface
+              key={id}
+              label={data.verbs[id]?.label ?? "Carry over"}
+              sentence={review.sentence}
+              rows={review.rows}
+              worksharing={worksharingOf(review.preview)}
+              enabled
+              refusal={review.stale ? "Review is stale; prepare it again" : null}
+              confirm={() => void mount.confirm(id)}
+              cancel={() => mount.cancelReview(id)}
+            />
+          );
+        })}
+      </div>
     </KeyScope>
   );
 }
@@ -509,10 +498,27 @@ export function AdmittedChrome(props: {
 }) {
   const navigation = useHasGlobalNavigation();
   const primary = useContext(HostedChrome) == null;
-  return navigation ? (
-    <NavigatedChrome {...props} />
-  ) : (
-    <Chrome {...props} primary={primary} portal={false} />
+  const { mount, data } = props;
+  // Read at call time, so the door never holds a stale subject.
+  const door = useMemo<AdmittedSubject>(
+    () => ({
+      toggle: (id) => subjectOf(mount, data)?.toggle(id),
+      add: (ids) => subjectOf(mount, data)?.add(ids),
+      remove: (id) => subjectOf(mount, data)?.remove(id),
+      setActive: (id) => subjectOf(mount, data)?.setActive(id),
+    }),
+    [mount, data],
+  );
+  return (
+    <SubjectDoor.Provider value={door}>
+      <PaneActionSlots>
+        {navigation ? (
+          <NavigatedChrome {...props} />
+        ) : (
+          <Chrome {...props} primary={primary} portal={false} />
+        )}
+      </PaneActionSlots>
+    </SubjectDoor.Provider>
   );
 }
 function NavigatedChrome(props: {

@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { admittedJournalKeys, admittedLayout, AdmittedSubjectPicker } from "./admitted-chrome";
+import {
+  admittedJournalKeys,
+  admittedLayout,
+  AdmittedSubjectPicker,
+  subjectOf,
+} from "./admitted-chrome";
 import { ReviewSurface } from "./review-surface";
 import { routeOwnsKey } from "./mount-work";
 import { readLayoutState, writeLayoutState } from "./mount-page";
@@ -184,4 +189,30 @@ test("admitted declarations preserve pane frames and split bounds for kit projec
     }).main?.frame,
   ).toEqual({ scroll: "clip", picture: true });
   expect(RouteGraphJson.shape.layout.safeParse({ ...node, minSize: -1 }).success).toBe(false);
+});
+
+test("the subject door adds beside what is open, and never narrows all to explicit ids", () => {
+  const subject = vi.fn();
+  let value: unknown = { kind: "all" };
+  const mount = {
+    picker: () => [
+      { id: "a", label: "SA 1" },
+      { id: "b", label: "SA 2" },
+    ],
+    page: { read: () => ({ system: value }) },
+    controls: { subject },
+  } as unknown as AdmittedMount;
+  const data = {
+    subject: { field: "system", noun: "systems" },
+    fields: { system: { role: "subject", cardinality: "many" } },
+  } as unknown as RouteGraphJson;
+  subjectOf(mount, data)!.add(["b"]);
+  expect(subject).not.toHaveBeenCalled();
+  value = { kind: "ids", ids: ["a"] };
+  subjectOf(mount, data)!.add(["a", "b"]);
+  subjectOf(mount, data)!.toggle("a");
+  expect(subject.mock.calls).toEqual([
+    [{ kind: "ids", ids: ["a", "b"] }],
+    [{ kind: "ids", ids: [] }],
+  ]);
 });

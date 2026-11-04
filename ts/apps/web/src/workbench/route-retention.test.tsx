@@ -21,7 +21,13 @@ import {
 import { z } from "zod";
 import { peClient } from "#/host/pe-client";
 import { peReadings } from "#/readings";
-import { useRouteSearch, useRouteFixture, useRouteNavigate } from "#/route/activity";
+import {
+  useRouteActivity,
+  useRouteSearch,
+  useRouteFixture,
+  useRouteNavigate,
+  type RouteActivityScope,
+} from "#/route/activity";
 import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
 import { familyGraph as familiesGraph } from "#/family/graph";
 import { useGraphRoute } from "#/shell/mount";
@@ -663,4 +669,36 @@ test("only visited trees mount and even an extra unpersisted deep link cannot re
   await go("unpersisted");
   expect(document.querySelectorAll("[data-route-tab]")).toHaveLength(12);
   await waitFor(() => expect(first.disposed).toHaveBeenCalledTimes(1));
+});
+
+test("an untabbed route keeps custody across its own history push, before the bank re-renders", async () => {
+  let scope: RouteActivityScope | null = null;
+  function Capture() {
+    scope = useRouteActivity();
+    return null;
+  }
+  function Root() {
+    const location = useRouterState({ select: (state) => state.location });
+    return (
+      <RouteRetention
+        route={location.pathname === "/ducts" ? "ducts" : null}
+        active={null}
+        tabs={[]}
+        ready
+        renderRoute={(body) => body}
+      />
+    );
+  }
+  const root = createRootRoute({ component: Root });
+  const ducts = createRoute({ getParentRoute: () => root, path: "/ducts", component: Capture });
+  const router = createRouter({
+    routeTree: root.addChildren([ducts]),
+    history: createMemoryHistory({ initialEntries: ["/ducts?selected=1"] }),
+  });
+  await router.load();
+  render(<RouterProvider router={router} />);
+  await waitFor(() => expect(scope?.current()).toBe(true));
+  // The route's address port pushes; history updates synchronously, the bank re-renders later.
+  router.history.push("/ducts?selected=2");
+  expect(scope!.current()).toBe(true);
 });

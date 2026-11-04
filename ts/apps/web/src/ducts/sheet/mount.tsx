@@ -7,13 +7,12 @@ import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { AttentionRoot } from "#/attention";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { DuctsOwner } from "../pane-context";
-import { localId } from "../neutral.ts";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { useAdmittedSubject } from "#/shell/subject";
 import { PaneActions } from "#/shell/pane-actions";
 import type { ProtoProps } from "../proto/props";
 import { subjectNamer } from "../subject-text";
-import { rosterOrder, stableFanKey, withComputed } from "./model";
+import { rosterOrder, stableFanKey, withComputed, type FanPort } from "./model";
 import { EMPTY_SNAPSHOT } from "./scoped-snapshot";
 import { InputsSurface } from "./inputs-surface";
 import { SheetPicture } from "./picture";
@@ -22,7 +21,7 @@ import { Roster, Ledger } from "./view";
 import { sheetState } from "./state";
 import { describeCloser, type Closer } from "./closer";
 import type { DuctsSheetEdits } from "@pe/agent-contracts";
-import type { SheetReading } from "../neutral.ts";
+import { localId, type SheetReading } from "../neutral.ts";
 import { editLabel, presentInputHistory, type EditMeta } from "./input-history";
 
 const SheetPanes = createContext<Readonly<Record<string, ReactNode>>>({});
@@ -59,7 +58,7 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     [props.attentionDoc, nameOf, props.onSelect, refProps],
   );
   const subject = useAdmittedSubject();
-  const fanId = (row: import("./model").FanPort) => localId("ducts-fan", stableFanKey(row));
+  const fanId = (row: FanPort) => localId("ducts-fan", stableFanKey(row));
   const busy = ["pending", "partial"].includes(reading.status);
   const changeInputs = async (
     edits: DuctsSheetEdits,
@@ -283,7 +282,7 @@ export function SheetProvider({ props, children }: { props: ProtoProps; children
     "sheet-picture": spine.picture((body, furniture) => (
       <>
         {body}
-        <PaneActions>{furniture?.actions}</PaneActions>
+        <PaneActions pane="sheet-picture">{furniture?.actions}</PaneActions>
       </>
     )),
     "sheet-ledger": <Ledger props={spine} />,

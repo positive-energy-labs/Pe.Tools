@@ -138,6 +138,16 @@
     margin-inline-start: auto;
   }
 }
+/* A wrapping header (`fit="wrap"`) flows its controls onto more lines at their own width instead of
+   shrinking them on one: the opt-in for a header whose actions accumulate chips. */
+[data-slot="pane-header"][data-fit="wrap"] [data-slot="pane-actions"] .dl-button-group {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+[data-slot="pane-header"][data-fit="wrap"] [data-slot="pane-actions"] .dl-button-group > * {
+  flex-shrink: 0;
+  max-width: 100%;
+}
 [data-slot="pane-header"][data-title-align="center"] [data-slot="rail-lead"] {
   align-items: center;
   padding-bottom: 0;
