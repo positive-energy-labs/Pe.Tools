@@ -4,7 +4,7 @@ import type { ReadingState } from "#/shell/readings";
 import { cutPolygons } from "./state";
 import { z } from "zod";
 import { gate, pane, split, routeAddress, type RouteGraph } from "@pe/agent-contracts";
-import { field } from "../../../../packages/agent-contracts/src/route-field";
+import { field, type ScalarSchema } from "../../../../packages/agent-contracts/src/route-field";
 import { spaceAddress } from "../../../../packages/agent-contracts/src/routes/space";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 import { queryVerb } from "#/shell/verbs";
@@ -15,9 +15,7 @@ import { ENCODINGS } from "./layers";
 import { regionSchema, spaceReads, type SpaceReadKey, type SpaceAnswerKey } from "./reads";
 
 const jsonField = <S extends z.ZodType>(
-  schema: import("../../../../packages/agent-contracts/src/route-field").BareSchema<S> extends z.ZodArray<any>
-    ? never
-    : S,
+  schema: ScalarSchema<S>,
 ) =>
   field(
     schema,

@@ -73,10 +73,12 @@ const CODECS: Record<string, Codec<unknown>> = {
 
 };
 
-export type BareSchema<S> = S extends z.ZodDefault<infer I> | z.ZodOptional<infer I> | z.ZodNullable<infer I> | z.ZodReadonly<infer I> | z.ZodCatch<infer I> | z.ZodPrefault<infer I> ? BareSchema<I> : S;
+/** Top-level collection values require a collection constructor. Objects may contain arrays. */
+export type ScalarSchema<S extends z.ZodType> =
+  Extract<z.output<S>, readonly unknown[]> extends never ? S : never;
 /** One field: a plain string, enum, number or boolean needs no codec; any other value brings one. */
 export function field<S extends z.ZodType, const A extends Access>(
-  schema: BareSchema<S> extends z.ZodArray<any> ? never : S,
+  schema: ScalarSchema<S>,
   access: A,
   codec?: Codec<z.output<S>>,
 ): RouteField<S> & A {

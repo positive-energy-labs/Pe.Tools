@@ -30,6 +30,8 @@ import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import { mintContext } from "../src/control.ts";
 import { serveRoutes } from "./real-server.ts";
 import { contextFetch } from "@pe/runtime/context";
+import { createCapabilityCatalogSource } from "../../../packages/mcps/src/pea/capabilities.ts";
+import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 
 /** A native schedule.cells.apply answer: one result per request cell, `[row, column, ok, error?]`. */
 export function cellsApplied(cells: [number, number, boolean, string?][], extra: object = {}) {
@@ -61,7 +63,9 @@ export async function setup() {
   const dir = await mkdtemp(join(tmpdir(), "pe-schedule-chain-"));
   cleanup.push(() => rm(dir, { recursive: true, force: true, maxRetries: 5 }));
   const captures = captureStore(join(dir, "captures"));
+  let capabilities: ReturnType<typeof createCapabilityCatalogSource>;
   const app = createPeRoutes({
+    capabilityCatalog: { read: (scope) => capabilities.read(scope) },
     store: fileRouteDocumentStore(join(dir, "work")),
     heads: { observe: () => () => {} },
     observeHostResource: (request, publish) => observeHost(request, publish),
@@ -209,6 +213,15 @@ export async function setup() {
       bridge,
     );
   let server = await mount();
+  const catalogSource = () => createCapabilityCatalogSource({
+    hostBaseUrl: server.base,
+    registrations: [{ spec: scheduleGridRouteState }],
+    machine: async () => machineFixture(sessions().map(session => ({
+      session: session.sessionId,
+      documents: session.state.openDocuments,
+    }))),
+  });
+  capabilities = catalogSource();
   vi.stubEnv(HOST_CONTEXT_VARIABLE, mintContext({ kind: "human", via: "cli" }));
   cleanup.push(() => server.close());
   // Settle readback and receipt writes before removing their files.
@@ -357,6 +370,7 @@ export async function setup() {
       await server.close();
       owner = new ActionJournal(join(dir, "actions.json"));
       server = await mount();
+      capabilities = catalogSource();
     },
     owner: () => owner,
   };

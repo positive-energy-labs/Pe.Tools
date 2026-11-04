@@ -13,7 +13,7 @@ import {
   type TakeoffsRouteDocument,
   type TakeoffObservation,
 } from "@pe/agent-contracts";
-import { field, text } from "../../../../packages/agent-contracts/src/route-field";
+import { field, text, type ScalarSchema } from "../../../../packages/agent-contracts/src/route-field";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 import { takeoffsAddress } from "../../../../packages/agent-contracts/src/routes/takeoffs";
 import { takeoffPageSchema } from "./actions";
@@ -29,7 +29,7 @@ export const takeoffGraphPageSchema = takeoffPageSchema
     zones: manyField("UniqueId", {}).schema,
   });
 export type TakeoffGraphPage = z.output<typeof takeoffGraphPageSchema>;
-const json = <S extends z.ZodType>(schema: import("../../../../packages/agent-contracts/src/route-field").BareSchema<S> extends z.ZodArray<any> ? never : S) =>
+const json = <S extends z.ZodType>(schema: ScalarSchema<S>) =>
   field(schema, {}, { encode: JSON.stringify, decode: JSON.parse });
 const a = takeoffsAddress.fields;
 const rowPartitions = Object.assign(

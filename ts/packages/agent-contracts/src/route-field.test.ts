@@ -1,14 +1,38 @@
 import { expect, test } from "vite-plus/test";
 import { INVALID } from "./page-keys.ts";
 import { z } from "zod";
-import { field, manyField, manyCodec, decodePageField, sortField, keyedSetField, orderedListField } from "./route-field.ts";
+import { field, manyField, manyCodec, decodePageField, sortField, keyedSetField, orderedListField, jsonCodec, type ScalarSchema } from "./route-field.ts";
 import { routeAddress } from "./route-address.ts";
+
+const forwardScalar = <S extends z.ZodType>(schema: ScalarSchema<S>) =>
+  field(schema, {}, { encode: JSON.stringify, decode: JSON.parse });
 
 const typeProof = () => {
   // @ts-expect-error array Page fields have one kernel owner
   field(z.array(z.string()), {}, manyCodec);
   // @ts-expect-error wrappers cannot hide an array
   field(z.array(z.string()).default([]), {}, manyCodec);
+  const union = z.union([z.array(z.string()), z.literal("all")]);
+  // @ts-expect-error an array-bearing union is a collection, not a scalar
+  field(union, { url: "replace", agent: "set" }, jsonCodec(union));
+  const wrappedUnion = union.nullable().optional().readonly().default("all");
+  // @ts-expect-error wrappers preserve the union's top-level collection alternative
+  field(wrappedUnion, {}, jsonCodec(wrappedUnion));
+  const tuple = z.tuple([z.string()]);
+  // @ts-expect-error tuple values are top-level collections too
+  field(tuple, {}, jsonCodec(tuple));
+  const wrappedTuple = tuple.readonly().nullable().optional().catch(null).prefault(null);
+  // @ts-expect-error tuple collection cardinality survives wrappers
+  field(wrappedTuple, {}, jsonCodec(wrappedTuple));
+  // @ts-expect-error forwarding wrappers must preserve union collection refusal
+  forwardScalar(wrappedUnion);
+  // @ts-expect-error forwarding wrappers must preserve readonly tuple refusal
+  forwardScalar(wrappedTuple);
+  forwardScalar(z.object({ values: z.array(z.string()) }));
+  forwardScalar(z.string());
+  field(z.string().default(""), { url: "replace" });
+  field(z.union([z.string(), z.number()]), {}, { encode: String, decode: String });
+  manyField("name", { initial: "all" });
   // @ts-expect-error callers cannot replace the many schema
   manyField("name", {}, z.array(z.string()));
   // @ts-expect-error options cannot override the schema either
@@ -68,4 +92,13 @@ test("open-picture ordered lists preserve order, repeats and explicit empty thro
   expect(list.codec.decode("invalid")).toBe(INVALID);
   expect(list.codec.decode('{"items":[1]}')).toBe(INVALID);
   expect(() => orderedListField(z.string(), { cap: -1 })).toThrow();
+});
+
+test("structured scalar fields may contain arrays without acquiring collection cardinality", () => {
+  const schema = z.object({ columns: z.array(z.string()) }).default({ columns: [] });
+  const scalar = field(schema, { url: "replace" }, jsonCodec(schema));
+  expect(decodePageField(scalar, { scalar: '{"columns":["name","flow"]}' }, "scalar").decoded).toMatchObject({
+    success: true, data: { columns: ["name", "flow"] },
+  });
+  expect(scalar).not.toHaveProperty("cardinality");
 });
