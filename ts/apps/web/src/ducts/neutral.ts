@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { identityCodecs } from "../shell/page-port.ts";
-import { openSet } from "../shell/open-set";
+import { openSet } from "../shell/open-set.neutral.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import {
   applyPatches,

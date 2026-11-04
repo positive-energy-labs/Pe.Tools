@@ -31,7 +31,7 @@ import type { TimelineEntry } from "./timeline";
 import { RouteVisibility } from "../route/activity";
 import { SubjectDoor, type AdmittedSubject } from "./subject";
 import { PaneActionSlots, usePaneActionSlot } from "./pane-actions";
-import { openSet, type OpenSet } from "./open-set";
+import { openSet, type OpenSet } from "./open-set.neutral";
 
 /** K4 owns reading state and deduplicated pane closure refresh. */
 const rosterSchema = z.array(z.object({ id: z.unknown(), label: z.string() }));

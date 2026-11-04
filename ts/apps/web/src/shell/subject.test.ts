@@ -11,7 +11,7 @@ import { systemSubjectGraph as ductsGraph } from "./subject.test-support";
 import { fanSubjectGraph as fansGraph } from "./subject.test-support";
 import { graphUrlPage } from "./mount-page";
 import { restorePageSearch } from "../route/url";
-import { openSet } from "./open-set";
+import { openSet } from "./open-set.neutral";
 test("subject many codec preserves exact sets and resolves all against the current roster", () => {
   const ids = ["SA,1", "FC-1@2", "a%b", "all"];
   expect(manyCodec.decode(manyCodec.encode(ids))).toEqual(ids);
