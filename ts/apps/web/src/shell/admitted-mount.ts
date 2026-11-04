@@ -1,38 +1,32 @@
-import { bindWork,workKey } from "@pe/agent-contracts";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import type { EntryTable } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import {
-canonicalEnvironmentInput,
 createRouteEnvironmentIssuer,
 type KernelServices
 } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import type { FieldControls,InvocationToken,PagePort,SchemaTable } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import {
 createAdmittedRouteRegistry,
 resolveRouteBindings,
 } from "../../../../packages/agent-contracts/src/route-module";
-import { routeWorkSubject } from "../../../../packages/agent-contracts/src/route-work-subject";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
 import { createAdmittedAddress } from "./admitted-address";
 import { createAdmittedCellActions,createAdmittedCells } from "./admitted-cells";
-import { type MountedOwner,type MountedSnapshot } from "./admitted-context.ts";
 import { createAdmittedGeometry } from "./admitted-geometry";
 import { createAdmittedHistory } from "./admitted-history.ts";
 import { createAdmittedInvocation } from "./admitted-invoke.ts";
 import { createAdmittedObservers } from "./admitted-observers";
 import type { PlaceInput } from "./admitted-place";
 import { createAdmittedReadings } from "./admitted-readings.ts";
+import { createAdmittedScope } from "./admitted-scope.ts";
 import { createAdmittedWork } from "./admitted-work";
 import {
-applicationWorkRegistry,
-createApplicationWorkRegistry,
+createApplicationWorkRegistry
 } from "./application-work-registry";
 import { fixtureGeometryDoor } from "./fixture-geometry-door";
 import { createNamedFixtureRouteEnvironment } from "./fixture-lane";
-import { createPagePolicy,createPagePorts,freezePage } from "./page-port";
+import { createPagePorts,freezePage } from "./page-port";
 import { createRouteEnvironment,type EnvironmentValidation } from "./route-environment";
 import { createWorkFeedClient } from "./work-feed-client";
 export { ReviewRefusal } from "./admitted-invoke.ts";
@@ -59,33 +53,7 @@ export async function evaluateRouteBytes(bytes: Uint8Array): Promise<unknown> {
   return import(/* @vite-ignore */ url);
 }
 
-/** Closed slot census. Other kinds refuse before resource acquisition. */
-export const admittedMountBodyKinds: readonly string[] = Object.freeze([
-  "args",
-  "adapter",
-  "derive",
-  "picker",
-  "ready",
-  "describe",
-  "work",
-  "intent",
-  "lands",
-  "page",
-  "pane",
-  "seed",
-  "transition",
-  "predicate",
-  "show",
-  "subject",
-  "placement",
-  "present",
-  "group",
-  "label",
-  "focus",
-  "take",
-  "salvage",
-  "migration",
-]);
+export { admittedMountBodyKinds } from "./admitted-scope.ts";
 
 export class PlaceWriteRefusal extends Error {
   readonly kind = "refused";
@@ -95,21 +63,11 @@ export class PlaceWriteRefusal extends Error {
     this.name = "PlaceWriteRefusal";
   }
 }
-/** Application services are installed once. Routes supply only admission and location. */
-const applicationWorkDoor = createWorkFeedClient();
-const sourceTimeline = new WeakMap<
-  object,
-  import("../../../../packages/runtime/src/work-journal").TimelineEntry[]
->();
-const registriesByDoor = new WeakMap<object, ReturnType<typeof createApplicationWorkRegistry>>();
+/** One shell composition owns its feed, journals and source timeline. */
 export function createRouteShell(services: Omit<KernelServices, "target">) {
-  const liveDoor = services.work ?? applicationWorkDoor;
-  let scopedRegistry = registriesByDoor.get(liveDoor);
-  if (!scopedRegistry) {
-    scopedRegistry = services.work ? createApplicationWorkRegistry() : applicationWorkRegistry;
-    registriesByDoor.set(liveDoor, scopedRegistry);
-  }
-  const workRegistry = scopedRegistry;
+  const liveDoor = services.work ?? createWorkFeedClient();
+  const workRegistry = createApplicationWorkRegistry();
+  const sourceTimeline = new WeakMap<object, import("../../../../packages/runtime/src/work-journal.ts").TimelineEntry[]>();
   return {
     mount<
       G extends RouteGraphJson,
@@ -120,34 +78,9 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
     >(admitted: AdmittedRoute<G, S, E, Render, W>, input: PlaceInput) {
       const { address, fixture, target, memory } = input;
       const route = admitted;
-      const registry = createAdmittedRouteRegistry();
-      const registration = registry.register(route);
-      const resolve = () => {
-        const bindings = resolveRouteBindings(registry, route);
-        if (!bindings) throw Error("Foreign or retired mount admission");
-        return bindings;
-      };
-      const bindings = resolve();
-      for (const body of Object.values(bindings.bodies)) {
-        if (!admittedMountBodyKinds.includes(body.kind)) {
-          registration.deactivate();
-          throw Error(`Unsupported admitted mount body slot: ${body.slot}`);
-        }
-      }
-      // Migration bodies execute only in host admission. The Work feed proves registration
-      // and finishes persistent migration before exposing Work; no body or schema is sent here.
-      // Result landing owns presentation for verbs without a sealed ModelWrite preview.
-      for (const [id, verb] of Object.entries(route.data.verbs)) {
-        if (
-          verb.present &&
-          (verb.kind !== "command" || bindings.entries[verb.entry]?.axes.effect !== "ModelWrite")
-        ) {
-          registration.deactivate();
-          throw Error(
-            `Unsupported admitted presentation phase: verbs.${id}.present requires a sealed preview`,
-          );
-        }
-      }
+      const scope = createAdmittedScope({route, input, workRegistry, snapshots: () => readings.snapshots(),
+        closed: () => closed, observeReceipts: () => readings.observeReceipts(), notify: () => notify()});
+      const {registry, registration, resolve, bindings, policy, issuer, owner, read, entryFor, mountJournal, workSpec} = scope;
       const observers = createAdmittedObservers(route.data, bindings.bodies);
       const cells = createAdmittedCells(
         route.data,
@@ -155,130 +88,6 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         bindings.bodies,
         route.resolvedWork?.schema,
       );
-      const policy = createPagePolicy<RouteGraphJson, SchemaTable>(
-        route.data,
-        bindings.schemas,
-        () => "unresolved",
-        route.data.transition
-          ? (current, patch, origin) => {
-              const deps = route.data.transitionDeps ?? { page: [], work: [], readings: [] };
-              if (deps.readings.some((id) => !readings.snapshots()[id]?.current))
-                return { ok: false, reason: "Transition reading evidence unavailable or stale" };
-              const acceptedWork = owner.read()?.work?.value;
-              if (deps.work.length && !acceptedWork)
-                return { ok: false, reason: "Transition Work unavailable" };
-              const evidence = Object.fromEntries(deps.readings.map((id) => [id, readings.snapshots()[id]]));
-              const result = resolve().bodies[route.data.transition!]!.run(
-                current,
-                patch,
-                origin,
-                freezePage({
-                  page: Object.fromEntries(deps.page.map((key) => [key, current[key]])),
-                  work: Object.fromEntries(deps.work.map((key) => [key, acceptedWork?.[key]])),
-                  readings: evidence,
-                }),
-              ) as import("../../../../packages/agent-contracts/src/route-kernel-page").DecodeResult<unknown>;
-              // Re-entrant publication cannot decide on the evidence captured above.
-              if (
-                deps.readings.some((id) => readings.snapshots()[id] !== evidence[id] || !readings.snapshots()[id]?.current)
-              )
-                return { ok: false, reason: "Transition reading evidence changed" };
-              return result;
-            }
-          : undefined,
-      );
-
-      const initial = policy.initial();
-      if (!initial.ok) {
-        registration.deactivate();
-        throw Error(initial.reason);
-      }
-      const identityForPage = (page: Readonly<Record<string, unknown>>) => ({
-        target,
-        work: route.data.work
-          ? bindWork(
-              route.data.work.route,
-              input.work.address,
-              routeWorkSubject(route.data, bindings, page) ??
-                address.read().get("work") ??
-                undefined,
-              input.work.open ?? undefined,
-            )
-          : null,
-      });
-      const registryForWork = fixture === null ? workRegistry : createApplicationWorkRegistry();
-      const leases = new Map<
-        string,
-        ReturnType<typeof registryForWork.acquire> & { released?: boolean }
-      >();
-      const entryFor = (key: import("@pe/agent-contracts").WorkKey) => {
-        const id = workKey(key);
-        let lease = leases.get(id);
-        const current = owner.read()?.scope.identity.work;
-        const shown = current && workKey(current) === id;
-        if (shown && !closed) {
-          for (const [other, held] of leases)
-            if (other !== id && !held.released) {
-              held.released = true;
-              held.release();
-            }
-        }
-        if (!lease || (lease.released && shown && !closed)) {
-          lease = registryForWork.acquire(key);
-          leases.set(id, lease);
-          const unsubscribe = lease.entry.subscribe(() => {
-            observeReceipts();
-            notify();
-          });
-          const release = lease.release.bind(lease);
-          lease.release = () => {
-            unsubscribe();
-            release();
-          };
-        }
-        return lease.entry;
-      };
-      const mountJournal = (key: import("@pe/agent-contracts").WorkKey) => entryFor(key).journal;
-      const workSpec = route.resolvedWork
-        ? {
-            route: route.resolvedWork.spec.route,
-            title: route.data.name,
-            description: "",
-            schema: route.resolvedWork.schema,
-          }
-        : undefined;
-      const issuer = createRouteTokenIssuer();
-      const ownerOptions = {
-        dependencies: () =>
-          Object.fromEntries(
-            Object.entries(readings.snapshots())
-              .filter(([, value]) => value.current)
-              .map(([id, value]) => [id, value.current ? value.hash : ""]),
-          ),
-        scopeFields: [
-          route.data.subject.field,
-          ...(route.data.workSubject ? [route.data.workSubject] : []),
-        ],
-        identityForPage,
-        preparePage: policy.prepare,
-        issuer,
-      };
-      const owner: MountedOwner<W> = createRouteScopeGate<RouteGraphJson, SchemaTable, W>(
-        workSpec
-          ? {
-              ...ownerOptions,
-              workSchema: workSpec.schema,
-              hashWork: canonicalEnvironmentInput,
-              journal: mountJournal,
-            }
-          : ownerOptions,
-      );
-      owner.enter(identityForPage(initial.value), initial.value);
-      const read = (): MountedSnapshot<W> => {
-        const snapshot = owner.read();
-        if (!snapshot) throw Error("Mount has no accepted snapshot");
-        return snapshot;
-      };
       const ports = createPagePorts(route.data, { ...owner, readPage: () => read().page });
       const environmentIssuer = createRouteEnvironmentIssuer();
       let closed = false;
@@ -309,7 +118,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           sourceTimeline.set(entry, rows);
         },
       });
-      const {plan, observeReceipts, queryInputs, queryLandings, demanded, generations, retire} = readings;
+      const {plan, queryInputs, queryLandings, demanded, generations, retire} = readings;
       const validate: EnvironmentValidation = {
         admitted: (candidate) => candidate === route && registry.resolve(route) === route,
         token: (token) => owner.current(token),
@@ -404,7 +213,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         environment.close();
         plan.close();
         registration.deactivate();
-        for (const lease of leases.values()) lease.release();
+        scope.release();
         listeners.clear();
       };
       try {
@@ -584,3 +393,4 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
   };
 }
 export type AdmittedMount = ReturnType<ReturnType<typeof createRouteShell>["mount"]>;
+

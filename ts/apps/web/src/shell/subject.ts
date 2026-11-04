@@ -3,6 +3,9 @@ import { canonicalRouteInput, decodePageField, type RouteGraph } from "@pe/agent
 
 type Option = { id: string; label: string };
 type Declaration = Pick<RouteGraph<any, any>, "fields" | "subjectField" | "name">;
+// COMMON 20 exception: the legacy register/publish/use API has no shell or provider argument.
+// Moving these registries requires changing mount-pane, app-bar and mount-chrome's shared contract.
+// Admitted mounts do not publish here; keep this legacy registry until that contract is retired.
 const declarations = new Map<string, Declaration>();
 const rosters = new Map<string, readonly Option[]>();
 const listeners = new Set<() => void>();
