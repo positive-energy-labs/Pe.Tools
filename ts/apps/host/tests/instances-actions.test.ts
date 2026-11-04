@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
 import { existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -36,6 +37,12 @@ import {
   planAcquisition,
 } from "../src/acquisition.ts";
 import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
+// Instances owns its SDK transport. These HTTP witnesses expose no bridge attachment or dispatch.
+const sdkOnlyBridge = {
+  list: Effect.succeed([]),
+  subscribe: () => () => {},
+  invoke: () => { throw Error("Instances must dispatch through the SDK"); },
+} as unknown as RevitBridge["Service"];
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();
@@ -45,7 +52,9 @@ const receiptPath = "C:/receipts/dev.json";
 const openId = "a".repeat(32);
 /** The value after `flag` in one recorded argv. */
 const flag = (argv: readonly string[], name: string) => argv[argv.indexOf(name) + 1];
-const shape = (posture: "foreground" | "background") => ({ posture });
+const shape = (posture: "foreground" | "background") => ({
+  payload: "checkout", reload: "none", posture, quarantine: false, purpose: "interactive",
+});
 const execution = { allowed: true, code: null, detail: null };
 const controlledRow = (over: Record<string, unknown> = {}) => ({
   case: "controlled-active",
@@ -58,6 +67,9 @@ const controlledRow = (over: Record<string, unknown> = {}) => ({
 });
 const observed = { selection: { pid: 4242 }, process: { ...originalProcess, pid: 4242 } };
 const observedRow = {
+  year: 2025,
+  observedAtUtc: originalProcess.processStartUtc,
+  bridge: { bridge: "missing-endpoint" },
   case: "observed-active",
   process: observed.process,
   shape: shape("foreground"),
@@ -1249,7 +1261,7 @@ test("R4d: after recovery over HTTP, cleanup closes and stops the Revit that sur
   world.crash = "open";
   const server = await serveRoutes(
     makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), f.deps),
-    {} as RevitBridge["Service"],
+    sdkOnlyBridge,
   );
   cleanup.push(() => server.close());
   const human = { [HOST_CONTEXT_HEADER]: mintContext({ kind: "human", via: "cli" }) };
@@ -1359,7 +1371,7 @@ test.each(["running", "missing-response", "wrong-request", "wrong-key", "conflic
 test("restart, stop and close run for a human; stop and close require an unsaved choice", async () => {
   const f = await setup((args) =>
     args[0] === "session"
-      ? { result: { id: "dev", state: "ok", phase: "ready" } }
+      ? { result: { id: "dev", state: "ok", phase: args[1] === "stop" ? "stopped" : "ready" } }
       : { result: { state: "ok", document: { openId } } },
   );
   const document = { source: "sdk", session: { id: "dev" }, openId };
@@ -1456,7 +1468,7 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
   });
   const server = await serveRoutes(
     makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), f.deps),
-    {} as RevitBridge["Service"],
+    sdkOnlyBridge,
   );
   cleanup.push(async () => {
     release();
@@ -1508,10 +1520,10 @@ test.each([
 ] as const)(
   "%s that omits a defaulted option reads back its own receipt over HTTP",
   async (key, verb) => {
-    const f = await setup(() => ({ result: { id: "dev", state: "ok", phase: "stopped" } }));
+    const f = await setup(() => ({ result: { id: "dev", state: "ok", phase: verb === "reset" ? "ready" : "stopped" } }));
     const server = await serveRoutes(
       makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), { sdk: f.deps.sdk }),
-      {} as RevitBridge["Service"],
+      sdkOnlyBridge,
     );
     cleanup.push(() => server.close());
     // The owner's terminal: its context rides every host call the client makes.
