@@ -4,7 +4,7 @@ import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { schemas } from "../neutral.ts";
 import { snapshot as networkSnapshot } from "../test-fixture.ts";
 import { indexOf, sceneOf } from "../scene.ts";
-import { EMPTY_SNAPSHOT, SHEET_GROUP, sheetSnapshot } from "./scoped-snapshot.ts";
+import { EMPTY_SNAPSHOT, SHEET_GROUP, sheetSnapshot, sheetSystems } from "./scoped-snapshot.ts";
 
 it("a raw ids read draws every element under the one sheet group", () => {
   const raw = {
@@ -26,3 +26,11 @@ it("decodes absence separately and keeps native timestamp validation strict", ()
   expect(nativeResponseSchema("ducts.snapshot.walk").safeParse(native).success).toBe(true);
   expect(schemas.sheetSnapshot.safeParse(native).success).toBe(true);
 });
+
+it("owner links scope only canonical roster entries and omit scope for bounded ids snapshots", () => {
+  const bounded = { ...networkSnapshot, systems: [], nodes: networkSnapshot.nodes.map(node => ({ ...node, systemName: "SA 20,RA 37" })) };
+  expect(sheetSystems(bounded)).toEqual([]);
+  const canonical = { ...bounded, systems: networkSnapshot.systems };
+  expect(sheetSystems(canonical)).toEqual(networkSnapshot.systems.map(system => system.name));
+});
+
