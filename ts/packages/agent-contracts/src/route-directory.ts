@@ -22,7 +22,6 @@ export type AppSurface = "web" | "pwa" | "tray";
 export type AppRouteMount = "full" | "compact";
 export interface AppRoute {
   key: string;
-  moduleHash: string;
   surfaces: Readonly<Record<AppSurface, AppRouteMount | false>>;
   path: string;
   title: string;
@@ -55,10 +54,9 @@ export interface AppRoute {
 }
 
 export const ROUTE_DIRECTORY: readonly AppRoute[] = routeDirectory.map(
-  ({ directory: d, key, moduleHash }) => ({
+  ({ directory: d, key }) => ({
     ...d,
     key,
-    moduleHash,
     iconKey: d.icon as AppRoute["iconKey"],
     task: d.category as AppTask,
     description: d.blurb,
