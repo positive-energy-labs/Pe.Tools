@@ -84,7 +84,7 @@
     "apps/host/tests/boundary.test.ts": 5,
     "apps/host/tests/bridge-analytics.test.ts": 1,
     "apps/host/tests/capabilities.test.ts": 3,
-    "apps/host/tests/demo-lane.scenario.test.ts": 3,
+    "apps/host/tests/demo-lane.scenario.browser.test.ts": 3,
     "apps/host/tests/dispatch-outcome.test.ts": 1,
     "apps/host/tests/ducts-sheet.test.ts": 1,
     "apps/host/tests/mcp-route.test.ts": 3,

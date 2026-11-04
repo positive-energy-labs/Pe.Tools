@@ -3,7 +3,9 @@ import { browserGuardianPlugin } from "@pe/browser/build";
 import { join } from "node:path";
 import { receiptBuildDefines } from "./src/build-stamp.ts";
 
-export default defineConfig({
+const browserTestFiles = ["tests/**/*.browser.test.{ts,tsx}"];
+
+export default defineConfig(({ mode }) => ({
   pack: {
     entry: ["src/index.ts"],
     outDir: "dist-installed/bundle",
@@ -49,7 +51,9 @@ export default defineConfig({
   // Real processes and files on Windows: the 5 s default fails honest tests under load. Heavy ones
   // carry their own 30 s.
   test: {
-    include: ["tests/**/*.test.{ts,tsx}"],
+    include: mode === "browser" ? browserTestFiles : ["tests/**/*.test.{ts,tsx}"],
+    // Browser fixtures require BUDGET BROWSER_FIXTURE_START_GIB (8 GiB); one browser at a time.
+    exclude: mode === "browser" ? [] : browserTestFiles,
     env: { PE_LANE: "dev" },
     fileParallelism: false,
     testTimeout: 15_000,
@@ -58,4 +62,4 @@ export default defineConfig({
     globalSetup: ["../../tests/isolated-home/global-setup.ts"],
     setupFiles: ["../../tests/isolated-home/setup.ts", "tests/sdk-contract-setup.ts"],
   },
-});
+}));
