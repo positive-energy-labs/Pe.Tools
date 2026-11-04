@@ -6,10 +6,14 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createProviders } from "../src/harness/providers.ts";
 import { productProvidersPath } from "../src/product-paths.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 let root: string;
 let previous: string | undefined;
 beforeEach(async () => {
+  // The host's state root is fixed at import (ISOFIX-R) inside this file's isolated test home, so
+  // each test starts from an empty one instead of re-pointing the home env.
+  await rm(hostOwnership.rootPath, { recursive: true, force: true });
   root = await mkdtemp(join(tmpdir(), "pe-provider-state-"));
   previous = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = root;

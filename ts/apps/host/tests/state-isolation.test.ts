@@ -1,8 +1,7 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { productRouteWorkPath } from "../src/product-paths.ts";
 
 let root: string;
 let installed: string;
@@ -20,16 +19,16 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-test("the production Work resolver honors the dev home", () => {
+// The host's root is computed once at module load (ISOFIX-R), so each test imports after its env stub.
+test("the production Work resolver honors the dev home", async () => {
+  const { productRouteWorkPath } = await import("../src/product-paths.ts");
   expect(productRouteWorkPath()).toBe(join(root, "home", ".local-state", "state", "route-work"));
 });
 
-test("startup refuses a dev home junction to installed state before host code runs", async () => {
-  mkdirSync(installed, { recursive: true });
-  mkdirSync(join(root, "home"));
-  symlinkSync(installed, join(root, "home", ".local-state"), "junction");
+// ISOFIX-R dropped junction resolution (canonicalPath) by ruling; a home inside installed state still refuses.
+test("startup refuses a dev home inside installed state before host code runs", async () => {
+  vi.stubEnv("PE_TOOLS_PRODUCT_HOME", installed);
   await expect(import("../src/host-ownership.ts")).rejects.toThrow("installed product state");
-  expect(() => productRouteWorkPath()).toThrow("installed product state");
 });
 
 test("source startup cannot claim the installed lane", async () => {

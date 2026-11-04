@@ -25,7 +25,6 @@ public static class HostEndpoint {
     public const string HostExecutablePathVariable = "PE_TOOLS_HOST_EXECUTABLE_PATH";
 
     public const string DefaultFrontendBaseUrl = "http://localhost:5150";
-    public const string DefaultHostBaseUrl = "http://127.0.0.1:5180";
 
     public static string ResolveFrontendBaseUrl(string? overrideValue = null) =>
         FirstNonBlank(overrideValue, Environment.GetEnvironmentVariable(FrontendBaseUrlVariable))
