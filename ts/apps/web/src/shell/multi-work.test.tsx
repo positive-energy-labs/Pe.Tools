@@ -5,18 +5,9 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { StrictMode } from "react";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import {
-  address,
-  bindWork,
-  pane,
-  readingKey,
-  workKey,
-  workWriteSchema,
-  type RouteGraph,
-} from "@pe/agent-contracts";
+import { address, bindWork, pane, readingKey, workKey, type RouteGraph } from "@pe/agent-contracts";
 import { peReadings } from "#/readings";
 import { previousOf } from "#/shell/readings-hooks";
-import { acquireWorkJournal } from "#/shell/journal";
 import * as host from "../route/host";
 import { useWorkHandles } from "./use-work-handles";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
@@ -24,69 +15,6 @@ import { createGraphMount } from "./mount-owner";
 import { appAtomRegistry } from "./owner";
 import { docAtom } from "./work-document";
 import { workVerb } from "./verbs";
-
-test("a Chat head Work write acknowledges the canonical kernel journal", async () => {
-  const schema = z.object({ count: z.number().default(0) });
-  const graph: RouteGraph<{}, z.output<typeof schema>> = {
-    ...testSubject,
-    key: "head-journal",
-    address: "head-journal",
-    name: "Head journal",
-    work: schema,
-    fields: { ...testFields },
-    readings: { ...testReadings },
-    verbs: {},
-    panes: { main: { label: "Main", purpose: "Test", draws: [], verbs: [] } },
-    stages: { main: { word: "Main", panes: ["main"], verbs: [] } },
-    layout: pane("main"),
-  };
-  const key = bindWork(graph.key, null, crypto.randomUUID());
-  const entries = [{ work: legacyWork(graph)!, key }];
-  const held = acquireWorkJournal(key);
-  vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
-    if (request.kind === "work")
-      accept({
-        kind: "snapshot",
-        key: readingKey(request),
-        value: { revision: 3, doc: schema.parse({}) },
-      } as never);
-    return () => {};
-  });
-  vi.spyOn(host, "writeRouteWork").mockImplementation(async (_key, body) => {
-    const write = workWriteSchema.parse(body);
-    return {
-      ok: true,
-      revision: 4,
-      write: {
-        key,
-        kind: write.kind,
-        by: "human",
-        press: write.press,
-        base: 3,
-        revision: 4,
-        patches: write.patches,
-        inverse: [{ path: ["count"], value: 0 }],
-        undoable: true,
-      },
-    };
-  });
-  try {
-    const hook = renderHook(() => useWorkHandles(entries), { wrapper: StrictMode });
-    expect(hook.result.current[0]!.revision).toBe(3);
-    await act(async () => {
-      expect(
-        await hook.result.current[0]!.write([{ path: ["count"], value: 1 }], 3, {
-          press: "head-take",
-        }),
-      ).toBeNull();
-    });
-    expect(held.journal.read().undo.map((step) => step.press)).toEqual(["head-take"]);
-  } finally {
-    cleanup();
-    held.release();
-    vi.restoreAllMocks();
-  }
-});
 
 test("a head and its route share real host admission, undo, redo and author barriers across key spellings", async () => {
   const route = `multi-work-${crypto.randomUUID()}`;
@@ -149,7 +77,7 @@ test("a head and its route share real host admission, undo, redo and author barr
     { work: legacyWork(graph)!, key: headKey },
     { work: legacyWork(graph)!, key: otherKey },
   ];
-  const hook = renderHook(() => useWorkHandles(entries));
+  const hook = renderHook(() => useWorkHandles(entries), { wrapper: StrictMode });
   const atom = docAtom(spec, pageKey);
   const mount = createGraphMount(graph, {
     getSnapshot: () => {

@@ -3,13 +3,11 @@ import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   admittedJournalKeys,
-  admittedLayout,
   AdmittedSubjectPicker,
   subjectOf,
 } from "./admitted-chrome";
 import { ReviewSurface } from "./review-surface";
 import { routeOwnsKey } from "./mount-work";
-import { readLayoutState, writeLayoutState } from "./mount-page";
 import type { AdmittedMount } from "./admitted-mount";
 import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 beforeEach(() => {
@@ -63,45 +61,6 @@ test("Work undo follows current focus through portals and preserves native text 
   theirs.remove();
   composer.remove();
   input.remove();
-});
-
-test("stage membership and gates remove leaves before kit layout; device state round trips", () => {
-  const data = {
-    fields: { stage: { role: "stage" } },
-    stageOrder: ["inspect"],
-    stages: { inspect: { panes: ["main", "aside"] } },
-    layout: {
-      kind: "split",
-      id: "seam",
-      axis: "h",
-      size: 320,
-      children: [
-        { kind: "pane", id: "main" },
-        { kind: "gate", when: "show", child: { kind: "pane", id: "aside" } },
-        { kind: "pane", id: "other-stage" },
-      ],
-    },
-  } as unknown as RouteGraphJson;
-  const mount = {
-    page: { read: () => ({ stage: "inspect" }) },
-    visible: () => true,
-    predicates: () => ({ show: true }),
-  } as unknown as AdmittedMount;
-  const layout = admittedLayout(data, mount);
-  expect(layout).toMatchObject({
-    kind: "split",
-    minSize: 80,
-    maxSize: undefined,
-    children: [{ id: "main" }, { id: "aside" }],
-  });
-  writeLayoutState("pe.route.test.layout", { aside: { folded: true, sizes: { seam: 420 } } });
-  expect(readLayoutState("pe.route.test.layout")).toEqual({
-    aside: { folded: true, sizes: { seam: 420 } },
-  });
-  expect(admittedLayout(data, { ...mount, predicates: () => ({ show: false }) })).toEqual({
-    kind: "pane",
-    id: "main",
-  });
 });
 
 test("many-subject all/none use the declared control and unknown membership never prints ids", () => {

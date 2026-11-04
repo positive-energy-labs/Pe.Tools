@@ -190,6 +190,7 @@ async function admitted(
   amendment: {
     data?: Record<string, unknown>;
     bodies?: Record<string, unknown>;
+    schemas?: Record<string, z.ZodType>;
     sources?: Record<string, unknown>;
     landing?: boolean;
     queryFromPage?: boolean;
@@ -198,7 +199,11 @@ async function admitted(
   const selectedModule = {
     ...module,
     sources: amendment.sources ?? {},
-    schemas: { ...schemas, ids: z.object({ elementIds: z.array(z.number()) }) },
+    schemas: {
+      ...schemas,
+      ids: z.object({ elementIds: z.array(z.number()) }),
+      ...amendment.schemas,
+    },
     bodies: {
       ...bodies,
       ...amendment.bodies,
@@ -336,7 +341,10 @@ const ready = (value: string) => ({ status: "ready", current: true, value, hash:
 const closes: (() => void)[] = [];
 afterEach(() => {
   cleanup();
-  closes.splice(0).forEach((close) => close());
+  closes
+    .splice(0)
+    .reverse()
+    .forEach((close) => close());
 });
 test("composition rejects stale refresh/page frames and disposes all delivery", async () => {
   const t = transports();
@@ -465,6 +473,7 @@ test("explicit readings wait for demand and malformed live output cannot reach b
   expect(mount.read("main")).toMatchObject({ props: { children: "Label valid" } });
 });
 import { createFixtureWorkDoor } from "./fixture-work-door";
+import { RouteWorkspace, observeResources } from "@pe/runtime";
 import type {
   WorkJournalDoor,
   WorkFeedState,
@@ -514,6 +523,7 @@ async function workRoute(
       : {}),
     capabilities: ["work", "native-write"] as const,
     work: { route: "note", schema: "work", version: 1, migrations: {} },
+    workFields: { amount: { label: "amount", internal: false } },
     ...(needs === "document" ? {} : { workSubject: "note" }),
     readings: {
       ...data.readings,
@@ -815,6 +825,7 @@ test("D4: a new writer at either shared Work submission path cannot bypass Place
   );
   closes.push(work.close, owner.close);
   work.sync();
+  await vi.waitFor(() => expect(work.ready()).toBe(true));
   const issued = owner.invocation(owner.capture("new-writer"), {});
   if (!issued.ok) throw Error(issued.reason);
   const request: Parameters<typeof work.submit>[0] = {
@@ -861,7 +872,7 @@ test.each(["ack-first", "stream-first"])(
     const shell = createRouteShell({ ...t.services, work: door });
     const route = await workRoute();
     const mount = shell.mount(route, placeInput(locationPort().address));
-    expect(mount.work()?.value).toEqual({ amount: 0 });
+    await vi.waitFor(() => expect(mount.work()?.value).toEqual({ amount: 0 }));
     await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
     deliverStream?.({ kind: "pending" });
     expect(mount.work()).toEqual({ revision: 1, value: { amount: 2 } });
@@ -870,7 +881,7 @@ test.each(["ack-first", "stream-first"])(
     await settle(pending);
     const reopened = shell.mount(route, placeInput(locationPort().address));
     closes.push(reopened.close);
-    expect(reopened.work()).toEqual({ revision: 2, value: { amount: 5 } });
+    await vi.waitFor(() => expect(reopened.work()).toEqual({ revision: 2, value: { amount: 5 } }));
   },
 );
 
@@ -886,6 +897,7 @@ test("review uses accepted Work, becomes stale on stream edit, and subject enter
     placeInput(locationPort().address),
   );
   closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
   mount.invoke("change", 2);
   expect(mount.review("change")?.preview).toEqual([{ path: ["amount"], value: 2 }]);
   await settle(
@@ -931,6 +943,10 @@ test("fixture selection centrally isolates Work across mounts", async () => {
   const a = shell.mount(route, placeInput(locationPort("?fixture=sample").address)),
     b = shell.mount(route, placeInput(locationPort("?fixture=sample").address));
   closes.push(a.close, b.close);
+  await vi.waitFor(() => {
+    expect(a.work()).not.toBeNull();
+    expect(b.work()).not.toBeNull();
+  });
   await settle(a.invoke("change", 4) as Observation<WorkWriteOutcome>);
   expect(a.work()?.value).toEqual({ amount: 4 });
   expect(b.work()?.value).toEqual({ amount: 0 });
@@ -954,6 +970,7 @@ test("mount native review submits accepted Work through the command door", async
     placeInput(locationPort().address),
   );
   closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
   mount.invoke("native", 0);
   expect(submit).not.toHaveBeenCalled();
   expect(mount.review("native")?.preview).toMatchObject({
@@ -1006,6 +1023,7 @@ test("stale-base refuses without recomputing or retrying the Work edit", async (
     placeInput(locationPort().address),
   );
   closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
   const outcome = await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
   expect(outcome).toMatchObject({
     kind: "refused",
@@ -1083,6 +1101,7 @@ async function nativeFixture(presenter?: (result: unknown, evidence: unknown) =>
     placeInput(locationPort().address),
   );
   closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
   const preview = () => {
     const index = acquire.mock.calls.findLastIndex(
       ([request]) => request.key.op === "native.write.preview",
@@ -1202,6 +1221,7 @@ test("shared preview transport renders before-to-after review and commits identi
       }),
     );
     const mount = mounted.mock.results[0]!.value;
+    await vi.waitFor(() => expect(mount.work()).not.toBeNull());
     act(() => {
       mount.invoke("native", 1234);
     });
@@ -1323,81 +1343,118 @@ test.each(["reject", "timeout"])(
 );
 
 async function historyFixture(pea = false) {
-  const t = transports();
-  const store = createFixtureWorkDoor(
-    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
-    { amount: 0 },
-  );
+  const route = await workRoute();
+  const disk = new Map<string, unknown>();
+  const host = async () => {
+    const workspace = new RouteWorkspace({
+      registrations: [],
+      store: {
+        getState: async ({ targetKey }) =>
+          structuredClone(
+            disk.get(targetKey) ?? {
+              version: 1,
+              revision: 0,
+              doc: { amount: 0 },
+            },
+          ),
+        setState: async ({ targetKey, value }) => {
+          disk.set(targetKey, structuredClone(value));
+        },
+      },
+    });
+    const registration = workspace.registerAdmitted(route);
+    expect(await registration.ready).toBeNull();
+    closes.push(registration.close);
+    return workspace;
+  };
+  const workspace = await host();
   const acks: import("@pe/agent-contracts").WorkWriteAck[] = [];
   const outcomes: WorkWriteOutcome[] = [];
-  let stream: ((state: WorkFeedState) => void) | undefined;
+  const streams = new Set<(state: WorkFeedState) => void>();
   let paused = false;
   let scope: Parameters<WorkJournalDoor["open"]>[0];
-  const author = (ack: import("@pe/agent-contracts").WorkWriteAck) => ({
-    ...ack,
-    by: pea && ack.kind === "apply" ? ("pea" as const) : ack.by,
-  });
-  const submitWork = vi.fn<WorkJournalDoor["submitWork"]>((key, write, invocation) => ({
-    subscribe(deliver, end) {
-      return store.submitWork(key, write, invocation).subscribe((outcome) => {
-        outcomes.push(outcome);
-        if (outcome.kind === "accepted") {
-          const ack = author(outcome.ack);
-          acks.push(ack);
-          deliver({ kind: "accepted", ack });
-        } else deliver(outcome);
-      }, end);
-    },
-  }));
-  const door: WorkJournalDoor = {
-    ...store,
-    submitWork,
-    open(key) {
-      scope = key;
-      return {
-        subscribe(deliver, end) {
-          stream = deliver;
-          return store.open(key).subscribe((state) => {
-            if (state.kind === "ack") {
-              if (!paused) deliver({ kind: "ack", ack: author(state.ack) });
-            } else deliver(state);
-          }, end);
+  const connect = (ws: RouteWorkspace) => {
+    const store = createWorkFeedClient(
+      { subscribe: observeResources(ws, { observe: () => () => {} }), dirty() {} },
+      {
+        write: (key, write) => ws.write(key, key.route, "human", write),
+        submit: async () => {
+          throw Error("History never invokes native writes");
         },
-      };
-    },
+      },
+    );
+    const submitWork = vi.fn<WorkJournalDoor["submitWork"]>((key, write, invocation) => ({
+      subscribe(deliver, end) {
+        return store.submitWork(key, write, invocation).subscribe((outcome) => {
+          outcomes.push(outcome);
+          deliver(outcome);
+        }, end);
+      },
+    }));
+    const door: WorkJournalDoor = {
+      ...store,
+      submitWork,
+      open(key) {
+        scope = key;
+        return {
+          subscribe(deliver, end) {
+            streams.add(deliver);
+            const stop = store.open(key).subscribe((state) => {
+              if (state.kind === "ack") {
+                acks.push(state.ack);
+                if (paused) return;
+              }
+              deliver(state);
+            }, end);
+            return () => {
+              streams.delete(deliver);
+              stop();
+            };
+          },
+        };
+      },
+    };
+    return { door, submitWork };
   };
-  const route = await workRoute();
-  const shell = createRouteShell({ ...t.services, work: door });
-  const mount = shell.mount(route, placeInput(locationPort().address));
-  closes.push(mount.close);
+  const connected = connect(workspace);
+  const shell = createRouteShell({ ...transports().services, work: connected.door });
+  const mountOn = async (shell: ReturnType<typeof createRouteShell>) => {
+    const mount = shell.mount(route, placeInput(locationPort().address));
+    closes.push(mount.close);
+    await vi.waitFor(() => expect(mount.work()).not.toBeNull());
+    return mount;
+  };
+  const mount = await mountOn(shell);
   return {
     mount,
     shell,
     route,
-    door,
     acks,
     outcomes,
-    submitWork,
+    ...connected,
+    second: () =>
+      mountOn(createRouteShell({ ...transports().services, work: connect(workspace).door })),
+    restart: async () =>
+      mountOn(createRouteShell({ ...transports().services, work: connect(await host()).door })),
     pause: () => {
       paused = true;
     },
     flush: () => {
-      acks.forEach((ack) => stream?.({ kind: "ack", ack }));
+      acks.forEach((ack) => streams.forEach((deliver) => deliver({ kind: "ack", ack })));
       paused = false;
     },
-    external: async (amount: number) =>
-      settle(
-        submitWork(
-          scope!,
-          {
-            kind: "apply",
-            press: "external",
-            expectedRevision: acks.at(-1)?.revision ?? 0,
-            patches: [{ path: ["amount"], value: amount }],
-          },
-          {} as Parameters<WorkJournalDoor["submitWork"]>[2],
-        ),
-      ),
+    external: async (amount: number) => {
+      const result = await workspace.write(scope.key, "note", pea ? "pea" : "human", {
+        kind: "apply",
+        press: "external",
+        label: "Set amount",
+        expectedRevision: (await workspace.read(scope.key, "note"))!.revision,
+        patches: [{ path: ["amount"], value: amount }],
+      });
+      if (!result.ok) throw Error(JSON.stringify(result));
+      await vi.waitFor(() => expect(acks.at(-1)?.revision).toBe(result.revision));
+      return result;
+    },
   };
 }
 
@@ -1440,7 +1497,7 @@ test("Revert appends an inverse step and undo restores the reverted value", asyn
   expect(f.mount.work()?.value).toEqual({ amount: 5 });
 });
 
-test("undo refuses the door's stale base after a concurrent write without retrying", async () => {
+test("undo refuses a changed host inverse after a concurrent write without retrying", async () => {
   const f = await historyFixture();
   await settle(f.mount.invoke("change", 5) as Observation<WorkWriteOutcome>);
   f.pause();
@@ -1451,7 +1508,7 @@ test("undo refuses the door's stale base after a concurrent write without retryi
   expect(f.submitWork.mock.calls.at(-1)?.[1].expectedRevision).toBe(1);
   expect(f.outcomes.at(-1)).toMatchObject({
     kind: "refused",
-    refusal: { code: "stale_revision", revision: 2 },
+    refusal: { error: "this inverse is unknown or its paths changed" },
   });
   expect(f.mount.journalRefusal()).toBeTruthy();
   f.flush();
@@ -1463,32 +1520,28 @@ test("undo refuses the door's stale base after a concurrent write without retryi
   });
 });
 
-test("a departed mount recovers undo history solely from open's feed", async () => {
-  const f = await historyFixture();
+test("independent shells share authored edits, invalidate redo and recover inverse history after host restart", async () => {
+  const f = await historyFixture(true);
+  const second = await f.second();
   await settle(f.mount.invoke("change", 6) as Observation<WorkWriteOutcome>);
+  await vi.waitFor(() => expect(second.work()).toEqual({ revision: 1, value: { amount: 6 } }));
+  expect(await second.history!.undo()).toMatchObject({ ok: true });
+  await vi.waitFor(() => expect(f.mount.work()).toEqual({ revision: 2, value: { amount: 0 } }));
+  expect(await f.mount.history!.redo()).toMatchObject({ ok: true });
+  await vi.waitFor(() => expect(second.work()?.revision).toBe(3));
+  expect(await second.history!.undo()).toMatchObject({ ok: true });
+  await f.external(9);
+  await vi.waitFor(() => expect(f.mount.work()?.revision).toBe(5));
+  expect(await f.mount.history!.redo()).toMatchObject({ ok: false, code: "empty" });
+  expect(second.journal()?.undo.at(-1)).toMatchObject({ by: "pea", label: "Set amount" });
   f.mount.close();
-  // A new shell has no retained journal or submit callback. Snapshot then replay owns recovery.
-  const door: WorkJournalDoor = {
-    ...f.door,
-    open: (scope) => ({
-      subscribe(deliver) {
-        deliver({
-          kind: "ready",
-          snapshot: { key: scope.key, revision: 1, value: { amount: 6 } },
-          history: { from: 1, acks: f.acks },
-        });
-        return () => {};
-      },
-    }),
-  };
-  const mount = createRouteShell({ ...transports().services, work: door }).mount(
-    f.route,
-    placeInput(locationPort().address),
-  );
-  closes.push(mount.close);
-  expect(mount.journal()?.undo).toHaveLength(1);
-  expect(await mount.history!.undo()).toMatchObject({ ok: true });
-  expect(mount.work()?.value).toEqual({ amount: 0 });
+  second.close();
+  // No retained journal, submit callback, or constructed replay snapshot crosses this restart.
+  const recovered = await f.restart();
+  expect(recovered.work()).toEqual({ revision: 5, value: { amount: 9 } });
+  expect(recovered.journal()?.undo.at(-1)).toMatchObject({ by: "pea", label: "Set amount" });
+  expect(await recovered.history!.undo()).toMatchObject({ ok: true });
+  expect(recovered.work()).toEqual({ revision: 6, value: { amount: 0 } });
 });
 
 test("shared shell buttons expose Work undo and redo without route callbacks", async () => {
@@ -1783,6 +1836,7 @@ test.each([
       }),
     );
     closes.push(mount.close);
+    await vi.waitFor(() => expect(mount.work()).not.toBeNull());
     const expected = needs === "nothing" ? { kind: "host" } : documentA;
     expect(contexts[0]!.target).toEqual(expected);
     expect(contexts[0]!.attempt.target).toBe(contexts[0]!.target);
@@ -1851,32 +1905,78 @@ test("application target change remounts once and retires the old ordinary sourc
   }
 });
 
-test("global predicates drive layout gates on publication and never run during draw", async () => {
-  const predicate = vi.fn((ctx) => {
-    expect(Object.keys(ctx)).toEqual(["page", "work", "readings"]);
-    return ctx.page.query === "show" && ctx.readings.notes.current;
-  });
+test("admitted predicates update a rendered split from current evidence without running during draw", async () => {
+  const predicate = vi.fn((ctx) => ctx.page.query === "show" && ctx.readings.notes.current);
   const route = await admitted(false, false, {
+    schemas: { stage: z.enum(["main", "other"]) },
     data: {
+      fields: {
+        ...data.fields,
+        stage: { ...data.fields.query, role: "stage", schema: "stage", initial: "main" },
+      },
+      stageOrder: ["main", "other"],
       predicates: { allowed: "allowed" },
       observe: ["notes"],
-      layout: { kind: "gate", when: "allowed", child: data.layout },
+      panes: {
+        ...data.panes,
+        aside: { ...data.panes.main, label: "Aside", body: "aside" },
+        unused: { ...data.panes.main, label: "Other stage", body: "unused" },
+      },
+      stages: {
+        main: { ...data.stages.main, panes: ["main", "aside"] },
+        other: { word: "Other", panes: ["unused"], verbs: [] },
+      },
+      layout: {
+        kind: "split",
+        id: "witness-split",
+        axis: "h",
+        size: 280,
+        children: [
+          data.layout,
+          { kind: "gate", when: "allowed", child: { kind: "pane", id: "aside" } },
+          { kind: "pane", id: "unused" },
+        ],
+      },
     },
-    bodies: { allowed: { slot: "predicates.allowed", kind: "predicate", source, run: predicate } },
+    bodies: {
+      allowed: { slot: "predicates.allowed", kind: "predicate", source, run: predicate },
+      aside: { ...bodies.main, slot: "panes.aside.body" },
+      unused: { ...bodies.main, slot: "panes.unused.body" },
+    },
   });
-  const t = transports(),
-    mount = createRouteShell(t.services).mount(route, placeInput(locationPort().address));
+  const t = transports();
+  const shell = createRouteShell(t.services);
+  const mounts = vi.spyOn(shell, "mount");
+  const view = render(
+    createElement(AdmittedPane, {
+      shell,
+      route,
+      address: locationPort().address,
+    }),
+  );
+  const mount = mounts.mock.results[0]!.value as ReturnType<
+    ReturnType<typeof createRouteShell>["mount"]
+  >;
   closes.push(mount.close);
-  expect(mount.read("main")).toBeNull();
-  mount.controls.query("query", "show");
-  t.frames.at(-1)!(ready("yes"));
-  expect(mount.visible("main")).toBe(true);
+  expect(mounts).toHaveBeenCalledOnce();
+  expect(screen.queryByText("Aside")).toBeNull();
+  act(() => {
+    mount.controls.query("query" as never, "show" as never);
+    t.frames.at(-1)!(ready("yes"));
+  });
+  expect(screen.getByText("Aside")).toBeTruthy();
+  expect(screen.queryByText("Other stage")).toBeNull();
+  const split = view.container.querySelector("[data-layout-split]")!;
+  expect(split.getAttribute("data-axis")).toBe("horizontal");
+  expect(split.getAttribute("style")).toContain("280px");
   const calls = predicate.mock.calls.length;
   mount.read("main");
-  mount.read("main");
+  mount.read("aside");
   expect(predicate).toHaveBeenCalledTimes(calls);
-  mount.controls.query("query", "hide");
-  expect(mount.read("main")).toBeNull();
+  act(() => {
+    mount.controls.query("query" as never, "hide" as never);
+  });
+  expect(screen.queryByText("Aside")).toBeNull();
 });
 
 test("subject display receives only subject and is cached outside draw", async () => {
@@ -1921,7 +2021,10 @@ test("subject text observes global publications with validated cached output", a
 });
 
 test("row placement uses shared query dispatch with captured input and refuses outside allowed union", async () => {
-  const choose = vi.fn((row) => [row]);
+  const choose = vi.fn((row) => {
+    expect(Object.isFrozen(row)).toBe(true);
+    return [row];
+  });
   const route = await admitted(true, true);
   // amend the query witness's placement through a fresh admission below
   const rowRoute = await admitted(false, false, {
@@ -1961,6 +2064,7 @@ test("row placement uses shared query dispatch with captured input and refuses o
   verbs.capture!();
   expect(acquire.mock.calls.at(-1)![0].key.sortedKeyInput).toBe(JSON.stringify({ query: "42" }));
   expect(() => mount.place("main", "outside", input)).toThrow("Undeclared pane verb");
+  expect(() => mount.place("main", 123 as never, input)).toThrow();
   const calls = choose.mock.calls.length;
   expect(() => mount.read("main")).toThrow("during render");
   expect(choose).toHaveBeenCalledTimes(calls);
@@ -2050,6 +2154,7 @@ test("cell displays, focus, take and salvage use real shared Page/Work owners", 
     placeInput(locationPort().address),
   );
   closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
   expect(mount.cells().amount).toEqual([
     { key: "amount", group: ["amount"], labels: ["AMOUNT"], text: "6" },
   ]);
@@ -2107,6 +2212,7 @@ test("rendered Work basis refuses old, copied and foreign edits; current basis a
   const shell = createRouteShell({ ...t.services, work: { ...store, submitWork } });
   const mount = shell.mount(route, placeInput(locationPort().address));
   closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
   mount.read("main");
   const old = pane!.workBasis;
   expect(old.workRevision).toBe(0);
@@ -2168,6 +2274,7 @@ test("a delayed submit keeps its captured expectedRevision across a newer accept
     placeInput(locationPort().address),
   );
   closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
   const pending = settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
   await Promise.resolve();
   await settle(mount.invoke("change", 10) as Observation<WorkWriteOutcome>);
@@ -2226,6 +2333,7 @@ async function landingFixture(
   const location = locationPort();
   const mount = shell.mount(route, placeInput(location.address));
   closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
   mount.invoke("native", 0);
   const submission = mount.confirm("native") as ReturnType<WorkJournalDoor["submit"]>;
   return {
@@ -2528,12 +2636,14 @@ test.each(["accepted", "refused"] as const)(
       placeInput(locationPort().address),
     );
     closes.push(mount.close);
+    await vi.waitFor(() => expect(mount.work()).not.toBeNull());
     mount.read("main");
     const outcome = pane!.verbs.change(2, pane!.workBasis);
     await Promise.resolve();
     const next = identityCodecs.local.encode({ namespace: "note", subject: "replacement" });
     if (!next.ok) throw Error(next.reason);
     mount.controls.subject(next.value);
+    await vi.waitFor(() => expect(mount.work()).toEqual({ revision: 0, value: { amount: 0 } }));
     mount.read("main");
     const replacement = mount.work();
     const changed = vi.fn();
@@ -2661,6 +2771,7 @@ test.each([false, true])(
       placeInput(locationPort().address),
     );
     closes.push(mount.close);
+    await vi.waitFor(() => expect(mount.work()).not.toBeNull());
     expect(t.keys).toHaveLength(1);
     mount.invoke("native", 0);
     expect(mount.review("native")?.stale).toBe(false);
@@ -2723,6 +2834,7 @@ test("retained pane releases leases on hide and reuses its Page and history on s
     );
   const rendered = render(view(true));
   const mount = spy.mock.results[0]!.value;
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
   await act(async () => {
     mount.controls.query("query", "retained");
     await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
@@ -2831,6 +2943,7 @@ test("K4 only successful receipt effects from K1's receipt view invalidate a rea
     Object.assign({ ...t.services, work: door }, { [readingEvidencePort]: evidence }),
   ).mount(await workRoute(), placeInput(locationPort().address));
   closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
   t.frames[0]!(ready("first"));
   const accepted = mount.readingStatus("notes").snapshot;
   log({ kind: "log", value: { message: "source progress" } });
@@ -2996,6 +3109,7 @@ test.each(["take", "unsuggest", "clear"] as const)(
       placeInput(locationPort().address, { custody: { current: () => custody === "current" } }),
     );
     closes.push(mount.close);
+    await vi.waitFor(() => expect(mount.work()).not.toBeNull());
     const cellContext = mount.read("main") as {
       cells: Record<typeof kind, (id: string, key: string) => Observation<WorkWriteOutcome>>;
     };
@@ -3036,6 +3150,7 @@ test("recovery replaces saved evidence with a problem and clears it on a new att
     placeInput(locationPort().address),
   );
   closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
   try {
     await vi.waitFor(() => expect(mount.recovery().carryOver).toBe(true));
     saved.mockRejectedValueOnce(Error("salvage offline"));

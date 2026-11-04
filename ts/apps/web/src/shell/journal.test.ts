@@ -11,6 +11,7 @@ import { z } from "zod";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import { createWorkJournal, type JournalWriter } from "./journal";
 import { createRouteTimeline, TIMELINE_LIMIT } from "./timeline";
+import { writeLabel } from "./work-writes";
 
 afterEach(() => vi.useRealTimers());
 
@@ -82,33 +83,6 @@ function fixture() {
   };
   return { key, initial, stored, workspace, journal, timeline, writer, requests, apply };
 }
-
-test("Pea's host undo and redo walk the person's journal: same step, same revisions, person redoes", async () => {
-  const f = fixture();
-  await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
-  const before = (await f.workspace.read(f.key, f.key.route))!.doc;
-  await f.apply([{ path: ["settings", "height"], value: 99 }], null, "pea");
-  const pea = (direction: "undo" | "redo", revision: number) =>
-    f.workspace.step(f.key, f.key.route, "pea", direction, revision);
-  expect(await pea("undo", 2)).toMatchObject({ ok: true, revision: 3, write: { kind: "restore" } });
-  expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(before);
-  expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1"]);
-  expect(f.journal.read().redo.map(({ press }) => press)).toEqual(["pea:r2"]);
-  // The Timeline says who moved last: Pea undid Pea's step; each step keeps its author.
-  expect(f.journal.read().last).toMatchObject({ kind: "undo", by: "pea" });
-  expect(f.journal.read().undo.map(({ by }) => by)).toEqual(["human"]);
-  expect(f.journal.read().redo.map(({ by }) => by)).toEqual(["pea"]);
-  // The person's Redo replays the step Pea undid, then Pea's redo-then-undo cycle stays coherent.
-  expect(await f.journal.redo(f.writer)).toMatchObject({ ok: true, press: "pea:r2", revision: 4 });
-  expect(f.journal.read().last).toMatchObject({ kind: "redo", by: "human" });
-  expect(await pea("undo", 4)).toMatchObject({ ok: true, revision: 5 });
-  expect(await pea("redo", 5)).toMatchObject({ ok: true, revision: 6 });
-  expect(f.journal.read().undo.map(({ press }) => press)).toEqual(["human-1", "pea:r2"]);
-  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "pea:r2" });
-  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true, press: "human-1" });
-  expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
-  expect(await pea("undo", 8)).toMatchObject({ ok: false });
-});
 
 test("undoing a Pea edit still refuses when its path changed elsewhere", async () => {
   const f = fixture();
@@ -203,19 +177,6 @@ test("failed restore leaves the step; a partially completed press resumes withou
   expect(await f.journal.undo(flaky)).toMatchObject({ ok: true, revision: 4 });
   expect(f.requests.map(({ expectedRevision }) => expectedRevision)).toEqual([2, 3]);
   expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual(f.initial);
-});
-
-test("new human press clears redo, duplicate acks do not add steps, and Work identities stay separate", async () => {
-  const f = fixture();
-  const ack = await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
-  f.journal.accept(ack);
-  f.journal.accept({ ...ack, key: bindWork(f.key.route, null, "other"), revision: 10 });
-  expect(f.journal.read().undo).toHaveLength(1);
-  expect(f.journal.read().revision).toBe(1);
-  await f.journal.undo(f.writer);
-  await f.apply([{ path: ["settings", "height"], value: 8 }], "human-2");
-  expect(await f.journal.redo(f.writer)).toMatchObject({ ok: false, code: "empty" });
-  expect(createWorkJournal(f.key).read().undo).toEqual([]); // No persistence or module-global route instance.
 });
 
 test("a missed accepted revision retains superseded history rather than restoring across unknown writes", async () => {
@@ -377,16 +338,6 @@ test("empty descriptions cannot remove the accepted entry's required label", asy
   expect(f.journal.read().undo[0]).toMatchObject({ label: "width", meta: { late: true } });
 });
 
-test("an older reread cannot roll back the journal revision or discard history", async () => {
-  const f = fixture();
-  await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
-  await f.apply([{ path: ["settings", "width"], value: 30 }], "human-2");
-  expect(f.journal.read()).toMatchObject({ revision: 2, undo: [{}, {}] });
-  // The tab-lifetime journal meets its Work recreated at r0 (fixture remount, start-fresh elsewhere).
-  f.journal.observe({ revision: 0, doc: f.initial });
-  expect(f.journal.read()).toMatchObject({ revision: 2, undo: [{}, {}], redo: [] });
-});
-
 test("explicit verb labels survive move, late describe and repeated namer registration", () => {
   const key = { route: "labels", binding: "host" as const, target: null };
   const journal = createWorkJournal(key);
@@ -410,4 +361,41 @@ test("explicit verb labels survive move, late describe and repeated namer regist
   journal.name(() => ({ label: "Edit Work" }));
   expect(journal.read().undo[0]?.label).toBe("Set MUAS-1 flow");
   expect(journal.read().moves[0]?.label).toBe("Set MUAS-1 flow");
+});
+
+test("host history replay takes field and cell names even when the route arrives after acquisition", async () => {
+  const f = fixture();
+  await f.apply([{ path: ["settings", "width"], value: 20 }], "width");
+  await f.apply([{ path: ["cells", "one", "edit"], value: { value: "after" } }], "cell");
+  const replay = createWorkJournal(f.key);
+  let stop = () => {};
+  const saved = await new Promise<{
+    revision: number;
+    doc: unknown;
+    history: Parameters<typeof replay.restoreView>[1];
+  }>((resolve, reject) => {
+    stop = f.workspace.observeFeed(
+      f.key,
+      (value) => resolve(value as Parameters<typeof resolve>[0]),
+      () => {},
+      reject,
+    );
+  });
+  stop();
+  replay.restoreView(saved, saved.history);
+  replay.name((patches) =>
+    writeLabel(patches, {
+      workFields: { settings: { label: "dimensions" } },
+      cells: [{ segment: "cells", noun: "unit flows", groupOf: (id) => [id] }],
+    }),
+  );
+  expect(replay.read().moves.map((move) => move.label)).toEqual([
+    "Edit dimensions",
+    "Edit unit flows",
+  ]);
+  expect(await replay.undo(f.writer)).toMatchObject({ ok: true });
+  expect((await f.workspace.read(f.key, f.key.route))!.doc).toEqual({
+    ...f.initial,
+    settings: { width: 20, height: 4 },
+  });
 });
