@@ -118,6 +118,7 @@ export async function setup() {
             title: "Same",
             address: document,
             isFamilyDocument: false,
+            isActive: true,
           },
         ],
       },
