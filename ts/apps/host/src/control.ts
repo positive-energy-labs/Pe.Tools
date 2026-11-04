@@ -652,7 +652,13 @@ export function mintPageDoor(
     door,
     readConsent: humanBound && slot.kind === "pinned" ? target : null,
   });
-  return { token, retire: () => retireContext(token) };
+  return {
+    token,
+    retire: () => {
+      pageDoors.delete(caller);
+      retireContext(token);
+    },
+  };
 }
 
 /**

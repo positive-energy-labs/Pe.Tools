@@ -1,3 +1,4 @@
+import { admittedRequestIdentity } from "../src/request-services.ts";
 import { afterEach, expect, test } from "vite-plus/test";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -12,6 +13,7 @@ import {
 } from "@pe/agent-contracts";
 import {
   admitCrossing,
+  originOf,
   bindControl,
   callerOf,
   live,
@@ -183,4 +185,37 @@ test("a retiring host leaves the terminal context another host wrote since", asy
     else process.env[productPathNames.productHomeVariable] = prior;
     await rm(home, { recursive: true, force: true });
   }
+});
+
+test("a page native read keeps only its minted door through request admission", () => {
+  bind();
+  const minted = mintPageDoor("page:@pages/pin", {
+    kind: "pinned", address: address("C:/Jobs/Pin.rvt"),
+  }, "/pages/pin/act", true, docA);
+  try {
+    const transport = callerOf({ kind: "local" }, { [HOST_CONTEXT_HEADER]: minted.token });
+    if ("refusal" in transport) throw Error(transport.refusal.detail);
+    const identity = admittedRequestIdentity(transport.caller, {});
+    expect(identity.caller).toBe(transport.caller);
+    expect(Object.isFrozen(identity.caller)).toBe(true);
+    expect(Reflect.set(transport.caller, "page", "page:@pages/other")).toBe(false);
+    expect(originOf(identity.caller).caller).toEqual({ kind: "page", page: "page:@pages/pin" });
+    expect(JSON.stringify(originOf(identity.caller))).not.toContain(minted.token);
+    expect(admitCrossing(identity.caller, { kind: "document", ref: docA }, "/call", true)).toBeNull();
+    const unminted = admittedRequestIdentity({ kind: "page", page: "page:@pages/pin" }, {});
+    expect(refusal(() => admitCrossing(unminted.caller, { kind: "document", ref: docA }, "/call", true)))
+      .toBe("page.use-page-door");
+    minted.retire();
+    expect(() => admitCrossing(identity.caller, { kind: "document", ref: docA }, "/call", true)).toThrow(Refused);
+  } finally { minted.retire(); }
+});
+
+test("request admission preserves a human caller's native authority", () => {
+  bind();
+  const caller: Caller = { kind: "human", via: "local" };
+  const identity = admittedRequestIdentity(caller, {});
+  expect(identity.caller).toBe(caller);
+  expect(Object.isFrozen(caller)).toBe(true);
+  expect(admitCrossing(identity.caller, { kind: "document", ref: docA }, "/call", true))
+    .toEqual({ kind: "human" });
 });

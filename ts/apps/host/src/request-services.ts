@@ -29,7 +29,8 @@ export function admittedRequestIdentity(
   const requestId = randomUUID();
   return freeze({
     requestId,
-    caller: structuredClone(caller),
+    // Freeze the admitted caller in place: page-door authority is keyed by its identity.
+    caller,
     scope: structuredClone(scope),
     ownership: {
       owner: requestId as ValidatedOwner,
