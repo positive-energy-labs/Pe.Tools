@@ -42,6 +42,7 @@ export function openSet<T>(key: (id: T) => string, roster: readonly T[]) {
     members,
     active,
     add,
+    select: (value: OpenSet<T>, ids: readonly T[]) => of(ids, active(value)),
     remove,
     toggle: (value: OpenSet<T>, id: T) => (has(value, id) ? remove(value, id) : add(value, [id])),
     setActive: (value: OpenSet<T>, id: T) =>

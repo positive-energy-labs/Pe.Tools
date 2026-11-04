@@ -12,6 +12,14 @@ import { fanSubjectGraph as fansGraph } from "./subject.test-support";
 import { graphUrlPage } from "./mount-page";
 import { restorePageSearch } from "../route/url";
 import { openSet } from "./open-set.neutral";
+test("picker selection preserves active membership and resolves its removal", () => {
+  const set = openSet((id: string) => id, ["a", "b", "c"]);
+  const value = { kind: "ids", ids: ["a", "b"], active: "b" } as const;
+  expect(set.select(value, ["a", "b", "c"])).toEqual({ ...value, ids: ["a", "b", "c"] });
+  expect(set.select(value, ["a", "c"])).toEqual({ kind: "ids", ids: ["a", "c"] });
+  expect(set.select({ kind: "all" }, ["a", "b"])).toEqual({ kind: "ids", ids: ["a", "b"] });
+  expect(set.select(value, [])).toEqual({ kind: "ids", ids: [] });
+});
 test("subject many codec preserves exact sets and resolves all against the current roster", () => {
   const ids = ["SA,1", "FC-1@2", "a%b", "all"];
   expect(manyCodec.decode(manyCodec.encode(ids))).toEqual(ids);
