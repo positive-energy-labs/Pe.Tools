@@ -4,101 +4,8 @@ import { Input } from "@pe/kit/lang/input";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { coloursOf } from "../../colours";
 const LINES = "t-small grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { SystemScope } from "@pe/ducts-domain/system-scope";
-import { airflowOptions, airflowPatches, type AirflowOf } from "../../airflow";
 import type { LossesWork } from "../../work";
-import { SlotPicker } from "./slot-picker";
-import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 import { transitionPatches } from "@pe/agent-contracts";
-import { reviewTransitions } from "#/components/work/band";
-type SlotScope = Pick<SystemScope, "groups" | "terminals" | "units"> | null;
-export function ParameterSlots({
-  snapshot,
-  work,
-  scope,
-}: {
-  snapshot: DuctSnapshot;
-  work: LossesWork;
-  scope: SlotScope;
-}) {
-  return (
-    <div
-      className="t-small grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1"
-      aria-label="Parameter slots"
-    >
-      <AirflowSlot snapshot={snapshot} work={work} scope={scope} of="terminal" />
-      <AirflowSlot snapshot={snapshot} work={work} scope={scope} of="unit" />
-      {(
-        [
-          ["fanStatic", "Unit ESP"],
-          ["terminalDrop", "Grille drop"],
-          ["componentDrop", "Component drop"],
-          ["fittingCoefficient", "Fitting coefficient"],
-        ] as const
-      ).map(([key, label]) => {
-        const cell = work.doc?.parameters[key] ?? {};
-        return (
-          <label key={key} className="contents">
-            <span>{label}</span>
-            <StateCell
-              {...cellFromDraft(cell, { value: snapshot.slots[key], cap: "editable" }, String)}
-              scale="row"
-              onCommit={(value: string) =>
-                work
-                  .write(
-                    transitionPatches(["parameters"], key, cell, { kind: "set", rung: { value } }),
-                  )
-                  .then((refusal) => refusal?.message)
-              }
-              transitions={reviewTransitions(
-                { segment: "parameters", revision: work.revision, write: work.write },
-                key,
-                cell,
-              )}
-            />
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-/** The airflow read slot as one line: the parameter grilles (or units) read their flow from, a picker over every candidate with its coverage, best first. */
-function AirflowSlot({
-  snapshot,
-  work,
-  scope,
-  of,
-}: {
-  snapshot: DuctSnapshot;
-  work: LossesWork;
-  scope: SlotScope;
-  of: AirflowOf;
-}) {
-  const { current, options } = airflowOptions(snapshot, scope, of);
-  const noun = of === "unit" ? "units" : "grilles";
-  const word = of === "unit" ? "Unit airflow" : "Grille airflow";
-  return (
-    <>
-      <span
-        className="text-ink-2"
-        data-e-airflow={of === "unit" ? undefined : current}
-        data-e-unit-airflow={of === "unit" ? current : undefined}
-      >
-        {word}
-      </span>
-      <SlotPicker
-        word={word}
-        current={current}
-        options={options}
-        noun={noun}
-        where={scope ? "in this system" : "in the document"}
-        onPick={(slot) => void work.write(airflowPatches(work.doc, slot, of))}
-      />
-    </>
-  );
-}
-
 const AIR_WORDS: Record<DuctAirType, string> = {
   supply: "Supply air",
   return: "Return air",
@@ -107,7 +14,7 @@ const AIR_WORDS: Record<DuctAirType, string> = {
   unknown: "Unknown / mixed",
 };
 
-/** One person-owned Work cell, like designFriction; this palette never reaches Revit. */
+/** This ducts-owned palette never reaches Revit. */
 export function SystemColours({ work }: { work: LossesWork }) {
   const colours = coloursOf(work.doc);
   const cell = work.doc?.systemColours ?? {};

@@ -21,7 +21,8 @@ test("every admitted builtin is discoverable once with a hosted mount and no leg
   }
   for (const key of legacyRouteDiscovery.keys())
     expect(publicRoutes.get(key)?.graph).toBe(legacyRouteDiscovery.get(key)!.graph);
-  expect(publicRoutes.get("fans")!.work!.route).toBe("ducts");
+  // Q2: fans now owns its canonical Work registration.
+  expect(publicRoutes.get("fans")!.work!.route).toBe("fans");
   expect(actionRoute("families.apply")).toBe("families");
 });
 test("hosted admitted address retains the call's exact Work, target and thread without global URL writes", () => {

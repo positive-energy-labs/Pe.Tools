@@ -19,7 +19,7 @@ import { ProposalHead } from "#/chat/proposal-head";
 import {
   describeInputHistory,
   presentInputHistory,
-} from "#/ducts/sheet/input-history";
+} from "#/ducts/sheet/input-history.neutral";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import { createGraphMount } from "./mount-owner";
 import { appAtomRegistry } from "./owner";

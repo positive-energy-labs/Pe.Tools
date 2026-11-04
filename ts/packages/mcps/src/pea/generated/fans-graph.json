@@ -2,7 +2,6 @@
   "version": 1,
   "capabilities": [
     "work",
-    "native-write",
     "geometry"
   ],
   "key": "fans",
@@ -30,40 +29,25 @@
     "resume": "document"
   },
   "fields": {
-    "threadSearch": {
+    "inputSort": {
       "role": "query",
-      "schema": "threadSearch",
-      "codec": "threadSearch",
-      "initial": {
-        "v": 1,
-        "keywords": "",
-        "pills": [
-          {
-            "field": "scope",
-            "op": "=",
-            "value": "all"
-          }
-        ]
-      },
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "threadSort": {
-      "role": "query",
-      "schema": "threadSort",
-      "codec": "threadSort",
+      "schema": "inputSort",
+      "codec": "inputSort",
       "initial": "",
       "url": "replace",
       "share": true,
       "agent": "set"
     },
-    "stage": {
-      "role": "stage",
-      "schema": "sheetStage",
-      "codec": "stage",
-      "initial": "sheet",
-      "url": "push",
+    "inputSearch": {
+      "role": "query",
+      "schema": "inputSearch",
+      "codec": "inputSearch",
+      "initial": {
+        "keywords": "",
+        "pills": [],
+        "v": 1
+      },
+      "url": "replace",
       "share": true,
       "agent": "set"
     },
@@ -76,114 +60,11 @@
       "share": true,
       "agent": "set"
     },
-    "sceneView": {
+    "contextStyle": {
       "role": "pose",
-      "schema": "sceneView",
-      "codec": "sceneView",
-      "initial": {
-        "preset": "all",
-        "section": null
-      },
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "system": {
-      "role": "query",
-      "schema": "system",
-      "codec": "system",
-      "initial": {
-        "kind": "ids",
-        "ids": []
-      },
-      "url": "push",
-      "share": true,
-      "agent": "set"
-    },
-    "systemSearch": {
-      "role": "query",
-      "schema": "systemSearch",
-      "codec": "systemSearch",
-      "initial": {
-        "v": 1,
-        "keywords": "",
-        "pills": []
-      },
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "systemSort": {
-      "role": "query",
-      "schema": "systemSort",
-      "codec": "systemSort",
-      "initial": "",
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "rulingSearch": {
-      "role": "query",
-      "schema": "rulingSearch",
-      "codec": "rulingSearch",
-      "initial": {
-        "v": 1,
-        "keywords": "",
-        "pills": []
-      },
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "rulingSort": {
-      "role": "query",
-      "schema": "rulingSort",
-      "codec": "rulingSort",
-      "initial": "",
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "treeSearch": {
-      "role": "query",
-      "schema": "treeSearch",
-      "codec": "treeSearch",
-      "initial": {
-        "v": 1,
-        "keywords": "",
-        "pills": []
-      },
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "treeSort": {
-      "role": "query",
-      "schema": "treeSort",
-      "codec": "treeSort",
-      "initial": "",
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "inputSearch": {
-      "role": "query",
-      "schema": "inputSearch",
-      "codec": "inputSearch",
-      "initial": {
-        "v": 1,
-        "keywords": "",
-        "pills": []
-      },
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "inputSort": {
-      "role": "query",
-      "schema": "inputSort",
-      "codec": "inputSort",
-      "initial": "",
+      "schema": "contextStyle",
+      "codec": "contextStyle",
+      "initial": "glass",
       "url": "replace",
       "share": true,
       "agent": "set"
@@ -196,6 +77,24 @@
       "url": "push",
       "share": true,
       "agent": "set"
+    },
+    "fan": {
+      "role": "subject",
+      "schema": "fan",
+      "codec": "fan",
+      "initial": {
+        "ids": [],
+        "kind": "ids"
+      },
+      "url": "push",
+      "share": true,
+      "agent": "set",
+      "cardinality": "many",
+      "identity": "fan",
+      "picker": {
+        "reading": "fans",
+        "options": "pickFans"
+      }
     },
     "layers": {
       "role": "pose",
@@ -214,15 +113,6 @@
       "share": true,
       "agent": "set"
     },
-    "contextStyle": {
-      "role": "pose",
-      "schema": "contextStyle",
-      "codec": "contextStyle",
-      "initial": "glass",
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
     "picture": {
       "role": "pose",
       "schema": "picture",
@@ -232,56 +122,14 @@
       "share": true,
       "agent": "set"
     },
-    "viewport": {
-      "role": "pose",
-      "schema": "viewport",
-      "codec": "viewport",
-      "initial": null,
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "fan": {
-      "role": "subject",
-      "schema": "fan",
-      "codec": "fan",
-      "initial": {
-        "kind": "ids",
-        "ids": []
-      },
-      "url": "push",
-      "share": true,
-      "agent": "set",
-      "cardinality": "many",
-      "identity": "fan",
-      "picker": {
-        "reading": "fans",
-        "options": "pickFans"
-      }
-    },
-    "sheetPath": {
-      "role": "query",
-      "schema": "sheetPath",
-      "codec": "sheetPath",
-      "initial": "",
-      "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "selected": {
-      "role": "selection",
-      "kinds": [
-        "focus"
-      ]
-    },
     "rosterSearch": {
       "role": "query",
       "schema": "rosterSearch",
       "codec": "rosterSearch",
       "initial": {
-        "v": 1,
         "keywords": "",
-        "pills": []
+        "pills": [],
+        "v": 1
       },
       "url": "replace",
       "share": true,
@@ -295,13 +143,54 @@
       "url": "replace",
       "share": true,
       "agent": "set"
+    },
+    "sceneView": {
+      "role": "pose",
+      "schema": "sceneView",
+      "codec": "sceneView",
+      "initial": {
+        "preset": "all",
+        "section": null
+      },
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "focus"
+      ]
+    },
+    "sheetPath": {
+      "role": "query",
+      "schema": "sheetPath",
+      "codec": "sheetPath",
+      "initial": "",
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "stage": {
+      "role": "stage",
+      "schema": "sheetStage",
+      "codec": "stage",
+      "initial": "sheet",
+      "url": "push",
+      "share": true,
+      "agent": "set"
+    },
+    "viewport": {
+      "role": "pose",
+      "schema": "viewport",
+      "codec": "viewport",
+      "initial": null,
+      "url": "replace",
+      "share": true,
+      "agent": "set"
     }
   },
   "identities": {
-    "system": {
-      "kind": "local",
-      "codec": "local"
-    },
     "fan": {
       "kind": "local",
       "codec": "local"
@@ -320,123 +209,12 @@
   },
   "historyDetail": "historyDetail",
   "work": {
-    "route": "ducts"
+    "schema": "work",
+    "route": "fans",
+    "version": 1,
+    "migrations": {}
   },
   "readings": {
-    "roster": {
-      "kind": "use",
-      "entry": "ducts.roster",
-      "args": "rosterArgs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "ducts": {
-      "kind": "use",
-      "entry": "ducts.networks",
-      "args": "networksArgs",
-      "deps": {
-        "page": [
-          "system"
-        ],
-        "work": [
-          "criteria",
-          "kinds",
-          "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "claims",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
-        ],
-        "readings": [
-          "roster"
-        ]
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "tables": {
-      "kind": "use",
-      "entry": "ducts.tables",
-      "args": "tablesArgs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "catalogs": {
-      "kind": "use",
-      "entry": "ducts.catalogs",
-      "args": "catalogsArgs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "pricing": {
-      "kind": "derive",
-      "output": "pricing",
-      "derive": "price",
-      "deps": {
-        "page": [],
-        "work": [
-          "criteria",
-          "kinds",
-          "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "claims",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
-        ],
-        "readings": [
-          "ducts",
-          "tables",
-          "catalogs"
-        ]
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
     "fans": {
       "kind": "use",
       "entry": "ducts.fans",
@@ -444,85 +222,18 @@
       "deps": {
         "page": [],
         "work": [
-          "criteria",
-          "kinds",
           "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "claims",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
+          "calculation",
+          "terminalDrops",
+          "componentDrops",
+          "esp",
+          "equipmentFlows",
+          "roles",
+          "flows",
+          "parameters",
+          "designFriction"
         ],
         "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "sheet": {
-      "kind": "use",
-      "entry": "ducts.sheet",
-      "args": "sheetArgs",
-      "deps": {
-        "page": [
-          "fan",
-          "sheetPath"
-        ],
-        "work": [
-          "criteria",
-          "kinds",
-          "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "claims",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
-        ],
-        "readings": [
-          "fans"
-        ]
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "sheetSnapshot": {
-      "kind": "use",
-      "entry": "ducts.sheet-snapshot",
-      "args": "sheetSnapshotArgs",
-      "deps": {
-        "page": [],
-        "work": [
-          "criteria",
-          "kinds",
-          "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "claims",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
-        ],
-        "readings": [
-          "sheet"
-        ]
       },
       "demand": "visible",
       "retain": {
@@ -547,53 +258,95 @@
       },
       "refresh": "dependencies"
     },
-    "lossPreview": {
-      "kind": "use",
-      "entry": "ducts.preview-losses",
-      "args": "lossArgs",
+    "pricing": {
+      "kind": "derive",
+      "output": "pricing",
+      "derive": "price",
       "deps": {
         "page": [],
-        "work": [],
-        "readings": []
+        "work": [
+          "writeIntent",
+          "calculation",
+          "terminalDrops",
+          "componentDrops",
+          "esp",
+          "equipmentFlows",
+          "roles",
+          "flows",
+          "parameters",
+          "designFriction"
+        ],
+        "readings": [
+          "sheet"
+        ]
       },
-      "demand": "explicit",
+      "demand": "visible",
       "retain": {
         "evidence": "scope",
         "resource": "scope"
       },
-      "refresh": "explicit"
+      "refresh": "dependencies"
     },
-    "healPreview": {
+    "sheet": {
       "kind": "use",
-      "entry": "ducts.preview-heal",
-      "args": "healArgs",
+      "entry": "ducts.sheet",
+      "args": "sheetArgs",
       "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
+        "page": [
+          "fan",
+          "sheetPath"
+        ],
+        "work": [
+          "writeIntent",
+          "calculation",
+          "terminalDrops",
+          "componentDrops",
+          "esp",
+          "equipmentFlows",
+          "roles",
+          "flows",
+          "parameters",
+          "designFriction"
+        ],
+        "readings": [
+          "fans"
+        ]
       },
-      "demand": "explicit",
+      "demand": "visible",
       "retain": {
         "evidence": "scope",
         "resource": "scope"
       },
-      "refresh": "explicit"
+      "refresh": "dependencies"
     },
-    "fanPreview": {
+    "sheetSnapshot": {
       "kind": "use",
-      "entry": "ducts.preview-assign-fan",
-      "args": "fanArgs",
+      "entry": "ducts.sheet-snapshot",
+      "args": "sheetSnapshotArgs",
       "deps": {
         "page": [],
-        "work": [],
-        "readings": []
+        "work": [
+          "writeIntent",
+          "calculation",
+          "terminalDrops",
+          "componentDrops",
+          "esp",
+          "equipmentFlows",
+          "roles",
+          "flows",
+          "parameters",
+          "designFriction"
+        ],
+        "readings": [
+          "sheet"
+        ]
       },
-      "demand": "explicit",
+      "demand": "visible",
       "retain": {
         "evidence": "scope",
         "resource": "scope"
       },
-      "refresh": "explicit"
+      "refresh": "dependencies"
     },
     "sheetView": {
       "kind": "derive",
@@ -628,19 +381,11 @@
       "captures": [],
       "patch": "browse",
       "fields": [
-        "threadSearch",
-        "threadSort",
-        "systemSearch",
-        "systemSort",
-        "rulingSearch",
-        "rulingSort",
-        "treeSearch",
-        "treeSort",
-        "inputSearch",
-        "inputSort",
         "sheetPath",
         "rosterSearch",
-        "rosterSort"
+        "rosterSort",
+        "inputSearch",
+        "inputSort"
       ]
     },
     "edit": {
@@ -651,54 +396,22 @@
       "deps": {
         "page": [],
         "work": [
-          "criteria",
-          "kinds",
           "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "claims",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
+          "calculation",
+          "terminalDrops",
+          "componentDrops",
+          "esp",
+          "equipmentFlows",
+          "roles",
+          "flows",
+          "parameters",
+          "designFriction"
         ],
         "readings": []
       },
       "captures": [],
       "patches": "edit",
       "describe": "describeEdit"
-    },
-    "sheetEdit": {
-      "kind": "work",
-      "input": "sheetEdit",
-      "label": "Edit sheet inputs",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [
-          "criteria",
-          "kinds",
-          "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "claims",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
-        ],
-        "readings": [
-          "sheet"
-        ]
-      },
-      "captures": [],
-      "ready": "sheetReady",
-      "patches": "sheetEdit",
-      "describe": "describeSheet"
     },
     "scope": {
       "kind": "work",
@@ -708,18 +421,16 @@
       "deps": {
         "page": [],
         "work": [
-          "criteria",
-          "kinds",
           "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "claims",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
+          "calculation",
+          "terminalDrops",
+          "componentDrops",
+          "esp",
+          "equipmentFlows",
+          "roles",
+          "flows",
+          "parameters",
+          "designFriction"
         ],
         "readings": []
       },
@@ -727,150 +438,36 @@
       "patches": "scope",
       "describe": "describeScope"
     },
-    "losses": {
-      "kind": "command",
-      "input": "none",
-      "label": "Write to Revit",
-      "review": "shown",
+    "sheetEdit": {
+      "kind": "work",
+      "input": "sheetEdit",
+      "label": "Edit sheet inputs",
+      "review": "none",
       "deps": {
-        "page": [
-          "stage",
-          "system",
-          "fan"
-        ],
+        "page": [],
         "work": [
-          "criteria",
-          "kinds",
           "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "claims",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
+          "calculation",
+          "terminalDrops",
+          "componentDrops",
+          "esp",
+          "equipmentFlows",
+          "roles",
+          "flows",
+          "parameters",
+          "designFriction"
         ],
         "readings": [
-          "ducts",
-          "sheetSnapshot",
           "sheet"
         ]
       },
-      "captures": [
-        "ducts",
-        "sheetSnapshot",
-        "sheet"
-      ],
-      "ready": "lossReady",
-      "present": "presentLosses",
-      "entry": "ducts.apply-losses",
-      "intent": "losses"
-    },
-    "heal": {
-      "kind": "command",
-      "input": "none",
-      "label": "Heal",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "stage",
-          "system",
-          "fan"
-        ],
-        "work": [
-          "criteria",
-          "kinds",
-          "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "claims",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
-        ],
-        "readings": [
-          "ducts",
-          "sheetSnapshot",
-          "sheet"
-        ]
-      },
-      "captures": [
-        "ducts",
-        "sheetSnapshot",
-        "sheet"
-      ],
-      "ready": "healReady",
-      "present": "presentHeal",
-      "entry": "ducts.apply-heal",
-      "intent": "heal"
-    },
-    "assign": {
-      "kind": "command",
-      "input": "none",
-      "label": "Make the fan",
-      "review": "shown",
-      "deps": {
-        "page": [
-          "stage",
-          "system",
-          "fan"
-        ],
-        "work": [
-          "criteria",
-          "kinds",
-          "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "claims",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
-        ],
-        "readings": [
-          "ducts",
-          "sheetSnapshot",
-          "sheet"
-        ]
-      },
-      "captures": [
-        "ducts",
-        "sheetSnapshot",
-        "sheet"
-      ],
-      "ready": "fanReady",
-      "present": "presentFan",
-      "entry": "ducts.apply-assign-fan",
-      "intent": "assign"
+      "captures": [],
+      "ready": "sheetReady",
+      "patches": "sheetEdit",
+      "describe": "describeSheet"
     }
   },
   "panes": {
-    "sheet-roster": {
-      "label": "Fans",
-      "purpose": "Open fan ports",
-      "draws": [
-        "fans",
-        "sheet",
-        "sheetSnapshot"
-      ],
-      "verbs": [
-        "browse",
-        "edit",
-        "sheetEdit",
-        "scope",
-        "losses",
-        "heal",
-        "assign"
-      ],
-      "body": "sheet-roster"
-    },
     "sheet-inputs": {
       "label": "Inputs",
       "purpose": "Edit fan inputs",
@@ -883,33 +480,10 @@
       "verbs": [
         "browse",
         "edit",
-        "sheetEdit",
         "scope",
-        "losses",
-        "heal",
-        "assign"
+        "sheetEdit"
       ],
       "body": "sheet-inputs"
-    },
-    "sheet-picture": {
-      "label": "Picture",
-      "purpose": "Inspect fan paths",
-      "draws": [
-        "fans",
-        "sheet",
-        "sheetSnapshot",
-        "sheetView"
-      ],
-      "verbs": [
-        "browse",
-        "edit",
-        "sheetEdit",
-        "scope",
-        "losses",
-        "heal",
-        "assign"
-      ],
-      "body": "sheet-picture"
     },
     "sheet-ledger": {
       "label": "Ledger",
@@ -923,13 +497,44 @@
       "verbs": [
         "browse",
         "edit",
-        "sheetEdit",
         "scope",
-        "losses",
-        "heal",
-        "assign"
+        "sheetEdit"
       ],
       "body": "sheet-ledger"
+    },
+    "sheet-picture": {
+      "label": "Picture",
+      "purpose": "Inspect fan paths",
+      "draws": [
+        "fans",
+        "sheet",
+        "sheetSnapshot",
+        "sheetView"
+      ],
+      "verbs": [
+        "browse",
+        "edit",
+        "scope",
+        "sheetEdit"
+      ],
+      "body": "sheet-picture"
+    },
+    "sheet-roster": {
+      "label": "Fans",
+      "purpose": "Open fan ports",
+      "draws": [
+        "fans",
+        "sheet",
+        "sheetSnapshot",
+        "sheetView"
+      ],
+      "verbs": [
+        "browse",
+        "edit",
+        "scope",
+        "sheetEdit"
+      ],
+      "body": "sheet-roster"
     }
   },
   "layout": {
@@ -991,68 +596,98 @@
         "sheet-picture",
         "sheet-ledger"
       ],
-      "verbs": [
-        "losses"
-      ]
+      "verbs": []
     }
   },
   "stageOrder": [
     "sheet"
   ],
-  "predicates": {
-    "system": "hasSystem"
-  },
-  "salvage": "salvage",
+  "predicates": {},
   "cells": {
-    "assumptions": {
-      "segment": "assumptions",
-      "value": "assumptionsCell",
-      "groupOf": "groupassumptions",
-      "label": "labelassumptions",
+    "calculation": {
+      "segment": "calculation",
+      "value": "calculationCell",
+      "groupOf": "groupcalculation",
       "deps": {
         "page": [],
         "work": [],
         "readings": []
       }
     },
-    "rules": {
-      "segment": "rules",
-      "value": "rulesCell",
-      "groupOf": "grouprules",
-      "label": "labelrules",
+    "terminalDrops": {
+      "segment": "terminalDrops",
+      "value": "terminalDropsCell",
+      "groupOf": "groupterminalDrops",
       "deps": {
         "page": [],
         "work": [],
         "readings": []
       }
     },
-    "catalogs": {
-      "segment": "catalogs",
-      "value": "catalogsCell",
-      "groupOf": "groupcatalogs",
-      "label": "labelcatalogs",
+    "componentDrops": {
+      "segment": "componentDrops",
+      "value": "componentDropsCell",
+      "groupOf": "groupcomponentDrops",
       "deps": {
         "page": [],
         "work": [],
         "readings": []
       }
     },
-    "ruleAssignments": {
-      "segment": "ruleAssignments",
-      "value": "ruleAssignmentsCell",
-      "groupOf": "groupruleAssignments",
-      "label": "labelruleAssignments",
+    "esp": {
+      "segment": "esp",
+      "value": "espCell",
+      "groupOf": "groupesp",
       "deps": {
         "page": [],
         "work": [],
         "readings": []
       }
     },
-    "kinds": {
-      "segment": "kinds",
-      "value": "kindsCell",
-      "groupOf": "groupkinds",
-      "label": "labelkinds",
+    "equipmentFlows": {
+      "segment": "equipmentFlows",
+      "value": "equipmentFlowsCell",
+      "groupOf": "groupequipmentFlows",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      }
+    },
+    "roles": {
+      "segment": "roles",
+      "value": "rolesCell",
+      "groupOf": "grouproles",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      }
+    },
+    "flows": {
+      "segment": "flows",
+      "value": "flowsCell",
+      "groupOf": "groupflows",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      }
+    },
+    "parameters": {
+      "segment": "parameters",
+      "value": "parametersCell",
+      "groupOf": "groupparameters",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      }
+    },
+    "designFriction": {
+      "segment": null,
+      "value": "designFrictionCell",
+      "groupOf": "groupdesignFriction",
       "deps": {
         "page": [],
         "work": [],
@@ -1061,33 +696,9 @@
     }
   },
   "workFields": {
-    "subject": {
-      "label": "system membership",
-      "internal": false
-    },
-    "claims": {
-      "label": "element claims",
-      "internal": false
-    },
-    "labelParameter": {
-      "label": "label parameter",
-      "internal": false
-    },
-    "workingPhase": {
-      "label": "working phase",
-      "internal": false
-    },
-    "systemColours": {
-      "label": "system colours",
-      "internal": false
-    },
     "writeIntent": {
       "label": "write scope",
       "internal": true
-    },
-    "criteria": {
-      "label": "design criteria",
-      "internal": false
     }
   },
   "seeds": {

@@ -828,19 +828,15 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeESystems",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "e-systems"
     },
     "e-sidebar": {
@@ -855,47 +851,16 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeESidebar",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
-      "body": "e-sidebar"
-    },
-    "e-inputs": {
-      "label": "Inputs",
-      "purpose": "Edit flow, ESP, role and drop",
-      "draws": [
-        "fans",
-        "roster",
-        "ducts",
-        "tables",
-        "catalogs",
-        "pricing",
-        "meshes"
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
       ],
-      "verbs": {
-        "choose": "placeEInputs",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
-      "body": "e-inputs"
+      "body": "e-sidebar"
     },
     "e-rules-all": {
       "label": "All-systems rules",
@@ -909,19 +874,15 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeERulesAll",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "e-rules-all"
     },
     "e-rules": {
@@ -936,19 +897,15 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeERules",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "e-rules"
     },
     "e-picture": {
@@ -963,19 +920,15 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeEPicture",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "e-picture"
     },
     "e-inbox": {
@@ -990,19 +943,15 @@
         "pricing",
         "meshes"
       ],
-      "verbs": {
-        "choose": "placeEInbox",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "e-inbox"
     }
   },
@@ -1032,21 +981,8 @@
                 "kind": "gate",
                 "when": "system",
                 "child": {
-                  "kind": "split",
-                  "id": "inputs",
-                  "axis": "v",
-                  "size": 220,
-                  "children": [
-                    {
-                      "kind": "pane",
-                      "id": "e-sidebar"
-                    },
-                    {
-                      "kind": "pane",
-                      "id": "e-inputs"
-                    }
-                  ],
-                  "sized": "end"
+                  "kind": "pane",
+                  "id": "e-sidebar"
                 }
               }
             ],
@@ -1118,7 +1054,6 @@
       "panes": [
         "e-systems",
         "e-sidebar",
-        "e-inputs",
         "e-rules-all",
         "e-rules",
         "e-picture",

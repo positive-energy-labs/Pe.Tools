@@ -21,13 +21,11 @@ import { fixture } from "./fixtures/builtin.neutral.ts";
 
 async function entry(
   module = fixture,
-  workOwner?: BuiltinClosure["workOwner"],
 ): Promise<BuiltinEnrollment> {
   const envelope: BuiltinClosure = {
     source: "builtin-closure",
     version: 1,
     data: module.data,
-    workOwner,
     hostVersion: "u8b",
     modules: [{ id: "builtin.neutral.ts", sha256: "a".repeat(64) }],
     variants: [{ client: "web", entry: "builtin.neutral.ts" }],
@@ -35,7 +33,6 @@ async function entry(
     externals: [],
   };
   // Omit absent optional fields because JCS refuses undefined.
-  if (!workOwner) delete (envelope as { workOwner?: unknown }).workOwner;
   return {
     routeKey: module.data.key,
     closure: { envelope, fingerprint: await builtinClosureFingerprint(envelope) },
@@ -93,14 +90,15 @@ test("Captures admits only a registry receipt using its generated full web closu
   expect(run.service!.registry.resolve(route)).toBeNull();
 });
 
-test("Ducts owns the exclusive host Work and Fans presents the same canonical registration", async () => {
+test("Ducts and Fans own independent canonical host Work registrations", async () => {
   const f = workspace();
   const run = await open(f.workspace);
   try {
     if (!run.service) throw Error(JSON.stringify(run.result));
     const owner = run.service.routes.get("ducts")!;
     const presenter = run.service.routes.get("fans")!;
-    expect(presenter.workFingerprint).toBe(owner.workFingerprint);
+    // Q2: each admitted route owns its Work fingerprint.
+    expect(presenter.workFingerprint).not.toBe(owner.workFingerprint);
     const view = await f.workspace.view(bindWork("ducts", null), "ducts");
     expect(view!.doc).toEqual(ductsRouteState.schema.parse({}));
     expect(
@@ -114,7 +112,8 @@ test("Ducts owns the exclusive host Work and Fans presents the same canonical re
         ],
       }),
     ).toMatchObject({ ok: true });
-    expect(presenter.resolvedWork!.spec).toEqual(owner.resolvedWork!.spec);
+    expect(presenter.resolvedWork!.spec.route).toBe("fans");
+    expect(owner.resolvedWork!.spec.route).toBe("ducts");
     expect(createRouteRegistrations().some((row) => row.spec.route === "ducts")).toBe(false);
   } finally {
     await close(run.scope);
@@ -174,55 +173,17 @@ test("neutral Work migration precedes exact feeds; stale fingerprints refuse and
   expect(run.service!.registry.resolve(route)).toBeNull();
   release.forEach((stop) => stop());
 });
-test("a presenter admits its owner from closure data in any order, one migration", async () => {
+test("fans enrolls alone with its own Work registration", async () => {
+  const { fansHostModule } = await import("../../web/src/fans/neutral.ts");
   const f = workspace();
-  const migrate = vi.fn(fixture.bodies.upgrade!.run);
-  const owner = await entry({
-    ...fixture,
-    bodies: { upgrade: { ...fixture.bodies.upgrade!, run: migrate } },
-    workState: { ...fixture.workState!, migrations: { 1: migrate } },
-  });
-  f.saved.set(workKey(bindWork("u8b", null)), {
-    version: 1,
-    schemaVersion: 1,
-    revision: 7,
-    doc: { old: 3 },
-    history: [],
-  });
-  const pinned = workFingerprintSchema.parse(`builtin-closure:${owner.closure.fingerprint}`);
-  const presenterModule: HostRouteModule = {
-    data: {
-      ...fixture.data,
-      key: "u8b-presenter",
-      address: "/u8b-presenter",
-      work: { route: "u8b" },
-    },
-    schemas: {},
-    bodies: {},
-  };
-  const presenter = await entry(presenterModule, { route: "u8b", fingerprint: pinned });
-  const run = await open(f.workspace, [owner, presenter]);
-  expect(run.service).toBeDefined();
+  const fan = await entry(fansHostModule);
+  const run = await open(f.workspace, [fan]);
   try {
-    expect(run.service!.routes.get("u8b-presenter")!.workFingerprint).toBe(pinned);
-    expect(migrate).toHaveBeenCalledOnce();
-  } finally {
-    await close(run.scope);
-  }
-  // Order carries no meaning: the presenter's closure `workOwner` admits the owner first.
-  const reversed = await open(f.workspace, [presenter, owner]);
-  try {
-    expect(reversed.service!.routes.get("u8b-presenter")!.workFingerprint).toBe(pinned);
-    expect(migrate).toHaveBeenCalledOnce();
-  } finally {
-    await close(reversed.scope);
-  }
-  const stale = await entry(presenterModule, {
-    route: "u8b",
-    fingerprint: workFingerprintSchema.parse(`builtin-closure:${"0".repeat(64)}`),
-  });
-  const mismatch = await open(f.workspace, [owner, stale]);
-  expect(Exit.isFailure(mismatch.result)).toBe(true);
+    expect(run.service?.routes.get("fans")?.resolvedWork?.spec.route).toBe("fans");
+    expect(run.service?.routes.has("ducts")).toBe(false);
+    const key = bindWork("fans", null);
+    expect(await f.workspace.admitFeed(key, { routeKey: "fans", fingerprint: workFingerprintSchema.parse(`builtin-closure:${fan.closure.fingerprint}`) })).toBeNull();
+  } finally { await close(run.scope); }
 });
 test("partial startup failure unwinds prior Work registration with a typed failure", async () => {
   const f = workspace();

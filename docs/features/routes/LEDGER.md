@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-04, Q2 gives Fans its own declared Work, admission, writeIntent and edit doors; cross-route Work owner references are deleted. Q1/Q5 open Fans with empty fan inputs and empty undo after the Ducts split. (U3)
+
 - 2026-11-04, Work accepted/publication listener exceptions are isolated observation faults: log each fault, continue to peers and publish, and keep the committed write successful. Promise-island publication uses `finally` (COMMON 24). Persistence failures still reject before notification. Owner: [RouteWorkspace](../../../ts/packages/runtime/src/route-workspace.ts). (counsel, D5)
 
 - 2026-11-04, each network and sheet pane constructs only its own body; query and semantic landing live in Page. The fake-pane allowance is zero, enforced by [the pane-body law](../../../ts/tests/repo-guards/src/unification-pane-bodies.law.ts). Landing on a locked fan cell focuses the cell root (COMMON 8). (counsel, U1b)
@@ -73,6 +75,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Tried & rejected
 
+- 2026-11-04, A durable browser fixture harness is not intended. Prove persistence/isolation with deterministic cold shells over real RouteWorkspace; Manual D owns browser reload on a real dev host. (U3/counsel)
+
 - 2026-11-04, schema-level `ListSearch.readonly`: it changes Pea metadata. Keep readonly at the TypeScript display owners in [ListSearch](../../../ts/packages/agent-contracts/src/list-search.ts), [PicturePage](../../../ts/packages/agent-contracts/src/routes/picture.ts) and sheet display types. (counsel, U1b)
 
 - 2026-11-03, a `moved` host branch that births fans Work from ducts Work (FANSPLIT 3A) was superseded by Q5: delete the old fan edits. (counsel)
@@ -88,13 +92,18 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
-- U3: type `resolvedWork.schema` as `ZodType<W>`, remove admitted Work assertions, and give `PricingResult` a typed kernel output. Owners: [admitted mount](../../../ts/apps/web/src/shell/admitted-mount.ts), [kernel bodies](../../../ts/packages/agent-contracts/src/route-kernel-bodies.ts). (counsel, U1b)
+- PROTO-HOME owns the production `ducts/proto/` rename/deletion under COMMON 30. U3 leaves it in place to avoid U4/MOUNT-CUT conflicts. (counsel, U3, 2026-11-04)
+
+- 2026-11-04, scene/navigation snapshot units differ from Chadds `sheet.roster` IDs ([ducts fixture](../../../ts/apps/web/src/ducts/fixtures.ts#L45), [Fans kernel](../../../ts/apps/web/src/fans/kernel.tsx#L27)); align fixture identity before claiming a browser crossing from a Ducts fan row. Keep that leg UNPROVEN[Manual D on real Chadds]. (test-fixture owner, U3 finding)
+- 2026-11-04, root cell families enumerate every root property in [admitted cells](../../../ts/apps/web/src/shell/admitted-cells.ts#L81); Fans designFriction rows therefore include unrelated roots. The explicit friction editor writes the correct path; do not add route-local filtering. MOUNT-CUT owns this cells seam. (MOUNT-CUT, U3 finding accepted by counsel)
+- 2026-11-04, replace the named pricing SHIMs with actual reads of both Works. Manual D must prove browser reload persistence on the real dev host and the source-row crossing on real Chadds. Retain the pre-existing RHVAC stale-basis Apply/commit finding. (U4)
+
+- Give `PricingResult` a typed kernel output; its display cast remains in [screen.tsx](../../../ts/apps/web/src/ducts/proto/e/screen.tsx#L116). U3 closes the former Work-schema typing and accepted-Work assertions, leaving this output debt. (counsel, U1b; U3 follow-up)
 - Kernel owner: make completion/`settleWork` failure terminal and subscription lifetime scoped; census [the admitted mount](../../../ts/apps/web/src/shell/admitted-mount.ts) as its own kernel unit at aggregate review 1. The existing Common 15 rejection gap below remains. (counsel, U1b)
 - Manual D: finish opened-network-pane, Set-row and pending browser checks against a repaired fixture/native-schema lane. U1b browser observations cover older bytes, not the integrated tip; current behavior is UNPROVEN in that lane. Evidence: [U1b report](C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-b85d72ee/.artifacts/tmp/u1b/REPORT.md). (counsel, U1b)
 
 - Main is blocked while any `U4: fan cells reach apply-losses only through the fans Work` marker remains. U4 restores the eleven tests below without dropping their assertions; the two harness cases must read the actual fans binding instead of neutral fans before unskip. (counsel, 2026-11-03)
 - /ducts pricing reads the neutral fans Work until U4 wires the real one. (counsel, 2026-11-03)
-- U3 makes an absent fans Work an error when the fans route registers; remove the sole `pe-routes.ts` readWork fallback. (counsel B, 2026-11-03)
 - closure/route-directory hash cycle: closures embed `route-directory.ts`, and the directory holds the closure fingerprints, so both can never be fresh; the closure check stays green over a stale directory. (finding, U2r, 2026-11-03)
 - U4 re-enables `D03/C07: admitted losses preview is read-only, names sealed rows and commits only its scope` in [fans-native.test.ts:160](../../../ts/apps/host/tests/fans-native.test.ts#L160); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
 - U4 re-enables `W11: real Pea deadline controls the admitted sealed write` in [fans-native.test.ts:181](../../../ts/apps/host/tests/fans-native.test.ts#L181); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
@@ -111,7 +120,7 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - `shell/work-door-observation.ts`: completion rejection can strand waiting cell transitions; replace observation/completion ownership with typed terminals on success/failure/interruption and scoped subscription release. U1 has no rejection proof. (counsel/Common 15, 2026-11-04)
 - The readonly `DuctSnapshot` input sweep reached 28 files (16 production, 12 tests) and stopped; the alias was restored. U1b closes the Page viewport/`ListSearch` and `SheetReading` display casts with readonly display contracts. The broader snapshot sweep remains Owed. `Grids`/`Catalogs` were narrowed in two domain files. (counsel, 2026-11-04)
 - `source-route-services`/`ReadingContext` erases catalog input types before ducts sources; the one `ReadArgs` cast names the kernel gap. No per-reader decode was added. (counsel, 2026-11-04)
-- The sheet criteria pane retains the root criteria writer; other fan-owned cells stay locked until their Work is wired. Declared keyed ChoiceCell paths use `ctx.cells`. U1b deletes the aggregate `SheetBody`, not this writer. (counsel/Q2a, U1b, 2026-11-04)
+- Ducts retains its root criteria writer; fan-owned editors now live on Fans InputsBody/InputsSurface. The generic root-cell family enumeration remains with MOUNT-CUT above. (counsel/Q2a, U1b; U3, 2026-11-04)
 
 - Tag preservation across the route's own URL write is UNPROVEN; no dedicated test (fans-pick df93f1d2).
 

@@ -42,30 +42,16 @@ export async function admit(hostVersion = "fans-fixture") {
   );
   if (!owner.ok) throw Error(JSON.stringify(owner.diagnostics));
   if (!hostOwner.ok) throw Error(JSON.stringify(hostOwner.diagnostics));
-  const envelope = {
-    ...ownerEnvelope,
-    data: fans.data,
-    workOwner: { route: "ducts", fingerprint: owner.route.workFingerprint },
-  };
+  const envelope = { ...ownerEnvelope, data: fans.data };
   const fingerprint = await builtinClosureFingerprint(envelope);
+  const fanCatalog = Object.entries(fans.entries).map(([key, entry]) => ({ key, ...entry.axes, uses: [] }));
   const inventory = createBuiltinRouteInventory({
-    web: { module: fans, workOwner: owner.route, closure: { envelope, fingerprint }, catalog },
-    host: {
-      module: fansHostModule,
-      host: true,
-      workOwner: hostOwner.route,
-      closure: { envelope, fingerprint },
-      catalog,
-    },
+    web: { module: fans, closure: { envelope, fingerprint }, catalog: fanCatalog },
+    host: { module: fansHostModule, host: true, closure: { envelope, fingerprint }, catalog: fanCatalog },
   });
   const presenter = (await inventory.prepare("web", fingerprint)).admit(fans);
   const hostPresenter = (await inventory.prepare("host", fingerprint)).admitHost(fansHostModule);
   if (!presenter.ok) throw Error(JSON.stringify(presenter.diagnostics));
   if (!hostPresenter.ok) throw Error(JSON.stringify(hostPresenter.diagnostics));
-  return {
-    owner: owner.route,
-    presenter: presenter.route,
-    hostOwner: hostOwner.route,
-    hostPresenter: hostPresenter.route,
-  };
+  return { owner: owner.route, presenter: presenter.route, hostOwner: hostOwner.route, hostPresenter: hostPresenter.route };
 }

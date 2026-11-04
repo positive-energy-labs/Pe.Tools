@@ -67,7 +67,6 @@ export function admittedBuiltinsLayer(
       const byKey = new Map(inventory.map((entry) => [entry.routeKey, entry]));
       if (byKey.size !== inventory.length)
         return yield* Effect.fail(failed("inventory", "Duplicate builtin enrollment"));
-      // A presenter admits its owner first, from the closure's `workOwner`; each key admits once.
       const admit = (
         entry: BuiltinEnrollment,
       ): Effect.Effect<HostAdmittedRoute, BuiltinEnrollmentFailed> =>
@@ -75,11 +74,6 @@ export function admittedBuiltinsLayer(
           const key = entry.routeKey;
           const done = routes.get(key);
           if (done) return done;
-          const ownerKey = entry.closure.envelope.workOwner?.route;
-          const ownerEntry = ownerKey === undefined ? undefined : byKey.get(ownerKey);
-          if (ownerKey !== undefined && (!ownerEntry || ownerEntry.closure.envelope.workOwner))
-            return yield* Effect.fail(failed(key, `${ownerKey} cannot own presented Work`));
-          const owner = ownerEntry && (yield* admit(ownerEntry));
           const loaded = yield* Effect.tryPromise({
             try: entry.load,
             catch: (reason) => failed(key, reason),
@@ -92,7 +86,7 @@ export function admittedBuiltinsLayer(
           const prepared = yield* Effect.tryPromise({
             try: () =>
               createBuiltinRouteInventory({
-                [key]: { host: true, module, workOwner: owner, closure: entry.closure, catalog: [] },
+                [key]: { host: true, module, closure: entry.closure, catalog: [] },
               }).prepare(key, entry.closure.fingerprint),
             catch: (reason) => failed(key, reason),
           });

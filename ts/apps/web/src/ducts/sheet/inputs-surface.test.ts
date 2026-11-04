@@ -84,6 +84,7 @@ it("puts the model/walked conflict in the fan airflow cell without changing its 
   );
   const view = render(
     createElement(InputsSurface, {
+      ductsHref: "/ducts",
       ctx,
       busy: false,
       elementName: null,
@@ -212,6 +213,7 @@ it.each(["terminal:7:cfm", "join:1:0|2:0"])(
       restore,
     };
     const props = {
+      ductsHref: "/ducts",
       ctx,
       busy: false,
       elementName: null,
@@ -229,7 +231,8 @@ it.each(["terminal:7:cfm", "join:1:0|2:0"])(
     fireEvent.click(button);
     expect(restore).toHaveBeenCalledWith("clear-1");
     view.rerender(
-      createElement(InputsSurface, { ...props, history: { ...history, cleared: null } }),
+      createElement(InputsSurface, {
+      ...props, history: { ...history, cleared: null } }),
     );
     expect(view.queryByRole("button", { name: "Restore 100 cfm" })).toBeNull();
   },
@@ -242,6 +245,7 @@ it("labels the undoable row action Revert and records the same History name", ()
   const apply = vi.fn();
   const { getAllByRole } = render(
     createElement(InputsSurface, {
+      ductsHref: "/ducts",
       ctx,
       apply,
       busy: false,

@@ -1,7 +1,10 @@
 import { prescribedHydraulics } from "./hydraulic-closure.ts";
 import { componentFlows, type ComponentFlow } from "./component-flows.ts";
 import { physicalGraph, type PhysicalGraph, type CircuitReason } from "./physical-graph.ts";
-import type { DuctCalculation, DuctPortPin } from "@pe/agent-contracts";
+import type { DuctCalculation as Calculation, DuctPortPin as PortPin } from "@pe/agent-contracts";
+import type { Immutable } from "../../agent-contracts/src/route-kernel-data.ts";
+type DuctCalculation = Immutable<Calculation>;
+type DuctPortPin = Immutable<PortPin>;
 import type { GroupTree } from "./topology.ts";
 import { terminalCfm } from "./topology.ts";
 import type { DuctSnapshot } from "./types.ts";

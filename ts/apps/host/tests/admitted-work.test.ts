@@ -330,68 +330,12 @@ test("retirement during a disk census never runs the retired migration bodies", 
   expect(JSON.parse(readFileSync(f.path, "utf8")).value.doc).toEqual({ amount: 2, note: "new" });
 });
 
-test("a presenter pins its linked owner fingerprint; replacing the owner refuses only stale feeds", async () => {
+test("a foreign route cannot reference another route's Work", async () => {
   const f = await setup();
-  const module = {
-    ...builtinModule,
-    data: {
-      ...builtinModule.data,
-      key: "presenter",
-      address: "/presenter",
-      work: { route: "tiny" },
-    },
-  };
-  const envelope: BuiltinClosure = {
-    source: "builtin-closure",
-    version: 1,
-    data: module.data,
-    hostVersion: "test",
-    variants: [{ client: "web", entry: "bodies.js" }],
-    modules: [{ id: "bodies.js", sha256: "a".repeat(64) }],
-    inputs: [],
-    externals: [],
-    workOwner: { route: "tiny", fingerprint: f.admitted.workFingerprint },
-  };
+  const module = { ...builtinModule, data: { ...builtinModule.data, key: "foreign", address: "/foreign", work: { ...builtinModule.data.work, route: "tiny" } } };
+  const envelope: BuiltinClosure = { source: "builtin-closure", version: 1, data: module.data, hostVersion: "test", variants: [{ client: "web", entry: "bodies.js" }], modules: [{ id: "bodies.js", sha256: "a".repeat(64) }], inputs: [], externals: [] };
   const fingerprint = await builtinClosureFingerprint(envelope);
-  const inventory = createBuiltinRouteInventory({
-    presenter: {
-      module,
-      workOwner: f.admitted,
-      closure: { envelope, fingerprint },
-      catalog: Object.entries(module.entries).map(([key, entry]) => ({
-        key,
-        ...entry.axes,
-        uses: [],
-      })),
-    },
-  });
-  const presenter = (await inventory.prepare("presenter", fingerprint)).admitUnknown(module);
-  if (!presenter.ok) throw Error(JSON.stringify(presenter.diagnostics));
-  expect(presenter.route.workFingerprint).toBe(f.admitted.workFingerprint);
-  const census = vi.spyOn(f.store, "listState");
-  expect(await f.workspace.registerAdmitted(presenter.route).ready).toBeNull();
-  expect(census).not.toHaveBeenCalled();
-  const stale = f.feed("work", presenter.route.workFingerprint);
-  await vi.waitFor(() => expect(stale[0]?.kind).toBe("snapshot"));
-  const replacement = await route((doc) => doc, "builtin-closure", "owner-v2");
-  const registered = registerAdmittedHostRoute(replacement, f.workspace);
-  releases.push(registered.close);
-  expect(await registered.ready).toBeNull();
-  await vi.waitFor(() =>
-    expect(stale.at(-1)).toMatchObject({
-      kind: "failure",
-      failure: { kind: "registration-mismatch" },
-    }),
-  );
-  const current = f.feed("work", replacement.workFingerprint);
-  const refused = f.feed("work", presenter.route.workFingerprint);
-  await vi.waitFor(() => {
-    expect(current[0]?.kind).toBe("snapshot");
-    expect(refused[0]).toMatchObject({
-      kind: "failure",
-      failure: { kind: "registration-mismatch" },
-    });
-  });
-  expect(presenter.route.workFingerprint).toBe(f.admitted.workFingerprint);
-  expect(presenter.route.workFingerprint).not.toBe(replacement.workFingerprint);
+  const inventory = createBuiltinRouteInventory({ foreign: { module, closure: { envelope, fingerprint }, catalog: [] } });
+  expect((await inventory.prepare("foreign", fingerprint)).admitUnknown(module).ok).toBe(false);
+  expect(f.admitted.data.work?.route).toBe("tiny");
 });

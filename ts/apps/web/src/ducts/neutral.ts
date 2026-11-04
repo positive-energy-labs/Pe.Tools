@@ -43,7 +43,7 @@ describeInputHistory,
 editLabel,
 editMetaSchema,
 inputHistoryMetaSchema,
-} from "./sheet/input-history.ts";
+} from "./sheet/input-history.neutral.ts";
 
 const detail = ductsSheetResponseSchema.options;
 export const openSheetSchema = z.object({
@@ -876,13 +876,6 @@ export const ductsData = {
       verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-sidebar",
     },
-    "e-inputs": {
-      label: "Inputs",
-      purpose: "Edit flow, ESP, role and drop",
-      draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
-      verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
-      body: "e-inputs",
-    },
     "e-rules-all": {
       label: "All-systems rules",
       purpose: "Price every read fitting type",
@@ -949,21 +942,8 @@ export const ductsData = {
                 kind: "gate",
                 when: "system",
                 child: {
-                  kind: "split",
-                  id: "inputs",
-                  axis: "v",
-                  sized: "end",
-                  size: 220,
-                  children: [
-                    {
-                      kind: "pane",
-                      id: "e-sidebar",
-                    },
-                    {
-                      kind: "pane",
-                      id: "e-inputs",
-                    },
-                  ],
+                  kind: "pane",
+                  id: "e-sidebar",
                 },
               },
             ],
@@ -1024,7 +1004,6 @@ export const ductsData = {
       panes: [
         "e-systems",
         "e-sidebar",
-        "e-inputs",
         "e-rules-all",
         "e-rules",
         "e-picture",
@@ -1421,7 +1400,6 @@ export const neutralBodies = {
   | "price"
   | "e-systems"
   | "e-sidebar"
-  | "e-inputs"
   | "e-rules-all"
   | "e-rules"
   | "e-picture"
@@ -1444,3 +1422,12 @@ export const ductsHostModule = {
     dropFanCells: dropFanCellsBody,
   },
 };
+
+/** Carry only the destination subject and the document/fixture binding. */
+export function ductsLink(ids: readonly string[], search: Readonly<Record<string, unknown>>) {
+  const params = new URLSearchParams();
+  for (const key of ["target", "fixture", "thread"])
+    if (typeof search[key] === "string") params.set(key, search[key]);
+  params.set("system", JSON.stringify({ kind: "ids", ids: ids.map(id => localId("ducts-system", id)) }));
+  return `/ducts?${params}`;
+}

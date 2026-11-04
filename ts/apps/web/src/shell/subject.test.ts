@@ -95,3 +95,13 @@ test("an open set keeps its active member explicit: add never moves it, remove h
   expect(set.remove(all, "a")).toEqual({ kind: "ids", ids: ["b", "c", "d"] });
   expect(set.remove(all, "c")).toEqual({ kind: "ids", ids: ["a", "b", "d"] });
 });
+
+// FANSPLIT Q2: exercise admitted declarations as well as the legacy policy fixture.
+test("admitted ducts and fans publish distinct subject nouns and Work bindings", async () => {
+  const { admit } = await import("../fans/admission.fixture.ts");
+  const { owner, presenter } = await admit();
+  expect(owner.data.subject).toMatchObject({ field: "system", noun: "system" });
+  expect(presenter.data.subject).toMatchObject({ field: "fan", noun: "fan" });
+  expect(owner.resolvedWork?.spec.route).toBe("ducts");
+  expect(presenter.resolvedWork?.spec.route).toBe("fans");
+});

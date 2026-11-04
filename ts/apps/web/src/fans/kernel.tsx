@@ -1,18 +1,54 @@
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { LAYOUT_FIXTURE } from "../ducts/layout.fixture.ts";
+import { COLOURS_FIXTURE } from "../ducts/colours.fixture.ts";
+import { NAVIGATION_FIXTURE } from "../ducts/navigation.fixture.ts";
+import sheetFixture from "../ducts/sheet/sheet.fixture.json";
+import { SCENE_FIXTURE } from "../ducts/scene.fixture.ts";
+import { fansDocumentSchema } from "@pe/agent-contracts";
 import { createElement } from "react";
-import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import { jsonCodec } from "../../../../packages/agent-contracts/src/route-kernel-codecs";
-import { seedBodies } from "../ducts/fixtures";
-import { codecs, bodies as ductsBodies } from "../ducts/kernel";
-import { InputsBody, LedgerBody, PictureBody, RosterBody } from "../ducts/sheet/mount";
-import { sheetState } from "../ducts/sheet/state";
-import { ductsSources } from "../ducts/sources";
-import { identityCodecs } from "../shell/page-port";
-import { entries, fansData, fansNeutralBodies, schemas } from "./neutral";
+import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
+import { jsonCodec } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
+import { InputsBody, LedgerBody, PictureBody, RosterBody } from "../ducts/sheet/mount.tsx";
+import { sheetState } from "../ducts/sheet/state.ts";
+import { ductsSources } from "../ducts/sources.ts";
+import { identityCodecs } from "../shell/page-port.ts";
+import { entries, fansData, fansNeutralBodies, schemas } from "./neutral.ts";
 const source = { module: "fans/kernel.tsx", export: "bodies" };
+const seed = <const K extends string>(name: K, snapshot: DuctSnapshot) => ({
+  slot: `seeds.${name}.load` as const,
+  kind: "seed" as const,
+  source,
+  run: () => ({
+    work: fansDocumentSchema.parse({}),
+    readings: {
+      fans: entries["ducts.fans"].output.parse(sheetFixture.roster),
+      sheet: schemas.sheet.parse({
+        rows: sheetFixture.roster.rows,
+        progress: null,
+        opened: [],
+        open: {
+          overview: sheetFixture.overview,
+          inputs: sheetFixture.inputs,
+          elements: sheetFixture.elements,
+          legs: sheetFixture.legs,
+          worstLegs: [],
+          worksheet: null,
+        },
+      }),
+      sheetSnapshot: snapshot,
+      meshes: null,
+      pricing: null,
+    },
+  }),
+});
 export const bodies = {
   ...fansNeutralBodies,
-  ...seedBodies,
-  price: ductsBodies.price,
+  seedScene: seed("scene", SCENE_FIXTURE.snapshot),
+  seedLayout: seed("layout", LAYOUT_FIXTURE.snapshot),
+  seedColours: seed("colours", COLOURS_FIXTURE.snapshot),
+  seedNavigation: seed("navigation", NAVIGATION_FIXTURE.snapshot),
+  // SHIM: U4 replaces this dormant derive with pricing that reads both Works.
+  price: { slot: "readings.pricing.derive", kind: "derive", source, run: () => null },
   sheetView: {
     slot: "readings.sheetView.derive",
     kind: "derive",
@@ -43,9 +79,6 @@ export const bodies = {
     source,
     run: (ctx) => createElement(LedgerBody, { ctx }),
   },
-  presentLosses: ductsBodies.presentLosses,
-  presentHeal: ductsBodies.presentHeal,
-  presentFan: ductsBodies.presentFan,
 } satisfies BodyBindings<typeof fansData, typeof schemas, typeof entries>;
 export const module = {
   data: fansData,
@@ -54,7 +87,17 @@ export const module = {
   bodies,
   identities: { local: identityCodecs.local },
   codecs: {
-    ...codecs,
+    contextRadiusFt: jsonCodec(schemas.contextRadiusFt),
+    contextStyle: jsonCodec(schemas.contextStyle),
+    encoding: jsonCodec(schemas.encoding),
+    fan: jsonCodec(schemas.fan),
+    layers: jsonCodec(schemas.layers),
+    picture: jsonCodec(schemas.picture),
+    sceneView: jsonCodec(schemas.sceneView),
+    sheetPath: jsonCodec(schemas.sheetPath),
+    viewport: jsonCodec(schemas.viewport),
+    inputSearch: jsonCodec(schemas.inputSearch),
+    inputSort: jsonCodec(schemas.inputSort),
     stage: jsonCodec(schemas.sheetStage),
     rosterSearch: jsonCodec(schemas.rosterSearch),
     rosterSort: jsonCodec(schemas.rosterSort),

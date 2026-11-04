@@ -30,14 +30,14 @@ type TransactionPatch<G extends RouteGraphJson, S extends SchemaTable> =
   | Parameters<AcceptanceOwner<G, S>["restorePage"]>[0];
 
 /** Pure Page policy is supplied by the client; all state and publication remain here. */
-interface WorkServices<G extends RouteGraphJson, S extends SchemaTable> {
-  readonly workSchema: z.ZodType<Immutable<WorkOf<G, S>>>;
-  readonly hashWork: (value: Immutable<WorkOf<G, S>>) => string;
+interface WorkServices<W> {
+  readonly workSchema: z.ZodType<W>;
+  readonly hashWork: (value: W) => string;
   /** The composition root retains one journal per Work, independently of mounted UI. */
   readonly journal: (key: WorkKey) => WorkJournal;
 }
-export type ScopeGateOptions<G extends RouteGraphJson, S extends SchemaTable> = (
-  | WorkServices<G, S>
+export type ScopeGateOptions<G extends RouteGraphJson, S extends SchemaTable, W = Immutable<WorkOf<G, S>>> = (
+  | WorkServices<W>
   | { readonly workSchema?: never; readonly hashWork?: never; readonly journal?: never }
 ) & {
   /** Kernel composition resolves the new Work identity before publishing a subject move. */
@@ -70,15 +70,15 @@ function immutableCopy<T>(value: T): T {
 const refused = (message: string): MoveResult => ({ kind: "refused", code: "acceptance", message });
 
 /** One synchronous acceptance owner below React. UI disposal retires publication, not receipts. */
-export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaTable>(
-  options: ScopeGateOptions<G, S>,
-): AcceptanceOwner<G, S> {
+export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaTable, W = Immutable<WorkOf<G, S>>>(
+  options: ScopeGateOptions<G, S, W>,
+): AcceptanceOwner<G, S, W> {
   const suppliedWork = [options.workSchema, options.hashWork, options.journal].filter(
     Boolean,
   ).length;
   if (suppliedWork !== 0 && suppliedWork !== 3) throw Error("Incomplete Work acceptance services");
-  type Snapshot = AcceptanceSnapshot<G, S>;
-  const work = options as Partial<WorkServices<G, S>>;
+  type Snapshot = AcceptanceSnapshot<G, S, W>;
+  const work = options as Partial<WorkServices<W>>;
   const issuer = options.issuer ?? createRouteTokenIssuer();
   let state: Snapshot | null = null;
   let closed = false;
@@ -197,15 +197,15 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
   };
   function acceptWork(
     token: InvocationToken,
-    delivery: Extract<WorkDelivery<WorkOf<G, S>>, { kind: "ack" }>,
+    delivery: Extract<WorkDelivery<W>, { kind: "ack" }>,
   ): WorkReduction;
   function acceptWork(
     token: AcceptanceToken,
-    delivery: Exclude<WorkDelivery<WorkOf<G, S>>, { kind: "ack" }>,
+    delivery: Exclude<WorkDelivery<W>, { kind: "ack" }>,
   ): WorkReduction;
   function acceptWork(
     token: InvocationToken | AcceptanceToken,
-    delivery: WorkDelivery<WorkOf<G, S>>,
+    delivery: WorkDelivery<W>,
   ): WorkReduction {
     if (!work.workSchema || !work.hashWork || !work.journal)
       return { kind: "refused", reason: "wrong-work" };
@@ -278,7 +278,7 @@ export function createRouteScopeGate<G extends RouteGraphJson, S extends SchemaT
       continueInvocation();
       return { kind: "duplicate", revision, receipt };
     }
-    let value: Immutable<WorkOf<G, S>>;
+    let value: W;
     let hash: string;
     if (delivery.kind === "snapshot") {
       const decoded = work.workSchema.safeParse(delivery.value);

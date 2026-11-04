@@ -12,7 +12,6 @@ import { pricingJob,rememberAnalysis } from "./pricing-job";
 import {
 AllRulesBody,
 InboxBody,
-InputsBody,
 PictureBody,
 RulesBody,
 SystemsPane,
@@ -60,12 +59,6 @@ export const bodies = {
     kind: "pane",
     source,
     run: (ctx) => createElement(TreePane, { ctx }),
-  },
-  "e-inputs": {
-    slot: "panes.e-inputs.body",
-    kind: "pane",
-    source,
-    run: (ctx) => createElement(InputsBody, { ctx }),
   },
   "e-rules-all": {
     slot: "panes.e-rules-all.body",

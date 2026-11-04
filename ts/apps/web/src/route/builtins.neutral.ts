@@ -1,10 +1,6 @@
-/** The one builtin manifest: each admitted builtin's closure pin, decoded once, and its DOM-free
- * host module. The host imports only this file from apps/web/src; the package move is Owed in
- * docs/features/routes/LEDGER.md (`builtin-routes`). The owner relation is the closure's
- * `workOwner`, never a route-name literal or an array order. */
+/** Builtin closure pins and DOM-free host modules share one manifest. */
 import { z } from "zod";
 import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
-import { workFingerprintSchema } from "../../../../packages/agent-contracts/src/route-kernel-admission.ts";
 import type { BuiltinClosure } from "../../../../packages/agent-contracts/src/route-module.ts";
 import type { HostRouteModule } from "../../../../packages/agent-contracts/src/host-route-admission.ts";
 import { ductsHostModule } from "../ducts/neutral.ts";
@@ -26,7 +22,6 @@ const closureSchema: z.ZodType<{ fingerprint: string; envelope: BuiltinClosure }
       version: z.literal(1),
       hostVersion: z.string(),
       data: RouteGraphJson,
-      workOwner: z.strictObject({ route: z.string(), fingerprint: workFingerprintSchema }).optional(),
       variants: z.array(z.strictObject({ client: z.enum(["web", "pea"]), entry: z.string() })),
       modules: z.array(member),
       inputs: z.array(member),

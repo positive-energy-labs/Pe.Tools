@@ -4,6 +4,9 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 
 ## Decided
 
+- 2026-11-04, Q2a removes the Ducts Inputs pane; colours remain in Ducts Systems and kinds in All Rules, while fan settings and roles move to Fans InputsBody. Ducts links to Fans instead of writing Fans Work. (U3)
+- 2026-11-04, Drop the InputsPane list-presentation parity rows “inputs preserve scoped order and selection, while editing and fan verbs stay isolated from list activation” and “inputs use address grammar/name order and retain the unpriced waiting state” with the deleted pane (58f5b5e8); preserve owner-route editor and admitted-pane laws. (U3)
+
 - 2026-11-03, Ducts Work v2 drops fan cells and Load Preview at migration 1→2 (`dropFanCells`); fan edits are deleted, not moved, and fans Work starts empty. The host persists the migrated record with history `[]`. (kaitpw, Q5/Q1)
 - 2026-11-03, each route declares its own `writeIntent`: ducts holds groups, fan and rules cells; fans holds walk and fan cells. Pricing receives both Works as required inputs and keys its cache by both. (kaitpw, Q3/Q4)
 - 2026-11-03, Load Preview is deleted: the loads cell, Pea paste path and terminalFlows source. Flow precedence is edit, then rooms split, then Revit. (kaitpw)
@@ -175,7 +178,7 @@ Rebuilt 2026-10-21 as current truth after the close of the ducts walk; git holds
 - Direction, fan-coil flow truth (kaitpw 2026-11-03, CONVERGENCE (i) M3): push the fan's airflow into its grilles' airflow parameters, "so that setting airflow is purely an equipment edit". The split rule across grilles is open and evolves with the future rooms product.
 - Direction, topology checks C1 to C3 surface TBD (kaitpw 2026-11-03, CONVERGENCE (i)): "something like the duct network's small 'fix x' notification, and in 3D would be nice"; muse it extensively later with layers and keyed layers in the mix, since many semantic distinctions must stay intuitive.
 - C7 cap-tap auto-accept (kaitpw 2026-11-03, CONVERGENCE (i)): build it only if a Chadds census shows it is not niche; "if it is niche, it is resolved by hand. Count it before building." Witness: louver plenum 14106988, end cap 14107111, MUAS-1 intake duct 14122436, 2.63 in gap (UNPROVEN, no live read). Hap: you cannot model a sheet-metal duct box in Revit, and firms model plenum boxes this way routinely.
-- [M] Finish the /fans Work split: U3 registers its Work and U4 seals both revisions for writers. Q5 deletes the old fan edits; the ducts cells stay byte-equal through migration. (kaitpw, 2026-11-03)
+- [M] Finish the /fans Work split: U3 has registered its own Work; U4 still seals both revisions for writers. Q5 deletes the old fan edits; the ducts cells stay byte-equal through migration. (kaitpw, 2026-11-03; U3 status 2026-11-04)
 
 - S9 native consumption: prove host result matching against Revit velocity pressure for elbows, transitions and both tap legs; changed or ambiguous bases must refuse. See `PeLossServer.Calculate` TODO. No Revit session was authorized for S9.
 

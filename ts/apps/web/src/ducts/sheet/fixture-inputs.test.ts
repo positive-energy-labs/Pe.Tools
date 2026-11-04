@@ -7,7 +7,6 @@ import type {
   Observation,
   WorkWriteOutcome,
 } from "../../../../../packages/agent-contracts/src/work-journal-door";
-import fixture from "./sheet.fixture.json";
 const closes: (() => void)[] = [];
 afterEach(() =>
   closes
@@ -26,11 +25,11 @@ const settle = (value: Observation<WorkWriteOutcome>) =>
   );
 test("the admitted criteria editor resolves Work, and host Undo resolves the firm layer again", async () => {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.workBasis()).not.toBeNull());
+  await vi.waitFor(() => expect(f.owner.workBasis()).not.toBeNull());
+  // Q2: criteria belongs to the ducts Work, through its own edit door.
   const changed = await settle(
-    f.fans.invoke("sheetEdit", {
-      edits: { criteria: { allowanceInWg: { return: 0.35 } } },
-      basis: fixture.overview.basis,
+    f.owner.invoke("edit", {
+      patches: [{ path: ["criteria"], value: { edit: { value: { allowanceInWg: { return: 0.35 } } } } }],
       history: { label: "Return allowance" },
     }) as Observation<WorkWriteOutcome>,
   );
@@ -47,10 +46,10 @@ test("the admitted criteria editor resolves Work, and host Undo resolves the fir
     },
   };
   const current = () => {
-    const work = designOf(f.fans.work()!.value as Record<string, unknown>);
+    const work = designOf(f.owner.work()!.value as Record<string, unknown>);
     return resolveCriteria(stagedDucts(work, work), null, firm).allowanceInWg.return;
   };
   expect(current()).toMatchObject({ value: 0.35, source: "Work" });
-  expect(await f.fans.history!.undo()).toMatchObject({ ok: true });
+  expect(await f.owner.history!.undo()).toMatchObject({ ok: true });
   expect(current()).toMatchObject({ value: 0.2, source: "firm" });
 });

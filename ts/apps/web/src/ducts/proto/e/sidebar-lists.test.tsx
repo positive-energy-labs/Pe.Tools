@@ -13,12 +13,9 @@ import { hovered } from "@pe/kit/lang/attention";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { FanResult } from "@pe/ducts-domain/losses";
 import type { Priced } from "@pe/ducts-domain/pricing";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { readGestures } from "@pe/kit/keys";
 import { NativeObservationScope } from "#/revit/observation";
 import type { TreeNode } from "../b/model";
 import { SystemTree, type TreeCtx } from "./tree-sidebar";
-import { InputsPane, type InputsPaneProps } from "./inputs-pane";
 import { fanFacts } from "./fan-sections";
 import { Scroll } from "@pe/kit/lang/scroll";
 
@@ -38,11 +35,6 @@ vi.mock("@pe/kit/lang/collection", async (original) => {
   };
 });
 
-// Cell fixtures exercise the sidebar's event boundary; the Work cell implementations stay unchanged.
-vi.mock("./input-cells", () => ({
-  EquipmentCells: ({ id }: { id: number }) => <input aria-label={`unit cell ${id}`} />,
-  TerminalCells: ({ id }: { id: number }) => <input aria-label={`grille cell ${id}`} />,
-}));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -242,88 +234,7 @@ test("address query and name sort round trip; revealing an excluded selection ne
   expect(runs.map((row) => row.getAttribute("data-key"))).toEqual(["A other", "Z critical"]);
 });
 
-const inputs = (over: Partial<InputsPaneProps> = {}): InputsPaneProps => ({
-  snapshot: {
-    nodes: [
-      { id: 1, kind: "equipment" },
-      { id: 20, kind: "terminal" },
-      { id: 10, kind: "terminal" },
-    ],
-  } as DuctSnapshot,
-  priced: {} as Priced,
-  work: { doc: null, revision: 4, write: vi.fn(async () => null) },
-  scope: { groups: [], units: new Set([1]), terminals: new Set([10, 20]) },
-  nameOf: (id) => `Name ${id}`,
-  selected: null,
-  select: vi.fn(),
-  ...over,
-});
-
-test("inputs preserve scoped order and selection, while editing and fan verbs stay isolated from list activation", () => {
-  const registry = makeAtomRegistry();
-  const verb = vi.fn();
-  const props = inputs({ selected: 20, fanVerbs: () => <button onClick={verb}>make fan</button> });
-  render(
-    <TestAttention registry={registry}>
-      <InputsPane {...props} />
-    </TestAttention>,
-  );
-  expect(screen.getAllByRole("option").map((row) => row.getAttribute("data-key"))).toEqual([
-    "unit:1",
-    "grille:20",
-    "grille:10",
-  ]);
-  expect(keyed("grille:20").getAttribute("aria-selected")).toBe("true");
-  expect(readGestures()).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ keys: ["Enter"], label: "commit, next row" }),
-      expect.objectContaining({ keys: ["Tab"], label: "commit, next cell" }),
-      expect.objectContaining({ keys: ["Esc"], label: "drop the typed value" }),
-      expect.objectContaining({ pointer: "click", label: "select in the picture" }),
-    ]),
-  );
-  const cell = screen.getByRole("textbox", { name: "unit cell 1" });
-  cell.focus();
-  fireEvent.click(cell);
-  fireEvent.keyDown(cell, { key: "ArrowDown" });
-  fireEvent.keyDown(cell, { key: "Enter" });
-  fireEvent.keyDown(cell, { key: "Escape" });
-  fireEvent.click(screen.getByRole("button", { name: "make fan" }));
-  expect(verb).toHaveBeenCalledOnce();
-  expect(props.select).not.toHaveBeenCalled();
-  fireEvent.click(within(keyed("unit:1")).getByText("Name 1"));
-  expect(props.select).toHaveBeenCalledWith(1);
-  fireEvent.pointerOver(keyed("grille:10"));
-  expect(registry.get(hovered)?.key ?? null).toBe("e:10");
-  fireEvent.pointerOver(document.body.querySelector(".contents")!);
-  expect(registry.get(hovered)?.key ?? null).toBeNull();
-});
-
-test("inputs use address grammar/name order and retain the unpriced waiting state", async () => {
-  const changed = vi.fn();
-  const props = inputs({
-    selected: 20,
-    address: { search: search("", { kind: "grille" }), sort: "name", onChange: changed },
-  });
-  const view = render(<InputsPane {...props} />);
-  expect(screen.getAllByRole("option").map((row) => row.getAttribute("data-key"))).toEqual([
-    "grille:10",
-    "grille:20",
-  ]);
-  expect(changed).not.toHaveBeenCalled();
-  fireEvent.change(screen.getByRole("combobox", { name: "Search inputs" }), {
-    target: { value: "10" },
-  });
-  await waitFor(() =>
-    expect(changed).toHaveBeenCalledWith(search("10", { kind: "grille" }), "name"),
-  );
-  view.rerender(<InputsPane {...inputs({ priced: null })} />);
-  expect(
-    screen.getByText("flow, ESP and role cells open once the loss tables are read"),
-  ).toBeTruthy();
-  expect(screen.queryByRole("listbox")).toBeNull();
-});
-
+// Q2: the removed Ducts Inputs pane is exercised through the admitted Fans pane instead.
 const fan = (unit: number, critical: number | null, cfm: number): FanResult => ({
   unit,
   cfm,

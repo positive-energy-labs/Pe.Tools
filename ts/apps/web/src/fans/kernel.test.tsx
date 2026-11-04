@@ -1,95 +1,48 @@
 import { expect, test } from "vite-plus/test";
-import {
-  builtinClosureFingerprint,
-  createBuiltinRouteInventory,
-  type AdmittedRoute,
-} from "../../../../packages/agent-contracts/src/route-module";
-import { module as capturesModule } from "../captures/kernel";
-import { ductsDocumentSchema } from "@pe/agent-contracts";
+import { fansDocumentSchema } from "@pe/agent-contracts";
+import { admit } from "./admission.fixture.ts";
+import { z } from "zod";
+import { builtinClosureFingerprint, createBuiltinRouteInventory } from "../../../../packages/agent-contracts/src/route-module.ts";
+import { module as fans } from "./kernel.tsx";
+import { fansLink } from "./neutral.ts";
+import { localSubject } from "../ducts/neutral.ts";
+import { selectedFans, stableFanKey } from "../ducts/sheet/model.ts";
+import sheet from "../ducts/sheet/sheet.fixture.json";
 
-async function admit(
-  key: string,
-  work: unknown,
-  owner?: AdmittedRoute,
-  linkedOwner = owner,
-  hostVersion = "w1-fixture",
-) {
-  const module = {
-    ...capturesModule,
-    schemas: { ...capturesModule.schemas, work: ductsDocumentSchema },
-    data: {
-      ...capturesModule.data,
-      key,
-      address: `/${key}`,
-      capabilities: ["work"] as const,
-      work,
-    },
-  };
-  const envelope = {
-    source: "builtin-closure" as const,
-    version: 1 as const,
-    data: module.data as never,
-    hostVersion,
-    variants: [{ client: "web" as const, entry: "route.js" }],
-    modules: [{ id: "route.js", sha256: "a".repeat(64) }],
-    inputs: [],
-    externals: [],
-    ...(linkedOwner && {
-      workOwner: { route: linkedOwner.data.key, fingerprint: linkedOwner.workFingerprint },
-    }),
-  };
-  const fingerprint = await builtinClosureFingerprint(envelope);
-  const inventory = createBuiltinRouteInventory({
-    route: {
-      module,
-      workOwner: owner,
-      closure: { envelope, fingerprint },
-      catalog: Object.entries(module.entries).map(([key, entry]) => ({
-        key,
-        ...entry.axes,
-        uses: [],
-      })),
-    },
-  });
-  return (await inventory.prepare("route", fingerprint)).admitUnknown(module);
-}
-const spec = { route: "ducts", schema: "work", version: 1, migrations: {} };
-test("shared Work resolves the admitted owner's schema and pinned fingerprint", async () => {
-  const owner = await admit("ducts", spec);
-  if (!owner.ok) throw Error(JSON.stringify(owner.diagnostics));
-  const presenter = await admit("fans", { route: "ducts" }, owner.route);
-  if (!presenter.ok) throw Error(JSON.stringify(presenter.diagnostics));
-  expect(presenter.route.workFingerprint).toBe(owner.route.workFingerprint);
-  expect(presenter.route.resolvedWork).toBe(owner.route.resolvedWork);
-});
-test("shared Work refuses a missing admitted owner", async () => {
-  const result = await admit("fans", { route: "ducts" });
-  expect(result.ok).toBe(false);
-  if (!result.ok)
-    expect(result.diagnostics).toContainEqual(
-      expect.objectContaining({ path: "work.route", code: "missing" }),
-    );
-});
-test("shared Work refuses redeclaring the owner's schema", async () => {
-  const owner = await admit("ducts", spec);
-  if (!owner.ok) throw Error(JSON.stringify(owner.diagnostics));
-  const result = await admit("fans", spec, owner.route);
-  expect(result.ok).toBe(false);
-  if (!result.ok)
-    expect(result.diagnostics).toContainEqual(
-      expect.objectContaining({ path: "work.route", code: "policy" }),
-    );
+test("fans admits its own schema and fingerprint independently of ducts", async () => {
+  const { owner, presenter, hostPresenter } = await admit();
+  expect(presenter.data.work).toEqual({ route: "fans", schema: "work", version: 1, migrations: {} });
+  expect(presenter.workFingerprint).not.toBe(owner.workFingerprint);
+  expect(presenter.resolvedWork?.schema.parse({})).toEqual(fansDocumentSchema.parse({}));
+  expect(hostPresenter.resolvedWork?.spec.route).toBe("fans");
 });
 
-test("shared Work cannot relink an old presenter envelope to a new owner admission", async () => {
-  const old = await admit("ducts", spec);
-  const changed = await admit("ducts", spec, undefined, undefined, "owner-v2");
-  if (!old.ok || !changed.ok) throw Error("Owner admission failed");
-  expect(old.route.workFingerprint).not.toBe(changed.route.workFingerprint);
-  const result = await admit("fans", { route: "ducts" }, changed.route, old.route);
-  expect(result.ok).toBe(false);
-  if (!result.ok)
-    expect(result.diagnostics).toContainEqual(
-      expect.objectContaining({ path: "work.route", code: "identity" }),
-    );
+test("nominal Work schema boundary refuses unknown keys and mismatched schema objects", async () => {
+  for (const unknown of [true, false]) {
+    const data = { ...fans.data, work: { ...fans.data.work, schema: unknown ? "missing" : "work" } };
+    const original = { ...fans, data };
+    const envelope = { source: "builtin-closure" as const, version: 1 as const, data,
+      hostVersion: "schema-boundary-test", variants: [{ client: "web" as const, entry: "fixture.ts" }],
+      modules: [{ id: "fixture.ts", sha256: "a".repeat(64) }], inputs: [], externals: [] };
+    const fingerprint = await builtinClosureFingerprint(envelope);
+    const inventory = createBuiltinRouteInventory({ fans: { module: original,
+      closure: { envelope, fingerprint }, catalog: Object.entries(fans.entries).map(([key, entry]) => ({ key, ...entry.axes, uses: [] })) } });
+    const admission = await inventory.prepare("fans", fingerprint);
+    const result = admission.admitUnknown(unknown ? original : { ...original,
+      schemas: { ...original.schemas, work: z.object({ unrelated: z.string() }) } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics.some(diagnostic =>
+      /schema|Bindings differ/i.test(diagnostic.message))).toBe(true);
+  }
+});
+
+test("fan links carry the destination identity and binding without ducts Page fields", () => {
+  const row = sheet.roster.rows[0];
+  if (!row) throw Error("The captured roster has no fan");
+  const url = new URL(fansLink([stableFanKey(row)], { fixture: "scene", target: "document", thread: "t", system: "SA", selected: "duct" }), "https://fixture.invalid");
+  expect(url.pathname).toBe("/fans");
+  expect([...url.searchParams.keys()].sort()).toEqual(["fan", "fixture", "target", "thread"]);
+  const subject = JSON.parse(url.searchParams.get("fan") ?? "null");
+  expect(fans.codecs.fan.decode(url.searchParams.get("fan") ?? "")).toEqual({ ok: true, value: subject });
+  expect(selectedFans(subject.ids.map(localSubject), sheet.roster.rows)).toEqual([row]);
 });

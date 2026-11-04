@@ -2447,85 +2447,18 @@ test("ModelWrite refuses a stale rendered Work basis before acquiring any previe
   expect(f.preview().input.work.revision).toBe(current.workRevision);
 });
 
-async function presentingRoute(
-  owner: import("../../../../packages/agent-contracts/src/route-module").AdmittedRoute,
-) {
-  const { createAdmittedRouteRegistry, resolveRouteBindings } =
-    await import("../../../../packages/agent-contracts/src/route-module");
+test("a mount never receives an admission referring to another route's Work", async () => {
+  const owner = await workRoute();
+  const { createAdmittedRouteRegistry, resolveRouteBindings } = await import("../../../../packages/agent-contracts/src/route-module");
   const registry = createAdmittedRouteRegistry();
   const registration = registry.register(owner);
-  const bindings = resolveRouteBindings(registry, owner)!;
-  const module = {
-    ...bindings,
-    data: {
-      ...owner.data,
-      key: "presenter",
-      address: "/presenter",
-      work: { route: owner.data.key },
-    },
-  };
-  const envelope = {
-    source: "builtin-closure" as const,
-    version: 1 as const,
-    data: module.data,
-    hostVersion: "test",
-    variants: [{ client: "web" as const, entry: "witness.ts" }],
-    modules: [{ id: "witness.ts", sha256: "a".repeat(64) }],
-    inputs: [],
-    externals: [],
-    workOwner: { route: owner.data.key, fingerprint: owner.workFingerprint },
-  };
+  const module = { ...resolveRouteBindings(registry, owner)!, data: { ...owner.data, key: "foreign", address: "/foreign", work: { ...owner.data.work!, route: "note" } } };
+  const envelope = { source: "builtin-closure" as const, version: 1 as const, data: module.data, hostVersion: "test", variants: [{ client: "web" as const, entry: "witness.ts" }], modules: [{ id: "witness.ts", sha256: "a".repeat(64) }], inputs: [], externals: [] };
   const fingerprint = await builtinClosureFingerprint(envelope);
-  const inventory = createBuiltinRouteInventory({
-    presenter: {
-      module,
-      workOwner: owner,
-      closure: { envelope, fingerprint },
-      catalog: Object.entries(bindings.entries).map(([key, entry]) => ({
-        key,
-        ...entry.axes,
-        uses: [],
-      })) as never,
-    },
-  });
-  const result = (await inventory.prepare("presenter", fingerprint)).admitUnknown(module);
+  const inventory = createBuiltinRouteInventory({ foreign: { module, closure: { envelope, fingerprint }, catalog: [] } });
+  const result = (await inventory.prepare("foreign", fingerprint)).admitUnknown(module);
+  expect(result.ok).toBe(false);
   registration.deactivate();
-  if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
-  return result.route;
-}
-
-test("two routes edit, undo and redo one owner's accepted Work in order", async () => {
-  const owner = await workRoute();
-  const presenter = await presentingRoute(owner);
-  const store = createFixtureWorkDoor(
-    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
-    { amount: 0 },
-  );
-  const scopes: string[] = [];
-  const door: WorkJournalDoor = {
-    ...store,
-    open(scope) {
-      scopes.push(scope.route);
-      expect(scope.key.route).toBe("note");
-      expect(scope.fingerprint).toBe(owner.workFingerprint);
-      return store.open(scope);
-    },
-  };
-  const shell = createRouteShell({ ...transports().services, work: door });
-  const a = shell.mount(owner, placeInput(locationPort().address));
-  const b = shell.mount(presenter, placeInput(locationPort().address));
-  closes.push(a.close, b.close);
-  await settle(a.invoke("change", 2) as Observation<WorkWriteOutcome>);
-  expect(b.work()).toEqual({ revision: 1, value: { amount: 2 } });
-  await settle(b.invoke("change", 3) as Observation<WorkWriteOutcome>);
-  expect(a.work()).toEqual({ revision: 2, value: { amount: 5 } });
-  expect(b.workBasis()?.token.scope.identity.work?.route).toBe("note");
-  await b.history!.undo();
-  expect(a.work()?.value).toEqual({ amount: 2 });
-  await b.history!.redo();
-  expect(a.work()?.value).toEqual({ amount: 5 });
-  expect(a.work()).toEqual(b.work());
-  expect(scopes).toEqual(["note", "note"]);
 });
 
 test.each(["accepted", "refused"] as const)(

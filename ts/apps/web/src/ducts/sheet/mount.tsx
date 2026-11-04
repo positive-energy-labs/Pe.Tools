@@ -1,3 +1,9 @@
+import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
+import { StateCell, cellFromDraft } from "@pe/kit/lang/cell";
+import { reviewTransitions } from "#/components/work/band";
+import { ChoiceCell } from "./choice-cell.tsx";
+import { Button } from "@pe/kit/lang/button";
+import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
 import { AttentionRoot } from "#/attention";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { NativeObservationScope } from "#/revit/observation";
@@ -11,7 +17,7 @@ DuctsSheetEdits,
 PicturePage,
 RouteStatePatch,
 } from "@pe/agent-contracts";
-import { ductsDesign,neutralFansWork,transitionPatches } from "@pe/agent-contracts";
+import { ductsDesign,transitionPatches } from "@pe/agent-contracts";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { elementKey,type SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
@@ -22,10 +28,10 @@ import type { PaneContext } from "../../../../../packages/agent-contracts/src/ro
 import { entries,fansData,schemas } from "../../fans/neutral";
 import { attentionSubjects } from "../cell-focus";
 import { localId,localSubject,namesOf } from "../neutral.ts";
-import { subjectLink } from "../subject-link";
+import { ductsLink } from "../neutral.ts";
 import { subjectNamer } from "../subject-text";
 import { describeCloser,type Closer } from "./closer";
-import { editLabel,presentInputHistory,type EditMeta } from "./input-history";
+import { editLabel,presentInputHistory,type EditMeta } from "./input-history.neutral";
 import { InputsSurface } from "./inputs-surface";
 import { rosterOrder,stableFanKey,withComputed,type FanPort } from "./model";
 import { SheetPicture } from "./picture";
@@ -116,7 +122,7 @@ export function RosterBody({
             .filter((name): name is string => !!name),
         ),
       ].map((name) => (
-        <a key={name} href={subjectLink("ducts", [name], search)}>
+        <a key={name} href={ductsLink([name], search)}>
           {name}
         </a>
       ))}
@@ -166,9 +172,47 @@ export function InputsBody({
       void ctx.history?.undo(press);
     },
   };
+  const search = useRouteSearchSlice(search => search);
   const fanReading = fans.value;
+  const friction = ctx.work?.designFriction ?? {};
   const ownPane = (
+    <>
+      <section aria-label="Fan settings" className="flex flex-col gap-2 p-1">
+        <span data-sheet-cell="Design friction" aria-label="Design friction" className="flex items-baseline gap-2">
+          <span>Design friction</span>
+          <StateCell {...cellFromDraft(friction, { value: String(friction.edit?.value ?? DEFAULT_DESIGN_FRICTION_RATE),
+            cap: ctx.workBasis ? "editable" : "locked", capReason: "Read Work before editing" }, String)} scale="row"
+            numeric={{ min: 0, digits: 3 }} unit={{ label: "in-wg/100 ft" }}
+            onCommit={(text: string) => write(transitionPatches([], "designFriction", friction,
+              { kind: "set", rung: { value: Number(text) } }), { label: "Design friction" }).then(result => result?.message)}
+            transitions={reviewTransitions({ segment: null, revision: ctx.workBasis?.workRevision ?? null, write: patches => write(patches, { label: "Design friction" }) }, "designFriction", friction)} />
+          <span data-input-source={friction.edit ? "Work" : "default"}>{friction.edit ? "Work" : "default"}</span>
+        </span>
+        {([["fanStatic", "Unit ESP"], ["terminalDrop", "Grille drop"], ["componentDrop", "Component drop"], ["fittingCoefficient", "Fitting coefficient"]] as const).map(([key, label]) => {
+          const cell = ctx.work?.parameters[key] ?? {};
+          return <label key={key} className="flex items-baseline gap-2"><span>{label}</span>
+            <StateCell {...cellFromDraft(cell, { value: snapshot.slots[key], cap: "editable" }, String)} scale="row"
+              onCommit={(value: string) => write(transitionPatches(["parameters"], key, cell, { kind: "set", rung: { value } }), { label }).then(result => result?.message)}
+              transitions={reviewTransitions({ segment: "parameters", revision: ctx.workBasis?.workRevision ?? null, write: patches => write(patches, { label }) }, key, cell)} />
+          </label>;
+        })}
+        {snapshot.nodes.filter(node => node.kind === "equipment").map(node => {
+          const key = String(node.id);
+          const cell = ctx.work?.roles[key] ?? {};
+          const label = `Unit role ${nameOf(node.id)}`;
+          return <label key={key} className="flex items-baseline gap-2"><span>{label}</span>
+            <ChoiceCell label={label} cell={cell} path={["roles", key]} show={JSON.stringify}
+              current={cell.edit?.value.role ?? sheet?.inputs?.inputs.units[key]?.role.value ?? suggestRole(node, suggestKind(node).kind)}
+              options={[{ key: "fan", label: "Fan" }, { key: "passive", label: "Passive" }]}
+              refusal={ctx.workBasis ? null : "Read Work before editing"}
+              pick={role => void write(transitionPatches(["roles"], key, cell, { kind: "set", rung: { value: { role } } }), { label })}
+              act={async (_path, cell, kind) => write(transitionPatches(["roles"], key, cell, { kind }), { label })} />
+            {cell.edit && <Button label="Clear unit role" onClick={() => void write(transitionPatches(["roles"], key, cell, { kind: "clear" }), { label })}>Clear unit role</Button>}
+          </label>;
+        })}
+      </section>
     <InputsSurface
+      ductsHref={ductsLink(snapshot.systems.map(system => system.name), search)}
       ctx={{
         snapshot,
         doc: workDoc,
@@ -197,20 +241,14 @@ export function InputsBody({
       history={history}
       nameOf={nameOf}
       act={async (path, cell, kind, label) => {
-        if (path.length === 1) {
-          // temporary: criteria writer moves to fans with its cells (U2/U3, Q2a)
-          return write(transitionPatches([], path[0], cell, { kind }), {
-            label: `${kind} Pea's ${label}`,
-          });
-        }
-        // U4 moves parameter cells and their writer to the fans Work.
-        if (path[0] === "parameters") return { code: "unavailable", message: "Fan parameter editing is unavailable" };
-        const result = await settleWork(ctx.cells[kind](path[0], path[1]));
-        return result.kind === "refused"
-          ? { code: "refused", message: result.refusal.error }
-          : null;
+        if (path.length === 1 || path[0] !== "parameters")
+          return { code: "unavailable", message: "Edit duct rules on /ducts" };
+        return write(transitionPatches(["parameters"], path[1], cell, { kind }), {
+          label: `${kind} Pea's ${label}`,
+        });
       }}
     />
+    </>
   );
   return (
     <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf}>
@@ -291,8 +329,8 @@ export function LedgerBody({
   const select = (selected: string) =>
     ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
   const state = ctx.readings.sheetView.value ?? EMPTY_SHEET_STATE;
-  const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null) =>
-    describeCloser(blocker, typed, {
+  const closerOf = (blocker: import("./tiers").SheetBlocker, typed: number | null): Closer => {
+    const closer = describeCloser(blocker, typed, {
       terminalDrop: state.inputs?.criteria.terminalDropInWg ?? null,
       nameOf,
       wait: busy
@@ -320,24 +358,21 @@ export function LedgerBody({
       fittingOf: (key) => sheet?.inputs?.fittings.find((f) => f.key === key) ?? null,
       tableTitles: sheet?.inputs?.tableTitles ?? {},
     });
+    const owned = (action: Closer["action"]) => action?.kind === "drop" || action?.kind === "cfm" || action?.kind === "unitCfm";
+    return {
+      ...closer,
+      action: owned(closer.action) ? closer.action : null,
+      refusal: owned(closer.action) ? closer.refusal : "Edit duct rules on /ducts",
+      secondary: null,
+      crossing: null,
+      choices: null,
+    };
+  };
   const editsFor = (closers: readonly Closer[]) =>
     closers.reduce<DuctsSheetEdits>((edits, closer) => {
       if (closer.refusal || !closer.action) return edits;
       const action = closer.action;
       switch (action.kind) {
-        case "rule":
-          return {
-            ...edits,
-            joins: [
-              ...(edits.joins ?? []),
-              { pair: [action.pair[0], action.pair[1]], verdict: "accept" },
-            ],
-          };
-        case "cap":
-          return {
-            ...edits,
-            ends: [...(edits.ends ?? []), { end: action.end, verdict: "capped" }],
-          };
         case "drop":
           return action.terminal
             ? {
@@ -361,21 +396,8 @@ export function LedgerBody({
             ...edits,
             equipmentFlows: { ...edits.equipmentFlows, [action.unitId]: { cfm: action.value } },
           };
-        case "price":
-          return {
-            ...edits,
-            assignments: { ...edits.assignments, [action.family]: { rule: action.rule } },
-            ...(action.table
-              ? { tables: { ...edits.tables, [action.rule]: { table: action.table } } }
-              : {}),
-          };
-        case "table":
-          return { ...edits, tables: { ...edits.tables, [action.rule]: { table: action.table } } };
-        case "pathDrop":
-          return {
-            ...edits,
-            fittingDrops: { ...edits.fittingDrops, [action.key]: { inWg: action.value } },
-          };
+        case "rule": case "cap": case "price": case "table": case "pathDrop":
+          return edits;
       }
     }, {});
   const ownPane = (
@@ -412,8 +434,8 @@ function sheetSnapshot(reading: SheetContext["readings"]["sheetSnapshot"]) {
   return (reading.value ?? EMPTY_SNAPSHOT) as import("@pe/ducts-domain/types").DuctSnapshot;
 }
 function sheetWork(value: SheetContext["work"]) {
-  // U4 wires the real fans Work here.
-  return ductsDesign(value, neutralFansWork);
+  // SHIM: U4 supplies the ducts Work reading for fan sheet projections.
+  return value ? ductsDesign(null, value) : null;
 }
 function SheetFrame({
   ctx,
