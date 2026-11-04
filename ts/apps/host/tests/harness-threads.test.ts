@@ -1,6 +1,6 @@
 // U4 wires the real fans Work for callers without one.
 import { neutralFansWork } from "@pe/agent-contracts";
-import { consentService, harnessThreads, testSpawner } from "./effect-test.ts";
+import { consentService, harnessThreads, testSpawner, settle } from "./effect-test.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
@@ -1780,8 +1780,7 @@ test("Stop escalation logs a retiring failure as ThreadRetireFailed", async () =
   } finally {
     stop.mockRestore();
     log.mockRestore();
-    // effect-edge: test-runner
-    await Effect.runPromise(stopChild(detached));
+    await settle(stopChild(detached));
     await h.close();
   }
 });
