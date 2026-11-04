@@ -6,6 +6,8 @@ design-system ledger, not restated here.
 
 ## Decided
 
+- 2026-11-04, request admission preserves and recursively freezes the host-owned Caller; scope data is still cloned. This keeps minted page-door identity through native admission. Retiring a door also deletes its WeakMap entry; unminted and retired callers remain refused. Owners: [request-services.ts](../../../ts/apps/host/src/request-services.ts) and [control.ts](../../../ts/apps/host/src/control.ts). (counsel, PAGEDOOR; ADR 0029 rule 2)
+
 - 2026-11-04, `/call` may forward `notDispatched` only from evidence that nothing contradicts; a problem-shaped error with unknown provenance cannot claim no dispatch. Contradictory `dispatched` evidence wins. This is retry authority: [the action journal](../../../ts/apps/host/src/action-journal.ts) may repeat a failed step on resume. [Dispatch-evidence laws](../../../ts/apps/host/tests/call-dispatch-evidence.test.ts) cover the HTTP boundary; native mutation behavior remains UNPROVEN here. (counsel, NOTDISP)
 
 - 2026-11-04, dev endpoint callers wait for their local supervisor's launch result before receipt discovery. Readiness settles before Revit UI bridge work, so a caller on that UI thread can wait safely; the existing launcher budget and ownership checks remain authoritative. With no matching supervisor the caller fails fast. (HOSTREADY, counsel)
@@ -211,7 +213,6 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 
 ## Owed
 
-- PAGE-DOOR-KEY remains open, owned by the separate PAGEDOOR unit: cloning an admitted page Caller loses its WeakMap admission. HOSTFIX contains only SEQ-ONE, finalizer logging and the MCP fiber-abort fix; it does not repair page-caller custody. Source: [control.ts](../../../ts/apps/host/src/control.ts); evidence: [HOSTFIX report](C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-ae3427fc/.artifacts/tmp/hostfix/REPORT.md), `page-regression.patch`. (counsel, HOSTFIX, 2026-11-04)
 
 - After main, retire competing failure mappers through the closed `DoorFailure` path (Effect audit P3); finish effect F2's single failure mapper through coherent producer conversions, including [servePeRoute](../../../ts/packages/host-contracts/src/pe-api.ts), before global middleware ownership. Preserve native evidence and SDK opaque success envelopes. D5 isolates Work observation faults only; the mapper half is not implemented. (counsel, 2026-11-04)
 
