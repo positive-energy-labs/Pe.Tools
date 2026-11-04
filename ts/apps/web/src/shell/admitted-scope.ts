@@ -11,40 +11,18 @@ import {
 } from "../../../../packages/agent-contracts/src/route-module.ts";
 import { routeWorkSubject } from "../../../../packages/agent-contracts/src/route-work-subject.ts";
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate.ts";
-import type { MountedOwner, MountedRoute, MountedSnapshot, Snapshots } from "./admitted-context.ts";
+import type {
+  MountContext,
+  MountedOwner,
+  MountedRoute,
+  MountedSnapshot,
+  Snapshots,
+} from "./admitted-context.ts";
+import { currentReadingHashes, projectEvidence } from "./admitted-context.ts";
 import type { PlaceInput } from "./admitted-place.ts";
 import { createApplicationWorkRegistry } from "./application-work-registry.ts";
-import { createNamedFixtureRouteEnvironment } from "./fixture-lane.ts";
-import { createPagePolicy, freezePage } from "./page-port.ts";
+import { createPagePolicy } from "./page-port.ts";
 import { createRouteEnvironment, type EnvironmentValidation } from "./route-environment.ts";
-/** Closed slot census. Other kinds refuse before resource acquisition. */
-export const admittedMountBodyKinds: readonly string[] = Object.freeze([
-  "args",
-  "adapter",
-  "derive",
-  "picker",
-  "ready",
-  "describe",
-  "work",
-  "intent",
-  "lands",
-  "page",
-  "pane",
-  "seed",
-  "transition",
-  "predicate",
-  "show",
-  "subject",
-  "placement",
-  "present",
-  "group",
-  "label",
-  "focus",
-  "take",
-  "salvage",
-  "migration",
-]);
-
 export function createAdmittedScope<W extends Record<string, unknown>>({
   route,
   input,
@@ -62,7 +40,7 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
   observeReceipts(): void;
   notify(): void;
 }) {
-  const { address, fixture, target } = input;
+  const { address, target } = input;
   const registry = createAdmittedRouteRegistry();
   const registration = registry.register(route);
   const resolve = () => {
@@ -71,12 +49,13 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
     return bindings;
   };
   const bindings = resolve();
-  for (const body of Object.values(bindings.bodies)) {
-    if (!admittedMountBodyKinds.includes(body.kind)) {
+  // COMMON 3: admission owns slot/kind checks. A linked cell admission is valid but
+  // this shell cannot execute it; retain that capability refusal before acquisition.
+  for (const body of Object.values(bindings.bodies))
+    if (body.kind === "admit") {
       registration.deactivate();
       throw Error(`Unsupported admitted mount body slot: ${body.slot}`);
     }
-  }
   // Migration bodies execute only in host admission. The Work feed proves registration
   // and finishes persistent migration before exposing Work; no body or schema is sent here.
   // Result landing owns presentation for verbs without a sealed ModelWrite preview.
@@ -108,12 +87,8 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
             current,
             patch,
             origin,
-            freezePage({
-              page: Object.fromEntries(deps.page.map((key) => [key, current[key]])),
-              work: Object.fromEntries(deps.work.map((key) => [key, acceptedWork?.[key]])),
-              readings: evidence,
-            }),
-          ) as import("../../../../packages/agent-contracts/src/route-kernel-page").DecodeResult<unknown>;
+            projectEvidence(deps, current, acceptedWork ?? {}, evidence),
+          ) as import("../../../../packages/agent-contracts/src/route-kernel-page.ts").DecodeResult<unknown>;
           // Re-entrant publication cannot decide on the evidence captured above.
           if (
             deps.readings.some(
@@ -142,7 +117,7 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
         )
       : null,
   });
-  const registryForWork = fixture === null ? workRegistry : createApplicationWorkRegistry();
+  const registryForWork = workRegistry;
   const leases = new Map<
     string,
     ReturnType<typeof registryForWork.acquire> & { released?: boolean }
@@ -185,12 +160,7 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
     : undefined;
   const issuer = createRouteTokenIssuer();
   const ownerOptions = {
-    dependencies: () =>
-      Object.fromEntries(
-        Object.entries(snapshots())
-          .filter(([, value]) => value.current)
-          .map(([id, value]) => [id, value.current ? value.hash : ""]),
-      ),
+    dependencies: () => currentReadingHashes(snapshots()),
     scopeFields: [
       route.data.subject.field,
       ...(route.data.workSubject ? [route.data.workSubject] : []),
@@ -235,73 +205,26 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
 }
 
 export function createAdmittedEnvironment<W extends Record<string, unknown>>(
-  {
-    route,
-    registry,
-    owner,
-    registration,
-    workSpec,
-  }: ReturnType<typeof createAdmittedScope<W>> & { route: MountedRoute<W> },
-  {
-    input,
-    services,
-    liveDoor,
-    environmentIssuer,
-    plan,
-    ownsKey,
-  }: {
-    input: PlaceInput;
-    services: Omit<
-      import("../../../../packages/agent-contracts/src/route-kernel-environment.ts").KernelServices,
-      "target"
-    >;
-    liveDoor: import("../../../../packages/agent-contracts/src/work-journal-door.ts").WorkJournalDoor;
-    environmentIssuer: import("../../../../packages/agent-contracts/src/route-kernel-environment.ts").RouteEnvironmentIssuer;
-    plan: import("./admitted-reading-plan.ts").AdmittedReadingPlan;
-    ownsKey(
-      key: import("../../../../packages/agent-contracts/src/route-kernel-environment.ts").ResolvedReadKey,
-    ): boolean;
-  },
+  context: MountContext<W>,
+  create: (validate: EnvironmentValidation) => ReturnType<typeof createRouteEnvironment>,
 ) {
-  const { fixture } = input;
+  const { route, registry, owner, registration } = context;
+  const plan = context.readings().plan;
   const validate: EnvironmentValidation = {
     admitted: (candidate) => candidate === route && registry.resolve(route) === route,
     token: (token) => owner.current(token),
     scope: (scope) => owner.current(scope),
     invocation: (invocation) => owner.current(invocation),
-    key: (key) => ownsKey(key),
+    key: (key) => context.readings().ownsKey(key),
     detail: () => false,
     geometryScope: () => false,
   };
-  return (() => {
-    try {
-      return fixture === null
-        ? createRouteEnvironment({
-            issuer: environmentIssuer,
-            validate,
-            ports: {
-              ...services,
-              work: route.data.work ? { read: liveDoor, submit: liveDoor } : undefined,
-              submitNative: (command) =>
-                services.submitNative
-                  ? services.submitNative(command)
-                  : (services.nativeWrite ?? liveDoor).submit(command),
-              geometry: undefined,
-            },
-          })
-        : createNamedFixtureRouteEnvironment({
-            issuer: environmentIssuer,
-            validate,
-            plan,
-            name: fixture,
-            workSpec,
-            now: () => services.clock.now(),
-          });
-    } catch (error) {
-      owner.close();
-      plan.close();
-      registration.deactivate();
-      throw error;
-    }
-  })();
+  try {
+    return create(validate);
+  } catch (error) {
+    owner.close();
+    plan.close();
+    registration.deactivate();
+    throw error;
+  }
 }

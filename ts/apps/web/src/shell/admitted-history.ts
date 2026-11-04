@@ -2,19 +2,9 @@ import { OLDER_WORK, UNREADABLE_WORK } from "@pe/agent-contracts";
 import { z } from "zod";
 import type { createWorkJournal } from "../../../../packages/runtime/src/work-journal.ts";
 import { peReadings } from "../readings.ts";
-import { salvageRouteWork, startFreshRouteWork } from "../route/host.ts";
 import { admittedWorkPatches } from "./admitted-cells.ts";
-import {
-  project,
-  type MountedBindings,
-  type MountedOwner,
-  type MountedRoute,
-  type MountedSnapshot,
-  type Snapshots,
-} from "./admitted-context.ts";
-import type { createAdmittedInvocation } from "./admitted-invoke.ts";
-import type { PlaceInput } from "./admitted-place.ts";
-import type { createAdmittedWork } from "./admitted-work.ts";
+import type { MountContext } from "./admitted-context.ts";
+import { currentReadingHashes, projectEvidence } from "./admitted-context.ts";
 import { freezePage } from "./page-port.ts";
 /** The notice is provenance for the existing recovery banner, not another recovery state. */
 export type RecoveryState = (
@@ -23,35 +13,23 @@ export type RecoveryState = (
   | { kind: "busy" }
   | { kind: "problem"; sentence: string }
 ) & { notice?: string | null };
-export function createAdmittedHistory<W extends Record<string, unknown>>({
-  route,
-  owner,
-  read,
-  work,
-  bindings,
-  fixture,
-  action,
-  resolve,
-  notify,
-  closed,
-  snapshots,
-  mountJournal,
-  invocation,
-}: {
-  route: MountedRoute<W>;
-  owner: MountedOwner<W>;
-  read(): MountedSnapshot<W>;
-  work: ReturnType<typeof createAdmittedWork>;
-  bindings: MountedBindings;
-  fixture: PlaceInput["fixture"];
-  action(): void;
-  resolve(): unknown;
-  notify(): void;
-  closed(): boolean;
-  snapshots(): Snapshots;
-  mountJournal(key: import("@pe/agent-contracts").WorkKey): ReturnType<typeof createWorkJournal>;
-  invocation: ReturnType<typeof createAdmittedInvocation<W>>;
-}) {
+export function createAdmittedHistory<W extends Record<string, unknown>>(context: MountContext<W>) {
+  const {
+    route,
+    owner,
+    read,
+    bindings,
+    recoveryHost,
+    action,
+    resolve,
+    notify,
+    closed,
+    mountJournal,
+  } = context;
+  const work = context.work(),
+    invocation = context.invocation(),
+    snapshots = context.readings().snapshots;
+
   let state: RecoveryState = { kind: "idle" };
   const { present, reviews } = invocation;
   let recoveryScope: unknown;
@@ -64,7 +42,7 @@ export function createAdmittedHistory<W extends Record<string, unknown>>({
       state = { kind: "idle" };
     }
     if (
-      fixture !== null ||
+      !recoveryHost ||
       !route.data.salvage ||
       !work.ready() ||
       !snapshot?.work ||
@@ -74,7 +52,7 @@ export function createAdmittedHistory<W extends Record<string, unknown>>({
     recoveryRevision = snapshot.work.revision;
     const scope = snapshot.scope;
     const revision = recoveryRevision;
-    void salvageRouteWork(scope.identity.work!).then(
+    void recoveryHost.salvageRouteWork(scope.identity.work!).then(
       (saved) => {
         if (closed() || owner.read()?.scope !== scope || recoveryRevision !== revision) return;
         if (state.kind !== "busy")
@@ -167,29 +145,19 @@ export function createAdmittedHistory<W extends Record<string, unknown>>({
     action();
     resolve();
     const key = owner.read()?.scope.identity.work;
-    if (!route.data.salvage || !key || !work.ready() || fixture !== null)
+    if (!route.data.salvage || !key || !work.ready() || !recoveryHost)
       throw Error("Salvage unavailable");
     const issued = owner.invocation(
       owner.capture("work-salvage"),
-      Object.fromEntries(
-        Object.entries(snapshots())
-          .filter(([, reading]) => reading.current)
-          .map(([id, reading]) => [id, reading.current ? reading.hash : ""]),
-      ),
+      currentReadingHashes(snapshots()),
     );
     if (!issued.ok) throw Error(issued.reason);
     const deps = route.data.salvageDeps ?? { page: [], work: [], readings: [] };
     for (const id of deps.readings)
       if (!snapshots()[id]?.current) throw Error(`Reading unavailable: ${id}`);
     // Display evidence only: the invocation owns freshness, never a second write seal.
-    const evidence = freezePage(
-      structuredClone({
-        page: project(deps.page, read().page),
-        work: project(deps.work, read().work!.value),
-        readings: Object.fromEntries(deps.readings.map((id) => [id, snapshots()[id]])),
-      }),
-    );
-    const saved = await salvageRouteWork(key);
+    const evidence = projectEvidence(deps, read().page, read().work!.value, snapshots());
+    const saved = await recoveryHost.salvageRouteWork(key);
     if (!owner.current(issued.value) || !work.ready()) throw Error("Salvage is stale");
     if (!saved) return null;
     const decoded = z
@@ -226,6 +194,7 @@ export function createAdmittedHistory<W extends Record<string, unknown>>({
         );
       },
     });
+    state = { kind: "saved", ...saved, notice: state.notice };
     notify();
     return { kind: "review", preview: patches };
   };
@@ -250,22 +219,23 @@ export function createAdmittedHistory<W extends Record<string, unknown>>({
           ? null
           : (state.notice ?? null),
     startFresh:
-      fixture === null && (work.problem() === OLDER_WORK || work.problem() === UNREADABLE_WORK),
-    carryOver: fixture === null && work.ready() && state.kind === "saved",
+      !!recoveryHost && (work.problem() === OLDER_WORK || work.problem() === UNREADABLE_WORK),
+    carryOver: !!recoveryHost && work.ready() && state.kind === "saved",
     busy: state.kind === "busy",
     problem: state.kind === "problem" ? state.sentence : null,
   });
   const startFresh = async () => {
     action();
     resolve();
-    if (!recovery().startFresh || state.kind === "busy") throw Error("Start fresh unavailable");
+    if (!recoveryHost || !recovery().startFresh || state.kind === "busy")
+      throw Error("Start fresh unavailable");
     const captured = owner.capture("work-recovery");
     const scope = read().scope;
     const key = scope.identity.work!;
     state = { kind: "busy", notice: work.problem() };
     notify();
     try {
-      const result = await startFreshRouteWork(key);
+      const result = await recoveryHost.startFreshRouteWork(key);
       if (!owner.current(captured)) throw Error("Recovery is stale");
       if (!result.ok) throw Error("agentHint" in result ? result.agentHint : result.error);
       // The terminal failed subscription cannot observe reset. Reacquire with the

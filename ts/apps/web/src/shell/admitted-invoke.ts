@@ -5,36 +5,16 @@ import {
   type SemanticActionKey,
 } from "@pe/agent-contracts";
 import { z } from "zod";
-import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
-import {
-  canonicalEnvironmentInput,
-  type KernelServices,
-} from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
+import { canonicalEnvironmentInput } from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
 import type { InvocationToken } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
 import { admittedWorkPatches } from "./admitted-cells.ts";
 import { commandResultDecoder, type CommandResultDecode } from "./admitted-command-result.ts";
-import {
-  project,
-  type MountedBindings,
-  type MountedOwner,
-  type MountedRoute,
-  type MountedSnapshot,
-  type Snapshots,
-} from "./admitted-context.ts";
-import type { createAdmittedGeometry } from "./admitted-geometry.ts";
-import type { PlaceInput } from "./admitted-place.ts";
+import type { MountContext } from "./admitted-context.ts";
+import { project, projectEvidence, readingHashes } from "./admitted-context.ts";
 import { placeAdmittedVerbs } from "./admitted-placement.ts";
 import { createAdmittedRetention, InvocationOverload } from "./admitted-retention.ts";
-import type { createAdmittedWork } from "./admitted-work.ts";
 import { freezePage } from "./page-port.ts";
 import { reviewChanges } from "./review-value.ts";
-export type QueryInput = {
-  input: unknown;
-  landing?: string;
-  landed?: boolean;
-  inputsCurrent?: () => boolean;
-  invocation: InvocationToken;
-};
 export class ReviewRefusal extends Error {
   readonly kind = "refused";
   constructor(readonly reason: "review-stale" | "present-threw" | "present-invalid") {
@@ -44,68 +24,38 @@ export class ReviewRefusal extends Error {
     this.name = "ReviewRefusal";
   }
 }
-type PresentationEvidence = Readonly<{
-  page: Readonly<Record<string, unknown>>;
-  work: Readonly<Record<string, unknown>>;
-  readings: Readonly<Record<string, ReadingSnapshot<unknown>>>;
-}>;
+type PresentationEvidence = ReturnType<typeof projectEvidence>;
 
-export function createAdmittedInvocation<W extends Record<string, unknown>>({
-  route,
-  owner,
-  read,
-  work,
-  bindings,
-  door,
-  fixture,
-  target,
-  services,
-  action,
-  resolve,
-  notify,
-  schedule,
-  snapshots,
-  queryInputs,
-  queryLandings,
-  demanded,
-  generations,
-  retire,
-  geometry,
-}: {
-  route: MountedRoute<W>;
-  owner: MountedOwner<W>;
-  read(): MountedSnapshot<W>;
-  work: ReturnType<typeof createAdmittedWork>;
-  bindings: MountedBindings;
-  door:
-    | import("../../../../packages/agent-contracts/src/work-journal-door.ts").WorkJournalDoor
-    | undefined;
-  fixture: PlaceInput["fixture"];
-  target: PlaceInput["target"];
-  services: Omit<KernelServices, "target">;
-  action(): void;
-  resolve(): unknown;
-  notify(): void;
-  schedule(): void;
-  snapshots(): Snapshots;
-  queryInputs: Map<string, QueryInput>;
-  queryLandings: Map<string, CommandResultDecode>;
-  demanded: Set<string>;
-  generations: Map<string, number>;
-  retire(id: string): void;
-  geometry: ReturnType<typeof createAdmittedGeometry>;
-}) {
+export function createAdmittedInvocation<W extends Record<string, unknown>>(
+  context: MountContext<W>,
+) {
+  const {
+    route,
+    owner,
+    read,
+    bindings,
+    input: { target },
+    action,
+    resolve,
+    notify,
+    schedule,
+    submitNative,
+  } = context;
+  const work = context.work();
+  const { snapshots, beginQuery } = context.readings();
+
   const preparing = createAdmittedRetention<{
-    invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
+    invocation: import("../../../../packages/agent-contracts/src/route-kernel-page.ts").InvocationToken;
     reading: string;
     handle: string;
     evidence: PresentationEvidence;
+    input: unknown;
     send(): unknown;
   }>({ entries: Object.keys(route.data.verbs).length, bytes: 1024 * 1024 });
   const reviews = new Map<
     string,
     {
-      invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
+      invocation: import("../../../../packages/agent-contracts/src/route-kernel-page.ts").InvocationToken;
       send(): unknown;
       preview: unknown;
       presentation?: { sentence: string; rows: readonly string[] };
@@ -185,25 +135,19 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>({
       throw Error("Stale or foreign accepted Work basis");
     if (declaration.deps.work.length && (!work.ready() || !read().work))
       throw Error("Work unavailable");
-    const dependencies: Record<string, string> = {};
-    for (const key of declaration.deps.readings) {
-      const reading = snapshots()[key];
-      if (!reading?.current) throw Error(`Reading unavailable: ${key}`);
-      dependencies[key] = reading.hash;
-    }
+    const dependencies = readingHashes(declaration.deps.readings, snapshots());
     const issued = owner.invocation(owner.capture(`verb:${id}`), dependencies);
     if (!issued.ok) throw Error(issued.reason);
     const invocation = issued.value;
     const context = () => ({
       workBasis: basis ?? (owner.read()?.work ? invocation : null),
-      page: project(declaration.deps.page, read().page),
-      work: project(declaration.deps.work, (edit?.work ?? read().work)?.value ?? {}),
-      readings: freezePage(
-        Object.fromEntries(declaration.deps.readings.map((key) => [key, snapshots()[key]])),
+      ...projectEvidence(
+        declaration.deps,
+        read().page,
+        (edit?.work ?? read().work)?.value ?? {},
+        snapshots(),
       ),
-      captures: freezePage(
-        Object.fromEntries(declaration.captures.map((key) => [key, snapshots()[key]])),
-      ),
+      captures: project(declaration.captures, snapshots()),
     });
     if (declaration.ready) {
       const ready = bindings.bodies[declaration.ready]!.run(context(), parsed);
@@ -232,22 +176,15 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>({
           return { kind: "refused", reason: "describe-threw" } as const;
         }
       }
-      const patches = () =>
-        admittedWorkPatches(
-          route.data,
-          bindings.schemas,
-          bindings.bodies[declaration.patches]!.run(context(), parsed),
-          route.resolvedWork!.schema,
-        );
-      preview = freezePage(patches());
+      const patches = admittedWorkPatches(
+        route.data,
+        bindings.schemas,
+        bindings.bodies[declaration.patches]!.run(context(), parsed),
+        route.resolvedWork!.schema,
+      );
+      preview = patches;
       send = () => {
-        const observation = work.write(
-          () => preview as import("@pe/agent-contracts").WorkWrite["patches"],
-          invocation,
-          invocation.id,
-          detail,
-          basis,
-        );
+        const observation = work.write(() => patches, invocation, invocation.id, detail, basis);
         observation.subscribe(
           () => {
             if (owner.read()?.scope === invocation.token.scope) notify();
@@ -261,13 +198,11 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>({
       const modelWrite = entry.axes.effect === "ModelWrite";
       const captured = context();
       // Display evidence labels only. owner.current enforces freshness; the host seal binds the write.
-      const evidence = freezePage(
-        structuredClone({
-          page: captured.page,
-          work: captured.work,
-          readings: captured.readings,
-        }),
-      );
+      const evidence = freezePage({
+        page: captured.page,
+        work: captured.work,
+        readings: captured.readings,
+      });
       const accepted = read();
       if (modelWrite && basis && basis.workRevision !== accepted.work?.revision)
         throw Error("Stale accepted Work basis; prepare from the current revision");
@@ -294,20 +229,10 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>({
           ),
         ),
       );
-      entry.input.parse(intent);
       preview = freezePage({ work: accepted.work, input: intent });
       // ActionJournal owns the existing Reject? consent window after this admission.
       send = () => {
-        if (!door) throw Error("Native commands unavailable");
-        const submission = (
-          fixture === null
-            ? (command: Parameters<NonNullable<KernelServices["submitNative"]>>[0]) =>
-                services.submitNative
-                  ? services.submitNative(command)
-                  : (services.nativeWrite ?? door).submit(command)
-            : (command: Parameters<NonNullable<KernelServices["submitNative"]>>[0]) =>
-                door.submit(command)
-        )({
+        const submission = submitNative({
           id: invocation.id,
           key: declaration.entry,
           target: target ?? { kind: "host" },
@@ -360,6 +285,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>({
         const readingId = candidates[0]![0];
         reviews.delete(id);
         const retained = preparing.set(id, {
+          input: intent,
           evidence,
           invocation,
           reading: readingId,
@@ -371,13 +297,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>({
           },
         });
         if (retained.kind === "overload") throw new InvocationOverload("preparing");
-        const previous = queryInputs.get(readingId);
-        if (previous) owner.retire(previous.invocation.token);
-        queryInputs.set(readingId, { input: intent, invocation });
-        demanded.add(readingId);
-        generations.set(readingId, (generations.get(readingId) ?? 0) + 1);
-        retire(readingId);
-        schedule();
+        beginQuery(readingId, { input: intent, invocation }, false);
         const review = reviews.get(id);
         return review ? { kind: "review", preview: review.preview } : { kind: "preview" };
       }
@@ -388,9 +308,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>({
     } else {
       const entry = bindings.entries[declaration.entry]!;
       const args = freezePage(
-        structuredClone(
-          entry.input.parse(bindings.bodies[declaration.args]!.run(context(), parsed)),
-        ),
+        entry.input.parse(bindings.bodies[declaration.args]!.run(context(), parsed)),
       );
       const targets = Object.entries(route.data.readings).filter(
         ([id, reading]) =>
@@ -400,13 +318,10 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>({
       );
       if (targets.length !== 1)
         throw Error("Query entry must identify exactly one declared reading");
-      const [readingId, reading] = targets[0]!;
+      const [readingId] = targets[0]!;
       preview = args;
       send = () => {
-        const previous = queryInputs.get(readingId);
-        if (previous) owner.retire(previous.invocation.token);
-        queryLandings.delete(readingId);
-        queryInputs.set(readingId, {
+        beginQuery(readingId, {
           input: args,
           invocation,
           landing: declaration.lands,
@@ -428,11 +343,6 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>({
             }
           },
         });
-        demanded.add(readingId);
-        generations.set(readingId, (generations.get(readingId) ?? 0) + 1);
-        retire(readingId);
-        if (reading.kind === "use" && reading.geometry) geometry.refresh(readingId);
-        else schedule();
       };
     }
     const dispatch = () => {
@@ -465,7 +375,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>({
         if (!result?.current) continue;
         preparing.delete(id);
         const sealed = writePreviewSchema.parse(result.value);
-        const handle = workHandleSchema.parse((sealed.seal.work as { handle?: unknown })?.handle);
+        const handle = z.object({ handle: workHandleSchema }).parse(sealed.seal.work).handle;
         if (canonicalEnvironmentInput(handle) !== pending.handle)
           throw Error("Preview sealed a different Work handle");
         const presentation = present(id, sealed, pending.evidence);

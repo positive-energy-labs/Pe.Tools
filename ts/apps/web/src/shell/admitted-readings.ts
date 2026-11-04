@@ -1,80 +1,56 @@
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import {
   canonicalEnvironmentInput,
-  type KernelServices,
   type ReadHandle,
   type ResolvedReadKey,
-  type RouteEnvironmentIssuer,
 } from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
-import type { createAdmittedCells } from "./admitted-cells.ts";
+import type { InvocationToken } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
 import type { CommandResultDecode } from "./admitted-command-result.ts";
-import type {
-  MountedBindings,
-  MountedOwner,
-  MountedRoute,
-  MountedSnapshot,
-} from "./admitted-context.ts";
-import type { createAdmittedGeometry } from "./admitted-geometry.ts";
-import type { createAdmittedObservers } from "./admitted-observers.ts";
-import type { PlaceInput } from "./admitted-place.ts";
+import type { MountContext } from "./admitted-context.ts";
 import {
   createAdmittedReadingPlan,
   readingClosure,
   receiptHitsReading,
   type AdmittedReadingStatus,
 } from "./admitted-reading-plan.ts";
-import type { createApplicationWorkRegistry } from "./application-work-registry.ts";
 import { freezePage } from "./page-port.ts";
-import type { createRouteEnvironment } from "./route-environment.ts";
-import { sourceReadingEvidence } from "./source-route-services.ts";
-export function createAdmittedReadings<W extends Record<string, unknown>>({
-  route,
-  owner,
-  read,
-  bindings,
-  input,
-  services,
-  environmentIssuer,
-  observers,
-  cells,
-  geometry,
-  environment,
-  schedule,
-  notify,
-  settle,
-  syncInvocation,
-  beforeSync,
-  available,
-  closed,
-  entryFor,
-  logEvidence,
-  resolve,
-}: {
-  route: MountedRoute<W>;
-  owner: MountedOwner<W>;
-  read(): MountedSnapshot<W>;
-  bindings: MountedBindings;
-  input: PlaceInput;
-  services: Omit<KernelServices, "target">;
-  environmentIssuer: RouteEnvironmentIssuer;
-  observers: ReturnType<typeof createAdmittedObservers>;
-  cells: ReturnType<typeof createAdmittedCells>;
-  geometry(): ReturnType<typeof createAdmittedGeometry>;
-  environment(): ReturnType<typeof createRouteEnvironment>;
-  schedule(): void;
-  notify(): void;
-  settle(): void;
-  syncInvocation(): void;
-  beforeSync(): void;
-  available(): boolean;
-  closed(): boolean;
-  entryFor(
-    key: import("@pe/agent-contracts").WorkKey,
-  ): ReturnType<ReturnType<typeof createApplicationWorkRegistry>["acquire"]>["entry"];
-  logEvidence(id: string, value: unknown): void;
-  resolve(): unknown;
-}) {
-  const { fixture, target } = input;
+const unavailable = (reason: string): ReadingSnapshot<unknown> => ({
+  status: "unavailable",
+  current: false,
+  reason,
+});
+export type ReadingQuery = {
+  input: unknown;
+  landing?: string;
+  phase: "pending" | "landed";
+  inputsCurrent?: () => boolean;
+  invocation: InvocationToken;
+};
+export function createAdmittedReadings<W extends Record<string, unknown>>(
+  context: MountContext<W>,
+) {
+  const {
+    route,
+    owner,
+    read,
+    bindings,
+    input,
+    environmentIssuer,
+    observers,
+    cells,
+    geometry,
+    environment,
+    schedule,
+    notify,
+    beforeSync,
+    available,
+    closed,
+    entryFor,
+    logEvidence,
+    resolve,
+  } = context;
+
+  const { target } = input;
   const generations = new Map<string, number>();
   const plan = createAdmittedReadingPlan({
     route,
@@ -88,7 +64,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>({
   let readings: Record<string, ReadingSnapshot<unknown>> = {};
   type Active = {
     signature: string;
-    key: import("../../../../packages/agent-contracts/src/route-kernel-environment").ResolvedReadKey;
+    key: import("../../../../packages/agent-contracts/src/route-kernel-environment.ts").ResolvedReadKey;
     token: ReturnType<typeof owner.capture>;
     snapshot: ReadingSnapshot<unknown>;
     handle?: ReadHandle<unknown>;
@@ -101,7 +77,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>({
   const hostGenerations = new Map<string, string | null>();
   const seenReceipts = new Map<string, string>();
   const paneDemand = new Map<string, boolean>();
-  const evidence = sourceReadingEvidence(services);
+  const evidence = context.sourceEvidence;
   const invalidate = (id: string) => {
     generations.set(id, (generations.get(id) ?? 0) + 1);
     retire(id);
@@ -175,40 +151,29 @@ export function createAdmittedReadings<W extends Record<string, unknown>>({
   };
   const watchEvidence = (
     readingId: string,
-    request: import("../../../../packages/agent-contracts/src/route-kernel-environment").ResolvedRead<unknown>,
+    request: import("../../../../packages/agent-contracts/src/route-kernel-environment.ts").ResolvedRead<unknown>,
     record: Active,
   ) => {
-    return fixture === null
-      ? evidence?.observe(request, record.token, (event) => {
-          if (closed() || active.get(readingId) !== record) return;
-          if (event.kind === "log") {
-            logEvidence(readingId, event.value);
-            notify();
-          } else {
-            const had = hostGenerations.has(readingId);
-            const prior = hostGenerations.get(readingId);
-            hostGenerations.set(readingId, event.value);
-            if (had && prior !== event.value) {
-              invalidate(readingId);
-              schedule();
-            }
-          }
-        })
-      : undefined;
+    return evidence.observe?.(request, record.token, (event) => {
+      if (closed() || active.get(readingId) !== record) return;
+      if (event.kind === "log") {
+        logEvidence(readingId, event.value);
+        notify();
+      } else {
+        const had = hostGenerations.has(readingId);
+        const prior = hostGenerations.get(readingId);
+        hostGenerations.set(readingId, event.value);
+        if (had && prior !== event.value) {
+          invalidate(readingId);
+          schedule();
+        }
+      }
+    });
   };
   const pickerOptions: Record<string, unknown> = {};
   const demanded = new Set<string>();
   // Invocation arguments belong to the attempt, never to Page or selection.
-  const queryInputs = new Map<
-    string,
-    {
-      input: unknown;
-      landing?: string;
-      landed?: boolean;
-      inputsCurrent?: () => boolean;
-      invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
-    }
-  >();
+  const queryInputs = new Map<string, ReadingQuery>();
   const queryLandings = new Map<string, CommandResultDecode>();
   const subjectField = route.data.subject.field;
   let evidenceScope = read().scope;
@@ -225,7 +190,9 @@ export function createAdmittedReadings<W extends Record<string, unknown>>({
     try {
       do {
         again = false;
-        settle();
+        resolve();
+        context.work().sync();
+        context.history().sync();
         if (evidenceScope !== read().scope) {
           evidenceScope = read().scope;
           for (const [id, reading] of Object.entries(route.data.readings))
@@ -266,19 +233,11 @@ export function createAdmittedReadings<W extends Record<string, unknown>>({
               !demanded.has(id)) ||
             (declaration.demand === "subject" && read().page[subjectField] === null)
           ) {
-            next[id] = {
-              status: "unavailable",
-              current: false,
-              reason: "Explicit demand required",
-            };
+            next[id] = unavailable("Explicit demand required");
             continue;
           }
           if (!wanted.has(id)) {
-            next[id] = readings[id] ?? {
-              status: "unavailable",
-              current: false,
-              reason: "Pane hidden",
-            };
+            next[id] = readings[id] ?? unavailable("Pane hidden");
             geometry().suspend(id);
             continue;
           }
@@ -296,16 +255,12 @@ export function createAdmittedReadings<W extends Record<string, unknown>>({
             (request) => {
               const readingId = plan.readingId(request)!;
               if (route.data.readings[readingId]!.demand === "explicit" && !demanded.has(readingId))
-                return {
-                  status: "unavailable",
-                  current: false,
-                  reason: "Explicit demand required",
-                };
+                return unavailable("Explicit demand required");
               used.add(readingId);
               const signature = canonicalEnvironmentInput(request.key);
               dependencies.set(
                 readingId,
-                evidence?.dependencies(request, owner.capture(`dependencies:${readingId}`)) ??
+                evidence.dependencies?.(request, owner.capture(`dependencies:${readingId}`)) ??
                   (target?.kind === "document" ? [{ kind: "document", ref: target.ref }] : []),
               );
               const saved = retained.get(readingId);
@@ -425,7 +380,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>({
           const result = readings[readingId];
           if (
             !query.landing ||
-            query.landed ||
+            query.phase === "landed" ||
             !result?.current ||
             result.status !== "ready" ||
             !owner.current(query.invocation.token)
@@ -437,23 +392,14 @@ export function createAdmittedReadings<W extends Record<string, unknown>>({
             declaration.kind === "use" && declaration.geometry
               ? (result.value as { kind: string; value?: unknown }).value
               : result.value;
-          const decoded = bindings.entries[declaration.entry]!.output.safeParse(value);
-          query.landed = true;
-          if (!decoded.success) {
-            queryLandings.set(readingId, {
-              kind: "result-undecodable",
-              key: declaration.entry,
-              receiptId: query.invocation.id,
-              problem: decoded.error.message,
-            });
-            continue;
-          }
-          queryLandings.set(readingId, { kind: "decoded", value: decoded.data });
+          // Source acceptance (or geometry acceptance) already decoded this exact value.
+          query.phase = "landed";
+          queryLandings.set(readingId, { kind: "decoded", value });
           // A current read publishes Page against the accepted state at completion.
           // Its original Work revision remains unchanged for query patch writes.
           const landing = owner.invocation(query.invocation.token, {});
           if (!landing.ok) continue;
-          const patch = bindings.bodies[query.landing]!.run(freezePage(decoded.data), read().page);
+          const patch = bindings.bodies[query.landing]!.run(freezePage(value), read().page);
           owner.acceptPage(landing.value, patch as Parameters<typeof owner.acceptPage>[1]);
         }
         for (const [key, field] of Object.entries(route.data.fields)) {
@@ -462,7 +408,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>({
               bindings.bodies[field.picker.options]!.run(readings[field.picker.reading]),
             );
         }
-        syncInvocation();
+        context.invocation().sync();
       } while (again && !closed());
     } finally {
       scheduling = false;
@@ -483,7 +429,18 @@ export function createAdmittedReadings<W extends Record<string, unknown>>({
     sync,
     snapshots: () => readings,
     plan,
-    queryInputs,
+    beginQuery(id: string, query: Omit<ReadingQuery, "phase">, refreshGeometry = true) {
+      const previous = queryInputs.get(id);
+      if (previous) owner.retire(previous.invocation.token);
+      queryLandings.delete(id);
+      queryInputs.set(id, { ...query, phase: "pending" });
+      demanded.add(id);
+      generations.set(id, (generations.get(id) ?? 0) + 1);
+      retire(id);
+      const reading = route.data.readings[id];
+      if (refreshGeometry && reading?.kind === "use" && reading.geometry) geometry().refresh(id);
+      else schedule();
+    },
     queryLandings,
     demanded,
     generations,
@@ -509,11 +466,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>({
       readingStatus(id: string): AdmittedReadingStatus {
         if (!route.data.readings[id]) throw Error(`Unknown reading: ${id}`);
         return Object.freeze({
-          snapshot: readings[id] ?? {
-            status: "unavailable" as const,
-            current: false as const,
-            reason: "Not read",
-          },
+          snapshot: readings[id] ?? unavailable("Not read"),
           previous: previous.get(id),
           demanded: input.custody.current() && wantedReadings().has(id),
           leased: !!active.get(id)?.handle || geometry().leased(id),

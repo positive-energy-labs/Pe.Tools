@@ -1,41 +1,13 @@
 import type { InvocationToken } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
-import type { createAdmittedCellActions } from "./admitted-cells.ts";
-import type {
-  MountedBindings,
-  MountedRoute,
-  MountedSnapshot,
-  Snapshots,
-} from "./admitted-context.ts";
-import type { createAdmittedGeometry } from "./admitted-geometry.ts";
-import type { createAdmittedHistory } from "./admitted-history.ts";
-import type { createAdmittedInvocation } from "./admitted-invoke.ts";
-import type { createAdmittedObservers } from "./admitted-observers.ts";
-import type { createPagePorts } from "./page-port.ts";
-export function createAdmittedBody<W extends Record<string, unknown>>({
-  route,
-  read,
-  resolve,
-  ports,
-  snapshots,
-  geometry,
-  observers,
-  invocation,
-  historyOwner,
-  transitionCell,
-  duringDraw,
-}: {
-  route: MountedRoute<W>;
-  read(): MountedSnapshot<W>;
-  resolve(): MountedBindings;
-  ports: ReturnType<typeof createPagePorts>;
-  snapshots(): Snapshots;
-  geometry: ReturnType<typeof createAdmittedGeometry>;
-  observers: ReturnType<typeof createAdmittedObservers>;
-  invocation: ReturnType<typeof createAdmittedInvocation<W>>;
-  historyOwner: ReturnType<typeof createAdmittedHistory<W>>;
-  transitionCell: ReturnType<typeof createAdmittedCellActions<W>>;
-  duringDraw<T>(draw: () => T): T;
-}) {
+import type { MountContext } from "./admitted-context.ts";
+export function createAdmittedBody<W extends Record<string, unknown>>(context: MountContext<W>) {
+  const { route, read, resolve, ports, geometry: getGeometry, observers, duringDraw } = context;
+  const geometry = getGeometry(),
+    invocation = context.invocation(),
+    historyOwner = context.history(),
+    transitionCell = context.cellActions(),
+    snapshots = context.readings().snapshots;
+
   const { workBasis, place, invoke } = invocation;
   const { history, recovery, startFresh, salvage } = historyOwner;
   return (pane: string) => {

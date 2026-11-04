@@ -1,9 +1,11 @@
 import { transitionPatches, type CellLike } from "@pe/agent-contracts";
-import { bare } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
-import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
-import type { SchemaTable } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import { freezePage } from "./page-port";
+import { bare } from "../../../../packages/agent-contracts/src/route-field.ts";
+import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
+import type { SchemaTable } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
+import type { MountContext } from "./admitted-context.ts";
+import { projectEvidence, readingHashes } from "./admitted-context.ts";
+import { freezePage } from "./page-port.ts";
 
 export function admittedWorkPatches(
   data: Pick<RouteGraphJson, "work" | "cells">,
@@ -153,54 +155,13 @@ export function createAdmittedCells(
 }
 
 /** Invocation and transition share the cell owner; mount supplies only accepted state and write. */
-export function createAdmittedCellActions<W extends Record<string, unknown>>({
-  route,
-  owner,
-  read,
-  work,
-  cells,
-  snapshots,
-  action,
-  resolve,
-}: {
-  route: import("../../../../packages/agent-contracts/src/route-kernel-admission.ts").AdmittedRoute<
-    import("../../../../packages/agent-contracts/src/route-kernel-data.ts").RouteGraphJson,
-    SchemaTable,
-    import("../../../../packages/agent-contracts/src/route-kernel-bodies.ts").EntryTable,
-    unknown,
-    W
-  >;
-  owner: import("../../../../packages/agent-contracts/src/route-kernel-page.ts").AcceptanceOwner<
-    RouteGraphJson,
-    SchemaTable,
-    W
-  >;
-  read(): import("../../../../packages/agent-contracts/src/route-kernel-page.ts").AcceptanceSnapshot<
-    RouteGraphJson,
-    SchemaTable,
-    W
-  >;
-  work: ReturnType<typeof import("./admitted-work.ts").createAdmittedWork>;
-  cells: ReturnType<typeof createAdmittedCells>;
-  snapshots(): Readonly<
-    Record<
-      string,
-      import("../../../../packages/agent-contracts/src/route-kernel-bodies.ts").ReadingSnapshot<unknown>
-    >
-  >;
-  action(): void;
-  resolve(): unknown;
-}) {
-  const project = (keys: readonly string[], value: Readonly<Record<string, unknown>>) =>
-    freezePage(Object.fromEntries(keys.map((key) => [key, value[key]])));
-  const readingHash = (
-    reading:
-      | import("../../../../packages/agent-contracts/src/route-kernel-bodies.ts").ReadingSnapshot<unknown>
-      | undefined,
-  ) => {
-    if (!reading?.current) throw Error("Reading unavailable");
-    return reading.hash;
-  };
+export function createAdmittedCellActions<W extends Record<string, unknown>>(
+  context: MountContext<W>,
+) {
+  const { route, owner, read, action, resolve, cells } = context;
+  const work = context.work(),
+    snapshots = context.readings().snapshots;
+
   return (kind: "take" | "unsuggest" | "clear", id: string, key: unknown) => {
     action();
     resolve();
@@ -211,20 +172,12 @@ export function createAdmittedCellActions<W extends Record<string, unknown>>({
       if (!work.ready() || !snapshot?.work) throw Error("Work unavailable");
       for (const reading of declaration.deps.readings)
         if (!snapshots()[reading]?.current) throw Error(`Reading unavailable: ${reading}`);
-      return freezePage({
-        page: project(declaration.deps.page, snapshot.page),
-        work: project(declaration.deps.work, snapshot.work.value),
-        readings: Object.fromEntries(
-          declaration.deps.readings.map((key) => [key, snapshots()[key]]),
-        ),
-      });
+      return projectEvidence(declaration.deps, snapshot.page, snapshot.work.value, snapshots());
     };
     context();
     const issued = owner.invocation(
       owner.capture(`cell-${kind}:${id}`),
-      Object.fromEntries(
-        declaration.deps.readings.map((key) => [key, readingHash(snapshots()[key])]),
-      ),
+      readingHashes(declaration.deps.readings, snapshots()),
     );
     if (!issued.ok) throw Error(issued.reason);
     return work.write(

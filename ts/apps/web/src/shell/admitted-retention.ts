@@ -12,26 +12,21 @@ export function createAdmittedRetention<V>(limits: { entries: number; bytes: num
     values: () => [...rows.values()].map((row) => row.value),
     entries: () => [...rows].map(([id, row]): [string, V] => [id, row.value]),
     delete: remove,
-    set(id: string, value: V) {
+    set(
+      id: string,
+      value: V,
+    ): { kind: "stored" } | { kind: "overload"; entries: number; bytes: number } {
       const size = new TextEncoder().encode(JSON.stringify(value)).byteLength;
       const prior = rows.get(id)?.bytes ?? 0;
       if (
         rows.size + (rows.has(id) ? 0 : 1) > limits.entries ||
         bytes - prior + size > limits.bytes
       )
-        return { kind: "overload", entries: limits.entries, bytes: limits.bytes } satisfies {
-          kind: "overload" | "stored";
-          entries?: number;
-          bytes?: number;
-        };
+        return { kind: "overload", entries: limits.entries, bytes: limits.bytes };
       remove(id);
       rows.set(id, { value, bytes: size });
       bytes += size;
-      return { kind: "stored" } satisfies {
-        kind: "overload" | "stored";
-        entries?: number;
-        bytes?: number;
-      };
+      return { kind: "stored" };
     },
     clear() {
       rows.clear();

@@ -15,7 +15,7 @@ import {
 } from "../../../../packages/agent-contracts/src/route-module";
 
 import { identityCodecs } from "./page-port";
-import { createRouteShell, admittedMountBodyKinds, PlaceWriteRefusal } from "./admitted-mount";
+import { createRouteShell, PlaceWriteRefusal } from "./admitted-mount";
 import { createAdmittedWork } from "./admitted-work";
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
 import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
@@ -1581,32 +1581,10 @@ test("transition returned patches retain role and schema checks; restore invokes
 });
 
 test("slot census refuses unsupported bodies at mount admission and invokes picker options", async () => {
-  expect(admittedMountBodyKinds).toEqual([
-    "args",
-    "adapter",
-    "derive",
-    "picker",
-    "ready",
-    "describe",
-    "work",
-    "intent",
-    "lands",
-    "page",
-    "pane",
-    "seed",
-    "transition",
-    "predicate",
-    "show",
-    "subject",
-    "placement",
-    "present",
-    "group",
-    "label",
-    "focus",
-    "take",
-    "salvage",
-    "migration",
-  ]);
+  // COMMON 3: prove refusal at the admission boundary instead of copying its kind census.
+  await expect(
+    admitted(false, false, { bodies: { pick: { ...bodies.pick, kind: "unsupported" } } }),
+  ).rejects.toThrow(/Expected picker/);
   const run = vi.fn((snapshot) => (snapshot.current ? [{ id: null, label: snapshot.value }] : []));
   const route = await admitted(false, false, {
     bodies: { pick: { ...bodies.pick, run } },
@@ -3068,9 +3046,27 @@ test("recovery replaces saved evidence with a problem and clears it on a new att
       carryOver: false,
     });
     await mount.salvage();
-    expect(mount.recovery()).toMatchObject({ problem: null, busy: false });
+    expect(mount.recovery()).toMatchObject({ problem: null, busy: false, carryOver: true });
     expect(mount.review("work.salvage")).not.toBeNull();
   } finally {
     saved.mockRestore();
   }
+});
+
+test("oversized command landings report a gap while the durable receipt and Page landing survive", async () => {
+  const f = await landingFixture();
+  const outcome = {
+    kind: "accepted-native",
+    outcome: "committed",
+    receiptId: "large-receipt",
+    result: { name: "x".repeat(1024 * 1024) },
+  } satisfies Parameters<typeof f.deliver>[0];
+  f.deliver(outcome);
+  expect(f.mount.commandLanding(f.submission.handle.id)).toMatchObject({
+    kind: "gap",
+    receiptId: f.submission.handle.id,
+  });
+  expect(f.door.accepted(f.submission.handle.id)).toEqual(outcome);
+  expect(f.land).toHaveBeenCalledTimes(1);
+  expect(f.mount.page.read().query).toBe(outcome.result.name);
 });
