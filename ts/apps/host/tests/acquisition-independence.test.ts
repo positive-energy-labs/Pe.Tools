@@ -344,9 +344,9 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
       ["controlled", "acq-controlled", { isWorkshared: false, isDetached: false }],
       ["observed", "acq-observed", { isWorkshared: true, isDetached: true }],
     ] as const) {
-      // Missing required SDK fields refuse at the wire boundary before domain certification.
+      // Unassociated SDK payloads remain unknown; acquisition certification must name the missing fact.
       census(custody, {});
-      await refused(acquisition, /non-envelope/);
+      await refused(acquisition, /isWorkshared/);
       // The native read failed: null is unknown, never independent.
       census(custody, { isWorkshared: null, isDetached: null });
       await refused(acquisition, /isWorkshared/);

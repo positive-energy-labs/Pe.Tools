@@ -213,7 +213,7 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 
 ## Owed
 
-- 2026-11-04, SDK `ClientContractEmitter` does not publish verb/result associations. The local `scripts/sdk-wire.ts` projection validates generated DTO shapes, but cannot establish which result belongs to a verb; add the relation at SDK authority before claiming verb-specific decoding. (testing-world)
+- 2026-11-04, SDK `ClientContractEmitter` does not publish verb/result associations. The local `scripts/sdk-wire.ts` projection validates the nested envelope frame and leaves result payloads unknown because the SDK also emits anonymous objects; add payload authority at the SDK before selecting result decoders. (testing-world)
 
 - 5 host tests fail under FORCE_COLOR=1 with no architecture set and pass otherwise; test output must not depend on terminal colour. Names in HOST47.md. (2026-11-04) Names: `tests/harness-install.test.ts`: `Codex package installs with RedirectionGuard; a bad digest preserves the previous install`; `tests/neutral-imports.test.ts`: `Node ESM imports neutral module ts/apps/web/src/ducts/neutral.ts from the host`; `tests/neutral-imports.test.ts`: `Node ESM imports neutral module ts/apps/web/src/families/neutral.ts from the host`; `tests/neutral-imports.test.ts`: `Node ESM imports neutral module ts/apps/web/src/fans/neutral.ts from the host`; `tests/neutral-imports.test.ts`: `Node ESM imports neutral module ts/apps/web/src/schedules/neutral.ts from the host`.
 

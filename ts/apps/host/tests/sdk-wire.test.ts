@@ -46,10 +46,6 @@ test("production refuses malformed nested wire fields and unknown discriminator 
       delete v.binary.sha256;
     },
     (v: ReturnType<typeof valid>) => {
-      v.result = JSON.parse(replay("session-list")).result;
-      v.result.sessions[0].case = "invented";
-    },
-    (v: ReturnType<typeof valid>) => {
       v.exitCode = 0.5;
     },
   ]) {
@@ -69,4 +65,18 @@ test("recorded transport corpus remains independently inspectable", () => {
     (file) => !isPeRevitEnvelope(JSON.parse(readFileSync(join(folder, file), "utf8"))),
   );
   expect(rejected).toEqual([]);
+});
+
+// SDK Program.cs:317 and ServiceCommand.cs:133 use anonymous objects, not exported result DTOs.
+test("anonymous SDK help and service payloads survive generated frame decoding", () => {
+  for (const result of [
+    { rootVerbs: [], verbs: [] },
+    { appBase: "C:/example", services: [], locks: [] },
+  ]) {
+    const frame = { ...valid(), result };
+    expect(isPeRevitEnvelope(frame)).toBe(true);
+    expect(parsePeRevitEnvelope(JSON.stringify(frame), ["source-derived"], launch).result).toEqual(
+      result,
+    );
+  }
 });

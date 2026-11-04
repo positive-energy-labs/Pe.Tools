@@ -1,7 +1,7 @@
 // SDK client. Runtime decoding projects the generated SDK contract through scripts/sdk-wire.ts.
 // Process success is not a verdict; validation rejects empty, non-JSON, and non-envelope output.
 
-import { wire, resultTypes } from "./generated/pe-revit-wire.ts";
+import { wire } from "./generated/pe-revit-wire.ts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -136,14 +136,13 @@ function matchesWire(value: unknown, shape: WireShape): boolean {
 }
 
 /** Decode the SDK projection, including nested fields, nullability and union discriminators.
- * The SDK does not publish verb/result associations. A result must match a generated DTO, but
- * this cannot prove that it belongs to the requested verb. SDK-owned unknown leaves stay unknown.
+ * The SDK also emits anonymous result objects and publishes no verb/result association.
+ * Result payloads remain unknown here; callers own decoding the payload contracts they select.
  */
 export function isPeRevitEnvelope(value: unknown): value is PeRevitEnvelope {
   if (!matchesWire(value, "Envelope")) return false;
   const envelope = value as PeRevitEnvelope;
-  return Number.isInteger(envelope.exitCode) && envelope.exitCode >= 0 && envelope.exitCode <= 4 &&
-    (envelope.result === null || resultTypes.some(name => matchesWire(envelope.result, name)));
+  return Number.isInteger(envelope.exitCode) && envelope.exitCode >= 0 && envelope.exitCode <= 4;
 }
 
 /** Parse stdout into a typed envelope (throws on any of the validate failures above). */

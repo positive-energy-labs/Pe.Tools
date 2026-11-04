@@ -59,19 +59,19 @@ function shape(type: ts.Type): Shape {
   }
   throw Error(`Unsupported SDK type ${checker.typeToString(type)}`);
 }
-for (const statement of source.statements)
-  if (ts.isInterfaceDeclaration(statement)) shape(checker.getTypeAtLocation(statement));
-const resultTypes = source.statements
-  .filter(ts.isInterfaceDeclaration)
-  .map((s) => s.name.text)
-  .filter((n) => n !== "Envelope");
+const envelope = source.statements.find(
+  (statement): statement is ts.InterfaceDeclaration =>
+    ts.isInterfaceDeclaration(statement) && statement.name.text === "Envelope",
+);
+if (!envelope) throw Error("SDK contract has no Envelope interface");
+shape(checker.getTypeAtLocation(envelope));
 const text = `// DO NOT EDIT. Projected from pe-revit-contract.ts by scripts/sdk-wire.ts.\n// SDK authority has no verb/result association; unknown payload leaves remain unknown.\nexport const contractSha256 = ${JSON.stringify(createHash("sha256").update(readFileSync(input, "utf8").replace(/\r\n/g, "\n")).digest("hex"))};\nexport const wire = ${
   "{\n" +
   Object.entries(definitions)
     .map(([name, value]) => `  ${JSON.stringify(name)}: ${JSON.stringify(value)}`)
     .join(",\n") +
   "\n}"
-};\nexport const resultTypes = ${JSON.stringify(resultTypes)};\n`;
+};\n`;
 if (process.argv.includes("--check")) {
   if (readFileSync(output, "utf8").replace(/\r\n/g, "\n") !== text)
     throw Error("SDK wire projection drift: run node scripts/sdk-wire.ts");
