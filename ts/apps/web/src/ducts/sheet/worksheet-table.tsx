@@ -11,7 +11,7 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  */
 import { useContext, useState } from "react";
 import type { DuctsInputs, DuctsSheetEdits } from "@pe/agent-contracts";
-import { AttentionDocument, mention, useAttention, type SubjectKey } from "@pe/kit/lang/attention";
+import { AttentionDocument, mention, useAttention } from "@pe/kit/lang/attention";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import { delivers } from "@pe/ducts-domain/sheet/worksheet";
 import { pressure, type Detail } from "./model";
@@ -168,7 +168,7 @@ function SectionRows({ ws, run, side, doc }: { ws: Ws; run: Run; side: Side; doc
             role="row"
             className={`${ROW} t-small`}
             data-section={id}
-            {...mention({ doc, key: `section:${id}` as SubjectKey })}
+            {...mention({ doc, key: `section:${id}` })}
           >
             <span className="face-mono text-ink-2">
               {s.runIds.length > 1 ? `×${s.runIds.length}` : ""}
@@ -257,7 +257,7 @@ function SideTable({
                   data-run={run.id}
                   data-critical={run.critical ? "" : undefined}
                   data-marked={picked.size && holds(run) && run !== opener ? "" : undefined}
-                  {...mention({ doc, key: `run:${run.id}` as SubjectKey })}
+                  {...mention({ doc, key: `run:${run.id}` })}
                   onClick={() =>
                     setOpen((s) => {
                       const next = new Set(s);

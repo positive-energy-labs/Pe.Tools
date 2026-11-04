@@ -24,6 +24,7 @@ type ReadArgs = Partial<
     z.output<(typeof entries)["ducts.sheet"]["input"]> &
     z.output<(typeof entries)["ducts.sheet-snapshot"]["input"]>
 >;
+// Kernel gap: legacy ReadingContext erases catalog input types before sources run; type that single boundary after U1.
 const args = (ctx: ReadingContext) => ctx.args as ReadArgs;
 
 import { blockerElements } from "./sheet/layers";

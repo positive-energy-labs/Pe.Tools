@@ -1,3 +1,4 @@
+import type { Immutable } from "../../agent-contracts/src/route-kernel-data.ts";
 import { friction, sectionOf } from "./loss-physics.ts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -5,9 +6,9 @@ export {
   catalogSchema,
   catalogTableSchema,
   type CatalogTable,
-  type Catalogs,
 } from "@pe/agent-contracts";
-import { type CatalogTable, type Catalogs, type CatalogInput } from "@pe/agent-contracts";
+import { type CatalogTable, type Catalogs as ContractCatalogs, type CatalogInput } from "@pe/agent-contracts";
+export type Catalogs = Immutable<ContractCatalogs>;
 export const EMPTY_CATALOGS: Catalogs = Object.freeze({});
 export const catalogLinkKey = (
   family: string | null | undefined,
@@ -36,7 +37,7 @@ export type CatalogLoss = {
 );
 
 /** No clamping or extrapolation, including the flow limits of an interpolated width row. */
-function bracket(xs: number[], x: number): [number, number, number] | null {
+function bracket(xs: readonly number[], x: number): [number, number, number] | null {
   if (!Number.isFinite(x) || x < xs[0]! || x > xs.at(-1)!) return null;
   const hi = xs.findIndex((n) => n >= x);
   if (xs[hi] === x) return [hi, hi, 0];

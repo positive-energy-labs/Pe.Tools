@@ -1,9 +1,9 @@
+import { useCallback } from "react";
+import { localId } from "../neutral";
 import type * as Atom from "effect/reactivity/Atom";
 import type { SubjectKey } from "@pe/kit/lang/attention";
-/** The one props object `route.tsx` hands the shell: the reads, the page, the Work and the selection callbacks. */
-import type { DuctClaim, DuctsRouteDocument, OrbitViewport } from "@pe/agent-contracts";
+import type { DuctsRouteDocument, OrbitViewport } from "@pe/agent-contracts";
 import type { price } from "@pe/ducts-domain/pricing";
-import type { readiness } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { ReactNode } from "react";
 import type { History } from "@pe/agent-contracts";
@@ -13,6 +13,7 @@ import type { HealReview } from "../reviews";
 import type { Claim, Run } from "../legs";
 import type { PricingResult } from "../pricing-job";
 
+// ProtoProps survives for picture/SystemsList/DuctsOwner; U1b replaces with real per-pane bodies
 export interface ProtoProps {
   /** Geometry follows the native snapshot revision, independently of pending pricing. */
   captureSource?: { document: { session: string; openId: string }; version: string } | null;
@@ -24,10 +25,6 @@ export interface ProtoProps {
   priced: ReturnType<typeof price> | null;
   /** The snapshot and tables are in and the price is still being computed (a few seconds). */
   pricing: boolean;
-  /** Catalog findings (prose), as route.tsx draws them above the body. */
-  findings: readonly string[];
-  /** Per-group readiness (internal keys). */
-  ready: ReturnType<typeof readiness>;
   /** Document-wide projections share the worker's Work revision; null before the first solve. */
   analysis: PricingResult["analysis"] | null;
   /** Run scene (ids + claims + verdict callback); null until a subject exists. */
@@ -36,8 +33,6 @@ export interface ProtoProps {
   onVerdict: (claim: Claim, verdict: NonNullable<Claim["verdict"]>) => void;
   /** The chosen system's claims (every claim when no system is chosen). */
   claims: readonly Claim[];
-  /** The claim cells keyed by id as the Work (or the `?fixture=scene` fixture) holds them. */
-  claimCells: Record<string, DuctClaim>;
   /** Route page state (selected, issue, system, level, layers, encoding, picture, viewport, ...). */
   page: Omit<DuctsPage, "system"> & {
     system: string[];
@@ -54,12 +49,11 @@ export interface ProtoProps {
   onPose?: (pose: OrbitViewport | null) => void;
   /** Selection / hover callbacks over element ids and claims. */
   onSelect: (id: number | null) => void;
-  onSelectClaim: (claim: Claim) => void;
   /** Work doc and its writer. Every write invokes the kernel Work verb. */
   work: {
     doc: DuctsRouteDocument | null;
     revision: number | null;
-    write: (patches: never) => Promise<unknown> | void;
+    write: import("../work").LossesWork["write"];
   };
   /** Empty-state words, or null when the snapshot is drawable. */
   empty: { says: string; exit: string } | null;
@@ -72,7 +66,6 @@ export interface ProtoProps {
   /** Pane placements render the kernel's controls; no preview state or lifecycle exists here. */
   commands: (row?: unknown) => ReactNode;
   cells: (row: { segment: string; key: string }) => ReactNode;
-  busy: boolean;
   /** How many changes a write would carry: edit cells and pending rulings. */
   edit: number;
   /** Coverage of the explicitly chosen Revit systems. */
@@ -82,4 +75,49 @@ export interface ProtoProps {
     reading: readonly string[];
     report?: string;
   } | null;
+}
+
+// The remaining picture/SystemsList consumers use their existing callback until U1b recuts them.
+export function useProtoPage(
+  pagePort: Pick<
+    import("../../../../../packages/agent-contracts/src/route-kernel-bodies").PaneContext<
+      typeof import("../neutral").ductsData,
+      typeof import("../neutral").schemas,
+      typeof import("../neutral").entries,
+      keyof typeof import("../neutral").ductsData.panes
+    >["page"],
+    "select" | "pose"
+  >,
+  browse: (input: import("zod").z.output<typeof import("../neutral").schemas.browse>) => unknown,
+): ProtoProps["setPage"] {
+  return useCallback<ProtoProps["setPage"]>(
+    (next, move) => {
+      const {
+        selected,
+        contextRadiusFt,
+        sceneView,
+        encoding,
+        layers,
+        contextStyle,
+        picture,
+        viewport,
+        ...query
+      } = next;
+      if (selected !== undefined)
+        pagePort.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
+      const pose = {
+        ...(contextRadiusFt !== undefined && { contextRadiusFt }),
+        ...(sceneView !== undefined && { sceneView }),
+        ...(encoding !== undefined && { encoding }),
+        ...(layers !== undefined && { layers }),
+        ...(contextStyle !== undefined && { contextStyle }),
+        ...(picture !== undefined && { picture }),
+        ...(viewport !== undefined && { viewport }),
+      };
+      if (Object.keys(pose).length)
+        pagePort.pose(pose, move?.history === "replace" ? "gesture" : "named");
+      if (Object.keys(query).length) browse(query);
+    },
+    [pagePort, browse],
+  );
 }

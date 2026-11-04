@@ -9,9 +9,9 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 export const SHEET_GROUP = "sheet";
 
 /** No fan open, or the read not back yet: names fall back to the roster's marks. */
-export const EMPTY_SNAPSHOT = {
+export const EMPTY_SNAPSHOT: DuctSnapshot = {
   document: { title: "", readAt: "", elapsedMs: 0, networkBasedCalculations: false },
-  coordinateEncoding: "decimal",
+  coordinateEncoding: "native-double",
   levels: [],
   groups: [],
   nodes: [],
@@ -20,8 +20,15 @@ export const EMPTY_SNAPSHOT = {
   issues: [],
   layers: [],
   systems: [],
-  slots: {},
-} as unknown as DuctSnapshot;
+  slots: {
+    fanStatic: "",
+    fanFlow: "",
+    componentDrop: "",
+    terminalDrop: "",
+    fittingCoefficient: "",
+    terminalFlow: "",
+  },
+};
 
 export function sheetSnapshot(raw: DuctSnapshot | null): DuctSnapshot {
   if (!raw) return EMPTY_SNAPSHOT;

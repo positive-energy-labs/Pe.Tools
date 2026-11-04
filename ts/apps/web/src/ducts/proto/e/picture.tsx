@@ -1,3 +1,4 @@
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { sceneRequest } from "#/scene/host";
 /**
  * E's picture content: what the ducts picture is of and what it marks. Every picture behaviour
@@ -34,7 +35,6 @@ import { DuctsOverlay, linesOf, useEquipment } from "../../picture-content";
 import { elementNamer } from "../../claims";
 import { NodeFactsView, SegmentFactsView } from "../../facts";
 import { labelOfNode, legsOf } from "../../legs";
-import { ductsFocus } from "../../page";
 import { paintOfDucts, stubIdsOf } from "../../selection";
 import { healReviewLayers, findingLayers, findingShapes, noRunLayers } from "../../finding-layers";
 import { RunDetail, runOf } from "./run-detail";
@@ -100,6 +100,22 @@ export interface DuctsPictureExtra {
   /** The screen's alias picks call this when the subject is already the selection: fly again. */
   jump?: RefObject<((key: SubjectKey) => void) | null>;
 }
+
+/** Only opened systems are captured; an unscoped page never captures the whole document. */
+export const ductsFocus = (
+  snapshot: DuctSnapshot | null,
+  system: readonly string[],
+  drawn: Iterable<number> = [],
+  stubs: Iterable<number> = [],
+) => {
+  if (!snapshot) return null;
+  const scope = scopeOf(snapshot, system);
+  if (!scope) return null;
+  return {
+    walked: [...new Set([...scope.members, ...drawn])].map((id) => elementKey(id)),
+    near: [...stubs].map((id) => elementKey(id)),
+  };
+};
 
 export function DuctsPicture(props: ProtoProps & DuctsPictureExtra) {
   const { snapshot } = props;

@@ -232,6 +232,13 @@ export type PaneContext<
   P extends keyof G["panes"],
 > = {
   readonly page: PagePort<G, S>;
+  /** Cell edits share mount custody, captured dependencies and the Work journal. */
+  readonly cells: {
+    readonly [Kind in "take" | "unsuggest" | "clear"]: <C extends keyof G["cells"] & string>(
+      cell: C,
+      key: CellKey<S, G["cells"][C]>,
+    ) => Observation<WorkWriteOutcome>;
+  };
   readonly history?: "work" extends keyof G ? WorkHistoryPort<HistoryMeta<G, S>> : never;
   readonly recovery?: "work" extends keyof G ? WorkRecoveryPort : never;
   readonly work: Immutable<WorkOf<G, S>> | null;

@@ -9,8 +9,11 @@ import { availableTransitions, type CellLike } from "@pe/agent-contracts";
 import { cellFromDraft, StateCell, type CellOption, type CellTransition } from "@pe/kit/lang/cell";
 
 /** Run one Pea-suggestion transition on a Work cell; resolves to a refusal, or null when it landed. */
+export type CellPath =
+  | readonly ["criteria"]
+  | readonly ["rules" | "ruleAssignments" | "kinds" | "parameters", string];
 export type CellAct = (
-  path: readonly string[],
+  path: CellPath,
   cell: CellLike,
   kind: "take" | "unsuggest",
   label: string,
@@ -34,7 +37,7 @@ export function ChoiceCell({
   /** The Work cell behind the choice, when it has one (a Pea suggestion lives here). */
   cell: CellLike | undefined;
   /** That cell's path in the route document, `[segment, key]`. */
-  path: readonly string[] | null;
+  path: CellPath | null;
   /** A Work rung value as the option label it names. */
   show: (value: unknown) => string;
   refusal: string | null;

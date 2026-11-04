@@ -1,18 +1,13 @@
+import { jsonCodec } from "../../../../packages/agent-contracts/src/route-kernel-codecs";
 import { pricingJob } from "./pricing-job";
-import type { DuctsRouteDocument } from "@pe/agent-contracts";
-import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { Grids } from "@pe/ducts-domain/loss-grid";
-import type { Catalogs } from "@pe/ducts-domain/catalog";
 import { createElement } from "react";
 import { identityCodecs } from "../shell/page-port";
 import type {
   BodyBindings,
   CodecBindings,
 } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
-import type { SchemaTable } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { ductsData, schemas, entries, neutralBodies } from "./neutral";
-import { DuctsPane } from "./pane-view";
+import { NetworkBody } from "./proto/e/screen";
 import { ductsSources } from "./sources";
 import { presentLosses, presentHeal, presentFan } from "./reviews";
 import { seedBodies } from "./fixtures";
@@ -30,11 +25,13 @@ export const bodies = {
       const priced = pricingJob()({
         id: 0,
         base: {
-          snapshot: ducts.value as DuctSnapshot,
-          grids: tables.value as Grids,
-          catalogs: catalogs.value.tables as Catalogs,
+          // Domain readonly sweep reached 28 files; DuctSnapshot still requires mutable arrays.
+          snapshot: ducts.value as import("@pe/ducts-domain/types").DuctSnapshot,
+          grids: tables.value,
+          catalogs: catalogs.value.tables,
         },
-        doc: ctx.work as DuctsRouteDocument,
+        // readonly at the contract owner after U2 lands
+        doc: ctx.work as import("@pe/agent-contracts").DuctsRouteDocument,
       });
       if ("error" in priced) throw Error(priced.error);
       return "result" in priced ? priced.result : null;
@@ -45,83 +42,86 @@ export const bodies = {
     slot: "panes.e-systems.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-systems" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-systems" }),
   },
   "e-sidebar": {
     slot: "panes.e-sidebar.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-sidebar" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-sidebar" }),
   },
   "e-inputs": {
     slot: "panes.e-inputs.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-inputs" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-inputs" }),
   },
   "e-rules-all": {
     slot: "panes.e-rules-all.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-rules-all" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-rules-all" }),
   },
   "e-rules": {
     slot: "panes.e-rules.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-rules" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-rules" }),
   },
   "e-picture": {
     slot: "panes.e-picture.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-picture" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-picture" }),
   },
   "e-inbox": {
     slot: "panes.e-inbox.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(DuctsPane, { ctx, id: "e-inbox" }),
+    run: (ctx) => createElement(NetworkBody, { ctx, id: "e-inbox" }),
   },
   presentLosses: {
     slot: "verbs.losses.present",
     kind: "present",
     source,
-    run: (result: unknown, ctx: Parameters<typeof presentLosses>[1]) => presentLosses(result, ctx),
+    run: presentLosses,
   },
   presentHeal: {
     slot: "verbs.heal.present",
     kind: "present",
     source,
-    run: (result: unknown, ctx: Parameters<typeof presentHeal>[1]) => presentHeal(result, ctx),
+    run: presentHeal,
   },
   presentFan: {
     slot: "verbs.assign.present",
     kind: "present",
     source,
-    run: (result: unknown, ctx: Parameters<typeof presentFan>[1]) => presentFan(result, ctx),
+    run: presentFan,
   },
 } satisfies BodyBindings<typeof ductsData, typeof schemas, typeof entries>;
-const json = {
-  encode: JSON.stringify,
-  decode(text: string) {
-    try {
-      return { ok: true as const, value: JSON.parse(text) };
-    } catch {
-      return { ok: false as const, reason: "Malformed route value" };
-    }
-  },
-};
-export function jsonCodecs<G extends RouteGraphJson, S extends SchemaTable>(
-  data: G,
-): CodecBindings<G, S> {
-  return Object.fromEntries(
-    Object.entries(data.fields)
-      .filter(([, field]) => "codec" in field)
-      .map(([key]) => [key, json]),
-  ) as CodecBindings<G, S>;
-}
-export const codecs = jsonCodecs<typeof ductsData, typeof schemas>(ductsData);
+export const codecs = {
+  threadSearch: jsonCodec(schemas.threadSearch),
+  threadSort: jsonCodec(schemas.threadSort),
+  stage: jsonCodec(schemas.networkStage),
+  contextRadiusFt: jsonCodec(schemas.contextRadiusFt),
+  sceneView: jsonCodec(schemas.sceneView),
+  system: jsonCodec(schemas.system),
+  systemSearch: jsonCodec(schemas.systemSearch),
+  systemSort: jsonCodec(schemas.systemSort),
+  rulingSearch: jsonCodec(schemas.rulingSearch),
+  rulingSort: jsonCodec(schemas.rulingSort),
+  treeSearch: jsonCodec(schemas.treeSearch),
+  treeSort: jsonCodec(schemas.treeSort),
+  inputSearch: jsonCodec(schemas.inputSearch),
+  inputSort: jsonCodec(schemas.inputSort),
+  encoding: jsonCodec(schemas.encoding),
+  layers: jsonCodec(schemas.layers),
+  contextStyle: jsonCodec(schemas.contextStyle),
+  picture: jsonCodec(schemas.picture),
+  viewport: jsonCodec(schemas.viewport),
+  fan: jsonCodec(schemas.fan),
+  sheetPath: jsonCodec(schemas.sheetPath),
+} satisfies CodecBindings<typeof ductsData, typeof schemas>;
 export const module = {
   data: ductsData,
   schemas,

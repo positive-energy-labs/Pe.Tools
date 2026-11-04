@@ -44,7 +44,7 @@ test("cell display validates shapes and caches bodies; takes validate Work patch
   cells.rows();
   expect(group).toHaveBeenCalledOnce();
   expect(cells.focus("edits", "a")).toEqual({ query: "a" });
-  expect(cells.take("edits", "a", { page: {}, work: {}, readings: {} })).toEqual([
+  expect(cells.transition("take", "edits", "a", { page: {}, work: {}, readings: {} }, {})).toEqual([
     { path: ["edits"], value: { a: "taken" } },
   ]);
   expect(() => admittedWorkPatches(data, schemas, [{ path: ["secret"], value: 1 }])).toThrow(
