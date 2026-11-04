@@ -142,7 +142,7 @@
     "size": 300,
     "sized": "start"
   },
-  "moduleHash": "66fd5683e0b2a6d8216ab1648c79a57bd9f85773db0da5f3a24afd5be0879951",
+  "moduleHash": "ec93f470c7e245a4938f648928d7418bfdc81c458a5e8da9f909238d0b174c40",
   "name": "Pea",
   "panes": {
     "chat": {
@@ -210,6 +210,14 @@
       "kind": "use",
       "retire": "never",
       "source": "threads"
+    },
+    "transcript": {
+      "args": {
+        "runtime": true
+      },
+      "kind": "use",
+      "retire": "page",
+      "source": "transcript"
     }
   },
   "seeds": {
