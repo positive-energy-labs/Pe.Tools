@@ -4,6 +4,10 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-04, accept MOUNT-CUT production +318 (gap +168 versus +150), DUP 0, under its classified seam table; kaitpw reviews readability. Factory return types define the service surfaces and one MountContext preserves Work typing. [Seam map](C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-741eac7f/.artifacts/tmp/mount-cut/REPORT.md). (counsel, MOUNT-CUT)
+- 2026-11-04, keep [verbs-cells](../../../ts/apps/web/src/shell/verbs-cells.ts) until the legacy mount retires or is recut; keep the [subject registries](../../../ts/apps/web/src/shell/subject.ts#L6) until their consumer contract changes. The COMMON 20 exception is recorded beside the code. (counsel, MOUNT-CUT)
+- 2026-11-04, root cell families enumerate only their declared key-schema keys, or their own family id without a key schema. The [root-cell law](../../../ts/apps/web/src/shell/admitted-cells.test.ts) closes U3's unrelated-root finding without a route-local filter. (MOUNT-CUT)
+
 - 2026-11-04, Q2 gives Fans its own declared Work, admission, writeIntent and edit doors; cross-route Work owner references are deleted. Q1/Q5 open Fans with empty fan inputs and empty undo after the Ducts split. (U3)
 
 - 2026-11-04, Work accepted/publication listener exceptions are isolated observation faults: log each fault, continue to peers and publish, and keep the committed write successful. Promise-island publication uses `finally` (COMMON 24). Persistence failures still reject before notification. Owner: [RouteWorkspace](../../../ts/packages/runtime/src/route-workspace.ts). (counsel, D5)
@@ -75,6 +79,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Tried & rejected
 
+- 2026-11-04, MOUNT-CUT browser smoke stopped within its 15-minute box: normal fixture Vite React 504, then disposable-config CJS export failure; no repository config edits. UNPROVEN[browser blocked before admission]. [Evidence](C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-741eac7f/.artifacts/tmp/mount-cut/REPORT.md). (MOUNT-CUT)
+
 - 2026-11-04, A durable browser fixture harness is not intended. Prove persistence/isolation with deterministic cold shells over real RouteWorkspace; Manual D owns browser reload on a real dev host. (U3/counsel)
 
 - 2026-11-04, schema-level `ListSearch.readonly`: it changes Pea metadata. Keep readonly at the TypeScript display owners in [ListSearch](../../../ts/packages/agent-contracts/src/list-search.ts), [PicturePage](../../../ts/packages/agent-contracts/src/routes/picture.ts) and sheet display types. (counsel, U1b)
@@ -92,10 +98,12 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
+- Manual D after U4: prove real-host /ducts and /fans open, edit and deep-link behavior after MOUNT-CUT. UNPROVEN[browser smoke not completed]. (counsel, MOUNT-CUT, 2026-11-04)
+- COMMON 31: [startup-readiness.test.ts:103](../../../ts/apps/host/tests/startup-readiness.test.ts#L103) and :105 must use the existing effect-test seam. The two typed-lint failures are inherited at 603e8a49. (MOUNT-CUT finding, 2026-11-04)
+
 - PROTO-HOME owns the production `ducts/proto/` rename/deletion under COMMON 30. U3 leaves it in place to avoid U4/MOUNT-CUT conflicts. (counsel, U3, 2026-11-04)
 
 - 2026-11-04, scene/navigation snapshot units differ from Chadds `sheet.roster` IDs ([ducts fixture](../../../ts/apps/web/src/ducts/fixtures.ts#L45), [Fans kernel](../../../ts/apps/web/src/fans/kernel.tsx#L27)); align fixture identity before claiming a browser crossing from a Ducts fan row. Keep that leg UNPROVEN[Manual D on real Chadds]. (test-fixture owner, U3 finding)
-- 2026-11-04, root cell families enumerate every root property in [admitted cells](../../../ts/apps/web/src/shell/admitted-cells.ts#L81); Fans designFriction rows therefore include unrelated roots. The explicit friction editor writes the correct path; do not add route-local filtering. MOUNT-CUT owns this cells seam. (MOUNT-CUT, U3 finding accepted by counsel)
 - 2026-11-04, replace the named pricing SHIMs with actual reads of both Works. Manual D must prove browser reload persistence on the real dev host and the source-row crossing on real Chadds. Retain the pre-existing RHVAC stale-basis Apply/commit finding. (U4)
 
 - Give `PricingResult` a typed kernel output; its display cast remains in [screen.tsx](../../../ts/apps/web/src/ducts/proto/e/screen.tsx#L116). U3 closes the former Work-schema typing and accepted-Work assertions, leaving this output debt. (counsel, U1b; U3 follow-up)
@@ -120,7 +128,7 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - `shell/work-door-observation.ts`: completion rejection can strand waiting cell transitions; replace observation/completion ownership with typed terminals on success/failure/interruption and scoped subscription release. U1 has no rejection proof. (counsel/Common 15, 2026-11-04)
 - The readonly `DuctSnapshot` input sweep reached 28 files (16 production, 12 tests) and stopped; the alias was restored. U1b closes the Page viewport/`ListSearch` and `SheetReading` display casts with readonly display contracts. The broader snapshot sweep remains Owed. `Grids`/`Catalogs` were narrowed in two domain files. (counsel, 2026-11-04)
 - `source-route-services`/`ReadingContext` erases catalog input types before ducts sources; the one `ReadArgs` cast names the kernel gap. No per-reader decode was added. (counsel, 2026-11-04)
-- Ducts retains its root criteria writer; fan-owned editors now live on Fans InputsBody/InputsSurface. The generic root-cell family enumeration remains with MOUNT-CUT above. (counsel/Q2a, U1b; U3, 2026-11-04)
+- Ducts retains its root criteria writer; fan-owned editors now live on Fans InputsBody/InputsSurface. MOUNT-CUT closes the generic root-cell enumeration gap; U4 still owns the pricing/apply seam. (counsel/Q2a, U1b; U3/MOUNT-CUT, 2026-11-04)
 
 - Tag preservation across the route's own URL write is UNPROVEN; no dedicated test (fans-pick df93f1d2).
 
