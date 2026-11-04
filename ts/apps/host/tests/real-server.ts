@@ -11,7 +11,7 @@ import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { makeHttpLive } from "../src/app.ts";
 import { RevitBridge } from "../src/bridge.ts";
-import { hostOwnership, productRoot } from "../src/host-ownership.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
 
 /**
@@ -103,18 +103,25 @@ export async function bootHost() {
       }),
     ),
   );
-  const appBase = productRoot();
+  const appBase = hostOwnership.rootPath;
   let file = await readServiceFile(appBase, hostOwnership.serviceName);
   for (let i = 0; !file && i < 200; i++) {
     await new Promise((resolve) => setTimeout(resolve, 50));
     file = await readServiceFile(appBase, hostOwnership.serviceName);
   }
   // The claim holder writes its terminal context right after the service file appears.
-  for (let i = 0; !existsSync(hostContextTokenPath(hostOwnership.serviceName)) && i < 200; i++)
+  for (
+    let i = 0;
+    !existsSync(hostContextTokenPath(hostOwnership.rootPath, hostOwnership.serviceName)) && i < 200;
+    i++
+  )
     await new Promise((resolve) => setTimeout(resolve, 10));
   return {
     base: `http://127.0.0.1:${file!.port}`,
-    terminal: readFileSync(hostContextTokenPath(hostOwnership.serviceName), "utf8"),
+    terminal: readFileSync(
+      hostContextTokenPath(hostOwnership.rootPath, hostOwnership.serviceName),
+      "utf8",
+    ),
     async close() {
       // effect-edge: island, phase 5
       Effect.runSync(Deferred.succeed(latch, undefined));

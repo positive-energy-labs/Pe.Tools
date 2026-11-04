@@ -387,6 +387,9 @@ importers:
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../host-contracts
+      '@pe/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       devtools-protocol:
         specifier: 0.0.1724436
         version: 0.0.1724436

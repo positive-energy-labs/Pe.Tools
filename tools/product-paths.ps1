@@ -1,51 +1,21 @@
-# Mirrors ts/packages/host-contracts/src/service-identity.ts productRoot and
-# dotnet/Pe.Shared.Product/ProductPathing.cs ResolveRuntimeRoot. Callers own directory creation.
-function Resolve-ProductCanonicalPath {
-    param([string]$Path)
-    $full = [IO.Path]::GetFullPath($Path)
-    $parent = [IO.Path]::GetDirectoryName($full)
-    if (-not $parent) { return $full }
-    $canonicalParent = Resolve-ProductCanonicalPath $parent
-    $candidate = Join-Path $canonicalParent ([IO.Path]::GetFileName($full))
-    $item = Get-Item -LiteralPath $candidate -Force -ErrorAction SilentlyContinue
-    if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-        $target = @($item.Target)[0]
-        if (-not $target) { throw "Cannot resolve state path link '$candidate'." }
-        if (-not [IO.Path]::IsPathRooted($target)) { $target = Join-Path $canonicalParent $target }
-        return Resolve-ProductCanonicalPath $target
-    }
-    return $candidate
-}
-
+# The PowerShell form of the one state-root rule (C# ProductPathing.StateRoot, TS stateRoot); all three
+# assert ts/packages/host-contracts/tests/runtime-ownership.fixture.json. The caller names its lane and
+# owner root (a checkout, or the SDK install root); nothing defaults. Callers own directory creation.
 function Resolve-ProductRuntimeRoot {
     param(
-        [string]$ProductHomeOverride = $env:PE_TOOLS_PRODUCT_HOME,
-        [string]$LocalAppData = $env:LOCALAPPDATA,
-        [ValidateSet('dev', 'installed')][string]$Lane = 'installed',
-        [string]$SourceRoot
+        [Parameter(Mandatory)][ValidateSet('dev', 'installed')][string]$Lane,
+        [Parameter(Mandatory)][string]$Root,
+        [string]$ProductHomeOverride = $env:PE_TOOLS_PRODUCT_HOME
     )
-    if ([string]::IsNullOrWhiteSpace($LocalAppData)) {
-        $LocalAppData = [Environment]::GetFolderPath('LocalApplicationData')
+    if (-not [IO.Path]::IsPathRooted($Root)) { throw "A $Lane runtime needs an absolute owner root." }
+    # v0.7.30 refused an installed runtime under a home override; kept unchanged.
+    if ($Lane -eq 'installed' -and -not [string]::IsNullOrWhiteSpace($ProductHomeOverride)) {
+        throw 'An installed runtime does not run under PE_TOOLS_PRODUCT_HOME.'
     }
-    $installed = Join-Path $LocalAppData 'Positive Energy/Pe.Tools'
-    if ($Lane -eq 'dev') {
-        if ([string]::IsNullOrWhiteSpace($SourceRoot) -or
-            -not (Test-Path -LiteralPath (Join-Path $SourceRoot '.git')) -or
-            -not (Test-Path -LiteralPath (Join-Path $SourceRoot 'Pe.Tools.slnx') -PathType Leaf)) {
-            throw 'A dev state root requires a Pe.Tools checkout.'
-        }
-        $root = Join-Path ([IO.Path]::GetFullPath($SourceRoot)) '.artifacts/pe-tools'
-    } else { $root = $installed }
     if (-not [string]::IsNullOrWhiteSpace($ProductHomeOverride)) {
-        $root = Join-Path ([IO.Path]::GetFullPath($ProductHomeOverride.Trim())) '.local-state'
+        return [IO.Path]::Combine([IO.Path]::GetFullPath($ProductHomeOverride.Trim()), '.local-state')
     }
-    if ($Lane -eq 'dev') {
-        $canonicalInstalled = (Resolve-ProductCanonicalPath $installed).TrimEnd('\')
-        $canonicalRoot = (Resolve-ProductCanonicalPath $root).TrimEnd('\')
-        if ($canonicalRoot.Equals($canonicalInstalled, [StringComparison]::OrdinalIgnoreCase) -or
-            $canonicalRoot.StartsWith($canonicalInstalled + '\', [StringComparison]::OrdinalIgnoreCase)) {
-            throw "Dev host cannot use installed product state '$root'."
-        }
-    }
-    return $root
+    # Combine, not Join-Path: pure string work, like C# and TS, even for a drive that is not mounted.
+    if ($Lane -eq 'dev') { return [IO.Path]::Combine([IO.Path]::GetFullPath($Root), '.artifacts', 'pe-tools') }
+    return $Root
 }

@@ -7,7 +7,6 @@ import {
   HOST_CONTRACT_VERSION,
   productPathNames,
 } from "@pe/host-contracts/contracts";
-import { productRoot } from "@pe/host-contracts/service-identity";
 import {
   HostLogTarget,
   type HostProbeData,
@@ -255,7 +254,7 @@ function splitLogLines(text: string): string[] {
 }
 
 function productLogPaths() {
-  const rootPath = join(productRoot(), productPathNames.logsDirectoryName);
+  const rootPath = join(hostOwnership.rootPath, productPathNames.logsDirectoryName);
   return {
     hostLogPath: join(rootPath, productPathNames.hostLogFileName),
     revitAppLogPath: join(rootPath, productPathNames.revitAppLogFileName),

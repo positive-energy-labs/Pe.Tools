@@ -8,7 +8,7 @@ import { z } from "zod";
 import { command, refused, type CommandExecutor } from "./command-executor.ts";
 import { runPods, type PodDependencies } from "./family-actions.ts";
 import { podFolder } from "./settings.ts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 
 const safePath = (root: string, path: string) => {
   const full = resolve(root, path);
@@ -136,7 +136,12 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
           // The dev frontend receipt is tied to this checkout's host identity, never a guessed port.
           const port = Number(
             await readFile(
-              join(productRoot(), "state", "service", `${hostOwnership.serviceName}-web.port`),
+              join(
+                hostOwnership.rootPath,
+                "state",
+                "service",
+                `${hostOwnership.serviceName}-web.port`,
+              ),
               "utf8",
             ),
           );

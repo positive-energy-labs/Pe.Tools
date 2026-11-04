@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@pe/host-contracts": "workspace:*",
+    "@pe/runtime": "workspace:*",
     "devtools-protocol": "0.0.1724436",
     "effect": "4.0.2",
     "ws": "8.21.0"

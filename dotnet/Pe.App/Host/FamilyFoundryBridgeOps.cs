@@ -146,7 +146,7 @@ internal static class FamilyFoundryBridgeOps {
         }, specJson, plan);
         var source = composed.Root;
         var handled = new List<(bool IsError, string Message)>();
-        var artifacts = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, "Pe.Tools", "family-apply", Guid.NewGuid().ToString("N"));
+        var artifacts = Path.Combine(ProductRuntimeLayout.Current.ScratchPath, "Pe.Tools", "family-apply", Guid.NewGuid().ToString("N"));
         try {
             var data = RevitDialogs.NoModal(handled, () => ApplyFamilies(specJson, expectedPlanHashes, document, executionOptions, loadAndSave, artifacts, familyNames, cancellationToken));
             var failures = Failures(data);

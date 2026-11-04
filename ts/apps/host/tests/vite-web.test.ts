@@ -6,7 +6,7 @@ import { Deferred, Effect, Layer } from "effect";
 import { createServer as createViteServer } from "vite-plus";
 import { expect, test } from "vite-plus/test";
 import { makeHttpLive } from "../src/app.ts";
-import { hostOwnership, productRoot } from "../src/host-ownership.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { checkoutIngress, devHostProxy } from "../../web/dev-proxy.ts";
@@ -65,7 +65,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
       ),
     ),
   );
-  const appBase = productRoot();
+  const appBase = hostOwnership.rootPath;
   let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
   let socket: WebSocket | undefined;
   try {

@@ -503,7 +503,7 @@ public class CmdAutoTag : IExternalCommand {
     }
 
     private static string GetSettingsDirectory() {
-        return Pe.Shared.Product.ProductRuntimeLayout.ForCurrentUser().State.ResolveModuleStatePath("AutoTag");
+        return Pe.Shared.Product.ProductRuntimeLayout.Current.State.ResolveModuleStatePath("AutoTag");
     }
 
     #endregion

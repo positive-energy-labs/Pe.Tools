@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { productHomePath } from "@pe/host-contracts/product-paths";
-import { productRoot } from "@pe/host-contracts/service-identity";
+import { runtimeRoot } from "./runtime-owner.ts";
 
 export interface AnalyticsConfig {
   apiKey: string;
@@ -15,7 +15,7 @@ export function analyticsConfig(lane: "dev" | "installed"): AnalyticsConfig | nu
   const path =
     lane === "dev"
       ? join(productHomePath(), "preferences.json")
-      : join(productRoot(), "product.payloads.json");
+      : join(runtimeRoot(), "product.payloads.json");
   const file = readJson(path) as
     | {
         posthog?: AnalyticsConfig;
@@ -47,7 +47,7 @@ const validId = (value: unknown): value is string =>
 /** Exclusive creation preserves the winner's opaque UUID. Invalid identity disables export. */
 export function readOrCreateInstallId(): string | null {
   try {
-    const path = join(productRoot(), "state", "install.json");
+    const path = join(runtimeRoot(), "state", "install.json");
     const read = () => (readJson(path) as { installId?: unknown } | undefined)?.installId;
     const existing = read();
     if (validId(existing)) return existing;
@@ -71,7 +71,7 @@ export function writeFatalEvidence(
   error: unknown,
 ) {
   try {
-    const path = join(productRoot(), "logs");
+    const path = join(runtimeRoot(), "logs");
     mkdirSync(path, { recursive: true });
     appendFileSync(
       join(path, "host-fatal.jsonl"),

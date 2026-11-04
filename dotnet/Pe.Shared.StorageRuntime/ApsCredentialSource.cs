@@ -16,7 +16,7 @@ public sealed class ApsCredentialSource {
 
     public string ResolveCredentialsPath(string? basePathOverride = null) =>
         string.IsNullOrWhiteSpace(basePathOverride)
-            ? ProductRuntimeLayout.ForCurrentUser().State.ApsCredentialsPath
+            ? ProductRuntimeLayout.Current.State.ApsCredentialsPath
             : Path.Combine(Path.GetFullPath(basePathOverride), "credentials.json");
 
     public ApsCredentialSettings ReadCredentialsFile(string? basePathOverride = null) {

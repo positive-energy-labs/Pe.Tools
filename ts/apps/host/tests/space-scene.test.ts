@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { productRoot } from "@pe/host-contracts/service-identity";
+import { hostOwnership } from "../src/host-ownership.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 
 test("saved scene bytes remain available with no native registrations, and integrity is checked", async () => {
@@ -13,7 +13,7 @@ test("saved scene bytes remain available with no native registrations, and integ
   });
   const bytes = Buffer.from("PSC1 durable capture");
   const id = createHash("sha256").update(bytes).digest("hex");
-  const root = join(productRoot(), "cache", "space-scenes");
+  const root = join(hostOwnership.rootPath, "cache", "space-scenes");
   const path = join(root, `${id}.bin`);
   const request = () => app.fetch(new Request(`http://host/pe/space/scenes/${id}/artifact`));
   await mkdir(root, { recursive: true });

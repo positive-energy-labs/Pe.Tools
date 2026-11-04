@@ -7,10 +7,10 @@ import { Context, Deferred, Effect, Layer, type Scope } from "effect";
 import { ReceiptExport, recordUpdateFact } from "./receipt-export.ts";
 import { serviceFilePath, type ServiceFile } from "@pe/host-contracts/pe-service";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
-import { productRoot } from "@pe/host-contracts/service-identity";
 import { openWindow, prepareHostBinding, resolveHostVersion } from "./host-lifecycle.ts";
 import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
+import { trayOwnerArguments } from "@pe/host-contracts/service-identity";
 import { makeInstalledUpdateReader } from "./update-route.ts";
 import { installedForeignAddins } from "./foreign-addins.ts";
 
@@ -147,12 +147,13 @@ const installedTrayExecutable = () =>
 
 function installedTrayArguments(file: ServiceFile, show: boolean): string[] {
   return [
+    ...trayOwnerArguments(hostOwnership),
     "--parent-pid",
     String(file.pid),
     "--parent-start",
     file.processStartUtc,
     "--service-file",
-    serviceFilePath(productRoot(), hostOwnership.serviceName),
+    serviceFilePath(hostOwnership.rootPath, hostOwnership.serviceName),
     ...(show ? ["--show"] : []),
   ];
 }

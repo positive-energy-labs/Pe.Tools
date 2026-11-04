@@ -47,7 +47,7 @@ import {
   type TakeoffObservation,
   type TakeoffSnapshot,
 } from "@pe/agent-contracts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 
 const keyOf = (target: DocumentRef) => JSON.stringify([target.session, target.openId]);
 const previousOf = (state: TakeoffObservation) =>
@@ -996,11 +996,11 @@ export class TakeoffCaptures {
 
 /** Where this host service keeps its Takeoff, schedule and Families readings. */
 export const takeoffCapturesDirectory = () =>
-  join(productRoot(), "state", "host", hostOwnership.serviceName, "takeoff-captures");
+  join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName, "takeoff-captures");
 /** The APS Parameters Service cache Families readings reference. */
 export const apsParameterCachePath = () =>
   join(
-    productRoot(),
+    hostOwnership.rootPath,
     productPathNames.stateDirectoryName,
     productPathNames.globalDirectoryName,
     "parameters-service-cache.json",

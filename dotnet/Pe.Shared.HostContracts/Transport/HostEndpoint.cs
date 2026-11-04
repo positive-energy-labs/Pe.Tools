@@ -31,17 +31,20 @@ public static class HostEndpoint {
         FirstNonBlank(overrideValue, Environment.GetEnvironmentVariable(FrontendBaseUrlVariable))
         ?? DefaultFrontendBaseUrl;
 
-    public static string ResolveHostBaseUrl(string? overrideValue = null) {
-        var serviceName = ResolveServiceName(ConfiguredLane ?? throw new InvalidOperationException("The loaded payload has no configured runtime owner."), ConfiguredSourceRoot);
-        if (ConfiguredServiceName != serviceName)
-            throw new InvalidOperationException("The loaded payload's host service does not match its runtime owner.");
-        if (ConfiguredLane == "installed" && (!SameSourceRoot(ConfiguredInstalledRoot, RuntimeRootPath) || string.IsNullOrWhiteSpace(ConfiguredExecutablePath)))
+    public static string ResolveHostBaseUrl(string? overrideValue = null) =>
+        ResolveHostBaseUrl(ProductRuntimeLayout.Current, InstalledExecutablePath, overrideValue);
+
+    /// <summary>The configured runtime's host, verified against its receipt and its live status.</summary>
+    public static string ResolveHostBaseUrl(ProductRuntimeLayout runtime, string? installedExecutable, string? overrideValue) {
+        var serviceName = ResolveServiceName(runtime);
+        var installed = runtime.Lane == ProductLane.Installed;
+        if (installed && string.IsNullOrWhiteSpace(installedExecutable))
             throw new InvalidOperationException("The loaded payload has no verified canonical installation owner.");
-        var discovered = PeServiceDiscovery.TryDiscover(RuntimeRootPath, serviceName)
+        var discovered = PeServiceDiscovery.TryDiscover(runtime.RootPath, serviceName)
             ?? throw new InvalidOperationException($"No running '{serviceName}' host for the loaded payload.");
-        if (discovered.Lane != ConfiguredLane || (ConfiguredLane == "dev" ? !SameSourceRoot(discovered.SourceRoot, ConfiguredSourceRoot) : !string.IsNullOrWhiteSpace(discovered.SourceRoot)))
+        if (discovered.Lane != runtime.LaneName || (installed ? !string.IsNullOrWhiteSpace(discovered.SourceRoot) : !SameSourceRoot(discovered.SourceRoot, runtime.SourceRoot)))
             throw new InvalidOperationException("The host service receipt does not match the loaded payload's runtime owner.");
-        if (ConfiguredLane == "installed" && !SameSourceRoot(discovered.ExecutablePath, ConfiguredExecutablePath))
+        if (installed && !SameSourceRoot(discovered.ExecutablePath, installedExecutable))
             throw new InvalidOperationException("The host service receipt does not name the canonical installed executable.");
         var baseUrl = $"http://127.0.0.1:{discovered.Port}";
         var configured = FirstNonBlank(overrideValue, Environment.GetEnvironmentVariable(HostBaseUrlVariable));
@@ -53,49 +56,29 @@ public static class HostEndpoint {
         using var response = client.SendAsync(request).GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
         var status = JObject.Parse(response.Content.ReadAsStringAsync().GetAwaiter().GetResult());
-        if ((string?)status["lane"] != ConfiguredLane || (string?)status["serviceName"] != serviceName || (int?)status["processId"] != discovered.Pid
-            || (ConfiguredLane == "dev" ? !SameSourceRoot((string?)status["sourceRoot"], ConfiguredSourceRoot)
-                : !string.IsNullOrWhiteSpace((string?)status["sourceRoot"]) || !SameSourceRoot((string?)status["installedRoot"], ConfiguredInstalledRoot) || !SameSourceRoot((string?)status["executablePath"], ConfiguredExecutablePath)))
+        if ((string?)status["lane"] != runtime.LaneName || (string?)status["serviceName"] != serviceName || (int?)status["processId"] != discovered.Pid
+            || (installed
+                ? !string.IsNullOrWhiteSpace((string?)status["sourceRoot"]) || !SameSourceRoot((string?)status["installedRoot"], runtime.InstallRoot) || !SameSourceRoot((string?)status["executablePath"], installedExecutable)
+                : !SameSourceRoot((string?)status["sourceRoot"], runtime.SourceRoot)))
             throw new InvalidOperationException("The host listener does not match the loaded payload's runtime owner.");
         return baseUrl;
     }
 
-    /// <summary>The same lane-owned root used by the launcher's service lease and bridge discovery.</summary>
-    public static string RuntimeRootPath => ProductRuntimeLayout.ForRuntime(
-        ConfiguredLane ?? throw new InvalidOperationException("The loaded payload has no configured runtime owner."),
-        ConfiguredSourceRoot).RootPath;
+    /// <summary>The installed host executable the SDK manifest resolves; Pe.App sets it once in Startup, null in dev.</summary>
+    public static string? InstalledExecutablePath { get; set; }
 
-    public static string? ConfiguredServiceName { get; set; }
-    public static string? ConfiguredLane { get; set; }
-    public static string? ConfiguredSourceRoot { get; set; }
-    public static string? ConfiguredInstalledRoot { get; set; }
-    public static string? ConfiguredExecutablePath { get; set; }
+    public static string RuntimeServiceName => ResolveServiceName(ProductRuntimeLayout.Current);
 
     private static bool SameSourceRoot(string? left, string? right) =>
         !string.IsNullOrWhiteSpace(left) && !string.IsNullOrWhiteSpace(right)
         && PeServiceDiscovery.NormalizeSourceRoot(left!) == PeServiceDiscovery.NormalizeSourceRoot(right!);
 
-    /// <param name="lane">The SDK lane string: <c>"installed"</c> or <c>"dev"</c>.</param>
-    public static string ResolveServiceName(string lane, string? sourceRoot) {
-        if (lane == "installed" && string.IsNullOrWhiteSpace(sourceRoot))
-            return ServiceName;
-        if (lane != "dev")
-            throw new ArgumentException("A host requires a verified dev or installed lane.", nameof(lane));
-        if (string.IsNullOrWhiteSpace(sourceRoot))
-            throw new ArgumentException("A dev host requires a source root for service identity.", nameof(sourceRoot));
-        return SourceServiceName(sourceRoot!);
-    }
+    /// <summary>The installed service is the one global name; a dev host's name derives from its checkout.</summary>
+    public static string ResolveServiceName(ProductRuntimeLayout runtime) =>
+        runtime.Lane == ProductLane.Installed ? ServiceName : SourceServiceName(runtime.OwnerRoot);
 
     public static string SourceServiceName(string sourceRoot) =>
         PeServiceDiscovery.SourceServiceName(ServiceName, sourceRoot);
-
-    /// <summary>
-    ///     The actual bound port from the SDK runtime service file, via the vendored
-    ///     platform-neutral discovery client (<see cref="PeServiceDiscovery"/>). The service files
-    ///     live under the product root, which is the one thing this transport still asks
-    ///     <see cref="ProductRuntimeLayout"/> for. Liveness-checked: a crashed host's leftover file
-    ///     reads as null, never as an address.
-    /// </summary>
 
     private static string? FirstNonBlank(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();

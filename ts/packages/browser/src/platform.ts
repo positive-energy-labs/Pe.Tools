@@ -6,10 +6,10 @@ import { BrowserError } from "./errors.ts";
 import { windowsGuardianExecutable, assertPackagedProfileAvailable } from "./native-guardian.ts";
 import { isSea } from "node:sea";
 import { CLOSE_BUDGET_MS } from "./receipts.ts";
-import { productRoot } from "@pe/host-contracts/service-identity";
+import { runtimeRoot } from "@pe/runtime/runtime-owner";
 
 export const browserHome = (home?: string) =>
-  resolve(home ?? join(productRoot(), "state", "browser"));
+  resolve(home ?? join(runtimeRoot(), "state", "browser"));
 export const defaultChromeProfile = () =>
   process.platform === "win32"
     ? join(

@@ -21,8 +21,8 @@ import {
   type ServiceHostDescriptor,
   type ServiceHostHandle,
 } from "@pe/host-contracts/pe-service-host";
-import { hostOwnership, productRoot, type HostOwnership } from "./host-ownership.ts";
-import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
+import { hostOwnership, type HostOwnership } from "./host-ownership.ts";
+import { runtimeOwnerRejection, trayOwnerArguments } from "@pe/host-contracts/service-identity";
 import { currentCaller, writeTerminalContext } from "./control.ts";
 
 // The dev script authorizes same-checkout dev takeover only; the SDK owns cooperative retirement.
@@ -158,7 +158,7 @@ export async function prepareHostBinding(
   ownership: HostOwnership = hostOwnership,
   dependencies = bindingDependencies,
 ): Promise<number | ServiceFile> {
-  const appBase = productRoot();
+  const appBase = ownership.rootPath;
   const live =
     ownership.lane === "installed" || open
       ? await dependencies.discover(appBase, ownership.serviceName, { verifyOwner: true })
@@ -258,7 +258,7 @@ export class HostLifecycle extends Context.Service<
  */
 export function resolveHostVersion(): string {
   if (hostOwnership.lane !== "installed") return "dev";
-  const manifestPath = join(productRoot(), "product.payloads.json");
+  const manifestPath = join(hostOwnership.rootPath, "product.payloads.json");
   let version: unknown;
   try {
     version = (JSON.parse(readFileSync(manifestPath, "utf8")) as { version?: unknown }).version;
@@ -315,7 +315,7 @@ export const ServiceFileLive = Layer.effectDiscard(
     const { handle: handleDeferred, startTray } = yield* HostLifecycle;
     const address = server.address;
     const port = address._tag === "UnixPathAddress" ? 0 : address.port;
-    const appBase = productRoot();
+    const appBase = hostOwnership.rootPath;
     // Both variables describe a host that is RUNNING — a spawned child reads them to call back
     // into this process. They become lies the moment the claim releases, so they are scoped to it
     // and restored on the way out. (Unrestored, an in-process host inside a test run leaves its
@@ -445,10 +445,14 @@ export async function openWindow(port: number): Promise<void> {
           "Pe.Host.Tray.exe",
         );
   if (!existsSync(executable)) throw Error("Native PWA launcher is not built for this runtime.");
-  await promisify(execFile)(executable, ["--launch-window", destination.href], {
-    windowsHide: true,
-    timeout: 10_000,
-  });
+  await promisify(execFile)(
+    executable,
+    [...trayOwnerArguments(hostOwnership), "--launch-window", destination.href],
+    {
+      windowsHide: true,
+      timeout: 10_000,
+    },
+  );
 }
 
 /** Same installed-PWA/install flow as the tray and --open, authorized by the claim token. */

@@ -6,6 +6,7 @@ using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.HostContracts;
 using Pe.Shared.HostContracts.Transport;
+using Pe.Shared.Product;
 using Pe.Revit.Scripting.Transport;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
@@ -585,7 +586,7 @@ internal sealed class BridgeAgent : IDisposable {
         Log.Information(
             "Host bridge session identity: ProcessStartUtcUnixMs={ProcessStartUtcUnixMs}, Lane={Lane}, SdkSessionId={SdkSessionId}, BuildStamp={BuildStamp}, SessionDescriptorPath={SessionDescriptorPath}",
             identity.ProcessStartUtcUnixMs,
-            HostEndpoint.ConfiguredLane,
+            ProductRuntimeLayout.Current.LaneName,
             identity.SdkSessionId,
             identity.BuildStamp,
             identity.SessionDescriptorPath
@@ -596,12 +597,12 @@ internal sealed class BridgeAgent : IDisposable {
             this.BuildStateSnapshot(),
             RequestEvidence.ProcessStartUtcUnixMs,
             identity.SessionDescriptorPath,
-            HostEndpoint.ConfiguredLane,
+            ProductRuntimeLayout.Current.LaneName,
             identity.SdkSessionId,
             identity.BuildStamp,
-            HostEndpoint.ConfiguredSourceRoot,
-            HostEndpoint.ConfiguredServiceName,
-            HostEndpoint.ConfiguredInstalledRoot,
+            ProductRuntimeLayout.Current.SourceRoot,
+            HostEndpoint.RuntimeServiceName,
+            ProductRuntimeLayout.Current.InstallRoot,
             RequestEvidence.Snapshot()
         );
         this._transportSession.Write(new BridgeFrame(

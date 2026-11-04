@@ -1,0 +1,139 @@
+{
+  "$comment": "One table, three resolvers: C# ProductPathing.StateRoot (Pe.Shared.Tests RuntimeOwnershipTests), TS stateRoot (host-contracts runtime-ownership.test.ts), PowerShell Resolve-ProductRuntimeRoot (tools/tests/host-state-isolation.ps1). trayLaunches: TS trayOwnerArguments emits argv; C# Pe.Host.Tray Program.ParseOwner must accept it.",
+  "stateRoots": [
+    {
+      "name": "installed keeps the SDK install root verbatim",
+      "lane": "installed",
+      "ownerRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools",
+      "productHome": null,
+      "stateRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools"
+    },
+    {
+      "name": "installed short-name spelling is not re-spelled",
+      "lane": "installed",
+      "ownerRoot": "C:\\Users\\ALICE~1\\AppData\\Local\\Positive Energy\\Pe.Tools",
+      "productHome": null,
+      "stateRoot": "C:\\Users\\ALICE~1\\AppData\\Local\\Positive Energy\\Pe.Tools"
+    },
+    {
+      "name": "a blank home is no override",
+      "lane": "installed",
+      "ownerRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools",
+      "productHome": "   ",
+      "stateRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools"
+    },
+    {
+      "name": "installed refuses a home override (v0.7.30 behaviour)",
+      "lane": "installed",
+      "ownerRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools",
+      "productHome": "D:\\pe-home",
+      "error": "does not run under PE_TOOLS_PRODUCT_HOME"
+    },
+    {
+      "name": "dev uses its checkout artifacts",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": null,
+      "stateRoot": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools"
+    },
+    {
+      "name": "dev checkout with a trailing separator",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools\\",
+      "productHome": null,
+      "stateRoot": "C:\\src\\Pe.Tools\\.artifacts\\pe-tools"
+    },
+    {
+      "name": "dev home override is trimmed",
+      "lane": "dev",
+      "ownerRoot": "C:\\src\\Pe.Tools",
+      "productHome": "  D:\\pe-home  ",
+      "stateRoot": "D:\\pe-home\\.local-state"
+    },
+    {
+      "name": "a relative owner root refuses",
+      "lane": "dev",
+      "ownerRoot": "src\\Pe.Tools",
+      "productHome": null,
+      "error": "absolute owner root"
+    }
+  ],
+  "trayLaunches": [
+    {
+      "name": "installed host spawns the tray",
+      "owner": {
+        "lane": "installed",
+        "sourceRoot": null,
+        "installedRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools"
+      },
+      "launch": [
+        "--parent-pid",
+        "4242",
+        "--parent-start",
+        "2026-11-03T12:00:00.000Z",
+        "--service-file",
+        "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\service\\host.json"
+      ],
+      "argv": [
+        "--lane",
+        "installed",
+        "--root",
+        "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools",
+        "--parent-pid",
+        "4242",
+        "--parent-start",
+        "2026-11-03T12:00:00.000Z",
+        "--service-file",
+        "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools\\state\\service\\host.json"
+      ]
+    },
+    {
+      "name": "installed host opens a window",
+      "owner": {
+        "lane": "installed",
+        "sourceRoot": null,
+        "installedRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools"
+      },
+      "launch": ["--launch-window", "http://127.0.0.1:5150/open"],
+      "argv": [
+        "--lane",
+        "installed",
+        "--root",
+        "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools",
+        "--launch-window",
+        "http://127.0.0.1:5150/open"
+      ]
+    },
+    {
+      "name": "dev host opens a window",
+      "owner": { "lane": "dev", "sourceRoot": "C:\\src\\Pe.Tools", "installedRoot": null },
+      "launch": ["--launch-window", "http://127.0.0.1:5175/open"],
+      "argv": [
+        "--lane",
+        "dev",
+        "--root",
+        "C:\\src\\Pe.Tools",
+        "--launch-window",
+        "http://127.0.0.1:5175/open"
+      ]
+    },
+    {
+      "name": "dev tray supervisor spawns the tray",
+      "owner": { "lane": "dev", "sourceRoot": "C:\\src\\Pe.Tools", "installedRoot": null },
+      "launch": [
+        "--dev",
+        "--supervisor-file",
+        "C:\\src\\Pe.Tools\\.artifacts\\dev-tray\\supervisor.json"
+      ],
+      "argv": [
+        "--lane",
+        "dev",
+        "--root",
+        "C:\\src\\Pe.Tools",
+        "--dev",
+        "--supervisor-file",
+        "C:\\src\\Pe.Tools\\.artifacts\\dev-tray\\supervisor.json"
+      ]
+    }
+  ]
+}

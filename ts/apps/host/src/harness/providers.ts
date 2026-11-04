@@ -1,3 +1,4 @@
+import { hostOwnership } from "../host-ownership.ts";
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -393,11 +394,11 @@ function acpProbe(
           });
           let opened: Effect.Success<ReturnType<typeof openAdapter>>;
           try {
-            mkdirSync(productScratchPath(), { recursive: true });
+            mkdirSync(productScratchPath(hostOwnership.rootPath), { recursive: true });
             opened = await settle(
               openAdapter(
                 record.harness,
-                productScratchPath(),
+                productScratchPath(hostOwnership.rootPath),
                 env,
                 () => ({
                   sessionUpdate: async () => {},
@@ -446,7 +447,7 @@ function acpProbe(
               clientCapabilities: { fs: { readTextFile: false, writeTextFile: false } },
             });
             const session = await conn
-              .newSession({ cwd: productScratchPath(), mcpServers: [] })
+              .newSession({ cwd: productScratchPath(hostOwnership.rootPath), mcpServers: [] })
               .catch((error) => {
                 const message = String(error?.message ?? error);
                 if (/auth/i.test(message)) return { refused: message };
@@ -600,7 +601,10 @@ function openConsole(
   env: Record<string, string | undefined>,
   opened: () => void,
 ): Promise<ConsoleResult> {
-  const scriptPath = join(productScratchPath(), `pe-tools-console-${randomUUID()}.ps1`);
+  const scriptPath = join(
+    productScratchPath(hostOwnership.rootPath),
+    `pe-tools-console-${randomUUID()}.ps1`,
+  );
   mkdirSync(dirname(scriptPath), { recursive: true });
   writeFileSync(scriptPath, consoleScript(command), "utf8");
   const child = spawn(

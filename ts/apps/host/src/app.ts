@@ -47,7 +47,7 @@ import {
   resolveHostVersion,
   ServiceFileLive,
 } from "./host-lifecycle.ts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer, peApiErrorsLayer, type HostWork } from "./pe-routes.ts";
 import { capturesRoute } from "./captures-route.ts";
@@ -218,7 +218,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
   // Both lanes wait for explicit reads until completion or disconnect; upload limits stay intact.
   nodeServer.setTimeout(0);
   const remoteConfig = readRemoteIngress(
-    join(productRoot(), "state", hostOwnership.serviceName, "remote-ingress.json"),
+    join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "remote-ingress.json"),
   );
   const remoteRequests = new WeakSet<object>();
   const remote = remoteConfig ? remoteListener(nodeServer, remoteRequests) : null;
@@ -274,11 +274,11 @@ export function makeHttpLive(options: HttpLiveOptions) {
       installed: hostOwnership.lane === "installed",
       port,
       run: tailscaleCommand(),
-      ...shareIntentFile(join(productRoot(), "state", "share.json")),
+      ...shareIntentFile(join(hostOwnership.rootPath, "state", "share.json")),
     });
   const devices =
     options.devices ??
-    createDevices(join(productRoot(), "state", hostOwnership.serviceName, "devices.json"));
+    createDevices(join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "devices.json"));
   bindControl({ deviceThread: (device) => devices.active(device).thread });
   const identity = requestIdentityLayer({
     devices,

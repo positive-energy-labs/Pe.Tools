@@ -8,7 +8,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { writeArtifact } from "./page-artifacts.ts";
 import { productPathNames, scriptingWorkspaceIdentity } from "@pe/host-contracts/contracts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import {
   archiveId,
   installArchive,
@@ -34,7 +34,7 @@ const shippedPodsRoot = (): string | null =>
   hostOwnership.lane === "installed" ? join(dirname(process.execPath), "pods") : null;
 
 const ledgerPath = () =>
-  join(productRoot(), productPathNames.stateDirectoryName, "shipped-pods.json");
+  join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "shipped-pods.json");
 
 let firstRun: Promise<ShippedPodsReport> | undefined;
 

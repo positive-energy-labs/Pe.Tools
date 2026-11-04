@@ -2,12 +2,12 @@ import { dispatchRefusal, validateDispatch, markDispatched } from "./action-disp
 import { join } from "node:path";
 import { ActionJournal } from "./action-journal.ts";
 import { HostLog } from "./host-log.ts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import { receiptStampSchema, type ReceiptStamp } from "@pe/agent-contracts";
 let journal: ActionJournal | undefined;
 let log: HostLog | undefined;
 let stamp: ReceiptStamp | null = null;
-const stateDir = () => join(productRoot(), "state", "host", hostOwnership.serviceName);
+const stateDir = () => join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName);
 /** Called by host boot only after its runtime identity has been admitted. */
 export function setHostReceiptStamp(value: ReceiptStamp) {
   const next = receiptStampSchema.parse(value);

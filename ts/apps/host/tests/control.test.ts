@@ -23,6 +23,7 @@ import {
 } from "../src/control.ts";
 import { HOST_CONTEXT_HEADER, productPathNames } from "@pe/host-contracts/contracts";
 import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 const docA: DocumentRef = { session: "S1", openId: "A" };
 // The same saved Address open in a second Revit: a different lifetime.
@@ -166,7 +167,7 @@ test("a retiring host leaves the terminal context another host wrote since", asy
   const prior = process.env[productPathNames.productHomeVariable];
   process.env[productPathNames.productHomeVariable] = home;
   try {
-    const path = hostContextTokenPath("host-dev");
+    const path = hostContextTokenPath(hostOwnership.rootPath, "host-dev");
     const first = writeTerminalContext("host-dev");
     const settled = writeTerminalContext("host-dev");
     const token = readFileSync(path, "utf8");

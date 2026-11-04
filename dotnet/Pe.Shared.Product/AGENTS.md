@@ -17,9 +17,9 @@ It is not the installed-layout authority. `product.payloads.json` is the single 
 
 - `ProductIdentity` — vendor, product, and user-visible names.
 - `ProductPathNames` — product-owned state and user-content names.
-- `ProductRuntimeLayout` — LocalAppData state/log/cache trees, including APS tokens. No binary paths.
+- `ProductLane` / `ProductRuntimeLayout` — the process's one runtime record (lane, owner root, state root) and its state/log/cache/scratch trees, including APS tokens. No binary paths.
 - `ProductUserContentLayout` / `ScriptingWorkspaceLayout` — `Documents\Pe.Tools\preferences.json` and portable Pods.
-- `ProductPathing` — the product home (`PE_TOOLS_PRODUCT_HOME`, else `Documents\Pe.Tools`; the host resolves the same variable), safe subdirectory resolution and the machine-local runtime root (`%LOCALAPPDATA%\Positive Energy\Pe.Tools`, or `<home>\.local-state` when the override is set, so an isolated run shares no state with the owner's host; the host's `productRoot` resolves the same way).
+- `ProductPathing` — the product home (`PE_TOOLS_PRODUCT_HOME`, else `Documents\Pe.Tools`; the host resolves the same variable), safe subdirectory resolution, and the pure `StateRoot(lane, ownerRoot, home)`: `<home>\.local-state` under the override (an isolated run shares no state with the owner's host), else the dev checkout's `.artifacts\pe-tools`, else the SDK install root verbatim. TS `stateRoot` and PowerShell `Resolve-ProductRuntimeRoot` assert the same `ts/packages/host-contracts/tests/runtime-ownership.fixture.json`.
 
 ## Hard Dependency Rule
 
@@ -27,7 +27,7 @@ Pure .NET/BCL. No Revit API, ASP.NET/host packages, `HttpClient`, JSON dependenc
 
 ## Transport Boundary
 
-Transport lives in `Pe.Shared.HostContracts`: `HostEndpoint`, `TsHostCallClient`, and the SDK-owned read-only `PeServiceDiscovery` projection. `HostEndpoint` reads only `ProductRuntimeLayout.ForCurrentUser().RootPath`; the dependency points from transport to product identity, never back.
+Transport lives in `Pe.Shared.HostContracts`: `HostEndpoint`, `TsHostCallClient`, and the SDK-owned read-only `PeServiceDiscovery` projection. `HostEndpoint` reads only `ProductRuntimeLayout.Current`; the dependency points from transport to product identity, never back.
 
 ## Target Local Contract
 
@@ -51,6 +51,7 @@ The local folder is a filesystem address, not pod identity. Authored JSON, scrip
 ## Consumer Guidance
 
 - Ask for intentful paths and perform IO at the caller boundary; resolution creates no directories.
-- Every Pe.Tools-owned path, including scratch, must derive from `ProductRuntimeLayout` / `ProductUserContentLayout`, TS `productRoot` / `product-paths`, or PowerShell `tools/product-paths.ps1`. `PE_TOOLS_PRODUCT_HOME` selects the whole environment. The production-only `product-environment.guard.test.ts` rejects direct OS-root reads outside these resolvers; each third-party or SDK exception names its reason.
+- Ownership is told, never inferred (kaitpw, 2026-11-03): each shell calls `ProductRuntimeLayout.Configure` once from facts it was given — Pe.App from `PePayloadContext` (installed root = the SDK `InstallRoot`; a dev payload without a session descriptor refuses), `Pe.Host.Tray` and `Pe.Rhvac.Tool` from a leading `--lane --root` argv (one grammar, `ProductRuntimeLayout.ParseOwnerArguments`), `Pe.Dev.Cli` from the operator's checkout. A second call throws; reading `Current` before it throws; only a host that may run without a shell (the Revit test assembly) checks `IsConfigured`. Libraries read `Current`; nothing walks up from an assembly location. An installed runtime refuses `PE_TOOLS_PRODUCT_HOME` as v0.7.30 did; that refusal lives in the pure state-root rule of all three languages.
+- Every Pe.Tools-owned path, including scratch, must derive from `ProductRuntimeLayout` / `ProductUserContentLayout`, TS `productRoot(owner)` / `hostOwnership.rootPath` / `product-paths`, or PowerShell `tools/product-paths.ps1`. `PE_TOOLS_PRODUCT_HOME` selects the whole environment. The production-only `product-environment.guard.test.ts` rejects direct OS-root reads outside these resolvers; each third-party or SDK exception names its reason.
 - Build and installer code reads installed-layout facts directly from `product.payloads.json`.
 - Repo artifact topology belongs to `build/ProductLayoutAuthority.cs` and `build/BuildArtifactLayout.cs`.

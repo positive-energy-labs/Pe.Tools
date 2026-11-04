@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { Deferred, Effect } from "effect";
 import { NodeRuntime } from "@effect/platform-node";
-import { checkoutRootFrom, productRoot } from "@pe/host-contracts/service-identity";
+import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { serviceFilePath } from "@pe/host-contracts/pe-service";
 import { publishDevTraySession } from "../scripts/dev-tray-session.ts";
 import { hostOwnership } from "./host-ownership.ts";
@@ -90,7 +90,7 @@ const program = hostProgram(
                 void publishDevTraySession({
                   schemaVersion: 1,
                   sourceRoot: hostOwnership.sourceRoot!,
-                  serviceFile: serviceFilePath(productRoot(), hostOwnership.serviceName),
+                  serviceFile: serviceFilePath(hostOwnership.rootPath, hostOwnership.serviceName),
                   hostInstanceId: handle.serviceFile.instanceId,
                   frontendOrigin: frontend.url,
                   frontendPid: frontend.pid,

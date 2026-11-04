@@ -179,6 +179,20 @@ const allowed: Record<string, { line: string; reason: string }[]> = {
       reason: "Refuses anything except the actual MSI root in an owned Windows Sandbox guest.",
     },
   ],
+  "tools/crossing-kit.ps1": [
+    {
+      line: "$installRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Positive Energy\\Pe.Tools'",
+      reason:
+        "The installed-lane crossing kit names the MSI/SDK install root it just installed; never a checkout.",
+    },
+  ],
+  "dotnet/Pe.App/AppCore.cs": [
+    {
+      line: 'File.WriteAllText(Path.Combine(Path.GetTempPath(), "Pe.Tools-startup-fault.txt"),',
+      reason:
+        "Startup fault sink: ownership failed before any product root exists, so support reads OS temp.",
+    },
+  ],
 };
 
 test("production product data uses the one environment resolver, including scratch", () => {

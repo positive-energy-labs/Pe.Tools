@@ -269,7 +269,7 @@ async function ensureTsHostRunning(): Promise<string> {
   const existing = discoverHostBaseUrl();
   if (existing) return existing;
 
-  const appBase = owner.installedRoot ?? productRoot();
+  const appBase = productRoot(owner);
   const launch =
     owner.lane === "installed"
       ? { entryPath: path.join(appBase, productInstallLayout["VersionedApp:host"]) }

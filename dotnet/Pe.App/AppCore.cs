@@ -37,10 +37,17 @@ public sealed class AppCore : IPePayload {
     private IDisposable? _sdkOperations;
 
     public void Startup(PePayloadContext context) {
+        // The SDK decided the lane and roots at load time; every state path (including the log
+        // below) derives from the record Capture builds, so a fault here predates Serilog.
+        try {
+            TsHostLauncher.Capture(context);
+        } catch (Exception error) {
+            File.WriteAllText(Path.Combine(Path.GetTempPath(), "Pe.Tools-startup-fault.txt"),
+                $"{DateTime.UtcNow:o} Pe.Tools could not establish its runtime owner (lane '{context.Lane}').\r\n{error}\r\n");
+            throw;
+        }
         CreateLogger();
         RevitReceipts.Start();
-        // The SDK decided the lane and roots at load time; the launcher only reads them.
-        TsHostLauncher.Capture(context);
 
         var app = context.Application;
 

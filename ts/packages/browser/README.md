@@ -46,7 +46,7 @@ pnpm exec pe-browser stop SESSION
 
 `attachBrowser` accepts an explicit CDP endpoint or human-enabled modern Chrome discovery. A page lease is exclusive across clients of one session; another target can proceed independently. `release` ends the lease. Release pages before `session.disconnect()` when retaining the session for another client. `close` can retire only library-created tabs; a borrowed tab must be released. Session cleanup closes created tabs and disconnects from an attached browser. Browser-level raw CDP is privileged and can change foreign state; custody is a lifecycle boundary, not a protocol security sandbox.
 
-Default session storage is `productRoot()/state/browser`, including the canonical product-home override. Attachment exclusion uses the canonical OS-user product state namespace instead, so different explicit browser homes or product-home overrides cannot create competing keepers for the same browser. Chrome's own profile discovery remains separate from product storage.
+Default session storage is `<runtime root>/state/browser` (the runtime owner's `resolveLaneAndRoot().rootPath`), including the canonical product-home override. Attachment exclusion uses the canonical OS-user product state namespace instead, so different explicit browser homes or product-home overrides cannot create competing keepers for the same browser. Chrome's own profile discovery remains separate from product storage.
 
 Promise CDP and scoped Effect acquisition use the same transport. Errors expose `code`, `method`, `requestId`, and `outcome` where applicable. An `unknown` outcome means Chrome may have acted; inspect state before retrying a mutation. Caller cancellation and timeouts never replay commands.
 

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Pe.Shared.Product;
 
 namespace Pe.Host.Tray;
 
@@ -6,9 +7,16 @@ internal static class Program {
     [STAThread]
     private static int Main(string[] args) {
         try {
+            // Every launcher (installed host, dev host, dev-tray supervisor and script) tells the tray its owner.
+            var (lane, root, rest) = ProductRuntimeLayout.ParseOwnerArguments(args);
+            ProductRuntimeLayout.Configure(lane, root);
+            args = rest;
             if (args.Length == 2 && args[0] == "--launch-window")
                 return PwaLauncher.LaunchWindowAsync(args[1]).GetAwaiter().GetResult();
             var launch = TrayLaunch.Parse(args);
+            if (launch.IsDev != (ProductRuntimeLayout.Current.Lane == ProductLane.Dev)
+                || launch.IsDev && !string.Equals(launch.SourceRoot, Path.GetFullPath(ProductRuntimeLayout.Current.OwnerRoot), StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("The tray launch does not belong to its --lane/--root owner.");
             using var parent = Process.GetProcessById(launch.ParentPid);
             if (parent.HasExited || !launch.MatchesParent(parent.Id, parent.StartTime.ToUniversalTime()))
                 return 1;

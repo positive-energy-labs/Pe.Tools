@@ -181,6 +181,7 @@ restated here.
 
 ## Owed
 
+- Direction (kaitpw, 2026-11-03): kaitpw wants a first-class, easy-to-understand way to point the app at a different home root, so tests can hide existing Pods, expose only some, or try new skills. PE_TOOLS_PRODUCT_HOME is the existing seam (env-only, not user-facing). Design later; ISOFIX-R must keep that seam clean and unchanged.
 - 2026-11-02, kaitpw is not settled on the Pea permission model (per-thread run consent, Reject window, cross-thread and cross-tab permissions) and avoids trying alternatives because the host has no owner of lifetime; open a `muse` on it after ADR 0029 phase 5 lands, with fixture prototypes of each model, not before.
 - Approved distillation residue from Fable R2: consolidate repeated incarnation declarations and target narrowing without adding another owner; share the journal's no-dispatch predicate; remove duplicate command eligibility checks while retaining read-door checks; replace the tautological capture dependency with sealed input; make unavailable-resource probes produce typed stale refusals. These six bounded simplifications were explicitly nonblocking; review evidence is archived under `.artifacts/runs/deterministic-20261027-distillation-landing/`.
 

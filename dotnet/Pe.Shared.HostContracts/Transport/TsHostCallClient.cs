@@ -32,7 +32,7 @@ public static class TsHostCallClient {
             "application/json"
         );
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
-        httpRequest.Headers.Add(HostEndpoint.RuntimeServiceHeader, HostEndpoint.ConfiguredServiceName);
+        httpRequest.Headers.Add(HostEndpoint.RuntimeServiceHeader, HostEndpoint.RuntimeServiceName);
         using var response = HttpClient
             .SendAsync(httpRequest, cancellation.Token)
             .GetAwaiter()

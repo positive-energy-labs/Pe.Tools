@@ -1,54 +1,42 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../product-paths.ps1')
-$fixture = Join-Path ([IO.Path]::GetTempPath()) ('pe-isofix-' + [Guid]::NewGuid().ToString('N'))
-$previousHome = $env:PE_TOOLS_PRODUCT_HOME
-$previousLocal = $env:LOCALAPPDATA
-function Assert-Equal($Actual, $Expected, $Name) {
-    if ($Actual -ne $Expected) { throw "$Name expected '$Expected', received '$Actual'" }
-    Write-Output "PASS $Name"
-}
-function Assert-Refused([scriptblock]$Action, $Name) {
-    try { & $Action } catch {
-        if ($_.Exception.Message -notlike '*installed product state*') { throw }
-        Write-Output "PASS $Name"
-        return
+# The PowerShell resolver asserts the same table as C# ProductPathing.StateRoot and TS stateRoot.
+$table = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../ts/packages/host-contracts/tests/runtime-ownership.fixture.json') -Raw | ConvertFrom-Json
+foreach ($row in $table.stateRoots) {
+    $refused = $null
+    $actual = $null
+    try {
+        $actual = Resolve-ProductRuntimeRoot -Lane $row.lane -Root $row.ownerRoot -ProductHomeOverride $row.productHome
+    } catch {
+        $refused = $_.Exception.Message
     }
-    throw "$Name did not refuse installed product state"
+    # Assert outside the try, so a resolver that stops refusing cannot be caught by its own failure message.
+    if ($row.error) {
+        if ($null -eq $refused) { throw "$($row.name) expected refusal '$($row.error)', received '$actual'" }
+        if ($refused -notlike "*$($row.error)*") { throw "$($row.name) refused with '$refused'" }
+    } elseif ($null -ne $refused) { throw "$($row.name) refused unexpectedly: $refused" }
+    elseif ($actual -ne $row.stateRoot) { throw "$($row.name) expected '$($row.stateRoot)', received '$actual'" }
+    Write-Output "PASS $($row.name)"
 }
+# A caller that names no lane is refused rather than defaulted to installed.
+foreach ($name in 'Lane', 'Root') {
+    $parameter = (Get-Command Resolve-ProductRuntimeRoot).Parameters[$name]
+    if (-not ($parameter.Attributes | Where-Object { $_ -is [Parameter] -and $_.Mandatory })) { throw "-$name has a default" }
+}
+Write-Output 'PASS lane and root are mandatory'
+# Evaluate only the real tray's service-path assignment, never its process or IO body.
+$previousHome = $env:PE_TOOLS_PRODUCT_HOME
 try {
-    $checkoutRoot = Join-Path $fixture 'checkout'
-    New-Item -ItemType Directory -Path $checkoutRoot -Force | Out-Null
-    Set-Content -LiteralPath (Join-Path $checkoutRoot '.git') -Value 'gitdir: fixture'
-    Set-Content -LiteralPath (Join-Path $checkoutRoot 'Pe.Tools.slnx') -Value ''
-    $env:LOCALAPPDATA = Join-Path $fixture 'Users/owner/AppData/Local'
     $env:PE_TOOLS_PRODUCT_HOME = $null
-    $installed = Join-Path $env:LOCALAPPDATA 'Positive Energy/Pe.Tools'
-    $expected = Join-Path $checkoutRoot '.artifacts/pe-tools'
-    Assert-Equal (Resolve-ProductRuntimeRoot -Lane dev -SourceRoot $checkoutRoot) $expected 'dev checkout root'
-    Assert-Equal (Resolve-ProductRuntimeRoot -Lane installed) $installed 'installed root'
-    # Evaluate only the real tray's service-path assignment, never its process or IO body.
+    $checkoutRoot = 'C:\src\Pe.Tools'
     $tokens = $null
     $errors = $null
     $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot '../dev-tray.ps1'), [ref]$tokens, [ref]$errors)
     if ($errors.Count) { throw $errors[0] }
     $assignment = $ast.Find({ param($node) $node -is [Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -eq '$services' }, $true)
     Invoke-Expression $assignment.Extent.Text
-    Assert-Equal $services (Join-Path $expected 'state/service') 'tray finds checkout service receipts'
-    $env:PE_TOOLS_PRODUCT_HOME = Join-Path $fixture 'home'
-    Assert-Equal (Resolve-ProductRuntimeRoot -Lane dev -SourceRoot $checkoutRoot) (Join-Path $env:PE_TOOLS_PRODUCT_HOME '.local-state') 'dev override'
-    $env:PE_TOOLS_PRODUCT_HOME = $installed
-    Assert-Refused { Resolve-ProductRuntimeRoot -Lane dev -SourceRoot $checkoutRoot } 'installed descendant'
-    $env:PE_TOOLS_PRODUCT_HOME = Join-Path $fixture 'linked-home'
-    New-Item -ItemType Directory -Path $env:PE_TOOLS_PRODUCT_HOME, $installed -Force | Out-Null
-    New-Item -ItemType Junction -Path (Join-Path $env:PE_TOOLS_PRODUCT_HOME '.local-state') -Target $installed | Out-Null
-    Assert-Refused { Resolve-ProductRuntimeRoot -Lane dev -SourceRoot $checkoutRoot } 'installed junction'
+    if ($services -ne 'C:\src\Pe.Tools\.artifacts\pe-tools\state\service') { throw "tray service receipts resolved to '$services'" }
+    Write-Output 'PASS tray finds checkout service receipts'
 } finally {
     $env:PE_TOOLS_PRODUCT_HOME = $previousHome
-    $env:LOCALAPPDATA = $previousLocal
-    # Remove the junction first; never recursively traverse its target during fixture cleanup.
-    $link = Join-Path $fixture 'linked-home/.local-state'
-    if (Test-Path -LiteralPath $link) { [IO.Directory]::Delete($link) }
-    $resolvedFixture = [IO.Path]::GetFullPath($fixture)
-    if (-not $resolvedFixture.StartsWith([IO.Path]::GetTempPath(), [StringComparison]::OrdinalIgnoreCase)) { throw 'Fixture escaped temp' }
-    Remove-Item -LiteralPath $resolvedFixture -Recurse -Force
 }
