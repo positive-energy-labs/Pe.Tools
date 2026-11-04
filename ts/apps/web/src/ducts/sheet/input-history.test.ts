@@ -3,7 +3,7 @@ import { bindWork, type WorkWriteAck } from "@pe/agent-contracts";
 import { createWorkJournal } from "#/shell/journal";
 import { writeLabel } from "#/shell/work-writes";
 import { ductsData } from "../neutral";
-import { editLabel, inputHistoryMetaSchema, presentInputHistory } from "./input-history";
+import { editLabel, presentInputHistory } from "./input-history";
 
 test("staging the write scope is named in History and never shown in Inputs", () => {
   const key = bindWork("ducts", null, "inputs-internal");
@@ -25,7 +25,7 @@ test("staging the write scope is named in History and never shown in Inputs", ()
   });
   journal.accept(ack(1, ["flows", "12"], "a"));
   const entries = () =>
-    journal.entries(inputHistoryMetaSchema) as Parameters<typeof presentInputHistory>[0];
+    journal.entries() as Parameters<typeof presentInputHistory>[0];
   expect(presentInputHistory(entries(), null).last?.label).not.toMatch(/\./);
   journal.accept(ack(2, ["writeIntent", "edit"], "b"));
   const read = journal.read();

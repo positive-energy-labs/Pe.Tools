@@ -1,75 +1,43 @@
-import { z } from "zod";
 import {
   createBuiltinRouteInventory,
   type AdmittedRoute,
-  type BuiltinClosure,
 } from "../../../../packages/agent-contracts/src/route-module";
-import {
-  RouteGraphJson,
-  type RouteDiagnostic,
-} from "../../../../packages/agent-contracts/src/route-kernel-data";
+import type { RouteDiagnostic } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { module as captures } from "../captures/kernel";
-import { module as schedulesModule } from "../schedules/kernel";
+import { module as schedules } from "../schedules/kernel";
 import { module as families } from "../families/kernel";
 import { module as ducts } from "../ducts/kernel";
 import { module as fans } from "../fans/kernel";
-import capturesGenerated from "../captures/source-closure.generated.json";
-import schedulesGenerated from "../schedules/source-closure.generated.json";
-import familiesGenerated from "../families/source-closure.generated.json";
-import ductsGenerated from "../ducts/source-closure.generated.json";
-import fansGenerated from "../fans/source-closure.generated.json";
+import { builtins, isBuiltinKey, type BuiltinKey } from "./builtins.neutral";
 
-type Generated =
-  | typeof capturesGenerated
-  | typeof schedulesGenerated
-  | typeof familiesGenerated
-  | typeof ductsGenerated
-  | typeof fansGenerated;
-// Generated JSON crosses the admission boundary once; route authors supply no builtin receipt.
-const closure = (generated: Generated) => ({
-  fingerprint: generated.fingerprint,
-  envelope: {
-    hostVersion: generated.envelope.hostVersion,
-    modules: generated.envelope.modules,
-    inputs: generated.envelope.inputs,
-    externals: generated.envelope.externals,
-    source: z.literal("builtin-closure").parse(generated.envelope.source),
-    version: z.literal(1).parse(generated.envelope.version),
-    data: RouteGraphJson.parse(generated.envelope.data),
-    ...("workOwner" in generated.envelope && {
-      workOwner: generated.envelope.workOwner as BuiltinClosure["workOwner"],
-    }),
-    variants: generated.envelope.variants.map((variant) => ({
-      ...variant,
-      client: z.enum(["web", "pea"]).parse(variant.client),
-    })),
-  },
-});
-const definitions = {
-  captures: { module: captures, closure: closure(capturesGenerated) },
-  schedules: { module: schedulesModule, closure: closure(schedulesGenerated) },
-  families: { module: families, closure: closure(familiesGenerated) },
-  ducts: { module: ducts, closure: closure(ductsGenerated) },
-  fans: { module: fans, closure: closure(fansGenerated) },
-};
-type BuiltinKey = keyof typeof definitions;
-export const builtinRouteKeys = Object.keys(definitions) as BuiltinKey[];
-export const builtinRouteStamp = (key: BuiltinKey) => definitions[key].closure.fingerprint;
-export async function loadBuiltinRoute(
-  key: BuiltinKey,
-  expectedFingerprint: string,
-): Promise<
+const modules = { captures, schedules, families, ducts, fans } satisfies Record<BuiltinKey, unknown>;
+type Admitted =
   | { readonly ok: true; readonly route: AdmittedRoute }
-  | { readonly ok: false; readonly diagnostics: readonly RouteDiagnostic[] }
-> {
-  const owner = key === "fans" ? await loadBuiltinRoute("ducts", builtinRouteStamp("ducts")) : null;
+  | { readonly ok: false; readonly diagnostics: readonly RouteDiagnostic[] };
+export const builtinRouteKeys = Object.keys(builtins) as BuiltinKey[];
+export const builtinRouteStamp = (key: BuiltinKey) => builtins[key].closure.fingerprint;
+// One admission per (key, stamp): a presenter reuses its owner's admitted route.
+const admissions = new Map<string, Promise<Admitted>>();
+export function loadBuiltinRoute(key: BuiltinKey, expectedFingerprint: string) {
+  const id = `${key}\n${expectedFingerprint}`;
+  const pending = admissions.get(id) ?? admit(key, expectedFingerprint);
+  admissions.set(id, pending);
+  return pending;
+}
+async function admit(key: BuiltinKey, expectedFingerprint: string): Promise<Admitted> {
+  const { closure } = builtins[key];
+  const ownerKey = closure.envelope.workOwner?.route;
+  if (ownerKey !== undefined && (!isBuiltinKey(ownerKey) || builtins[ownerKey].closure.envelope.workOwner))
+    throw Error(`${ownerKey} cannot own ${key}'s presented Work`);
+  const owner = ownerKey && (await loadBuiltinRoute(ownerKey, builtinRouteStamp(ownerKey)));
   if (owner && !owner.ok) return owner;
-  const definition = definitions[key];
+  const module = modules[key];
   const inventory = createBuiltinRouteInventory({
     [key]: {
-      ...definition,
-      ...(owner?.ok && { workOwner: owner.route }),
-      catalog: Object.entries(definition.module.entries).map(([entry, contract]) => ({
+      module,
+      closure,
+      ...(owner && { workOwner: owner.route }),
+      catalog: Object.entries(module.entries).map(([entry, contract]) => ({
         key: entry,
         ...contract.axes,
         uses: [],
@@ -77,5 +45,5 @@ export async function loadBuiltinRoute(
     },
   });
   const prepared = await inventory.prepare(key, expectedFingerprint);
-  return prepared.admitUnknown(definition.module);
+  return prepared.admitUnknown(module);
 }

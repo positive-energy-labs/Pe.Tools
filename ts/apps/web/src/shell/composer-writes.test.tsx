@@ -18,7 +18,6 @@ import { previousOf } from "#/shell/readings-hooks";
 import { ProposalHead } from "#/chat/proposal-head";
 import {
   describeInputHistory,
-  inputHistoryMetaSchema,
   presentInputHistory,
 } from "#/ducts/sheet/input-history";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
@@ -57,8 +56,7 @@ async function scenario() {
           ],
           history: {
             readings: ["sheet"],
-            describe: (scope, _input, after) =>
-              describeInputHistory(scope.readings, { label: `Edit ${LABEL}` }, after),
+            describe: () => describeInputHistory({ label: `Edit ${LABEL}` }),
           },
         },
       ),
@@ -167,8 +165,7 @@ async function scenario() {
     },
     workHistory: {
       readings: ["sheet"],
-      describe: (scope, input, after) =>
-        describeInputHistory(scope.readings, { label: input.label }, after),
+      describe: (_scope, input) => describeInputHistory({ label: input.label }),
     },
     write: writeRouteWork,
     binding: (_id, args) => ({ subject: null, args }),
@@ -244,7 +241,7 @@ test("D8.7: edit → composer revert → edit → undo → undo names the restor
         presentInputHistory(
           one.owner
             .journal(one.owner.snapshot().work!.handle.key)
-            .entries(inputHistoryMetaSchema) as Parameters<typeof presentInputHistory>[0],
+            .entries() as Parameters<typeof presentInputHistory>[0],
           null,
         ).last?.words,
       ).toBe(""),
@@ -267,7 +264,7 @@ test("D8.7: edit → composer revert → edit → undo → undo names the restor
       presentInputHistory(
         one.owner
           .journal(one.owner.snapshot().work!.handle.key)
-          .entries(inputHistoryMetaSchema) as Parameters<typeof presentInputHistory>[0],
+          .entries() as Parameters<typeof presentInputHistory>[0],
         null,
       ),
     ).toMatchObject({

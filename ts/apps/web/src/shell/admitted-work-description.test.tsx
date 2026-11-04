@@ -103,8 +103,9 @@ function settle(observation: Observation<WorkWriteOutcome>): Promise<WorkWriteOu
   );
 }
 
-const describeDrop = (value: z.output<typeof input>) =>
-  `Part drop ${value.row} ? ${value.value} in-wg`;
+const describeDrop = (value: z.output<typeof input>) => ({
+  label: `Part drop ${value.row} ? ${value.value} in-wg`,
+});
 const address = { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} };
 async function fixture(describe?: (...args: any[]) => unknown) {
   const route = await witness(describe);
@@ -237,7 +238,7 @@ for (const [name, describe, reason] of [
     "mutation",
     (value: any) => {
       value.row = "other";
-      return "bad";
+      return { label: "bad" };
     },
     "describe-threw",
   ],
@@ -290,11 +291,9 @@ test("description reference is Work-only", () => {
 });
 
 test("slot values and join targets label the accepted input", async () => {
-  const f = await fixture((value) =>
-    value.kind === "slot"
-      ? `Slot ${value.row} ? ${value.value}`
-      : `Join ${value.row} ? ${value.value}`,
-  );
+  const f = await fixture((value) => ({
+    label: value.kind === "slot" ? `Slot ${value.row} ? ${value.value}` : `Join ${value.row} ? ${value.value}`,
+  }));
   try {
     for (const edit of [
       { row: "DS-1", kind: "slot", value: 4 },

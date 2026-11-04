@@ -1,4 +1,3 @@
-import type { z } from "zod";
 import type { GraphJsonValue as JsonValue } from "../../agent-contracts/src/route-graph.ts";
 import {
   canonicalRouteInput,
@@ -43,6 +42,8 @@ type Transition = {
 export interface JournalDetail {
   label: string;
   meta?: unknown;
+  /** The host withheld trust in stored `meta`: it no longer decodes under the admitted schema. */
+  detail?: "unavailable";
   /** Every path is kernel or route staging (`writeIntent`): History names it, Inputs omits it. */
   internal?: true;
 }
@@ -86,6 +87,13 @@ const overlaps = (a: RouteStatePatch["path"], b: RouteStatePatch["path"]) =>
   a
     .slice(0, Math.min(a.length, b.length))
     .every((part, index) => String(part) === String(b[index]));
+/** Carry the host's presentation verdict; untrusted stored `meta` never reaches a step. */
+const presentation = (ack: WorkWriteAck): Pick<JournalDetail, "meta" | "detail"> =>
+  ack.detail === "unavailable"
+    ? { detail: "unavailable" }
+    : ack.meta === undefined
+      ? {}
+      : { meta: ack.meta };
 const footprint = (write: Pick<WorkWriteAck, "patches" | "inverse">) =>
   [...write.patches, ...write.inverse].map(({ path }) => path);
 
@@ -240,8 +248,8 @@ export function createWorkJournal(key: WorkKey) {
         : (ack.press ?? `r${ack.revision}`);
       if (!detail && !ack.label) unnamed.add(ack.step ?? ack.press);
       detail ??= ack.label
-        ? { label: ack.label, ...(ack.meta !== undefined && { meta: ack.meta }) }
-        : { ...namer(ack.patches), ...(ack.meta !== undefined && { meta: ack.meta }) };
+        ? { label: ack.label, ...presentation(ack) }
+        : { ...namer(ack.patches), ...presentation(ack) };
     }
     if (
       !detail ||
@@ -523,28 +531,25 @@ export function createWorkJournal(key: WorkKey) {
       revision = snapshot.revision;
       current = structuredClone(snapshot);
     },
-    /** Projection only. New acks were host-decoded; old presentation is decoded tolerantly
-     * under this reader's schema without mutating shared steps or canonical receipts. */
-    entries: (schema?: z.ZodType) =>
-      structuredClone(
-        [
-          ...undo.map((step) => ({ step, state: "applied" as const })),
-          ...redo.map((step) => ({ step, state: "undone" as const })),
-        ].map(({ step, state }) => ({
-          id: step.id,
-          press: step.press,
-          label: step.label,
-          ...(step.internal && { internal: true as const }),
-          by: step.by,
-          at: step.at,
-          state,
-          ...(step.meta === undefined
+    /** Projection only; the host decoded every meta at its door. Callers copy before exposing. */
+    entries: () =>
+      [
+        ...undo.map((step) => ({ step, state: "applied" as const })),
+        ...redo.map((step) => ({ step, state: "undone" as const })),
+      ].map(({ step, state }) => ({
+        id: step.id,
+        press: step.press,
+        label: step.label,
+        ...(step.internal && { internal: true as const }),
+        by: step.by,
+        at: step.at,
+        state,
+        ...(step.detail === "unavailable"
+          ? { detail: "unavailable" as const }
+          : step.meta === undefined
             ? { detail: "none" as const }
-            : !schema?.safeParse(step.meta).success
-              ? { detail: "unavailable" as const }
-              : { detail: "available" as const, meta: step.meta as JsonValue }),
-        })),
-      ),
+            : { detail: "available" as const, meta: step.meta as JsonValue }),
+      })),
     /** A read proves values only at its own revision; a newer acknowledgement invalidates it. */
     observe(snapshot: { revision: number; doc: unknown }) {
       // A delayed Reading cannot erase already accepted history. A revision is not a lifetime id.

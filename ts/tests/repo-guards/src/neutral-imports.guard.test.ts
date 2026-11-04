@@ -23,7 +23,8 @@ function forbidden(file: string, seen = new Set<string>()): string[] {
       if (
         /^(?:react(?:-dom)?(?:\/|$)|@pe\/web(?:\/|$)|#\/)|\.(?:css|scss|less)$/.test(fileName) ||
         (target.replaceAll("\\", "/").includes("/apps/web/src/") &&
-          !/(?:^|[\\/])(?:.*\.)?neutral(?:\.ts)?$/.test(target))
+          // Generated closure pins are data, not UI: the builtin manifest imports them.
+          !/(?:^|[\\/])(?:.*\.)?neutral(?:\.ts)?$|\.generated\.json$/.test(target))
       )
         return [`${file}: ${fileName}`];
       if (fileName.startsWith(".")) {
@@ -36,7 +37,9 @@ function forbidden(file: string, seen = new Set<string>()): string[] {
     });
 }
 test("neutral modules never import web UI, React, web aliases or styles", () => {
-  expect(files(join(root, "apps")).flatMap((file) => forbidden(file))).toEqual([]);
+  // One visited set across roots: an edge reached from two neutral modules is one offender.
+  const seen = new Set<string>();
+  expect(files(join(root, "apps")).flatMap((file) => forbidden(file, seen))).toEqual([]);
 });
 
 const extensionlessImports = (source: string) =>

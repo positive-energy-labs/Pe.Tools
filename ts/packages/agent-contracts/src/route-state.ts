@@ -127,6 +127,13 @@ export const routeStatePatchSchema = z.object({
 export type RouteStatePatch = z.infer<typeof routeStatePatchSchema>;
 
 const historyMetaSchema: z.ZodType<JsonValue> = z.json();
+/** The host write door's history-detail refusals; every reader names them from here. */
+export const historyMetaRefusalCodes = ["invalid_meta", "meta_too_large"] as const;
+export type HistoryMetaRefusalCode = (typeof historyMetaRefusalCodes)[number];
+export const isHistoryMetaRefusalCode = (code: unknown): code is HistoryMetaRefusalCode =>
+  (historyMetaRefusalCodes as readonly unknown[]).includes(code);
+/** Serialized history detail ceiling at the host write door. */
+export const HISTORY_META_MAX_BYTES = 4096;
 
 /** One invocation, never one identity per patch. Authorship comes from the host principal. */
 export const workWriteSchema = z.object({
@@ -151,6 +158,8 @@ export type WorkWriteAck = {
   label?: string;
   /** Route presentation; never inverse, authorship, or authority. */
   meta?: JsonValue;
+  /** Host verdict at load: stored `meta` no longer decodes under the admitted schema. */
+  detail?: "unavailable";
   restoreOf?: number;
   /** Receipt whose confirmed outcome retired these cells. */
   receiptId?: string;
@@ -178,6 +187,7 @@ export const workWriteAckSchema: z.ZodType<WorkWriteAck> = z.object({
   label: z.string().trim().min(1).optional(),
   /** Route presentation; never inverse, authorship, or authority. */
   meta: historyMetaSchema.optional(),
+  detail: z.literal("unavailable").optional(),
   receiptId: z.string().min(1).optional(),
   restoreOf: z.number().int().positive().optional(),
   base: z.number().int().nonnegative(),
@@ -205,7 +215,7 @@ export type RouteStateWriteResult =
   | {
       ok: false;
       kind: "refused";
-      code: "invalid_meta" | "meta_too_large";
+      code: HistoryMetaRefusalCode;
       error: string;
       hint: string;
     }

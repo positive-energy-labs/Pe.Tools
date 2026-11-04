@@ -115,8 +115,6 @@ test("Ducts owns the exclusive host Work and Fans presents the same canonical re
       }),
     ).toMatchObject({ ok: true });
     expect(presenter.resolvedWork!.spec).toEqual(owner.resolvedWork!.spec);
-    const keys = builtinEnrollments.map((row) => row.routeKey);
-    expect(keys.indexOf("ducts")).toBeLessThan(keys.indexOf("fans"));
     expect(createRouteRegistrations().some((row) => row.spec.route === "ducts")).toBe(false);
   } finally {
     await close(run.scope);
@@ -176,7 +174,7 @@ test("neutral Work migration precedes exact feeds; stale fingerprints refuse and
   expect(run.service!.registry.resolve(route)).toBeNull();
   release.forEach((stop) => stop());
 });
-test("owner precedes presenter with an unchanged pinned fingerprint and one migration", async () => {
+test("a presenter admits its owner from closure data in any order, one migration", async () => {
   const f = workspace();
   const migrate = vi.fn(fixture.bodies.upgrade!.run);
   const owner = await entry({
@@ -211,8 +209,14 @@ test("owner precedes presenter with an unchanged pinned fingerprint and one migr
   } finally {
     await close(run.scope);
   }
+  // Order carries no meaning: the presenter's closure `workOwner` admits the owner first.
   const reversed = await open(f.workspace, [presenter, owner]);
-  expect(Exit.isFailure(reversed.result)).toBe(true);
+  try {
+    expect(reversed.service!.routes.get("u8b-presenter")!.workFingerprint).toBe(pinned);
+    expect(migrate).toHaveBeenCalledOnce();
+  } finally {
+    await close(reversed.scope);
+  }
   const stale = await entry(presenterModule, {
     route: "u8b",
     fingerprint: workFingerprintSchema.parse(`builtin-closure:${"0".repeat(64)}`),

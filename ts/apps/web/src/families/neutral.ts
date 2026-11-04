@@ -332,13 +332,14 @@ export const familiesNeutralBodies = {
     slot: "verbs.writeCells.describe",
     kind: "describe",
     source,
-    run: (patches) =>
-      patches
+    run: (patches) => ({
+      label: patches
         .map((p) => {
           const a = familyCellAddress(String(p.path[1]));
           return `${a.parameter} / ${a.typeName}`;
         })
         .join(", "),
+    }),
   },
   writeCells: {
     slot: "verbs.writeCells.patches",
@@ -549,8 +550,9 @@ export const familiesNeutralBodies = {
     slot: "verbs.edit.describe",
     kind: "describe",
     source,
-    run: (input) =>
-      `${input.address.familyName} / ${input.address.typeName} / ${input.address.parameter} to ${input.value.value}`,
+    run: (input) => ({
+      label: `${input.address.familyName} / ${input.address.typeName} / ${input.address.parameter} to ${input.value.value}`,
+    }),
   },
   revert: {
     slot: "verbs.revert.patches",

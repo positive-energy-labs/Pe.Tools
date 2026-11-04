@@ -1,4 +1,4 @@
-import { workWriteAckSchema } from "@pe/agent-contracts";
+import { isHistoryMetaRefusalCode, workWriteAckSchema } from "@pe/agent-contracts";
 import type {
   Observation,
   WorkWriteOutcome,
@@ -49,7 +49,7 @@ export function workOutcome(
       },
     };
   }
-  if (refusal.code === "invalid_meta" || refusal.code === "meta_too_large")
+  if (isHistoryMetaRefusalCode(refusal.code))
     return {
       kind: "refused",
       refusal: { kind: "refused", code: refusal.code, error: refusal.error, hint: refusal.hint },

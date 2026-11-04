@@ -263,11 +263,10 @@ test("the independent Ducts/Fans census classifies all 63 rows with an executabl
     }
 });
 
-test("both production inventories enroll Ducts before Fans exactly once and legacy owns neither", async () => {
+test("one builtin manifest enrolls Ducts and Fans exactly once and legacy owns neither", async () => {
   expect(builtinRouteKeys.length).toBeGreaterThan(0);
   expect(builtinRouteKeys.filter((key) => key === "ducts")).toHaveLength(1);
   expect(builtinRouteKeys.filter((key) => key === "fans")).toHaveLength(1);
-  expect(builtinRouteKeys.indexOf("ducts")).toBeLessThan(builtinRouteKeys.indexOf("fans"));
   expect(createRouteRegistrations().map((row) => row.spec.route)).not.toContain("ducts");
   expect(createRouteRegistrations().map((row) => row.spec.route)).not.toContain("fans");
   const owner = await loadBuiltinRoute("ducts", builtinRouteStamp("ducts"));

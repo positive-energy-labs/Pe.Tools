@@ -321,7 +321,7 @@ test("history metadata survives host restart and counts toward the retained byte
   expect(view?.history.acks[0]?.meta).toEqual({ row: "x".repeat(2000) });
   const journal = createWorkJournal(f.key);
   journal.restoreView({ revision: view!.revision, doc: view!.doc }, view!.history);
-  expect(journal.entries(z.strictObject({ row: z.string() }))[0]).toMatchObject({
+  expect(journal.entries()[0]).toMatchObject({
     detail: "available",
     meta: { row: "x".repeat(2000) },
   });

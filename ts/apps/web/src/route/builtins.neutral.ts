@@ -1,0 +1,46 @@
+/** The one builtin manifest: each admitted builtin's closure pin, decoded once, and its DOM-free
+ * host module. The host imports only this file from apps/web/src; the package move is Owed in
+ * docs/features/routes/LEDGER.md (`builtin-routes`). The owner relation is the closure's
+ * `workOwner`, never a route-name literal or an array order. */
+import { z } from "zod";
+import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
+import { workFingerprintSchema } from "../../../../packages/agent-contracts/src/route-kernel-admission.ts";
+import type { BuiltinClosure } from "../../../../packages/agent-contracts/src/route-module.ts";
+import type { HostRouteModule } from "../../../../packages/agent-contracts/src/host-route-admission.ts";
+import { ductsHostModule } from "../ducts/neutral.ts";
+import { fansHostModule } from "../fans/neutral.ts";
+import { familiesHostModule } from "../families/neutral.ts";
+import { schedulesHostModule } from "../schedules/neutral.ts";
+import capturesGenerated from "../captures/source-closure.generated.json" with { type: "json" };
+import schedulesGenerated from "../schedules/source-closure.generated.json" with { type: "json" };
+import familiesGenerated from "../families/source-closure.generated.json" with { type: "json" };
+import ductsGenerated from "../ducts/source-closure.generated.json" with { type: "json" };
+import fansGenerated from "../fans/source-closure.generated.json" with { type: "json" };
+
+const member = z.strictObject({ id: z.string(), sha256: z.string() });
+const closureSchema: z.ZodType<{ fingerprint: string; envelope: BuiltinClosure }> =
+  z.strictObject({
+    fingerprint: z.string(),
+    envelope: z.strictObject({
+      source: z.literal("builtin-closure"),
+      version: z.literal(1),
+      hostVersion: z.string(),
+      data: RouteGraphJson,
+      workOwner: z.strictObject({ route: z.string(), fingerprint: workFingerprintSchema }).optional(),
+      variants: z.array(z.strictObject({ client: z.enum(["web", "pea"]), entry: z.string() })),
+      modules: z.array(member),
+      inputs: z.array(member),
+      externals: z.array(member),
+    }),
+  });
+
+const captures = closureSchema.parse(capturesGenerated);
+export const builtins = {
+  captures: { closure: captures, host: { data: captures.envelope.data, schemas: {}, bodies: {} } },
+  schedules: { closure: closureSchema.parse(schedulesGenerated), host: schedulesHostModule },
+  families: { closure: closureSchema.parse(familiesGenerated), host: familiesHostModule },
+  ducts: { closure: closureSchema.parse(ductsGenerated), host: ductsHostModule },
+  fans: { closure: closureSchema.parse(fansGenerated), host: fansHostModule },
+} satisfies Record<string, { closure: z.output<typeof closureSchema>; host: HostRouteModule }>;
+export type BuiltinKey = keyof typeof builtins;
+export const isBuiltinKey = (key: string): key is BuiltinKey => Object.hasOwn(builtins, key);

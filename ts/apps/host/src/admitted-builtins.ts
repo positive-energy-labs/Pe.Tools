@@ -64,56 +64,69 @@ export function admittedBuiltinsLayer(
         return yield* Effect.fail(
           failed("inventory", "Builtin cutover keys and host enrollment differ"),
         );
-      for (const entry of inventory) {
-        const key = entry.routeKey;
-        if (routes.has(key)) return yield* Effect.fail(failed(key, "Duplicate builtin enrollment"));
-        const loaded = yield* Effect.tryPromise({
-          try: entry.load,
-          catch: (reason) => failed(key, reason),
-        });
-        if (closed) return yield* Effect.fail(failed(key, "Enrollment retired"));
-        const module = yield* Effect.try({
-          try: () => captureHostModule(composeHostRouteRegistration(loaded, registrations)),
-          catch: (reason) => failed(key, reason),
-        });
-        const ownerKey = module.data.work?.route;
-        const owner = ownerKey && ownerKey !== key ? routes.get(ownerKey) : undefined;
-        const prepared = yield* Effect.tryPromise({
-          try: () =>
-            createBuiltinRouteInventory({
-              [key]: { host: true, module, workOwner: owner, closure: entry.closure, catalog: [] },
-            }).prepare(key, entry.closure.fingerprint),
-          catch: (reason) => failed(key, reason),
-        });
-        if (closed) return yield* Effect.fail(failed(key, "Enrollment retired"));
-        const admitted = yield* Effect.try({
-          try: () => prepared.admitHost(module),
-          catch: (reason) => failed(key, reason),
-        });
-        if (!admitted.ok)
-          return yield* Effect.fail(failed(key, JSON.stringify(admitted.diagnostics)));
-        const route = admitted.route;
-        if (route.data.key !== key)
-          return yield* Effect.fail(failed(key, "Inventory and declaration keys differ"));
-        const receipt = yield* Effect.try({
-          try: () => registry.register(route),
-          catch: (reason) => failed(key, reason),
-        });
-        releases.push(receipt.deactivate);
-        routes.set(key, route);
-        if (route.data.work?.route === key) {
-          const registration = yield* Effect.try({
-            try: () => registerAdmittedHostRoute(route, workspace),
+      const byKey = new Map(inventory.map((entry) => [entry.routeKey, entry]));
+      if (byKey.size !== inventory.length)
+        return yield* Effect.fail(failed("inventory", "Duplicate builtin enrollment"));
+      // A presenter admits its owner first, from the closure's `workOwner`; each key admits once.
+      const admit = (
+        entry: BuiltinEnrollment,
+      ): Effect.Effect<HostAdmittedRoute, BuiltinEnrollmentFailed> =>
+        Effect.gen(function* () {
+          const key = entry.routeKey;
+          const done = routes.get(key);
+          if (done) return done;
+          const ownerKey = entry.closure.envelope.workOwner?.route;
+          const ownerEntry = ownerKey === undefined ? undefined : byKey.get(ownerKey);
+          if (ownerKey !== undefined && (!ownerEntry || ownerEntry.closure.envelope.workOwner))
+            return yield* Effect.fail(failed(key, `${ownerKey} cannot own presented Work`));
+          const owner = ownerEntry && (yield* admit(ownerEntry));
+          const loaded = yield* Effect.tryPromise({
+            try: entry.load,
             catch: (reason) => failed(key, reason),
           });
-          releases.push(registration.close);
-          const failure = yield* Effect.tryPromise({
-            try: () => registration.ready,
+          if (closed) return yield* Effect.fail(failed(key, "Enrollment retired"));
+          const module = yield* Effect.try({
+            try: () => captureHostModule(composeHostRouteRegistration(loaded, registrations)),
             catch: (reason) => failed(key, reason),
           });
-          if (failure) return yield* Effect.fail(failed(key, JSON.stringify(failure)));
-        }
-      }
+          const prepared = yield* Effect.tryPromise({
+            try: () =>
+              createBuiltinRouteInventory({
+                [key]: { host: true, module, workOwner: owner, closure: entry.closure, catalog: [] },
+              }).prepare(key, entry.closure.fingerprint),
+            catch: (reason) => failed(key, reason),
+          });
+          if (closed) return yield* Effect.fail(failed(key, "Enrollment retired"));
+          const admitted = yield* Effect.try({
+            try: () => prepared.admitHost(module),
+            catch: (reason) => failed(key, reason),
+          });
+          if (!admitted.ok)
+            return yield* Effect.fail(failed(key, JSON.stringify(admitted.diagnostics)));
+          const route = admitted.route;
+          if (route.data.key !== key)
+            return yield* Effect.fail(failed(key, "Inventory and declaration keys differ"));
+          const receipt = yield* Effect.try({
+            try: () => registry.register(route),
+            catch: (reason) => failed(key, reason),
+          });
+          releases.push(receipt.deactivate);
+          routes.set(key, route);
+          if (route.data.work?.route === key) {
+            const registration = yield* Effect.try({
+              try: () => registerAdmittedHostRoute(route, workspace),
+              catch: (reason) => failed(key, reason),
+            });
+            releases.push(registration.close);
+            const failure = yield* Effect.tryPromise({
+              try: () => registration.ready,
+              catch: (reason) => failed(key, reason),
+            });
+            if (failure) return yield* Effect.fail(failed(key, JSON.stringify(failure)));
+          }
+          return route;
+        });
+      for (const entry of inventory) yield* admit(entry);
       return { routes, registry };
     }),
   );
