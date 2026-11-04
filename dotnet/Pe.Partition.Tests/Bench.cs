@@ -20,6 +20,10 @@ namespace Pe.Partition.Tests;
 ///         of Mechanical Zoning Plan - Level 1, solved one at a time and concatenated. Set
 ///         PE_BENCH_PROPOSALS=1 to retain captured proposals and PE_BENCH_FIXTURES=a,b to select fixtures;
 ///         detail.json retains the full answers and traces, failure.txt a fixture's solve exception.
+///         The same solved inputs also feed <c>eval/partition/network.py</c> through
+///         <c>.artifacts/runs/rails/$PE_RAILS_RUN/data</c> (default w2).
+///         Each named zone also has <c>input.json</c> and <c>rails.json</c> for
+///         <c>eval/partition/rails.py &lt;name&gt; &lt;input&gt; &lt;rails&gt; &lt;out-dir&gt;</c>.
 ///     </para>
 /// </summary>
 [TestFixture, Explicit("bench: writes .artifacts/runs/bench and needs python with PIL")]
@@ -45,6 +49,8 @@ public sealed class Bench {
         var run = Path.Combine(RepoRoot, ".artifacts", "runs", "bench", DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + (FramingOn ? "-rails" : "-rails-noframing") + (KeepProposals ? "-proposals" : ""));
         Directory.CreateDirectory(run);
         var failures = new List<string>();
+        var networkDir = Directory.CreateDirectory(Path.Combine(RepoRoot, ".artifacts", "runs", "rails",
+            Environment.GetEnvironmentVariable("PE_RAILS_RUN") ?? "w2", "data")).FullName;
         var selected = Environment.GetEnvironmentVariable("PE_BENCH_FIXTURES")?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) ?? [];
         var fixtures = Fixtures().Where(f => selected.Length == 0 || selected.Contains(f.Name, StringComparer.Ordinal)).ToList();
         Assert.That(fixtures, Is.Not.Empty, "PE_BENCH_FIXTURES matched no fixtures");
@@ -54,21 +60,25 @@ public sealed class Bench {
             Directory.CreateDirectory(dir);
             var answers = new List<PartitionAnswer>();
             try {
-                foreach (var captured in inputs) {
+                foreach (var (zoneName, captured) in inputs) {
                     // Default: measure the rail solver alone. Architect proposals are adopted, not solved, so they are
                     // stripped; the Project D session ran with none (zone-0d5e3ccb-inputs.json) and this matches it.
                     // PE_BENCH_PROPOSALS=1 also exercises adoption and the scraps between proposals and rails.
                     var input = captured with { Proposals = KeepProposals ? captured.Proposals : [], Knobs = captured.Knobs with { FramingRails = FramingOn } };
-                    answers.Add(Solve.RunRails(input, probes.For(input)));
+                    var answer = Solve.RunRails(input, probes.For(input));
+                    answers.Add(answer);
+                    // Keep network.py's original six cases and names; metrics/render consume the whole bench.
+                    RailsRun.Write(Path.Combine(dir, zoneName), zoneName, input, answer,
+                        name is "project-a-live" or "project-d-level1" ? networkDir : null);
                 }
             } catch (Exception e) {
-                // Covers solving only; fixture enumeration and loading still fail the run at once.
+                // Covers solving and network export; fixture enumeration/loading still fail the run at once.
                 File.WriteAllText(Path.Combine(dir, "failure.txt"), $"{name}, zone index {answers.Count}\n{e}");
                 failures.Add($"{name}, zone index {answers.Count}: {e.Message}");
                 continue;
             }
             File.WriteAllText(Path.Combine(dir, "answer.json"), JsonConvert.SerializeObject(new {
-                Zones = inputs.Select(i => i.ZoneLoops).ToArray(),
+                Zones = inputs.Select(i => i.Input.ZoneLoops).ToArray(),
                 Rooms = answers.SelectMany((a, zi) => a.Rooms.Select(r => new { Zone = zi, r.Index, Disposition = r.Disposition.ToString(), r.Reason, r.AreaSqft, r.Loop, r.Holes, r.InkBacked })).ToArray(),
                 Accounting = answers.Select(a => a.Accounting).ToArray(),
                 Ms = answers.Sum(a => a.Ms),
@@ -76,10 +86,11 @@ public sealed class Bench {
             File.WriteAllText(Path.Combine(dir, "detail.json"), JsonConvert.SerializeObject(answers));
             // Ink is the knee band's pieces (flat convex x,y polygons), the evidence the solver saw.
             File.WriteAllText(Path.Combine(dir, "ink.json"), JsonConvert.SerializeObject(new {
-                Knee = inputs[0].Knee.Elements.SelectMany(e => e.Pieces).ToArray(),
-                Header = inputs[0].Header.Elements.SelectMany(e => e.Pieces).ToArray(),
+                Knee = inputs[0].Input.Knee.Elements.SelectMany(e => e.Pieces).ToArray(),
+                Header = inputs[0].Input.Header.Elements.SelectMany(e => e.Pieces).ToArray(),
             }));
-            var rails = Rails.From(inputs[0] with { Knobs = inputs[0].Knobs with { FramingRails = FramingOn } });
+            var first = inputs[0].Input;
+            var rails = Rails.From(first with { Knobs = first.Knobs with { FramingRails = FramingOn } });
             TestContext.Out.WriteLine($"{name}: {answers.Sum(a => a.Rooms.Count)} rooms in {answers.Sum(a => a.Ms):F0} ms, "
                 + $"{rails.Count} rails ({rails.Count(r => r.Source == Rails.Framing)} framing), "
                 + (probes.Recorded ? $"probes {probes.Hits} recorded, {probes.Misses} stubbed" : "probes stubbed"));
@@ -90,14 +101,14 @@ public sealed class Bench {
         Assert.That(failures, Is.Empty, string.Join("\n", failures));
     }
 
-    private static IEnumerable<(string Name, PartitionInput[] Inputs, string? ProbeDir)> Fixtures() {
-        yield return ("project-a-live", [Gz("project-a/partition/live")], "project-a/partition/live");
-        yield return ("project-a-main-09", [Main09()], null);
+    private static IEnumerable<(string Name, (string Name, PartitionInput Input)[] Inputs, string? ProbeDir)> Fixtures() {
+        yield return ("project-a-live", [("project-a-live", Gz("project-a/partition/live"))], "project-a/partition/live");
+        yield return ("project-a-main-09", [("project-a-main-09", Main09())], null);
         // Main Level#09 recaptured 2026-09-25 from the Project A (Recovery) file with Enclosure.Default (Doors included).
         // That file links the March IFC and 03.12 DWG, not the 07.28 set main-09 came from: a different model state.
-        yield return ("project-a-main-09-doors", [Gz("project-a/partition/main-09-doors")], "project-a/partition/main-09-doors");
-        yield return ("project-c-live", [Gz("project-c/partition/live")], "project-c/partition/live");
-        yield return ("project-c-level2", [Gz("project-c/partition/level2")], null);
+        yield return ("project-a-main-09-doors", [("project-a-main-09-doors", Gz("project-a/partition/main-09-doors"))], "project-a/partition/main-09-doors");
+        yield return ("project-c-live", [("project-c-live", Gz("project-c/partition/live"))], "project-c/partition/live");
+        yield return ("project-c-level2", [("project-c-level2", Gz("project-c/partition/level2"))], null);
         yield return ("project-d-level1", ProjectD(), "project-d/partition");
         // Per-level captures with their zones (<model>/partition/<level>/zones.json), discovered on disk so no model
         // name is written here; the run names them by their private directories, which stay under .artifacts.
@@ -107,7 +118,7 @@ public sealed class Bench {
             var model = Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(level)))!;
             var captured = Gz($"{model}/partition/{Path.GetFileName(level)}");
             var inputs = JArray.Parse(File.ReadAllText(Path.Combine(level, "zones.json")))
-                .Select(z => captured with { ZoneLoops = z["Loops"]!.ToObject<double[][]>()! }).ToArray();
+                .Select((z, i) => ($"{model}-{Path.GetFileName(level)}-{i}", captured with { ZoneLoops = z["Loops"]!.ToObject<double[][]>()! })).ToArray();
             yield return ($"{model}-{Path.GetFileName(level)}", inputs, null);
         }
     }
@@ -128,13 +139,18 @@ public sealed class Bench {
             Knobs.Default, [knee.Stamp.Resolved], "historical synthetic fixture", []);
     }
 
-    private static PartitionInput[] ProjectD() {
+    private static (string Name, PartitionInput Input)[] ProjectD() {
         var level = JsonConvert.DeserializeObject<PartitionInput>(File.ReadAllText(ProjectDInput))!;
         // The five hand fills (the 100 sf Pantry is a room, not a zone). Solved as zones: a person's zone edge is a wall.
         return JArray.Parse(File.ReadAllText(ProjectDZones))
             .Where(r => (double)r["Sqft"]! > 200)
-            .Select(r => level with { ZoneLoops = [r["Outer"]!.SelectMany(p => new[] { (double)p[0]!, (double)p[1]! }).ToArray()] })
+            .Select(r => ($"project-d-{(long)r["ElementId"]!}", WithZone(level, r)))
             .ToArray();
+    }
+
+    internal static PartitionInput WithZone(PartitionInput level, JToken zone) {
+        double[] Flat(JToken ring) => ring.SelectMany(p => new[] { (double)p[0]!, (double)p[1]! }).ToArray();
+        return level with { ZoneLoops = [Flat(zone["Outer"]!), .. (zone["Holes"] as JArray ?? []).Select(Flat)] };
     }
 
     private static void Python(string script, string run) {

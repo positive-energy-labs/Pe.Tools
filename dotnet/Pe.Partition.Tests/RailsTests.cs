@@ -129,31 +129,6 @@ public sealed class RailsTests {
 
     private sealed record Box2(double[] A, double[] B);
 
-    /// <summary>
-    ///     Falsifier dump, not a gate: writes each capture's rails as JSON for the W1 render. Needs
-    ///     <c>PE_RAILS_OUT</c>; Project D needs <c>PE_RAILS_PROJECT_D</c> (a whole-level input JSON).
-    /// </summary>
-    [Explicit]
-    [TestCase("project-d-level1")]
-    [TestCase("project-a-live")]
-    public void Dump_rails(string name) {
-        var outDir = Environment.GetEnvironmentVariable("PE_RAILS_OUT") ?? throw new AssertionException("PE_RAILS_OUT is unset");
-        string json;
-        if (name == "project-d-level1") {
-            json = File.ReadAllText(Environment.GetEnvironmentVariable("PE_RAILS_PROJECT_D") ?? throw new AssertionException("PE_RAILS_PROJECT_D is unset"));
-        } else {
-            using var file = File.OpenRead(Path.Combine(PrivateFixtures.Dir("project-a/partition/live"), "partition-input.json.gz"));
-            using var gzip = new System.IO.Compression.GZipStream(file, System.IO.Compression.CompressionMode.Decompress);
-            json = new StreamReader(gzip).ReadToEnd();
-        }
-        var input = Newtonsoft.Json.JsonConvert.DeserializeObject<PartitionInput>(json)!;
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        var rails = Rails.From(input);
-        TestContext.Out.WriteLine($"{name}: {rails.Count} rails in {sw.ElapsedMilliseconds} ms");
-        Directory.CreateDirectory(outDir);
-        File.WriteAllText(Path.Combine(outDir, name + "-rails.json"), Newtonsoft.Json.JsonConvert.SerializeObject(rails));
-    }
-
     [TestCase(0)]
     [TestCase(33)]
     public void Dwg_wall_line_pair_gives_a_midline_rail_and_a_lone_line_gives_none(double deg) {
