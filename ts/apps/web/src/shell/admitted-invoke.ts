@@ -42,7 +42,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     submitNative,
   } = context;
   const work = context.work();
-  const { snapshots, beginQuery } = context.readings();
+  const { snapshots, beginQuery, workHandles } = context.readings();
 
   const preparing = createAdmittedRetention<{
     invocation: import("../../../../packages/agent-contracts/src/route-kernel-page.ts").InvocationToken;
@@ -212,14 +212,19 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       const declaredIntent = z
         .record(z.string(), z.unknown())
         .parse(bindings.bodies[declaration.intent]!.run(context(), parsed));
-      if (modelWrite && Object.hasOwn(declaredIntent, "work"))
+      if (
+        modelWrite &&
+        (Object.hasOwn(declaredIntent, "work") || Object.hasOwn(declaredIntent, "readWorks"))
+      )
         throw Error("ModelWrite intent cannot supply Work identity");
+      const readWorks = workHandles(declaration.deps.readings);
       const intent = freezePage(
         z.record(z.string(), z.unknown()).parse(
           entry.input.parse(
             modelWrite
               ? {
                   ...declaredIntent,
+                  ...(Object.keys(readWorks).length ? { readWorks } : {}),
                   work: workHandleSchema.parse({
                     key: accepted.scope.identity.work,
                     revision: accepted.work!.revision,
@@ -313,6 +318,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       const targets = Object.entries(route.data.readings).filter(
         ([id, reading]) =>
           reading.kind !== "derive" &&
+          reading.kind !== "work" &&
           reading.entry === declaration.entry &&
           (declaration.reading === undefined || declaration.reading === id),
       );

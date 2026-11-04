@@ -91,8 +91,7 @@ type NetworkContext = PaneContext<
   keyof typeof ductsData.panes
 >;
 function useNetworkData(ctx: NetworkContext) {
-  // U4 wires the real fans Work here.
-  const workDoc = useMemo(() => ductsDesign(ctx.work, neutralFansWork), [ctx.work]);
+  const workDoc = useMemo(() => ductsDesign(ctx.work, ctx.readings.fansWork.value ?? neutralFansWork), [ctx.work, ctx.readings.fansWork.value]);
   const target = ctx.workBasis?.token.scope.identity.target ?? { kind: "host" as const };
   const page = ctx.page.read();
   const roster = ctx.readings.roster.value;
@@ -111,7 +110,8 @@ function useNetworkData(ctx: NetworkContext) {
   // Domain readonly sweep reached 28 files; snapshot consumers still require mutable arrays.
   const snapshot = (networkRead.value ?? null) as import("../../neutral").SnapshotReading | null;
   const pricing = ctx.readings.pricing;
-  // Kernel gap: the pricing derive schema is unknown; its worker result also carries Maps.
+  // Domain readonly owner: PricingResult/ducts-domain still exposes mutable arrays.
+  // Counsel permits this one cast rather than widening beyond the bounded U4 input scope.
   const priced =
     pricing.status !== "failed" ? (pricing.value as PricingResult | undefined) : undefined;
   const edit = useMemo(() => stagedDucts(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);

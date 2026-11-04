@@ -29,7 +29,7 @@ export type EntryTable = Readonly<Record<string, EntryContract>>;
 type Input<E extends EntryTable, K> = K extends keyof E ? z.output<E[K]["input"]> : never;
 /** ModelWrite intent cannot supply Work identity; the mount binds accepted Work. */
 type IntentForEffect<I, Effect> = Effect extends "ModelWrite"
-  ? Omit<I, "work"> & { readonly work?: never }
+  ? Omit<I, "work" | "readWorks"> & { readonly work?: never; readonly readWorks?: never }
   : I;
 type CommandIntent<E extends EntryTable, K> = K extends keyof E
   ? IntentForEffect<Input<E, K>, E[K]["axes"]["effect"]>

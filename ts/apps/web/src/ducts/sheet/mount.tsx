@@ -140,7 +140,7 @@ export function InputsBody({
   ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-inputs">;
 }) {
   const { snapshot, sheet, fans, nameOf, selected, changeInputs, busy } = useSheetData(ctx);
-  const workDoc = sheetWork(ctx.work);
+  const workDoc = sheetWork(ctx);
   const write = async (patches: RouteStatePatch[], history?: EditMeta) => {
     if (!ctx.workBasis)
       return { code: "unavailable", message: "Read this document's Work before editing" };
@@ -264,7 +264,7 @@ export function PictureBody({
   const { authored, snapshot, value, sheet, fans, roster, nameOf, selected } = useSheetData(ctx);
   const target = ctx.workBasis?.token.scope.identity.target;
   const doc = target?.kind === "document" ? target.ref : null;
-  const workDoc = sheetWork(ctx.work);
+  const workDoc = sheetWork(ctx);
   const select = (selected: string) =>
     ctx.page.select(selected ? [{ kind: "focus", id: localId("ducts-focus", selected) }] : []);
   const setPage = picturePageMove<PicturePage<string, "schematic">>(
@@ -429,13 +429,12 @@ export function LedgerBody({
     </SheetFrame>
   );
 }
-function sheetSnapshot(reading: SheetContext["readings"]["sheetSnapshot"]) {
+export function sheetSnapshot(reading: SheetContext["readings"]["sheetSnapshot"]) {
   // Domain readonly sweep reached 28 files; picture consumers still require mutable arrays.
   return (reading.value ?? EMPTY_SNAPSHOT) as import("@pe/ducts-domain/types").DuctSnapshot;
 }
-function sheetWork(value: SheetContext["work"]) {
-  // SHIM: U4 supplies the ducts Work reading for fan sheet projections.
-  return value ? ductsDesign(null, value) : null;
+function sheetWork(ctx: SheetContext) {
+  return ctx.work && ctx.readings.ductsWork.value ? ductsDesign(ctx.readings.ductsWork.value, ctx.work) : null;
 }
 function SheetFrame({
   ctx,

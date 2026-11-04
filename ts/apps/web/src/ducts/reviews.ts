@@ -67,8 +67,7 @@ export function presentHeal(result: unknown, scope: ReviewEvidence) {
   const snapshot = snapshotOf(scope);
   const name = snapshot ? subjectNamer(snapshot) : () => null;
   const plan = snapshot
-    ? // U4 wires the real fans Work here.
-      healPlan(snapshot, ductsDesign(scope.work ?? null, neutralFansWork))
+    ? healPlan(snapshot, ductsDesign(scope.work ?? null, scope.readings.fansWork?.value ?? neutralFansWork))
     : null;
   const targets = response.groups.flatMap((group) =>
     group.items.map((item) => {

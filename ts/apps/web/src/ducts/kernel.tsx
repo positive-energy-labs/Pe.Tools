@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { ductsDesign, neutralFansWork } from "@pe/agent-contracts";
+import { ductsDesign } from "@pe/agent-contracts";
 import type {
 BodyBindings,
 CodecBindings,
@@ -28,16 +28,15 @@ export const bodies = {
     kind: "derive",
     source,
     run: (ctx) => {
-      const { ducts, tables, catalogs } = ctx.readings;
-      if (!ducts.value || !tables.value || !catalogs.value) return null;
+      const { ducts, tables, catalogs, fansWork } = ctx.readings;
+      if (!ducts.value || !tables.value || !catalogs.value || !fansWork.value) return null;
       const base = {
         // Domain readonly sweep reached 28 files; DuctSnapshot still requires mutable arrays.
         snapshot: ducts.value as import("@pe/ducts-domain/types").DuctSnapshot,
         grids: tables.value,
         catalogs: catalogs.value.tables,
       };
-      // U4 wires the real fans Work here.
-      const doc = ductsDesign(ctx.work, neutralFansWork);
+      const doc = ductsDesign(ctx.work, fansWork.value);
       const priced = pricingJob()({ id: 0, base, doc });
       if ("error" in priced) throw Error(priced.error);
       if ("result" in priced) {

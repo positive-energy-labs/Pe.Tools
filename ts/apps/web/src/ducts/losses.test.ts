@@ -1,4 +1,3 @@
-// U4 wires the real fans Work for callers without one.
 import { neutralFansWork } from "@pe/agent-contracts";
 /**
  * /ducts loss solver, deterministic. Interpolation is checked on three real ASHRAE grids shipped

@@ -16,6 +16,7 @@ import { completion, workOutcome, failedWrite } from "./work-door-observation";
 export function createFixtureWorkDoor(
   spec: RouteStateSpec<z.ZodType>,
   seed: unknown,
+  readings: Readonly<Record<string, z.ZodType | undefined>> = {},
 ): WorkJournalDoor {
   const states = new Map<
     string,
@@ -27,13 +28,15 @@ export function createFixtureWorkDoor(
     }
   >();
   const stateFor = (scope: WorkScope) => {
+    const schema = scope.reading ? readings[scope.reading] : spec.schema;
+    if (!schema) throw Error("Undeclared fixture Work reading");
     const id = workKey(scope.key);
     let state = states.get(id);
     if (!state) {
       state = {
         revision: 0,
         acks: [],
-        value: spec.schema.parse(structuredClone(seed)),
+        value: schema.parse(scope.reading ? {} : structuredClone(seed)),
         listeners: new Set(),
       };
       states.set(id, state);
@@ -90,6 +93,7 @@ export function createFixtureWorkDoor(
     submitWork: (scope, write) =>
       completion<WorkWriteOutcome>({ kind: "pending" }, async () => {
         try {
+          if (scope.reading) throw Error("A Work reading is read-only");
           const state = stateFor(scope);
           const prior = state.value;
           const result = applyPatches(

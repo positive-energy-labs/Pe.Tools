@@ -307,6 +307,22 @@
     }
   },
   "readings": {
+    "fansWork": {
+      "kind": "work",
+      "route": "fans",
+      "output": "fansWork",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    },
     "roster": {
       "kind": "use",
       "entry": "ducts.roster",
@@ -346,7 +362,8 @@
           "systemColours"
         ],
         "readings": [
-          "roster"
+          "roster",
+          "fansWork"
         ]
       },
       "demand": "visible",
@@ -411,7 +428,8 @@
         "readings": [
           "ducts",
           "tables",
-          "catalogs"
+          "catalogs",
+          "fansWork"
         ]
       },
       "demand": "visible",
@@ -441,7 +459,9 @@
           "workingPhase",
           "systemColours"
         ],
-        "readings": []
+        "readings": [
+          "fansWork"
+        ]
       },
       "demand": "visible",
       "retain": {
@@ -474,7 +494,8 @@
           "systemColours"
         ],
         "readings": [
-          "fans"
+          "fans",
+          "fansWork"
         ]
       },
       "demand": "visible",
@@ -505,7 +526,8 @@
           "systemColours"
         ],
         "readings": [
-          "sheet"
+          "sheet",
+          "fansWork"
         ]
       },
       "demand": "visible",
@@ -656,7 +678,8 @@
           "systemColours"
         ],
         "readings": [
-          "sheet"
+          "sheet",
+          "fansWork"
         ]
       },
       "captures": [],
@@ -719,7 +742,8 @@
         "readings": [
           "ducts",
           "sheetSnapshot",
-          "sheet"
+          "sheet",
+          "fansWork"
         ]
       },
       "captures": [
@@ -760,7 +784,8 @@
         "readings": [
           "ducts",
           "sheetSnapshot",
-          "sheet"
+          "sheet",
+          "fansWork"
         ]
       },
       "captures": [
@@ -801,7 +826,8 @@
         "readings": [
           "ducts",
           "sheetSnapshot",
-          "sheet"
+          "sheet",
+          "fansWork"
         ]
       },
       "captures": [
@@ -820,6 +846,7 @@
       "label": "Systems",
       "purpose": "Choose a system to inspect",
       "draws": [
+        "fansWork",
         "fans",
         "roster",
         "ducts",
@@ -843,6 +870,7 @@
       "label": "System tree",
       "purpose": "Inspect the opened systems and their runs",
       "draws": [
+        "fansWork",
         "fans",
         "roster",
         "ducts",
@@ -866,6 +894,7 @@
       "label": "All-systems rules",
       "purpose": "Price every read fitting type",
       "draws": [
+        "fansWork",
         "fans",
         "roster",
         "ducts",
@@ -889,6 +918,7 @@
       "label": "This system's rules",
       "purpose": "Review fitting rules for the opened systems",
       "draws": [
+        "fansWork",
         "fans",
         "roster",
         "ducts",
@@ -912,6 +942,7 @@
       "label": "Picture",
       "purpose": "Inspect the model or schematic",
       "draws": [
+        "fansWork",
         "fans",
         "roster",
         "ducts",
@@ -935,6 +966,7 @@
       "label": "Rulings",
       "purpose": "Review assumptions and planned writes",
       "draws": [
+        "fansWork",
         "fans",
         "roster",
         "ducts",

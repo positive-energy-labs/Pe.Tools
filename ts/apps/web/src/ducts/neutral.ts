@@ -1,3 +1,4 @@
+import { fansDocumentSchema } from "@pe/agent-contracts";
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import {
 applyPatches,
@@ -193,6 +194,7 @@ export const schemas = {
   scope: ductsDocumentSchema.shape.writeIntent.unwrap().shape.edit.unwrap().unwrap().shape.value,
   snapshot: snapshotReadingSchema.nullable(),
   sheet: sheetReadingSchema.nullable(),
+  fansWork: fansDocumentSchema,
   pricing: z.unknown().nullable(),
   tables: z.record(z.string(), z.record(z.string(), grid)).nullable(),
   catalogs: ductCatalogReadingSchema.nullable(),
@@ -204,12 +206,14 @@ const axes = {
   cost: "Cheap",
   cardinality: "One",
 } as const;
+const fanInput: z.ZodType<import("@pe/agent-contracts").FansDocument> = fansDocumentSchema;
 export const entries = {
   "ducts.roster": { input: schemas.none, output: schemas.snapshot, axes },
   "ducts.networks": {
     input: z.object({
       system: z.union([z.array(z.string()), z.literal("all")]),
       work: schemas.work.nullable(),
+      fanWork: fanInput.optional(),
       roster: schemas.snapshot,
     }),
     output: schemas.snapshot,
@@ -218,7 +222,7 @@ export const entries = {
   "ducts.tables": { input: schemas.none, output: schemas.tables, axes },
   "ducts.catalogs": { input: schemas.none, output: schemas.catalogs, axes },
   "ducts.fans": {
-    input: z.object({ work: schemas.work.nullable() }),
+    input: z.object({ work: schemas.work.nullable(), fanWork: fanInput.optional() }),
     output: ductsRosterResponseSchema.nullable(),
     axes,
   },
@@ -227,13 +231,15 @@ export const entries = {
       fan: z.union([z.array(z.string()), z.literal("all")]),
       sheetPath: z.string(),
       work: schemas.work.nullable(),
+      fanWork: fanInput.optional(),
       fans: ductsRosterResponseSchema.nullable(),
     }),
     output: schemas.sheet,
     axes,
   },
   "ducts.sheet-snapshot": {
-    input: z.object({ work: schemas.work.nullable(), sheet: schemas.sheet }),
+    input: z.object({ work: schemas.work.nullable(),
+      fanWork: fanInput.optional(), sheet: schemas.sheet }),
     output: schemas.snapshot,
     axes,
   },
@@ -560,6 +566,7 @@ export const ductsData = {
   },
   salvage: "salvage",
   readings: {
+    fansWork: { kind: "work", route: "fans", output: "fansWork", deps: { page: [], work: [], readings: [] }, demand: "visible", retain: { evidence: "scope", resource: "scope" }, refresh: "dependencies" },
     roster: {
       kind: "use",
       entry: "ducts.roster",
@@ -583,7 +590,7 @@ export const ductsData = {
       deps: {
         page: ["system"],
         work: workKeys,
-        readings: ["roster"],
+        readings: ["roster", "fansWork"],
       },
       demand: "visible",
       retain: {
@@ -628,7 +635,7 @@ export const ductsData = {
       kind: "derive",
       output: "pricing",
       derive: "price",
-      deps: { page: [], work: workKeys, readings: ["ducts", "tables", "catalogs"] },
+      deps: { page: [], work: workKeys, readings: ["ducts", "tables", "catalogs", "fansWork"] },
       demand: "visible",
       retain: { evidence: "scope", resource: "scope" },
       refresh: "dependencies",
@@ -640,7 +647,7 @@ export const ductsData = {
       deps: {
         page: [],
         work: workKeys,
-        readings: [],
+        readings: ["fansWork"],
       },
       demand: "visible",
       retain: {
@@ -656,7 +663,7 @@ export const ductsData = {
       deps: {
         page: ["fan", "sheetPath"],
         work: workKeys,
-        readings: ["fans"],
+        readings: ["fans", "fansWork"],
       },
       demand: "visible",
       retain: {
@@ -672,7 +679,7 @@ export const ductsData = {
       deps: {
         page: [],
         work: workKeys,
-        readings: ["sheet"],
+        readings: ["sheet", "fansWork"],
       },
       demand: "visible",
       retain: {
@@ -792,7 +799,7 @@ export const ductsData = {
       deps: {
         page: [],
         work: workKeys,
-        readings: ["sheet"],
+        readings: ["sheet", "fansWork"],
       },
       patches: "sheetEdit",
       describe: "describeSheet",
@@ -821,7 +828,7 @@ export const ductsData = {
       deps: {
         page: ["stage", "system", "fan"],
         work: workKeys,
-        readings: ["ducts", "sheetSnapshot", "sheet"],
+        readings: ["ducts", "sheetSnapshot", "sheet", "fansWork"],
       },
       entry: "ducts.apply-losses",
       intent: "losses",
@@ -837,7 +844,7 @@ export const ductsData = {
       deps: {
         page: ["stage", "system", "fan"],
         work: workKeys,
-        readings: ["ducts", "sheetSnapshot", "sheet"],
+        readings: ["ducts", "sheetSnapshot", "sheet", "fansWork"],
       },
       entry: "ducts.apply-heal",
       intent: "heal",
@@ -853,7 +860,7 @@ export const ductsData = {
       deps: {
         page: ["stage", "system", "fan"],
         work: workKeys,
-        readings: ["ducts", "sheetSnapshot", "sheet"],
+        readings: ["ducts", "sheetSnapshot", "sheet", "fansWork"],
       },
       entry: "ducts.apply-assign-fan",
       intent: "assign",
@@ -865,42 +872,42 @@ export const ductsData = {
     "e-systems": {
       label: "Systems",
       purpose: "Choose a system to inspect",
-      draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
+      draws: ["fansWork", "fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
       verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-systems",
     },
     "e-sidebar": {
       label: "System tree",
       purpose: "Inspect the opened systems and their runs",
-      draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
+      draws: ["fansWork", "fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
       verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-sidebar",
     },
     "e-rules-all": {
       label: "All-systems rules",
       purpose: "Price every read fitting type",
-      draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
+      draws: ["fansWork", "fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
       verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-rules-all",
     },
     "e-rules": {
       label: "This system's rules",
       purpose: "Review fitting rules for the opened systems",
-      draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
+      draws: ["fansWork", "fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
       verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-rules",
     },
     "e-picture": {
       label: "Picture",
       purpose: "Inspect the model or schematic",
-      draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
+      draws: ["fansWork", "fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
       verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-picture",
     },
     "e-inbox": {
       label: "Rulings",
       purpose: "Review assumptions and planned writes",
-      draws: ["fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
+      draws: ["fansWork", "fans", "roster", "ducts", "tables", "catalogs", "pricing", "meshes"],
       verbs: ["browse", "edit", "sheetEdit", "scope", "losses", "heal", "assign"],
       body: "e-inbox",
     },
@@ -1130,8 +1137,7 @@ const selectedGroups = (ctx: ScopeEvidence) => {
 };
 const lossReady = (ctx: ScopeEvidence): true | string => {
   const intent = ctx.work.writeIntent.edit?.value;
-  // U4: the fan walk scope is fans Work; until it is wired a sheet preview is never ready.
-  if (ctx.page.stage === "sheet") return "Choose this fan's write scope before previewing";
+  if (ctx.page.stage === "sheet") return ctx.readings.fansWork.value?.writeIntent.edit?.value.walk ? true : "Choose this fan's write scope before previewing";
   const groups = selectedGroups(ctx);
   return groups.length && canonicalRouteInput(intent?.groups) === canonicalRouteInput(groups)
     ? true
@@ -1243,6 +1249,7 @@ export const neutralBodies = {
         system: namesOf(ctx.page.system),
         roster: ctx.readings.roster.value ?? null,
         work: ctx.work,
+        fanWork: ctx.readings.fansWork.value,
       }) as z.output<(typeof entries)["ducts.networks"]["input"]>,
   },
   tablesArgs: { slot: "readings.tables.args", kind: "args", source, run: () => ({}) },
@@ -1252,7 +1259,7 @@ export const neutralBodies = {
     kind: "args",
     source,
     // readonly at the contract owner after U2 lands
-    run: (ctx) => ({ work: ctx.work }) as z.output<(typeof entries)["ducts.fans"]["input"]>,
+    run: (ctx) => ({ work: ctx.work, fanWork: ctx.readings.fansWork.value }) as z.output<(typeof entries)["ducts.fans"]["input"]>,
   },
   sheetArgs: {
     slot: "readings.sheet.args",
@@ -1265,6 +1272,7 @@ export const neutralBodies = {
         sheetPath: ctx.page.sheetPath,
         fans: ctx.readings.fans.value ?? null,
         work: ctx.work,
+        fanWork: ctx.readings.fansWork.value,
       }) as z.output<(typeof entries)["ducts.sheet"]["input"]>,
   },
   sheetSnapshotArgs: {
@@ -1273,7 +1281,8 @@ export const neutralBodies = {
     source,
     // readonly at the contract owner after U2 lands
     run: (ctx) =>
-      ({ work: ctx.work, sheet: ctx.readings.sheet.value ?? null }) as z.output<
+      ({ work: ctx.work,
+        fanWork: ctx.readings.fansWork.value, sheet: ctx.readings.sheet.value ?? null }) as z.output<
         (typeof entries)["ducts.sheet-snapshot"]["input"]
       >,
   },
@@ -1309,8 +1318,7 @@ export const neutralBodies = {
     run: (ctx, input) =>
       authoredPatches(
         ctx.work as DuctsRouteDocument,
-        // U4 wires the real fans Work here; a fan-cell edit refuses at the ducts schema until then.
-        editPatches(input.edits, ductsDesign(ctx.work as DuctsRouteDocument, neutralFansWork)),
+        editPatches(input.edits, ductsDesign(ctx.work, ctx.readings.fansWork.value ?? neutralFansWork)),
       ),
   },
   sheetReady: {

@@ -1,5 +1,4 @@
-// U4 wires the real fans Work for callers without one.
-import { neutralFansWork } from "@pe/agent-contracts";
+import { fansDocumentSchema } from "@pe/agent-contracts";
 import { consentService, harnessThreads, testSpawner, settle } from "./effect-test.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
@@ -189,8 +188,7 @@ const kinds = (events: HarnessEvent[]) =>
     )
     .map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
 
-// "U4: fan cells reach apply-losses only through the fans Work"
-test.skip.each(["claude", "codex"] as const)(
+test.each(["claude", "codex"] as const)(
   "%s: canonical Address Work joins find, stage, sealed preview, 60-second consent, journal apply and receipt in one chain",
   async (harness) => {
     const dir = await mkdtemp(join(root, "chain-"));
@@ -201,7 +199,7 @@ test.skip.each(["claude", "codex"] as const)(
     const address = documentAddress("C:/Models/chain.rvt");
     const key = bindWork("ducts", address, undefined, target);
     const routes = createPeRoutes({
-      registrations: [{ spec: tools.ducts.work }],
+      registrations: [{ spec: tools.ducts.work }, { spec: tools.fans.work }],
       store: fileRouteDocumentStore(join(dir, "work")),
       heads: { observe: () => () => {} },
       navigation: { documents: async () => [{ ...target, address }], threads: async () => [] },
@@ -288,11 +286,11 @@ test.skip.each(["claude", "codex"] as const)(
                   { sessionId: "A", connected: true, openDocuments: [{ ...target, address }] },
                 ],
               });
-            if (path === "/pe/route-state/ducts")
+            if (path === "/pe/route-state/fans")
               return routes.fetch(new Request(`${base}${incoming.url}`));
             if (path === "/chain/locate") {
               const found = await peRead.execute(
-                { key: "route:ducts", timeoutSeconds: 30, target: { kind: "open", ref: target } },
+                { key: "route:fans", timeoutSeconds: 30, target: { kind: "open", ref: target } },
                 {},
               );
               expect(found).toMatchObject({
@@ -306,8 +304,8 @@ test.skip.each(["claude", "codex"] as const)(
               const census = await routes.workspace.instances();
               expect(census.works).toHaveLength(1);
               expect(census.works[0]).toMatchObject({ scope: { binding: "address" }, revision: 1 });
-              expect(workKey(census.works[0]!.scope)).toBe(workKey(key));
-              located = { key, revision: (found as { result: { revision: number } }).result.revision };
+              expect(workKey(census.works[0]!.scope)).toBe(workKey({ ...key, route: "fans" }));
+              located = { key, revision: 0 };
               return Response.json(found);
             }
             if (path === "/pe/capabilities")
@@ -318,7 +316,7 @@ test.skip.each(["claude", "codex"] as const)(
                 machine: machineFixture(),
                 capabilities: buildCapabilities({
                   ops: [],
-                  routes: [tools.ducts.work],
+                  routes: [tools.ducts.work, tools.fans.work],
                   packages: [],
                   skills: [],
                 }),
@@ -328,7 +326,7 @@ test.skip.each(["claude", "codex"] as const)(
             if (path === "/chain/stage")
               return routes.fetch(
                 new Request(
-                  `${base}/pe/route-state/ducts/apply?target=${encodeURIComponent(address)}`,
+                  `${base}/pe/route-state/fans/apply?target=${encodeURIComponent(address)}`,
                   {
                     method: "POST",
                     headers: { "content-type": "application/json" },
@@ -418,7 +416,9 @@ test.skip.each(["claude", "codex"] as const)(
         ],
       });
       const saved = (await routes.workspace.view(key, "ducts"))!.doc as never;
-      expect(stagedDucts(saved, neutralFansWork).equipmentFlows).toEqual({});
+      const fans = fansDocumentSchema.parse((await routes.workspace.view({ ...key, route: "fans" }, "fans"))!.doc);
+      expect(stagedDucts(saved, fans).equipmentFlows).toEqual({});
+      expect(writes[0]).toMatchObject({ equipmentFlows: [{ id: 14577391, cfm: 975, source: "chain" }] });
     } finally {
       vi.useRealTimers();
       await h.close();

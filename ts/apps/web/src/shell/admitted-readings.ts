@@ -1,3 +1,4 @@
+import { applyPatches, type WorkHandle } from "@pe/agent-contracts";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import {
   canonicalEnvironmentInput,
@@ -14,7 +15,7 @@ import {
   type AdmittedReadingStatus,
 } from "./admitted-reading-plan.ts";
 import { freezePage } from "./page-port.ts";
-const unavailable = (reason: string): ReadingSnapshot<unknown> => ({
+const unavailable = (reason: string): Extract<ReadingSnapshot<unknown>, { current: false }> => ({
   status: "unavailable",
   current: false,
   reason,
@@ -50,6 +51,102 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
   } = context;
 
   const { target } = input;
+  type WorkReading =
+    | (Extract<ReadingSnapshot<unknown>, { current: true }> & { readonly handle: WorkHandle })
+    | Extract<ReadingSnapshot<unknown>, { current: false }>;
+  // Bounded by declared edges. The environment owns the subscriptions' lifetime.
+  type WorkRead = { signature: string; snapshot: WorkReading; stop(): void };
+  const workReads = new Map<string, WorkRead>();
+  const syncWorkReadings = () => {
+    const scope = read().scope;
+    const key = scope.identity.work;
+    for (const [id, declaration] of Object.entries(route.data.readings)) {
+      if (declaration.kind !== "work" || !key) continue;
+      const foreignKey = { ...key, route: declaration.route };
+      const signature = canonicalEnvironmentInput([scope.identity, foreignKey]);
+      if (workReads.get(id)?.signature === signature) continue;
+      workReads.get(id)?.stop();
+      const record: WorkRead = {
+        signature,
+        snapshot: unavailable("Work pending"),
+        stop() {},
+      };
+      workReads.set(id, record);
+      const schema = bindings.schemas[declaration.output];
+      if (!schema) throw Error(`Unlinked Work reading output: ${declaration.output}`);
+      record.stop = environment()
+        .environment.work.read.open({
+          route: route.data.key,
+          fingerprint: route.workFingerprint,
+          reading: id,
+          key: foreignKey,
+          target: scope.identity.target,
+          subject: null,
+        })
+        .subscribe(
+          (state) => {
+            if (workReads.get(id) !== record || closed()) return;
+            let value: unknown;
+            let revision: number;
+            if (state.kind === "ready") {
+              const decoded = schema.safeParse(state.snapshot.value);
+              if (!decoded.success) {
+                record.snapshot = unavailable(decoded.error.message);
+                schedule();
+                return;
+              }
+              value = decoded.data;
+              revision = state.snapshot.revision;
+            } else if (state.kind === "ack" && record.snapshot.current) {
+              const ack = state.ack;
+              if (ack.revision <= record.snapshot.handle.revision) return;
+              const result = applyPatches(
+                { route: declaration.route, title: "Work reading", description: "", schema },
+                {
+                  version: 1,
+                  revision: record.snapshot.handle.revision,
+                  doc: record.snapshot.value,
+                },
+                ack.by,
+                ack.patches,
+                ack.base,
+                true,
+                true,
+              );
+              if (!result.ok) {
+                record.snapshot = unavailable(result.error);
+                schedule();
+                return;
+              }
+              value = result.envelope.doc;
+              revision = ack.revision;
+            } else {
+              record.snapshot = unavailable(
+                state.kind === "failed" ? "Work feed failed" : "Work pending",
+              );
+              schedule();
+              return;
+            }
+            if (record.snapshot.current && record.snapshot.handle.revision !== revision)
+              for (const key of invalidate(id))
+                if (route.data.readings[key]?.refresh === "explicit") demanded.delete(key);
+            record.snapshot = freezePage({
+              status: "ready",
+              current: true,
+              value,
+              handle: { key: foreignKey, revision },
+              hash: canonicalEnvironmentInput([revision, value]),
+            });
+            schedule();
+          },
+          () => {
+            if (workReads.get(id) !== record || closed()) return;
+            record.snapshot = unavailable("Work feed ended");
+            schedule();
+          },
+        );
+    }
+  };
   const generations = new Map<string, number>();
   const plan = createAdmittedReadingPlan({
     route,
@@ -105,6 +202,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
         ]),
       ),
     });
+    return stale;
   };
   function observeReceipts() {
     const key = owner.read()?.scope.identity.work;
@@ -176,6 +274,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
   const queryLandings = new Map<string, CommandResultDecode>();
   const subjectField = route.data.subject.field;
   let evidenceScope = read().scope;
+  let explicitWorkRevision: number | undefined;
   let scheduling = false;
   let again = false;
   const sync = () => {
@@ -191,6 +290,13 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
         again = false;
         resolve();
         context.work().sync();
+        syncWorkReadings();
+        const revision = read().work?.revision;
+        if (explicitWorkRevision !== undefined && explicitWorkRevision !== revision)
+          for (const [id, declaration] of Object.entries(route.data.readings))
+            if (declaration.refresh === "explicit" && declaration.deps.work.length)
+              demanded.delete(id);
+        explicitWorkRevision = revision;
         context.history().sync();
         if (evidenceScope !== read().scope) {
           evidenceScope = read().scope;
@@ -250,6 +356,9 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
             {
               page: read().page,
               work: owner.read()?.work?.value ?? null,
+              workReadings: Object.fromEntries(
+                [...workReads].map(([id, read]) => [id, read.snapshot]),
+              ),
             },
             (request) => {
               const readingId = plan.readingId(request)!;
@@ -386,7 +495,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
           )
             continue;
           const declaration = route.data.readings[readingId]!;
-          if (declaration.kind === "derive") continue;
+          if (declaration.kind === "derive" || declaration.kind === "work") continue;
           const value =
             declaration.kind === "use" && declaration.geometry
               ? (result.value as { kind: string; value?: unknown }).value
@@ -427,6 +536,15 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
   return {
     sync,
     snapshots: () => readings,
+    workHandles: (ids: readonly string[]) =>
+      Object.fromEntries(
+        ids.flatMap((id) => {
+          const record = workReads.get(id);
+          return record?.snapshot.current
+            ? [[record.snapshot.handle.key.route, record.snapshot.handle]]
+            : [];
+        }),
+      ),
     plan,
     beginQuery(id: string, query: Omit<ReadingQuery, "phase">, refreshGeometry = true) {
       const previous = queryInputs.get(id);
@@ -452,6 +570,8 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
       schedule();
     },
     suspend() {
+      for (const read of workReads.values()) read.stop();
+      workReads.clear();
       for (const id of active.keys()) retire(id);
       for (const id of Object.keys(route.data.readings)) geometry().suspend(id);
     },

@@ -1,4 +1,3 @@
-// U4 wires the real fans Work for callers without one.
 import { neutralFansWork } from "@pe/agent-contracts";
 import type { DuctsDesign } from "@pe/agent-contracts";
 import type { Catalogs } from "@pe/ducts-domain/catalog";

@@ -57,8 +57,7 @@ const captured = (source: UseSource<DuctSnapshot | null>): UseSource<SnapshotRea
 const target = (ctx: ReadingContext) => (ctx.target.kind === "document" ? ctx.target.ref : null);
 
 const slots = (ctx: ReadingContext) => {
-  // U4 wires the real fans Work here.
-  const edit = stagedDucts(args(ctx).work ?? null, neutralFansWork);
+  const edit = stagedDucts(args(ctx).work ?? null, args(ctx).fanWork ?? neutralFansWork);
 
   return { slots: edit.parameters, labelParameter: edit.labelParameter ?? undefined };
 };

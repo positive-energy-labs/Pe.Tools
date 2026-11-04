@@ -88,6 +88,7 @@ export class RouteWorkspace {
     {
       fingerprint: RouteFingerprint;
       workRoute: string;
+      readings: import("@pe/agent-contracts").RouteGraphJson["readings"];
       ready: Promise<WorkFeedFailure | null>;
       close(): void;
     }
@@ -222,6 +223,7 @@ export class RouteWorkspace {
     const record = {
       fingerprint: route.workFingerprint,
       workRoute: work.route,
+      readings: route.data.readings,
       ready,
       close: () => {
         if (this.#admissions.get(route.data.key) !== record) return;
@@ -275,7 +277,11 @@ export class RouteWorkspace {
         expected: registered.fingerprint,
         received: admission.fingerprint,
       };
-    if (key.route !== registered.workRoute)
+    const reading = admission.reading ? registered.readings[admission.reading] : undefined;
+    const workRoute = admission.reading
+      ? reading?.kind === "work" ? reading.route : null
+      : registered.workRoute;
+    if (key.route !== workRoute)
       return {
         kind: "failed",
         code: "WorkRouteMismatch",

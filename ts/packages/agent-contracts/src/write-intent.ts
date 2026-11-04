@@ -63,7 +63,7 @@ interface WorkIntentOptions {
   derive?: (work: unknown) => unknown;
 }
 
-const workWriteInputSchema = z.strictObject({ work: workHandleSchema });
+const workWriteInputSchema = z.strictObject({ work: workHandleSchema, readWorks: z.record(z.string(), workHandleSchema).optional() });
 
 /** Named boundaries keep declaration emit out of the local generic entry closure (TS 6.0.3). */
 type IntentEntry<D extends Command> = Omit<D, "input" | "work"> & {

@@ -4,6 +4,9 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-04, cross-route Work dependencies are read-only admitted readings, authenticated by the caller fingerprint and declared edge; only owner verbs write cells. (counsel, U4)
+- 2026-11-04, native losses consume both Ducts and Fans Work in the existing seal; fan revision changes require a new preview. All eleven previously skipped host laws are restored. (counsel, U4)
+
 - 2026-11-04, the 20 repo-guards failures inherited at c293e78e are a known inherited set, not a main blocker; each merge must add zero against its base. LINT2 closes the COMMON 31 [startup-readiness](../../../ts/apps/host/tests/startup-readiness.test.ts) lint debt through the existing effect-test seam. (counsel)
 
 - 2026-11-04, accept MOUNT-CUT production +318 (gap +168 versus +150), DUP 0, under its classified seam table; kaitpw reviews readability. Factory return types define the service surfaces and one MountContext preserves Work typing. [Seam map](C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-741eac7f/.artifacts/tmp/mount-cut/REPORT.md). (counsel, MOUNT-CUT)
@@ -100,36 +103,26 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
+- Manual D must prove a Ducts rule edit makes Fans pricing stale, Refresh uses the new rule, and read-only Ducts rows link to their rule. Browser proof is UNPROVEN; the U4 fixture did not reach admission. (counsel, U4, 2026-11-04)
+
 - Manual D after U4: prove real-host /ducts and /fans open, edit and deep-link behavior after MOUNT-CUT. UNPROVEN[browser smoke not completed]. (counsel, MOUNT-CUT, 2026-11-04)
 
 - PROTO-HOME owns the production `ducts/proto/` rename/deletion under COMMON 30. U3 leaves it in place to avoid U4/MOUNT-CUT conflicts. (counsel, U3, 2026-11-04)
 
 - 2026-11-04, scene/navigation snapshot units differ from Chadds `sheet.roster` IDs ([ducts fixture](../../../ts/apps/web/src/ducts/fixtures.ts#L45), [Fans kernel](../../../ts/apps/web/src/fans/kernel.tsx#L27)); align fixture identity before claiming a browser crossing from a Ducts fan row. Keep that leg UNPROVEN[Manual D on real Chadds]. (test-fixture owner, U3 finding)
-- 2026-11-04, replace the named pricing SHIMs with actual reads of both Works. Manual D must prove browser reload persistence on the real dev host and the source-row crossing on real Chadds. Retain the pre-existing RHVAC stale-basis Apply/commit finding. (U4)
+- U4 supplies admitted cross-Work readings and sealed native losses. The five host fallback sites above remain. Manual D must prove browser reload persistence on the real dev host and the source-row crossing on real Chadds. Retain the pre-existing RHVAC stale-basis Apply/commit finding. (U4, 2026-11-04)
 
 - Give `PricingResult` a typed kernel output; its display cast remains in [screen.tsx](../../../ts/apps/web/src/ducts/proto/e/screen.tsx#L116). U3 closes the former Work-schema typing and accepted-Work assertions, leaving this output debt. (counsel, U1b; U3 follow-up)
 - Kernel owner: make completion/`settleWork` failure terminal and subscription lifetime scoped; census [the admitted mount](../../../ts/apps/web/src/shell/admitted-mount.ts) as its own kernel unit at aggregate review 1. The existing Common 15 rejection gap below remains. (counsel, U1b)
 - Manual D: finish opened-network-pane, Set-row and pending browser checks against a repaired fixture/native-schema lane. U1b browser observations cover older bytes, not the integrated tip; current behavior is UNPROVEN in that lane. Evidence: [U1b report](C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-b85d72ee/.artifacts/tmp/u1b/REPORT.md). (counsel, U1b)
 
-- Main is blocked while any `U4: fan cells reach apply-losses only through the fans Work` marker remains. U4 restores the eleven tests below without dropping their assertions; the two harness cases must read the actual fans binding instead of neutral fans before unskip. (counsel, 2026-11-03)
-- /ducts pricing reads the neutral fans Work until U4 wires the real one. (counsel, 2026-11-03)
+- Five ducts-host `neutralFansWork` fallbacks remain after U4: [ducts-actions.ts:171](../../../ts/apps/host/src/ducts-actions.ts#L171) and [:205](../../../ts/apps/host/src/ducts-actions.ts#L205) use `(design) ?? neutralFansWork` even though `design` is non-null at :120, and pass that joined design as the fans argument; [ducts-inputs.ts:61](../../../ts/apps/host/src/ducts-inputs.ts#L61) uses `doc ?? neutralFansWork`; [ducts-sheet.ts:392](../../../ts/apps/host/src/ducts-sheet.ts#L392) and [:507](../../../ts/apps/host/src/ducts-sheet.ts#L507) use `stagedDucts(saved.doc, (saved.doc) ?? neutralFansWork)`. U4 removed the wiring comments, not these fallbacks. Cleanup belongs to the first Manual D fix unit that touches ducts host code. (counsel, 2026-11-04)
 - closure/route-directory hash cycle: closures embed `route-directory.ts`, and the directory holds the closure fingerprints, so both can never be fresh; the closure check stays green over a stale directory. (finding, U2r, 2026-11-03)
-- U4 re-enables `D03/C07: admitted losses preview is read-only, names sealed rows and commits only its scope` in [fans-native.test.ts:160](../../../ts/apps/host/tests/fans-native.test.ts#L160); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
-- U4 re-enables `W11: real Pea deadline controls the admitted sealed write` in [fans-native.test.ts:181](../../../ts/apps/host/tests/fans-native.test.ts#L181); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
-- U4 re-enables `W11: real Pea reject controls the admitted sealed write` in [fans-native.test.ts:181](../../../ts/apps/host/tests/fans-native.test.ts#L181); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
-- U4 re-enables `fixture HTTP roster uses the real sheet service and strict open-document inventory` in [fans-native.test.ts:49](../../../ts/apps/host/tests/fans-native.test.ts#L49); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
-- U4 re-enables `claude: canonical Address Work joins find, stage, sealed preview, 60-second consent, journal apply and receipt in one chain` in [harness-threads.test.ts:193](../../../ts/apps/host/tests/harness-threads.test.ts#L193); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
-- U4 re-enables `codex: canonical Address Work joins find, stage, sealed preview, 60-second consent, journal apply and receipt in one chain` in [harness-threads.test.ts:193](../../../ts/apps/host/tests/harness-threads.test.ts#L193); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
-- U4 re-enables `host-derived preview and apply send the captured Work flow and retire only confirmed cells` in [unification-write-boundary.test.ts:398](../../../ts/apps/host/tests/unification-write-boundary.test.ts#L398); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
-- U4 re-enables `kernel gap: Work A cannot write document B` in [unification-write-boundary.test.ts:229](../../../ts/apps/host/tests/unification-write-boundary.test.ts#L229); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
-- U4 re-enables `kernel gap: native payload must derive from Work, not caller` in [unification-write-boundary.test.ts:229](../../../ts/apps/host/tests/unification-write-boundary.test.ts#L229); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
-- U4 re-enables `kernel gap: preview seal refuses apply after Work changes` in [unification-write-boundary.test.ts:327](../../../ts/apps/host/tests/unification-write-boundary.test.ts#L327); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
-- U4 re-enables `unknown outcome blocks a new invocation from dispatching the same write` in [unification-write-boundary.test.ts:372](../../../ts/apps/host/tests/unification-write-boundary.test.ts#L372); marker: `U4: fan cells reach apply-losses only through the fans Work`. (counsel, 2026-11-03)
 
 - `shell/work-door-observation.ts`: completion rejection can strand waiting cell transitions; replace observation/completion ownership with typed terminals on success/failure/interruption and scoped subscription release. U1 has no rejection proof. (counsel/Common 15, 2026-11-04)
 - The readonly `DuctSnapshot` input sweep reached 28 files (16 production, 12 tests) and stopped; the alias was restored. U1b closes the Page viewport/`ListSearch` and `SheetReading` display casts with readonly display contracts. The broader snapshot sweep remains Owed. `Grids`/`Catalogs` were narrowed in two domain files. (counsel, 2026-11-04)
 - `source-route-services`/`ReadingContext` erases catalog input types before ducts sources; the one `ReadArgs` cast names the kernel gap. No per-reader decode was added. (counsel, 2026-11-04)
-- Ducts retains its root criteria writer; fan-owned editors now live on Fans InputsBody/InputsSurface. MOUNT-CUT closes the generic root-cell enumeration gap; U4 still owns the pricing/apply seam. (counsel/Q2a, U1b; U3/MOUNT-CUT, 2026-11-04)
+- Ducts retains its root criteria writer; fan-owned editors now live on Fans InputsBody/InputsSurface. MOUNT-CUT closes the generic root-cell enumeration gap; U4 implements its admitted pricing/apply seam; the five host fallback sites above remain. (counsel/Q2a, U1b; U3/MOUNT-CUT, 2026-11-04)
 
 - Tag preservation across the route's own URL write is UNPROVEN; no dedicated test (fans-pick df93f1d2).
 

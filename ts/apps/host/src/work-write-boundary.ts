@@ -7,6 +7,7 @@ import { z } from "zod";
 import {
   canonicalRouteInput,
   writeResponseSchema,
+  workHandleSchema,
   workBinding,
   tools,
   type Tool,
@@ -76,7 +77,7 @@ async function deriveFromWork(
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader },
 ) {
-  const { work } = definition.input.parse(ctx.admission.input) as { work: WorkHandle };
+  const { work, readWorks } = z.object({ work: workHandleSchema, readWorks: z.record(z.string(), workHandleSchema).optional() }).parse(definition.input.parse(ctx.admission.input));
   if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
   const target = ctx.admission.target.ref;
   const observed = await lifetime(bridge, target, false, deps);
@@ -93,7 +94,7 @@ async function deriveFromWork(
       .map((name) => [name]),
     edits: spec.editable,
   }))) as { writeIntent?: Record<string, { edit?: { value: Record<string, unknown> } }> };
-  const input = { ...(hooks.derive(doc) as object), work };
+  const input = { ...(hooks.derive(doc) as object), work, ...(readWorks ? { readWorks } : {}) };
   return { work, input, target, observed };
 }
 const withInput = (ctx: CommandContext, input: Record<string, unknown>): CommandContext => ({
