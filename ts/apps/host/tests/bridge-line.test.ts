@@ -1,4 +1,5 @@
 import { DispatchLimits } from "@pe/host-internal/dispatch";
+import { bindActionDispatch } from "../src/action-dispatch.ts";
 import { Cause, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, vi } from "vite-plus/test";
@@ -409,6 +410,38 @@ const terminal = (requestId: string, outcome = "Succeeded") => ({
 });
 const terminalFrame = (requestId: string, outcome?: string) =>
   JSON.stringify({ kind: "Terminal", terminal: terminal(requestId, outcome) });
+
+effectTest("a failed dispatch journal mark stays typed and holds B until A Terminal", () =>
+  Effect.gen(function* () {
+    const h = yield* harness;
+    const id = crypto.randomUUID();
+    const release = bindActionDispatch(id, {
+      refusal: () => null,
+      validate: async () => null,
+      dispatched: async () => {
+        throw Error("journal disk failed");
+      },
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(release));
+    const a = yield* h.call("test.a", {}, id);
+    const runningA = yield* h.sent;
+    const result = yield* Fiber.await(a);
+    const b = yield* h.call("test.b");
+    yield* turns();
+    expect
+      .soft(failure(result))
+      .toMatchObject({ _tag: "BridgeError", evidence: { dispatched: true } });
+    expect(Exit.findErrorOption(result)).toMatchObject({
+      _tag: "Some", value: { _tag: "BridgeError", evidence: { dispatched: true } },
+    });
+    expect(yield* Queue.size(h.outgoing)).toBe(0);
+    yield* h.frame(terminalFrame(runningA.requestId));
+    const runningB = yield* h.sent;
+    expect(runningB.operationKey).toBe("test.b");
+    yield* h.answer(runningB.requestId);
+    expect(Exit.isSuccess(yield* Fiber.await(b))).toBe(true);
+  }),
+);
 const inFlight = (fields: Record<string, unknown>) => ({
   inFlight: { processId: 42, processStartUtcUnixMs: 1000, ...fields },
 });

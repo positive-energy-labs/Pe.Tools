@@ -638,7 +638,15 @@ export const makeDispatcher = (ports: DispatchPorts) =>
             ),
           );
         }
-        if (reserved) yield* Effect.promise(() => ports.markBridgeDispatched(requestId));
+        if (owed) yield* Ref.set(owed, reply);
+        if (reserved)
+          yield* Effect.tryPromise({
+            try: () => ports.markBridgeDispatched(requestId),
+            catch: () =>
+              new BridgeError("Dispatched; the journal did not record it", 503, {
+                dispatched: true,
+              }),
+          });
         // The slot is released by Revit's answer to THIS request (from any socket of the
         // session) or by process death; never by a reconnect, a timer, or a cancel's acceptance.
         // Only host stop interrupts the worker mid-op (a leaving waiter never does).
@@ -648,6 +656,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
             reserved ? cancelInFlight(session, requestId, reply) : Effect.void,
           ),
         );
+        if (owed && !isUnsettled(res)) yield* Ref.set(owed, null);
         if (!res.ok) {
           const state = yield* Ref.get(session.state);
           const targetOpenId = res.openDocumentId ?? openDocumentId;
