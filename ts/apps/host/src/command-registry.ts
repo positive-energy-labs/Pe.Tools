@@ -35,8 +35,10 @@ export function commandRegistry(
     "machine.bootstrap": bootstrapExecutor(deps.sdk),
     "page.publish": pagePublicationExecutor(
       productPagesRootPath(),
+      // Read at publish time: the bound port is known only after the claim, and may not be 5180.
       origin ??
-        (process.env[hostProcessIdentity.hostBaseUrlVariable] ||
+        (() =>
+          process.env[hostProcessIdentity.hostBaseUrlVariable] ||
           hostProcessIdentity.defaultHostBaseUrl),
       pageLibrary,
       hostCaptures(),

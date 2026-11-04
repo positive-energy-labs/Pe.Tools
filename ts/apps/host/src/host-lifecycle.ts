@@ -27,7 +27,8 @@ import { currentCaller, writeTerminalContext } from "./control.ts";
 
 // The dev script authorizes same-checkout dev takeover only; the SDK owns cooperative retirement.
 const DEV_TAKEOVER_ARGUMENT = "--take-over-host";
-const installedPort = 5180;
+/** The installed host's preferred port (product.payloads.json `preferredPort`); every client reads the bound port from the service file. */
+export const installedPort = 5180;
 
 type PortOccupant = {
   readonly pid: number;
@@ -151,7 +152,7 @@ function describeOccupant(occupant: PortOccupant): string {
   return `pid ${occupant.pid}, executable ${occupant.executable}${occupant.serviceName ? `, service '${occupant.serviceName}'` : ""}`;
 }
 
-/** Installed reuse/refusal happens before bind. Dev retains SDK port choice and takeover. */
+/** Installed reuse/refusal happens before bind. Dev retains SDK port choice and takeover, never on the installed port. */
 export async function prepareHostBinding(
   open: boolean,
   version: string,
@@ -172,11 +173,10 @@ export async function prepareHostBinding(
       if (rejection) throw Error(`Dev host reuse refused: ${rejection}`);
     }
     if (open && live?.version === version) return live;
-    return dependencies.choosePort(
-      appBase,
-      ownership.serviceName,
-      Number(new URL(hostProcessIdentity.defaultHostBaseUrl).port),
-    );
+    // A dev host never takes the installed port, even a remembered one: a test Revit's orphaned dev
+    // host held 5180 and the user's installed host refused to start (2026-11-03). 0 = any free port.
+    const port = await dependencies.choosePort(appBase, ownership.serviceName, 0);
+    return port === installedPort ? 0 : port;
   }
   if (live) {
     const owners = await dependencies.occupants(appBase, live.port);
@@ -226,9 +226,13 @@ export async function prepareHostBinding(
   } catch (cause) {
     detail = `owner census unavailable: ${String(cause)}`;
   }
-  throw new Error(
-    `Installed host cannot bind 127.0.0.1:${installedPort}: occupied or inaccessible; ${detail}. No takeover or alternate port.`,
+  // Departs from v0.7.30 (which refused and left the user with no host): a foreign holder of the
+  // preferred port never blocks the installed host. Pe.App, tray, Pea, MCP and the SDK supervisor
+  // read the bound port from the service file; the PWA's origin (and its site data) follows the port.
+  console.warn(
+    `pe-host: 127.0.0.1:${installedPort} is held (${detail}); binding a free port instead. No takeover.`,
   );
+  return 0;
 }
 
 /**
