@@ -37,7 +37,25 @@ export function trustedBaseline(cwd = tsRoot): { baseline: Islands; ref: string 
     console.log(`effect islands: baseline absent at ${ref}; using introduction ${introduction}`);
     ref = introduction;
   }
-  return { baseline: JSON.parse(git("show", `${ref}:${baselinePath}`)) as Islands, ref };
+  const baseline: Islands = JSON.parse(git("show", `${ref}:${baselinePath}`));
+  // Only Git-detected renames inherit a cap; copies and additions remain new files.
+  const changes = git("diff", "-M", "--name-status", "-z", "--no-relative", `${ref}..HEAD`).split(
+    "\0",
+  );
+  const renames = new Map<string, string>();
+  for (let i = 0; i < changes.length; ) {
+    const status = changes[i++];
+    const oldPath = changes[i++];
+    if (!status?.startsWith("R")) continue;
+    const newPath = changes[i++];
+    if (oldPath?.startsWith("ts/") && newPath?.startsWith("ts/"))
+      renames.set(oldPath.slice(3), newPath.slice(3));
+  }
+  const renamed: Islands = { src: {}, tests: {} };
+  for (const kind of ["src", "tests"] as const)
+    for (const [file, count] of Object.entries(baseline[kind]))
+      renamed[kind][renames.get(file) ?? file] = count;
+  return { baseline: renamed, ref };
 }
 
 export function increases(actual: Islands, cap: Islands, kind: keyof Islands): string[] {

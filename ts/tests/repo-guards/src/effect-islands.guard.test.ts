@@ -9,6 +9,61 @@ import { increases, tightenedBaseline, trustedBaseline } from "./effect-islands.
 
 const trusted = trustedBaseline();
 
+it.each(["rename", "rename and raise", "new", "copy"])("ratchets a committed %s", (change) => {
+  const cwd = mkdtempSync(join(tmpdir(), "effect-islands-"));
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe" }).trim();
+  try {
+    git("init", "-b", "main");
+    git("config", "user.name", "Probe");
+    git("config", "user.email", "probe@example.invalid");
+    const dir = join(cwd, "ts/tests/repo-guards/src");
+    mkdirSync(dir, { recursive: true });
+    mkdirSync(join(cwd, "ts/apps"));
+    const path = join(dir, "effect-islands.baseline.json");
+    const oldFile = "apps/probe.ts";
+    const newFile = "apps/renamed probe.ts";
+    const source = `${Array.from({ length: 20 }, (_, i) => `export const n${i} = ${i};`).join("\n")}\n// effect-edge: island, phase 5\n`;
+    writeFileSync(join(cwd, "ts", oldFile), source);
+    writeFileSync(path, JSON.stringify({ src: { [oldFile]: 1 }, tests: {} }));
+    git("add", "ts");
+    git("commit", "-m", "initial baseline");
+    const base = git("rev-parse", "HEAD");
+    git("checkout", "-b", "change");
+    if (change.startsWith("rename")) git("mv", `ts/${oldFile}`, `ts/${newFile}`);
+    const count = change === "rename and raise" ? 2 : 1;
+    writeFileSync(
+      join(cwd, "ts", newFile),
+      change === "new"
+        ? "// effect-edge: island, phase 5\nexport const brandNew = true;\n"
+        : `${source}${count === 2 ? "// effect-edge: island, phase 5\n" : ""}`,
+    );
+    const actual = {
+      src: { ...(change.startsWith("rename") ? {} : { [oldFile]: 1 }), [newFile]: count },
+      tests: {},
+    };
+    writeFileSync(path, JSON.stringify(actual));
+    git("add", "ts");
+    git("commit", "-m", change);
+    expect(git("status", "--porcelain")).toBe("");
+    const selected = trustedBaseline(cwd);
+    expect(selected.ref).toBe(base);
+    expect(increases(actual, selected.baseline, "src")).toEqual(
+      change === "rename"
+        ? []
+        : [`${newFile}: ${count} > ${change === "rename and raise" ? 1 : 0}`],
+    );
+    if (change === "rename")
+      expect(tightenedBaseline(actual, actual, selected.baseline, () => false)).toEqual(actual);
+    else
+      expect(() => tightenedBaseline(actual, actual, selected.baseline, () => false)).toThrow(
+        "refused: islands only shrink",
+      );
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 it("detects a committed baseline increase against the merge base", () => {
   const cwd = mkdtempSync(join(tmpdir(), "effect-islands-"));
   const git = (...args: string[]) =>
