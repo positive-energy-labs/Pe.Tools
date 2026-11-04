@@ -1240,7 +1240,7 @@ export const neutralBodies = {
     run: (key) => [key],
   },
   groupkinds: { slot: "cells.kinds.groupOf", kind: "group", source, run: (key) => [key] },
-  rosterArgs: { slot: "readings.roster.args", kind: "args", source, run: () => ({ ids: [...TABLE_IDS] }) },
+  rosterArgs: { slot: "readings.roster.args", kind: "args", source, run: () => ({}) },
   networksArgs: {
     slot: "readings.ducts.args",
     kind: "args",
@@ -1255,7 +1255,7 @@ export const neutralBodies = {
       }) as z.output<(typeof entries)["ducts.networks"]["input"]>,
   },
   tablesArgs: { slot: "readings.tables.args", kind: "args", source, run: () => ({ ids: [...TABLE_IDS] }) },
-  catalogsArgs: { slot: "readings.catalogs.args", kind: "args", source, run: () => ({ ids: [...TABLE_IDS] }) },
+  catalogsArgs: { slot: "readings.catalogs.args", kind: "args", source, run: () => ({}) },
   fansArgs: {
     slot: "readings.fans.args",
     kind: "args",
@@ -1354,9 +1354,9 @@ export const neutralBodies = {
   lossArgs: { slot: "readings.lossPreview.args", kind: "args", source, run: () => null },
   healArgs: { slot: "readings.healPreview.args", kind: "args", source, run: () => null },
   fanArgs: { slot: "readings.fanPreview.args", kind: "args", source, run: () => null },
-  losses: { slot: "verbs.losses.intent", kind: "intent", source, run: () => ({ ids: [...TABLE_IDS] }) },
-  heal: { slot: "verbs.heal.intent", kind: "intent", source, run: () => ({ ids: [...TABLE_IDS] }) },
-  assign: { slot: "verbs.assign.intent", kind: "intent", source, run: () => ({ ids: [...TABLE_IDS] }) },
+  losses: { slot: "verbs.losses.intent", kind: "intent", source, run: () => ({}) },
+  heal: { slot: "verbs.heal.intent", kind: "intent", source, run: () => ({}) },
+  assign: { slot: "verbs.assign.intent", kind: "intent", source, run: () => ({}) },
   lossReady: { slot: "verbs.losses.ready", kind: "ready", source, run: lossReady },
   healReady: {
     slot: "verbs.heal.ready",
