@@ -8,7 +8,9 @@ import { createRouteScopeGate } from "../../../../packages/runtime/src/route-sco
 import type { MountedOwner,MountedRoute,MountedSnapshot,Snapshots } from "./admitted-context.ts";
 import type { PlaceInput } from "./admitted-place.ts";
 import { createApplicationWorkRegistry } from "./application-work-registry.ts";
+import { createNamedFixtureRouteEnvironment } from "./fixture-lane.ts";
 import { createPagePolicy,freezePage } from "./page-port.ts";
+import { createRouteEnvironment,type EnvironmentValidation } from "./route-environment.ts";
 /** Closed slot census. Other kinds refuse before resource acquisition. */
 export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "args",
@@ -198,4 +200,57 @@ export function createAdmittedScope<W extends Record<string, unknown>>({route, i
 
 return {registry, registration, resolve, bindings, policy, issuer, owner, read, entryFor, mountJournal, workSpec,
  release() {for (const lease of leases.values()) lease.release();}};
+}
+
+export function createAdmittedEnvironment<W extends Record<string, unknown>>(
+ {route, registry, owner, registration, workSpec}: ReturnType<typeof createAdmittedScope<W>> & {route: MountedRoute<W>},
+ {input, services, liveDoor, environmentIssuer, plan, ownsKey}: {
+ input: PlaceInput; services: Omit<import("../../../../packages/agent-contracts/src/route-kernel-environment.ts").KernelServices,"target">;
+ liveDoor: import("../../../../packages/agent-contracts/src/work-journal-door.ts").WorkJournalDoor;
+ environmentIssuer: import("../../../../packages/agent-contracts/src/route-kernel-environment.ts").RouteEnvironmentIssuer;
+ plan: import("./admitted-reading-plan.ts").AdmittedReadingPlan;
+ ownsKey(key: import("../../../../packages/agent-contracts/src/route-kernel-environment.ts").ResolvedReadKey): boolean;
+}) {
+ const {fixture} = input;
+      const validate: EnvironmentValidation = {
+        admitted: (candidate) => candidate === route && registry.resolve(route) === route,
+        token: (token) => owner.current(token),
+        scope: (scope) => owner.current(scope),
+        invocation: (invocation) => owner.current(invocation),
+        key: (key) =>
+          ownsKey(key),
+        detail: () => false,
+        geometryScope: () => false,
+      };
+      return (() => {
+        try {
+          return fixture === null
+            ? createRouteEnvironment({
+                issuer: environmentIssuer,
+                validate,
+                ports: {
+                  ...services,
+                  work: route.data.work ? { read: liveDoor, submit: liveDoor } : undefined,
+                  submitNative: (command) =>
+                    services.submitNative
+                      ? services.submitNative(command)
+                      : (services.nativeWrite ?? liveDoor).submit(command),
+                  geometry: undefined,
+                },
+              })
+            : createNamedFixtureRouteEnvironment({
+                issuer: environmentIssuer,
+                validate,
+                plan,
+                name: fixture,
+                workSpec,
+                now: () => services.clock.now(),
+              });
+        } catch (error) {
+          owner.close();
+          plan.close();
+          registration.deactivate();
+          throw error;
+        }
+      })();
 }

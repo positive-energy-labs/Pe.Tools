@@ -12,6 +12,7 @@ resolveRouteBindings,
 } from "../../../../packages/agent-contracts/src/route-module";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { createAdmittedAddress } from "./admitted-address";
+import { createAdmittedBody } from "./admitted-body.ts";
 import { createAdmittedCellActions,createAdmittedCells } from "./admitted-cells";
 import { createAdmittedGeometry } from "./admitted-geometry";
 import { createAdmittedHistory } from "./admitted-history.ts";
@@ -19,15 +20,13 @@ import { createAdmittedInvocation } from "./admitted-invoke.ts";
 import { createAdmittedObservers } from "./admitted-observers";
 import type { PlaceInput } from "./admitted-place";
 import { createAdmittedReadings } from "./admitted-readings.ts";
-import { createAdmittedScope } from "./admitted-scope.ts";
+import { createAdmittedEnvironment,createAdmittedScope } from "./admitted-scope.ts";
 import { createAdmittedWork } from "./admitted-work";
 import {
 createApplicationWorkRegistry
 } from "./application-work-registry";
 import { fixtureGeometryDoor } from "./fixture-geometry-door";
-import { createNamedFixtureRouteEnvironment } from "./fixture-lane";
 import { createPagePorts,freezePage } from "./page-port";
-import { createRouteEnvironment,type EnvironmentValidation } from "./route-environment";
 import { createWorkFeedClient } from "./work-feed-client";
 export { ReviewRefusal } from "./admitted-invoke.ts";
 
@@ -119,47 +118,8 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         },
       });
       const {plan, queryInputs, queryLandings, demanded, generations, retire} = readings;
-      const validate: EnvironmentValidation = {
-        admitted: (candidate) => candidate === route && registry.resolve(route) === route,
-        token: (token) => owner.current(token),
-        scope: (scope) => owner.current(scope),
-        invocation: (invocation) => owner.current(invocation),
-        key: (key) =>
-          readings.ownsKey(key),
-        detail: () => false,
-        geometryScope: () => false,
-      };
-      const environment: ReturnType<typeof createRouteEnvironment> = (() => {
-        try {
-          return fixture === null
-            ? createRouteEnvironment({
-                issuer: environmentIssuer,
-                validate,
-                ports: {
-                  ...services,
-                  work: route.data.work ? { read: liveDoor, submit: liveDoor } : undefined,
-                  submitNative: (command) =>
-                    services.submitNative
-                      ? services.submitNative(command)
-                      : (services.nativeWrite ?? liveDoor).submit(command),
-                  geometry: undefined,
-                },
-              })
-            : createNamedFixtureRouteEnvironment({
-                issuer: environmentIssuer,
-                validate,
-                plan,
-                name: fixture,
-                workSpec,
-                now: () => services.clock.now(),
-              });
-        } catch (error) {
-          owner.close();
-          plan.close();
-          registration.deactivate();
-          throw error;
-        }
-      })();
+      const environment = createAdmittedEnvironment({...scope, route}, {
+        input, services, liveDoor, environmentIssuer, plan, ownsKey: readings.ownsKey});
       const door =
         fixture === null
           ? liveDoor
@@ -337,56 +297,10 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         ),
         restore: () => transport!.restore(),
         ...readings.public,
-        read(pane: string) {
-          const current = resolve();
-          if (!Object.hasOwn(route.data.panes, pane)) throw Error(`Unknown pane: ${pane}`);
-          const declaration = route.data.panes[pane]!;
-          if (!observers.visible(pane) || !declaration.body) return null;
-          const basis = workBasis();
-          drawing = true;
-          try {
-            return current.bodies[declaration.body]!.run({
-              place: (row: unknown, input: unknown) => place(pane, row, input, basis),
-              page: ports.page,
-              work: read().work?.value ?? null,
-              workBasis: basis,
-              history,
-              cells: {
-                take: (id: string, key: unknown) => transitionCell("take", id, key),
-                unsuggest: (id: string, key: unknown) => transitionCell("unsuggest", id, key),
-                clear: (id: string, key: unknown) => transitionCell("clear", id, key),
-              },
-              recovery: route.data.work
-                ? { state: recovery, startFresh, carryOver: salvage }
-                : undefined,
-              readings: Object.freeze(
-                Object.fromEntries(declaration.draws.map((id) => [id, readings.snapshots()[id]])),
-              ),
-              readingActions: Object.fromEntries(
-                declaration.draws
-                  .filter((id) => geometry.actions[id])
-                  .map((id) => [id, geometry.actions[id]]),
-              ),
-              readCosts: Object.freeze({ ...geometry.costs }),
-              visible: true,
-              verbs: Object.fromEntries(
-                ("allowed" in declaration.verbs
-                  ? declaration.verbs.allowed
-                  : declaration.verbs
-                ).map((id: string) => [
-                  id,
-                  (input: unknown, editBasis?: InvocationToken) => {
-                    if (route.data.verbs[id]?.kind === "work" && !editBasis)
-                      throw Error("Work edit requires its rendered accepted basis");
-                    return invoke(id, input, editBasis);
-                  },
-                ]),
-              ),
-            });
-          } finally {
-            drawing = false;
-          }
-        },
+        read: createAdmittedBody({route, read, resolve, ports, snapshots: readings.snapshots,
+          geometry, observers, invocation, historyOwner, transitionCell,
+          duringDraw<T>(draw: () => T): T {drawing = true; try {return draw();} finally {drawing = false;}},
+        }),
         close,
       };
     },
