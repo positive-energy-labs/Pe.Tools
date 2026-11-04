@@ -1,6 +1,6 @@
 import { placeInput } from "./admitted-place.test-fixture";
 import { RouteActivity, RouteVisibility } from "../route/activity";
-import { actionReceiptSchema } from "@pe/agent-contracts";
+import { draftCellSchema, actionReceiptSchema } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 import { createElement, StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -478,7 +478,7 @@ async function workRoute(
   modelWrite = false,
   needs: "nothing" | "document" = "nothing",
   presenter?: (result: unknown, evidence: unknown) => unknown,
-  cellBodies = false,
+  cellBodies: false | true | "draft" = false,
   landing?: {
     run: (result: unknown, page: unknown) => unknown;
     output: z.ZodType;
@@ -499,11 +499,11 @@ async function workRoute(
               key: "text",
               value: "number",
               groupOf: "cellGroup",
-              show: "cellShow",
+              ...(cellBodies === "draft" ? {} : { show: "cellShow" }),
               label: "cellLabel",
               focus: "cellFocus",
-              take: "cellTake",
-              deps: { page: ["query"], work: ["amount"], readings: ["notes"] },
+              ...(cellBodies === "draft" ? {} : { take: "cellTake" }),
+              deps: { page: ["query"], work: cellBodies === "draft" ? [] : ["amount"], readings: ["notes"] },
             },
           },
         } as const)
@@ -594,7 +594,7 @@ async function workRoute(
           }
         : {}),
     },
-    schemas: { ...schemas, work: z.object({ amount: z.number() }), number: z.number() },
+    schemas: { ...schemas, work: z.object({ amount: cellBodies === "draft" ? draftCellSchema(z.number()) : z.number() }), number: z.number() },
     bodies: {
       ...bodies,
       ...(readingWork
@@ -640,12 +640,12 @@ async function workRoute(
               source,
               run: (key: string) => [key],
             },
-            cellShow: {
+            ...(cellBodies === "draft" ? {} : { cellShow: {
               slot: "cells.amount.show",
               kind: "show",
               source,
               run: (value: number) => String(value),
-            },
+            } }),
             cellLabel: {
               slot: "cells.amount.label",
               kind: "label",
@@ -658,7 +658,7 @@ async function workRoute(
               source,
               run: (key: string) => ({ query: key }),
             },
-            cellTake: {
+            ...(cellBodies === "draft" ? {} : { cellTake: {
               slot: "cells.amount.take",
               kind: "take",
               source,
@@ -672,7 +672,7 @@ async function workRoute(
                 expect(Object.keys(ctx.readings)).toEqual(["notes"]);
                 return [{ path: ["amount"], value: ctx.work.amount + 1 }];
               },
-            },
+            } }),
           }
         : {}),
       ...(presenter
@@ -3022,3 +3022,41 @@ test("resource release never withdraws the Place's write authority", async () =>
     "accepted",
   );
 });
+
+
+test.each(["take", "unsuggest", "clear"] as const)(
+  "cell %s captures its channel and label and refuses stale readings or lost custody",
+  async (kind) => {
+    const t = transports();
+    const initial = { amount: { edit: { value: 3 }, suggestion: { value: 7 } } };
+    const store = createFixtureWorkDoor(
+      { route: "note", title: "", description: "", schema: z.object({ amount: draftCellSchema(z.number()) }) },
+      initial,
+    );
+    const submit = vi.spyOn(store, "submitWork");
+    let custody: "current" | "departed" = "current";
+    const route = await workRoute("none", false, "nothing", undefined, "draft", {
+      output: z.unknown(), run: () => ({}), pane: (ctx) => ctx,
+    });
+    const mount = createRouteShell({ ...t.services, work: store }).mount(route,
+      placeInput(locationPort().address, { custody: { current: () => custody === "current" } }));
+    closes.push(mount.close);
+    const cellContext = mount.read("main") as { cells: Record<typeof kind, (id: string, key: string) => Observation<WorkWriteOutcome>> };
+    const run = () => cellContext.cells[kind]("amount", "amount");
+    expect(() => run()).toThrow("Reading unavailable: notes");
+    expect(submit).not.toHaveBeenCalled();
+    t.frames.at(-1)!(ready("notes"));
+    custody = "departed";
+    expect(() => run()).toThrow(PlaceWriteRefusal);
+    expect(submit).not.toHaveBeenCalled();
+    custody = "current";
+    expect((await settle(run())).kind).toBe("accepted");
+    const label = `${kind === "take" ? "Take" : kind === "unsuggest" ? "Unsuggest" : "Clear"} amount`;
+    expect(submit.mock.calls[0]?.[1]).toMatchObject({ label });
+    expect(submit.mock.calls[0]?.[2]).toMatchObject({ token: { channel: `cell-${kind}:amount` } });
+    expect(mount.work()?.value).toEqual({ amount: kind === "take"
+      ? { edit: { value: 7, by: "human", base: 0, at: expect.any(String) }, suggestion: null }
+      : kind === "unsuggest" ? { edit: { value: 3 }, suggestion: null }
+      : { edit: null, suggestion: { value: 7 } } });
+  },
+);

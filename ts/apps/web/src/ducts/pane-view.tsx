@@ -1,3 +1,4 @@
+import { settleWork } from "../shell/work-door-observation";
 import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useMemo } from "react";
 import { stagedDucts, type DuctsRouteDocument, type RouteStatePatch } from "@pe/agent-contracts";
@@ -11,10 +12,6 @@ import type {
   PaneContext,
   ReadingSnapshot,
 } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import type {
-  WorkWriteOutcome,
-  Observation,
-} from "../../../../packages/agent-contracts/src/work-journal-door";
 import { activeName, ductsData, schemas, entries, localId, localSubject, namesOf } from "./neutral";
 import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 import { NetworkPane, NetworkProvider } from "./proto/e/screen";
@@ -37,7 +34,7 @@ type KernelContext = PaneContext<
   typeof entries,
   keyof typeof ductsData.panes
 >;
-export type DuctsViewContext = Pick<KernelContext, "work" | "workBasis" | "history" | "verbs"> & {
+export type DuctsViewContext = Pick<KernelContext, "work" | "workBasis" | "history" | "verbs" | "cells"> & {
   readonly page: Pick<KernelContext["page"], "select" | "pose"> & {
     read(): Omit<ReturnType<KernelContext["page"]["read"]>, "stage">;
   };
@@ -48,27 +45,6 @@ const unavailable: ReadingSnapshot<unknown> = {
   current: false,
   reason: "Not requested",
 };
-export function settled(
-  write: Observation<WorkWriteOutcome> | { kind: "refused"; reason: "describe-threw" },
-): Promise<WorkWriteOutcome> {
-  if ("kind" in write)
-    return Promise.resolve({
-      kind: "refused",
-      refusal: {
-        kind: "error",
-        error: "Could not name this edit",
-        hint: "Retry the current input",
-      },
-    });
-  return new Promise((resolve) => {
-    write.subscribe(
-      (value) => {
-        if (value.kind !== "pending") resolve(value);
-      },
-      () => {},
-    );
-  });
-}
 export function DuctsPane({ ctx, id }: { ctx: DuctsViewContext; id: string }) {
   const read = (key: string) => ctx.readings[key] ?? unavailable;
   const workDoc = ctx.work as DuctsRouteDocument | null;
@@ -154,7 +130,7 @@ export function DuctsPane({ ctx, id }: { ctx: DuctsViewContext; id: string }) {
     async (patches: RouteStatePatch[], history?: EditMeta) => {
       if (!ctx.workBasis)
         return { code: "unavailable", message: "Read this document's Work before editing" };
-      const result = await settled(ctx.verbs.edit({ patches, history }, ctx.workBasis));
+      const result = await settleWork(ctx.verbs.edit({ patches, history }, ctx.workBasis));
       return result.kind === "refused" ? { code: "refused", message: result.refusal.error } : null;
     },
     [ctx],
@@ -353,6 +329,7 @@ export function DuctsPane({ ctx, id }: { ctx: DuctsViewContext; id: string }) {
     <DuctsOwner
       value={{
         props,
+        cells: ctx.cells,
         commands: scopeCommand,
         fanRoster: (fanRead.value?.rows ?? []) as import("./sheet/model").FanPort[],
         meshes: read("meshes").value as import("#/scene/types").SceneMeshes | undefined,
@@ -363,7 +340,7 @@ export function DuctsPane({ ctx, id }: { ctx: DuctsViewContext; id: string }) {
         sheetEdit: async (edits, history, basis) => {
           if (!ctx.workBasis)
             return { code: "unavailable", message: "Read this document's Work before editing" };
-          const result = await settled(
+          const result = await settleWork(
             ctx.verbs.sheetEdit({ edits, history, basis }, ctx.workBasis),
           );
           return result.kind === "refused"

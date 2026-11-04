@@ -1,3 +1,5 @@
+import { identityCodecs, identityPartSchema, decodeFailure } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
+export { identityCodecs } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
 import { z } from "zod";
 import { deepEqual } from "@tanstack/react-router";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
@@ -10,11 +12,6 @@ import {
 import type {
   DecodeResult,
   FieldControls,
-  IdentityCodec,
-  IdentityCodecs,
-  IdentityId,
-  IdentityKind,
-  IdentityParts,
   MoveOrigin,
   MoveResult,
   PageOf,
@@ -24,100 +21,7 @@ import type {
   SelectionItem,
 } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
 
-const nonempty = z.string().refine((s) => s.trim().length > 0, "Empty identity part");
-const uniqueId = nonempty.refine((s) => !/^[+-]?\d+$/.test(s.trim()), "ElementId is not UniqueId");
-const linkTuple = z.tuple([nonempty, uniqueId, nonempty]);
-const elementTuple = z
-  .tuple([nonempty, linkTuple.nullable(), uniqueId])
-  .refine(
-    ([document, link]) => link === null || document === link[0],
-    "Link and element must name the same containing document",
-  );
-const failure = (reason: string): { readonly ok: false; readonly reason: string } => ({
-  ok: false,
-  reason,
-});
-
-function identityCodec<K extends IdentityKind, T>(
-  kind: K,
-  tuple: z.ZodType<T>,
-  partsSchema: z.ZodType<IdentityParts[K]>,
-  pack: (parts: IdentityParts[K]) => T,
-  unpack: (tuple: T) => IdentityParts[K],
-): IdentityCodec<K> {
-  const schema = z.custom<IdentityId<K>>((value: unknown) => {
-    if (typeof value !== "string") return false;
-    try {
-      const parsed = tuple.safeParse(JSON.parse(value));
-      return parsed.success && JSON.stringify(parsed.data) === value;
-    } catch {
-      return false;
-    }
-  });
-  const decode = (text: string): DecodeResult<IdentityId<K>> => {
-    const parsed = schema.safeParse(text);
-    return parsed.success
-      ? { ok: true, value: parsed.data }
-      : failure(`Invalid canonical ${kind} identity`);
-  };
-  return Object.freeze({
-    kind,
-    decode,
-    encode(parts: IdentityParts[K]): DecodeResult<IdentityId<K>> {
-      const parsed = partsSchema.safeParse(parts);
-      return parsed.success
-        ? decode(JSON.stringify(pack(parsed.data)))
-        : failure(`Invalid ${kind} parts`);
-    },
-    parts(id: IdentityId<K>): IdentityParts[K] {
-      return unpack(tuple.parse(JSON.parse(schema.parse(id))));
-    },
-  });
-}
-const linkParts = z.strictObject({
-  document: nonempty,
-  linkUniqueId: uniqueId,
-  linkedDocument: nonempty,
-});
-const packLink = (p: IdentityParts["link"]): z.output<typeof linkTuple> => [
-  p.document,
-  p.linkUniqueId,
-  p.linkedDocument,
-];
-const unpackLink = ([document, linkUniqueId, linkedDocument]: z.output<
-  typeof linkTuple
->): IdentityParts["link"] => ({ document, linkUniqueId, linkedDocument });
-
-export const identityCodecs: IdentityCodecs = Object.freeze({
-  document: identityCodec(
-    "document",
-    z.tuple([nonempty]),
-    z.strictObject({ document: nonempty }),
-    (p) => [p.document],
-    ([document]) => ({ document }),
-  ),
-  link: identityCodec("link", linkTuple, linkParts, packLink, unpackLink),
-  element: identityCodec<"element", z.output<typeof elementTuple>>(
-    "element",
-    elementTuple,
-    z.strictObject({ document: nonempty, link: linkParts.nullable(), uniqueId }),
-    (p) => [p.document, p.link === null ? null : packLink(p.link), p.uniqueId],
-    ([document, link, uniqueId]) => ({
-      document,
-      link: link === null ? null : unpackLink(link),
-      uniqueId,
-    }),
-  ),
-  local: identityCodec(
-    "local",
-    z.tuple([nonempty, nonempty]),
-    z.strictObject({ namespace: nonempty, subject: nonempty }),
-    (p) => [p.namespace, p.subject],
-    ([namespace, subject]) => ({ namespace, subject }),
-  ),
-});
-
-const selectionItem = z.strictObject({ kind: nonempty, id: nonempty });
+const selectionItem = z.strictObject({ kind: identityPartSchema, id: identityPartSchema });
 const selectionShape = z.array(selectionItem);
 type Item = z.output<typeof selectionItem>;
 
@@ -137,11 +41,11 @@ export function selectionCodec<G extends RouteGraphJson, const K extends readonl
   };
   const normalize = (value: unknown): DecodeResult<readonly Selected[]> => {
     const parsed = selectionShape.safeParse(value);
-    if (!parsed.success) return failure("Selection must be an array of {kind,id}");
+    if (!parsed.success) return decodeFailure("Selection must be an array of {kind,id}");
     const seen = new Set<string>();
     const items: Selected[] = [];
     for (const item of parsed.data) {
-      if (!isSelected(item)) return failure(`Invalid ${item.kind} identity`);
+      if (!isSelected(item)) return decodeFailure(`Invalid ${item.kind} identity`);
       const key = JSON.stringify([item.kind, item.id]);
       if (!seen.has(key)) items.push(item);
       seen.add(key);
@@ -158,7 +62,7 @@ export function selectionCodec<G extends RouteGraphJson, const K extends readonl
       try {
         return normalize(JSON.parse(text));
       } catch {
-        return failure("Invalid selection JSON");
+        return decodeFailure("Invalid selection JSON");
       }
     },
   });
@@ -249,10 +153,10 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
 
   const decodeField = (key: string, value: unknown): DecodeResult<unknown> => {
     const field = graph.fields[key];
-    if (!field) return failure(`Unknown Page field: ${key}`);
+    if (!field) return decodeFailure(`Unknown Page field: ${key}`);
     if (field.role === "selection") return selectionCodec(graph, field.kinds).normalize(value);
     const parsed = schemas[field.schema]?.safeParse(value);
-    if (!parsed?.success) return failure(`Invalid Page field: ${key}`);
+    if (!parsed?.success) return decodeFailure(`Invalid Page field: ${key}`);
     if (field.role === "subject") {
       const identities = typeof field.identity === "string" ? [field.identity] : field.identity;
       const check = (id: unknown) => {
@@ -263,7 +167,7 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
       };
       if (field.cardinality === "one") {
         if (parsed.data !== null && !check(parsed.data))
-          return failure(`Invalid subject identity: ${key}`);
+          return decodeFailure(`Invalid subject identity: ${key}`);
       } else {
         const many = z
           .union([
@@ -281,7 +185,7 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
             (!many.data.ids.every(check) ||
               (many.data.active !== undefined && !check(many.data.active))))
         )
-          return failure(`Invalid subject set: ${key}`);
+          return decodeFailure(`Invalid subject set: ${key}`);
       }
     }
     return { ok: true, value: parsed.data };
@@ -300,15 +204,15 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
   const decode = (input: unknown): DecodeResult<PageOf<G, S>> => {
     const parsed = record.safeParse(input);
     if (!parsed.success || Object.keys(parsed.data).some((key) => !role(key)))
-      return failure("Invalid Page fields");
+      return decodeFailure("Invalid Page fields");
     const out: Record<string, unknown> = {};
     for (const [key] of fields) {
-      if (!Object.hasOwn(parsed.data, key)) return failure(`Missing Page field: ${key}`);
+      if (!Object.hasOwn(parsed.data, key)) return decodeFailure(`Missing Page field: ${key}`);
       const result = decodeField(key, parsed.data[key]);
       if (!result.ok) return result;
       out[key] = result.value;
     }
-    return isPage(out) ? { ok: true, value: freezePage(out) } : failure("Invalid Page");
+    return isPage(out) ? { ok: true, value: freezePage(out) } : decodeFailure("Invalid Page");
   };
   const defaults = () =>
     Object.fromEntries(
@@ -327,34 +231,34 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
     origin: MoveOrigin,
     runTransition = true,
   ): PagePreparation<G, S> => {
-    if (!originSchema.safeParse(origin).success) return failure("Missing or invalid move origin");
+    if (!originSchema.safeParse(origin).success) return decodeFailure("Missing or invalid move origin");
     const parsed = record.safeParse(patch);
-    if (!parsed.success) return failure("Invalid Page patch");
+    if (!parsed.success) return decodeFailure("Invalid Page patch");
     const entries = Object.entries(parsed.data);
     for (const [key] of entries) {
       const r = role(key);
       if (!r || key === "__proto__" || key === "constructor")
-        return failure(`Unknown Page field: ${key}`);
+        return decodeFailure(`Unknown Page field: ${key}`);
       if (origin.kind === "human" && r !== origin.source)
-        return failure(`Human ${origin.source} cannot write ${key}`);
+        return decodeFailure(`Human ${origin.source} cannot write ${key}`);
       if (
         origin.kind === "restore" &&
         !["subject", "selection", "pose", "stage", "query", "draft"].includes(r)
       )
-        return failure(`Restore cannot write ${key}`);
+        return decodeFailure(`Restore cannot write ${key}`);
       if (
         origin.kind === "pea" &&
         (r === "device" ||
           r === "transient" ||
           ("agent" in graph.fields[key]! && graph.fields[key]!.agent !== "set"))
       )
-        return failure(`Pea cannot write ${key}`);
+        return decodeFailure(`Pea cannot write ${key}`);
     }
     if (
       origin.kind === "restore" &&
       (!Object.hasOwn(parsed.data, subjectKey) || !Object.hasOwn(parsed.data, selectionKey))
     )
-      return failure("Restore requires subject and selection together");
+      return decodeFailure("Restore requires subject and selection together");
     if (transition && runTransition) {
       // Validate the proposed patch before route code, then validate its returned patch identically.
       const proposed = prepare(current, patch, origin, false);
@@ -376,12 +280,12 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
       !deepEqual(current[selectionKey], next[selectionKey]) &&
       fields.some(([key, field]) => field.role === "pose" && !deepEqual(current[key], next[key]))
     ) {
-      return failure("Selection and pose are separate moves");
+      return decodeFailure("Selection and pose are separate moves");
     }
     const result = decode(next);
     if (!result.ok) return result;
     const checked = membership(result.value);
-    if (typeof checked !== "string") return failure(checked.reason);
+    if (typeof checked !== "string") return decodeFailure(checked.reason);
     return {
       ok: true,
       value: {
@@ -398,14 +302,14 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
     restoreState(url: unknown, memory: unknown): DecodeResult<RestoreState> {
       const u = record.safeParse(url);
       const m = record.safeParse(memory);
-      if (!u.success || !m.success) return failure("Invalid restore fields");
+      if (!u.success || !m.success) return decodeFailure("Invalid restore fields");
       for (const input of [u.data, m.data]) {
         if (
           Object.keys(input).some(
             (key) => !role(key) || ["setting", "device", "transient"].includes(role(key)!),
           )
         )
-          return failure("Field cannot be restored");
+          return decodeFailure("Field cannot be restored");
       }
       const decoded = decode({ ...defaults(), ...m.data, ...u.data });
       if (!decoded.ok) return decoded;
@@ -416,7 +320,7 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
       );
       return isRestoreState(restored)
         ? { ok: true, value: freezePage(restored) }
-        : failure("Invalid restore");
+        : decodeFailure("Invalid restore");
     },
     prepare,
   });

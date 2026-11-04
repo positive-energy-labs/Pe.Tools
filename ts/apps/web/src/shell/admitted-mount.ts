@@ -1499,6 +1499,41 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         close();
         throw error;
       }
+      const transitionCell = (kind: "take" | "unsuggest" | "clear", id: string, key: unknown) => {
+          action();
+          resolve();
+          const declaration = route.data.cells[id];
+          if (!declaration) throw Error(`Unknown cell: ${id}`);
+          const context = () => {
+            if (!work.ready()) throw Error("Work unavailable");
+            for (const reading of declaration.deps.readings)
+              if (!readings[reading]?.current) throw Error(`Reading unavailable: ${reading}`);
+            return freezePage({
+              page: project(declaration.deps.page, owner.read()!.page),
+              work: project(
+                declaration.deps.work,
+                owner.read()!.work!.value as Record<string, unknown>,
+              ),
+              readings: Object.fromEntries(
+                declaration.deps.readings.map((key) => [key, readings[key]]),
+              ),
+            });
+          };
+          context();
+          const issued = owner.invocation(
+            owner.capture(`cell-${kind}:${id}`),
+            Object.fromEntries(
+              declaration.deps.readings.map((key) => [
+                key,
+                (readings[key] as { hash: string }).hash,
+              ]),
+            ),
+          );
+          if (!issued.ok) throw Error(issued.reason);
+          return work.write(() => cells.transition(kind, id, key, context(), owner.read()!.work!.value as Record<string, unknown>), issued.value, issued.value.id, {
+            label: `${kind === "take" ? "Take" : kind === "unsuggest" ? "Unsuggest" : "Clear"} ${id}`,
+          });
+        };
       return {
         // The exact admission supplies both these schemas and field roles.
         page: ports.page as PagePort<G, S>,
@@ -1531,41 +1566,9 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         salvage,
         recovery,
         startFresh,
-        takeCell(id: string, key: unknown) {
-          action();
-          resolve();
-          const declaration = route.data.cells[id];
-          if (!declaration) throw Error(`Unknown cell: ${id}`);
-          const context = () => {
-            if (!work.ready()) throw Error("Work unavailable");
-            for (const reading of declaration.deps.readings)
-              if (!readings[reading]?.current) throw Error(`Reading unavailable: ${reading}`);
-            return freezePage({
-              page: project(declaration.deps.page, owner.read()!.page),
-              work: project(
-                declaration.deps.work,
-                owner.read()!.work!.value as Record<string, unknown>,
-              ),
-              readings: Object.fromEntries(
-                declaration.deps.readings.map((key) => [key, readings[key]]),
-              ),
-            });
-          };
-          context();
-          const issued = owner.invocation(
-            owner.capture(`cell-take:${id}`),
-            Object.fromEntries(
-              declaration.deps.readings.map((key) => [
-                key,
-                (readings[key] as { hash: string }).hash,
-              ]),
-            ),
-          );
-          if (!issued.ok) throw Error(issued.reason);
-          return work.write(() => cells.take(id, key, context()), issued.value, issued.value.id, {
-            label: `Take ${id}`,
-          });
-        },
+        takeCell: (id: string, key: unknown) => transitionCell("take", id, key),
+        unsuggestCell: (id: string, key: unknown) => transitionCell("unsuggest", id, key),
+        clearCell: (id: string, key: unknown) => transitionCell("clear", id, key),
         focusCell(id: string, key: unknown) {
           action();
           resolve();
@@ -1707,6 +1710,11 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
               work: owner.read()!.work?.value ?? null,
               workBasis: basis,
               history,
+              cells: {
+                take: (id: string, key: unknown) => transitionCell("take", id, key),
+                unsuggest: (id: string, key: unknown) => transitionCell("unsuggest", id, key),
+                clear: (id: string, key: unknown) => transitionCell("clear", id, key),
+              },
               recovery: route.data.work
                 ? { state: recovery, startFresh, carryOver: salvage }
                 : undefined,

@@ -1,3 +1,5 @@
+import { jsonCodec } from "../../../../packages/agent-contracts/src/route-kernel-codecs";
+import { z } from "zod";
 import { DEMO_FAMILIES } from "./seeds";
 import { familiesObservationSchema, familiesRouteState } from "@pe/agent-contracts";
 import { familiesScopeId } from "./neutral";
@@ -75,16 +77,8 @@ export const familiesModule = {
   bodies: familiesBodies,
   identities: { local: identityCodecs.local },
   codecs: {
-    json: {
-      encode: JSON.stringify,
-      decode: (text: string) => {
-        try {
-          return { ok: true as const, value: JSON.parse(text) };
-        } catch {
-          return { ok: false as const, reason: "Invalid family scope" };
-        }
-      },
-    },
+    json: jsonCodec(z.union([familiesSchemas.subject, familiesSchemas.text])),
+
   },
 };
 

@@ -1,3 +1,4 @@
+import { transitionPatches, type CellLike } from "@pe/agent-contracts";
 import { bare } from "../../../../packages/agent-contracts/src/route-field";
 import { z } from "zod";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
@@ -106,14 +107,29 @@ export function createAdmittedCells(
       if (!cell.focus) throw Error("Cell has no focus action");
       return bodies[cell.focus]!.run(parsed);
     },
-    take(id: string, key: unknown, context: unknown) {
+    transition(kind: "take" | "unsuggest" | "clear", id: string, key: unknown,
+      context: unknown, work: Readonly<Record<string, unknown>>) {
       const parsed = keyFor(id, key),
         cell = data.cells[id]!;
-      if (!cell.take) throw Error("Cell has no take action");
+      const segment = cell.segment === null ? work : work[cell.segment];
+      const value = (segment as Readonly<Record<string, CellLike>> | undefined)?.[String(parsed)] ?? {};
+      const transition = () => {
+        const patches = transitionPatches(cell.segment === null ? [] : [cell.segment], String(parsed), value, { kind });
+        // Root object fields are replaced as a whole; keyed cells may patch their rungs.
+        return cell.segment === null && patches.length
+          ? [{ path: [String(parsed)], value: {
+              ...value,
+              ...Object.fromEntries(patches.map((patch) => [patch.path.at(-1), patch.value])),
+            } }]
+          : patches;
+      };
+      const patches = kind === "take" && cell.take
+        ? bodies[cell.take]!.run(context, parsed)
+        : transition();
       return admittedWorkPatches(
         data,
         schemas,
-        bodies[cell.take]!.run(context, parsed),
+        patches,
         ownerSchema,
       );
     },

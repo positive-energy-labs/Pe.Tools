@@ -13,17 +13,17 @@
 export interface Grid {
   title: string;
   xLabel: string;
-  x: number[];
+  x: readonly number[];
   yLabel?: string;
-  y?: number[];
+  y?: readonly number[];
   /** The outer axis of a three-axis table (its first printed column); `grid` is then [z][y][x]. */
   zLabel?: string;
-  z?: number[];
-  grid: number[][] | number[] | (number[] | null)[][];
+  z?: readonly number[];
+  grid: ReadonlyArray<readonly number[]> | readonly number[] | ReadonlyArray<ReadonlyArray<readonly number[] | null>>;
 }
 
 /** TABLE (upper case, e.g. "CD3-2") -> result ("Co", "Cb", "Cs") -> grid. */
-export type Grids = Record<string, Record<string, Grid>>;
+export type Grids = Readonly<Record<string, Readonly<Record<string, Grid>>>>;
 
 /** The point a lookup read, each axis clamped to what the table states there. */
 export interface LookupPoint {
@@ -43,9 +43,9 @@ export interface Lookup {
 
 export class GridError extends Error {}
 
-const clampTo = (v: number, xs: number[]) => Math.min(Math.max(v, xs[0]!), xs.at(-1)!);
+const clampTo = (v: number, xs: readonly number[]) => Math.min(Math.max(v, xs[0]!), xs.at(-1)!);
 
-function interp1(x: number, xs: number[], ys: number[], label: string): [number, string?] {
+function interp1(x: number, xs: readonly number[], ys: readonly number[], label: string): [number, string?] {
   const last = xs.length - 1;
   if (x <= xs[0]!) return [ys[0]!, x < xs[0]! ? `${label} clamped at ${xs[0]}` : undefined];
   if (x >= xs[last]!)
@@ -59,7 +59,7 @@ function interp1(x: number, xs: number[], ys: number[], label: string): [number,
 }
 
 /** The bracketing indices along an ascending axis and the weight of the upper one; clamped at the ends. */
-function bracket(v: number, vs: number[]): { lo: number; hi: number; t: number } {
+function bracket(v: number, vs: readonly number[]): { lo: number; hi: number; t: number } {
   const last = vs.length - 1;
   // On a node, read that slice alone (a neighbour weighted 0 would still add its clamp notes).
   const node = vs.indexOf(v);
@@ -113,7 +113,7 @@ export function toGrids(response: unknown): Grids {
   const tables = (response as { tables?: Record<string, Record<string, unknown>> } | null)?.tables;
   if (!tables || typeof tables !== "object")
     throw new GridError("ducts.tables response has no tables");
-  const out: Grids = {};
+  const out: Record<string, Record<string, Grid>> = {};
   for (const [id, results] of Object.entries(tables)) {
     out[id.toUpperCase()] = {};
     for (const [res, raw] of Object.entries(results))

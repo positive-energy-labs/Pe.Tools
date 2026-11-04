@@ -64,3 +64,26 @@ export const failedWrite = (error: unknown): WorkWriteOutcome => ({
     hint: "Reconcile Work before retrying",
   },
 });
+
+// TODO: COMMON 15: completion() strands observers on rejection; settleWork cannot recover a terminal the door never emits.
+export function settleWork(
+  write: Observation<WorkWriteOutcome> | { kind: "refused"; reason: "describe-threw" },
+): Promise<WorkWriteOutcome> {
+  if ("kind" in write)
+    return Promise.resolve({
+      kind: "refused",
+      refusal: {
+        kind: "error",
+        error: "Could not name this edit",
+        hint: "Retry the current input",
+      },
+    });
+  return new Promise((resolve) => {
+    write.subscribe(
+      (value) => {
+        if (value.kind !== "pending") resolve(value);
+      },
+      () => {},
+    );
+  });
+}
