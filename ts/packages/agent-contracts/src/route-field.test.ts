@@ -35,6 +35,11 @@ const typeProof = () => {
   forwardScalar(wrappedTuple);
   forwardScalar(z.object({ values: z.array(z.string()) }));
   forwardScalar(z.string());
+  const mode = forwardMode(["model", "flat"], "model");
+  const literal: "model" | "flat" = mode.schema.parse("model");
+  // @ts-expect-error accepting a generic enum must not widen away its literal keys
+  const outsideMode: z.output<typeof mode.schema> = "outside";
+  void [literal, outsideMode];
   field(z.string().default(""), { url: "replace" });
   field(z.union([z.string(), z.number()]), {}, { encode: String, decode: String });
   manyField("name", { initial: "all" });
