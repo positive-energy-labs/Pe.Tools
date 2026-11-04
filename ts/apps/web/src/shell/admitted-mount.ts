@@ -30,7 +30,7 @@ import { createAdmittedEnvironment, createAdmittedScope } from "./admitted-scope
 import { createAdmittedWork } from "./admitted-work.ts";
 import { createApplicationWorkRegistry } from "./application-work-registry.ts";
 import { fixtureGeometryDoor } from "./fixture-geometry-door.ts";
-import { createNamedFixtureRouteEnvironment } from "./fixture-lane.ts";
+import { createNamedFixtureRouteEnvironment } from "./fixture-lane";
 import { createPagePorts } from "./page-port.ts";
 import { createRouteEnvironment } from "./route-environment.ts";
 import { sourceReadingEvidence } from "./source-route-services.ts";
@@ -78,7 +78,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       Render,
       W extends Record<string, unknown>,
     >(admitted: AdmittedRoute<G, S, E, Render, W>, input: PlaceInput) {
-      const { address, fixture, memory } = input;
+      const { address, fixture, target, memory } = input;
       const route = admitted;
       const scope = createAdmittedScope({
         admission: mountAdmittedRoute(route, route.fingerprint),
@@ -215,7 +215,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         if (drawing) throw Error("Admitted action cannot run during render");
         if (invocation.presenting()) throw Error("Admitted action cannot run during presentation");
         if (closed) throw Error("Mount closed");
-        if (!input.custody.current() || input.target === null) throw new PlaceWriteRefusal();
+        if (!input.custody.current() || target === null) throw new PlaceWriteRefusal();
       };
       const invocation = createAdmittedInvocation(context);
       const { invoke, place, workBasis } = invocation;
