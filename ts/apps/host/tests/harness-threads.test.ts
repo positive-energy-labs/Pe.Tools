@@ -1691,3 +1691,67 @@ test("Stop with a failing consent persist still cancels, then kills a child that
   ]);
   await h.close();
 }, 30_000);
+
+test("question settlement survives a throwing persist listener and reports failure", async () => {
+  const h = await host(undefined, undefined, undefined, undefined, {
+    receiptFact: (_id, _title, event) => {
+      if (event.kind === "question_resolved") throw Error("question persist failed");
+    },
+  });
+  const call = caller(h);
+  const read = reader(h);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id: string = created.json.id;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "question" });
+  const body = await until(read, id, (b) => openQuestions(b).length === 1);
+  const result = await call("POST", `/pe/threads/${id}/question`, {
+    requestId: openQuestions(body)[0]!.requestId,
+    action: "accept",
+    content: { pick: "b" },
+  });
+  expect(result.status).toBe(502);
+  expect(result.json.error).toContain("question persist failed");
+  await expect.poll(async () => JSON.stringify((await read(id)).events)).toContain("answered b");
+  await until(read, id, (b) => !b.running);
+});
+
+test("Stop escalation kills the child even when the transcript disk append fails", async () => {
+  let killed = false;
+  const h = await host(
+    undefined,
+    undefined,
+    undefined,
+    async (name) => {
+      if (name === "harness.session.stopped") killed = true;
+    },
+    { stopGraceMs: 500 },
+  );
+  const call = caller(h);
+  const read = reader(h);
+  const created = await call("POST", "/pe/threads", { providerId: "claude" });
+  const id: string = created.json.id;
+  await call("POST", `/pe/threads/${id}/prompt`, { text: "stubborn" });
+  await until(read, id, (b) => lastEcho(b) === "echo: stubborn");
+  killed = false;
+  const append = h.log.append.bind(h.log);
+  const fault = vi.spyOn(h.log, "append").mockImplementation((event) => {
+    if (
+      event.kind === "thread" &&
+      event.event.kind === "error" &&
+      event.event.message.startsWith("Stop:")
+    ) {
+      fault.mockRestore();
+      throw Error("transcript disk full");
+    }
+    return append(event);
+  });
+  try {
+    await call("POST", `/pe/threads/${id}/cancel`);
+    await until(read, id, (b) => JSON.stringify(b.events).includes("ignoring cancel"));
+    await expect.poll(() => killed, { timeout: 2500 }).toBe(true);
+    expect((await call("GET", `/pe/threads/${id}`)).status).toBe(200);
+  } finally {
+    fault.mockRestore();
+    await h.close();
+  }
+});

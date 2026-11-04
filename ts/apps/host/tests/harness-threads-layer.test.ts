@@ -1,3 +1,4 @@
+import { followThread } from "@pe/agent-contracts/chat-state";
 import { Spawner } from "../src/harness/spawner.ts";
 import { NodeServices } from "@effect/platform-node";
 import { Context, Effect, FileSystem, Layer, Scope } from "effect";
@@ -156,5 +157,64 @@ nodeTest("event timestamps come from the Clock, not the wall", () =>
     const [created] = threads.historySnapshot();
     expect(created?.events.map((event) => event.at)).toEqual(["2031-01-02T03:04:05.000Z"]);
     expect(created?.createdAt).toBe("2031-01-02T03:04:05.000Z");
+  }),
+);
+
+nodeTest("replay damage preserves sequence identity and delivers the first live event", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped();
+    yield* seed(
+      root,
+      "thread",
+      JSON.stringify(meta("thread")),
+      [
+        JSON.stringify(prompt),
+        '{"seq":2,"kind":"torn',
+        JSON.stringify({ ...turnEnd, seq: 3 }),
+        "",
+      ].join("\n"),
+    );
+    const threads = yield* store(root);
+    const delivered: ReturnType<typeof followThread>[] = [];
+    const unsubscribe = threads.observe({ kind: "thread", thread: "thread" }, (frame) => {
+      if (frame.kind === "event") delivered.push(followThread(3, frame));
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(() => unsubscribe?.()));
+    const response = yield* Effect.promise(() =>
+      withInvocationContext({ caller: human }, () =>
+        threads.fetch(
+          new Request("http://host/pe/threads/thread", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ title: "changed" }),
+          }),
+        ),
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect.soft(threads.historySnapshot()[0]?.events.map((e) => e.seq)).toEqual([1, 3, 4]);
+    expect(delivered).toMatchObject([{ kind: "apply", event: { seq: 4, kind: "title_changed" } }]);
+  }),
+);
+
+nodeTest("a failed service close is tagged and logged at the scope boundary", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped();
+    const logs = captureLogs();
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const threads = yield* store(root, logs);
+        const close = threads.close;
+        vi.spyOn(threads, "close").mockImplementationOnce(async () => {
+          await close();
+          throw Error("close disk failed");
+        });
+      }),
+    ).pipe(Effect.provide(logs.layer));
+    expect(logs.lines.map((line) => line.message)).toMatchObject([
+      [{ _tag: "ThreadCloseFailed", message: "Error: close disk failed" }],
+    ]);
   }),
 );

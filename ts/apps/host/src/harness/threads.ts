@@ -435,11 +435,21 @@ function writeJson(path: string, value: unknown) {
   renameSync(`${path}.tmp`, path);
 }
 
+class ThreadPersistFailed extends Schema.TaggedError<ThreadPersistFailed>()("ThreadPersistFailed", {
+  message: Schema.String,
+}) {}
+
+class ThreadCloseFailed extends Schema.TaggedError<ThreadCloseFailed>()("ThreadCloseFailed", {
+  message: Schema.String,
+}) {}
+
 /**
  * What the Layer hands the store: the replayed threads, the host's clock and a logger bound to the
  * host's services. The store is Promise code until phase 5; these are the only Effect things in it.
  */
 type Startup = {
+  // Phase 5 exception: settlement reuses this store's existing island, without a new runtime or edge.
+  run: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
   loaded: readonly LoadedThread[];
   clock: Clock.Clock;
   /** Logs a warning on the host's logger from Promise code. */
@@ -594,7 +604,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     const keys = options.providers.keys();
     const stamped: HarnessEvent = {
       ...bounded(event),
-      seq: t.events.length + 1,
+      seq: (t.events.at(-1)?.seq ?? 0) + 1,
       at: stamp(),
     };
     const full = keys.length > 0 ? redactKeys(stamped, keys) : stamped;
@@ -1049,27 +1059,50 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     by: "user" | "cancel" | "expired",
   ) {
     const pending = t.questions.get(requestId);
-    if (!pending) return false;
+    if (!pending) return Promise.resolve(false);
     t.questions.delete(requestId);
     const turnId = pending.turnId;
-    append(
-      t,
-      by === "user" && answer
-        ? { kind: "question_resolved", turnId, requestId, by, ...answer }
-        : { kind: "question_resolved", turnId, requestId, by: by === "user" ? "cancel" : by },
+    return startup.run(
+      Effect.gen(function* () {
+        const persisted = yield* Effect.exit(
+          Effect.try({
+            try: () =>
+              append(
+                t,
+                by === "user" && answer
+                  ? { kind: "question_resolved", turnId, requestId, by, ...answer }
+                  : {
+                      kind: "question_resolved",
+                      turnId,
+                      requestId,
+                      by: by === "user" ? "cancel" : by,
+                    },
+              ),
+            catch: (error) => new ThreadPersistFailed({ message: String(error) }),
+          }),
+        ).pipe(
+          Effect.onExit(() =>
+            Effect.sync(() => {
+              pending.resolve(
+                answer?.action === "accept"
+                  ? { action: "accept", content: answer.content ?? {} }
+                  : { action: answer ? "decline" : "cancel" },
+              );
+              scheduleIdle(t);
+            }),
+          ),
+        );
+        yield* persisted;
+        return true;
+      }),
     );
-    pending.resolve(
-      (answer?.action === "accept"
-        ? { action: "accept", content: answer.content ?? {} }
-        : { action: answer ? "decline" : "cancel" }) as CreateElicitationResponse,
-    );
-    scheduleIdle(t);
-    return true;
   }
 
   /** Every ask the turn left open ends with the turn. */
-  function settleAsks(t: Thread, by: "cancel" | "expired") {
-    for (const requestId of t.questions.keys()) resolveQuestion(t, requestId, null, by);
+  async function settleAsks(t: Thread, by: "cancel" | "expired") {
+    await Promise.all(
+      [...t.questions.keys()].map((requestId) => resolveQuestion(t, requestId, null, by)),
+    );
   }
 
   async function connect(t: Thread): Promise<Live> {
@@ -1165,7 +1198,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       t.child = null;
       t.session = "closed";
       t.live = null;
-      settleAsks(t, "expired");
+      void settleAsks(t, "expired").catch((error) => warn(String(error)));
       append(t, {
         kind: "error",
         turnId: t.running,
@@ -1733,7 +1766,11 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     } catch (error) {
       persist = error;
     }
-    settleAsks(t, "cancel");
+    try {
+      await settleAsks(t, "cancel");
+    } catch (error) {
+      persist ??= error;
+    }
     escalate(t, turnId, child);
     const live = await connecting?.catch((error) => {
       console.error("threads: asynchronous operation failed", error);
@@ -1761,13 +1798,25 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
   function escalate(t: Thread, turnId: string, child: AdapterChild | null) {
     const timer = setTimeout(() => {
       if (t.running !== turnId) return;
-      if (!ended(t, turnId))
-        append(t, {
-          kind: "error",
-          turnId,
-          message: `Stop: the harness did not end this turn within ${grace / 1000} s; its child was killed and the outcome is unknown.`,
-        });
-      if (t.child === child) void retire(t);
+      void startup
+        .run(
+          Effect.try({
+            try: () => {
+              if (!ended(t, turnId))
+                append(t, {
+                  kind: "error",
+                  turnId,
+                  message: `Stop: the harness did not end this turn within ${grace / 1000} s; its child was killed and the outcome is unknown.`,
+                });
+            },
+            catch: (error) => new ThreadPersistFailed({ message: String(error) }),
+          }).pipe(
+            Effect.onExit(() =>
+              t.child === child ? Effect.promise(() => retire(t)) : Effect.void,
+            ),
+          ),
+        )
+        .catch((error) => warn(`Stop escalation persist failed: ${String(error)}`));
     }, grace);
     timer.unref();
     void t.turn.finally(() => clearTimeout(timer));
@@ -2102,7 +2151,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       case "thread.question": {
         requireHuman(caller, url.pathname, "answering a human question");
         const { requestId, ...answer } = await input(questionResponseSchema);
-        return resolveQuestion(t, requestId, answer, "user")
+        return (await resolveQuestion(t, requestId, answer, "user"))
           ? json({ ok: true })
           : json({ error: `No pending question ${requestId}` }, 409);
       }
@@ -2482,6 +2531,7 @@ export const makeHarnessThreads = Effect.fn("HarnessThreads.make")(function* (
   const skipped: string[] = [];
   const { service, sweep } = createHarnessThreads(options, {
     loaded,
+    run,
     clock,
     warn,
     skipped,
@@ -2492,7 +2542,12 @@ export const makeHarnessThreads = Effect.fn("HarnessThreads.make")(function* (
   });
   for (const message of skipped) yield* Effect.logWarning(message);
   yield* Effect.sync(sweep).pipe(Effect.delay("60 seconds"), Effect.forever, Effect.forkScoped);
-  yield* Effect.addFinalizer(() => Effect.promise(() => service.close()));
+  yield* Effect.addFinalizer(() =>
+    Effect.tryPromise({
+      try: () => service.close(),
+      catch: (error) => new ThreadCloseFailed({ message: String(error) }),
+    }).pipe(Effect.catchTag("ThreadCloseFailed", (error) => Effect.logError(error))),
+  );
   return service;
 });
 
