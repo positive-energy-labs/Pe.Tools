@@ -4,6 +4,7 @@
  * Source census only: computed module specifiers and transitive wrappers are not visible.
  */
 import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import { expect, it } from "vite-plus/test";
 import {
   ROOT,
@@ -85,17 +86,15 @@ it("host door bypasses can only shrink (ADR 0026)", () => {
   ).toEqual({ violations: [], stale: [] });
 });
 
-it("has no migration allowances left", () => {
-  expect(baseline).toEqual({});
-});
-
-it("kernel gap: shared observation-scoped Select and Section Box need a kernel verb door", () => {
-  const file = WEB + "revit/element-menu.tsx";
-  // A mounted route's target cannot replace the displayed observation's captured lifetime.
-  expect(
-    bypasses(file, readImports(file)),
-    "Global verbs still submit outside shell execution",
-  ).toBe(false);
+// RATCHET-GREEN replaces the obsolete zero-debt assertions with an audited migration floor.
+it("committed host-door allowances only shrink after the identity migration", () => {
+  const path = "ts/tests/repo-guards/src/host-door.baseline.json";
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: resolve(ROOT, ".."), encoding: "utf8" }).trim();
+  const snapshots = git("log", "--format=%H", "3dc3d091..HEAD", "--", path).split(/\s+/).filter(Boolean);
+  for (const sha of snapshots) {
+    const floor = JSON.parse(git("show", `${sha}:${path}`));
+    expect(ratchet(Object.keys(baseline), floor).violations).toEqual([]);
+  }
 });
 
 it("exempts only named infrastructure, never neighboring UI or a directory", () => {

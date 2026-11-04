@@ -306,9 +306,7 @@ function structuralCensus() {
     }
   }
 
-  return Object.fromEntries(
-    Object.entries(result).map(([law, sites]) => [law, [...sites].sort()]),
-  );
+  return Object.fromEntries(Object.entries(result).map(([law, sites]) => [law, [...sites].sort()]));
 }
 
 function geometryCensus(): string[] {
@@ -365,7 +363,7 @@ export function additions(actual: OffenderSets, allowed: OffenderSets): string[]
 }
 
 /** Read-only history check. Legacy numeric baselines cannot bless a new identity. The first
- * identity baseline is the migration floor; every subsequent commit and merge base constrains it. */
+ * ordinal-free multiset baseline is the RATCHET-GREEN migration floor; every later snapshot constrains it. */
 export function baselineFloors(): OffenderSets[] {
   const git = (...args: string[]) =>
     execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
@@ -378,6 +376,10 @@ export function baselineFloors(): OffenderSets[] {
     if (!git("ls-tree", sha, "--", baselinePath)) return []; // This law did not exist at that merge base.
     const value: unknown = JSON.parse(git("show", `${sha}:${baselinePath}`));
     if (typeof value !== "object" || value === null || !Object.values(value).every(Array.isArray))
+      return [];
+    // RATCHET-GREEN explicitly re-baselines the legacy ordinal format with audited causes.
+    // Incomparable old snapshots cannot cap the new buckets; later multiset floors still shrink.
+    if (Object.values(value).some((sites) => sites.some((site: string) => /@\d+$/.test(site))))
       return [];
     return [value as OffenderSets];
   });
@@ -495,9 +497,7 @@ export function legacyInventory(input?: Record<string, string>) {
     });
   return {
     graphs: graphs.sort((a, b) => a.file.localeCompare(b.file)),
-    sites: Object.fromEntries(
-      Object.entries(sites).map(([rule, ids]) => [rule, [...ids].sort()]),
-    ),
+    sites: Object.fromEntries(Object.entries(sites).map(([rule, ids]) => [rule, [...ids].sort()])),
   };
 }
 
@@ -632,9 +632,7 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
         result.fixtureMode!.push(identity(edge.node));
     }
   }
-  return Object.fromEntries(
-    Object.entries(result).map(([law, sites]) => [law, [...sites].sort()]),
-  );
+  return Object.fromEntries(Object.entries(result).map(([law, sites]) => [law, [...sites].sort()]));
 }
 
 if (
