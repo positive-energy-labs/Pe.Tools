@@ -14,10 +14,7 @@ public sealed record ProductRuntimeLayout(ProductLane Lane, string OwnerRoot, st
 
     /// <summary>The process's one runtime record. Unset means the shell skipped startup; nothing guesses.</summary>
     public static ProductRuntimeLayout Current => _current ?? throw new InvalidOperationException(
-        "The shell did not configure the product runtime. Pe.App, Pe.Host.Tray, Pe.Dev.Cli and Pe.Rhvac.Tool call ProductRuntimeLayout.Configure once at startup.");
-
-    /// <summary>For a host that may or may not have run a shell first (a Revit test assembly); shells just Configure.</summary>
-    public static bool IsConfigured => _current is not null;
+        "The shell did not configure the product runtime. Pe.App (also in Revit test runs, where the SDK boots it), Pe.Host.Tray, Pe.Dev.Cli and Pe.Rhvac.Tool call ProductRuntimeLayout.Configure once at startup.");
 
     /// <summary>Set once by the shell from the facts it was told; a second call is a startup bug.</summary>
     public static ProductRuntimeLayout Configure(ProductLane lane, string ownerRoot) {
