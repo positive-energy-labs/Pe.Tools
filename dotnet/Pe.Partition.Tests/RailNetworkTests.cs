@@ -187,10 +187,14 @@ public sealed class RailNetworkTests {
     private static PartitionAnswer RunRails(double[] zone, params double[][][] walls) => RunRails(zone, [], walls);
 
     private static PartitionAnswer RunRails(double[] zone, RoomProposal[] proposals, params double[][][] walls) {
+        return RunRailsWithRejections(zone, proposals, [], walls);
+    }
+
+    private static PartitionAnswer RunRailsWithRejections(double[] zone, RoomProposal[] proposals, double[][] rejected, params double[][][] walls) {
         var stamp = new Stamp("doc", 0, Stamp.HostInternalFt, DateTime.UnixEpoch, [], true, new Resolved([], [], [], [], []));
         var elements = walls.Select((w, k) => new SliceElement(new Handle("doc", k + 1, "u" + (k + 1), null, "Walls", PrimKind.Solid), w)).ToList();
         var knee = new SliceAnswer(stamp, new Searched(0, 0, 0, 0, 0), elements, elements.Sum(e => e.Pieces.Count), 0);
-        var input = new PartitionInput(knee, knee with { Elements = [] }, [zone], 0, Knobs.Default, [], "test", proposals);
+        var input = new PartitionInput(knee, knee with { Elements = [] }, [zone], 0, Knobs.Default, [], "test", proposals, Rejected: rejected);
         var answer = Pe.Revit.Partition.Solve.RunRails(input, (_, _) => new ProbeAnswer(stamp, knee.Searched,
             new ProbeHit(H, 0, 0), new ProbeHit(H, 9, 9), 20, 0));
         var acc = answer.Accounting;
@@ -246,6 +250,72 @@ public sealed class RailNetworkTests {
         var answer = RunRails(Box(0, 0, 20, 10), [locked], Slab(9.75, 0, 10.25, 10));
         Assert.That(answer.Rooms.Single(r => r.Proposal is { IsLocked: true }).AreaSqft, Is.EqualTo(100).Within(1e-6));
         Assert.That(answer.Rooms.Where(r => r.Proposal is null).Select(r => r.AreaSqft), Is.EquivalentTo(new[] { 100.0 }).Using<double>((a, b) => Math.Abs(a - b) < 1e-6));
+    }
+
+    [TestCase(0, false)]
+    [TestCase(10, false)]
+    [TestCase(20, false)]
+    [TestCase(30, false)]
+    [TestCase(0, true)]
+    [TestCase(10, true)]
+    [TestCase(20, true)]
+    [TestCase(30, true)]
+    public void Locked_or_merged_rooms_leave_the_other_rooms_whole(int lockedWidth, bool reverseCapture) {
+        // Three 10x10 rooms. Lock the west room, merge the west pair, or merge all three.
+        // Expectations come from these coordinates, never from a previous solver answer.
+        RoomProposal[] proposals = lockedWidth == 0 ? [] :
+            [new(RoomProposal.LockedPrefix + "west", "Person's room", "", [Box(0, 0, lockedWidth, 10)])];
+        var walls = new[] { Slab(9.75, 0, 10.25, 10), Slab(19.75, 0, 20.25, 10) };
+        if (reverseCapture) walls = walls.Reverse().Select(w => w.Reverse().ToArray()).ToArray();
+        var answer = RunRails(Box(0, 0, 30, 10), proposals, walls);
+        var factory = new GeometryFactory();
+        Polygon Polygon(double[] loop) => factory.CreatePolygon([
+            .. Enumerable.Range(0, loop.Length / 2).Select(i => new Coordinate(loop[2 * i], loop[2 * i + 1])),
+            new Coordinate(loop[0], loop[1])]);
+        var expectedWestEdges = Enumerable.Range(lockedWidth / 10, (30 - lockedWidth) / 10).Select(i => i * 10).ToArray();
+        var machine = answer.Rooms.Where(r => r.Proposal is null).OrderBy(r => r.LabelX).ToArray();
+        Assert.Multiple(() => {
+            Assert.That(answer.Accounting, Is.EqualTo(new Accounting(300, 300, 0, 0, 0)));
+            Assert.That(answer.Rooms.All(r => r.Disposition == Disposition.Accepted), Is.True);
+            Assert.That(machine, Has.Length.EqualTo(expectedWestEdges.Length));
+            Assert.That(answer.Rooms.Count(r => r.Proposal is not null), Is.EqualTo(proposals.Length));
+            Assert.That(answer.Trace.Rails, Has.Count.EqualTo(2));
+            Assert.That(answer.Trace.Faces.Select(f => f.Index), Is.EqualTo(answer.Rooms.Select(r => r.Index)));
+        });
+        for (var i = 0; i < expectedWestEdges.Length; i++) {
+            var x = expectedWestEdges[i];
+            Assert.That(Polygon(machine[i].Loop).SymmetricDifference(Polygon(Box(x, 0, x + 10, 10))).Area,
+                Is.LessThan(1e-6), "neighbour geometry survives the lock/merge");
+            Assert.That(machine[i].AreaSqft, Is.EqualTo(100).Within(1e-6));
+            Assert.That(machine[i].Holes, Is.Empty);
+            Assert.That(Polygon(Box(x, 0, x + 10, 10)).Contains(factory.CreatePoint(
+                new Coordinate(machine[i].LabelX, machine[i].LabelY))), Is.True, "label stays inside its room");
+        }
+        if (lockedWidth > 0) {
+            var kept = answer.Rooms.Single(r => r.Proposal is not null);
+            Assert.That(kept.Proposal, Is.SameAs(proposals[0]));
+            Assert.That(kept.AreaSqft, Is.EqualTo(lockedWidth * 10).Within(1e-6));
+            Assert.That(Polygon(kept.Loop).SymmetricDifference(Polygon(Box(0, 0, lockedWidth, 10))).Area,
+                Is.LessThan(1e-6), "merged room returns whole across the old divider");
+            Assert.That(kept.Holes, Is.Empty);
+        }
+    }
+
+    [TestCase(0, 10, true)]
+    [TestCase(1.5, 8.5, true)]
+    [TestCase(3.5, 6.5, false)]
+    public void Rejection_holds_only_the_overlapping_room(double x0, double x1, bool rejected) {
+        // West room is 100 sf; the rejection covers 100%, 70%, or 30% of it.
+        var answer = RunRailsWithRejections(Box(0, 0, 20, 10), [], [Box(x0, 0, x1, 10)], Slab(9.75, 0, 10.25, 10));
+        var west = answer.Rooms.Single(r => r.LabelX < 10);
+        var east = answer.Rooms.Single(r => r.LabelX > 10);
+        Assert.Multiple(() => {
+            Assert.That(west.Disposition, Is.EqualTo(rejected ? Disposition.Held : Disposition.Accepted));
+            Assert.That(west.Reason, Is.EqualTo(rejected ? Reasons.Rejected : null));
+            Assert.That(east.Disposition, Is.EqualTo(Disposition.Accepted));
+            Assert.That(east.Reason, Is.Null);
+            Assert.That(answer.Accounting, Is.EqualTo(new Accounting(200, rejected ? 100 : 200, rejected ? 100 : 0, 0, 0)));
+        });
     }
 
     [TestCase(3.0, 4.0, Disposition.Accepted, null)]
