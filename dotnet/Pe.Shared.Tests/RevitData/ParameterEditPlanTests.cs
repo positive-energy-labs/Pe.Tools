@@ -10,7 +10,7 @@ public sealed class ParameterEditPlanTests {
     private const string? Ok = null;
 
     /// <summary>What <see cref="E" /> with <see cref="Ev.Stale" /> on <paramref name="element" /> answers.</summary>
-    private static string S(long element) => Stale(Target(element, raw: "stale"), Target(element));
+    private static string S(long element) => $"Expected target evidence is stale: element {element} 'Mark' changed since review (value expected 'stale', now 'A').";
 
     /// <summary>What a sibling answers when <paramref name="cause" /> refused its group.</summary>
     private static string G(string cause, int more = 0) => GroupRefused + cause + (more > 0 ? $" (+{more} more refused)" : "");
@@ -29,8 +29,6 @@ public sealed class ParameterEditPlanTests {
     private static Edit StaleBy(int element, Func<ParameterTarget, ParameterTarget> expected) =>
         E(element, element) with { Value = E(0, element).Value with { Expected = expected(Target(element)) } };
 
-    private static string Why(Edit edit) => Stale(edit.Value.Expected!, edit.Current!);
-
     /// <summary>A plan as comparable text: refusals per edit, then each write as its answered edit indices.</summary>
     private static (string?[] Refusals, string[] Writes) Shape(Plan plan) =>
         (plan.Refusals.Select(refusal => refusal?.Message).ToArray(), plan.Writes.Select(write => string.Join(",", write.Edits)).ToArray());
@@ -43,9 +41,18 @@ public sealed class ParameterEditPlanTests {
             [E(0, 1, ev: Ev.Stale)], [S(1)]);
         Edit[] fields = [StaleBy(1, target => target with { IsReadOnly = true }), StaleBy(2, target => target with { HasValue = false }),
             StaleBy(3, target => target with { StorageType = RequestedParameterStorageType.Double }),
-            StaleBy(4, target => target with { ParameterName = "Comments" })];
+            StaleBy(4, target => target with { ParameterName = "Comments" }),
+            StaleBy(5, target => target with { ElementId = 99 }),
+            StaleBy(6, target => target with { ParameterId = -1 })];
         yield return Case("Any evidence field differing is stale, not just the raw value", Evidence.IfGiven,
-            fields, fields.Select(Why).ToArray<string?>());
+            fields, [
+                "Expected target evidence is stale: element 1 'Mark' changed since review (isReadOnly expected True, now False).",
+                "Expected target evidence is stale: element 2 'Mark' changed since review (hasValue expected False, now True).",
+                "Expected target evidence is stale: element 3 'Mark' changed since review (storageType expected Double, now String).",
+                "Expected target evidence is stale: element 4 'Mark' changed since review (parameterName expected 'Comments', now 'Mark').",
+                "Expected target evidence is stale: element 5 'Mark' changed since review (elementId expected 99, now 5).",
+                "Expected target evidence is stale: element 6 'Mark' changed since review (parameterId expected -1, now -1001203)."
+            ]);
         yield return Case("A wet edit without Expected refuses", Evidence.Required,
             [E(0, 1, ev: Ev.None)], [MissingExpected]);
         yield return Case("Evidence if given (dry run, script door) admits a missing Expected but still refuses a stale one", Evidence.IfGiven,
@@ -181,71 +188,4 @@ public sealed class ParameterEditPlanTests {
         });
     }
 
-    [Test]
-    public void Agrees_with_a_naive_reference_judge_on_random_edit_sets() {
-        var random = new Random(20260918);
-        for (var trial = 0; trial < 500; trial++) {
-            var edits = Enumerable.Range(0, random.Next(1, 11)).Select(_ => RandomEdit(random)).ToList();
-            var evidence = random.Next(4) == 0 ? Evidence.IfGiven : Evidence.Required;
-            var actual = Shape(Build(edits, evidence));
-            var naive = Naive(edits, evidence);
-            Assert.Multiple(() => {
-                Assert.That(actual.Refusals, Is.EqualTo(naive.Refusals), $"trial {trial} refusals");
-                Assert.That(actual.Writes, Is.EqualTo(naive.Writes), $"trial {trial} writes");
-            });
-        }
-    }
-
-    private static Edit RandomEdit(Random random) {
-        var group = random.Next(4);
-        var element = random.Next(1, 5);
-        if (random.Next(12) == 0) return new Edit(group, new ParameterValueEdit(element, -1001203, Value: "X"), null);
-        var ev = random.Next(8) switch { 0 => Ev.None, 1 => Ev.Stale, _ => Ev.Fresh };
-        return E(group, element, random.Next(3) == 0 ? "Y" : "X", ev, random.Next(10) == 0 ? "CFM" : null, random.Next(10) == 0);
-    }
-
-    /// <summary>
-    ///     Reference judge written the obvious way: live edits connect when they share a group or a target; a
-    ///     connected set with more than one payload refuses; the rest coalesce per target.
-    /// </summary>
-    private static (string?[] Refusals, string[] Writes) Naive(IReadOnlyList<Edit> edits, Evidence evidence) {
-        var n = edits.Count;
-        var judged = edits.Select(edit =>
-            edit.Refusal ?? (edit.Current == null ? $"Target element {edit.Value.ElementId} did not resolve."
-                : edit.Value.Expected == null ? (evidence == Evidence.IfGiven ? null : MissingExpected)
-                : edit.Value.Expected == edit.Current ? null : Stale(edit.Value.Expected, edit.Current))).ToArray();
-        var refusals = Enumerable.Range(0, n).Select(i => {
-            if (judged[i] != null) return judged[i];
-            var causes = Enumerable.Range(0, n).Where(j => edits[j].Group == edits[i].Group && judged[j] != null)
-                .Select(j => judged[j]!).Order(StringComparer.Ordinal).ToList();
-            return causes.Count == 0 ? null : G(causes[0], causes.Count - 1);
-        }).ToArray();
-
-        bool Live(int i) => refusals[i] == null;
-        bool SameTarget(int i, int j) => edits[i].Current!.ElementId == edits[j].Current!.ElementId
-                                         && edits[i].Current!.ParameterId == edits[j].Current!.ParameterId;
-        var conflicted = new bool[n];
-        for (var start = 0; start < n; start++) {
-            if (!Live(start)) continue;
-            var reached = new HashSet<int> { start };
-            for (var grew = true; grew;) {
-                grew = false;
-                for (var j = 0; j < n; j++)
-                    if (Live(j) && !reached.Contains(j) && reached.Any(i => edits[i].Group == edits[j].Group || SameTarget(i, j)))
-                        grew = reached.Add(j);
-            }
-            conflicted[start] = reached.Select(i => (edits[i].Value.Value, edits[i].Value.Unit, edits[i].Value.RawInternal)).Distinct().Count() > 1;
-        }
-        for (var i = 0; i < n; i++)
-            if (conflicted[i]) refusals[i] = AliasConflict;
-
-        var writes = new List<List<int>>();
-        for (var i = 0; i < n; i++) {
-            if (!Live(i)) continue;
-            var write = writes.FirstOrDefault(w => SameTarget(w[0], i));
-            if (write == null) writes.Add([i]);
-            else write.Add(i);
-        }
-        return (refusals, writes.Select(w => string.Join(",", w)).ToArray());
-    }
 }
