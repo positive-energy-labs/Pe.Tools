@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-04, An open route sees another route's Work edits only on reload or re-entry; there is no cross-route push invalidation (F8, REDRIVE). kaitpw ruled the push unnecessary.
+
 - 2026-11-04, no open fan is explicit sheet-reading absence, never a native snapshot; native timestamp validation stays strict. Rule owner links preserve their semantic rule selection and available system context. (FX-SHEET)
 
 - 2026-11-04, scene selects the existing layout fixture composition on Ducts and Fans; the original Project A trace remains an ungrouped trace without system metadata. Fixture systems are synthetic and do not certify real Revit behavior. [Pairing law](../../../ts/apps/web/src/ducts/fixtures.test.ts). (FIXTURE0)
@@ -109,9 +111,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
-- [Fixture test] [fixture-routes.test.ts](../../../ts/apps/web/src/shell/fixture-routes.test.ts) assumes every drawn reading is eagerly ready; at 7c38edcd, Fans pricing instead requires explicit demand. Reconcile the test demand step with U4 policy without weakening its no-host-read contract. Inherited by FIXTURE0, 2026-11-04.
 
-- Manual D must prove a Ducts rule edit makes Fans pricing stale, Refresh uses the new rule, and read-only Ducts rows link to their rule. Browser proof is UNPROVEN; the U4 fixture did not reach admission. (counsel, U4, 2026-11-04)
+- Manual D must prove that after reload or re-entry, Fans pricing uses the new Ducts rule and read-only Ducts rows link to their rule. Browser proof is UNPROVEN; the U4 fixture did not reach admission. (counsel, U4, 2026-11-04)
 
 - Manual D after U4: prove real-host /ducts and /fans open, edit and deep-link behavior after MOUNT-CUT. UNPROVEN[browser smoke not completed]. (counsel, MOUNT-CUT, 2026-11-04)
 

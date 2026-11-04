@@ -44,7 +44,8 @@ const seed = <const K extends string>(name: K, snapshot: DuctSnapshot) => ({
         }),
         sheetSnapshot: snapshot,
         meshes: null,
-        pricing: null,
+        tables: {},
+        catalogs: { tables: {}, findings: [] },
       },
     };
   },
