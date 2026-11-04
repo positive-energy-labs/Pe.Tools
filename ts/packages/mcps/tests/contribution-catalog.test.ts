@@ -69,6 +69,7 @@ test("skill reads exact admitted bytes, members refuse execution, and old keys r
   fakeRuntimeHost("http://127.0.0.1:9");
   vi.stubEnv("PE_CONTEXT", "");
   const paths: string[] = [];
+  let returnedHash = sha256;
   vi.stubGlobal("fetch", async (input: string | URL | Request) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     paths.push(url.pathname);
@@ -78,7 +79,7 @@ test("skill reads exact admitted bytes, members refuse execution, and old keys r
     return Response.json({
       content: bytes.toString(),
       bytesBase64: bytes.toString("base64"),
-      sha256,
+      sha256: returnedHash,
     });
   });
   const read = await peRead.execute({ key: skills[0]!.key, timeoutSeconds: 30 }, undefined);
@@ -97,6 +98,13 @@ test("skill reads exact admitted bytes, members refuse execution, and old keys r
       content: expect.stringMatching(/Legacy/),
     });
   expect(paths).toHaveLength(calls);
+  returnedHash = "0".repeat(64);
+  expect(
+    await peRead.execute({ key: skills[0]!.key, timeoutSeconds: 30 }, undefined),
+  ).toMatchObject({
+    ok: false,
+    content: expect.stringMatching(/revision|admitted/i),
+  });
 });
 
 test("Page shelf follows its projected URL and never borrows the Page action door", async () => {

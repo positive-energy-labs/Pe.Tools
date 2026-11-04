@@ -3,34 +3,18 @@ import type { RouteGraphJson } from "./route-kernel-data.ts";
 import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
 import type { RouteModule, RouteFingerprintInput } from "./route-kernel-admission.ts";
 import type { CodecBindings } from "./route-kernel-bodies.ts";
-import type { DecodeResult, IdentityCodec, IdentityId } from "./route-kernel-page.ts";
+import type { IdentityId } from "./route-kernel-page.ts";
 
-// Fixture schema only. C implements the shared identity codecs used by real authors.
-const localId = z.custom<IdentityId<"local">>((text: unknown) => {
-  if (typeof text !== "string") return false;
-  try {
-    const parts: unknown = JSON.parse(text);
-    return (
-      Array.isArray(parts) &&
-      parts.length === 2 &&
-      parts.every((p) => typeof p === "string" && p.length > 0) &&
-      JSON.stringify(parts) === text
-    );
-  } catch {
-    return false;
-  }
-});
-const linkParts = z.tuple([z.string().min(1), z.string().min(1), z.string().min(1)]);
-const nativeParts = z.tuple([z.string().min(1), linkParts.nullable(), z.string().min(1)]);
-const elementId = z.custom<IdentityId<"element">>((text: unknown) => {
-  if (typeof text !== "string") return false;
-  try {
-    const parts = nativeParts.safeParse(JSON.parse(text));
-    return parts.success && JSON.stringify(parts.data) === text;
-  } catch {
-    return false;
-  }
-});
+import { identityCodecs, jsonCodec } from "./route-kernel-codecs.ts";
+
+const localId = z.custom<IdentityId<"local">>(
+  (value) => typeof value === "string" && identityCodecs.local.decode(value).ok,
+);
+const elementId = z.custom<IdentityId<"element">>(
+  (value) => typeof value === "string" && identityCodecs.element.decode(value).ok,
+);
+export const localCodec = identityCodecs.local;
+export const elementCodec = identityCodecs.element;
 const mixedSubject = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("manual"), id: localId }),
   z.strictObject({ kind: z.literal("circuit"), id: elementId }),
@@ -45,13 +29,11 @@ export const schemas = {
   ]),
   text: z.string(),
   number: z.number(),
-  flag: z.boolean(),
   work: z.strictObject({ amount: z.number(), note: z.string() }),
   edit: z.strictObject({ amount: z.number() }),
   empty: z.strictObject({}),
   result: z.strictObject({ total: z.number() }),
   viewport: z.strictObject({ x: z.number(), y: z.number() }),
-  sort: z.strictObject({ columns: z.array(z.string()) }),
 };
 export const entries = {
   roster: {
@@ -85,13 +67,6 @@ const readingPolicy = {
 } as const;
 const policy = { url: "replace", share: true, agent: "set" } as const;
 const text = { role: "query", schema: "text", codec: "text", initial: "", ...policy } as const;
-const sort = {
-  role: "query",
-  schema: "sort",
-  codec: "sort",
-  initial: { columns: [] },
-  ...policy,
-} as const;
 export const builtinData = {
   version: 1,
   capabilities: ["work", "native-write"],
@@ -356,56 +331,6 @@ export const podBodies = {
   },
 } satisfies BodyBindings<typeof podData, typeof schemas, typeof podEntries, string>;
 
-function decoded<T>(schema: z.ZodType<T>, value: unknown): DecodeResult<T> {
-  const parsed = schema.safeParse(value);
-  return parsed.success
-    ? { ok: true, value: parsed.data }
-    : { ok: false, reason: parsed.error.message };
-}
-function jsonCodec<T>(schema: z.ZodType<T>) {
-  return {
-    encode: (value: T): string => JSON.stringify(value),
-    decode: (text: string): DecodeResult<T> => {
-      try {
-        return decoded(schema, JSON.parse(text));
-      } catch {
-        return { ok: false, reason: "Invalid JSON" };
-      }
-    },
-  };
-}
-export const localCodec: IdentityCodec<"local"> = {
-  kind: "local",
-  encode: (parts) => decoded(localId, JSON.stringify([parts.namespace, parts.subject])),
-  decode: (text) => decoded(localId, text),
-  parts: (id) => {
-    const parts = z.tuple([z.string(), z.string()]).parse(JSON.parse(id));
-    return { namespace: parts[0], subject: parts[1] };
-  },
-};
-export const elementCodec: IdentityCodec<"element"> = {
-  kind: "element",
-  encode: (parts) =>
-    decoded(
-      elementId,
-      JSON.stringify([
-        parts.document,
-        parts.link
-          ? [parts.link.document, parts.link.linkUniqueId, parts.link.linkedDocument]
-          : null,
-        parts.uniqueId,
-      ]),
-    ),
-  decode: (text) => decoded(elementId, text),
-  parts: (id) => {
-    const [document, link, uniqueId] = nativeParts.parse(JSON.parse(id));
-    return {
-      document,
-      uniqueId,
-      link: link ? { document: link[0], linkUniqueId: link[1], linkedDocument: link[2] } : null,
-    };
-  },
-};
 const builtinCodecs = {
   subject: jsonCodec(schemas.subjectOne),
   number: jsonCodec(schemas.number),
@@ -446,11 +371,9 @@ export const podModule = {
   artifact: artifact(podData),
 } satisfies RouteModule<typeof podData, typeof schemas, typeof podEntries, string>;
 
-// Twenty-six actual field declarations stress declaration emit, not a generated numeric range.
+// Only cardinality differs; shipped routes carry the large authoring graphs.
 export const ductsData = {
   ...builtinData,
-  key: "ducts-witness",
-  address: "/ducts-witness",
   fields: {
     ...builtinData.fields,
     system: {
@@ -459,56 +382,8 @@ export const ductsData = {
       schema: "subjectMany",
       initial: { kind: "ids", ids: [] },
     },
-    stage: { ...text, role: "stage", initial: "network" },
-    threadSearch: text,
-    threadSort: sort,
-    systemSearch: text,
-    systemSort: sort,
-    rulingSearch: text,
-    rulingSort: sort,
-    treeSearch: text,
-    treeSort: sort,
-    inputSearch: text,
-    inputSort: sort,
-    contextRadiusFt: { ...builtinData.fields.density, initial: 50 },
-    sceneView: { ...text, role: "pose" },
-    encoding: { ...text, role: "pose" },
-    layers: { ...sort, role: "pose" },
-    contextStyle: { ...text, role: "pose" },
-    picture: { ...text, role: "pose" },
-    showLabels: { role: "setting", schema: "flag", codec: "flag", initial: true },
-    draftName: { ...text, role: "draft" },
-    panel: { ...text, role: "device", url: false, share: false },
-    review: { ...text, role: "transient", url: false, share: false },
   },
 } as const satisfies RouteGraphJson;
-export const ductsBodies = {
-  ...builtinBodies,
-  rosterArgs: { ...builtinBodies.rosterArgs, run: ({ page }) => ({ filter: page.search }) },
-  edit: {
-    ...builtinBodies.edit,
-    run: (_ctx, input) => [{ path: ["amount"], value: input.amount }],
-  },
-  apply: { ...builtinBodies.apply, run: ({ work }) => ({ amount: work.amount }) },
-  calculate: {
-    slot: "readings.total.derive",
-    kind: "derive",
-    source,
-    run: ({ page, work }) => ({
-      total: work.amount * (page.system.kind === "all" ? 1 : page.system.ids.length),
-    }),
-  },
-  main: {
-    slot: "panes.main.body",
-    kind: "pane",
-    source,
-    run: ({ page }) => {
-      page.set("contextRadiusFt", 80);
-      return page.read().stage;
-    },
-  },
-} satisfies BodyBindings<typeof ductsData, typeof schemas, typeof entries, string>;
-
 // A captures-like admitted source needs only declared reads and Page services.
 const { work: _readOnlyWork, ...readOnlyBase } = builtinData;
 export const readOnlyData = {

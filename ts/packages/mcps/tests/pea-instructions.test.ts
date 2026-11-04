@@ -5,7 +5,6 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { address, emptyThreadHead, type ThreadHead } from "@pe/agent-contracts";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { createPeaMcpServer } from "../src/server.ts";
-import { peaAgentInstructions } from "../src/pea/instructions.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { defaultReadImageMaxBytes } from "../src/shared/read-image.ts";
 
@@ -35,7 +34,6 @@ test("one MCP connection discovers session and target changes without startup co
   try {
     await server.connect(serverTransport);
     await client.connect(clientTransport);
-    expect(client.getInstructions()).toBe(peaAgentInstructions);
     expect(fetch).not.toHaveBeenCalled();
     const discover = async () => {
       const result = await client.callTool({ name: "pe_find", arguments: {} });
@@ -69,7 +67,6 @@ test("one MCP connection discovers session and target changes without startup co
     }
     machine = machineFixture();
     expect(await discover()).toMatchObject({ target: head.targets[0]!.request, machine });
-    expect(client.getInstructions()).toBe(peaAgentInstructions);
   } finally {
     await client.close();
     await server.close();

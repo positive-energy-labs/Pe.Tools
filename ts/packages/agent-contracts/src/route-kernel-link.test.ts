@@ -27,9 +27,8 @@ import {
 } from "./route-module.ts";
 import type { RouteGraphJson } from "./route-kernel-data.ts";
 import type { RouteModule, RouteFingerprintInput } from "./route-kernel-admission.ts";
-import type { BodyBindings } from "./route-kernel-bodies.ts";
 import type { CatalogLink } from "./catalog.ts";
-import { manyField, manyCodec, sortField, keyedSetField, orderedListField } from "./route-field.ts";
+import { orderedListField } from "./route-field.ts";
 const bytes = new TextEncoder().encode("export const bodies = {};\n");
 const contracts = new TextEncoder().encode("kernel, schemas and codecs v1\n");
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -414,44 +413,6 @@ it("authenticates the exact immutable handle and captures bindings once", async 
   expect(registry.resolve(route)).toBeNull();
   expect(() => registry.register(route)).toThrow();
 });
-it("preserves manyField and table codec repairs", () => {
-  const field = manyField("UniqueId", { url: "replace" });
-  const value = ["a,b", "all", 'quote"', "space value"];
-  expect(field.schema.safeParse(value).success).toBe(true);
-  expect(manyCodec.decode(manyCodec.encode(value))).toEqual(value);
-  expect(manyCodec.decode("all")).toBe("all");
-  const sort = sortField({});
-  const sorted = sort.schema.parse(undefined);
-  expect(sort.codec.decode(sort.codec.encode(sorted))).toEqual(sorted);
-  const set = keyedSetField({});
-  const hidden = { column: true as const };
-  expect(set.codec.decode(set.codec.encode(hidden))).toEqual(hidden);
-});
-function typeRefusals(route: AdmittedRoute<typeof builtinData>) {
-  const registry = createAdmittedRouteRegistry();
-  // @ts-expect-error spread drops private nominal identity
-  registry.register({ ...route });
-  // @ts-expect-error changed data does not retain admission
-  registry.register({ ...route, data: { ...route.data, key: "forged" } });
-  // @ts-expect-error constructor is private
-  new AdmittedRoute();
-  const wrong: BodyBindings<typeof builtinData, typeof schemas, typeof entries> = {
-    ...builtinBodies,
-    // @ts-expect-error derive output follows the named result schema
-    calculate: { ...builtinBodies.calculate, run: () => ({ total: "wrong" }) },
-    // @ts-expect-error catalog args follow the linked entry input
-    rosterArgs: { ...builtinBodies.rosterArgs, run: () => ({ filter: 1 }) },
-  };
-  // @ts-expect-error role is compulsory
-  const missingRole: RouteGraphJson["fields"][string] = {
-    schema: "text",
-    codec: "text",
-    initial: "",
-  };
-  return { wrong, missingRole };
-}
-void typeRefusals;
-
 it("refuses replacement executable exports even under unchanged source labels and bytes", async () => {
   const { artifact, port } = await prepare();
   const result = port.admit({

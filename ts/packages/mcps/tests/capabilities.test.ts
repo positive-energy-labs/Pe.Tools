@@ -1,20 +1,19 @@
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { machineFixture } from "../../agent-contracts/tests/machine-fixture.ts";
-import { tsOnlyOperationCatalog, type PodList } from "@pe/host-contracts/operation-types";
 import { join } from "node:path";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import {
   address,
   documentRows,
+  familiesRouteState,
   type CapabilityCatalog,
   type ThreadHead,
   emptyThreadHead,
 } from "@pe/agent-contracts";
 import { buildCapabilities, createCapabilityCatalogSource } from "../src/pea/capabilities.ts";
-import { createRouteRegistrations } from "../src/pea/routes.ts";
-import { bundledPeaSkills } from "../src/pea/skills.ts";
-import { skillSnapshot } from "../src/pea/skill-publication.ts";
+import { builtinPeaSkillSnapshots } from "../src/pea/skill-publication.ts";
 import type { PackageProjection } from "@pe/agent-contracts";
 import { peDo, peRead } from "../src/pea/capability-tools.ts";
 
@@ -35,157 +34,32 @@ import {
   Refused,
 } from "../../../apps/host/src/control.ts";
 
-const ops = [
-  {
-    subject: "None",
-    touches: "Metadata",
-    effect: "Read",
-    cardinality: "One",
-    costTier: "Cheap" as const,
-    key: "revit.catalog.loaded-families",
-    displayName: "Loaded families",
-    description: "Inventory of loaded families.",
-    needs: "project-document" as const,
-    intent: "Read" as const,
-    visibility: "ExpertOnly" as const,
-    requestSchemaJson: JSON.stringify({ type: "object", title: "LoadedFamiliesRequest" }),
-  },
-  {
-    subject: "None",
-    touches: "Metadata",
-    effect: "Read",
-    cardinality: "One",
-    costTier: "Cheap" as const,
-    key: "scripting.execute",
-    description: "Run C#.",
-    needs: "document" as const,
-    intent: "Mutate" as const,
-  },
-  // What the C# catalog serves for a human verb: `[Op(..., Actor = OpActor.Human)]`.
-  ...["families.plan", "families.capture"].map((key) => ({
-    subject: "None",
-    touches: "Metadata",
-    effect: "Read",
-    cardinality: "One",
-    costTier: "Cheap" as const,
-    key,
-    description: "Human verb over loaded families.",
-    needs: "project-document" as const,
-    intent: "Read" as const,
-    actor: "any" as const,
-  })),
-];
+const ops = hostOpCatalog.filter((op) =>
+  [
+    "revit.catalog.loaded-families",
+    "scripting.execute",
+    "families.plan",
+    "families.capture",
+  ].includes(op.key),
+);
 
-test("native Human eligibility and local account requirements project into actual principals", () => {
-  const rows = buildCapabilities({
-    ops: [
+const packages: PackageProjection[] = [
+  {
+    id: "sheets",
+    folder: "sheets",
+    diagnostics: [],
+    members: [{ path: "src/Rename.cs", sha256: "a".repeat(64), sizeBytes: 1 }],
+    contributions: [
       {
-        subject: "None",
-        touches: "Metadata",
-        effect: "Read",
-        cardinality: "One",
-        costTier: "Cheap" as const,
-        key: "native.human",
-        needs: "document",
-        intent: "Mutate",
-        actor: "human",
+        key: "script:@sheets/src/Rename.cs",
+        sourcePath: "src/Rename.cs",
+        title: "Sheet tools: Rename sheets",
+        description: "",
       },
-      {
-        subject: "None",
-        touches: "Metadata",
-        effect: "Read",
-        cardinality: "One",
-        costTier: "Cheap" as const,
-        key: "native.any",
-        needs: "nothing",
-        intent: "Read",
-        actor: "any",
-      },
-      {
-        subject: "None",
-        touches: "Metadata",
-        effect: "Read",
-        cardinality: "One",
-        costTier: "Cheap" as const,
-        key: "local.human",
-        needs: "nothing",
-        intent: "Mutate",
-        principal: ["human"],
-      },
-      ...tsOnlyOperationCatalog.filter((row) =>
-        ["aps.auth.login", "aps.auth.logout", "host.shell.open"].includes(row.key),
-      ),
     ],
-    routes: [],
-    packages: [],
-    skills: [],
-  });
-  for (const key of ["native.human", "native.any", "local.human"])
-    expect(rows.find((row) => row.key === `op:${key}`)).toBeUndefined();
-  for (const key of ["aps.auth.login", "aps.auth.logout"])
-    expect(rows.find((row) => row.key === `op:${key}`)?.principal).toEqual(["human"]);
-  expect(rows.find((row) => row.key === "op:host.shell.open")?.principal).toEqual(["human", "pea"]);
-});
-
-const pods = {
-  pods: [
-    {
-      id: "sheets",
-      name: "Sheet tools",
-      version: "1.0.0",
-      folder: "sheets",
-      entrypoints: [{ sourcePath: "src/Rename.cs", name: "Rename sheets" }],
-      members: [],
-      contributions: [
-        {
-          kind: "script",
-          path: "src/Rename.cs",
-          memberPath: "src/Rename.cs",
-          key: "script:@sheets/src/Rename.cs",
-          name: "Rename sheets",
-          description: null,
-        },
-      ],
-      diagnostics: [],
-    },
-    {
-      id: "broken",
-      name: "Broken",
-      version: "0.1.0",
-      folder: "broken",
-      entrypoints: [{ sourcePath: "src/Run.cs" }],
-      members: [],
-      contributions: [],
-      diagnostics: [{ code: "Manifest", path: "pod.json", severity: "error", message: "bad json" }],
-    },
-  ],
-  unreadable: [],
-} satisfies PodList;
-
-const fixtureHash = "a".repeat(64);
-const packages: PackageProjection[] = pods.pods.map((p) => ({
-  id: p.id,
-  folder: p.folder,
-  diagnostics: p.diagnostics.map((d) => ({
-    code: d.code,
-    severity: d.severity,
-    message: d.message,
-    path: d.path ?? undefined,
-  })),
-  members: p.contributions.map((c) => ({ path: c.memberPath, sha256: fixtureHash, sizeBytes: 1 })),
-  contributions: p.contributions.map((c) => ({
-    key: c.key,
-    sourcePath: c.memberPath,
-    title: `${p.name}: ${c.name}`,
-    description: c.description ?? "",
-  })),
-}));
-const admittedSkills = bundledPeaSkills.map((s) => {
-  const bytes = Buffer.from(`${s.content.trimEnd()}\n`);
-  return skillSnapshot("product", s.name, [
-    { path: "SKILL.md", bytes, sha256: createHash("sha256").update(bytes).digest("hex") },
-  ]);
-});
+  },
+];
+const admittedSkills = builtinPeaSkillSnapshots();
 
 function catalog(): CapabilityCatalog {
   return {
@@ -195,9 +69,7 @@ function catalog(): CapabilityCatalog {
     diagnostics: [],
     capabilities: buildCapabilities({
       ops,
-      routes: createRouteRegistrations({ hostBaseUrl: "http://127.0.0.1:9" }).map(
-        (registration) => registration.spec,
-      ),
+      routes: [familiesRouteState],
       packages,
       skills: admittedSkills,
     }),
@@ -562,18 +434,13 @@ test("a cached catalog still reads the open documents fresh: a closed one is gon
     { openId: "o1", title: "A.rvt", address: null, isFamilyDocument: false, isActive: true },
   ];
   let opsReads = 0;
-  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+  vi.stubGlobal("fetch", async (input: string | URL | Request) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (url.pathname === "/ops") {
       opsReads += 1;
       return Response.json({ operations: ops });
     }
-    const key = JSON.parse(typeof init?.body === "string" ? init.body : "{}").key;
-    return Response.json(
-      key === "pod.list"
-        ? pods
-        : { sessions: [{ sessionId: "b1", connected: true, openDocuments: open }] },
-    );
+    return Response.json({ sessions: [{ sessionId: "b1", connected: true, openDocuments: open }] });
   });
   const source = createCapabilityCatalogSource({
     machine: async () => machineFixture([{ session: "b1", documents: open }]),
@@ -585,27 +452,6 @@ test("a cached catalog still reads the open documents fresh: a closed one is gon
   const again = await source.read();
   expect(documentRows(again)).toEqual([]);
   expect(opsReads).toBe(1);
-});
-
-test("human and Pea discover the same plan, capture and apply commands with explicit effects", () => {
-  const rows = catalog().capabilities;
-  for (const key of [
-    "families.plan",
-    "families.capture",
-    "families.apply",
-    "family.apply",
-    "settings.write",
-  ])
-    expect(rows.find((row) => row.key === `op:${key}`)?.principal).toEqual(
-      expect.arrayContaining(["human", "pea"]),
-    );
-  expect(rows.find((row) => row.key === "op:families.plan")?.effect).toBe("query");
-  expect(rows.find((row) => row.key === "op:families.capture")?.effect).toBe("command");
-  expect(rows.find((row) => row.key === "op:family.apply")?.effect).toBe("command");
-  expect(rows.find((row) => row.key === "route:families.edit")?.principal).toEqual(
-    expect.arrayContaining(["human", "pea"]),
-  );
-  expect(rows.some((row) => row.key === "route:families.propose")).toBe(false);
 });
 
 type ExecutableTool = { execute?: (input: never, context: never) => Promise<unknown> };

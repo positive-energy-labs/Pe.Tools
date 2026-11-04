@@ -1,9 +1,46 @@
-import { expect, test } from "vite-plus/test";
+import { Effect, Exit, Layer, Scope } from "effect";
+import { admittedBuiltinsLayer } from "../../../apps/host/src/admitted-builtins.ts";
+import { builtinEnrollments } from "../../../apps/host/src/builtin-enrollment.ts";
+import { afterEach, expect, test } from "vite-plus/test";
 import { address, familiesRouteState, familyCellKey } from "@pe/agent-contracts";
 
 import { RouteWorkspace } from "../../runtime/src/route-workspace.ts";
 import { hostLoadedFamilies, type HostCall } from "../src/pea/families-admission.ts";
 import { createRouteRegistrations } from "../src/pea/routes.ts";
+
+const cleanup: (() => Promise<void>)[] = [];
+afterEach(async () => {
+  for (const close of cleanup.splice(0).reverse()) await close();
+});
+
+async function admittedWorkspace(
+  loadedFamilies: import("../src/pea/families-admission.ts").LoadedFamilies,
+  initial?: unknown,
+) {
+  const saved = new Map<string, unknown>();
+  const work = new RouteWorkspace({
+    registrations: [],
+    store: {
+      getState: async ({ targetKey, route }) => saved.get(`${targetKey}\0${route}`) ?? initial,
+      setState: async ({ targetKey, route, value }) => {
+        saved.set(`${targetKey}\0${route}`, value);
+      },
+    },
+  });
+  const scope = await Effect.runPromise(Scope.make());
+  cleanup.push(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  await Effect.runPromise(
+    Layer.buildWithScope(
+      admittedBuiltinsLayer(
+        work,
+        builtinEnrollments.filter((entry) => entry.routeKey === "families"),
+        createRouteRegistrations({ admittedKeys: [], loadedFamilies }),
+      ),
+      scope,
+    ),
+  );
+  return work;
+}
 
 const at = address("c:\\models\\j1.rvt");
 const scope = { binding: "address" as const, route: "families", target: at };
@@ -11,28 +48,16 @@ const scope = { binding: "address" as const, route: "families", target: at };
 const loaded = [{ familyId: 3573700, familyName: "Casework", types: [{ typeName: "12 X 4" }] }];
 
 // The person edit the Casework scope; cell keys are checked against it (M13-2).
-function workspace() {
-  const edit = { version: 1, revision: 0, doc: { scope: { edit: { value: casework([]) } } } };
-  const saved = new Map<string, unknown>();
+async function workspace() {
   const reads: unknown[] = [];
-  return {
-    reads,
-    work: new RouteWorkspace({
-      registrations: createRouteRegistrations({
-        hostBaseUrl: "http://127.0.0.1:1",
-        loadedFamilies: async (target, filter) => {
-          reads.push({ target, filter });
-          return loaded;
-        },
-      }),
-      store: {
-        getState: async ({ targetKey, route }) => saved.get(`${targetKey}\0${route}`) ?? edit,
-        setState: async ({ targetKey, route, value }) => {
-          saved.set(`${targetKey}\0${route}`, value);
-        },
-      },
-    }),
-  };
+  const work = await admittedWorkspace(
+    async (target, filter) => {
+      reads.push({ target, filter });
+      return loaded;
+    },
+    { version: 1, revision: 0, doc: { scope: { edit: { value: casework([]) } } } },
+  );
+  return { reads, work };
 }
 const propose = (familyName: string, typeName = "12 X 4") => ({
   path: [
@@ -44,8 +69,8 @@ const propose = (familyName: string, typeName = "12 X 4") => ({
 });
 
 // F-J1-12, from hold 4b's recorded shapes (thread 1da7e887): the session list and the catalog as
-// the C# collector answers. It lists types only for a Rows/Full view, at most maxSamplesPerEntry
-// (default 10), and warns when the filter matches nothing.
+// the C# collector answers. The port checks the requested projection and budget against the
+// independent twelve-type response instead of reimplementing native filtering and pagination.
 const projectA = "f2933e8d-9e16-4bf4-b9ca-484f461e4563";
 const exhaust = {
   familyId: 3700298,
@@ -71,44 +96,15 @@ const liveHost = (): HostCall =>
           },
         ],
       };
-    const names: string[] = request.filter?.familyNames ?? [];
-    const categories: string[] = request.filter?.categoryNames ?? [];
-    const families = [exhaust].filter(
-      (f) =>
-        (!names.length || names.includes(f.familyName)) &&
-        (!categories.length || categories.includes(f.categoryName)),
-    );
-    const full = ["Rows", "Full"].includes(request.projection?.view);
-    return {
-      summary: { truncated: false },
-      families: families.map((f) => ({
-        ...f,
-        typeCount: f.types.length,
-        types: full ? f.types.slice(0, request.budget?.maxSamplesPerEntry ?? 10) : [],
-      })),
-      issues: families.length
-        ? []
-        : [
-            {
-              code: "LoadedFamiliesFilterMatchedZeroFamilies",
-              message: "Loaded-family filter matched zero families out of 1.",
-            },
-          ],
-    };
+    expect(key).toBe("revit.catalog.loaded-families");
+    expect(request.projection).toEqual({ view: "Rows" });
+    expect(request.budget.maxSamplesPerEntry).toBeGreaterThanOrEqual(12);
+    return { summary: { truncated: false }, families: [{ ...exhaust, typeCount: 12 }] };
   }) as HostCall;
 
-function ProjectAWork(familyNames: string[], categoryNames = ["Air Terminals"]) {
+async function ProjectAWork(familyNames: string[], categoryNames = ["Air Terminals"]) {
   const target = address(projectA);
-  const saved = new Map<string, unknown>();
-  const work = new RouteWorkspace({
-    registrations: createRouteRegistrations({
-      loadedFamilies: hostLoadedFamilies(undefined, liveHost()),
-    }),
-    store: {
-      getState: async ({ route }) => saved.get(route),
-      setState: async ({ route, value }) => void saved.set(route, value),
-    },
-  });
+  const work = await admittedWorkspace(hostLoadedFamilies(undefined, liveHost()));
   const at = { binding: "address" as const, route: "families", target };
   const scoped = { categoryNames, familyNames, placementScope: "AllLoaded" };
   return {
@@ -126,7 +122,7 @@ function ProjectAWork(familyNames: string[], categoryNames = ["Air Terminals"]) 
 }
 
 test("F-J1-12: the live catalog loopback admits a key for a type past the tenth, as Pea and as the person", async () => {
-  const { work, at, author } = ProjectAWork(["Price LBP15A Exhaust"]);
+  const { work, at, author } = await ProjectAWork(["Price LBP15A Exhaust"]);
   expect(await author()).toMatchObject({ ok: true, revision: 1 });
   const landed = await work.apply(at, "families", "pea", [propose("Price LBP15A Exhaust")], 1);
   expect(landed).toMatchObject({ ok: true, revision: 2 });
@@ -160,7 +156,7 @@ const casework = (familyNames: string[]) => ({
 });
 
 test("both authors share editable family scope and optional suggestions", async () => {
-  const { work } = workspace();
+  const { work } = await workspace();
   expect(
     await work.apply(
       scope,
@@ -199,22 +195,16 @@ test("both authors share editable family scope and optional suggestions", async 
 // "Price LBP15A Exhaust Old" was renamed away after it was written, so its rung is stale.
 
 /** project-a Work saved at revision 1 holding `doc`, as it reads after the catalog moved under it. */
-function seededWork(doc: unknown, host: HostCall = liveHost()) {
+async function seededWork(doc: unknown, host: HostCall = liveHost()) {
   const target = address(projectA);
-  const saved = new Map<string, unknown>([["families", { version: 1, revision: 1, doc }]]);
   const calls: any[] = [];
-  const work = new RouteWorkspace({
-    registrations: createRouteRegistrations({
-      loadedFamilies: hostLoadedFamilies(undefined, (async (key: any, request: any, on: any) => {
-        if (key === "revit.catalog.loaded-families") calls.push(request);
-        return host(key, request, on);
-      }) as HostCall),
-    }),
-    store: {
-      getState: async ({ route }) => saved.get(route),
-      setState: async ({ route, value }) => void saved.set(route, value),
-    },
-  });
+  const work = await admittedWorkspace(
+    hostLoadedFamilies(undefined, (async (key: any, request: any, on: any) => {
+      if (key === "revit.catalog.loaded-families") calls.push(request);
+      return host(key, request, on);
+    }) as HostCall),
+    { version: 1, revision: 1, doc },
+  );
   return { work, at: { binding: "address" as const, route: "families", target }, calls };
 }
 
@@ -225,7 +215,7 @@ const exhaustScope = {
 };
 
 test("M13-2 (d): Pea proposes a scope, then cells in it, with nothing edit; the catalog read carries the proposed filter", async () => {
-  const { work, at, calls } = seededWork({});
+  const { work, at, calls } = await seededWork({});
   const scoped = await work.apply(
     at,
     "families",
@@ -240,7 +230,7 @@ test("M13-2 (d): Pea proposes a scope, then cells in it, with nothing edit; the 
   for (const request of calls) expect(request.filter).toBeDefined();
   expect(calls.at(-1).filter).toEqual(exhaustScope);
   // The same, as ONE write: the scope proposed by an earlier patch keys the cells.
-  const one = seededWork({});
+  const one = await seededWork({});
   expect(
     await one.work.apply(
       one.at,
@@ -271,8 +261,8 @@ test("item 3: every door refusal names its code and its structured parts, and ke
   const cases: [string, () => Promise<unknown>, Record<string, unknown>][] = [
     [
       "unknown-family",
-      () =>
-        workspace().work.apply(
+      async () =>
+        (await workspace()).work.apply(
           scope,
           "families",
           "human",
@@ -288,38 +278,45 @@ test("item 3: every door refusal names its code and its structured parts, and ke
     ],
     [
       "no-scope",
-      () => seededWork({}).work.apply(seededWork({}).at, "families", "pea", [exhaustCell], 1),
+      async () => {
+        const f = await seededWork({});
+        return f.work.apply(f.at, "families", "pea", [exhaustCell], 1);
+      },
       {},
     ],
     [
       "unknown-family-type",
-      () => workspace().work.apply(scope, "families", "pea", [propose("Casework 2")], 0),
+      async () =>
+        (await workspace()).work.apply(scope, "families", "pea", [propose("Casework 2")], 0),
       { cells: [{ familyName: "Casework 2", typeName: "12 X 4", parameter: "View Description" }] },
     ],
     [
       "scope-unresolved",
-      () => {
-        const { work, at } = seededWork({
-          scope: {
-            edit: { value: { ...exhaustScope, categoryNames: ["Walls"], familyNames: [] } },
+      async () => {
+        const { work, at } = await seededWork(
+          {
+            scope: {
+              edit: { value: { ...exhaustScope, categoryNames: ["Walls"], familyNames: [] } },
+            },
           },
-        });
+          catalogOf([]),
+        );
         return work.apply(at, "families", "pea", [exhaustCell], 1);
       },
       {},
     ],
     [
       "scope-truncated",
-      () => {
-        const { work, at } = seededWork(stagedExhaust, catalogOf([], true));
+      async () => {
+        const { work, at } = await seededWork(stagedExhaust, catalogOf([], true));
         return work.apply(at, "families", "pea", [exhaustCell], 1);
       },
       {},
     ],
     [
       "types-truncated",
-      () => {
-        const { work, at } = seededWork(
+      async () => {
+        const { work, at } = await seededWork(
           stagedExhaust,
           catalogOf([{ ...exhaust, typeCount: 13, types: exhaust.types }]),
         );
@@ -329,8 +326,8 @@ test("item 3: every door refusal names its code and its structured parts, and ke
     ],
     [
       "document-unavailable",
-      () => {
-        const { work, at } = seededWork(
+      async () => {
+        const { work, at } = await seededWork(
           stagedExhaust,
           casing((key) => (key === "bridge.sessions.list" ? { sessions: [] } : undefined)),
         );
@@ -340,8 +337,8 @@ test("item 3: every door refusal names its code and its structured parts, and ke
     ],
     [
       "catalog-unreachable",
-      () => {
-        const { work, at } = seededWork(
+      async () => {
+        const { work, at } = await seededWork(
           stagedExhaust,
           casing((key) => {
             if (key === "revit.catalog.loaded-families") throw Error("socket hang up");

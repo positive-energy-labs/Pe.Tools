@@ -7,14 +7,20 @@ import { PeaCliCommands } from "../src/pea/PeaCliCommands.ts";
 import { peRead, peDo } from "../src/pea/capability-tools.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
+import { mintContext, retireContext } from "../../../apps/host/src/control.ts";
 
-afterEach(() => vi.unstubAllEnvs());
+const contexts: string[] = [];
+afterEach(() => {
+  for (const context of contexts.splice(0)) retireContext(context);
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
 
 test("Gunshi Schedule read and human apply use exact HTTP command and reviewed Work revision", async () => {
   const f = await setup();
   const output = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
-    const host = new PeaCliCommands({ hostBaseUrl: fakeRuntimeHost() }).hostCommand();
+    const host = new PeaCliCommands({ hostBaseUrl: fakeRuntimeHost(f.base) }).hostCommand();
     const command = host;
     const request = join(f.dir, "request.json");
     await writeFile(request, JSON.stringify({ scheduleId: 42 }), "utf8");
@@ -66,7 +72,7 @@ test("Gunshi Schedule read and human apply use exact HTTP command and reviewed W
 
 test("Schedule A/B/A reads use thread defaults; apply requires matching Work and target", async () => {
   const f = await setup();
-  fakeRuntimeHost();
+  fakeRuntimeHost(f.base);
   // A harness child's call: its context names the thread and the host answers `/pe/scope/self`.
   const inner = globalThis.fetch;
   vi.stubGlobal("fetch", (input: string | URL | Request, init?: RequestInit) =>
@@ -81,9 +87,11 @@ test("Schedule A/B/A reads use thread defaults; apply requires matching Work and
         )
       : inner(input as string, init),
   );
-  vi.stubEnv("PE_CONTEXT", "test-context");
+  const context = mintContext({ kind: "pea", thread: "t" });
+  contexts.push(context);
+  vi.stubEnv("PE_CONTEXT", context);
   const run = (tool: typeof peRead | typeof peDo, input: unknown) =>
-    withInvocationContext({}, () =>
+    withInvocationContext({ hostBaseUrl: f.base, headers: { "x-pe-context": context } }, () =>
       tool.execute!(input as never, { agent: { toolCallId: "schedule-call" } } as never),
     );
   const start = f.sent.length;
