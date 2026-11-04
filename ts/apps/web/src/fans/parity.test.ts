@@ -322,6 +322,7 @@ test("the legacy Ducts/Fans pane, reading and write census cannot shrink with th
     "ducts",
     "fanPreview",
     "fans",
+    "fansWork",
     "healPreview",
     "lossPreview",
     "meshes",
