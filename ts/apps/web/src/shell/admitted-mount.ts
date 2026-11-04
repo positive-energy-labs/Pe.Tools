@@ -46,8 +46,8 @@ export function mountAdmittedRoute(route: AdmittedRoute, expectedFingerprint: st
     registration: receipt,
     resolve() {
       const bindings = resolveRouteBindings(registry, route);
-      if (!bindings || route.fingerprint !== expectedFingerprint)
-        throw Error("Stale or foreign route admission at mount");
+      if (!bindings) throw Error("Foreign or retired mount admission");
+      if (route.fingerprint !== expectedFingerprint) throw Error("Stale route stamp at mount");
       return bindings;
     },
     close: () => receipt.deactivate(),
