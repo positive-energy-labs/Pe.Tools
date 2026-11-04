@@ -1,5 +1,4 @@
-import { bindWork,OLDER_WORK,UNREADABLE_WORK,workKey } from "@pe/agent-contracts";
-import { z } from "zod";
+import { bindWork,workKey } from "@pe/agent-contracts";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import type { EntryTable } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
@@ -17,13 +16,11 @@ resolveRouteBindings,
 import { routeWorkSubject } from "../../../../packages/agent-contracts/src/route-work-subject";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
-import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
-import { peReadings } from "../readings";
-import { salvageRouteWork,startFreshRouteWork } from "../route/host";
 import { createAdmittedAddress } from "./admitted-address";
-import { admittedWorkPatches,createAdmittedCellActions,createAdmittedCells } from "./admitted-cells";
-import { project,type MountedOwner,type MountedSnapshot } from "./admitted-context.ts";
+import { createAdmittedCellActions,createAdmittedCells } from "./admitted-cells";
+import { type MountedOwner,type MountedSnapshot } from "./admitted-context.ts";
 import { createAdmittedGeometry } from "./admitted-geometry";
+import { createAdmittedHistory } from "./admitted-history.ts";
 import { createAdmittedInvocation } from "./admitted-invoke.ts";
 import { createAdmittedObservers } from "./admitted-observers";
 import type { PlaceInput } from "./admitted-place";
@@ -298,7 +295,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       const schedule = (): void => readings.sync();
       const readings: ReturnType<typeof createAdmittedReadings<W>> = createAdmittedReadings({ route, owner, read, bindings, input, services,
         environmentIssuer, observers, cells, geometry: () => geometry, environment: () => environment,
-        schedule, notify, settle: () => {resolve(); work.sync(); syncRecovery();},
+        schedule, notify, settle: () => {resolve(); work.sync(); historyOwner.sync();},
         syncInvocation: () => invocation.sync(),
         beforeSync: () => {if (drawing) throw Error("Admitted observers cannot run during render");},
         available: () => !closed && resources === "held" && input.custody.current(), closed: () => closed,
@@ -372,46 +369,6 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         (scope) => entryFor(scope.key).connect(scope, door!),
         (key) => entryFor(key).refusedEdits,
       );
-      let savedRecovery: { from: string; value: unknown } | null = null;
-      let recoverySentence: string | null = null;
-      let recoveryProblem: string | null = null;
-      let recoveryBusy = false;
-      let recoveryScope: unknown;
-      let recoveryRevision: number | null = null;
-      function syncRecovery() {
-        const snapshot = owner.read();
-        if (snapshot?.scope !== recoveryScope) {
-          recoveryScope = snapshot?.scope;
-          recoveryRevision = null;
-          savedRecovery = null;
-          recoverySentence = null;
-          recoveryProblem = null;
-          recoveryBusy = false;
-        }
-        if (
-          fixture !== null ||
-          !route.data.salvage ||
-          !work.ready() ||
-          !snapshot?.work ||
-          snapshot.work.revision === recoveryRevision
-        )
-          return;
-        recoveryRevision = snapshot.work.revision;
-        const scope = snapshot.scope;
-        const revision = recoveryRevision;
-        void salvageRouteWork(scope.identity.work!).then(
-          (saved) => {
-            if (closed || owner.read()?.scope !== scope || recoveryRevision !== revision) return;
-            savedRecovery = saved;
-            notify();
-          },
-          (error: unknown) => {
-            if (closed || owner.read()?.scope !== scope || recoveryRevision !== revision) return;
-            recoveryProblem = String(error);
-            notify();
-          },
-        );
-      }
       const geometry = createAdmittedGeometry({
         route,
         owner,
@@ -429,211 +386,10 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       const invocation = createAdmittedInvocation({ route, owner, read, work, bindings, door,
         fixture, target, services, action, resolve, notify, schedule,
         snapshots: readings.snapshots, queryInputs, queryLandings, demanded, generations, retire, geometry });
-      const { invoke, place, workBasis, present, reviews } = invocation;
-      const journal = () => {
-        const key = owner.read()?.scope.identity.work;
-        return key ? mountJournal(key) : null;
-      };
-      let journalProblem: {
-        message: string;
-        journal: ReturnType<typeof createWorkJournal>;
-        revision: number | null;
-      } | null = null;
-      const historyProblem = (
-        current: ReturnType<typeof createWorkJournal>,
-        message: string | null,
-      ) => {
-        journalProblem = message
-          ? { message, journal: current, revision: current.read().revision }
-          : null;
-      };
-      const restore = async (direction: "undo" | "redo", press?: string) => {
-        action();
-        resolve();
-        const current = journal();
-        if (closed || !work.ready() || !current) throw Error("Work unavailable");
-        const basis = owner.invocation(owner.capture(`history:${direction}`), {});
-        if (!basis.ok) throw Error(basis.reason);
-        const result = await current[direction](
-          (request) => work.submit(request, basis.value),
-          press,
-        );
-        historyProblem(current, result.ok ? null : result.message);
-        notify();
-        return result;
-      };
-      const revert = async (press?: string) => {
-        resolve();
-        const current = journal();
-        if (closed || !work.ready() || !current) throw Error("Work unavailable");
-        const state = current.read();
-        const step = state.undo.at(-1);
-        if (!step || (press !== undefined && step.press !== press))
-          throw Error("The selected history entry is no longer last");
-        if (state.busy || step.barrier || step.superseded)
-          throw Error(step.superseded?.message ?? "History step is blocked");
-        const basis = owner.invocation(owner.capture("history:revert"), {});
-        if (!basis.ok) throw Error(basis.reason);
-        // An ordinary appended edit of the host's inverse makes Revert itself undoable.
-        const result = await work.submit(
-          {
-            kind: "apply",
-            expectedRevision: read().work!.revision,
-            press: basis.value.id,
-            label: `Revert ${step.label}`,
-            patches: step.transitions
-              .slice(0, step.cursor)
-              .reverse()
-              .flatMap((t) => t.inverse),
-          },
-          basis.value,
-        );
-        if (result.ok) current.describe(basis.value.id, { label: `Revert ${step.label}` });
-        historyProblem(
-          current,
-          result.ok ? null : "agentHint" in result ? result.agentHint : result.error,
-        );
-        notify();
-        return result;
-      };
-      const history = route.data.work
-        ? {
-            get entries() {
-              return freezePage(journal()?.entries() ?? []);
-            },
-            undo: (press?: string) => restore("undo", press),
-            redo: (press?: string) => restore("redo", press),
-            revert,
-          }
-        : undefined;
-      const prepareSalvage = async () => {
-        action();
-        resolve();
-        const key = owner.read()?.scope.identity.work;
-        if (!route.data.salvage || !key || !work.ready() || fixture !== null)
-          throw Error("Salvage unavailable");
-        const issued = owner.invocation(
-          owner.capture("work-salvage"),
-          Object.fromEntries(
-            Object.entries(readings.snapshots())
-              .filter(([, reading]) => reading.current)
-              .map(([id, reading]) => [id, (reading as { hash: string }).hash]),
-          ),
-        );
-        if (!issued.ok) throw Error(issued.reason);
-        const deps = route.data.salvageDeps ?? { page: [], work: [], readings: [] };
-        for (const id of deps.readings)
-          if (!readings.snapshots()[id]?.current) throw Error(`Reading unavailable: ${id}`);
-        // Display evidence only: the invocation owns freshness, never a second write seal.
-        const evidence = freezePage(
-          structuredClone({
-            page: project(deps.page, read().page),
-            work: project(deps.work, read().work!.value),
-            readings: Object.fromEntries(deps.readings.map((id) => [id, readings.snapshots()[id]])),
-          }),
-        );
-        const saved = await salvageRouteWork(key);
-        if (!owner.current(issued.value) || !work.ready()) throw Error("Salvage is stale");
-        if (!saved) return null;
-        const decoded = z
-          .discriminatedUnion("ok", [
-            z.strictObject({ ok: z.literal(true), value: z.unknown() }),
-            z.strictObject({ ok: z.literal(false), reason: z.string() }),
-          ])
-          .parse(
-            bindings.bodies[route.data.salvage]!.run(
-              freezePage(saved.value),
-              freezePage({ page: read().page, work: read().work!.value, readings }),
-            ),
-          );
-        if (!decoded.ok) throw Error(decoded.reason);
-        const patches = admittedWorkPatches(
-          route.data,
-          bindings.schemas,
-          decoded.value,
-          route.resolvedWork?.schema,
-        );
-        const presentation = present("work.salvage", patches, evidence, route.data.salvagePresent);
-        reviews.set("work.salvage", {
-          presentation,
-          invocation: issued.value,
-          preview: patches,
-          send: () => {
-            if (!owner.current(issued.value) || !work.ready()) throw Error("Salvage is stale");
-            return work.write(
-              () => patches,
-              issued.value,
-              issued.value.id,
-              { label: "Salvage Work" },
-              issued.value,
-            );
-          },
-        });
-        notify();
-        return { kind: "review", preview: patches };
-      };
-      const salvage = async () => {
-        const scope = owner.read()?.scope;
-        recoveryProblem = null;
-        try {
-          return await prepareSalvage();
-        } catch (error) {
-          if (owner.read()?.scope === scope) recoveryProblem = String(error);
-          throw error;
-        } finally {
-          notify();
-        }
-      };
-      const recovery = () => ({
-        sentence:
-          work.problem() === OLDER_WORK || work.problem() === UNREADABLE_WORK
-            ? work.problem()
-            : work.failure()
-              ? null
-              : recoverySentence,
-        startFresh:
-          fixture === null && (work.problem() === OLDER_WORK || work.problem() === UNREADABLE_WORK),
-        carryOver: fixture === null && work.ready() && !!savedRecovery,
-        busy: recoveryBusy,
-        problem: recoveryProblem,
-      });
-      const startFresh = async () => {
-        action();
-        resolve();
-        if (!recovery().startFresh || recoveryBusy) throw Error("Start fresh unavailable");
-        const captured = owner.capture("work-recovery");
-        const scope = read().scope;
-        const key = scope.identity.work!;
-        recoverySentence = work.problem();
-        recoveryBusy = true;
-        recoveryProblem = null;
-        notify();
-        try {
-          const result = await startFreshRouteWork(key);
-          if (!owner.current(captured)) throw Error("Recovery is stale");
-          if (!result.ok) throw Error("agentHint" in result ? result.agentHint : result.error);
-          // The terminal failed subscription cannot observe reset. Reacquire with the
-          // original admission, including its fingerprint, rather than accepting reset's ack.
-          peReadings.dirty({
-            ...key,
-            kind: "work",
-            admission: {
-              routeKey: route.resolvedWork!.spec.route,
-              fingerprint: route.workFingerprint,
-            },
-          });
-          await work.reopen();
-          if (!owner.current(captured)) throw Error("Recovery is stale");
-          if (route.data.salvage) return await salvage();
-          return null;
-        } catch (error) {
-          if (owner.read()?.scope === scope) recoveryProblem = String(error);
-          throw error;
-        } finally {
-          if (owner.read()?.scope === scope) recoveryBusy = false;
-          notify();
-        }
-      };
+      const { invoke, place, workBasis } = invocation;
+      const historyOwner = createAdmittedHistory({route, owner, read, work, bindings, fixture,
+        action, resolve, notify, closed: () => closed, snapshots: readings.snapshots, mountJournal, invocation});
+      const {history, salvage, recovery, startFresh, restore, journal} = historyOwner;
       let transport: ReturnType<typeof createAdmittedAddress> | undefined;
       let unsubscribeOwner = () => {};
       const close = () => {
@@ -765,13 +521,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           return key ? entryFor(key).activity() : [];
         },
         journal: () => journal()?.read() ?? null,
-        journalRefusal: () =>
-          !work.ready()
-            ? "Work unavailable"
-            : journalProblem?.journal === journal() &&
-                journalProblem?.revision === journal()?.read().revision
-              ? (journalProblem?.message ?? null)
-              : null,
+        journalRefusal: historyOwner.journalRefusal,
         restoreWork: restore,
         refreshable: Object.values(route.data.readings).some(
           (reading) => reading.refresh === "explicit",

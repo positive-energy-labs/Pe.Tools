@@ -2993,3 +2993,26 @@ test.each(["take", "unsuggest", "clear"] as const)(
       : { edit: null, suggestion: { value: 7 } } });
   },
 );
+
+
+test("recovery replaces saved evidence with a problem and clears it on a new attempt", async () => {
+  const saved = vi.spyOn(workHost, "salvageRouteWork").mockResolvedValue({from: "old", value: {amount: 12}});
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    {route: "note", title: "", description: "", schema: z.object({amount: z.number()})},
+    {amount: 6},
+  );
+  const mount = createRouteShell({...t.services, work: store}).mount(
+    await workRoute("none", false, "nothing", undefined, true), placeInput(locationPort().address),
+  );
+  closes.push(mount.close);
+  try {
+    await vi.waitFor(() => expect(mount.recovery().carryOver).toBe(true));
+    saved.mockRejectedValueOnce(Error("salvage offline"));
+    await expect(mount.salvage()).rejects.toThrow("salvage offline");
+    expect(mount.recovery()).toMatchObject({problem: "Error: salvage offline", busy: false, carryOver: false});
+    await mount.salvage();
+    expect(mount.recovery()).toMatchObject({problem: null, busy: false});
+    expect(mount.review("work.salvage")).not.toBeNull();
+  } finally { saved.mockRestore(); }
+});
