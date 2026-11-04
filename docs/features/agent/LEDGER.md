@@ -181,6 +181,7 @@ restated here.
 
 ## Owed
 
+- Pea has not walked heal, airflow or assign-fan live from a vague prompt; the skill steps are written, the `pea --prompt` probe is not run. The two probe prompts: "does Project A have any runs ready to run a pressure drop on?" and "how bad is sa 19 … i think its fc-23" (a deliberate system mismatch Pea should notice and ask about). (moved from the ducts ledger 2026-11-03, CONVERGENCE (h): an honest gap owned by Pea, not reopened by the meeting.)
 - 2026-11-02, kaitpw is not settled on the Pea permission model (per-thread run consent, Reject window, cross-thread and cross-tab permissions) and avoids trying alternatives because the host has no owner of lifetime; open a `muse` on it after ADR 0029 phase 5 lands, with fixture prototypes of each model, not before.
 - Approved distillation residue from Fable R2: consolidate repeated incarnation declarations and target narrowing without adding another owner; share the journal's no-dispatch predicate; remove duplicate command eligibility checks while retaining read-door checks; replace the tautological capture dependency with sealed input; make unavailable-resource probes produce typed stale refusals. These six bounded simplifications were explicitly nonblocking; review evidence is archived under `.artifacts/runs/deterministic-20261027-distillation-landing/`.
 
