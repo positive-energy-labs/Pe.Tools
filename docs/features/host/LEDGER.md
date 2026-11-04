@@ -211,6 +211,8 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 
 ## Owed
 
+- PAGE-DOOR-KEY remains open, owned by the separate PAGEDOOR unit: cloning an admitted page Caller loses its WeakMap admission. HOSTFIX contains only SEQ-ONE, finalizer logging and the MCP fiber-abort fix; it does not repair page-caller custody. Source: [control.ts](../../../ts/apps/host/src/control.ts); evidence: [HOSTFIX report](C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-ae3427fc/.artifacts/tmp/hostfix/REPORT.md), `page-regression.patch`. (counsel, HOSTFIX, 2026-11-04)
+
 - After main, retire competing failure mappers through the closed `DoorFailure` path (Effect audit P3); finish effect F2's single failure mapper through coherent producer conversions, including [servePeRoute](../../../ts/packages/host-contracts/src/pe-api.ts), before global middleware ownership. Preserve native evidence and SDK opaque success envelopes. D5 isolates Work observation faults only; the mapper half is not implemented. (counsel, 2026-11-04)
 
 

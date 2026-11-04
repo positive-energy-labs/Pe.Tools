@@ -356,14 +356,14 @@ function readCapture(response: Response): { id: string; url: string } | undefine
 
 // Plain POST /call — unknown keys pass through so runtime-registered Revit ops
 // are callable without a package rebuild; the host/Revit side owns validation.
-const runHostRpcEffect = Effect.fnUntraced(function* (
+export const runHostRpcEffect = Effect.fnUntraced(function* (
   key: string,
   request: unknown,
   options: HostRpcCallerOptions,
 ) {
   const base = trimTrailingSlash(options.hostBaseUrl ?? resolveHostBaseUrl());
   return yield* Effect.tryPromise({
-    try: async () => {
+    try: async (signal) => {
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (options.requestId) headers["x-pe-action-id"] = options.requestId;
       if (options.session) headers[HOST_RPC_SDK_SESSION_HEADER] = JSON.stringify(options.session);
@@ -377,8 +377,8 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
           headers,
           signal:
             options.timeoutMs == null
-              ? undefined
-              : AbortSignal.timeout(Math.max(options.timeoutMs, 1)),
+              ? signal
+              : AbortSignal.any([signal, AbortSignal.timeout(Math.max(options.timeoutMs, 1))]),
         },
       );
       if (!response.ok) {

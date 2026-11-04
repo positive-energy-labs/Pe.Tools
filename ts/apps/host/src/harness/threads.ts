@@ -439,6 +439,10 @@ class ThreadPersistFailed extends Schema.TaggedError<ThreadPersistFailed>()("Thr
   message: Schema.String,
 }) {}
 
+class ThreadRetireFailed extends Schema.TaggedError<ThreadRetireFailed>()("ThreadRetireFailed", {
+  message: Schema.String,
+}) {}
+
 class ThreadCloseFailed extends Schema.TaggedError<ThreadCloseFailed>()("ThreadCloseFailed", {
   message: Schema.String,
 }) {}
@@ -466,6 +470,7 @@ type Startup = {
 
 function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) {
   const { clock, warn, spawner } = startup;
+  const nextSeq = (t: Thread) => (t.events.at(-1)?.seq ?? 0) + 1;
   const nowMs = () => clock.currentTimeMillisUnsafe();
   const stamp = () => DateTime.formatIso(DateTime.makeUnsafe(nowMs()));
   const threads = new Map<string, Thread>();
@@ -604,7 +609,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     const keys = options.providers.keys();
     const stamped: HarnessEvent = {
       ...bounded(event),
-      seq: (t.events.at(-1)?.seq ?? 0) + 1,
+      seq: nextSeq(t),
       at: stamp(),
     };
     const full = keys.length > 0 ? redactKeys(stamped, keys) : stamped;
@@ -1529,7 +1534,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     // The head as of delivery is the document this turn runs against; the record names it itself.
     const head = readHead(t.meta.id);
     const pins = pinElementTargets(t, turnId, head.targets);
-    const promptSeq = t.events.length + 1;
+    const promptSeq = nextSeq(t);
     const targetChunks = elementChunks(pins.targets, (targets, part, parts) => ({
       kind: "turn_element_targets",
       promptSeq,
@@ -1812,7 +1817,12 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
             catch: (error) => new ThreadPersistFailed({ message: String(error) }),
           }).pipe(
             Effect.onExit(() =>
-              t.child === child ? Effect.promise(() => retire(t)) : Effect.void,
+              t.child === child
+                ? Effect.tryPromise({
+                    try: () => retire(t),
+                    catch: (error) => new ThreadRetireFailed({ message: String(error) }),
+                  }).pipe(Effect.catchTag("ThreadRetireFailed", (error) => Effect.logError(error)))
+                : Effect.void,
             ),
           ),
         )

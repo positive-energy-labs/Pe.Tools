@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { followThread } from "@pe/agent-contracts/chat-state";
 import { Spawner } from "../src/harness/spawner.ts";
 import { NodeServices } from "@effect/platform-node";
@@ -216,5 +217,31 @@ nodeTest("a failed service close is tagged and logged at the scope boundary", ()
     expect(logs.lines.map((line) => line.message)).toMatchObject([
       [{ _tag: "ThreadCloseFailed", message: "Error: close disk failed" }],
     ]);
+  }),
+);
+
+nodeTest("a replay gap keeps every new target part linked to its prompt sequence", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped();
+    yield* seed(root, "thread", JSON.stringify(meta("thread")), [
+      JSON.stringify(prompt), '{"seq":2,"kind":"torn',
+      JSON.stringify({ ...turnEnd, seq: 3 }), "",
+    ].join("\n"));
+    const threads = yield* store(root);
+    const response = yield* Effect.promise(() => withInvocationContext({ caller: human }, () =>
+      threads.fetch(new Request("http://host/pe/threads/thread/prompt", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: randomUUID(), text: "after damage" }),
+      })),
+    ));
+    expect(yield* Effect.promise(() => response.json())).toMatchObject({});
+    expect(response.status).toBe(200);
+    const events = threads.historySnapshot()[0]?.events ?? [];
+    const delivered = events.find((event) => event.kind === "prompt" && event.seq > 3);
+    expect(delivered).toMatchObject({ kind: "prompt", seq: 5 });
+    const parts = events.filter((event) => event.kind === "turn_element_targets").filter((event) => event.seq > 3);
+    expect(parts.length).toBeGreaterThan(0);
+    for (const part of parts) expect(part.promptSeq).toBe(delivered?.seq);
   }),
 );
