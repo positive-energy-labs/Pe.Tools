@@ -3,7 +3,6 @@ import { LAYOUT_FIXTURE } from "../ducts/layout.fixture.ts";
 import { COLOURS_FIXTURE } from "../ducts/colours.fixture.ts";
 import { NAVIGATION_FIXTURE } from "../ducts/navigation.fixture.ts";
 import sheetFixture from "../ducts/sheet/sheet.fixture.json";
-import { SCENE_FIXTURE } from "../ducts/scene.fixture.ts";
 import { ductsDesign, fansDocumentSchema } from "@pe/agent-contracts";
 import { createElement } from "react";
 import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
@@ -19,32 +18,40 @@ const seed = <const K extends string>(name: K, snapshot: DuctSnapshot) => ({
   slot: `seeds.${name}.load` as const,
   kind: "seed" as const,
   source,
-  run: () => ({
-    work: fansDocumentSchema.parse({}),
-    readings: {
-      fans: entries["ducts.fans"].output.parse(sheetFixture.roster),
-      sheet: schemas.sheet.parse({
-        rows: sheetFixture.roster.rows,
-        progress: null,
-        opened: [],
-        open: {
-          overview: sheetFixture.overview,
-          inputs: sheetFixture.inputs,
-          elements: sheetFixture.elements,
-          legs: sheetFixture.legs,
-          worstLegs: [],
-          worksheet: null,
-        },
-      }),
-      sheetSnapshot: snapshot,
-      meshes: null,
-      pricing: null,
-    },
-  }),
+  run: () => {
+    const rows = sheetFixture.roster.rows.filter((row) =>
+      snapshot.nodes.some((node) => node.id === row.unitId),
+    );
+    return {
+      work: fansDocumentSchema.parse({}),
+      readings: {
+        fans: entries["ducts.fans"].output.parse({
+          ...sheetFixture.roster,
+          rows,
+        }),
+        sheet: schemas.sheet.parse({
+          rows,
+          progress: null,
+          opened: [],
+          open: {
+            overview: sheetFixture.overview,
+            inputs: sheetFixture.inputs,
+            elements: sheetFixture.elements,
+            legs: sheetFixture.legs,
+            worstLegs: [],
+            worksheet: null,
+          },
+        }),
+        sheetSnapshot: snapshot,
+        meshes: null,
+        pricing: null,
+      },
+    };
+  },
 });
 export const bodies = {
   ...fansNeutralBodies,
-  seedScene: seed("scene", SCENE_FIXTURE.snapshot),
+  seedScene: seed("scene", LAYOUT_FIXTURE.snapshot),
   seedLayout: seed("layout", LAYOUT_FIXTURE.snapshot),
   seedColours: seed("colours", COLOURS_FIXTURE.snapshot),
   seedNavigation: seed("navigation", NAVIGATION_FIXTURE.snapshot),

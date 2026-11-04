@@ -6,7 +6,6 @@ import {
   ductsSheetOverviewSchema,
   ductsSheetResponseSchema,
 } from "@pe/agent-contracts";
-import { SCENE_FIXTURE } from "./scene.fixture";
 import { LAYOUT_FIXTURE, LAYOUT_ROSTER } from "./layout.fixture";
 import { COLOURS_FIXTURE } from "./colours.fixture";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
@@ -14,7 +13,8 @@ import { pricingJob } from "./pricing-job";
 import sheet from "./sheet/sheet.fixture.json";
 
 const fixtures = {
-  scene: SCENE_FIXTURE,
+  // The raw Project A trace has no systems; the existing layout fixture pairs it with a roster.
+  scene: LAYOUT_FIXTURE,
   layout: LAYOUT_FIXTURE,
   colours: COLOURS_FIXTURE,
   navigation: NAVIGATION_FIXTURE,
@@ -35,7 +35,12 @@ function seed(name: keyof typeof fixtures) {
             uniqueId: row.uniqueId ?? `layout-fixture-${index.toString(16).padStart(8, "0")}`,
           })),
         }
-      : sheet.roster,
+      : {
+          ...sheet.roster,
+          rows: sheet.roster.rows.filter((row) =>
+            fixture.snapshot.nodes.some((node) => node.id === row.unitId),
+          ),
+        },
   );
   const overview = ductsSheetOverviewSchema.parse(sheet.overview);
   const inputs = ductsSheetResponseSchema.options[4].parse(sheet.inputs);
