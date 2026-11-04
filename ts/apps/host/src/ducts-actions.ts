@@ -4,7 +4,7 @@ import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { ductsDesign, neutralFansWork, stagedDucts, workHandleSchema } from "@pe/agent-contracts";
+import { ductsDesign, stagedDucts, workHandleSchema } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
 import { invokeBridge, type RevitBridge } from "./bridge.ts";
@@ -168,7 +168,7 @@ export function ductsExecutors(
                 autoJoinGapIn: criteria.autoJoinGapIn.value,
                 candidateBoxIn: criteria.healBoxIn.value,
               } : selector,
-              slots: stagedDucts(design, (design) ?? neutralFansWork).parameters,
+              slots: stagedDucts(doc, fans).parameters,
             },
           );
         let snapshot = await {
@@ -202,7 +202,7 @@ export function ductsExecutors(
             // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
             const request = applyRequest(
               snapshot,
-              price(snapshot, grids, design, (design) ?? neutralFansWork, catalogs.tables),
+              price(snapshot, grids, doc, fans, catalogs.tables),
               appliedAt ?? "",
               intent?.groups ?? [],
             );

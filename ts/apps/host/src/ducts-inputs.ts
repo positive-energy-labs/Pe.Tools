@@ -1,4 +1,3 @@
-import { neutralFansWork } from "@pe/agent-contracts";
 /**
  * The host side of the inputs resolver (ducts LEDGER 2026-10-29): load the layers the pure
  * `resolveInputs` reads (Work's staged edits, the firm file) and turn a sheet's `edits` into Work
@@ -57,8 +56,8 @@ export async function readFirm(path = firmFilePath()): Promise<FirmReading> {
 }
 
 /** Work's staged edits as the resolver reads them. */
-export function workLayer(doc: DuctsDesign | null): WorkLayer {
-  const staged = stagedDucts(doc, doc ?? neutralFansWork);
+export function workLayer(design: DuctsDesign): WorkLayer {
+  const staged = stagedDucts(design, design);
   return {
     flows: staged.flows,
     terminalDrops: staged.terminalDrops,
