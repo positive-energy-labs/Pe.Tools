@@ -171,7 +171,7 @@ test("no open fan is absence and every sheet pane renders without a native decod
 
 
 
-test("a read-only fan rule link restores its rule and bounded system context on ducts", async () => {
+test("a read-only fan rule link restores its rule without fabricating bounded system context", async () => {
   const f = await createWitness(closes, new Map(), {
     "ducts.sheet": { kind: "use", open(_ctx, deliver) {
       deliver({ kind: "complete", revision: 1, value: {
@@ -196,7 +196,9 @@ test("a read-only fan rule link restores its rule and bounded system context on 
   const url = new URL(link.href);
   const destination = f.mount(f.admitted.owner, url.searchParams, "rule-crossing");
   expect(destination.page.read().selected.map(item => localSubject(item.id))).toEqual([group]);
-  expect(destination.page.read().system).toEqual({ kind: "ids", ids: [localId("ducts-system", "SA")] });
+  // F6: an ids snapshot has no canonical roster; the owner link must omit system scope.
+  expect(url.searchParams.has("system")).toBe(false);
+  expect(destination.page.read().system).toEqual({ kind: "ids", ids: [] });
   source.unmount();
   await vi.waitFor(() => expect(destination.readingStatus("pricing").snapshot.current).toBe(true));
   const view = render(<RegistryContext value={registry()}>{nodeFor(destination, "e-rules-all")}</RegistryContext>);
