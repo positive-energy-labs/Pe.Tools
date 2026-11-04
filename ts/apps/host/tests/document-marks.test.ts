@@ -15,7 +15,6 @@ import {
   familiesMatrixEnvelopeSchema,
   type ReadingFrame,
 } from "@pe/agent-contracts";
-import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import type { HostBridgeEvent, RevitBridge } from "../src/bridge.ts";
 import { assertFresh, documentMarks, STALE_READ } from "../src/document-marks.ts";
 import { setup } from "./schedule-test-fixture.ts";
@@ -24,7 +23,7 @@ import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts"
 const A = { session: "S1", openId: "open-A" };
 
 /** A bridge that is only its event tap and its session view. */
-function fakeBridge(sdkSessionId?: string) {
+function fakeBridge() {
   const listeners = new Set<(event: HostBridgeEvent) => void>();
   const emit = (event: HostBridgeEvent) => {
     for (const listener of listeners) listener(event);
@@ -32,15 +31,14 @@ function fakeBridge(sdkSessionId?: string) {
   return {
     bridge: {
       list: Effect.sync(() => [
-        { sessionId: "S1", sdkSessionId, connected: true },
+        { sessionId: "S1", connected: true },
         { sessionId: "S2", connected: true },
       ]),
       subscribe: (listener: (event: HostBridgeEvent) => void) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
-      snapshot: (sessionId?: string) =>
-        Effect.sync(() => ({ connected: true, sessionId, sdkSessionId })),
+      snapshot: (sessionId?: string) => Effect.sync(() => ({ connected: true, sessionId })),
     } as unknown as RevitBridge["Service"],
     changed: (session: string, ...openIds: string[]) =>
       emit({
@@ -106,14 +104,18 @@ test("the envelope carries the mark: served unchanged, republished changed, with
   expect(frames).toHaveLength(2);
 });
 
-test("a push over a newer mark is refused undispatched in one sentence, over HTTP", async () => {
-  const f = await setup();
-  f.revitChanged(f.b);
-  await settle();
-  expect(await f.submit()).toMatchObject({ error: STALE_READ });
-  expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toEqual([]);
-  expect((await f.view()).doc.cells["1::2"].edit.value).toBe("150 VA");
-});
+test.each(["changed", "disconnected"])(
+  "a push after %s is refused undispatched over HTTP",
+  async (event) => {
+    const f = await setup();
+    if (event === "changed") f.revitChanged(f.b);
+    else f.bridgeDetached(f.b.session);
+    await settle();
+    expect(await f.submit()).toMatchObject({ error: STALE_READ });
+    expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toEqual([]);
+    expect((await f.view()).doc.cells["1::2"].edit.value).toBe("150 VA");
+  },
+);
 
 test("the families matrix Reading streams an envelope, never the body, and wears the mark", async () => {
   const world = fakeBridge();

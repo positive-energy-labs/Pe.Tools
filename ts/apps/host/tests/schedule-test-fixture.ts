@@ -1,24 +1,20 @@
 import { captureStore } from "./effect-test.ts";
-import { createPeClient, matchPeRoute } from "@pe/agent-contracts/pe-api";
-import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
+import { createPeClient, httpRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterEach, expect, vi } from "vite-plus/test";
-import { Context, Effect, Layer } from "effect";
-import { HttpRouter } from "effect/http";
+import { Effect, Layer } from "effect";
+import { HttpEffect, HttpRouter } from "effect/http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   address,
-  scheduleCatalogSchema,
   scheduleGridRouteState,
   scheduleReadingSchema,
   type DocumentRef,
-  type ScheduleReadKey,
   type ScheduleReading,
   type ActionAdmission,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { buildCapabilities } from "../../../packages/mcps/src/pea/capabilities.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge, BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
@@ -30,27 +26,10 @@ import { markDispatched } from "../src/action-dispatch.ts";
 import { replayAnswer } from "./sdk-replay.ts";
 import { detailResponse } from "./schedule-fixture.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { withInvocationContext } from "@pe/runtime/context";
-import type { Caller } from "@pe/agent-contracts";
-import { human, pea } from "./callers.ts";
-
-/** The host's schedule reading endpoint, read the way a route client reads it. */
-async function readScheduleCapture(
-  key: ScheduleReadKey,
-  input: Record<string, unknown>,
-  target?: DocumentRef,
-) {
-  const response = await fetch("/schedules/readings", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ key, input, target }),
-  });
-  const value = await response.json();
-  if (!response.ok) throw Error((value as { error?: string }).error ?? `${response.status}`);
-  return key === "schedule.grid.catalog"
-    ? scheduleCatalogSchema.parse(value)
-    : scheduleReadingSchema.parse(value);
-}
+import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
+import { mintContext } from "../src/control.ts";
+import { serveRoutes } from "./real-server.ts";
+import { contextFetch } from "@pe/runtime/context";
 
 /** A native schedule.cells.apply answer: one result per request cell, `[row, column, ok, error?]`. */
 export function cellsApplied(cells: [number, number, boolean, string?][], extra: object = {}) {
@@ -74,7 +53,7 @@ export function cellsApplied(cells: [number, number, boolean, string?][], extra:
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();
-  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
 export async function setup() {
@@ -85,20 +64,6 @@ export async function setup() {
   const app = createPeRoutes({
     store: fileRouteDocumentStore(join(dir, "work")),
     heads: { observe: () => () => {} },
-    capabilityCatalog: {
-      read: async () => ({
-        at: new Date().toISOString(),
-        sources: { catalog: "ok" },
-        diagnostics: [],
-        machine: machineFixture(),
-        capabilities: buildCapabilities({
-          ops: [],
-          routes: [scheduleGridRouteState],
-          packages: [],
-          skills: [],
-        }),
-      }),
-    },
     observeHostResource: (request, publish) => observeHost(request, publish),
     // As the host boots: one mark holder per bridge, shared by every Reading and every push.
     markReadings: (observe) => (request, publish) => markReadings(marks)(observe)(request, publish),
@@ -114,10 +79,8 @@ export async function setup() {
     b = { session: "B", openId: "open-B" };
   const document = address(join(dir, "Same.rvt"));
   let reopened = false,
-    lost = false,
     unknown = false,
-    readbackFails = false,
-    pathless = false;
+    readbackFails = false;
   let hold: Promise<void> | undefined,
     release = () => {};
   let response: unknown = cellsApplied([[1, 2, true]]);
@@ -149,7 +112,7 @@ export async function setup() {
           {
             openId: reopened && target === b ? "reopened-B" : target.openId,
             title: "Same",
-            address: pathless ? null : document,
+            address: document,
             isFamilyDocument: false,
           },
         ],
@@ -173,6 +136,8 @@ export async function setup() {
   const bridgeDetached = (session: string) => {
     for (const listener of bridgeListeners) listener({ sessionId: session, kind: "disconnected" });
   };
+  // External native source only: answers and document events. Work, admission and recovery
+  // belong to the production routes below; these values never decide their expected outcomes.
   const bridge = {
     list: Effect.sync(sessions),
     snapshot: (id?: string) => Effect.sync(() => ({ connected: true, sessionId: id })),
@@ -226,60 +191,48 @@ export async function setup() {
       },
     });
   };
+  const pe = HttpRouter.use((router) =>
+    Effect.gen(function* () {
+      for (const route of Object.values(httpRoutes)) {
+        if (route.owner !== "pe") continue;
+        yield* router.add(
+          route.method,
+          route.path,
+          HttpEffect.fromWebHandler((request) => servePeRoute(request, app.fetch)),
+        );
+      }
+    }),
+  );
   const mount = () =>
-    HttpRouter.toWebHandler(
-      makeCallRoute(owner, captures, { workspace: work, sdk }).pipe(
-        Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
-      ),
-      { disableLogger: true },
+    serveRoutes(
+      Layer.mergeAll(pe, makeCallRoute(owner, captures, { workspace: work, sdk })),
+      bridge,
     );
-  let server = mount();
-  cleanup.push(() => server.dispose());
-  // Teardown runs in reverse, so this runs first: every action the test admitted settles before
-  // its server, runtime and workspace go. A push clears Work before it ends (it still reads back
-  // and files its receipt), so a test can finish mid-action; deleting the workspace then raced
-  // the readback capture's write (ENOTEMPTY on captures/schedules).
+  let server = await mount();
+  vi.stubEnv(HOST_CONTEXT_VARIABLE, mintContext({ kind: "human", via: "cli" }));
+  cleanup.push(() => server.close());
+  // Settle readback and receipt writes before removing their files.
   cleanup.push(async () => {
+    release();
     for (const row of await owner.list()) await owner.wait(row.id);
   });
-  const requests: { path: string; body: string; result?: unknown }[] = [];
-  // The identity middleware's stand-in: every request crosses as `as`.
-  let as: Caller = human;
-  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
-    const request = new Request(
-      new URL(
-        typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
-        "http://host",
-      ),
-      init,
-    );
-    const url = new URL(request.url);
-    if (matchPeRoute(request.method, url.pathname)?.route.owner === "pe") {
-      const row = {
-        path: url.pathname + url.search,
-        body: await request.clone().text(),
-        result: undefined as unknown,
-      };
-      requests.push(row);
-      const response = await withInvocationContext({ caller: as }, () => app.fetch(request));
-      row.result = await response.clone().json();
-      return response;
-    }
-    const result = await withInvocationContext({ caller: as }, () =>
-      server.handler(request, Context.empty() as never),
-    );
-    if (lost && url.pathname === "/actions" && request.method === "POST") {
-      lost = false;
-      throw Error("lost acceptance");
-    }
-    return result;
-  });
-  const read = async (target = b) =>
-    (await readScheduleCapture(
-      "schedule.grid.snapshot",
-      { scheduleId: detail.entries[0].scheduleId },
+  const post = async (path: string, body: unknown) => {
+    const response = await contextFetch(`${server.base}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return { status: response.status, value: (await response.json()) as any };
+  };
+  const read = async (target = b) => {
+    const result = await post("/schedules/readings", {
+      key: "schedule.grid.snapshot",
+      input: { scheduleId: detail.entries[0].scheduleId },
       target,
-    )) as ScheduleReading;
+    });
+    if (result.status !== 200) throw Error(JSON.stringify(result.value));
+    return scheduleReadingSchema.parse(result.value);
+  };
   const reading = await read();
   const scope = {
     binding: "workspace" as const,
@@ -287,33 +240,24 @@ export async function setup() {
     target: null,
     work: reading.workspaceId,
   };
-  const client = createPeClient();
+  const client = () => createPeClient(server.base, contextFetch);
   const view = () =>
-    client.call("work.get", {
+    client().call("work.get", {
       params: { route: "schedules" },
       query: { work: scope.work },
     }) as Promise<{
       revision: number;
       doc: { basis?: { captureId: string }; cells: Record<string, any> };
     }>;
-  const patch = async (patches: RouteStatePatch[], actor = "human") => {
+  const patch = async (patches: RouteStatePatch[]) => {
     const previous = await view();
-    as = actor === "agent" ? pea() : human;
-    try {
-      return (
-        await client.response("work.apply", {
-          params: { route: "schedules" },
-          query: { work: scope.work },
-          body: {
-            patches,
-            expectedRevision: previous?.revision ?? 0,
-            press: actor === "agent" ? null : crypto.randomUUID(),
-          },
-        })
-      ).json();
-    } finally {
-      as = human;
-    }
+    return (
+      await client().response("work.apply", {
+        params: { route: "schedules" },
+        query: { work: scope.work },
+        body: { patches, expectedRevision: previous.revision, press: crypto.randomUUID() },
+      })
+    ).json();
   };
   const bindReading = async (input: {
     readingId: string;
@@ -321,12 +265,13 @@ export async function setup() {
     reading?: ScheduleReading;
   }) => {
     const id = crypto.randomUUID();
-    const response = await fetch("/actions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id, key: "schedule.grid.bind", target: { kind: "host" }, input }),
+    const result = await post("/actions", {
+      id,
+      key: "schedule.grid.bind",
+      target: { kind: "host" },
+      input,
     });
-    if (!response.ok) throw Error(JSON.stringify(await response.json()));
+    if (result.status >= 400) throw Error(JSON.stringify(result.value));
     const receipt = await owner.wait(id);
     if (receipt.state !== "succeeded") throw Error(JSON.stringify(receipt));
     return receipt.result;
@@ -348,14 +293,6 @@ export async function setup() {
     if (result.status !== 409) await owner.wait(preview.id);
     return value;
   };
-  const post = async (path: string, body: unknown) => {
-    const response = await fetch(path, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    return { status: response.status, value: (await response.json()) as any };
-  };
   const submit = async (submitted?: ActionAdmission) => {
     const value = submitted ?? (await admission());
     const result = await post("/actions", value);
@@ -363,13 +300,12 @@ export async function setup() {
   };
   return {
     dir,
-    app,
-    requests,
+    get base() {
+      return server.base;
+    },
     scope,
     a,
     b,
-    captures,
-    work,
     view,
     patch,
     read,
@@ -402,14 +338,8 @@ export async function setup() {
         visibleBodyRowCount: 0,
         isPlacedOnSheet: false,
       }),
-    unsave: () => {
-      pathless = true;
-    },
     reopen: () => {
       reopened = true;
-    },
-    lose: () => {
-      lost = true;
     },
     unknown: () => {
       unknown = true;
@@ -424,9 +354,9 @@ export async function setup() {
     },
     release: () => release(),
     restart: async () => {
-      await server.dispose();
+      await server.close();
       owner = new ActionJournal(join(dir, "actions.json"));
-      server = mount();
+      server = await mount();
     },
     owner: () => owner,
   };

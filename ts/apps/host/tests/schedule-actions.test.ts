@@ -195,14 +195,23 @@ test("Work edits finish while native execution waits and settlement preserves la
 test("lost acceptance and host remount replay the original admission once", async () => {
   const f = await setup();
   const original = await f.admission();
-  f.lose();
+  const transport = globalThis.fetch;
+  const loss = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const response = await transport(input, init);
+    if (String(input) === `${f.base}/actions` && init?.method === "POST") {
+      loss.mockRestore();
+      await response.arrayBuffer();
+      throw Error("lost acceptance");
+    }
+    return response;
+  });
   expect(
     await runSemanticAction(
       "schedule.grid.push",
       {},
       f.b,
       original.input.work as import("@pe/agent-contracts").WorkHandle,
-      "",
+      f.base,
       original.id,
     ),
   ).toMatchObject({ id: original.id, state: "succeeded" });
@@ -214,7 +223,7 @@ test("lost acceptance and host remount replay the original admission once", asyn
       {},
       f.b,
       original.input.work as import("@pe/agent-contracts").WorkHandle,
-      "",
+      f.base,
       original.id,
     ),
   ).toMatchObject({ id: original.id, state: "succeeded" });
@@ -232,8 +241,8 @@ test("lost native outcome remains staged, original receipt recovers without a fr
     notDispatched: true,
   });
   await f.restart();
-  await controlAction("action.recover", { id: original.id }, "");
-  await controlAction("action.resume", { id: original.id }, "");
+  await controlAction("action.recover", { id: original.id }, f.base);
+  await controlAction("action.resume", { id: original.id }, f.base);
   expect(await f.owner().wait(original.id)).toMatchObject({ state: "succeeded" });
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
@@ -274,7 +283,7 @@ test("readback failure is explicit and original resume performs only a read, nev
     notDispatched: true,
   });
   f.failReadback(false);
-  await controlAction("action.resume", { id: result.id }, "");
+  await controlAction("action.resume", { id: result.id }, f.base);
   expect(await f.owner().wait(result.id)).toMatchObject({ state: "succeeded" });
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
 });
@@ -306,8 +315,8 @@ test("missing acknowledgments recover the same native receipt before original re
   const original = await f.admission();
   expect(await f.submit(original)).toMatchObject({ state: "incomplete" });
   f.setResponse(cellsApplied([[1, 2, true]]));
-  await controlAction("action.recover", { id: original.id }, "");
-  await controlAction("action.resume", { id: original.id }, "");
+  await controlAction("action.recover", { id: original.id }, f.base);
+  await controlAction("action.resume", { id: original.id }, f.base);
   expect(await f.owner().wait(original.id)).toMatchObject({ state: "succeeded" });
   expect((await f.view()).doc.cells["1::2"].edit).toBeNull();
   expect(f.sent.filter((s) => s.key === "schedule.cells.apply")).toHaveLength(1);
@@ -339,8 +348,8 @@ test("a recovered partial acknowledgment retires newly proven cells without rewr
       [2, 2, true],
     ]),
   );
-  await controlAction("action.recover", { id: original.id }, "");
-  await controlAction("action.resume", { id: original.id }, "");
+  await controlAction("action.recover", { id: original.id }, f.base);
+  await controlAction("action.resume", { id: original.id }, f.base);
   const completed = await f.owner().wait(original.id);
   expect(completed).toMatchObject({ state: "succeeded" });
   expect(completed.steps.find((step) => step.id === first.id)).toEqual(first);
