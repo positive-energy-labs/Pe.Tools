@@ -1,11 +1,16 @@
 import { expect, test } from "vite-plus/test";
-import { INVALID } from "./page-keys.ts";
+import { INVALID, modeKey } from "./page-keys.ts";
 import { z } from "zod";
 import { field, manyField, manyCodec, decodePageField, sortField, keyedSetField, orderedListField, jsonCodec, type ScalarSchema } from "./route-field.ts";
 import { routeAddress } from "./route-address.ts";
 
 const forwardScalar = <S extends z.ZodType>(schema: ScalarSchema<S>) =>
   field(schema, {}, { encode: JSON.stringify, decode: JSON.parse });
+
+// Generic enum outputs are scalar even while their literal keys are still parameters.
+const forwardMode = <const M extends readonly [string, ...string[]]>(modes: M, initial: M[number]) =>
+  field(modeKey(modes, initial), {});
+void forwardMode;
 
 const typeProof = () => {
   // @ts-expect-error array Page fields have one kernel owner

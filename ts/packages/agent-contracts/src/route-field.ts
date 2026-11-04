@@ -75,7 +75,9 @@ const CODECS: Record<string, Codec<unknown>> = {
 
 /** Top-level collection values require a collection constructor. Objects may contain arrays. */
 export type ScalarSchema<S extends z.ZodType> =
-  Extract<z.output<S>, readonly unknown[]> extends never ? S : never;
+  S extends z.ZodType<string | number | boolean | bigint | symbol | null | undefined>
+    ? S
+    : Extract<z.output<S>, readonly unknown[]> extends never ? S : never;
 /** One field: a plain string, enum, number or boolean needs no codec; any other value brings one. */
 export function field<S extends z.ZodType, const A extends Access>(
   schema: ScalarSchema<S>,
