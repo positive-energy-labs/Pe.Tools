@@ -1,3 +1,4 @@
+import type { HostRouteModule } from "../../../../packages/agent-contracts/src/host-route-admission.ts";
 import { commandCatalogAxes } from "../../../../packages/agent-contracts/src/command-axes.ts";
 import { z } from "zod";
 import {
@@ -321,7 +322,10 @@ export const familiesEntries = {
   },
 };
 const source = { module: "families/neutral.ts", export: "familiesNeutralBodies" };
-export const familiesNeutralBodies = {
+export const familiesNeutralBodies: Omit<
+  BodyBindings<typeof familiesData, typeof familiesSchemas, typeof familiesEntries>,
+  "main" | "seed"
+> = {
   receiptArgs: {
     slot: "readings.receipts.args",
     kind: "args",
@@ -581,12 +585,9 @@ export const familiesNeutralBodies = {
       return true;
     },
   },
-} satisfies Omit<
-  BodyBindings<typeof familiesData, typeof familiesSchemas, typeof familiesEntries>,
-  "main" | "seed"
->;
+};
 // Host recovery extracts canonical bytes; web salvage derives review patches.
-export const familiesHostModule = {
+export const familiesHostModule: HostRouteModule = {
   data: familiesData,
   schemas: familiesSchemas,
   bodies: {

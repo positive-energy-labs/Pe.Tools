@@ -29,12 +29,13 @@ const closureSchema: z.ZodType<{ fingerprint: string; envelope: BuiltinClosure }
   });
 
 const captures = closureSchema.parse(capturesGenerated);
-export const builtins = {
+interface Builtin { closure: z.output<typeof closureSchema>; host: HostRouteModule }
+export const builtins: Record<"captures" | "schedules" | "families" | "ducts" | "fans", Builtin> = {
   captures: { closure: captures, host: { data: captures.envelope.data, schemas: {}, bodies: {} } },
   schedules: { closure: closureSchema.parse(schedulesGenerated), host: schedulesHostModule },
   families: { closure: closureSchema.parse(familiesGenerated), host: familiesHostModule },
   ducts: { closure: closureSchema.parse(ductsGenerated), host: ductsHostModule },
   fans: { closure: closureSchema.parse(fansGenerated), host: fansHostModule },
-} satisfies Record<string, { closure: z.output<typeof closureSchema>; host: HostRouteModule }>;
+};
 export type BuiltinKey = keyof typeof builtins;
 export const isBuiltinKey = (key: string): key is BuiltinKey => Object.hasOwn(builtins, key);

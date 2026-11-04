@@ -1,3 +1,4 @@
+import type { HostRouteModule } from "../../../../packages/agent-contracts/src/host-route-admission.ts";
 import {
   applyPatches,
   ductsSheetEditsSchema,
@@ -305,25 +306,9 @@ export const fansData = {
   workFields: { writeIntent: { label: "write scope", internal: true } },
 } as const satisfies RouteGraphJson;
 const rosterSort = z.enum(["", "name"]);
-export const schemas = {
-  contextRadiusFt: sharedSchemas.contextRadiusFt,
-  contextStyle: sharedSchemas.contextStyle,
-  encoding: sharedSchemas.encoding,
-  fan: sharedSchemas.fan,
-  historyDetail: sharedSchemas.historyDetail,
-  inputSearch: sharedSchemas.inputSearch,
-  inputSort: sharedSchemas.inputSort,
-  layers: sharedSchemas.layers,
-  picture: sharedSchemas.picture,
-  sceneView: sharedSchemas.sceneView,
-  sheet: sharedSchemas.sheet,
-  sheetPath: sharedSchemas.sheetPath,
-  sheetStage: sharedSchemas.sheetStage,
+const fanSchemas = {
   snapshot: sharedSchemas.sheetSnapshot.nullable(),
-  pricing: sharedSchemas.pricing,
   ductsWork: ductsDocumentSchema,
-  viewport: sharedSchemas.viewport,
-  edit: sharedSchemas.edit,
   sheetEdit: sharedSchemas.sheetEdit.extend({
     edits: ductsSheetEditsSchema.pick({
       flows: true,
@@ -361,6 +346,26 @@ export const schemas = {
   flowsCell: fansDocumentSchema.shape.flows.unwrap().valueType,
   parametersCell: fansDocumentSchema.shape.parameters.unwrap().valueType,
   designFrictionCell: fansDocumentSchema.shape.designFriction.unwrap(),
+};
+export const schemas: typeof fanSchemas & Pick<typeof sharedSchemas,
+  "contextRadiusFt" | "contextStyle" | "encoding" | "fan" | "historyDetail" | "inputSearch" | "inputSort" | "layers" | "picture" | "sceneView" | "sheet" | "sheetPath" | "sheetStage" | "pricing" | "viewport" | "edit"> = {
+  ...fanSchemas,
+  contextRadiusFt: sharedSchemas.contextRadiusFt,
+  contextStyle: sharedSchemas.contextStyle,
+  encoding: sharedSchemas.encoding,
+  fan: sharedSchemas.fan,
+  historyDetail: sharedSchemas.historyDetail,
+  inputSearch: sharedSchemas.inputSearch,
+  inputSort: sharedSchemas.inputSort,
+  layers: sharedSchemas.layers,
+  picture: sharedSchemas.picture,
+  sceneView: sharedSchemas.sceneView,
+  sheet: sharedSchemas.sheet,
+  sheetPath: sharedSchemas.sheetPath,
+  sheetStage: sharedSchemas.sheetStage,
+  pricing: sharedSchemas.pricing,
+  viewport: sharedSchemas.viewport,
+  edit: sharedSchemas.edit,
 };
 const workSchema: z.ZodType<Immutable<FansRouteDocument>> = fansDocumentSchema;
 const fanReadingSchema: z.ZodType<
@@ -423,7 +428,19 @@ const group = <const K extends string>(segment: K) => ({
   source,
   run: (key: string) => [key],
 });
-export const fansNeutralBodies = {
+export const fansNeutralBodies: Omit<
+  BodyBindings<typeof fansData, typeof schemas, typeof entries>,
+  | "seedScene"
+  | "seedLayout"
+  | "seedColours"
+  | "seedNavigation"
+  | "price"
+  | "sheetView"
+  | "sheet-roster"
+  | "sheet-inputs"
+  | "sheet-picture"
+  | "sheet-ledger"
+> = {
   tablesArgs: { slot: "readings.tables.args", kind: "args", source, run: () => ({ ids: [...TABLE_IDS] }) },
   catalogsArgs: { slot: "readings.catalogs.args", kind: "args", source, run: () => ({}) },
   groupdesignFriction: group("designFriction"),
@@ -517,20 +534,8 @@ export const fansNeutralBodies = {
         label: fanLabel(row, reading.value?.rows ?? []),
       })),
   },
-} satisfies Omit<
-  BodyBindings<typeof fansData, typeof schemas, typeof entries>,
-  | "seedScene"
-  | "seedLayout"
-  | "seedColours"
-  | "seedNavigation"
-  | "price"
-  | "sheetView"
-  | "sheet-roster"
-  | "sheet-inputs"
-  | "sheet-picture"
-  | "sheet-ledger"
->;
-export const fansHostModule = { data: fansData, schemas, workState: fansRouteState, bodies: {} };
+};
+export const fansHostModule: HostRouteModule = { data: fansData, schemas, workState: fansRouteState, bodies: {} };
 
 /** Carry only the destination subject and the document/fixture binding. */
 export function fansLink(ids: readonly string[], search: Readonly<Record<string, unknown>>) {

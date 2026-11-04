@@ -1,3 +1,4 @@
+import type { HostRouteModule } from "../../../../packages/agent-contracts/src/host-route-admission.ts";
 import { fansDocumentSchema } from "@pe/agent-contracts";
 import type { DuctsRouteDocument } from "@pe/agent-contracts";
 import {
@@ -39,7 +40,7 @@ Many,
 import { ductsAddress } from "../../../../packages/agent-contracts/src/routes/ducts.ts";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared.ts";
 import { openSet } from "../shell/open-set.neutral.ts";
-import { identityCodecs } from "../shell/page-port.ts";
+import { identityCodecs } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
 import {
 describeInputHistory,
 editLabel,
@@ -1194,7 +1195,23 @@ const dropFanCellsBody = {
   source,
   run: dropFanCells,
 } as const;
-export const neutralBodies = {
+export const neutralBodies: Omit<
+  BodyBindings<typeof ductsData, typeof schemas, typeof entries>,
+  | "price"
+  | "e-systems"
+  | "e-sidebar"
+  | "e-rules-all"
+  | "e-rules"
+  | "e-picture"
+  | "e-inbox"
+  | "presentLosses"
+  | "presentHeal"
+  | "presentFan"
+  | "seedScene"
+  | "seedLayout"
+  | "seedColours"
+  | "seedNavigation"
+> = {
   dropFanCells: dropFanCellsBody,
   browse: { slot: "verbs.browse.patch", kind: "page", source, run: (_ctx, input) => input },
   labelassumptions: {
@@ -1405,25 +1422,9 @@ export const neutralBodies = {
       })) as readonly WorkPatch<typeof ductsDocumentSchema>[],
     }),
   },
-} satisfies Omit<
-  BodyBindings<typeof ductsData, typeof schemas, typeof entries>,
-  | "price"
-  | "e-systems"
-  | "e-sidebar"
-  | "e-rules-all"
-  | "e-rules"
-  | "e-picture"
-  | "e-inbox"
-  | "presentLosses"
-  | "presentHeal"
-  | "presentFan"
-  | "seedScene"
-  | "seedLayout"
-  | "seedColours"
-  | "seedNavigation"
->;
+};
 
-export const ductsHostModule = {
+export const ductsHostModule: HostRouteModule = {
   data: ductsData,
   schemas,
   workState: ductsRouteState,

@@ -5,7 +5,8 @@ import { entries, fansNeutralBodies } from "./neutral.ts";
 import { createWitness } from "./cutover.test-support.ts";
 
 test("Fans requests the shared native tables input and can price the result", async () => {
-  const input = entries["ducts.tables"].input.parse(fansNeutralBodies.tablesArgs.run());
+  const context: Parameters<typeof fansNeutralBodies.tablesArgs.run>[0] = { page: {}, work: {}, readings: {} };
+  const input = entries["ducts.tables"].input.parse(fansNeutralBodies.tablesArgs.run(context));
   expect(input).toEqual({ ids: TABLE_IDS });
   expect(nativeRequestSchema("ducts.tables").parse(input)).toEqual(input);
   const closes: (() => void)[] = [];

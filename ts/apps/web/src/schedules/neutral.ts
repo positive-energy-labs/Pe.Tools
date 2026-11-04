@@ -1,3 +1,4 @@
+import type { HostRouteModule } from "../../../../packages/agent-contracts/src/host-route-admission.ts";
 import { z } from "zod";
 import {
   scheduleCatalogSchema,
@@ -413,7 +414,7 @@ export const entries = {
     axes: { ...axes, subject: "Elements", cost: "Mutation" },
   },
 } as const;
-export const neutralBodies = {
+export const neutralBodies: Omit<BodyBindings<typeof schedulesData, typeof schemas, typeof entries>, "grid"> = {
   savedArgs: {
     slot: "readings.saved.args",
     kind: "args",
@@ -571,8 +572,8 @@ export const neutralBodies = {
       },
     }),
   },
-} satisfies Omit<BodyBindings<typeof schedulesData, typeof schemas, typeof entries>, "grid">;
-export const schedulesHostModule = {
+};
+export const schedulesHostModule: HostRouteModule = {
   data: schedulesData,
   schemas,
   bodies: {},

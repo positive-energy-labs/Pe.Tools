@@ -7,7 +7,7 @@ import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/ro
 import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { IdentityId } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { captureReceiptSchema } from "../../../../packages/agent-contracts/src/capture";
-import { identityCodecs } from "../shell/page-port";
+import { identityCodecs } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
 
 export const capturesData = {
   version: 1,
