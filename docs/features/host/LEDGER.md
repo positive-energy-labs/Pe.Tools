@@ -6,6 +6,8 @@ design-system ledger, not restated here.
 
 ## Decided
 
+- 2026-11-04, `/call` may forward `notDispatched` only from evidence that nothing contradicts; a problem-shaped error with unknown provenance cannot claim no dispatch. Contradictory `dispatched` evidence wins. This is retry authority: [the action journal](../../../ts/apps/host/src/action-journal.ts) may repeat a failed step on resume. [Dispatch-evidence laws](../../../ts/apps/host/tests/call-dispatch-evidence.test.ts) cover the HTTP boundary; native mutation behavior remains UNPROVEN here. (counsel, NOTDISP)
+
 - 2026-11-04, dev endpoint callers wait for their local supervisor's launch result before receipt discovery. Readiness settles before Revit UI bridge work, so a caller on that UI thread can wait safely; the existing launcher budget and ownership checks remain authoritative. With no matching supervisor the caller fails fast. (HOSTREADY, counsel)
 
 - 2026-11-02, [ADR 0029 amendment (2)](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md), rule 14: admission durably establishes owner capability, causal parent id, cancellation policy and terminal state before acknowledgment. Stop addresses the owner and its defined descendants. Submit, join, observe and stop are separate capabilities because request lifetime cannot define cross-process ownership.
@@ -209,7 +211,7 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 
 ## Owed
 
-- After main, finish effect F2's single failure mapper through coherent producer conversions, including [servePeRoute](../../../ts/packages/host-contracts/src/pe-api.ts), before global middleware ownership. Preserve native evidence and SDK opaque success envelopes. D5 isolates Work observation faults only; the mapper half is not implemented. (counsel, 2026-11-04)
+- After main, retire competing failure mappers through the closed `DoorFailure` path (Effect audit P3); finish effect F2's single failure mapper through coherent producer conversions, including [servePeRoute](../../../ts/packages/host-contracts/src/pe-api.ts), before global middleware ownership. Preserve native evidence and SDK opaque success envelopes. D5 isolates Work observation faults only; the mapper half is not implemented. (counsel, 2026-11-04)
 
 
 

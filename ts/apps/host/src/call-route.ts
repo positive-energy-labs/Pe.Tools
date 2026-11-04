@@ -1465,7 +1465,6 @@ function toProblem(error: unknown): {
       kind: "InvalidRequest",
       message: String(error.message),
       status: Number(error.status),
-      notDispatched: true,
     };
   if (error instanceof CommandRejected)
     return { kind: "InvalidRequest", message: error.message, status: 409 };
@@ -1512,7 +1511,7 @@ function toProblem(error: unknown): {
         status: error.statusCode,
         nativeOutcome: error.nativeOutcome,
         issues: error.evidence.issues,
-        notDispatched: error.evidence.notDispatched,
+        notDispatched: error.evidence.dispatched ? undefined : error.evidence.notDispatched,
         result: error.evidence.result,
         resolvedTarget: error.evidence.resolvedTarget,
       };
