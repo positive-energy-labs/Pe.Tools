@@ -122,7 +122,7 @@ for (const [key, closure] of closures) {
   );
   if (closureOnly) continue;
   const data = closure.envelope.data;
-  directory.push({ key, directory: projectKernelDirectory(data), moduleHash: closure.fingerprint });
+  directory.push({ key, directory: projectKernelDirectory(data) });
   await emit(
     new URL(`../../../packages/mcps/src/pea/generated/${key}-graph.json`, import.meta.url),
     `${JSON.stringify(data, null, 2)}\n`,
@@ -149,9 +149,6 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
     directory.push({
       key: graph.key,
       directory: graph.directory,
-      moduleHash: routeSourceHash(
-        await readFile(new URL(`../src/${folder.name}/graph.ts`, import.meta.url)),
-      ),
     });
     const destination = new URL(
       `../../../packages/mcps/src/pea/generated/${graph.key}-graph.json`,
@@ -163,7 +160,7 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
 if (!closureOnly)
   await emit(
     new URL("../../../packages/agent-contracts/src/generated/route-directory.ts", import.meta.url),
-    `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; directory: RouteDirectory; moduleHash: string}[] = ${JSON.stringify(directory, null, 2)};\n`,
+    `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; directory: RouteDirectory}[] = ${JSON.stringify(directory, null, 2)};\n`,
   );
 console.log(runtime ? JSON.stringify(projections) : `Projected ${directory.length} route graphs`);
 

@@ -12,7 +12,6 @@ import type { RouteModule as KernelModule, RouteBodyRender } from "./route-kerne
 import { bare, manyCodec } from "./route-field.ts";
 import { catalogEntries } from "./pe-api.ts";
 import { requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
-import { routeDirectory } from "./generated/route-directory.ts";
 import type { z } from "zod";
 import type { Command } from "./command.ts";
 import type { RouteStateSpec } from "./route-state.ts";
@@ -38,15 +37,6 @@ export function validateRouteModule(module: RouteModule): void {
   if (!/^[a-f0-9]{64}$/.test(module.moduleHash))
     throw Error("Route registration needs its module SHA-256");
   if (!module.graph.directory) throw Error("Route registration needs a directory declaration");
-  const builtin =
-    module.namespace === "builtin"
-      ? routeDirectory.find((row) => row.key === module.graph.key)
-      : undefined;
-  if (
-    module.namespace === "builtin" &&
-    (builtin?.moduleHash !== module.moduleHash || module.graph.moduleHash !== module.moduleHash)
-  )
-    throw Error("Builtin module hash does not match the generated directory");
   if (module.namespace !== "builtin") {
     for (const [id, field] of Object.entries(module.graph.fields)) {
       if (
