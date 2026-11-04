@@ -1,6 +1,6 @@
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { StateCell, cellFromDraft } from "@pe/kit/lang/cell";
-import { SheetCell } from "./sheet-cell";
+import { reviewTransitions } from "#/components/work/band";
 import { ChoiceCell } from "./choice-cell.tsx";
 import { Button } from "@pe/kit/lang/button";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
@@ -178,16 +178,22 @@ export function InputsBody({
   const ownPane = (
     <>
       <section aria-label="Fan settings" className="flex flex-col gap-2 p-1">
-        <SheetCell className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2" label="Design friction" value={friction.edit?.value ?? DEFAULT_DESIGN_FRICTION_RATE}
-          unit={{ label: "in-wg/100 ft" }} digits={3} source={friction.edit ? "Work" : "default"}
-          cell={friction} positive clearable={!!friction.edit} refusal={ctx.workBasis ? null : "Read Work before editing"}
-          onValue={value => write(transitionPatches([], "designFriction", friction,
-            value === null ? { kind: "clear" } : { kind: "set", rung: { value } }), { label: "Design friction" })} />
+        <span data-sheet-cell="Design friction" aria-label="Design friction" className="flex items-baseline gap-2">
+          <span>Design friction</span>
+          <StateCell {...cellFromDraft(friction, { value: String(friction.edit?.value ?? DEFAULT_DESIGN_FRICTION_RATE),
+            cap: ctx.workBasis ? "editable" : "locked", capReason: "Read Work before editing" }, String)} scale="row"
+            numeric={{ min: 0, digits: 3 }} unit={{ label: "in-wg/100 ft" }}
+            onCommit={(text: string) => write(transitionPatches([], "designFriction", friction,
+              { kind: "set", rung: { value: Number(text) } }), { label: "Design friction" }).then(result => result?.message)}
+            transitions={reviewTransitions({ segment: null, revision: ctx.workBasis?.workRevision ?? null, write: patches => write(patches, { label: "Design friction" }) }, "designFriction", friction)} />
+          <span data-input-source={friction.edit ? "Work" : "default"}>{friction.edit ? "Work" : "default"}</span>
+        </span>
         {([["fanStatic", "Unit ESP"], ["terminalDrop", "Grille drop"], ["componentDrop", "Component drop"], ["fittingCoefficient", "Fitting coefficient"]] as const).map(([key, label]) => {
           const cell = ctx.work?.parameters[key] ?? {};
           return <label key={key} className="flex items-baseline gap-2"><span>{label}</span>
             <StateCell {...cellFromDraft(cell, { value: snapshot.slots[key], cap: "editable" }, String)} scale="row"
-              onCommit={(value: string) => write(transitionPatches(["parameters"], key, cell, { kind: "set", rung: { value } }), { label }).then(result => result?.message)} />
+              onCommit={(value: string) => write(transitionPatches(["parameters"], key, cell, { kind: "set", rung: { value } }), { label }).then(result => result?.message)}
+              transitions={reviewTransitions({ segment: "parameters", revision: ctx.workBasis?.workRevision ?? null, write: patches => write(patches, { label }) }, key, cell)} />
           </label>;
         })}
         {snapshot.nodes.filter(node => node.kind === "equipment").map(node => {
