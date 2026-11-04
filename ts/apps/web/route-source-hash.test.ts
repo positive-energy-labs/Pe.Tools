@@ -70,7 +70,6 @@ test("actual resolver closes all module kinds; source, asset and imported JSON m
   for (const [file, source] of Object.entries(f.sources))
     writeFileSync(join(f.root, file), source.replaceAll("\n", "\r\n"));
   expect((await f.build()).fingerprint).toBe(first.fingerprint);
-
 }, 60_000);
 test("drift checks are read-only", async () => {
   const f = fixture();
@@ -128,7 +127,10 @@ test("computed imports refuse, external content integrity affects the envelope",
 
 test("builtin closures hash independently in declaration order", async () => {
   const f = fixture();
-  const options = ["fans", "ducts"].map(key => ({ ...f.options, data: { ...builtinData, key, address: `/${key}`, work: { ...builtinData.work, route: key } } }));
+  const options = ["fans", "ducts"].map((key) => ({
+    ...f.options,
+    data: { ...builtinData, key, address: `/${key}`, work: { ...builtinData.work, route: key } },
+  }));
   const closures = await buildBuiltinClosures(options);
   expect([...closures.keys()]).toEqual(["fans", "ducts"]);
   const alone = await buildBuiltinClosures([options[0]!]);
@@ -156,13 +158,13 @@ test("host package and Vite config edits do not repin a closure", async () => {
   const manifest = join(f.root, "host/package.json");
   const config = join(f.root, "vite.config.ts");
   writeFileSync(manifest, '{"version":"1","scripts":{"test":"one"}}');
-  writeFileSync(config, 'export default { build: { minify: false } };');
+  writeFileSync(config, "export default { build: { minify: false } };");
   const build = () => buildBuiltinClosure({ ...f.options, config: { configFile: config } });
   const first = await build();
   writeFileSync(manifest, '{"version":"2","scripts":{"test":"two"}}');
   expect((await build()).fingerprint).toBe(first.fingerprint);
-  writeFileSync(config, 'export default { build: { minify: true } };');
+  writeFileSync(config, "export default { build: { minify: true } };");
   expect((await build()).fingerprint).toBe(first.fingerprint);
   expect(first.envelope.inputs).toEqual([]);
-  expect(first.envelope.modules.map(member => member.id)).not.toContain("vite.config.ts");
+  expect(first.envelope.modules.map((member) => member.id)).not.toContain("vite.config.ts");
 });

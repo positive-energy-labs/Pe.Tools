@@ -841,18 +841,33 @@ it.each(["missing", "malformed"])(
 
 it("the closure pin alone admits builtin identity and refuses a stale pin or replaced body", async () => {
   const envelope: BuiltinClosure = {
-    source: "builtin-closure", version: 1, data: builtinData,
+    source: "builtin-closure",
+    version: 1,
+    data: builtinData,
     variants: [{ client: "web", entry: "builtin.ts" }],
-    modules: [{ id: "builtin.ts", sha256: digest(bytes) }], inputs: [], externals: [],
+    modules: [{ id: "builtin.ts", sha256: digest(bytes) }],
+    inputs: [],
+    externals: [],
   };
   const fingerprint = await builtinClosureFingerprint(envelope);
   const inventory = createBuiltinRouteInventory({
     builtin: { module: builtinModule, closure: { envelope, fingerprint }, catalog: baseCatalog },
   });
-  await expect(inventory.prepare("builtin", "0".repeat(64))).rejects.toThrow("Stale or unknown builtin stamp");
+  await expect(inventory.prepare("builtin", "0".repeat(64))).rejects.toThrow(
+    "Stale or unknown builtin stamp",
+  );
   const port = await inventory.prepare("builtin", fingerprint);
   expect(port.admit(builtinModule).ok).toBe(true);
-  expect(port.admit({ ...builtinModule, bodies: { ...builtinBodies, calculate: {
-    ...builtinBodies.calculate, run: () => ({ total: 999 }),
-  } } }).ok).toBe(false);
+  expect(
+    port.admit({
+      ...builtinModule,
+      bodies: {
+        ...builtinBodies,
+        calculate: {
+          ...builtinBodies.calculate,
+          run: () => ({ total: 999 }),
+        },
+      },
+    }).ok,
+  ).toBe(false);
 });
