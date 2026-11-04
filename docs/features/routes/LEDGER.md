@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-04, the 20 repo-guards failures inherited at c293e78e are a known inherited set, not a main blocker; each merge must add zero against its base. LINT2 closes the COMMON 31 [startup-readiness](../../../ts/apps/host/tests/startup-readiness.test.ts) lint debt through the existing effect-test seam. (counsel)
+
 - 2026-11-04, accept MOUNT-CUT production +318 (gap +168 versus +150), DUP 0, under its classified seam table; kaitpw reviews readability. Factory return types define the service surfaces and one MountContext preserves Work typing. [Seam map](C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-741eac7f/.artifacts/tmp/mount-cut/REPORT.md). (counsel, MOUNT-CUT)
 - 2026-11-04, keep [verbs-cells](../../../ts/apps/web/src/shell/verbs-cells.ts) until the legacy mount retires or is recut; keep the [subject registries](../../../ts/apps/web/src/shell/subject.ts#L6) until their consumer contract changes. The COMMON 20 exception is recorded beside the code. (counsel, MOUNT-CUT)
 - 2026-11-04, root cell families enumerate only their declared key-schema keys, or their own family id without a key schema. The [root-cell law](../../../ts/apps/web/src/shell/admitted-cells.test.ts) closes U3's unrelated-root finding without a route-local filter. (MOUNT-CUT)
@@ -99,7 +101,6 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 ## Owed
 
 - Manual D after U4: prove real-host /ducts and /fans open, edit and deep-link behavior after MOUNT-CUT. UNPROVEN[browser smoke not completed]. (counsel, MOUNT-CUT, 2026-11-04)
-- COMMON 31: [startup-readiness.test.ts:103](../../../ts/apps/host/tests/startup-readiness.test.ts#L103) and :105 must use the existing effect-test seam. The two typed-lint failures are inherited at 603e8a49. (MOUNT-CUT finding, 2026-11-04)
 
 - PROTO-HOME owns the production `ducts/proto/` rename/deletion under COMMON 30. U3 leaves it in place to avoid U4/MOUNT-CUT conflicts. (counsel, U3, 2026-11-04)
 

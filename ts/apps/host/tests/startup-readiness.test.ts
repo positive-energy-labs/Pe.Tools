@@ -8,6 +8,7 @@ import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { makeHttpLive } from "../src/app.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+import { settle } from "./effect-test.ts";
 
 vi.mock("../src/pe-revit-launch.ts", async (original) => ({
   ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
@@ -94,15 +95,13 @@ test("HTTP requests answer during claim acquisition and discovery only publishes
   }
 }, 15_000);
 
-test("HTTP response lifetime is reader-owned while request upload limits stay bounded", () => {
+test("HTTP response lifetime is reader-owned while request upload limits stay bounded", async () => {
   const nodeServer = createServer();
   nodeServer.setTimeout(120_000);
   const uploadTimeout = nodeServer.requestTimeout;
   const headersTimeout = nodeServer.headersTimeout;
-  // effect-edge: test-runner
-  const handle = Effect.runSync(Deferred.make<ServiceHostHandle>());
-  // effect-edge: test-runner
-  const latch = Effect.runSync(Deferred.make<void>());
+  const handle = await settle(Deferred.make<ServiceHostHandle>());
+  const latch = await settle(Deferred.make<void>());
   makeHttpLive({
     capabilities: { revit: false },
     lifecycle: { handle, latch },
