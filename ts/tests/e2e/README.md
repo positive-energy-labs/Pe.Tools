@@ -1,9 +1,9 @@
 # e2e lane: one test per acceptance journey (E2E-J1..J6)
 
-## Required product-browser case
+## Required product-browser journeys
 
 From `ts`, run `pnpm test:browser:product`. `pnpm verify` runs the same command without a task
-cache. It typechecks the CDP calls and browser callbacks, then starts an isolated source host with
+cache. It runs selection, then conversation and persisted Work journeys once each. Selection typechecks the CDP calls and browser callbacks, then starts an isolated source host with
 `--no-revit --no-tray` and an owned headless `@pe/browser` session. The navigation fixture supplies
 fixed local data. The case opens SA Lab and SA Office through real controls and checks exact URL
 membership, open-system chips and picture scope through reload, Back and Forward. Reload must
@@ -13,7 +13,7 @@ The shared launcher writes `custody.json` and `journey-result.json` under the da
 run. Failures also save rendered state and a screenshot. Cleanup retires only the owned browser
 and host. This case does not read the shared dev tray, attach to a user's browser, start Revit or
 send a Pea prompt. Keep browser callbacks self-contained and pass their inputs as arguments.
-The visible chaos journey below remains a separate opt-in check.
+Conversation uses a visible owned browser because its visibility fence minimizes and restores the window. The visible chaos journey below remains a separate opt-in check.
 
 For a concrete product bug, add a bounded regression to this required gate using fixed local
 inputs, the actual rendered control, trusted input, and an independent state read-back. Keep
@@ -33,7 +33,9 @@ A Work press from another thread's row must preserve the selected conversation. 
 one conversation while retaining the tool; the existing ACP test adapter substitutes inference only.
 That adapter also sends a real Pea-context open request and requires its command-specific lease and
 render acknowledgement. No native Revit operation or external model inference runs.
-Each run creates a dated artifact directory and stops its host and Chrome. Override
+A second connected witness edits real Work over HTTP through the production browser transport and Work feed. It rejects an anonymous forged author and a stale revision without changing saved bytes, isolates a second subject, reloads and reacquires the feed, then undoes to the initial document. It reads the canonical files independently. Reload proves browser reacquisition, not host crash recovery.
+
+All three suites use `route-chaos-launch.ts`; only chaos accepts borrowed resources. Each run creates a dated artifact directory and stops its host and Chrome. Override
 `CONVERSATION_WORK_ARTIFACT_DIR` when needed; the owned browser uses a dynamic port. This proves saved
 Work and browser behavior; it does not prove a native Revit read or write.
 

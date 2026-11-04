@@ -21,25 +21,38 @@ const { values } = parseArgs({
     require: { type: "string", default: "refresh,reconnect,worker" },
   },
 });
-if (values.suite !== "chaos" && values.suite !== "selection")
-  throw new Error("--suite must be chaos or selection");
-if (values.suite === "selection" && (values.attached || values.url || values.port || values.target))
-  throw new Error("The required selection suite owns its isolated runtime and browser");
+if (!["chaos", "selection", "conversation-work"].includes(values.suite!))
+  throw new Error("--suite must be chaos, selection or conversation-work");
+if (values.suite !== "chaos" && (values.attached || values.url || values.port || values.target))
+  throw new Error("The required product suites own their isolated runtime and browser");
 const testTs = resolve(import.meta.dirname, "../..");
 const source = resolve(values.source ?? join(testTs, ".."));
 const leaseThread = "caa00000-0000-4000-8000-000000000001";
-const dir = join(
-  testTs,
-  "..",
-  ".artifacts",
-  "runs",
-  `browser-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-route-launch`,
-  `${values.seed}-${Date.now()}`,
+const conversation = values.suite === "conversation-work";
+const dir = resolve(
+  process.env.CONVERSATION_WORK_ARTIFACT_DIR && conversation
+    ? process.env.CONVERSATION_WORK_ARTIFACT_DIR
+    : join(
+        testTs,
+        "..",
+        ".artifacts",
+        "runs",
+        `browser-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-route-launch`,
+        `${values.seed}-${Date.now()}`,
+      ),
 );
 await mkdir(dir, { recursive: true });
 const receipt = {
   suite: values.suite,
-  mode: values.attached ? "attached" : "demo",
+  mode: values.attached ? "attached" : "owned-source-no-revit-no-tray",
+  inference: conversation ? "substituted-acp-adapter" : "none",
+  hostSource: {
+    commit: "",
+    productDirty: "",
+    entry: "ts/apps/host/src/dev.ts",
+    loader: "jiti/register",
+  },
+  service: "",
   source,
   seed: values.seed,
   started: new Date().toISOString(),
@@ -113,7 +126,7 @@ const interrupt = () => {
     void stopOwned(testProcess).catch((error) => receipt.cleanup.push(String(error)));
 };
 async function stopOwned(child: ChildProcess) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
+  if (child.exitCode !== null || child.signalCode !== null || !child.pid) return;
   if (process.platform === "win32")
     await exec("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
       timeout: 10_000,
@@ -125,6 +138,18 @@ async function stopOwned(child: ChildProcess) {
 process.once("SIGINT", interrupt);
 process.once("SIGTERM", interrupt);
 try {
+  receipt.hostSource.commit = (
+    await exec("git", ["rev-parse", "HEAD"], { cwd: source, windowsHide: true })
+  ).stdout.trim();
+  receipt.hostSource.productDirty = (
+    await exec(
+      "git",
+      ["status", "--porcelain", "--untracked-files=all", "--", "ts/apps", "ts/packages"],
+      { cwd: source, windowsHide: true },
+    )
+  ).stdout.trim();
+  if (receipt.hostSource.productDirty)
+    throw Error("UNPROVEN_STARTUP: product source must be committed before starting the host");
   let web = values.url;
   let port = Number(values.port);
   let target = values.target;
@@ -164,6 +189,16 @@ try {
     await mkdir(home, { recursive: true });
     await mkdir(env.LOCALAPPDATA!, { recursive: true });
     await mkdir(env.APPDATA!, { recursive: true });
+    if (conversation) {
+      env.CONVERSATION_WORK_ARTIFACT_DIR = dir;
+      env.PE_HARNESS_ADAPTER_CODEX = env.PE_HARNESS_ADAPTER_CLAUDE = join(
+        source,
+        "ts/apps/host/tests/fake-acp-agent.mjs",
+      );
+      env.FAKE_ACP_SHAPE = "config";
+      const { seedConversationWork } = await import("./conversation-work.fixture.ts");
+      await seedConversationWork(home, dir);
+    }
     if (values.suite === "chaos") {
       // The lease witness explicitly selects an existing conversation. Tool entry itself creates none.
       const threadDir = join(home, ".local-state", "state", "harness-threads", leaseThread);
@@ -224,8 +259,10 @@ try {
           if (
             row.pid === host!.pid &&
             resolve(row.sourceRoot).toLowerCase() === source.toLowerCase()
-          )
+          ) {
+            receipt.service = join(serviceDir, file);
             return row;
+          }
         }
       },
       "isolated no-Revit host service receipt",
@@ -242,7 +279,9 @@ try {
       90_000,
     );
     web = new URL(
-      `/ducts?demo=navigation${values.suite === "chaos" ? `&thread=${leaseThread}` : ""}`,
+      conversation
+        ? "/pea"
+        : `/ducts?demo=navigation${values.suite === "chaos" ? `&thread=${leaseThread}` : ""}`,
       web,
     ).href;
     receipt.web = web;
@@ -295,6 +334,7 @@ try {
     CDP_PORT: String(port),
     CDP_TARGET: target!,
     E2E_WEB: web!,
+    WEB_BASE_URL: conversation ? new URL(web!).origin : web!,
     CHAOS_LANE: values.attached && !new URL(web!).searchParams.has("demo") ? "host" : "demo",
     CHAOS_SEED: values.seed,
     CHAOS_REQUIRE: values.require,
@@ -302,13 +342,21 @@ try {
     CHAOS_RESULT_PATH: journeyResultPath,
     E2E_RESULT_PATH: journeyResultPath,
   };
-  const config = values.suite === "selection" ? "product-selection" : "route-chaos";
-  testProcess = spawn("vp", ["test", "run", "--config", `tests/e2e/${config}.config.ts`], {
-    cwd: testTs,
-    env: testEnv,
-    stdio: "inherit",
-    windowsHide: true,
-  });
+  const config = conversation
+    ? "conversation-work"
+    : values.suite === "selection"
+      ? "product-selection"
+      : "route-chaos";
+  testProcess = spawn(
+    process.execPath,
+    ["node_modules/vite-plus/bin/vp", "test", "run", "--config", `tests/e2e/${config}.config.ts`],
+    {
+      cwd: testTs,
+      env: testEnv,
+      stdio: "inherit",
+      windowsHide: true,
+    },
+  );
   const code = await new Promise<number>((done, reject) => {
     const timer = setTimeout(() => {
       void stopOwned(testProcess!).catch((error) => receipt.cleanup.push(String(error)));
@@ -326,7 +374,9 @@ try {
   process.exitCode = code;
   receipt.result =
     code === 0
-      ? (JSON.parse(await readFile(journeyResultPath, "utf8")) as { result: string }).result
+      ? conversation
+        ? "PROVEN_BROWSER_SOURCE"
+        : (JSON.parse(await readFile(journeyResultPath, "utf8")) as { result: string }).result
       : "failed";
 } catch (error) {
   receipt.result = String(error);

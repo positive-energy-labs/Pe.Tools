@@ -1150,3 +1150,194 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     await save();
   }
 });
+
+// Direct HTTP boundary drive complements the trusted-input conversation journey above.
+// Only production transport modules run in the browser; expectations stay literal here.
+test("persisted Work edit, stale writer, subject switch and undo share the real HTTP feed", async () => {
+  const dir = process.env.CONVERSATION_WORK_ARTIFACT_DIR!;
+  const home = process.env.PE_TOOLS_PRODUCT_HOME!;
+  const custody = JSON.parse(await readFile(join(dir, "custody.json"), "utf8"));
+  if (
+    custody.mode !== "owned-source-no-revit-no-tray" ||
+    custody.hostSource?.commit !== git("rev-parse", "HEAD") ||
+    custody.target !== process.env.CDP_TARGET ||
+    custody.browserPort !== Number(process.env.CDP_PORT)
+  )
+    throw Error("PRECONDITION: HTTP mutation requires this launcher's owned source custody");
+  const page = await connect();
+  const checkpoints: unknown[] = [];
+  const target = "C:/Models/Office.rvt";
+  const other = "C:/Models/Annex.rvt";
+  const route = (target: string, operation = "") =>
+    `/pe/route-state/ducts${operation ? `/${operation}` : ""}?target=${encodeURIComponent(target)}`;
+  const request = (target: string, operation = "", body?: unknown) =>
+    page.evaluate(
+      async ({ url, bodyJson, moduleUrl }) => {
+        const { hostFetch } = await import(moduleUrl);
+        const response = await hostFetch(
+          url,
+          bodyJson === null
+            ? undefined
+            : {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: bodyJson,
+              },
+        );
+        return { status: response.status, body: await response.json() };
+      },
+      {
+        url: route(target, operation),
+        bodyJson: body === undefined ? null : (JSON.stringify(body) ?? null),
+        moduleUrl: "/src/host/runtime.ts",
+      },
+    );
+  const frames = () =>
+    page.read<
+      {
+        kind: string;
+        snapshot?: { revision?: number };
+        ack?: { revision?: number; base?: number };
+      }[]
+    >("globalThis.__workJourney?.frames ?? []");
+  const subscribe = async () => {
+    await page.read(`(async () => {
+      const { createWorkFeedClient } = await import('/src/shell/work-feed-client.ts');
+      const { publicRoutes, publicRoutesReady } = await import('/src/route/builtin-routes.tsx');
+      await publicRoutesReady;
+      const admission = publicRoutes.get('ducts').work.admission;
+      globalThis.__workJourney?.close();
+      const state = globalThis.__workJourney = { frames: [], close: () => {} };
+      state.close = createWorkFeedClient().open({route:'ducts',fingerprint:admission.fingerprint,key:{binding:'address',route:'ducts',target:${JSON.stringify(target)}},target:null,subject:null}).subscribe(frame => state.frames.push(frame), () => {});
+    })()`);
+  };
+  try {
+    await page.open(new URL("/pea", process.env.WEB_BASE_URL).href);
+    await page.until(
+      () => page.count('textarea[aria-label="Message"],input[aria-label="Message"]'),
+      "real composer ready for HTTP witness",
+    );
+    const initial = await request(target);
+    expect(initial.status).toBe(200);
+    expect(initial.body).toMatchObject({
+      revision: 2,
+      doc: { flows: { "1001": { edit: { value: { cfm: 100 } } } } },
+    });
+    const otherBefore = await request(other);
+    expect(otherBefore.status).toBe(200);
+    expect(otherBefore.body).toMatchObject({ revision: 0 });
+    const before = await workEvidence(home);
+    await subscribe();
+    await expect
+      .poll(async () => (await frames()).some((frame) => frame.kind === "ready"), {
+        timeout: 20_000,
+      })
+      .toBe(true);
+    const edit = {
+      patches: [
+        {
+          path: ["flows", "1001", "edit"],
+          value: { value: { cfm: 175, source: "HTTP journey" }, by: "pea" },
+        },
+      ],
+      expectedRevision: 2,
+      press: "http-work-edit",
+    };
+    // Anonymous loopback is read-only, even with a forged author in the body.
+    const anonymous = await fetch(new URL(route(target, "apply"), process.env.WEB_BASE_URL), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(edit),
+    });
+    expect(anonymous.status).toBe(403);
+    expect(await workEvidence(home)).toEqual(before);
+    const applied = await request(target, "apply", edit);
+    expect(applied.body).toMatchObject({ ok: true, write: { by: "human", base: 2, revision: 3 } });
+    expect((await request(target)).body).toMatchObject({
+      revision: 3,
+      doc: { flows: { "1001": { edit: { value: { cfm: 175 }, by: "human" } } } },
+    });
+    await expect
+      .poll(
+        async () =>
+          (await frames()).some((frame) => frame.kind === "ack" && frame.ack?.revision === 3),
+        { timeout: 20_000 },
+      )
+      .toBe(true);
+    const savedEdit = await workEvidence(home);
+    expect(savedEdit).not.toEqual(before);
+    expect(
+      savedEdit.find((row) => row.record.targetKey === "ducts/target:c:\\models\\office.rvt")
+        ?.record.value,
+    ).toMatchObject({ revision: 3, doc: { flows: { "1001": { edit: { value: { cfm: 175 } } } } } });
+    checkpoints.push({ step: "persisted-edit", applied, persisted: savedEdit });
+    const stale = await request(target, "apply", {
+      ...edit,
+      patches: [
+        { path: ["flows", "1001", "edit"], value: { value: { cfm: 999, source: "stale writer" } } },
+      ],
+      press: "stale-other-tab",
+    });
+    expect(stale.body).toMatchObject({ ok: false, code: "stale_revision" });
+    expect(await workEvidence(home)).toEqual(savedEdit);
+    // A different subject sees neither the edit nor the office's revision.
+    expect(await request(other)).toEqual(otherBefore);
+    await page.reload();
+    await page.until(
+      () => page.count('textarea[aria-label="Message"],input[aria-label="Message"]'),
+      "composer reopens after reload",
+    );
+    expect((await request(target)).body).toMatchObject({
+      revision: 3,
+      doc: { flows: { "1001": { edit: { value: { cfm: 175 } } } } },
+    });
+    await subscribe();
+    await expect
+      .poll(
+        async () =>
+          (await frames()).some(
+            (frame) => frame.kind === "ready" && frame.snapshot?.revision === 3,
+          ),
+        { timeout: 20_000 },
+      )
+      .toBe(true);
+    const undone = await request(target, "history", { direction: "undo", expectedRevision: 3 });
+    expect(undone.body).toMatchObject({
+      ok: true,
+      write: { by: "human", kind: "restore", base: 3, revision: 4 },
+    });
+    expect((await request(target)).body.doc).toEqual(initial.body.doc);
+    await expect
+      .poll(
+        async () =>
+          (await frames()).some((frame) => frame.kind === "ack" && frame.ack?.revision === 4),
+        { timeout: 20_000 },
+      )
+      .toBe(true);
+    const restored = await workEvidence(home);
+    expect(
+      restored.find((row) => row.record.targetKey === "ducts/target:c:\\models\\office.rvt")?.record
+        .value,
+    ).toMatchObject({ revision: 4, doc: initial.body.doc });
+    expect(await request(other)).toEqual(otherBefore);
+    expect(page.errors, "HTTP journey has no uncaught browser exceptions").toEqual([]);
+    checkpoints.push({
+      step: "restored",
+      stale,
+      undone,
+      frames: await frames(),
+      persisted: restored,
+    });
+  } catch (error) {
+    checkpoints.push({
+      step: "failure",
+      error: String(error),
+      frames: await frames().catch(String),
+    });
+    throw error;
+  } finally {
+    await writeFile(join(dir, "work-http-journey.json"), JSON.stringify(checkpoints, null, 2));
+    await page.read("globalThis.__workJourney?.close()").catch(() => {});
+    await page.close();
+  }
+});
