@@ -186,6 +186,19 @@ dotnet build .\dotnet\Pe.Dev.Cli\Pe.Dev.Cli.csproj -c Debug.R25
 
 This proves compile correctness only. It does not refresh any session's loaded assemblies, the package-local interactive outputs, installed product roots, or source-linked TypeScript payloads.
 
+## Host suite proof
+
+From `ts`, units and INT use the same full host command:
+
+```powershell
+pnpm --filter @pe/host test --run --maxWorkers=2
+```
+
+The [host test script](../ts/apps/host/package.json) builds `@pe/kit` before it runs the suite.
+Host page-serving and export tests read `packages/kit/dist/pe-kit.js` and its CSS, so source
+files alone are not sufficient. The default suite excludes browser fixtures. `pnpm gate`
+checks types, lint, guards and generated projections; the full host suite is a separate check.
+
 ## Revit proof decisions
 
 ### The verb chooses the rung; you choose whether to override it
