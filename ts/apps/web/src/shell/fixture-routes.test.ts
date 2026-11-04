@@ -133,7 +133,7 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
         try {
           expect(mount.workBasis(), `${key}/${name} Work`).not.toBeNull();
           mount.read(route.data.subject.pane);
-          // The scene intentionally has no Revit system roster; All is a valid empty subject too.
+          // Every fixture supports the All subject, including fixtures with no matching fan rows.
           expect(mount.controls.subject({ kind: "all" }).kind).toBe("accepted");
           for (const [id, pane] of Object.entries(route.data.panes)) {
             const rendered = mount.read(id);

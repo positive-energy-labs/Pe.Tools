@@ -124,13 +124,14 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
       ...peaSettingFields,
     },
     readings: {
-      threads: {  source: "threads", retire: "never" },
+      threads: { source: "threads", retire: "never" },
+      transcript: { source: "transcript", args: (page) => page.thread },
       head: {
         source: "head",
         args: (page) => page.thread,
       },
-      machine: {  source: "machine", args: (page) => page.thread },
-      receipts: {  source: "receipts", args: (page) => page.thread },
+      machine: { source: "machine", args: (page) => page.thread },
+      receipts: { source: "receipts", args: (page) => page.thread },
       capabilities: {
         source: "capabilities",
         args: (page) => page.thread,
@@ -238,6 +239,10 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
 export function chatAdapters(navigate: () => void): RouteAdapters<ChatPage, unknown> {
   return {
     sources: {
+      transcript: subscriptionSource({
+        request: (ctx) => ({ kind: "thread", thread: String(ctx.args || "draft") }),
+        decode: (value) => value,
+      }),
       threads: subscriptionSource({
         request: () => ({ kind: "threads" }),
         decode: (value) => value,

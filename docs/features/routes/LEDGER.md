@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-04, scene selects the existing layout fixture composition on Ducts and Fans; the original Project A trace remains an ungrouped trace without system metadata. Fixture systems are synthetic and do not certify real Revit behavior. [Pairing law](../../../ts/apps/web/src/ducts/fixtures.test.ts). (FIXTURE0)
+
 - 2026-11-04, cross-route Work dependencies are read-only admitted readings, authenticated by the caller fingerprint and declared edge; only owner verbs write cells. (counsel, U4)
 - 2026-11-04, native losses consume both Ducts and Fans Work in the existing seal; fan revision changes require a new preview. All eleven previously skipped host laws are restored. (counsel, U4)
 
@@ -84,6 +86,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Tried & rejected
 
+- 2026-11-04, dynamic `new URL` for nested Pod artifact paths excludes the nested file from Vite's emitted lookup and requests `undefined`; use literal bundled asset URLs. [Artifact law](../../../ts/apps/web/src/route/pod-fixtures.test.ts). (FIXTURE0)
+
 - 2026-11-04, MOUNT-CUT browser smoke stopped within its 15-minute box: normal fixture Vite React 504, then disposable-config CJS export failure; no repository config edits. UNPROVEN[browser blocked before admission]. [Evidence](C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-741eac7f/.artifacts/tmp/mount-cut/REPORT.md). (MOUNT-CUT)
 
 - 2026-11-04, A durable browser fixture harness is not intended. Prove persistence/isolation with deterministic cold shells over real RouteWorkspace; Manual D owns browser reload on a real dev host. (U3/counsel)
@@ -103,13 +107,15 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
+- [Fixture test] [fixture-routes.test.ts](../../../ts/apps/web/src/shell/fixture-routes.test.ts) assumes every drawn reading is eagerly ready; at 7c38edcd, Fans pricing instead requires explicit demand. Reconcile the test demand step with U4 policy without weakening its no-host-read contract. Inherited by FIXTURE0, 2026-11-04.
+
 - Manual D must prove a Ducts rule edit makes Fans pricing stale, Refresh uses the new rule, and read-only Ducts rows link to their rule. Browser proof is UNPROVEN; the U4 fixture did not reach admission. (counsel, U4, 2026-11-04)
 
 - Manual D after U4: prove real-host /ducts and /fans open, edit and deep-link behavior after MOUNT-CUT. UNPROVEN[browser smoke not completed]. (counsel, MOUNT-CUT, 2026-11-04)
 
 - PROTO-HOME owns the production `ducts/proto/` rename/deletion under COMMON 30. U3 leaves it in place to avoid U4/MOUNT-CUT conflicts. (counsel, U3, 2026-11-04)
 
-- 2026-11-04, scene/navigation snapshot units differ from Chadds `sheet.roster` IDs ([ducts fixture](../../../ts/apps/web/src/ducts/fixtures.ts#L45), [Fans kernel](../../../ts/apps/web/src/fans/kernel.tsx#L27)); align fixture identity before claiming a browser crossing from a Ducts fan row. Keep that leg UNPROVEN[Manual D on real Chadds]. (test-fixture owner, U3 finding)
+- Manual D must prove a Ducts fan row reaches the same fan on real Chadds. FIXTURE0 aligns only the synthetic [fixture roster and snapshot](../../../ts/apps/web/src/ducts/fixtures.ts); the real-host source-row crossing stays UNPROVEN. (test-fixture owner, U3 finding; FIXTURE0, 2026-11-04)
 - U4 supplies admitted cross-Work readings and sealed native losses. The five host fallback sites above remain. Manual D must prove browser reload persistence on the real dev host and the source-row crossing on real Chadds. Retain the pre-existing RHVAC stale-basis Apply/commit finding. (U4, 2026-11-04)
 
 - Give `PricingResult` a typed kernel output; its display cast remains in [screen.tsx](../../../ts/apps/web/src/ducts/proto/e/screen.tsx#L116). U3 closes the former Work-schema typing and accepted-Work assertions, leaving this output debt. (counsel, U1b; U3 follow-up)

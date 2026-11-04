@@ -41,3 +41,15 @@ test("chrome switches seeded readings and refuses missing seeds without a native
   expect(selection.calls.every((request) => request === null)).toBe(true);
   expect(fetch).not.toHaveBeenCalled();
 });
+
+test("companion transcript is a declared fixture reading on tool routes", async () => {
+  selection.name = "scene";
+  const fetch = vi.fn(() => {
+    throw Error("Real transport reached");
+  });
+  vi.stubGlobal("fetch", fetch);
+  const hook = renderHook(() => useEnvironmentReading(null, "transcript"));
+  await waitFor(() => expect(hook.result.current.reading.state).toBe("ready"));
+  expect(hook.result.current.remote).toBe(false);
+  expect(fetch).not.toHaveBeenCalled();
+});

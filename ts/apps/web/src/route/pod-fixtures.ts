@@ -1,4 +1,13 @@
 import { podRouteDescriptorSchema } from "@pe/agent-contracts";
+const artifacts = new Map([
+  [
+    "routes/voltage-drop/route.artifact",
+    new URL(
+      "../../../../../examples/pods/snowdon-circuits/routes/voltage-drop/route.artifact",
+      import.meta.url,
+    ),
+  ],
+]);
 /** Fixtures consume the same published artifact envelope as production discovery. */
 export async function podFixtures() {
   const response = await fetch(
@@ -15,9 +24,9 @@ export async function podFixtures() {
         workRoute: "pod.snowdon-circuits.voltage-drop",
         trusted: true,
       });
-      const response = await fetch(
-        new URL(`../../../../../examples/pods/snowdon-circuits/${row.artifact}`, import.meta.url),
-      );
+      const url = artifacts.get(row.artifact);
+      if (!url) throw Error(`Pod fixture artifact is not bundled: ${row.artifact}`);
+      const response = await fetch(url);
       if (!response.ok) throw Error(`Pod fixture artifact refused: ${response.status}`);
       return { row, envelope: { fingerprint: row.fingerprint, artifact: await response.json() } };
     }),
