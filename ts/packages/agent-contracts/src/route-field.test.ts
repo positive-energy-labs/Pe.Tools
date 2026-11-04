@@ -1,7 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import { INVALID, modeKey } from "./page-keys.ts";
 import { z } from "zod";
-import { field, manyField, manyCodec, decodePageField, sortField, keyedSetField, orderedListField, jsonCodec, type ScalarSchema } from "./route-field.ts";
+import { field, manyField, decodePageField, sortField, keyedSetField, orderedListField, jsonCodec, type ScalarSchema } from "./route-field.ts";
 import { routeAddress } from "./route-address.ts";
 
 const forwardScalar = <S extends z.ZodType>(schema: ScalarSchema<S>) =>
@@ -13,10 +13,14 @@ const forwardMode = <const M extends readonly [string, ...string[]]>(modes: M, i
 void forwardMode;
 
 const typeProof = () => {
-  // @ts-expect-error array Page fields have one kernel owner
-  field(z.array(z.string()), {}, manyCodec);
+  const array = z.array(z.string());
+  // @ts-expect-error array Page fields have one kernel owner, even with a type-correct codec
+  field(array, {}, jsonCodec(array));
+  const wrappedArray = array.default([]).readonly();
   // @ts-expect-error wrappers cannot hide an array
-  field(z.array(z.string()).default([]), {}, manyCodec);
+  field(wrappedArray, {}, jsonCodec(wrappedArray));
+  // @ts-expect-error forwarding wrappers cannot hide an array either
+  forwardScalar(wrappedArray);
   const union = z.union([z.array(z.string()), z.literal("all")]);
   // @ts-expect-error an array-bearing union is a collection, not a scalar
   field(union, { url: "replace", agent: "set" }, jsonCodec(union));
