@@ -17,11 +17,7 @@ import { makeCallRoute } from "../src/call-route.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { replayAnswer } from "./sdk-replay.ts";
-import {
-  machineAcquisition,
-  machineSessionAcquisition,
-  unavailableShare,
-} from "../src/machine.ts";
+import { machineAcquisition, machineSessionAcquisition, unavailableShare } from "../src/machine.ts";
 import { captureStore, machineOwner } from "./effect-test.ts";
 import { bindControl, mintContext } from "../src/control.ts";
 import type { ThreadHead } from "@pe/agent-contracts";
@@ -41,7 +37,9 @@ import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-act
 const sdkOnlyBridge = {
   list: Effect.succeed([]),
   subscribe: () => () => {},
-  invoke: () => { throw Error("Instances must dispatch through the SDK"); },
+  invoke: () => {
+    throw Error("Instances must dispatch through the SDK");
+  },
 } as unknown as RevitBridge["Service"];
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -53,7 +51,11 @@ const openId = "a".repeat(32);
 /** The value after `flag` in one recorded argv. */
 const flag = (argv: readonly string[], name: string) => argv[argv.indexOf(name) + 1];
 const shape = (posture: "foreground" | "background") => ({
-  payload: "checkout", reload: "none", posture, quarantine: false, purpose: "interactive",
+  payload: "checkout",
+  reload: "none",
+  posture,
+  quarantine: false,
+  purpose: "interactive",
 });
 const execution = { allowed: true, code: null, detail: null };
 const controlledRow = (over: Record<string, unknown> = {}) => ({
@@ -1520,7 +1522,9 @@ test.each([
 ] as const)(
   "%s that omits a defaulted option reads back its own receipt over HTTP",
   async (key, verb) => {
-    const f = await setup(() => ({ result: { id: "dev", state: "ok", phase: verb === "reset" ? "ready" : "stopped" } }));
+    const f = await setup(() => ({
+      result: { id: "dev", state: "ok", phase: verb === "reset" ? "ready" : "stopped" },
+    }));
     const server = await serveRoutes(
       makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), { sdk: f.deps.sdk }),
       sdkOnlyBridge,
