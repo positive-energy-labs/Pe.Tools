@@ -1,3 +1,4 @@
+import { replay } from "./sdk-replay.ts";
 import { Effect } from "effect";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,17 +12,7 @@ vi.mock("../src/pe-revit-launch.ts", async (original) => ({
   peRevitLauncher: vi.fn(() => ({ cmd: process.execPath, args: [] })),
 }));
 
-const envelope = JSON.stringify({
-  result: null,
-  resolved: {},
-  diagnostics: [],
-  nextSteps: [],
-  guide: "session",
-  related: [],
-  binary: {},
-  command: {},
-  exitCode: 3,
-});
+const envelope = replay("doc-open", {}, "refused");
 
 /** Exercise the production runner against an owned Node child, without an SDK or Revit launch. */
 async function fixture<T>(source: string, run: (args: string[], root: string) => Promise<T>) {

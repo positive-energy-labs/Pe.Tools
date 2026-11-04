@@ -9,7 +9,7 @@ import {
   readBootstrapInstallation,
   readBootstrapIdle,
 } from "../src/bootstrap.ts";
-import { replay } from "./e2-sdk-recordings.ts";
+import { replay } from "./sdk-replay.ts";
 import { bootstrapAlignmentSchema } from "@pe/host-contracts/pe-api";
 import { actionReceiptSchema } from "@pe/agent-contracts";
 import { GENERATED_FROM } from "@pe/host-contracts/pe-revit-contract";
@@ -195,8 +195,6 @@ test("an SDK journal failure still names an open Revit and blocks installation",
     process,
     bridge: _bridge,
     dialogs: _dialogs,
-    receipt: _receipt,
-    detail: _detail,
     ...row
   } = JSON.parse(replay("session-list")).result.sessions[0];
   const failed = {

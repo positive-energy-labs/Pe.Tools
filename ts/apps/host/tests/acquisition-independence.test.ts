@@ -1,5 +1,5 @@
 import { invokeCommand } from "./command-fixture.ts";
-import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
+import { replay, sdkBinary, sdkCommand } from "./sdk-replay.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -23,7 +23,7 @@ import { hostActionJournal } from "../src/gateway-owner.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { planAcquisition } from "../src/acquisition.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { originalProcess } from "./native-receipt-fixture.ts";
+import { originalProcess, sdkResolved } from "./native-receipt-fixture.ts";
 import { crossingOf } from "./callers.ts";
 
 /**
@@ -49,11 +49,11 @@ if (out && !existsSync(dirname(out))) {
 if (out) writeFileSync(out, "saved result", { flag: "wx" });
 const result =
   noun === "session" && verb === "list"
-    ? { state: "ok", sessions: world.sessions, processReadErrors: [] }
+    ? { ...${JSON.stringify(JSON.parse(replay("session-list")).result)}, sessions: world.sessions }
     : noun === "doc" && verb === "list"
       ? { state: "ok", documents: args.includes("--holdings") ? null : world.documents }
       : noun === "doctor"
-        ? { revitYears: ["2025"] }
+        ? ${JSON.stringify(JSON.parse(replay("doctor", {}, "none")).result)}
         : { state: "ok" };
 process.stdout.write(JSON.stringify({ result, resolved: noun === "doc" ? world.resolved : null,
   diagnostics: [], binary: ${JSON.stringify(sdkBinary)}, command: ${JSON.stringify(sdkCommand)}, nextSteps: [], guide: "op", related: [], exitCode: 0 }));
@@ -113,7 +113,7 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
     writeFileSync(
       world,
       JSON.stringify({
-        resolved: { pid: originalProcess.pid, processStartUtc: originalProcess.processStartUtc },
+        resolved: sdkResolved,
         documents: docs.map(
           (doc): Omit<SessionDocument, "isWorkshared" | "isDetached"> => ({
             ...doc,
@@ -123,10 +123,14 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
         sessions: [
           custody === "controlled"
             ? {
+                ...JSON.parse(replay("session-list")).result.sessions[0],
                 case: "controlled-active",
                 id: "pea",
                 process: originalProcess,
-                receipt: { receiptPath: join(localAppData, "pea.json") },
+                receipt: {
+                  ...JSON.parse(replay("session-list")).result.sessions[0].receipt,
+                  receiptPath: join(localAppData, "pea.json"),
+                },
                 shape,
                 execution,
                 observedAtUtc: now,
@@ -340,9 +344,9 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
       ["controlled", "acq-controlled", { isWorkshared: false, isDetached: false }],
       ["observed", "acq-observed", { isWorkshared: true, isDetached: true }],
     ] as const) {
-      // beta.202's read: no fact at all. Unproven, naming the fact it lacks.
+      // Missing required SDK fields refuse at the wire boundary before domain certification.
       census(custody, {});
-      await refused(acquisition, /isWorkshared/);
+      await refused(acquisition, /non-envelope/);
       // The native read failed: null is unknown, never independent.
       census(custody, { isWorkshared: null, isDetached: null });
       await refused(acquisition, /isWorkshared/);

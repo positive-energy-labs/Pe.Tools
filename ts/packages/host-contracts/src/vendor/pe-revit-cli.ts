@@ -1,6 +1,7 @@
-// SDK-owned copy-in client. The generated contract defines the nine-field envelope.
+// SDK client. Runtime decoding projects the generated SDK contract through scripts/sdk-wire.ts.
 // Process success is not a verdict; validation rejects empty, non-JSON, and non-envelope output.
 
+import { wire, resultTypes } from "./generated/pe-revit-wire.ts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -115,21 +116,34 @@ export function validatePeRevitEnvelope(
   return stdout;
 }
 
-/** Structural type guard for the envelope's nine required top-level fields. */
+type WireShape = string | { literal: unknown } | { union: WireShape[] } | { array: WireShape } | { fields: Record<string, WireShape> };
+const definitions: Record<string, WireShape> = wire;
+
+function matchesWire(value: unknown, shape: WireShape): boolean {
+  if (typeof shape === "string") {
+    if (shape === "unknown") return true;
+    if (shape === "null") return value === null;
+    if (Object.hasOwn(definitions, shape)) return matchesWire(value, definitions[shape]!);
+    return typeof value === shape && (shape !== "number" || Number.isFinite(value));
+  }
+  if ("literal" in shape) return value === shape.literal;
+  if ("union" in shape) return shape.union.some(branch => matchesWire(value, branch));
+  if ("array" in shape) return Array.isArray(value) && value.every(item => matchesWire(item, shape.array));
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return Object.keys(row).every(key => Object.hasOwn(shape.fields, key)) &&
+    Object.entries(shape.fields).every(([key, field]) => Object.hasOwn(row, key) && matchesWire(row[key], field));
+}
+
+/** Decode the SDK projection, including nested fields, nullability and union discriminators.
+ * The SDK does not publish verb/result associations. A result must match a generated DTO, but
+ * this cannot prove that it belongs to the requested verb. SDK-owned unknown leaves stay unknown.
+ */
 export function isPeRevitEnvelope(value: unknown): value is PeRevitEnvelope {
-  if (typeof value !== "object" || value === null) return false;
-  const v = value as Record<string, unknown>;
-  return (
-    "result" in v &&
-    "resolved" in v &&
-    Array.isArray(v.diagnostics) &&
-    typeof v.binary === "object" && v.binary !== null &&
-    typeof v.command === "object" && v.command !== null &&
-    Array.isArray(v.nextSteps) &&
-    typeof v.guide === "string" &&
-    Array.isArray(v.related) &&
-    typeof v.exitCode === "number" && Number.isInteger(v.exitCode) && v.exitCode >= 0 && v.exitCode <= 4
-  );
+  if (!matchesWire(value, "Envelope")) return false;
+  const envelope = value as PeRevitEnvelope;
+  return Number.isInteger(envelope.exitCode) && envelope.exitCode >= 0 && envelope.exitCode <= 4 &&
+    (envelope.result === null || resultTypes.some(name => matchesWire(envelope.result, name)));
 }
 
 /** Parse stdout into a typed envelope (throws on any of the validate failures above). */

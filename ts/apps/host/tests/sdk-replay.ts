@@ -1,12 +1,4 @@
-/**
- * Recorded SDK envelopes are the only base a host test fake may answer from (E1: rounds 2, 7 and 8
- * were green against invented envelopes and red in Revit). `sdk-envelopes/<verb>.<state>.json` are
- * real `pe-revit … --json` stdout from a controlled session (`tools/acceptance.py sdk`), with the
- * profile path normalized. `replay` starts a fake from one; `recordedProblems` (wired for every host
- * test by sdk-contract-setup.ts) refuses any parsed envelope whose shape the SDK never sent.
- * Re-record after an SDK pin bump: run each verb through `tools/acceptance.py sdk` and copy the
- * envelope here.
- */
+/** Recorded transport inputs. Production pe-revit-cli owns runtime wire decoding. */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Binary, CommandContext } from "@pe/host-contracts/pe-revit-contract";
@@ -46,8 +38,6 @@ const verbOf = (args: readonly string[]): string => {
 
 const kind = (value: unknown) =>
   value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
-
-/** One exemplar per discriminator (`case`, `kind`) so union rows are compared with their own kind. */
 const exemplars = (rows: Json[]) => {
   const byCase = new Map<string, Shape>();
   for (const row of rows)
@@ -58,92 +48,6 @@ const exemplars = (rows: Json[]) => {
     }
   return byCase;
 };
-
-function compare(real: Json, fake: unknown, path: string, problems: string[]) {
-  // ponytail: a field the recording saw as null (or an empty array) accepts any fake value; record a
-  // richer envelope to cover it.
-  if (real === null || fake === null || fake === undefined) return;
-  if (kind(real) !== kind(fake)) {
-    problems.push(`${path}: SDK sends ${kind(real)}, fake sends ${kind(fake)}`);
-    return;
-  }
-  if (Array.isArray(real)) {
-    const shapes = exemplars(real);
-    for (const [i, row] of (fake as unknown[]).entries()) {
-      const tag =
-        kind(row) === "object" ? String((row as Shape).case ?? (row as Shape).kind ?? "") : "";
-      const shape = shapes.get(tag) ?? (shapes.size === 1 && !tag ? shapes.get("") : undefined);
-      if (shape) compare(shape, row, `${path}[${i}]`, problems);
-    }
-    return;
-  }
-  if (kind(real) !== "object") return;
-  const realShape = real as Shape;
-  const fakeShape = fake as Record<string, unknown>;
-  for (const key of Object.keys(fakeShape))
-    if (!(key in realShape)) problems.push(`${path}.${key}: the SDK never sends it`);
-  for (const key of Object.keys(realShape))
-    if (!(key in fakeShape)) problems.push(`${path}.${key}: the SDK always sends it`);
-  for (const key of Object.keys(realShape))
-    if (key in fakeShape) compare(realShape[key]!, fakeShape[key], `${path}.${key}`, problems);
-}
-
-/** A CLI-level refusal (bad invocation, output exists) answers `result: {}`: its state is `none`. */
-const stateOf = (envelope: Record<string, unknown>) =>
-  String((envelope.result as Record<string, unknown> | null)?.state ?? "none");
-
-/** Problems with an envelope a fake produced for `args`; empty when it matches a recording. */
-export function recordedProblems(args: readonly string[], stdout: string): string[] {
-  const verb = verbOf(args);
-  const fake = JSON.parse(stdout) as Record<string, unknown>;
-  // The demo lane is a product simulation that names itself; it is not a test fake.
-  if ((fake.command as Record<string, unknown> | null)?.commandRule === "simulated-demo") return []; // demo-owner.ts SIMULATED_SDK
-  const exact = recorded.get(`${verb}.${stateOf(fake)}`);
-  // A state with no recording of its own is held to the envelope, not to another state's result.
-  // A verb never recorded (bootstrap install mutates the machine) keeps the recorded frame, and its
-  // result is held to the vendored contract alone.
-  const known = exact ?? [...recorded].find(([name]) => name.startsWith(`${verb}.`))?.[1];
-  if (!known && !contractShape(fake.result))
-    return [`no recorded envelope for '${verb}' and its result matches no contract shape`];
-  const real = known ?? frame;
-  const problems: string[] = [];
-  // A union result (op result: receipt, response, late, state-only) the recording did not take is
-  // held to the vendored contract: its keys must be exactly one generated interface's.
-  const union = exact && !sameKeys(exact.result, fake.result) && contractShape(fake.result);
-  compare(exact && !union ? real : { ...real, result: null }, fake, verb, problems);
-  return problems;
-}
-
-const sameKeys = (a: unknown, b: unknown) =>
-  kind(a) === "object" &&
-  kind(b) === "object" &&
-  Object.keys(a as object)
-    .sort()
-    .join() ===
-    Object.keys(b as object)
-      .sort()
-      .join();
-
-const contract = readFileSync(
-  join(
-    import.meta.dirname,
-    "../../../packages/host-contracts/src/vendor/generated/pe-revit-contract.ts",
-  ),
-  "utf8",
-);
-const interfaces = [...contract.matchAll(/export interface \w+(?:<\w+>)? \{([^}]*)\}/g)].map((m) =>
-  [...m[1]!.matchAll(/readonly (\w+)\??:/g)]
-    .map((k) => k[1])
-    .sort()
-    .join(),
-);
-const contractShape = (value: unknown) =>
-  kind(value) === "object" &&
-  interfaces.includes(
-    Object.keys(value as object)
-      .sort()
-      .join(),
-  );
 
 const merge = (base: Json, patch: unknown, path: string): Json => {
   if (patch === undefined) return base;

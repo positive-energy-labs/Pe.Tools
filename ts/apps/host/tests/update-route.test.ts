@@ -6,7 +6,12 @@ import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import type { Envelope, UpdatePlan, UpdateReceipt } from "@pe/host-contracts/pe-revit-contract";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
-import { createUpdateReader, UpdateReader, type UpdateRunner } from "../src/update-reader.ts";
+import {
+  createUpdateReader,
+  UpdateReader,
+  type UpdateRunner,
+  type UpdateFact,
+} from "../src/update-reader.ts";
 import { HostLifecycle } from "../src/host-lifecycle.ts";
 import { updateRoutes } from "../src/update-route.ts";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
@@ -101,12 +106,21 @@ async function fixture() {
     confirmed = receipt(saved.requestId);
     return envelope(confirmed, 4);
   });
+  const facts: UpdateFact[] = [];
   const make = (runner = run) =>
-    createUpdateReader({ path, run: runner, installed: true, pid: 123, manifest: MANIFEST });
+    createUpdateReader({
+      path,
+      run: runner,
+      installed: true,
+      pid: 123,
+      manifest: MANIFEST,
+      fact: (fact) => facts.push(fact),
+    });
   return {
     dir,
     path,
     calls,
+    facts,
     run,
     make,
     reader: make(),
@@ -224,7 +238,10 @@ test("lost acknowledgement recovers exactly the admitted id and never applies tw
 test("successor keeps last confirmed handoff through disconnect and confirms completion only by receipt", async () => {
   const f = await fixture();
   try {
+    await f.reader.refresh();
+    f.facts.length = 0;
     const admitted = await f.reader.apply(plan.planId);
+    expect(f.facts).toEqual([]);
     const original = admitted.receipt!;
     f.confirm(null);
     const successor = f.make();
@@ -238,6 +255,23 @@ test("successor keeps last confirmed handoff through disconnect and confirms com
     const confirmed = await successor.refresh();
     expect(confirmed.receipt?.state).toBe("ok");
     expect(confirmed.receipt?.legs.at(-1)?.name).toBe("done");
+    await successor.refresh();
+    expect(f.facts).toEqual([
+      {
+        kind: "settled",
+        requestId: admitted.requestId,
+        state: "ok",
+        version: "0.8.0",
+        detail: "confirmed leg",
+        automatic: false,
+        failedLeg: null,
+        exitCode: null,
+      },
+    ]);
+    // A new host repeats the fact to close the persist/intake crash window; journal dedupes by id.
+    await f.make().refresh();
+    expect(f.facts).toHaveLength(2);
+    expect(f.facts[1]).toEqual(f.facts[0]);
     await successor.apply(plan.planId);
     expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(1);
     expect(f.calls.some(({ args }) => args[0] === "op" && args[1] === "list")).toBe(false);

@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { bindActionDispatch } from "../src/action-dispatch.ts";
 import { StepFailure } from "../src/command-executor.ts";
 import { dispatchSdk, SDK_REQUEST_ID } from "../src/sdk-dispatch.ts";
-import { replayAnswer } from "./sdk-replay.ts";
+import { replay } from "./sdk-replay.ts";
 
 test.each([
   {
@@ -18,7 +18,7 @@ test.each([
     name: "supervisor refusal after an effect leg",
     argv: ["session", "stop"],
     state: "refused",
-    legs: [{ state: "ok" }],
+    legs: [{ name: "stop", status: "ok", detail: null, observedAtUtc: "2026-10-14T05:00:13Z" }],
     code: "op.stale-expectation",
     outcome: "unknown",
     markers: 1,
@@ -66,8 +66,8 @@ test.each([
       id,
       async (actual) => {
         expect(actual.at(-1)).toBe(id);
-        return replayAnswer(actual, {
-          result: { state, legs },
+        return replay(argv[0] === "session" ? "session-stop" : "doc-save", {
+          result: argv[0] === "session" ? { state, legs } : { state },
           diagnostics: [{ code, detail: "SDK outcome", fix: null }],
         });
       },

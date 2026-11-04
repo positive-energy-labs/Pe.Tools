@@ -9,7 +9,7 @@ import { downloadCloudVersion } from "../src/cloud-version.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { invokeInstances, fixtureAction } from "./domain-fixture.ts";
 import { crossingOf } from "./callers.ts";
-import { replay } from "./e2-sdk-recordings.ts";
+import { replay } from "./sdk-replay.ts";
 import { unavailableShare } from "../src/machine.ts";
 import { machineOwner } from "./effect-test.ts";
 import { unreadLeg } from "../src/update-reader.ts";

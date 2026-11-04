@@ -23,16 +23,15 @@ const step: ActionStep = {
 test("original process freeze requires one exact bridge incarnation before native dispatch", async () => {
   expect(await readOriginalProcess(42, 1000, sdkSessions)).toEqual(originalProcess);
   await expect(readOriginalProcess(42, 1001, sdkSessions)).rejects.toThrow(/Cannot prove/);
-  await expect(
-    readOriginalProcess(42, 1000, async () =>
-      sdkEnvelope({
-        sessions: [
-          { process: originalProcess },
-          { process: { ...originalProcess, processStartUtc: "1970-01-01T00:00:01.0000001Z" } },
-        ],
-      }),
-    ),
-  ).rejects.toThrow(/Cannot prove/);
+  const census = JSON.parse(await sdkSessions());
+  const row = census.result.sessions[0];
+  census.result.sessions = [
+    row,
+    { ...row, process: { ...originalProcess, processStartUtc: "1970-01-01T00:00:01.0000001Z" } },
+  ];
+  await expect(readOriginalProcess(42, 1000, async () => JSON.stringify(census))).rejects.toThrow(
+    /Cannot prove/,
+  );
 });
 test("production SDK reader uses exact generated selector; mismatched or unresolved saved receipts never authorize replay", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-sdk-receipt-"));
@@ -166,7 +165,7 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
           receipt: { ...receipt, verdict: "cancelled" },
           response: { error: "stopped", statusCode: 499 },
         },
-        diagnostics: [{ code: "ambiguous", message: "ambiguous evidence" }],
+        diagnostics: [{ code: "ambiguous", detail: "ambiguous evidence", fix: null }],
       }),
     );
     expect((await readNativeReceipt(step, originalProcess, read)).step).toEqual(step);
