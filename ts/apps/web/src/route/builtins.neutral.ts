@@ -20,7 +20,6 @@ const closureSchema: z.ZodType<{ fingerprint: string; envelope: BuiltinClosure }
     envelope: z.strictObject({
       source: z.literal("builtin-closure"),
       version: z.literal(1),
-      hostVersion: z.string(),
       data: RouteGraphJson,
       variants: z.array(z.strictObject({ client: z.enum(["web", "pea"]), entry: z.string() })),
       modules: z.array(member),

@@ -18,6 +18,101 @@ internal static class PeRoutes {
         }
     }
 
+    /// <summary>Schedules: <c>/schedules</c>.</summary>
+    internal static class Schedules {
+        public const string Path = "/schedules";
+        /// <summary>The URL keys a link may carry.</summary>
+        internal static class Keys {
+            public const string ThreadSearch = "threadSearch";
+            public const string ThreadSort = "threadSort";
+            public const string Stage = "stage";
+            public const string Pod = "pod";
+            public const string Path = "path";
+            public const string WorkspaceId = "workspaceId";
+            public const string Query = "query";
+            public const string Sort = "sort";
+            public const string Hidden = "hidden";
+            public const string Lines = "lines";
+            public const string Cell = "cell";
+        }
+    }
+
+    /// <summary>Families: <c>/families</c>.</summary>
+    internal static class Families {
+        public const string Path = "/families";
+        /// <summary>The URL keys a link may carry.</summary>
+        internal static class Keys {
+            public const string ThreadSearch = "threadSearch";
+            public const string ThreadSort = "threadSort";
+            public const string Stage = "stage";
+            public const string Pod = "pod";
+            public const string Path = "path";
+            public const string Query = "query";
+            public const string Sort = "sort";
+            public const string Hidden = "hidden";
+            public const string Lines = "lines";
+            public const string Past = "past";
+        }
+    }
+
+    /// <summary>Ducts: <c>/ducts</c>.</summary>
+    internal static class Ducts {
+        public const string Path = "/ducts";
+        /// <summary>The URL keys a link may carry.</summary>
+        internal static class Keys {
+            public const string ThreadSearch = "threadSearch";
+            public const string ThreadSort = "threadSort";
+            public const string Stage = "stage";
+            public const string Fan = "fan";
+            public const string ContextRadiusFt = "contextRadiusFt";
+            public const string SceneView = "sceneView";
+            public const string System = "system";
+            public const string Selected = "selected";
+            public const string SystemSearch = "systemSearch";
+            public const string SystemSort = "systemSort";
+            public const string RulingSearch = "rulingSearch";
+            public const string RulingSort = "rulingSort";
+            public const string TreeSearch = "treeSearch";
+            public const string TreeSort = "treeSort";
+            public const string InputSearch = "inputSearch";
+            public const string InputSort = "inputSort";
+            public const string Encoding = "encoding";
+            public const string Layers = "layers";
+            public const string ContextStyle = "contextStyle";
+            public const string Picture = "picture";
+            public const string Viewport = "viewport";
+        }
+    }
+
+    /// <summary>Fans: <c>/fans</c>.</summary>
+    internal static class Fans {
+        public const string Path = "/fans";
+        /// <summary>The URL keys a link may carry.</summary>
+        internal static class Keys {
+            public const string ThreadSearch = "threadSearch";
+            public const string ThreadSort = "threadSort";
+            public const string Stage = "stage";
+            public const string Fan = "fan";
+            public const string ContextRadiusFt = "contextRadiusFt";
+            public const string SceneView = "sceneView";
+            public const string System = "system";
+            public const string Selected = "selected";
+            public const string SystemSearch = "systemSearch";
+            public const string SystemSort = "systemSort";
+            public const string RulingSearch = "rulingSearch";
+            public const string RulingSort = "rulingSort";
+            public const string TreeSearch = "treeSearch";
+            public const string TreeSort = "treeSort";
+            public const string InputSearch = "inputSearch";
+            public const string InputSort = "inputSort";
+            public const string Encoding = "encoding";
+            public const string Layers = "layers";
+            public const string ContextStyle = "contextStyle";
+            public const string Picture = "picture";
+            public const string Viewport = "viewport";
+        }
+    }
+
     /// <summary>Pea: <c>/pea</c>.</summary>
     internal static class Pea {
         public const string Path = "/pea";
@@ -70,53 +165,6 @@ internal static class PeRoutes {
         }
     }
 
-    /// <summary>Ducts: <c>/ducts</c>.</summary>
-    internal static class Ducts {
-        public const string Path = "/ducts";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Stage = "stage";
-            public const string Fan = "fan";
-            public const string ContextRadiusFt = "contextRadiusFt";
-            public const string SceneView = "sceneView";
-            public const string System = "system";
-            public const string Selected = "selected";
-            public const string SystemSearch = "systemSearch";
-            public const string SystemSort = "systemSort";
-            public const string RulingSearch = "rulingSearch";
-            public const string RulingSort = "rulingSort";
-            public const string TreeSearch = "treeSearch";
-            public const string TreeSort = "treeSort";
-            public const string InputSearch = "inputSearch";
-            public const string InputSort = "inputSort";
-            public const string Encoding = "encoding";
-            public const string Layers = "layers";
-            public const string ContextStyle = "contextStyle";
-            public const string Picture = "picture";
-            public const string Viewport = "viewport";
-        }
-    }
-
-    /// <summary>Families: <c>/families</c>.</summary>
-    internal static class Families {
-        public const string Path = "/families";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Stage = "stage";
-            public const string Pod = "pod";
-            public const string Path = "path";
-            public const string Query = "query";
-            public const string Sort = "sort";
-            public const string Hidden = "hidden";
-            public const string Lines = "lines";
-            public const string Past = "past";
-        }
-    }
-
     /// <summary>Family: <c>/family</c>.</summary>
     internal static class Family {
         public const string Path = "/family";
@@ -134,35 +182,6 @@ internal static class PeRoutes {
             public const string Drill = "drill";
             public const string Inspector = "inspector";
             public const string Doc = "doc";
-        }
-    }
-
-    /// <summary>Fans: <c>/fans</c>.</summary>
-    internal static class Fans {
-        public const string Path = "/fans";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Stage = "stage";
-            public const string Fan = "fan";
-            public const string ContextRadiusFt = "contextRadiusFt";
-            public const string SceneView = "sceneView";
-            public const string System = "system";
-            public const string Selected = "selected";
-            public const string SystemSearch = "systemSearch";
-            public const string SystemSort = "systemSort";
-            public const string RulingSearch = "rulingSearch";
-            public const string RulingSort = "rulingSort";
-            public const string TreeSearch = "treeSearch";
-            public const string TreeSort = "treeSort";
-            public const string InputSearch = "inputSearch";
-            public const string InputSort = "inputSort";
-            public const string Encoding = "encoding";
-            public const string Layers = "layers";
-            public const string ContextStyle = "contextStyle";
-            public const string Picture = "picture";
-            public const string Viewport = "viewport";
         }
     }
 
@@ -293,44 +312,6 @@ internal static class PeRoutes {
             public const string Selected = "selected";
             public const string Show = "show";
             public const string Viewport = "viewport";
-        }
-    }
-
-    /// <summary>Schedule definitions: <c>/schedule-specs</c>.</summary>
-    internal static class ScheduleSpecs {
-        public const string Path = "/schedule-specs";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Stage = "stage";
-            public const string Pod = "pod";
-            public const string Path = "path";
-            public const string WorkspaceId = "workspaceId";
-            public const string Query = "query";
-            public const string Sort = "sort";
-            public const string Hidden = "hidden";
-            public const string Lines = "lines";
-            public const string Cell = "cell";
-        }
-    }
-
-    /// <summary>Schedules: <c>/schedules</c>.</summary>
-    internal static class Schedules {
-        public const string Path = "/schedules";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Stage = "stage";
-            public const string Pod = "pod";
-            public const string Path = "path";
-            public const string WorkspaceId = "workspaceId";
-            public const string Query = "query";
-            public const string Sort = "sort";
-            public const string Hidden = "hidden";
-            public const string Lines = "lines";
-            public const string Cell = "cell";
         }
     }
 

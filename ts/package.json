@@ -23,6 +23,7 @@
     "journey:conversation-work": "node --import jiti/register tests/e2e/conversation-work.launch.ts",
     "codegen": "pnpm --filter @pe/host-contracts codegen",
     "verify": "node scripts/verify.ts",
+    "gate": "node scripts/gate.ts",
     "test": "vp run -r test",
     "dev": "vp run --filter @pe/host dev",
     "dev:no-revit": "vp run --filter @pe/host dev:no-revit",

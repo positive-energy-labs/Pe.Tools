@@ -76,9 +76,6 @@ const { admittedBuiltinKeys } = await jiti.import<
   typeof import("../../../packages/agent-contracts/src/admitted-builtin-keys.ts")
 >("../../../packages/agent-contracts/src/admitted-builtin-keys.ts");
 const root = fileURLToPath(new URL("../", import.meta.url));
-const host = JSON.parse(
-  await readFile(new URL("../../host/package.json", import.meta.url), "utf8"),
-);
 const builtinOptions = [];
 for (const key of admittedBuiltinKeys) {
   const files = await readdir(new URL(`../src/${key}/`, import.meta.url));
@@ -89,24 +86,12 @@ for (const key of admittedBuiltinKeys) {
     root,
     identityRoot: fileURLToPath(new URL("../../../../", import.meta.url)),
     data: module.data,
-    hostVersion: host.version,
     variants: (["web", "pea"] as const).map((client) => ({
       client,
       entry,
     })),
     config: { resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] } },
-    inputs: [
-      "../vite.config.ts",
-      "../tsconfig.json",
-      "../route-source-hash.ts",
-      "../route-module-hash.ts",
-      "../../host/package.json",
-      "../../../pnpm-lock.yaml",
-      "../../../package.json",
-      "../../../packages/agent-contracts/src/route-kernel-data.ts",
-      "../../../packages/agent-contracts/src/route-module.ts",
-      "../../../packages/agent-contracts/src/admitted-builtin-keys.ts",
-    ].map((path) => fileURLToPath(new URL(path, import.meta.url))),
+
   });
 }
 const closures = await buildBuiltinClosures(builtinOptions);
@@ -122,7 +107,7 @@ for (const [key, closure] of closures) {
   );
   if (closureOnly) continue;
   const data = closure.envelope.data;
-  directory.push({ key, directory: projectKernelDirectory(data), moduleHash: closure.fingerprint });
+  directory.push({ key, directory: projectKernelDirectory(data) });
   await emit(
     new URL(`../../../packages/mcps/src/pea/generated/${key}-graph.json`, import.meta.url),
     `${JSON.stringify(data, null, 2)}\n`,
@@ -149,9 +134,6 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
     directory.push({
       key: graph.key,
       directory: graph.directory,
-      moduleHash: routeSourceHash(
-        await readFile(new URL(`../src/${folder.name}/graph.ts`, import.meta.url)),
-      ),
     });
     const destination = new URL(
       `../../../packages/mcps/src/pea/generated/${graph.key}-graph.json`,
@@ -163,7 +145,7 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
 if (!closureOnly)
   await emit(
     new URL("../../../packages/agent-contracts/src/generated/route-directory.ts", import.meta.url),
-    `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; directory: RouteDirectory; moduleHash: string}[] = ${JSON.stringify(directory, null, 2)};\n`,
+    `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; directory: RouteDirectory}[] = ${JSON.stringify(directory, null, 2)};\n`,
   );
 console.log(runtime ? JSON.stringify(projections) : `Projected ${directory.length} route graphs`);
 

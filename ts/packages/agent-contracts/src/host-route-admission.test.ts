@@ -41,7 +41,7 @@ async function prepare(module = neutral, data = module.data) {
     source: "builtin-closure",
     version: 1,
     data,
-    hostVersion: "test",
+
     modules: [{ id: "neutral.ts", sha256: "a".repeat(64) }],
     variants: [{ client: "web", entry: "neutral.ts" }],
     inputs: [],

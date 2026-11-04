@@ -1,6 +1,6 @@
 // Generated from web route graphs by codegen:routes.
 import type { RouteDirectory } from "../route-graph.ts";
-export const routeDirectory: readonly {key: string; directory: RouteDirectory; moduleHash: string}[] = [
+export const routeDirectory: readonly {key: string; directory: RouteDirectory}[] = [
   {
     "key": "captures",
     "directory": {
@@ -23,8 +23,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "title": "Captures",
       "category": "Coordinate model data",
       "blurb": "Inspect retained view pictures and receipts"
-    },
-    "moduleHash": "40170645ecd68589329631a89959a1a9b0fd00403d33cfe36af0acd129179312"
+    }
   },
   {
     "key": "schedules",
@@ -49,8 +48,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "title": "Schedules",
       "category": "Coordinate model data",
       "blurb": "Inspect document schedules"
-    },
-    "moduleHash": "7b8376ba8e1ff3b4feb29ec1f9b9411c3c229cfa8a99864822c6a3a52d2bd1e3"
+    }
   },
   {
     "key": "families",
@@ -75,8 +73,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "title": "Families",
       "category": "Build / audit families",
       "blurb": "Audit and reconcile loaded family parameters"
-    },
-    "moduleHash": "9f493f9a39792715c356a20d8ad5226dbcd4a942e5ca3210a54ef27fcb4964de"
+    }
   },
   {
     "key": "ducts",
@@ -103,8 +100,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "title": "Ducts",
       "category": "Calculate loads & airflow",
       "blurb": "Review duct systems, stage inputs and rulings, and preview writes in Revit"
-    },
-    "moduleHash": "9754468ac98810b499837adcede2001a5ecca5ddd4c2fd1d6b6167bdf2faffed"
+    }
   },
   {
     "key": "fans",
@@ -130,8 +126,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "title": "Fans",
       "category": "Calculate loads & airflow",
       "blurb": "Inspect fan paths, inputs and pressure requirements"
-    },
-    "moduleHash": "09ea426653dcc48145e2f3224ced1b47401a2ae9cb5d27fe22c5b11a13717a46"
+    }
   },
   {
     "key": "chat",
@@ -157,8 +152,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": "compact"
       }
-    },
-    "moduleHash": "66fd5683e0b2a6d8216ab1648c79a57bd9f85773db0da5f3a24afd5be0879951"
+    }
   },
   {
     "key": "data-tables",
@@ -182,8 +176,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": false
       }
-    },
-    "moduleHash": "10958e695996a49f3ae3c67ab46d0e03e774d386bedea4fb2a1e9d85c2b5cec8"
+    }
   },
   {
     "key": "design-system",
@@ -232,8 +225,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": false
       }
-    },
-    "moduleHash": "d195926c81beef734644e2b0007b2fde8e12b12e45b7667cfa53cd704b16bd04"
+    }
   },
   {
     "key": "duct-loss",
@@ -259,8 +251,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": false
       }
-    },
-    "moduleHash": "3aeab48f52ee768555e4dfbe23689a73e28bdd97571ca06716d45c82cccd8f32"
+    }
   },
   {
     "key": "family",
@@ -288,8 +279,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       },
       "resume": "document"
-    },
-    "moduleHash": "c67f3f03ad939e1760ce3fa03fbd0751384bd01b1f154bed717f2c8d4b6e034b"
+    }
   },
   {
     "key": "grilles",
@@ -317,8 +307,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": false
       }
-    },
-    "moduleHash": "ec7b33e4f1eabcdd53dc71b86502f99b92720f59658930bfcc4bbc18bf17e5a4"
+    }
   },
   {
     "key": "index",
@@ -343,8 +332,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": false
       }
-    },
-    "moduleHash": "ae9dfe5435f78eb350b58399e1870a098aca0e35ee73610f41c0438c547748f2"
+    }
   },
   {
     "key": "instances",
@@ -369,8 +357,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": "compact"
       }
-    },
-    "moduleHash": "21350399cdd3bfa321c971648748cf070e1af3ed744a2169a6c17e42fdd1f29a"
+    }
   },
   {
     "key": "ops",
@@ -396,8 +383,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": false
       }
-    },
-    "moduleHash": "582dfdc9d0c6cefe3c1769f22c404efd1221c3d925ae5878a51f02299d1768d6"
+    }
   },
   {
     "key": "bind",
@@ -421,8 +407,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": false
       }
-    },
-    "moduleHash": "87bc88cc7c48d186077e311088b03803b29c025791a7243020963026c35505af"
+    }
   },
   {
     "key": "parameter-links",
@@ -446,8 +431,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": false
       }
-    },
-    "moduleHash": "7ff16dfc9b3f2a730c2cf0ef74276419ac274fcd966011648bd16afbac6e4368"
+    }
   },
   {
     "key": "pod-admin",
@@ -472,8 +456,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": false
       }
-    },
-    "moduleHash": "70dccdaa2add51f12d415ee079b51169bcc784f3e50900ca0e0c8846faeb7a56"
+    }
   },
   {
     "key": "pods",
@@ -496,8 +479,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": false
       }
-    },
-    "moduleHash": "0af8c753d84cbbccee0aa77707b00217a774e7f069abb6efdc700fd9b1b44eb3"
+    }
   },
   {
     "key": "rhvac-sync",
@@ -525,8 +507,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       },
       "resume": "document"
-    },
-    "moduleHash": "a6307c66c9aa973f1e22181273bd9a606cf4493da94a0aa647f7d828dd975200"
+    }
   },
   {
     "key": "rooms",
@@ -553,8 +534,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       },
       "resume": "document"
-    },
-    "moduleHash": "6043488b0e198500d8e491eeefca589d36c323240a359b573799bb8778852c78"
+    }
   },
   {
     "key": "session-admin",
@@ -578,8 +558,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": "compact"
       }
-    },
-    "moduleHash": "bb576af4553e5df659977c3b1f907437d31d7faf340152b66fddd3cc8305e49e"
+    }
   },
   {
     "key": "settings",
@@ -616,8 +595,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": "compact"
       }
-    },
-    "moduleHash": "e2e4999145c97087d973eefa3ece0448fb43fafa0908c4602525d9a33394d862"
+    }
   },
   {
     "key": "space",
@@ -645,8 +623,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "pwa": "full",
         "tray": false
       }
-    },
-    "moduleHash": "ca36d65ba803b028db1550c95d747b798cbb42c50892b39ac94d7c1972c38111"
+    }
   },
   {
     "key": "takeoffs",
@@ -679,8 +656,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       },
       "resume": "document"
-    },
-    "moduleHash": "ff9b3a8396bb491719bbbb279520d9a4ef6867eb34a5458c540b57777e9650dd"
+    }
   },
   {
     "key": "zone-audit",
@@ -708,7 +684,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
         "tray": false
       },
       "resume": "document"
-    },
-    "moduleHash": "a9fa7f1a0573d61b5a4407e15d05b441502b88d2bb0ca9f277b917605b5dabe2"
+    }
   }
 ];
