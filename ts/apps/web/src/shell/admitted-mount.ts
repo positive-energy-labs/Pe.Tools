@@ -1,39 +1,52 @@
-import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import {
-  applicationWorkRegistry,
-  createApplicationWorkRegistry,
-} from "./application-work-registry";
-import { routeWorkSubject } from "../../../../packages/agent-contracts/src/route-work-subject";
-import { commandResultDecoder, type CommandResultDecode } from "./admitted-command-result";
-import type { InvocationToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import { peReadings } from "../readings";
-import { OLDER_WORK, UNREADABLE_WORK } from "@pe/agent-contracts";
-import { startFreshRouteWork, salvageRouteWork } from "../route/host";
-import { admittedWorkPatches } from "./admitted-cells";
-import { createAdmittedCells, createAdmittedCellActions } from "./admitted-cells";
+import { bindWork,OLDER_WORK,UNREADABLE_WORK,workKey } from "@pe/agent-contracts";
 import { z } from "zod";
-import { placeAdmittedVerbs } from "./admitted-placement";
-import { createAdmittedObservers } from "./admitted-observers";
-import { reviewChanges } from "./review-value";
-import {
-  bindWork,
-  workKey,
-  workHandleSchema,
-  writePreviewSchema,
-  commands,
-  type SemanticActionKey,
-} from "@pe/agent-contracts";
-import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
-import { createWorkFeedClient } from "./work-feed-client";
-import { createAdmittedWork } from "./admitted-work";
-import { createAdmittedGeometry } from "./admitted-geometry";
-import type { PlaceInput } from "./admitted-place";
-import { fixtureGeometryDoor } from "./fixture-geometry-door";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
+import type { EntryTable,ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import {
-  createAdmittedRouteRegistry,
-  resolveRouteBindings,
+canonicalEnvironmentInput,
+createRouteEnvironmentIssuer,
+type KernelServices,
+type ReadHandle,
+} from "../../../../packages/agent-contracts/src/route-kernel-environment";
+import type { FieldControls,InvocationToken,PagePort,SchemaTable } from "../../../../packages/agent-contracts/src/route-kernel-page";
+import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src/route-kernel-page";
+import {
+createAdmittedRouteRegistry,
+resolveRouteBindings,
 } from "../../../../packages/agent-contracts/src/route-module";
+import { routeWorkSubject } from "../../../../packages/agent-contracts/src/route-work-subject";
+import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
+import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
+import { peReadings } from "../readings";
+import { salvageRouteWork,startFreshRouteWork } from "../route/host";
+import { createAdmittedAddress } from "./admitted-address";
+import { admittedWorkPatches,createAdmittedCellActions,createAdmittedCells } from "./admitted-cells";
+import { type CommandResultDecode } from "./admitted-command-result";
+import { project } from "./admitted-context.ts";
+import { createAdmittedGeometry } from "./admitted-geometry";
+import { createAdmittedInvocation } from "./admitted-invoke.ts";
+import { createAdmittedObservers } from "./admitted-observers";
+import type { PlaceInput } from "./admitted-place";
+import {
+createAdmittedReadingPlan,
+readingClosure,
+receiptHitsReading,
+type AdmittedReadingStatus,
+} from "./admitted-reading-plan";
+import { createAdmittedWork } from "./admitted-work";
+import {
+applicationWorkRegistry,
+createApplicationWorkRegistry,
+} from "./application-work-registry";
+import { fixtureGeometryDoor } from "./fixture-geometry-door";
+import { createNamedFixtureRouteEnvironment } from "./fixture-lane";
+import { createPagePolicy,createPagePorts,freezePage } from "./page-port";
+import { createRouteEnvironment,type EnvironmentValidation } from "./route-environment";
+import { sourceReadingEvidence } from "./source-route-services";
+import { createWorkFeedClient } from "./work-feed-client";
+export { ReviewRefusal } from "./admitted-invoke.ts";
 
 /** This mount door never translates an executable legacy graph. Recheck before every draw. */
 export function mountAdmittedRoute(route: AdmittedRoute, expectedFingerprint: string) {
@@ -56,33 +69,6 @@ export async function evaluateRouteBytes(bytes: Uint8Array): Promise<unknown> {
   const url = `data:text/javascript;base64,${btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""))}`;
   return import(/* @vite-ignore */ url);
 }
-import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
-import type {
-  SchemaTable,
-  PagePort,
-  FieldControls,
-} from "../../../../packages/agent-contracts/src/route-kernel-page";
-import type { EntryTable } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import {
-  createRouteEnvironmentIssuer,
-  canonicalEnvironmentInput,
-  type KernelServices,
-  type ReadHandle,
-} from "../../../../packages/agent-contracts/src/route-kernel-environment";
-import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
-import { createPagePolicy, createPagePorts, freezePage } from "./page-port";
-import { createAdmittedAddress } from "./admitted-address";
-import {
-  createAdmittedReadingPlan,
-  readingClosure,
-  receiptHitsReading,
-  type AdmittedReadingStatus,
-} from "./admitted-reading-plan";
-import { sourceReadingEvidence } from "./source-route-services";
-import { createRouteEnvironment, type EnvironmentValidation } from "./route-environment";
-import { createNamedFixtureRouteEnvironment } from "./fixture-lane";
 
 /** Closed slot census. Other kinds refuse before resource acquisition. */
 export const admittedMountBodyKinds: readonly string[] = Object.freeze([
@@ -112,15 +98,6 @@ export const admittedMountBodyKinds: readonly string[] = Object.freeze([
   "migration",
 ]);
 
-export class ReviewRefusal extends Error {
-  readonly kind = "refused";
-  constructor(readonly reason: "review-stale" | "present-threw" | "present-invalid") {
-    super(
-      reason === "review-stale" ? "Review is stale; prepare it again" : `Review refused: ${reason}`,
-    );
-    this.name = "ReviewRefusal";
-  }
-}
 export class PlaceWriteRefusal extends Error {
   readonly kind = "refused";
   readonly reason = "place-read-only";
@@ -129,12 +106,6 @@ export class PlaceWriteRefusal extends Error {
     this.name = "PlaceWriteRefusal";
   }
 }
-type PresentationEvidence = Readonly<{
-  page: Readonly<Record<string, unknown>>;
-  work: Readonly<Record<string, unknown>>;
-  readings: Readonly<Record<string, ReadingSnapshot<unknown>>>;
-}>;
-
 /** Application services are installed once. Routes supply only admission and location. */
 const applicationWorkDoor = createWorkFeedClient();
 const sourceTimeline = new WeakMap<
@@ -196,7 +167,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         route.resolvedWork?.schema,
       );
       let readings: Record<string, ReadingSnapshot<unknown>> = {};
-      const policy = createPagePolicy(
+      const policy = createPagePolicy<RouteGraphJson, SchemaTable>(
         route.data,
         bindings.schemas,
         () => "unresolved",
@@ -852,402 +823,23 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
                   bindings.bodies[field.picker.options]!.run(readings[field.picker.reading]),
                 );
             }
-            for (const [id, pending] of preparing) {
-              if (!owner.current(pending.invocation)) {
-                preparing.delete(id);
-                reviewRefusals.set(id, new ReviewRefusal("review-stale"));
-                continue;
-              }
-              const result = readings[pending.reading];
-              if (!result?.current) continue;
-              preparing.delete(id);
-              const sealed = writePreviewSchema.parse(result.value);
-              const handle = workHandleSchema.parse(
-                (sealed.seal.work as { handle?: unknown })?.handle,
-              );
-              if (canonicalEnvironmentInput(handle) !== pending.handle)
-                throw Error("Preview sealed a different Work handle");
-              const presentation = present(id, sealed, pending.evidence);
-              if (!owner.current(pending.invocation)) {
-                reviewRefusals.set(id, new ReviewRefusal("review-stale"));
-                continue;
-              }
-              reviews.set(id, {
-                presentation,
-                invocation: pending.invocation,
-                preview: result.value,
-                send: () => pending.send(),
-              });
-            }
+            invocation.sync();
           } while (again && !closed);
         } finally {
           scheduling = false;
         }
         notify();
       };
-      const preparing = new Map<
-        string,
-        {
-          invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
-          reading: string;
-          handle: string;
-          evidence: PresentationEvidence;
-          send(): unknown;
-        }
-      >();
-      const reviews = new Map<
-        string,
-        {
-          invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
-          send(): unknown;
-          preview: unknown;
-          presentation?: { sentence: string; rows: readonly string[] };
-        }
-      >();
-      const reviewRefusals = new Map<string, ReviewRefusal>();
-      let presenting = false;
-      const present = (
-        id: string,
-        result: unknown,
-        evidence: PresentationEvidence,
-        body = route.data.verbs[id]?.present,
-      ) => {
-        if (!body) return undefined;
-        let value: unknown;
-        presenting = true;
-        try {
-          value = bindings.bodies[body]!.run(freezePage(result), evidence);
-        } catch {
-          const refusal = new ReviewRefusal("present-threw");
-          reviewRefusals.set(id, refusal);
-          throw refusal;
-        } finally {
-          presenting = false;
-        }
-        const parsed = z
-          .union([z.string(), z.strictObject({ sentence: z.string(), rows: z.array(z.string()) })])
-          .safeParse(value);
-        if (!parsed.success) {
-          const refusal = new ReviewRefusal("present-invalid");
-          reviewRefusals.set(id, refusal);
-          throw refusal;
-        }
-        return freezePage(
-          typeof parsed.data === "string" ? { sentence: parsed.data, rows: [] } : parsed.data,
-        );
-      };
-      const project = (keys: readonly string[], value: Readonly<Record<string, unknown>>) =>
-        freezePage(Object.fromEntries(keys.map((key) => [key, value[key]])));
       const action = () => {
         if (drawing) throw Error("Admitted action cannot run during render");
-        if (presenting) throw Error("Admitted action cannot run during presentation");
+        if (invocation.presenting()) throw Error("Admitted action cannot run during presentation");
         if (closed) throw Error("Mount closed");
         if (!input.custody.current() || input.target === null) throw new PlaceWriteRefusal();
       };
-      const place = (
-        pane: string,
-        row: unknown,
-        input: unknown,
-        basis?: InvocationToken | null,
-      ) => {
-        action();
-        resolve();
-        const declaration = route.data.panes[pane];
-        if (!declaration) throw Error(`Unknown pane: ${pane}`);
-        return placeAdmittedVerbs(
-          declaration,
-          bindings.schemas,
-          bindings.bodies,
-          row,
-          input,
-          (id, input) => invoke(id, input, basis ?? undefined),
-        );
-      };
-      const editBases = new WeakMap<InvocationToken, NonNullable<ReturnType<typeof owner.read>>>();
-      let renderedBasis: InvocationToken | null = null;
-      const workBasis = () => {
-        const snapshot = owner.read();
-        if (!snapshot?.work || !work.ready()) return null;
-        if (renderedBasis && editBases.get(renderedBasis) === snapshot) return renderedBasis;
-        const issued = owner.invocation(owner.capture(`rendered-work:${crypto.randomUUID()}`), {});
-        if (!issued.ok) throw Error(issued.reason);
-        renderedBasis = issued.value;
-        editBases.set(renderedBasis, snapshot);
-        return renderedBasis;
-      };
-      const landings = new Map<string, CommandResultDecode>();
-      const invoke = (id: string, input: unknown, basis?: InvocationToken) => {
-        action();
-        resolve();
-        reviewRefusals.delete(id);
-        const declaration = route.data.verbs[id];
-        if (!declaration) throw Error(`Unknown verb: ${id}`);
-        const parsed = bindings.schemas[declaration.input]!.parse(input);
-        const edit = basis === undefined ? undefined : editBases.get(basis);
-        if (basis !== undefined && (!edit || edit.scope !== owner.read()?.scope))
-          throw Error("Stale or foreign accepted Work basis");
-        if (declaration.deps.work.length && (!work.ready() || !read().work))
-          throw Error("Work unavailable");
-        const dependencies: Record<string, string> = {};
-        for (const key of declaration.deps.readings) {
-          const reading = readings[key];
-          if (!reading?.current) throw Error(`Reading unavailable: ${key}`);
-          dependencies[key] = reading.hash;
-        }
-        const issued = owner.invocation(owner.capture(`verb:${id}`), dependencies);
-        if (!issued.ok) throw Error(issued.reason);
-        const invocation = issued.value;
-        const context = () => ({
-          workBasis: basis ?? (owner.read()?.work ? invocation : null),
-          page: project(declaration.deps.page, read().page),
-          work: project(declaration.deps.work, (edit?.work ?? read().work)?.value ?? {}),
-          readings: freezePage(
-            Object.fromEntries(declaration.deps.readings.map((key) => [key, readings[key]])),
-          ),
-          captures: freezePage(
-            Object.fromEntries(declaration.captures.map((key) => [key, readings[key]])),
-          ),
-        });
-        if (declaration.ready) {
-          const ready = bindings.bodies[declaration.ready]!.run(context(), parsed);
-          if (ready !== true) throw Error(String(ready));
-        }
-        let preview: unknown;
-        let send: () => unknown;
-        if (declaration.kind === "work") {
-          let detail: Pick<import("@pe/agent-contracts").WorkWrite, "label" | "meta"> = {
-            label: declaration.label,
-          };
-          if (declaration.describe) {
-            const evidence = context();
-            try {
-              const described = bindings.bodies[declaration.describe]!.run(
-                freezePage(parsed),
-                freezePage({
-                  page: evidence.page,
-                  work: evidence.work,
-                  readings: evidence.readings,
-                }),
-              );
-              // The admitted declaration owns the return shape; the host decodes untrusted meta.
-              detail = described as typeof detail;
-            } catch {
-              return { kind: "refused", reason: "describe-threw" } as const;
-            }
-          }
-          const patches = () =>
-            admittedWorkPatches(
-              route.data,
-              bindings.schemas,
-              bindings.bodies[declaration.patches]!.run(context(), parsed),
-              route.resolvedWork!.schema,
-            );
-          preview = freezePage(patches());
-          send = () => {
-            const observation = work.write(
-              () => preview as import("@pe/agent-contracts").WorkWrite["patches"],
-              invocation,
-              invocation.id,
-              detail,
-              basis,
-            );
-            observation.subscribe(
-              () => {
-                if (owner.read()?.scope === invocation.token.scope) notify();
-              },
-              () => {},
-            );
-            return observation;
-          };
-        } else if (declaration.kind === "command") {
-          const entry = bindings.entries[declaration.entry]!;
-          const modelWrite = entry.axes.effect === "ModelWrite";
-          const captured = context();
-          // Display evidence labels only. owner.current enforces freshness; the host seal binds the write.
-          const evidence = freezePage(
-            structuredClone({
-              page: captured.page,
-              work: captured.work,
-              readings: captured.readings,
-            }),
-          );
-          const accepted = read();
-          if (modelWrite && basis && basis.workRevision !== accepted.work?.revision)
-            throw Error("Stale accepted Work basis; prepare from the current revision");
-          if (modelWrite && (!work.ready() || !accepted.work || !accepted.scope.identity.work))
-            throw Error("Accepted Work unavailable");
-          // ModelWrite has one input authority: B's accepted key and revision, never draft intent.
-          const declaredIntent = z
-            .record(z.string(), z.unknown())
-            .parse(bindings.bodies[declaration.intent]!.run(context(), parsed));
-          if (modelWrite && Object.hasOwn(declaredIntent, "work"))
-            throw Error("ModelWrite intent cannot supply Work identity");
-          const intent = freezePage(
-            z.record(z.string(), z.unknown()).parse(
-              entry.input.parse(
-                modelWrite
-                  ? {
-                      ...declaredIntent,
-                      work: workHandleSchema.parse({
-                        key: accepted.scope.identity.work,
-                        revision: accepted.work!.revision,
-                      }),
-                    }
-                  : declaredIntent,
-              ),
-            ),
-          );
-          entry.input.parse(intent);
-          preview = freezePage({ work: accepted.work, input: intent });
-          // ActionJournal owns the existing Reject? consent window after this admission.
-          send = () => {
-            if (!door) throw Error("Native commands unavailable");
-            const submission = (
-              fixture === null
-                ? (command: Parameters<NonNullable<KernelServices["submitNative"]>>[0]) =>
-                    services.submitNative
-                      ? services.submitNative(command)
-                      : (services.nativeWrite ?? door).submit(command)
-                : (command: Parameters<NonNullable<KernelServices["submitNative"]>>[0]) =>
-                    door.submit(command)
-            )({
-              id: invocation.id,
-              key: declaration.entry,
-              target: target ?? { kind: "host" },
-              input: intent,
-            });
-            if (declaration.lands) {
-              const decode = commandResultDecoder(submission, bindings.entries);
-              const land = bindings.bodies[declaration.lands]!.run;
-              submission.accepted.subscribe(
-                (outcome) => {
-                  if (outcome.kind === "pending") return;
-                  const result = decode(outcome);
-                  landings.set(submission.handle.id, result);
-                  if (result.kind === "decoded" && owner.current(invocation)) {
-                    const patch = land(freezePage(result.value), read().page);
-                    owner.acceptPage(invocation, patch as Parameters<typeof owner.acceptPage>[1]);
-                  }
-                  notify();
-                },
-                () => {},
-              );
-            }
-            return submission;
-          };
-          if (modelWrite) {
-            const command = Object.hasOwn(commands, declaration.entry)
-              ? commands[declaration.entry as SemanticActionKey]
-              : undefined;
-            const previewKey =
-              command && "writeBoundary" in command
-                ? command.writeBoundary.previewKey
-                : `${declaration.entry}.preview`;
-            const previewEntry = bindings.entries[previewKey];
-            if (
-              !previewEntry ||
-              previewEntry.axes.effect !== "TransactRead" ||
-              !previewEntry.axes.rollsBack
-            )
-              throw Error("ModelWrite requires its rolled-back catalog preview");
-            const candidates = Object.entries(route.data.readings).filter(
-              ([, reading]) =>
-                reading.kind === "use" &&
-                reading.entry === previewKey &&
-                reading.demand === "explicit",
-            );
-            if (candidates.length !== 1)
-              throw Error("ModelWrite preview must identify exactly one explicit reading");
-            previewEntry.input.parse(intent);
-            const readingId = candidates[0]![0];
-            reviews.delete(id);
-            preparing.set(id, {
-              evidence,
-              invocation,
-              reading: readingId,
-              handle: canonicalEnvironmentInput(intent.work),
-              send: () => {
-                if (!work.ready() || !owner.current(invocation))
-                  throw new ReviewRefusal("review-stale");
-                return send();
-              },
-            });
-            const previous = queryInputs.get(readingId);
-            if (previous) owner.retire(previous.invocation.token);
-            queryInputs.set(readingId, { input: intent, invocation });
-            demanded.add(readingId);
-            generations.set(readingId, (generations.get(readingId) ?? 0) + 1);
-            retire(readingId);
-            schedule();
-            const review = reviews.get(id);
-            return review ? { kind: "review", preview: review.preview } : { kind: "preview" };
-          }
-        } else if (declaration.kind === "page") {
-          const patch = bindings.bodies[declaration.patch]!.run(context(), parsed);
-          preview = patch;
-          send = () =>
-            owner.acceptPage(invocation, patch as Parameters<typeof owner.acceptPage>[1]);
-        } else {
-          const entry = bindings.entries[declaration.entry]!;
-          const args = freezePage(
-            structuredClone(
-              entry.input.parse(bindings.bodies[declaration.args]!.run(context(), parsed)),
-            ),
-          );
-          const targets = Object.entries(route.data.readings).filter(
-            ([id, reading]) =>
-              reading.kind !== "derive" &&
-              reading.entry === declaration.entry &&
-              (declaration.reading === undefined || declaration.reading === id),
-          );
-          if (targets.length !== 1)
-            throw Error("Query entry must identify exactly one declared reading");
-          const [readingId, reading] = targets[0]!;
-          preview = args;
-          send = () => {
-            const previous = queryInputs.get(readingId);
-            if (previous) owner.retire(previous.invocation.token);
-            queryLandings.delete(readingId);
-            queryInputs.set(readingId, {
-              input: args,
-              invocation,
-              landing: declaration.lands,
-              inputsCurrent: () => {
-                try {
-                  // workBasis stays at the read's starting revision, including expectedRevision.
-                  const current = entry.input.parse(
-                    bindings.bodies[declaration.args]!.run(
-                      {
-                        ...context(),
-                        work: project(declaration.deps.work, read().work?.value ?? {}),
-                      },
-                      parsed,
-                    ),
-                  );
-                  return canonicalEnvironmentInput(current) === canonicalEnvironmentInput(args);
-                } catch {
-                  return false;
-                }
-              },
-            });
-            demanded.add(readingId);
-            generations.set(readingId, (generations.get(readingId) ?? 0) + 1);
-            retire(readingId);
-            if (reading.kind === "use" && reading.geometry) geometry.refresh(readingId);
-            else schedule();
-          };
-        }
-        const dispatch = () => {
-          if (!owner.current(invocation)) throw new ReviewRefusal("review-stale");
-          return send();
-        };
-        if (declaration.review === "shown") {
-          reviews.set(id, { invocation, preview, send: dispatch });
-          notify();
-          return { kind: "review", preview };
-        }
-        return dispatch();
-      };
+      const invocation = createAdmittedInvocation({ route, owner, read, work, bindings, door,
+        fixture, target, services, action, resolve, notify, schedule,
+        snapshots: () => readings, queryInputs, queryLandings, demanded, generations, retire, geometry });
+      const { invoke, place, workBasis, present, reviews } = invocation;
       const journal = () => {
         const key = owner.read()?.scope.identity.work;
         return key ? mountJournal(key) : null;
@@ -1550,47 +1142,13 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         predicates: observers.predicates,
         visible: observers.visible,
         initialRestore: transport.initial,
-        review: (id: string) => {
-          const review = reviews.get(id);
-          if (!review) return null;
-          const stale = (!!route.data.work && !work.ready()) || !owner.current(review.invocation);
-          return {
-            preview: stale ? undefined : review.preview,
-            sentence: stale ? null : (review.presentation?.sentence ?? null),
-            rows: stale ? [] : (review.presentation?.rows ?? reviewChanges(review.preview)),
-            stale,
-          };
-        },
-        reviewRefusal: (id: string) => {
-          const review = reviews.get(id);
-          return review &&
-            ((!!route.data.work && !work.ready()) || !owner.current(review.invocation))
-            ? new ReviewRefusal("review-stale")
-            : (reviewRefusals.get(id) ?? null);
-        },
-        reviewIds: () => Array.from(reviews.keys()),
-        cancelReview: (id: string) => {
-          const invocation = preparing.get(id)?.invocation ?? reviews.get(id)?.invocation;
-          if (invocation) owner.retire(invocation.token);
-          preparing.delete(id);
-          reviews.delete(id);
-          reviewRefusals.delete(id);
-          schedule();
-        },
-        confirm: (id: string) => {
-          const review = reviews.get(id);
-          if (!review) throw reviewRefusals.get(id) ?? Error("No review to confirm");
-          const result = review.send();
-          reviews.delete(id);
-          notify();
-          return result;
-        },
+        ...invocation.public,
         work: () => owner.read()?.work ?? null,
         workBasis,
         queryLanding: (readingId: string) => queryLandings.get(readingId) ?? null,
-        commandLanding: (id: string) => landings.get(id) ?? null,
+        commandLanding: invocation.commandLanding,
         commandProblems: () =>
-          [...landings.values(), ...queryLandings.values()].filter(
+          [...invocation.landings(), ...queryLandings.values()].filter(
             (result) => result.kind === "result-undecodable",
           ),
         workProblem: work.problem,
