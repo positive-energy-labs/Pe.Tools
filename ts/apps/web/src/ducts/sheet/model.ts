@@ -4,7 +4,7 @@ import type {
   DuctsSheetResponse,
   FittingPricing,
 } from "@pe/agent-contracts";
-import type { Immutable } from "../../../../../packages/agent-contracts/src/route-kernel-data";
+import type { Immutable } from "../../../../../packages/agent-contracts/src/route-kernel-data.ts";
 
 export type FanPort = DuctsRosterResponse["rows"][number];
 
