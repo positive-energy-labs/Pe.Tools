@@ -1,10 +1,9 @@
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vite-plus/test";
 import ts from "typescript";
-import baseline from "./unification-2.baseline.json" with { type: "json" };
+import { describe, expect, it } from "vite-plus/test";
 import {
   additions,
   arraySchema,
@@ -16,6 +15,8 @@ import {
   syntax,
   zodArray,
 } from "./unification-2-census.ts";
+import baseline from "./unification-2.baseline.json" with { type: "json" };
+import "./unification-pane-bodies.law";
 
 const { legacyBuiltinRoutes, ...offenderBaseline } = baseline;
 

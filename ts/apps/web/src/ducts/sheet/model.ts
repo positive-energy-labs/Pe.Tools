@@ -1,8 +1,16 @@
-import type { DuctsSheetResponse, DuctsRosterResponse } from "@pe/agent-contracts";
+import type {
+  DuctsInputs,
+  DuctsRosterResponse,
+  DuctsSheetResponse,
+  FittingPricing,
+} from "@pe/agent-contracts";
+import type { Immutable } from "../../../../../packages/agent-contracts/src/route-kernel-data";
 
 export type FanPort = DuctsRosterResponse["rows"][number];
 
-export type Detail<K extends DuctsSheetResponse["kind"]> = Extract<DuctsSheetResponse, { kind: K }>;
+export type Detail<K extends DuctsSheetResponse["kind"]> = Immutable<
+  Extract<DuctsSheetResponse, { kind: K }>
+>;
 
 export const fanKey = (fan: Pick<FanPort, "unitId" | "portIndex">) =>
   `${fan.unitId}:${fan.portIndex}`;
@@ -50,12 +58,17 @@ export const withComputed = (roster: readonly FanPort[], computed: readonly FanP
 export const stableFanKey = (fan: Pick<FanPort, "uniqueId" | "portIndex">) =>
   `${fan.uniqueId}@${fan.portIndex}`;
 
-export function selectedFans<T extends Pick<FanPort, "uniqueId" | "portIndex">>(keys: string[] | "all", rows: readonly T[]): T[] {
+export function selectedFans<T extends Pick<FanPort, "uniqueId" | "portIndex">>(
+  keys: string[] | "all",
+  rows: readonly T[],
+): T[] {
   if (keys === "all") return [...rows];
   return [...new Set(keys)].map((key) => {
     const row = rows.find((row) => stableFanKey(row) === key);
     if (row) return row;
-    throw Error(`Fan link '${key}' is unavailable or uses a legacy mark/ElementId. Choose the fan from the roster to create a stable link.`);
+    throw Error(
+      `Fan link '${key}' is unavailable or uses a legacy mark/ElementId. Choose the fan from the roster to create a stable link.`,
+    );
   });
 }
 
@@ -75,3 +88,9 @@ export const fanLabel = (fan: Labelled, rows: readonly Labelled[]) => {
       : ` (${units.indexOf(fan.uniqueId) + 1} of ${units.length})`;
   return `${fan.mark}${place} / port ${fan.portIndex}`;
 };
+
+export type SheetInputs = Immutable<DuctsInputs>;
+export type SheetFitting = Immutable<FittingPricing>;
+
+export const TIERS = ["taken", "accept", "preview"] as const;
+export type Tier = (typeof TIERS)[number];

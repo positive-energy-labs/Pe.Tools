@@ -1,8 +1,8 @@
 import {
-  type MeasuredDisplayUnit,
-  type MeasuredValue,
   sameValue,
   type CellLike,
+  type MeasuredDisplayUnit,
+  type MeasuredValue,
 } from "@pe/agent-contracts";
 import type React from "react";
 
@@ -104,6 +104,8 @@ interface StateCellBase {
   numeric?: { integer?: boolean; min?: number; digits?: number };
   /** Placeholder for the editable value slot — e.g. an inherited value the cell would take. */
   placeholder?: string;
+  /** Semantic selection request; the cell lands its own input when the key changes. */
+  land?: string;
   /**
    * Locate what this cell describes: a click on the cell body when not editing. An editable
    * cell's input swallows its clicks, so the suggestion fold and the unsaved square (outside the
@@ -261,11 +263,16 @@ export interface CellTransition {
 const showJson = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
 
 /** Shared Work plus measured facts becomes one cell drawing. Attribution is host stamped. */
-export function cellFromDraft(
-  cell: Pick<CellLike, "suggestion" | "edit">,
+type DrawingCell<Value> = {
+  [K in keyof CellLike]:
+    | (Omit<NonNullable<CellLike[K]>, "value"> & { readonly value?: Value })
+    | null;
+};
+export function cellFromDraft<Value>(
+  cell: DrawingCell<Value>,
   facts: StateCellBase,
   /** The caller's word for a counter-proposed value; domain values are the caller's to format. */
-  show: (value: unknown) => string = showJson,
+  show: (value: Value | undefined) => string = showJson,
 ): StateCellBase {
   const { suggestion, edit } = cell;
   const stage = edit != null ? "edit" : suggestion != null ? "proposed" : "clean";

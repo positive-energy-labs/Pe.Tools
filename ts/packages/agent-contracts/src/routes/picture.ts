@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { sceneViewSchema, sceneViewCodec } from "../scene-view.ts";
 import {
   fitViewportCodec,
   modeKey,
@@ -7,7 +6,9 @@ import {
   viewportSchema,
   type Viewport,
 } from "../page-keys.ts";
-import { manyField, field, text } from "../route-field.ts";
+import { field, manyField, text } from "../route-field.ts";
+import type { Immutable } from "../route-kernel-data.ts";
+import { sceneViewCodec, sceneViewSchema } from "../scene-view.ts";
 
 /**
  * The Page keys a route's `Picture` (web `scene/picture`) reads and writes. A route's fields take
@@ -64,5 +65,7 @@ export const pictureFields = <
 type PictureFields = ReturnType<typeof pictureFields<[string, ...string[]], string>>;
 /** The page slice the picture reads and writes, over a route's own layer keys and flat picture. */
 export type PicturePage<_L extends string = string, F extends string = string> = {
-  [K in Exclude<keyof PictureFields, "layers" | "picture">]: z.output<PictureFields[K]["schema"]>;
-} & { layers: string[] | "all"; picture: "model" | F };
+  [K in Exclude<keyof PictureFields, "layers" | "picture">]: Immutable<
+    z.output<PictureFields[K]["schema"]>
+  >;
+} & { layers: readonly string[] | "all"; picture: "model" | F };

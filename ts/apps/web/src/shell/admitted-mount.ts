@@ -1499,6 +1499,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         close();
         throw error;
       }
+      // erased at route-module.ts:419 (resolvedWork.schema: z.ZodType); U3 types it as ZodType<W>
       const transitionCell = (kind: "take" | "unsuggest" | "clear", id: string, key: unknown) => {
           action();
           resolve();

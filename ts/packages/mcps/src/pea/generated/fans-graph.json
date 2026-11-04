@@ -273,6 +273,28 @@
       "kinds": [
         "focus"
       ]
+    },
+    "rosterSearch": {
+      "role": "query",
+      "schema": "rosterSearch",
+      "codec": "rosterSearch",
+      "initial": {
+        "v": 1,
+        "keywords": "",
+        "pills": []
+      },
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "rosterSort": {
+      "role": "query",
+      "schema": "rosterSort",
+      "codec": "rosterSort",
+      "initial": "",
+      "url": "replace",
+      "share": true,
+      "agent": "set"
     }
   },
   "identities": {
@@ -572,6 +594,24 @@
         "resource": "scope"
       },
       "refresh": "explicit"
+    },
+    "sheetView": {
+      "kind": "derive",
+      "output": "sheetView",
+      "derive": "sheetView",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "sheet"
+        ]
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
     }
   },
   "verbs": {
@@ -598,7 +638,9 @@
         "treeSort",
         "inputSearch",
         "inputSort",
-        "sheetPath"
+        "sheetPath",
+        "rosterSearch",
+        "rosterSort"
       ]
     },
     "edit": {
@@ -816,22 +858,17 @@
       "draws": [
         "fans",
         "sheet",
-        "sheetSnapshot",
-        "meshes"
+        "sheetSnapshot"
       ],
-      "verbs": {
-        "choose": "placeSheetRoster",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "sheet-roster"
     },
     "sheet-inputs": {
@@ -841,21 +878,17 @@
         "fans",
         "sheet",
         "sheetSnapshot",
-        "meshes"
+        "sheetView"
       ],
-      "verbs": {
-        "choose": "placeSheetInputs",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "sheet-inputs"
     },
     "sheet-picture": {
@@ -865,21 +898,17 @@
         "fans",
         "sheet",
         "sheetSnapshot",
-        "meshes"
+        "sheetView"
       ],
-      "verbs": {
-        "choose": "placeSheetPicture",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "sheet-picture"
     },
     "sheet-ledger": {
@@ -889,21 +918,17 @@
         "fans",
         "sheet",
         "sheetSnapshot",
-        "meshes"
+        "sheetView"
       ],
-      "verbs": {
-        "choose": "placeSheetLedger",
-        "allowed": [
-          "browse",
-          "edit",
-          "sheetEdit",
-          "scope",
-          "losses",
-          "heal",
-          "assign"
-        ],
-        "row": "placementRow"
-      },
+      "verbs": [
+        "browse",
+        "edit",
+        "sheetEdit",
+        "scope",
+        "losses",
+        "heal",
+        "assign"
+      ],
       "body": "sheet-ledger"
     }
   },

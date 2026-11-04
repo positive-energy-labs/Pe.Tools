@@ -1,9 +1,5 @@
-import type { WorkSchema } from "./route-work-owner.ts";
 import type { z } from "zod";
-import type { Observation, WorkWriteOutcome, JournalSubmission } from "./work-journal-door.ts";
-import type { RouteStateSpec } from "./route-state.ts";
 import type { CatalogAxes } from "./catalog.ts";
-import type { ExecutionTarget } from "./target.ts";
 import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
 import type {
   DecodeResult,
@@ -18,6 +14,10 @@ import type {
   SchemaValue,
   WorkOf,
 } from "./route-kernel-page.ts";
+import type { RouteStateSpec } from "./route-state.ts";
+import type { WorkSchema } from "./route-work-owner.ts";
+import type { ExecutionTarget } from "./target.ts";
+import type { JournalSubmission, Observation, WorkWriteOutcome } from "./work-journal-door.ts";
 
 /** Projection of the linked catalog, never a route-authored replacement for its axes. */
 export interface EntryContract {
@@ -296,7 +296,7 @@ type ReadingSlots<G extends RouteGraphJson, S extends SchemaTable, E extends Ent
         At<G["readings"][K], "derive">,
         `readings.${K}.derive`,
         "derive",
-        (ctx: Ctx<G, S, E, G["readings"][K]>) => ReadingValue<G, S, E, K>
+        (ctx: Ctx<G, S, E, G["readings"][K]>) => Immutable<ReadingValue<G, S, E, K>>
       >
     | Slot<
         At<G["readings"][K], "adapter">,

@@ -1,3 +1,4 @@
+import { land } from "./land";
 import { reachProps } from "./reach";
 import { useWork } from "./work";
 /**
@@ -6,21 +7,21 @@ import { useWork } from "./work";
  * never go inside a data cell. Precedence is the cascade order in cell.css.
  */
 import {
-  createContext,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  useTransition,
-  type RefObject,
+createContext,
+useContext,
+useEffect,
+useRef,
+useState,
+useTransition,
+type RefObject,
 } from "react";
 
-import { tv } from "../../lib/tv";
 import { useScopeKeys } from "../../keys";
+import { tv } from "../../lib/tv";
 
-import { Verdict } from "./verdict";
-import "./lang.css";
 import "./cell.css";
+import "./lang.css";
+import { Verdict } from "./verdict";
 
 export const stateCellRecipe = tv({
   slots: {
@@ -41,41 +42,41 @@ export const stateCellRecipe = tv({
   defaultVariants: { size: "card" },
 });
 
+import { focusQuiet } from "../../lib/utils";
 import {
-  cellFactsText,
-  fmtNum,
-  parseCell,
-  readCell,
-  readMeasuredText,
-  type CellCommit,
-  type CellOption,
-  type CellRefusal,
-  type CellTransition,
-  type CellTransitionKind,
-  type StateCellProps,
+cellFactsText,
+fmtNum,
+parseCell,
+readCell,
+readMeasuredText,
+type CellCommit,
+type CellOption,
+type CellRefusal,
+type CellTransition,
+type CellTransitionKind,
+type StateCellProps,
 } from "./cell-state";
-import { TooltipHint } from "./tooltip";
 import { ListPopup } from "./list-popup";
+import { TooltipHint } from "./tooltip";
 
 export {
-  CELL_STATE_ORDER,
-  cellFactsText,
-  cellFromDraft,
-  cellStateLabel,
-  fmtNum,
-  readMeasuredText,
-  unitWord,
+CELL_STATE_ORDER,
+cellFactsText,
+cellFromDraft,
+cellStateLabel,
+fmtNum,
+readMeasuredText,
+unitWord
 } from "./cell-state";
 export type {
-  CellCommit,
-  CellOption,
-  CellPick,
-  CellRefusal,
-  CellTransition,
-  CellTransitionKind,
-  StateCellProps,
+CellCommit,
+CellOption,
+CellPick,
+CellRefusal,
+CellTransition,
+CellTransitionKind,
+StateCellProps
 } from "./cell-state";
-import { focusQuiet } from "../../lib/utils";
 
 /** Each kind's glyph, key and plain sentence. The caller's `reason` overrides the sentence. */
 const TRANSITION: Record<CellTransitionKind, { key: string; says: string }> = {
@@ -180,6 +181,7 @@ export function StateCell(props: StateCellProps) {
   // its input) holds focus; Escape from the input hands focus back to it.
   const provided = useContext(CellHost);
   const rootRef = useRef<HTMLSpanElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [focusHost, setFocusHost] = useState<HTMLElement | null>(null);
   const hasTransitions = transitions.length > 0;
   const ownHost = provided == null && hasTransitions;
@@ -189,7 +191,7 @@ export function StateCell(props: StateCellProps) {
     if (!hasTransitions || !host) return;
     const on = () => setFocusHost(host);
     const off = (e: FocusEvent) => {
-      if (!host.contains(e.relatedTarget as Node | null)) setFocusHost(null);
+      if (!(e.relatedTarget instanceof Node) || !host.contains(e.relatedTarget)) setFocusHost(null);
     };
     host.addEventListener("focusin", on);
     host.addEventListener("focusout", off);
@@ -210,12 +212,19 @@ export function StateCell(props: StateCellProps) {
     read.body !== "locked" &&
     typeof value === "string";
   const choosing = props.choice != null && read.body !== "locked";
+  useEffect(() => {
+    if (props.land !== undefined) {
+      const target = editable ? inputRef.current : rootRef.current;
+      if (target) land(target, { focus: true });
+    }
+  }, [props.land, editable]);
   // Locate is a click on the cell BODY when not editing; an editable cell's input swallows its
   // own clicks (the caret owns them), so the handler can sit on the wrapper unconditionally.
   const locate =
     props.onLocate != null
       ? (event: React.MouseEvent) => {
-          if ((event.target as HTMLElement).closest("input,button") != null) return;
+          if (event.target instanceof Element && event.target.closest("input,button") != null)
+            return;
           props.onLocate?.();
         }
       : undefined;
@@ -294,7 +303,7 @@ export function StateCell(props: StateCellProps) {
         <span
           {...reachProps()}
           ref={rootRef}
-          tabIndex={ownHost ? 0 : undefined}
+          tabIndex={props.land !== undefined && !editable ? -1 : ownHost ? 0 : undefined}
           className={slots.base()}
           data-scale="row"
           data-unit={props.unit != null ? "" : undefined}
@@ -304,7 +313,8 @@ export function StateCell(props: StateCellProps) {
               ? (event) => {
                   const input = event.currentTarget.querySelector("input");
                   if (input == null || event.target === input) return;
-                  if ((event.target as HTMLElement).closest("button") != null) return;
+                  if (event.target instanceof Element && event.target.closest("button") != null)
+                    return;
                   event.preventDefault();
                   focusQuiet(input);
                   input.setSelectionRange(input.value.length, input.value.length);
@@ -381,8 +391,9 @@ export function StateCell(props: StateCellProps) {
             />
           ) : editable ? (
             <input
-              key={value as string}
-              defaultValue={value as string}
+              ref={inputRef}
+              key={initial.current}
+              defaultValue={initial.current}
               placeholder={
                 emptied || (props.unit != null && !props.placeholder)
                   ? EMPTY_MARK
@@ -514,7 +525,7 @@ export function StateCell(props: StateCellProps) {
     <TooltipHint content={hoverFoot ? (cellFactsText(props) ?? undefined) : undefined}>
       <span
         ref={rootRef}
-        tabIndex={ownHost ? 0 : undefined}
+        tabIndex={props.land !== undefined && !editable ? -1 : ownHost ? 0 : undefined}
         aria-busy={pending || undefined}
         onClick={locate}
       >

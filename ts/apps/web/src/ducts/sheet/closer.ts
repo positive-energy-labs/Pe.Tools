@@ -1,3 +1,4 @@
+import type { SheetFitting } from "./model";
 /**
  * One blocker's closer, described once for every row and batch verb: the verb text that names
  * the action and the value it will apply, why it cannot run (null when live), the inline input
@@ -14,14 +15,14 @@
  * through a proposed tee or tap takes a typed drop for that path only (`edits.fittingDrops`), with
  * no default. Everything else is ruled in Revit and the row says so.
  */
-import type { SheetBlocker } from "./tiers";
-import { closerKind, healPair } from "./tiers";
-import type { FittingPricing, Resolved } from "@pe/agent-contracts";
+import type { Resolved } from "@pe/agent-contracts";
 import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import { tableMeaning } from "./fitting-groups";
+import type { SheetBlocker } from "./tiers";
+import { closerKind, healPair } from "./tiers";
 
 export type CloserAction =
-  | { kind: "rule"; pair: [string, string] }
+  | { kind: "rule"; pair: readonly [string, string] }
   | { kind: "cap"; end: { elementId: number; connector: number } }
   | { kind: "drop"; elementId: number; value: number; terminal: boolean }
   | { kind: "cfm"; elementId: number; value: number }
@@ -82,7 +83,7 @@ export type CloserContext = {
     connector?: number;
   }) => { unitId: number; name: string } | null;
   /** A fitting's census row (the inputs detail's `fittings`), by the key its blocker names. */
-  fittingOf?: (key: string) => FittingPricing | null;
+  fittingOf?: (key: string) => SheetFitting | null;
   /** Each served ASHRAE table's title, by id: what a "price with" option means. */
   tableTitles?: Readonly<Record<string, string>>;
 };
@@ -95,7 +96,7 @@ export type CloserContext = {
  * matches), at the rule's own table or one of its options.
  */
 export function priceChoices(
-  row: FittingPricing,
+  row: SheetFitting,
   titles: Readonly<Record<string, string>> = {},
 ): PriceChoice[] {
   const means = (table: string) =>

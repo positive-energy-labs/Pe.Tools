@@ -1,3 +1,4 @@
+import type { SheetInputs } from "./model";
 /**
  * Every input this fan's walk reads, as rows that never vanish (kaitpw 2026-10-30: "whys that even
  * called an override"). A row is a value with its source: typed is a state of the row, not a list
@@ -6,18 +7,17 @@
  * per [family, type], naming the units it covers (it was one raw-key row per instance).
  */
 import {
-  DUCT_UNIT_KINDS,
-  type DuctUnitKind,
-  type DuctsInputs,
-  type DuctsDesign,
-  type DuctsSheetEdits,
-  type Resolved,
+DUCT_UNIT_KINDS,
+type DuctUnitKind,
+type DuctsDesign,
+type DuctsSheetEdits,
+type Resolved,
 } from "@pe/agent-contracts";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
-import { END_KEY, FITTING_DROP_CELL, JOIN_KEY } from "@pe/ducts-domain/sheet/index";
+import { END_KEY,FITTING_DROP_CELL,JOIN_KEY } from "@pe/ducts-domain/sheet/index";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { SubjectPart } from "@pe/kit/lang/subject-text";
-import { kindDisabledReason, kindMeaning } from "./kind-meaning";
+import { kindDisabledReason,kindMeaning } from "./kind-meaning";
 import type { WorkCell } from "./sheet-cell";
 
 export type InputSection = "units" | "terminals" | "parts" | "rulings";
@@ -68,7 +68,7 @@ export type InputRow = {
 export interface RowContext {
   snapshot: Pick<DuctSnapshot, "nodes">;
   doc: DuctsDesign | null;
-  inputs: DuctsInputs | null;
+  inputs: SheetInputs | null;
   /** The open fan's unit: its ESP is an input of this sheet; another unit's is not. */
   fanUnitId: number | null;
   flowConflict?: string;
@@ -267,7 +267,7 @@ export function inputRows(ctx: RowContext): InputRow[] {
       source: "typed",
       typed: true,
       control: { kind: "text", value: ruling.verdict },
-      clear: { joins: [{ pair: ruling.pair, verdict: "clear" }] },
+      clear: { joins: [{ pair: [ruling.pair[0], ruling.pair[1]], verdict: "clear" }] },
     });
   }
   for (const ruling of inputs.rulings.ends) {

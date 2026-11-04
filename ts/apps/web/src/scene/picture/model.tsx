@@ -13,26 +13,26 @@ import {
   type ReactNode,
 } from "react";
 
-import type { PicturePage, SceneView } from "@pe/agent-contracts";
-import { LOOK } from "#/scene/grounds";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
-import { fitSection, sectionVolume, type Section } from "#/scene/section";
-import { SectionControls, SectionHandles } from "#/scene/section-controls";
-import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "#/scene/orbit";
+import { ContinuationMarks } from "#/scene/continuations";
 import type { PictureBounds } from "#/scene/framing";
 import { framingPoints } from "#/scene/framing";
-import { useStage } from "#/scene/stage-controller";
-import { sectionProject, viewportProject, type Project, type Size } from "#/scene/projection";
-import { ContinuationMarks } from "#/scene/continuations";
-import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
-import { PaneOverlay } from "@pe/kit/lang/pane";
-import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { DetailedRead } from "./detail";
+import { LOOK } from "#/scene/grounds";
+import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "#/scene/orbit";
 import { CONTEXT_DEFAULT, type PictureContext } from "#/scene/picture/picture";
-import { Scene3D } from "#/scene/scene3d";
-import type { SceneRead } from "#/scene/use-scene";
-import type { Bounds, IssueTarget, Kinds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
+import { sectionProject, viewportProject, type Project, type Size } from "#/scene/projection";
 import type { ColourMode, ContextMode } from "#/scene/renderer";
+import { Scene3D } from "#/scene/scene3d";
+import { fitSection, sectionVolume, type Section } from "#/scene/section";
+import { SectionControls, SectionHandles } from "#/scene/section-controls";
+import { useStage } from "#/scene/stage-controller";
+import type { Bounds, IssueTarget, Kinds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
+import type { SceneRead } from "#/scene/use-scene";
+import type { PicturePage, SceneView } from "@pe/agent-contracts";
+import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
+import { PaneOverlay } from "@pe/kit/lang/pane";
+import { DetailedRead } from "./detail";
 
 const NONE: ReadonlySet<string> = new Set();
 const CONTEXT_LIMITS: Record<string, string> = {
@@ -119,7 +119,8 @@ export const poseOf = (
   size?: Size | null,
 ): OrbitViewport | null =>
   viewport?.kind === "orbit"
-    ? viewport
+    ? // The renderer owns its mutable camera pivot; Page remains immutable.
+      { ...viewport, pivot: [viewport.pivot[0], viewport.pivot[1], viewport.pivot[2]] }
     : bounds && size
       ? frame(bounds.scene, bounds.subject, undefined, size.width / size.height, bounds.points?.())
       : null;

@@ -24,7 +24,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "category": "Coordinate model data",
       "blurb": "Inspect retained view pictures and receipts"
     },
-    "moduleHash": "21f34b6fa51e420c13bac2b8493293fe2d775c6e72cdb87cb3814f958a0dfd1b"
+    "moduleHash": "cfb4d3a3503fe78523728259b2e8826d7b1ff9b0c563504bb5272f3029adc00a"
   },
   {
     "key": "schedules",
@@ -50,7 +50,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "category": "Coordinate model data",
       "blurb": "Inspect document schedules"
     },
-    "moduleHash": "aef36ac09471a79c2c8d51de59af90405f4166bd82a9bc57f012357691d4be0d"
+    "moduleHash": "bf9ed6d4ce378ee7329f1064a3b1416475118122433ff8b02b035a32347d395e"
   },
   {
     "key": "families",
@@ -76,7 +76,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "category": "Build / audit families",
       "blurb": "Audit and reconcile loaded family parameters"
     },
-    "moduleHash": "43da5bb71767608ec58743537ee8808525e3e96e523580b1d0c86cf31cbcdf52"
+    "moduleHash": "9ff6eb8619e30c4848bf653a68bcf0f4f646e775bfdfa3a25baddd9d8e595df9"
   },
   {
     "key": "ducts",
@@ -104,7 +104,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "category": "Calculate loads & airflow",
       "blurb": "Review duct systems, stage inputs and rulings, and preview writes in Revit"
     },
-    "moduleHash": "aa4e803b2a14e433e885b6ccb819f42a9ec619c54b841976950a420cd4fe72ba"
+    "moduleHash": "632b34080297f7421ecf8b3f597fd3b807786f6c30fd4cef9c2bcf6b6c834642"
   },
   {
     "key": "fans",
@@ -131,7 +131,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory; m
       "category": "Calculate loads & airflow",
       "blurb": "Inspect fan paths, inputs and pressure requirements"
     },
-    "moduleHash": "97704ac0a494d8bd3a7d495e490fca443d6c0d614338204d215ff535be29b7a4"
+    "moduleHash": "637c37c094dac5ec97b120cb03b321e2b9a15e9cfd3301bcf0eca1c27cd0b1f6"
   },
   {
     "key": "chat",

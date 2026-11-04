@@ -1,38 +1,39 @@
-import { useState, type JSX, type ReactNode } from "react";
-import { Redo2, Undo2 } from "lucide-react";
 import type {
-  DuctsInputs,
-  DuctsDesign,
-  DuctsSheetEdits,
-  DuctUnitKind,
-  FittingPricing,
-  Resolved,
+DuctsDesign,
+DuctsSheetEdits,
+DuctUnitKind,
+Resolved,
 } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { SubjectText } from "@pe/kit/lang/subject-text";
-import { airflowOptions, type AirflowOption } from "../airflow";
-import { ChoiceCell, type CellAct, type CellPath } from "./choice-cell";
+import { Redo2,Undo2 } from "lucide-react";
+import { useState,type JSX,type ReactNode } from "react";
+import { airflowOptions,type AirflowOption } from "../airflow";
+import { ChoiceCell,type CellAct,type CellPath } from "./choice-cell";
 import { criterionLabel } from "./criterion-words";
-import { editLabel } from "./input-history";
-import { fittingGroups, memberSubject, type FittingGroup } from "./fitting-groups";
+import { fittingGroups,memberSubject,type FittingGroup } from "./fitting-groups";
 import type { EditMeta } from "./input-history";
-import { inputRows, SECTION_WORDS, type InputRow, type InputSection } from "./input-rows";
-import { SheetCell, type WorkCell } from "./sheet-cell";
-import type { OpenSheet } from "../neutral.ts";
+import { editLabel } from "./input-history";
+import { inputRows,SECTION_WORDS,type InputRow,type InputSection } from "./input-rows";
+import type { SheetFitting,SheetInputs } from "./model";
+import { SheetCell,type WorkCell } from "./sheet-cell";
 
 export interface InputContext {
   snapshot: DuctSnapshot;
   doc: DuctsDesign | null;
   revision: number | null;
-  sheet: OpenSheet | null;
-  inputs: DuctsInputs | null;
+  sheet: {
+    overview: { fan: { unitId: number } | null };
+    inputs: { notes: readonly { kind: string; text: string }[] } | null;
+  } | null;
+  inputs: SheetInputs | null;
   firm: { version: string; path: string; present: boolean } | null;
   slots: readonly { slot: string; covered: number; total: number }[];
   activeSlot: string;
   element: { id: number; family: string | null } | null;
   /** Every fitting the open sheet priced (the inputs detail's census); empty until it lands. */
-  fittings: readonly FittingPricing[];
+  fittings: readonly SheetFitting[];
   /** Each served ASHRAE table's title, by id: what a table option means. */
   tableTitles?: Readonly<Record<string, string>>;
 }

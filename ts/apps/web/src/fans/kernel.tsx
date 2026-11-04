@@ -1,51 +1,47 @@
-import { jsonCodec } from "../../../../packages/agent-contracts/src/route-kernel-codecs";
 import { createElement } from "react";
-import { identityCodecs } from "../shell/page-port";
 import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import { fansData, schemas, entries, fansNeutralBodies } from "./neutral";
-import { SheetBody } from "../ducts/sheet/mount";
-import { useAdmittedSubject } from "#/shell/subject";
-import { localId } from "../ducts/neutral";
-import { stableFanKey } from "../ducts/sheet/model";
-function FanBody({ ctx, id }: Omit<Parameters<typeof SheetBody>[0], "open">) {
-  const subject = useAdmittedSubject();
-  return createElement(SheetBody, {
-    ctx,
-    id,
-    open: (row) => subject?.toggle(localId("ducts-fan", stableFanKey(row))),
-  });
-}
-import { bodies as ductsBodies, codecs } from "../ducts/kernel";
-import { ductsSources } from "../ducts/sources";
+import { jsonCodec } from "../../../../packages/agent-contracts/src/route-kernel-codecs";
 import { seedBodies } from "../ducts/fixtures";
+import { codecs, bodies as ductsBodies } from "../ducts/kernel";
+import { InputsBody, LedgerBody, PictureBody, RosterBody } from "../ducts/sheet/mount";
+import { sheetState } from "../ducts/sheet/state";
+import { ductsSources } from "../ducts/sources";
+import { identityCodecs } from "../shell/page-port";
+import { entries, fansData, fansNeutralBodies, schemas } from "./neutral";
 const source = { module: "fans/kernel.tsx", export: "bodies" };
 export const bodies = {
   ...fansNeutralBodies,
   ...seedBodies,
   price: ductsBodies.price,
+  sheetView: {
+    slot: "readings.sheetView.derive",
+    kind: "derive",
+    source,
+    run: (ctx) => sheetState(ctx.readings.sheet.value?.open ?? null),
+  },
   "sheet-roster": {
     slot: "panes.sheet-roster.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(FanBody, { ctx, id: "sheet-roster" }),
+    run: (ctx) => createElement(RosterBody, { ctx }),
   },
   "sheet-inputs": {
     slot: "panes.sheet-inputs.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(FanBody, { ctx, id: "sheet-inputs" }),
+    run: (ctx) => createElement(InputsBody, { ctx }),
   },
   "sheet-picture": {
     slot: "panes.sheet-picture.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(FanBody, { ctx, id: "sheet-picture" }),
+    run: (ctx) => createElement(PictureBody, { ctx }),
   },
   "sheet-ledger": {
     slot: "panes.sheet-ledger.body",
     kind: "pane",
     source,
-    run: (ctx) => createElement(FanBody, { ctx, id: "sheet-ledger" }),
+    run: (ctx) => createElement(LedgerBody, { ctx }),
   },
   presentLosses: ductsBodies.presentLosses,
   presentHeal: ductsBodies.presentHeal,
@@ -57,6 +53,11 @@ export const module = {
   entries,
   bodies,
   identities: { local: identityCodecs.local },
-  codecs: { ...codecs, stage: jsonCodec(schemas.sheetStage) },
+  codecs: {
+    ...codecs,
+    stage: jsonCodec(schemas.sheetStage),
+    rosterSearch: jsonCodec(schemas.rosterSearch),
+    rosterSort: jsonCodec(schemas.rosterSort),
+  },
   sources: ductsSources(),
 };

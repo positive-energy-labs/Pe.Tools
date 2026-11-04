@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { familyGraph, familyPageSchema } from "#/family/graph";
+import { graphUrlPage } from "#/shell/mount-page";
+import { createRouteOwner, makeAtomRegistry, useOwned } from "#/shell/owner";
+import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
+import { routeAddress } from "@pe/agent-contracts";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -7,16 +11,12 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
-import { routeAddress } from "@pe/agent-contracts";
 import { routeFile, useAddressPage } from "./address-page";
-import { createRouteOwner, makeAtomRegistry, useOwned } from "#/shell/owner";
-import { createViewOwner } from "./view-owner";
 import { useUrlPage } from "./url";
-import { familyGraph, familyPageSchema } from "#/family/graph";
-import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
-import { ductsPageSchema } from "#/ducts/page";
-import { graphUrlPage } from "#/shell/mount-page";
+import { createViewOwner } from "./view-owner";
+const ductsPageSchema = routeAddress("ducts").schema;
 
 afterEach(cleanup);
 

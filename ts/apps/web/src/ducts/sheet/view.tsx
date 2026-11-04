@@ -6,15 +6,15 @@
  * grouped taken / accept / preview, counts in each group header, one batch verb per group that runs
  * every live closer (`kind="commit"` when live).
  */
-import { Fragment, useMemo, useState } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
-import { fanKey, fanLabel, stableFanKey, pressure, type FanPort } from "./model";
+import { Fragment, useMemo, useState } from "react";
+import { subjectNamer } from "../subject-text";
 import { BlockerRow } from "./blocker-row";
 import type { Closer } from "./closer";
-import { subjectNamer } from "../subject-text";
+import { fanKey, fanLabel, pressure, stableFanKey, type FanPort } from "./model";
 import {
   isConsequence,
   presentIds,
@@ -24,7 +24,7 @@ import {
   type SheetBlocker,
   type Tier,
 } from "./tiers";
-import type { SheetViewProps } from "./types";
+import type { LedgerProps, RosterProps } from "./types";
 import { Worksheet } from "./worksheet-table";
 
 const rosterState = (row: FanPort) =>
@@ -38,10 +38,12 @@ const rosterSearch = (row: FanPort) => ({
   ids: [row.unitId],
 });
 
-export function Roster({ props }: { props: SheetViewProps }) {
+export function Roster({ props }: { props: RosterProps }) {
   const wait = props.busy || props.loading ? "Wait for the current read" : null;
-  const [listState, setListState] = useState<ListState>(emptyListState());
+  const [listState, setListState] = useState<ListState<"name">>(emptyListState<"name">());
   const list = useList({
+    persist: props.address,
+    sorts: { name: (fan: FanPort) => fan.mark },
     items: props.roster,
     keyOf: fanKey,
     search: rosterSearch,
@@ -90,7 +92,7 @@ export function Roster({ props }: { props: SheetViewProps }) {
   );
 }
 
-function Sides({ props }: { props: SheetViewProps }) {
+function Sides({ props }: { props: LedgerProps }) {
   const totals = props.sheet?.overview.totals;
   const fan = props.sheet?.overview.fan;
   if (!fan || !totals)
@@ -149,7 +151,7 @@ function TierGroup({
   /** The tier's cause rows; R-B consequences arrive through `consequencesOf`, never as rows of their own. */
   blockers: readonly SheetBlocker[];
   consequencesOf: (id: string) => readonly SheetBlocker[];
-  props: SheetViewProps;
+  props: LedgerProps;
 }) {
   // The batch runs each row's closer with no typed value: the firm shim for drops, the pair for
   // joins and heals; rows that need a typed number stay refused and are left to their row.
@@ -218,7 +220,7 @@ function TierGroup({
   );
 }
 
-export function Ledger({ props }: { props: SheetViewProps }) {
+export function Ledger({ props }: { props: LedgerProps }) {
   // R-B: consequence rows nest under their cause; only cause rows take a tier and a verb.
   const present = presentIds(props.blockers);
   const causes = props.blockers.filter((b) => !isConsequence(b, present));

@@ -1,25 +1,26 @@
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { useContext } from "react";
+import { cellFocusOf } from "../../cell-focus";
 /**
  * The inputs that live on the system tree: a terminal's flow and drop, a unit's flow, ESP and role.
- * U4 restores writers through the fans Work. Each is one kit trichotomy `StateCell` over its Work cell: a person's edit stages, Pea's suggestion
+ * Each is one kit trichotomy `StateCell` over its Work cell: a person's edit stages, Pea's suggestion
  * shows as the proposed state with accept and reject, and the value drawn is the one Pe resolved
  * (its rung named beside it in quiet text) until one is edit.
  */
-
-import { storedRuling } from "@pe/ducts-domain/rulings";
 import type { Priced } from "@pe/ducts-domain/pricing";
+import { storedRuling } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
+import { cellFromDraft,StateCell } from "@pe/kit/lang/cell";
+import { DuctsOwner } from "../../pane-context";
 
-import { equipmentInputs, terminalInputs, type Resolved } from "../../inputs";
-import type { CellSegment } from "../../inbox-rows";
+import { equipmentInputs,terminalInputs,type Resolved } from "../../inputs";
 import type { LossesWork } from "../../work";
 import { PressureEquivalent } from "./pressure-equivalent";
 
-type Rung = Record<string, unknown>;
+type Rung = import("@pe/agent-contracts").DuctFlow | import("@pe/agent-contracts").DuctDrop;
 
 interface CellSpec {
-  segment: CellSegment;
+  segment: "flows" | "equipmentFlows" | "terminalDrops" | "esp";
   /** The unit drawn inside the box, and the shorter form a narrow pane shows. */
   unit: { label: string; short?: string };
   digits: number;
@@ -34,7 +35,7 @@ const SPECS = {
     segment: "flows",
     unit: { label: "cfm" },
     digits: 0,
-    text: (v) => (v?.cfm == null ? undefined : String(v.cfm)),
+    text: (v) => (v && "cfm" in v ? String(v.cfm) : undefined),
     rung: (typed, standing) => ({
       cfm: Number(typed),
       ...(standing?.source ? { source: standing.source } : {}),
@@ -44,7 +45,7 @@ const SPECS = {
     segment: "equipmentFlows",
     unit: { label: "cfm" },
     digits: 0,
-    text: (v) => (v?.cfm == null ? undefined : String(v.cfm)),
+    text: (v) => (v && "cfm" in v ? String(v.cfm) : undefined),
     rung: (typed, standing) => ({
       cfm: Number(typed),
       ...(standing?.source ? { source: standing.source } : {}),
@@ -54,7 +55,7 @@ const SPECS = {
     segment: "terminalDrops",
     unit: { label: "in-wg", short: "wg" },
     digits: 4,
-    text: (v) => (v?.inWg == null ? undefined : String(v.inWg)),
+    text: (v) => (v && "inWg" in v ? String(v.inWg) : undefined),
     rung: (typed, standing) => ({
       inWg: Number(typed),
       ...(standing?.source ? { source: standing.source } : {}),
@@ -64,7 +65,7 @@ const SPECS = {
     segment: "esp",
     unit: { label: "in-wg", short: "wg" },
     digits: 4,
-    text: (v) => (v?.inWg == null ? undefined : String(v.inWg)),
+    text: (v) => (v && "inWg" in v ? String(v.inWg) : undefined),
     rung: (typed) => ({ inWg: Number(typed) }),
   },
 } satisfies Record<string, CellSpec>;
@@ -86,9 +87,9 @@ function InputCell({
   damage?: string;
 }) {
   const key = String(id);
+  const landing = cellFocusOf(useContext(DuctsOwner)?.selected ?? "");
   const cell = work.doc?.[spec.segment][key] ?? {};
-  const standing = (cell.edit ?? cell.suggestion)?.value as Rung | undefined;
-
+  const standing = (cell.edit ?? cell.suggestion)?.value;
   const word = cell.edit ? "override" : cell.suggestion ? "Pea proposes" : resolved.word;
   const value = spec.text(standing) ?? (resolved.value == null ? "" : String(resolved.value));
   return (
@@ -99,20 +100,23 @@ function InputCell({
       onClick={(event) => event.stopPropagation()}
     >
       <StateCell
-        {...cellFromDraft(
+        {...cellFromDraft<Rung>(
           cell,
           {
             value,
-            cap: "locked",
-            capReason: "Fan inputs are unavailable",
+            cap: "locked", capReason: "Fan inputs are unavailable",
           },
-          (value) => spec.text(value as Rung) ?? "",
+          (value) => spec.text(value) ?? "",
         )}
         scale="row"
+        land={
+          landing?.pane === "inputs" && landing.segment === spec.segment && landing.id === id
+            ? landing.key
+            : undefined
+        }
         damage={damage}
         unit={spec.unit}
         numeric={{ min: 0, digits: spec.digits }}
-        // U4 restores fan editing through the fans Work.
         transitions={[]}
       />
       {spec.unit.label === "in-wg" && value !== "" ? (
@@ -142,9 +146,9 @@ function RoleCell({
   store: DuctSnapshot["store"];
 }) {
   const key = String(id);
+  const landing = cellFocusOf(useContext(DuctsOwner)?.selected ?? "");
   const cell = work.doc?.roles[key] ?? {};
   const standing = (cell.edit ?? cell.suggestion)?.value;
-
   const stored = storedRuling(store, "roles", key);
   const word =
     cell.edit && stored === cell.edit.value.role
@@ -164,16 +168,16 @@ function RoleCell({
       <StateCell
         {...cellFromDraft(
           cell,
-          {
-            value: standing?.role ?? resolved.value ?? "fan",
-            cap: "locked",
-            capReason: "Fan inputs are unavailable",
-          },
-          (value) => (value as { role?: string } | undefined)?.role ?? "",
+          { value: standing?.role ?? resolved.value ?? "fan", cap: "locked", capReason: "Fan inputs are unavailable" },
+          (value) => value?.role ?? "",
         )}
         scale="row"
+        land={
+          landing?.pane === "inputs" && landing.segment === "roles" && landing.id === id
+            ? landing.key
+            : undefined
+        }
         placeholder="fan"
-        // U4 restores fan editing through the fans Work.
         transitions={[]}
       />
       <TooltipHint content={resolved.reason}>
