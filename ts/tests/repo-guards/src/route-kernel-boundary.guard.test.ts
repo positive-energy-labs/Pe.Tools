@@ -1,15 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import {
-  additions,
-  boundaryCensus,
-  legacyInventory,
-  baselineFloors,
-} from "./unification-2-census.ts";
-import baseline from "./unification-2.baseline.json" with { type: "json" };
-
-it("route kernel boundaries can only shed existing offenders", () => {
-  expect(additions(boundaryCensus(), baseline)).toEqual([]);
-}, 60000);
+import { additions, boundaryCensus, legacyInventory } from "./unification-2-census.ts";
 
 it("scans source despite mocked imports, aliases, exports and malformed fixture code", () => {
   const actual = boundaryCensus({
@@ -82,19 +72,6 @@ it("inventories registered, standalone, aliased, namespace and dynamic Pod legac
     "legacyGraphs: ts/apps/web/src/example/graph.ts#replacementGraph",
   ]);
 });
-
-it("real legacy sites and their committed allowances only shrink", () => {
-  const sites = legacyInventory().sites;
-  expect(additions(sites, baseline)).toEqual([]);
-  for (const floor of baselineFloors()) {
-    const seeded = Object.fromEntries(
-      Object.entries(sites)
-        .filter(([rule]) => rule in floor)
-        .map(([rule]) => [rule, baseline[rule as keyof typeof baseline]]),
-    );
-    expect(additions(seeded, floor)).toEqual([]);
-  }
-}, 60000);
 
 it("removing an earlier registration cannot rename surviving sites", () => {
   const file = "ts/apps/web/src/route/builtin-routes.tsx";

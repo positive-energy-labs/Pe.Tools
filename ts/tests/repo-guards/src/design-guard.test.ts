@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, posix, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import ts from "../../../apps/web/node_modules/typescript/lib/typescript.js";
+import ts from "typescript";
 import { describe, expect, it } from "vite-plus/test";
 
 // ── the walk ─────────────────────────────────────────────────────────────────────────────────

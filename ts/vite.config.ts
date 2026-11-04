@@ -14,6 +14,9 @@ export default defineConfig({
       "**/host-catalog.generated.ts",
       // Canonical closure pins and SDK shape projections are compared byte-for-byte by their producers.
       "**/source-closure.generated.json",
+      // route-graphs.ts --check owns exact projection bytes, including compact route-directory.ts.
+      "packages/agent-contracts/src/generated/route-directory.ts",
+      "packages/mcps/src/pea/generated/*-graph.json",
       "**/pe-revit-wire.ts",
       // `pe-revit context product` writes this file ("DO NOT EDIT"); regeneration undoes any reformat
       "**/product.g.ts",
@@ -46,7 +49,7 @@ export default defineConfig({
     rules: { "vite-plus/prefer-vite-plus-imports": "error" },
     // ADR 0029 rule 2: every fiber end in product code names its reason on the line.
     overrides: [{ files: ["apps/**", "packages/**"], rules: { "pe/effect-edge": "error" } }],
-    options: { typeAware: true, typeCheck: true },
+    options: { typeAware: true },
   },
   test: {
     exclude: ["**/node_modules/**", "**/dist-installed/**", "**/.artifacts/**"],

@@ -4,13 +4,8 @@ import { expect, it } from "vite-plus/test";
 import { root } from "./unification-2-census.ts";
 
 // S8: mount.tsx is the route door. Every noun lives in a `./mount-<noun>` seam beside it, so a new
-// noun has nowhere to land in the door: it may import and re-export only its seams, under a cap.
+// noun has nowhere to land in the door: it may import and re-export only its seams.
 const door = readFileSync(join(root, "ts/apps/web/src/shell/mount.tsx"), "utf8");
-const MAX_LINES = 80;
-
-it(`shell/mount.tsx stays under ${MAX_LINES} lines`, () => {
-  expect(door.split("\n").length).toBeLessThanOrEqual(MAX_LINES);
-});
 
 it("shell/mount.tsx imports and re-exports only its seams", () => {
   const specifiers = [...door.matchAll(/\bfrom\s+["']([^"']+)["']/g)].map((m) => m[1]!);

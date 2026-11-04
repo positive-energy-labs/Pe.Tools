@@ -51,63 +51,6 @@ export function identity(node: ts.Node): string {
   return `${node.getSourceFile().fileName}#${owner}:${text}`;
 }
 
-/** Any array in an authored schema counts, including object and union members.
- * Named kernel constructors own their shapes; only their calls escape this structural scan. */
-export function arraySchema(
-  node: ts.Node | undefined,
-  seen = new Set<ts.Node>(),
-  checker?: ts.TypeChecker,
-): boolean {
-  if (!node || seen.has(node)) return false;
-  seen.add(node);
-  if (
-    ts.isCallExpression(node) &&
-    ts.isPropertyAccessExpression(node.expression) &&
-    ["array", "tuple"].includes(node.expression.name.text)
-  )
-    return true;
-  // Resolve schema aliases and imported schema declarations without executing authored code.
-  if (
-    ts.isIdentifier(node) &&
-    (!ts.isPropertyAccessExpression(node.parent) || node.parent.expression === node)
-  ) {
-    const source = node.getSourceFile();
-    let found = false;
-    if (checker) {
-      let symbol = checker.getSymbolAtLocation(node);
-      if (symbol && symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
-      for (const declaration of symbol?.declarations ?? []) {
-        const file = declaration.getSourceFile();
-        if (!file.isDeclarationFile && !file.fileName.includes("node_modules"))
-          found ||= arraySchema(
-            ts.isVariableDeclaration(declaration)
-              ? declaration.initializer
-              : ts.isFunctionDeclaration(declaration)
-                ? declaration.body
-                : undefined,
-            seen,
-            checker,
-          );
-      }
-    }
-    if (!checker)
-      walk(source, (candidate) => {
-        if (
-          ts.isVariableDeclaration(candidate) &&
-          ts.isIdentifier(candidate.name) &&
-          candidate.name.text === node.text
-        )
-          found ||= arraySchema(candidate.initializer, seen, checker);
-      });
-    if (found) return true;
-  }
-  let found = false;
-  node.forEachChild((child) => {
-    if (arraySchema(child, seen, checker)) found = true;
-  });
-  return found;
-}
-
 const moduleCache = ts.createModuleResolutionCache(root, (path) => path, {});
 export function resolveModule(file: string, specifier: string): string | undefined {
   const found = ts.resolveModuleName(
@@ -127,95 +70,19 @@ export function resolveModule(file: string, specifier: string): string | undefin
   return found ? relative(root, found.resolvedFileName).replaceAll("\\", "/") : undefined;
 }
 
-/** Resolved Zod type AST: follows schema aliases, factories, imports and nested shapes without executing modules. */
-export function zodArray(
-  type: ts.Type,
-  checker: ts.TypeChecker,
-  seen = new Set<ts.Type>(),
-): boolean {
-  if (seen.has(type)) return false;
-  seen.add(type);
-  const name = type.getSymbol()?.getName() ?? type.aliasSymbol?.getName();
-  if (name === "ZodArray" || name === "ZodTuple") return true;
-  if (type.isUnionOrIntersection()) return type.types.some((t) => zodArray(t, checker, seen));
-  if (!(type.flags & ts.TypeFlags.Object)) return false;
-  if ((type as ts.ObjectType).objectFlags & ts.ObjectFlags.Reference)
-    if (checker.getTypeArguments(type as ts.TypeReference).some((t) => zodArray(t, checker, seen)))
-      return true;
-  if (name?.startsWith("Zod")) return false;
-  return type.getProperties().some((property) => {
-    const declaration = property.valueDeclaration ?? property.declarations?.[0];
-    return declaration
-      ? zodArray(checker.getTypeOfSymbolAtLocation(property, declaration), checker, seen)
-      : false;
-  });
-}
-
+// Field cardinality belongs to route-field.ts types, not a second compiler/schema interpreter.
 function structuralCensus() {
   const result: Record<string, string[]> = Object.fromEntries(
-    ["hostCalls", "customDecodes", "readWrites", "peaRows", "arrayFields", "unscopedGeometry"].map(
-      (key) => [key, []],
-    ),
+    ["hostCalls", "customDecodes", "readWrites", "peaRows", "unscopedGeometry"].map((key) => [
+      key,
+      [],
+    ]),
   );
   const production = files("ts").filter(
     (p) => /\.[cm]?tsx?$/.test(p) && !/(?:\.test\.|\/tests\/|\.generated\.)/.test(p),
   );
-  const candidates = new Set<string>();
-  const fieldNames = new Map<string, Set<string>>();
   for (const p of production) {
     const source = syntax(read(p), p);
-    const names = new Set(["field"]);
-    walk(source, (n) => {
-      if (ts.isImportSpecifier(n) && (n.propertyName ?? n.name).text === "field")
-        names.add(n.name.text);
-    });
-    let changed = true;
-    while (changed) {
-      changed = false;
-      walk(source, (n) => {
-        if (
-          ts.isVariableDeclaration(n) &&
-          ts.isIdentifier(n.name) &&
-          n.initializer &&
-          names.has(n.initializer.getText()) &&
-          !names.has(n.name.text)
-        ) {
-          names.add(n.name.text);
-          changed = true;
-        }
-      });
-    }
-    fieldNames.set(p, names);
-    walk(source, (n) => {
-      if (
-        ts.isCallExpression(n) &&
-        (names.has(n.expression.getText()) ||
-          (ts.isPropertyAccessExpression(n.expression) &&
-            (n.expression.name.text === "field" ||
-              (n.expression.name.text === "extend" &&
-                ts.isPropertyAccessExpression(n.expression.expression) &&
-                n.expression.expression.name.text === "schema"))))
-      )
-        candidates.add(p);
-    });
-  }
-  const program = ts.createProgram(
-    [...candidates].map((p) => resolve(root, p)),
-    {
-      target: ts.ScriptTarget.Latest,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      skipLibCheck: true,
-      types: [],
-      lib: ["lib.es2023.d.ts"],
-      noEmit: true,
-      allowJs: true,
-      paths: { "#/*": [resolve(root, "ts/apps/web/src/*")] },
-    },
-  );
-  const checker = program.getTypeChecker();
-  for (const p of production) {
-    const source = program.getSourceFile(resolve(root, p)) ?? syntax(read(p), p);
     const site = (node: ts.Node) =>
       identity(node)
         .replaceAll(root.replaceAll("\\", "/") + "/", "")
@@ -253,33 +120,6 @@ function structuralCensus() {
         n.properties.some((a) => prop(a, "key"))
       )
         add("peaRows", n);
-      // Page schemas authored via routeAddress(...).schema.extend and field(...) declarations.
-      if (
-        ts.isCallExpression(n) &&
-        (fieldNames.get(p)!.has(n.expression.getText(source)) ||
-          (ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === "field")) &&
-        n.arguments[0] &&
-        (zodArray(checker.getTypeAtLocation(n.arguments[0]), checker) ||
-          arraySchema(n.arguments[0], new Set(), checker))
-      )
-        add("arrayFields", n);
-      if (
-        ts.isCallExpression(n) &&
-        ts.isPropertyAccessExpression(n.expression) &&
-        n.expression.name.text === "extend" &&
-        ts.isPropertyAccessExpression(n.expression.expression) &&
-        n.expression.expression.name.text === "schema"
-      ) {
-        const obj = n.arguments[0];
-        if (obj && ts.isObjectLiteralExpression(obj))
-          for (const a of obj.properties)
-            if (
-              ts.isPropertyAssignment(a) &&
-              (zodArray(checker.getTypeAtLocation(a.initializer), checker) ||
-                arraySchema(a.initializer, new Set(), checker))
-            )
-              add("arrayFields", a);
-      }
     });
     if (p.startsWith("ts/apps/host/src/")) {
       // Conservative source-call census of the audited read owners, not a general call graph.
@@ -338,7 +178,7 @@ function geometryCensus(): string[] {
 export function census(): Record<string, string[]> {
   let shared: Record<string, string[]> | undefined;
   const result: Record<string, string[]> = {};
-  for (const law of ["hostCalls", "customDecodes", "readWrites", "peaRows", "arrayFields"])
+  for (const law of ["hostCalls", "customDecodes", "readWrites", "peaRows"])
     Object.defineProperty(result, law, {
       enumerable: true,
       get: () => (shared ??= structuralCensus())[law],

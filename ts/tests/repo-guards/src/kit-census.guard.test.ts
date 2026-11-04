@@ -317,7 +317,7 @@ const RULES: Rule[] = [
     exclude: [W + "{doc,docs,guide,tutorial,help,chat}/**"],
     allow: allow({
       "duct-loss/route.tsx": "Input labels, measured values, headings and equations name the calculation.",
-      "duct/charts.tsx": "Caption labels the plotted law.",
+      "duct-loss/duct/charts.tsx": "Caption labels the plotted law.",
       "components/work/band.tsx": "Recovery receipts, write conflicts and staged tallies support a decision.",
       "route/situation-verbs.tsx": "Outcomes and refusals disclose effects before a write.",
       "route/situation-grids.tsx": "Ledger values and log labels name machine state.",
@@ -328,7 +328,7 @@ const RULES: Rule[] = [
       "route/situation-marks.tsx": "Reader opens state details.",
     }), max: {
       [W + "duct-loss/route.tsx"]: 7,
-      [W + "duct/charts.tsx"]: 1,
+      [W + "duct-loss/duct/charts.tsx"]: 1,
       [W + "components/work/band.tsx"]: 3,
       [W + "route/situation-verbs.tsx"]: 2,
       [W + "route/situation-grids.tsx"]: 1,
@@ -343,7 +343,6 @@ const RULES: Rule[] = [
       "components/lang/leg-strip.tsx": "Fixed receipt-stage chips have no picks or navigation.",
       "ducts/docs.tsx": "Tutorial prose has no row navigation.",
       "ducts/introduction.tsx": "Shared public tutorial prose has no row navigation.",
-      "ducts/proto/e/preview-lines.tsx": "Static proposed-change and refusal text has no picks.",
       "lib/schema-to-field-render/field-metadata.tsx": "Static validation messages have no picks.",
     }), cannotSee: "Rows built by helpers; ListReading is the wave-4 kit reading name." },
   { id: "list-column-width-owner", doctrine: "L3",

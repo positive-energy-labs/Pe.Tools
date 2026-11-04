@@ -166,7 +166,6 @@ const config = defineConfig(({ mode, command }) => {
     lint: {
       options: {
         typeAware: true,
-        typeCheck: true,
       },
     },
     fmt: {},

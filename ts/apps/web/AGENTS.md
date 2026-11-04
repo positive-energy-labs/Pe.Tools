@@ -36,8 +36,7 @@ Call sites declare state; the language CSS owns what state looks like. Concretel
 4. **Lines and planes.** Separators are `hairline-{t,b,l,r,x,y}[-2]`, `hairline-rows`,
    `hairline-*-faint` (0.5px), `boundary-*` (2px strong); planes are
    `data-surface={page|artifact|recess|document}`. Raw `border-* border-line` pairs and raw
-   `bg-page`/`bg-artifact` outside components live on a shrinking allowlist
-   (`design-allowlist.baseline.json`); do not add to it.
+   `bg-page`/`bg-artifact` outside components are checked by the design guards.
 5. **Theme.** Every dual-theme token is one `light-dark()` declaration in `base.css`. Dark mode
    is the `.dark` class plus inline `color-scheme` (set by the theme toggle); a class-only
    toggle resolves `light-dark()` wrong — test theme claims through the real toggle.
