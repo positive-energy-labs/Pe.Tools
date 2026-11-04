@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 import { expect,test } from "vite-plus/test";
-import { files,root,syntax,walk } from "./unification-2-census";
+import { files,root,syntax,walk } from "./unification-2-census.ts";
 
 /** Pane admission is lazy only if its body constructs that pane alone. */
 function fakePaneSlots(source: ts.SourceFile): number[] {

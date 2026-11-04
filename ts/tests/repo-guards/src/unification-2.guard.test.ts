@@ -16,7 +16,7 @@ import {
   zodArray,
 } from "./unification-2-census.ts";
 import baseline from "./unification-2.baseline.json" with { type: "json" };
-import "./unification-pane-bodies.law";
+import "./unification-pane-bodies.law.ts";
 
 const { legacyBuiltinRoutes, ...offenderBaseline } = baseline;
 
