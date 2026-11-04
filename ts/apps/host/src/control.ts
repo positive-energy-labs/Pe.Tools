@@ -130,7 +130,7 @@ export function writeTerminalContext(serviceName: string) {
   // The host never calls itself under a context it inherited from the shell that started it.
   delete process.env[HOST_CONTEXT_VARIABLE];
   const token = mintContext({ kind: "human", via: "cli" });
-  const path = hostContextTokenPath(serviceName);
+  const path = hostContextTokenPath(hostOwnership.rootPath, serviceName);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, token, { mode: 0o600 });
   return {

@@ -9,7 +9,7 @@ public sealed class ModuleStorage(string module) {
         : module;
 
     public StateStorage State() => StateStorage.ExactDir(
-        ProductRuntimeLayout.ForCurrentUser().State.ResolveModuleStatePath(this.ModuleKey)
+        ProductRuntimeLayout.Current.State.ResolveModuleStatePath(this.ModuleKey)
     );
 
     public OutputStorage Output() => new(

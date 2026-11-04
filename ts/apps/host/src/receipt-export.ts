@@ -23,7 +23,7 @@ import { analyticsConfig, readOrCreateInstallId, writeFatalEvidence } from "@pe/
 import { isAnyOperationKey, isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import { ActionJournal } from "./action-journal.ts";
 import { hostActionJournal, setHostReceiptStamp } from "./gateway-owner.ts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import { subscribeReceiptProducers, type NativeReceiptProducer } from "./bridge.ts";
 import { originOf } from "./control.ts";
 import type { NoticeContext } from "./notices.ts";
@@ -816,7 +816,7 @@ export class ReceiptExport extends Context.Service<ReceiptExport, ReceiptExporte
           journal,
           stamps,
           client,
-          root: join(productRoot(), "state", "host", hostOwnership.serviceName),
+          root: join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName),
         });
         if (!stamps.host)
           exporter.track(exporter.record({ kind: "diagnostic", code: "identity.unavailable" }));

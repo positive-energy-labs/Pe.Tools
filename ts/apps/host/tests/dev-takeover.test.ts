@@ -5,14 +5,15 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
-import { productRoot, sourceHostServiceName } from "@pe/host-contracts/service-identity";
+import { sourceHostServiceName } from "@pe/host-contracts/service-identity";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 test("dev takeover keeps the incumbent serving until the SDK claim can proceed", async () => {
   const state = mkdtempSync(join(tmpdir(), "pe-host-takeover-"));
   const previousLocalAppData = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = state;
   const name = `${sourceHostServiceName(resolve(import.meta.dirname, "../../../.."))}-no-revit`;
-  const appBase = productRoot();
+  const appBase = hostOwnership.rootPath;
   const serviceDir = join(appBase, "state", "service");
   const lockPath = join(serviceDir, `${name}.lock`);
   const children: ChildProcess[] = [];

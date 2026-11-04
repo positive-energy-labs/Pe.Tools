@@ -13,8 +13,8 @@ import {
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import {
   checkoutRootFrom,
-  sourceHostServiceName,
   productRoot,
+  sourceHostServiceName,
 } from "@pe/host-contracts/service-identity";
 import { serviceFilePath } from "@pe/host-contracts/pe-service";
 import { runPeaPromptTurn } from "../src/prompt.ts";
@@ -34,6 +34,7 @@ vi.mock("@pe/host-contracts/pe-service", async (original) => ({
 }));
 const sourceRoot = checkoutRootFrom(import.meta.dirname)!;
 const owner = sourceHostServiceName(sourceRoot);
+const runtimeRoot = () => productRoot({ lane: "dev", sourceRoot, installedRoot: null });
 let fixtureRoot: string;
 let ownUrl: string;
 function ownReceipt(port: number, patch: Record<string, unknown> = {}) {
@@ -49,7 +50,7 @@ function ownReceipt(port: number, patch: Record<string, unknown> = {}) {
     sourceRoot,
     ...patch,
   };
-  const file = serviceFilePath(productRoot(), owner);
+  const file = serviceFilePath(runtimeRoot(), owner);
   mkdirSync(join(file, ".."), { recursive: true });
   writeFileSync(file, JSON.stringify(receipt));
   return receipt;
@@ -313,7 +314,7 @@ test("pea --prompt creates a thread, rejects permissions by default, and continu
 
 test("same-owner SDK startup ignores arbitrary launch command and revalidates its receipt", async () => {
   const port = (server.address() as AddressInfo).port;
-  rmSync(serviceFilePath(productRoot(), owner));
+  rmSync(serviceFilePath(runtimeRoot(), owner));
   process.env[hostProcessIdentity.hostBaseUrlVariable] = "";
   process.env.PE_TOOLS_HOST_LAUNCH_COMMAND = "must-never-execute";
   ensureRunning.mockReset();
@@ -322,7 +323,7 @@ test("same-owner SDK startup ignores arbitrary launch command and revalidates it
     const result = await runPeaPromptTurn({ prompt: "hi", harness: "codex", allow: true });
     expect(result.ok).toBe(true);
     expect(ensureRunning).toHaveBeenCalledExactlyOnceWith(
-      productRoot(),
+      runtimeRoot(),
       owner,
       expect.objectContaining({
         lane: "dev",
@@ -360,7 +361,7 @@ test("foreign receipt refuses before SDK startup or any HTTP call", async () => 
 
 test("SDK acknowledgement with a foreign replacement receipt cannot authorize prompt requests", async () => {
   const port = (server.address() as AddressInfo).port;
-  rmSync(serviceFilePath(productRoot(), owner));
+  rmSync(serviceFilePath(runtimeRoot(), owner));
   process.env[hostProcessIdentity.hostBaseUrlVariable] = "";
   ensureRunning.mockReset();
   ensureRunning.mockImplementationOnce(async () => ({
@@ -402,7 +403,7 @@ test("copied SEA pea is refused before SDK startup or prompt dispatch", async ()
 
 test("same-address SDK acknowledgement must match the exact successor incarnation", async () => {
   const port = (server.address() as AddressInfo).port;
-  rmSync(serviceFilePath(productRoot(), owner));
+  rmSync(serviceFilePath(runtimeRoot(), owner));
   process.env[hostProcessIdentity.hostBaseUrlVariable] = "";
   ensureRunning.mockReset();
   ensureRunning.mockImplementationOnce(async () => ({

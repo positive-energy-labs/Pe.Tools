@@ -21,6 +21,7 @@
 
     <ItemGroup>
         <None Include="../../ts/packages/host-contracts/src/generated/host-catalog.generated.ts" Link="host-catalog.generated.ts" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="../../ts/packages/host-contracts/tests/runtime-ownership.fixture.json" Link="runtime-ownership.fixture.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>

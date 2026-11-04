@@ -276,8 +276,8 @@ async function readFamiliesProgressively(
             return null;
           }
           // Each worker opens its own copy; the version check below rejects a file saved since Prepare.
-          folder ??= mkdir(productScratchPath(), { recursive: true }).then(() =>
-            mkdtemp(join(productScratchPath(), "families-")),
+          folder ??= mkdir(productScratchPath(hostOwnership.rootPath), { recursive: true }).then(
+            () => mkdtemp(join(productScratchPath(hostOwnership.rootPath), "families-")),
           );
           const file = join(await folder, `${id}.rvt`);
           await copyFile(source.copyPath!, file);

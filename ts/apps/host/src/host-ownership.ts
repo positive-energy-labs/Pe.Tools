@@ -10,8 +10,6 @@ import {
 } from "@pe/host-contracts/service-identity";
 import type { PeaRuntimeCapabilities } from "@pe/runtime";
 
-export { productRoot } from "@pe/host-contracts/service-identity";
-
 export type { HostLane } from "@pe/host-contracts/service-identity";
 
 export type HostOwnership = {
@@ -21,6 +19,8 @@ export type HostOwnership = {
   readonly serviceName: string;
   readonly sourceRoot: string | null;
   readonly installedRoot: string | null;
+  /** The one state root, computed once from the told owner; host code never re-derives it. */
+  readonly rootPath: string;
 };
 
 const NO_REVIT_ARGUMENT = "--no-revit";
@@ -46,8 +46,7 @@ function resolveHostOwnership(): HostOwnership {
   if (lane === "installed" && process.env[sourceRootVariable]?.trim())
     throw Error("An installed host cannot claim a checkout source root.");
   const installedRoot = lane === "installed" ? installedRuntimeRoot("host") : null;
-  // Refuse an unsafe override before host startup can publish receipts or mutate durable Work.
-  productRoot(lane, sourceRoot);
+  const rootPath = productRoot({ lane, sourceRoot, installedRoot });
   const serviceName = serviceNameForCapabilities(
     hostServiceName(lane, sourceRoot),
     hostCapabilities,
@@ -65,11 +64,12 @@ function resolveHostOwnership(): HostOwnership {
     serviceName,
     sourceRoot,
     installedRoot,
+    rootPath,
   };
 }
 
 function resolveHostLane(): HostLane {
-  // PE_LANE is the SINGLE authoritative lane signal: TsHostLauncher sets it on every Revit-driven
+  // PE_LANE is the SINGLE authoritative lane signal: the SDK supervisor sets it on every Revit-driven
   // spawn (installed and dev alike), and ensure-source-lane.ts sets it for
   // bare source runs. No PE_TOOLS_HOST_LANE, no path/argv heuristic, no silent default — an unknown
   // lane is a launch-configuration bug, so fail fast loudly rather than guess (IPC-SEAM-SPEC D7).

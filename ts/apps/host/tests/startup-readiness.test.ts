@@ -7,7 +7,7 @@ import { expect, test, vi } from "vite-plus/test";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { makeHttpLive } from "../src/app.ts";
-import { hostOwnership, productRoot } from "../src/host-ownership.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 vi.mock("../src/pe-revit-launch.ts", async (original) => ({
   ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
@@ -64,7 +64,7 @@ test("HTTP requests answer during claim acquisition and discovery only publishes
     const address = nodeServer.address();
     if (!address || typeof address === "string") throw new Error("host did not bind TCP");
     const base = `http://127.0.0.1:${address.port}`;
-    expect(await readServiceFile(productRoot(), hostOwnership.serviceName)).toBeNull();
+    expect(await readServiceFile(hostOwnership.rootPath, hostOwnership.serviceName)).toBeNull();
     const response = await fetch(`${base}/host/status`, { signal: AbortSignal.timeout(1_000) });
     expect(response.status).toBe(200);
     expect((await response.json()).processId).toBe(process.pid);
@@ -86,7 +86,7 @@ test("HTTP requests answer during claim acquisition and discovery only publishes
     nodeServer.closeAllConnections();
     // effect-edge: island, phase 5
     await Effect.runPromise(Fiber.interrupt(fiber));
-    expect(await readServiceFile(productRoot(), hostOwnership.serviceName)).toBeNull();
+    expect(await readServiceFile(hostOwnership.rootPath, hostOwnership.serviceName)).toBeNull();
     claim.before = async () => {};
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previousLocalAppData;

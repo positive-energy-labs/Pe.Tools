@@ -292,7 +292,7 @@ public static class RevitViewImageExporter {
     }
 
     private static string ExportToTemp(Document document, View view, int pixelSize) {
-        var outputDirectory = Path.Combine(ProductRuntimeLayout.ForCurrentUser().ScratchPath, "pe-view-captures");
+        var outputDirectory = Path.Combine(ProductRuntimeLayout.Current.ScratchPath, "pe-view-captures");
         var baseName = $"view-{view.Id.Value()}-{Guid.NewGuid():N}";
         return ExportPng(document, view.Id, outputDirectory, baseName, Math.Min(Math.Max(pixelSize, 100), 8000));
     }

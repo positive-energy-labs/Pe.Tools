@@ -1,76 +1,27 @@
-using System.ComponentModel;
-using System.Runtime.InteropServices;
-using System.Text;
-using Microsoft.Win32.SafeHandles;
-
 namespace Pe.Shared.Product;
 
 internal static class ProductPathing {
     /// <summary>
-    ///     The machine-local product root: an explicit <c>%LOCALAPPDATA%</c>, else
-    ///     <c>&lt;product home&gt;\.local-state</c> when <see cref="ProductPathNames.ProductHomeVariable" /> is set
-    ///     (an isolated run shares no state with the owner's host), else <c>%LOCALAPPDATA%\Vendor\Product</c>.
-    ///     Host lanes mirror ts/packages/host-contracts/src/service-identity.ts productRoot:
-    ///     dev uses checkout/.artifacts/pe-tools or the home override, never installed state.
+    ///     The state root for a runtime its shell was told about: <c>&lt;home&gt;\.local-state</c> under a
+    ///     product home override (an isolated run shares no state with the owner's host), else the dev
+    ///     checkout's <c>.artifacts\pe-tools</c>, else the SDK install root itself. Pure: the TS twin
+    ///     is <c>stateRoot</c> in service-identity.ts, and both assert runtime-ownership.fixture.json.
     /// </summary>
-    public static string ResolveRuntimeRoot(string? localAppData, string lane = "installed", string? sourceRoot = null) {
-        if (lane != "installed" && lane != "dev")
-            throw new ArgumentException("A runtime requires a dev or installed lane.", nameof(lane));
-        if (lane == "dev") {
-            if (string.IsNullOrWhiteSpace(sourceRoot))
-                throw new ArgumentException("A dev state root requires a Pe.Tools checkout.", nameof(sourceRoot));
-            var checkout = Path.GetFullPath(sourceRoot!);
-            if ((!File.Exists(Path.Combine(checkout, ".git")) && !Directory.Exists(Path.Combine(checkout, ".git"))) ||
-                !File.Exists(Path.Combine(checkout, "Pe.Tools.slnx")))
-                throw new ArgumentException("A dev state root requires a Pe.Tools checkout.", nameof(sourceRoot));
-            var root = string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable))
-                ? Path.Combine(checkout, ".artifacts", "pe-tools")
-                : Path.Combine(ResolveProductHome(null), ProductPathNames.LocalStateDirectoryName);
-            var installed = CanonicalPath(InstalledRuntimeRoot(localAppData)).TrimEnd(Path.DirectorySeparatorChar);
-            var candidate = CanonicalPath(root).TrimEnd(Path.DirectorySeparatorChar);
-            if (candidate.Equals(installed, StringComparison.OrdinalIgnoreCase) ||
-                candidate.StartsWith(installed + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"Dev host cannot use installed product state '{root}'.");
-            return root;
-        }
-        if (string.IsNullOrWhiteSpace(localAppData) &&
-            !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ProductPathNames.ProductHomeVariable)))
-            return Path.Combine(ResolveProductHome(null), ProductPathNames.LocalStateDirectoryName);
-        return InstalledRuntimeRoot(localAppData);
+    public static string StateRoot(ProductLane lane, string ownerRoot, string? productHome) {
+        if (!Path.IsPathRooted(ownerRoot))
+            throw new ArgumentException($"A {lane} runtime needs an absolute owner root.", nameof(ownerRoot));
+        if (!string.IsNullOrWhiteSpace(productHome))
+            return Path.Combine(Path.GetFullPath(productHome!.Trim()), ProductPathNames.LocalStateDirectoryName);
+        // Installed is the SDK's install root verbatim: byte-identical to v0.7.30's LocalApplicationData formula.
+        return lane == ProductLane.Dev ? Path.Combine(Path.GetFullPath(ownerRoot), ".artifacts", "pe-tools") : ownerRoot;
     }
 
-    private static string InstalledRuntimeRoot(string? localAppData) {
-        if (string.IsNullOrWhiteSpace(localAppData)) localAppData = Environment.GetEnvironmentVariable("LOCALAPPDATA");
-        var local = string.IsNullOrWhiteSpace(localAppData)
-            ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
-            : Path.GetFullPath(localAppData);
-        return Path.Combine(local, ProductIdentity.VendorName, ProductIdentity.ProductName);
-    }
-
-    // Like TS realpath on the nearest existing ancestor, including junctions; net48 has no ResolveLinkTarget.
-    private static string CanonicalPath(string path) {
-        path = Path.GetFullPath(path);
-        if (!Directory.Exists(path) && !File.Exists(path)) {
-            var parent = Path.GetDirectoryName(path);
-            return parent == null ? path : Path.Combine(CanonicalPath(parent), Path.GetFileName(path));
-        }
-        // Follow links without data access; share reads/writes/deletes and allow directory handles.
-        using var handle = CreateFile(path, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
-        if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
-        var buffer = new StringBuilder(32768);
-        var length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0);
-        if (length == 0 || length >= buffer.Capacity) throw new Win32Exception(Marshal.GetLastWin32Error());
-        var result = buffer.ToString();
-        return result.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase) ? @"\\" + result.Substring(8)
-            : result.StartsWith(@"\\?\", StringComparison.Ordinal) ? result.Substring(4) : result;
-    }
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security,
-        uint creation, uint flags, IntPtr template);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, StringBuilder path, uint capacity, uint flags);
+    /// <summary>
+    ///     The machine's installed namespace by the SDK/MSI rule (InstalledProduct.AppBaseFor). Never an
+    ///     owner: Pe.App takes the installed root from the SDK. Read only to refuse dev state inside it.
+    /// </summary>
+    public static string InstalledNamespace => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ProductIdentity.VendorName, ProductIdentity.ProductName);
 
     public static string ResolveApplicationData(string? applicationData) =>
         string.IsNullOrWhiteSpace(applicationData)

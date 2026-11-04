@@ -11,7 +11,7 @@ import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/service-identity";
 import { makeHttpLive } from "../src/app.ts";
-import { hostOwnership, productRoot } from "../src/host-ownership.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 const webRoot = resolve(import.meta.dirname, "..", "..", "web");
 
@@ -62,7 +62,7 @@ beforeAll(async () => {
   );
   // effect-edge: island, phase 5
   hostDone = Effect.runPromise(program);
-  const service = await waitForService(productRoot());
+  const service = await waitForService(hostOwnership.rootPath);
   serviceToken = service.token;
   hostUrl = `http://127.0.0.1:${service.port}`;
   browserVite = await createViteServer({

@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { devTrayDirectory, readJson, writeAtomic } from "./dev-tray-session.ts";
+import { trayOwnerArguments } from "@pe/host-contracts/service-identity";
 
 const alive = (pid: number) => {
   try {
@@ -145,7 +146,12 @@ export async function createDevTraySupervisor(sourceRoot: string, showWindow = f
       attempts++;
       child = spawn(
         join(sourceRoot, ".artifacts", "build", "Pe.Host.Tray", "Debug.R25", "Pe.Host.Tray.exe"),
-        ["--dev", "--supervisor-file", path],
+        [
+          ...trayOwnerArguments({ lane: "dev", sourceRoot, installedRoot: null }),
+          "--dev",
+          "--supervisor-file",
+          path,
+        ],
         { stdio: ["pipe", "ignore", "inherit"], windowsHide: true },
       );
       child.stdin?.on("error", () => {});

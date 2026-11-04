@@ -21,7 +21,7 @@ import {
 } from "@pe/agent-contracts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { BridgeError, type RevitBridge } from "./bridge.ts";
-import { productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import { isNavigation, type SpaFallback } from "./ops-catalog.ts";
 import { sha256Hex, writeArtifact } from "./page-artifacts.ts";
 
@@ -107,7 +107,7 @@ export class CaptureStore {
 let store: CaptureStore | undefined;
 export const hostCaptures = () =>
   (store ??= new CaptureStore(
-    join(productRoot(), productPathNames.stateDirectoryName, "captures"),
+    join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "captures"),
   ));
 
 type ViewImageAnswer = {

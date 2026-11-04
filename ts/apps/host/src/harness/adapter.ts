@@ -1,3 +1,4 @@
+import { hostOwnership } from "../host-ownership.ts";
 import { spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { closeSync, openSync, realpathSync, statSync, readFileSync } from "node:fs";
@@ -12,7 +13,7 @@ import {
   hostProcessIdentity,
   productInstallLayout,
 } from "@pe/host-contracts/contracts";
-import { checkoutLayout, productRoot } from "@pe/host-contracts/service-identity";
+import { checkoutLayout } from "@pe/host-contracts/service-identity";
 import { codexStandaloneRelease, installCommand } from "./install.ts";
 import { AdapterPackage, Win32Rows } from "./edge-schemas.ts";
 import { Cause, Effect, Exit, Schema, Scope, Stream } from "effect";
@@ -188,7 +189,7 @@ export const openAdapter = Effect.fn("Adapter.open")(function* (
 
 /** Pea's own Codex package: a physical directory under the product root, so OpenAI's junctions never apply. */
 export function codexPackagePath(): string {
-  return join(productRoot(), "harnesses", "Codex");
+  return join(hostOwnership.rootPath, "harnesses", "Codex");
 }
 
 /**

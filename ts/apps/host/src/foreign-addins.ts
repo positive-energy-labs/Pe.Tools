@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
-import { productRoot } from "@pe/host-contracts/service-identity";
+import { hostOwnership } from "./host-ownership.ts";
 
 type ProductManifest = {
   years?: string[];
@@ -61,7 +61,7 @@ function foreignAddins(manifest: ProductManifest, roots: AddinRoots) {
 export function installedForeignAddins() {
   try {
     const manifest = JSON.parse(
-      readFileSync(join(productRoot(), "product.payloads.json"), "utf8"),
+      readFileSync(join(hostOwnership.rootPath, "product.payloads.json"), "utf8"),
     ) as ProductManifest;
     const env = process.env;
     return foreignAddins(manifest, {

@@ -3,7 +3,6 @@ import { createRouteSettings } from "./route-settings.ts";
 import { productRouteSettingsPath } from "./product-paths.ts";
 import { createDuctsSheets, sheetNativeRead, type DuctsSheetSources } from "./ducts-sheet.ts";
 import { eligibleThreads, threadHistory } from "./thread-history.ts";
-import { productRoot } from "@pe/host-contracts/service-identity";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
 import {
@@ -386,7 +385,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
       const id = declared.params.id!;
       if (!/^[a-f0-9]{64}$/.test(id)) return json({ error: "Invalid scene id" }, 400);
       try {
-        const bytes = await readFile(join(productRoot(), "cache", "space-scenes", `${id}.bin`));
+        const bytes = await readFile(
+          join(hostOwnership.rootPath, "cache", "space-scenes", `${id}.bin`),
+        );
         if (createHash("sha256").update(bytes).digest("hex") !== id)
           return json({ error: "Scene artifact integrity failed" }, 409);
         return new Response(bytes, {
@@ -1212,7 +1213,7 @@ function* hostPeRoutes(
   });
   const stopWorkContext = bridge?.subscribe(() => threads.refreshWorkContexts());
   const scheduler = createScheduledTasks({
-    path: join(productRoot(), "state", hostOwnership.serviceName, "scheduled-tasks.json"),
+    path: join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "scheduled-tasks.json"),
     receipts: telemetry.journal,
     evidence: (since, before) =>
       new Set(eligibleThreads(threads.historySnapshot(), since, before).map((t) => t.id)),

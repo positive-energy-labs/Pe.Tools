@@ -8,4 +8,8 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
     </PropertyGroup>
+    <ItemGroup>
+        <!-- RuntimeOwnershipTests asserts the pure ProductPathing.StateRoot against the shared fixture table. -->
+        <InternalsVisibleTo Include="Pe.Shared.Tests" />
+    </ItemGroup>
 </Project>

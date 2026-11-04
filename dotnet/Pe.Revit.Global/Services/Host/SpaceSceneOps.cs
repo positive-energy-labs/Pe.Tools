@@ -16,7 +16,7 @@ internal static class SpaceSceneOps {
         // Scene.Write owns the region: admission for focus elements (each keeps its own context reach), the bounds only when no focus is named.
         if (request.Region is null && request.Bounds is null && request.ElementIds is not { Count: > 0 })
             throw new ArgumentException("Choose a region or explicit focus elements.");
-        var root = ProductRuntimeLayout.ForCurrentUser().Cache.ResolveModuleCachePath("space-scenes");
+        var root = ProductRuntimeLayout.Current.Cache.ResolveModuleCachePath("space-scenes");
         Directory.CreateDirectory(root);
         var vertexTemp = Path.Combine(root, Guid.NewGuid().ToString("N") + ".vertices");
         try {

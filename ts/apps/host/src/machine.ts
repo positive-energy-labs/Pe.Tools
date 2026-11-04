@@ -32,7 +32,7 @@ import {
 } from "@pe/host-contracts/pe-revit-contract";
 import { discoverService, readServiceFile } from "@pe/host-contracts/pe-service";
 import { runPeRevitCli } from "./session-route.ts";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { Providers } from "./harness/providers.ts";
 import { unreadLeg, type UpdateReader } from "./update-reader.ts";
@@ -889,7 +889,7 @@ export function machineSources(
     targets,
     actions: () => hostActionJournal().list(),
     host: Effect.fn("machine.host")(function* () {
-      const file = yield* attempt(() => readServiceFile(productRoot(), hostOwnership.serviceName));
+      const file = yield* attempt(() => readServiceFile(hostOwnership.rootPath, hostOwnership.serviceName));
       if (!file || file.pid !== process.pid)
         return yield* unreadable("This host has no matching SDK service identity.");
       const attachments = bridge ? yield* bridge.list : [];
@@ -918,7 +918,7 @@ export function machineSources(
         canonicalUrl: `http://127.0.0.1:${file.port}`,
       };
     }),
-    peers: () => attempt(() => readMachinePeers(productRoot(), hostOwnership.serviceName)),
+    peers: () => attempt(() => readMachinePeers(hostOwnership.rootPath, hostOwnership.serviceName)),
     sessions: Effect.fn("machine.sessions")(function* () {
       const { result } = yield* sdk<SessionListResult>(sessionListArgv({ all: true }));
       if (!Array.isArray(result.sessions))

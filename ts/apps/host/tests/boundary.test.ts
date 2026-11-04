@@ -7,7 +7,7 @@ import { Deferred, Effect, Layer } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
 import { makeHttpLive } from "../src/app.ts";
-import { hostOwnership, productRoot } from "../src/host-ownership.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 
@@ -45,7 +45,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
   process.env.PE_TOOLS_PRODUCT_HOME = join(localAppData, "content");
   process.env.PE_TOOLS_WEB_DIST = webDir;
   // appBase is resolved the same way the running host resolves it (LOCALAPPDATA now = temp).
-  const appBase = productRoot();
+  const appBase = hostOwnership.rootPath;
 
   // effect-edge: island, phase 5
   const latch = Effect.runSync(Deferred.make<void>());
@@ -84,7 +84,10 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
     expect(file.lane).toBe("dev");
 
     const base = `http://127.0.0.1:${file.port}`;
-    const terminal = readFileSync(hostContextTokenPath(hostOwnership.serviceName), "utf8");
+    const terminal = readFileSync(
+      hostContextTokenPath(hostOwnership.rootPath, hostOwnership.serviceName),
+      "utf8",
+    );
 
     // (2) GET /host/status â†’ 200 (confirms the recorded port is the real bound one).
     const status = await fetch(`${base}/host/status`);

@@ -2,7 +2,7 @@
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/http";
-import { hostOwnership, productRoot } from "./host-ownership.ts";
+import { hostOwnership } from "./host-ownership.ts";
 import { parsePeRevitEnvelope, peRevitLauncher, withStderr } from "./pe-revit-launch.ts";
 import {
   createUpdateReader,
@@ -65,13 +65,13 @@ export const makeInstalledUpdateReader = (
 ) =>
   createUpdateReader({
     handoff,
-    path: join(productRoot(), "state", "host-update.json"),
-    automaticOffPath: join(productRoot(), "state", "host-update-automatic-off"),
+    path: join(hostOwnership.rootPath, "state", "host-update.json"),
+    automaticOffPath: join(hostOwnership.rootPath, "state", "host-update-automatic-off"),
     fact,
     run: updateVerb,
     installed: hostOwnership.lane === "installed",
     pid: process.pid,
-    manifest: join(productRoot(), "product.payloads.json"),
+    manifest: join(hostOwnership.rootPath, "product.payloads.json"),
   });
 
 export const updateRoutes = Layer.mergeAll(

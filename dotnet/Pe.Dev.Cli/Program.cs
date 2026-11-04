@@ -1,4 +1,6 @@
 using Pe.Dev.Cli;
+using Pe.Dev.RevitAutomation;
+using Pe.Shared.Product;
 
 const string usage = """
                      Usage:
@@ -46,6 +48,10 @@ if (commandArgs.Count == 0 || !string.Equals(commandArgs[0], "automation", Strin
     Environment.ExitCode = 10;
     return;
 }
+
+// pe-dev is dev by construction: the operator's checkout (--repo-root or cwd) owns its runtime state.
+repoRoot = RepoRootResolver.Resolve(repoRoot);
+ProductRuntimeLayout.Configure(ProductLane.Dev, repoRoot);
 
 Environment.ExitCode = await AutomationCommandRunner.RunAsync(
     commandArgs.Skip(1).ToArray(),

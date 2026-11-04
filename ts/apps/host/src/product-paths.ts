@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { productRoot } from "@pe/host-contracts/service-identity";
+import { hostOwnership } from "./host-ownership.ts";
 
 import { productHomePath } from "@pe/host-contracts/product-paths";
 
@@ -17,7 +17,7 @@ export function productPagesRootPath(): string {
 
 /** A path under machine-local product state (`<productRoot>\state`): keys and per-machine data, not Documents. */
 const productStatePath = (...segments: string[]) =>
-  join(productRoot(), productPathNames.stateDirectoryName, ...segments);
+  join(hostOwnership.rootPath, productPathNames.stateDirectoryName, ...segments);
 
 export const productApsCredentialsPath = () => productStatePath("aps-auth", "credentials.json");
 

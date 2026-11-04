@@ -97,8 +97,8 @@ internal static class RevitReceipts {
 
     internal static void ReportHostVersion() {
         try {
-            var host = PeServiceDiscovery.TryDiscover(ProductRuntimeLayout.ForCurrentUser().RootPath,
-                HostEndpoint.ConfiguredServiceName ?? HostEndpoint.ServiceName)?.Version;
+            var host = PeServiceDiscovery.TryDiscover(ProductRuntimeLayout.Current.RootPath,
+                HostEndpoint.RuntimeServiceName)?.Version;
             if (host == null || host == AppVersion || host == _reportedHostVersion) return;
             _reportedHostVersion = host;
             Log.Warning("Installed host {HostVersion} does not match add-in {AppVersion}.", host, AppVersion);

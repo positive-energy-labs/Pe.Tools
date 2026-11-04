@@ -89,7 +89,7 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
         Log.Information("Host bridge supervisor connect requested: Reason={Reason}", reason);
 
         // Installed host lifetime belongs to login and explicit open, including after Quit or a crash.
-        if (TsHostLauncher.Lane == "installed") {
+        if (Pe.Shared.Product.ProductRuntimeLayout.Current.Lane == Pe.Shared.Product.ProductLane.Installed) {
             var installed = await this.ConnectRuntimeAsync(cancellationToken).ConfigureAwait(false);
             if (installed.Success) {
                 Analytics.RevitReceipts.ReportHostVersion();

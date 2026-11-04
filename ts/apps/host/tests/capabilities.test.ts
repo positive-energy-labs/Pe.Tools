@@ -14,7 +14,7 @@ import { createContributionContent, createPeRoutes } from "../src/pe-routes.ts";
 import { listPackages } from "../src/packages.ts";
 import { buildCapabilities, createCapabilityCatalogSource } from "@pe/mcps";
 import { findCapabilities } from "@pe/agent-contracts";
-import { hostOwnership, productRoot } from "../src/host-ownership.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 vi.mock("../src/machine.ts", async (original) => {
   const real = await original<typeof import("../src/machine.ts")>();
@@ -53,7 +53,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
   const previousLocalAppData = process.env.LOCALAPPDATA;
   process.env.LOCALAPPDATA = localAppData;
   vi.stubEnv(productPathNames.productHomeVariable, join(localAppData, "Documents", "Pe.Tools"));
-  const appBase = productRoot();
+  const appBase = hostOwnership.rootPath;
   const nodeServer = createNodeServer();
   const program = Effect.scoped(
     Effect.gen(function* () {
@@ -130,7 +130,10 @@ test("the host-owned /pe surface answers without Revit", async () => {
     expect(await (await putAs({ "x-pe-context": "forged" })).json()).toMatchObject({
       error: { code: "context.unknown" },
     });
-    const terminal = readFileSync(hostContextTokenPath(hostOwnership.serviceName), "utf8");
+    const terminal = readFileSync(
+      hostContextTokenPath(hostOwnership.rootPath, hostOwnership.serviceName),
+      "utf8",
+    );
     const put = await putAs({ "x-pe-context": terminal });
     expect(await put.json()).toMatchObject({ ok: true, head: { revision: 1 } });
     const resources = await fetch(

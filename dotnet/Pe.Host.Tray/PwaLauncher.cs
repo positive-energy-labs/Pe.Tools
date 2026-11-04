@@ -14,7 +14,7 @@ internal sealed record PackagedPwa(string AppId, string Profile, string StartUrl
 
 internal static class PwaLauncher {
     /** Pe.Tools-owned Edge app profiles, under the root `PE_TOOLS_PRODUCT_HOME` moves; Edge's own stays Edge's. */
-    internal static string PrivateProfileRoot => Path.Combine(ProductRuntimeLayout.ForCurrentUser().RootPath, "edge-app");
+    internal static string PrivateProfileRoot => Path.Combine(ProductRuntimeLayout.Current.RootPath, "edge-app");
     internal static string StandardProfileRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "Edge", "User Data");
     internal static async Task<InstalledPwa?> ResolveAsync(string origin, CancellationToken stop = default) {
         if (EdgeExecutable is not { } edge) throw new InvalidOperationException("Microsoft Edge is unavailable");

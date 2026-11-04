@@ -57,7 +57,7 @@ if ($script:requests -ne $before) { throw 'Replacement host was queried' }
 
 function Assert-Service {
     param([string]$Name, [string]$ProductHomeOverride, [string]$Expected)
-    $actual = Join-Path (Resolve-ProductRuntimeRoot -ProductHomeOverride $ProductHomeOverride -LocalAppData 'C:\Users\fixture\AppData\Local') 'state/service'
+    $actual = Join-Path (Resolve-ProductRuntimeRoot -Lane installed -Root 'C:\Users\fixture\AppData\Local\Positive Energy\Pe.Tools' -ProductHomeOverride $ProductHomeOverride) 'state/service'
     if ($actual -ne $Expected) { throw ('Unexpected service directory for ' + $Name + ': ' + $actual) }
     Write-Output ('PASS ' + $Name)
 }
@@ -68,7 +68,7 @@ Assert-Service 'override roots service files under .local-state' 'C:\Temp\pe-hom
 $previousHome = $env:PE_TOOLS_PRODUCT_HOME
 try {
     $env:PE_TOOLS_PRODUCT_HOME = ' C:\Temp\pe-home '
-    if ((Resolve-ProductRuntimeRoot) -ne 'C:\Temp\pe-home\.local-state') { throw 'The production resolver ignored the home environment.' }
+    if ((Resolve-ProductRuntimeRoot -Lane dev -Root 'C:\src\Pe.Tools') -ne 'C:\Temp\pe-home\.local-state') { throw 'The production resolver ignored the home environment.' }
     Write-Output 'PASS the production call reads the one home variable'
 } finally {
     $env:PE_TOOLS_PRODUCT_HOME = $previousHome

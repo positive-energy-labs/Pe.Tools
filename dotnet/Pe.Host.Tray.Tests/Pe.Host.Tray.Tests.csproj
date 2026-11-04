@@ -12,5 +12,7 @@
     <PackageReference Include="NUnit" Version="3.13.3" />
     <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
     <ProjectReference Include="../Pe.Host.Tray/Pe.Host.Tray.csproj" />
+    <!-- The TS host emits these argv rows (host-contracts runtime-ownership.test.ts); the tray must accept them. -->
+    <None Include="../../ts/packages/host-contracts/tests/runtime-ownership.fixture.json" Link="runtime-ownership.fixture.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
