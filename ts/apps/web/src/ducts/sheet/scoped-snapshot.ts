@@ -50,10 +50,7 @@ export function sheetSnapshot(raw: DuctSnapshot): DuctSnapshot {
   };
 }
 
-/** Bounded ids reads have no system roster; their elements still carry system names. */
+/** Bounded ids reads have no roster identity; display labels cannot scope an owner link. */
 export function sheetSystems(snapshot: DuctSnapshot): string[] {
-  return [...new Set([
-    ...snapshot.systems.map(system => system.name),
-    ...[...snapshot.nodes, ...snapshot.segments].map(element => element.systemName),
-  ].filter((name): name is string => !!name))];
+  return snapshot.systems.map(system => system.name);
 }

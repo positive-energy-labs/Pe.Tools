@@ -97,6 +97,8 @@ export interface RouteLease<R extends RouteKey> {
   ): { ok: true; patch: Record<string, string> } | { ok: false; error: string };
 }
 
+export type RouteAddressProblem = { kind: "non-text"; field: string };
+
 export interface RouteAddress<R extends RouteKey> {
   readonly route: R;
   /** The link target; the web file route of the same path owns it. */
@@ -111,7 +113,7 @@ export interface RouteAddress<R extends RouteKey> {
   /** The keys the address bar holds. */
   readonly keys: readonly UrlKey<R>[];
   /** Search (router-parsed or raw strings) → the URL page, typed, and the root carry. */
-  read(search: Record<string, unknown>): { page: UrlPage<R>; carry: Carry };
+  read(search: Record<string, unknown>): { page: UrlPage<R>; carry: Carry; problems: readonly RouteAddressProblem[] };
   /**
    * Page → the address bar's search: each URL key the page names, a default as `undefined` so a
    * merge drops it. Draft keys (`share: false`) included; this is the address, not a link.
@@ -158,24 +160,30 @@ export interface RouteAddress<R extends RouteKey> {
 /* ── Field reads and writes ──────────────────────────────────────────────────── */
 
 /** The router JSON-parses `selected=8081605` into a number and `target={..}` into an object. */
-const textOf = (raw: unknown): string | undefined =>
-  raw === undefined || raw === null
-    ? undefined
-    : typeof raw === "string"
-      ? raw
-      : Array.isArray(raw)
-        ? raw.join(",")
-        : typeof raw === "object"
-          ? JSON.stringify(raw)
-          : String(raw as number | boolean);
+const textOf = (raw: unknown): string | undefined => {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
+  if (Array.isArray(raw)) {
+    const items = z.array(z.union([z.string(), z.number(), z.boolean(), z.null()])).safeParse(raw);
+    return items.success ? items.data.join(",") : undefined;
+  }
+  if (typeof raw !== "object") return undefined;
+  try {
+    return JSON.stringify(raw);
+  } catch {
+    return undefined;
+  }
+};
 
 /** One field from raw search or lease text; malformed or refused falls to the default. */
-const readField = (field: RouteField, raw: unknown): unknown => {
+const readField = (field: RouteField, raw: unknown, refuse: () => void = () => {}): unknown => {
   if (raw !== null && typeof raw === "object") {
     const typed = field.schema.safeParse(raw);
     if (typed.success) return typed.data;
   }
   const text = textOf(raw);
+  if (text === undefined && raw != null) refuse();
   const decoded = text === undefined ? undefined : field.codec.decode(text);
   // `INVALID` reads as absent (the default); a decoded `null` is a value the schema judges.
   const parsed = field.schema.safeParse(decoded === INVALID ? undefined : decoded);
@@ -225,17 +233,19 @@ function build(route: RouteKey) {
     }
   };
 
-  const read = (search: Page) => ({
-    page: settle(
-      Object.fromEntries(urlKeys.map((key) => [key, readField(fields[key]!, search[key])])),
-    ),
-    carry: Object.fromEntries(
-      carryKeys.flatMap((key) => {
-        const value = textOf(search[key])?.trim();
-        return value ? [[key, value]] : [];
-      }),
-    ) as Carry,
-  });
+  const read = (search: Page) => {
+    const problems: RouteAddressProblem[] = [];
+    const page = settle(Object.fromEntries(urlKeys.map(key => [key,
+      readField(fields[key]!, search[key], () => problems.push({ kind: "non-text", field: key })),
+    ])));
+    const carry: Carry = {};
+    for (const key of carryKeys) {
+      const value = textOf(search[key])?.trim();
+      if (value) carry[key] = value;
+      else if (search[key] != null) problems.push({ kind: "non-text", field: key });
+    }
+    return { page, carry, problems };
+  };
 
   const link = (page: Page = {}, carry: Carry = {}) => {
     const params = new URLSearchParams();

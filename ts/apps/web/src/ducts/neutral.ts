@@ -18,11 +18,12 @@ routeStatePatchSchema,
 salvageDuctsWork,
 type RouteStatePatch,
 } from "@pe/agent-contracts";
+import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { ruleByKey,ruleWords } from "@pe/ducts-domain/loss-rules";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 import { commandCatalogAxes } from "../../../../packages/agent-contracts/src/command-axes.ts";
 import type {
@@ -220,7 +221,7 @@ export const entries = {
     output: schemas.snapshot,
     axes,
   },
-  "ducts.tables": { input: schemas.none, output: schemas.tables, axes },
+  "ducts.tables": { input: nativeRequestSchema("ducts.tables"), output: schemas.tables, axes },
   "ducts.catalogs": { input: schemas.none, output: schemas.catalogs, axes },
   "ducts.fans": {
     input: z.object({ work: schemas.work.nullable(), fanWork: fanInput.optional() }),
@@ -1253,7 +1254,7 @@ export const neutralBodies = {
         fanWork: ctx.readings.fansWork.value,
       }) as z.output<(typeof entries)["ducts.networks"]["input"]>,
   },
-  tablesArgs: { slot: "readings.tables.args", kind: "args", source, run: () => ({}) },
+  tablesArgs: { slot: "readings.tables.args", kind: "args", source, run: () => ({ ids: [...TABLE_IDS] }) },
   catalogsArgs: { slot: "readings.catalogs.args", kind: "args", source, run: () => ({}) },
   fansArgs: {
     slot: "readings.fans.args",

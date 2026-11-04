@@ -36,7 +36,10 @@ function searchOf(search: Record<string, unknown>, route?: RouteKey) {
   if (!pages) decoded.set(search, (pages = new Map()));
   let page = pages.get(route);
   if (!page) {
-    const read = routeAddress(route ?? "pea").read(search);
+    // Shell readers own carry only; admitted routes own their semantic field codecs.
+    const read = routeAddress(route ?? "pea").read(route ? search : {
+      target: search.target, work: search.work, thread: search.thread,
+    });
     page = {
       ...(route ? read.page : search),
       target: undefined,
