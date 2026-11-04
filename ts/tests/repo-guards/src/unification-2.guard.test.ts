@@ -11,6 +11,7 @@ import {
   boundaryCensus,
   census,
   identity,
+  walk,
   root,
   syntax,
   zodArray,
@@ -51,6 +52,21 @@ describe("unification 2 offender identities", () => {
     expect(additions({ rule: ["b.ts#new"] }, { rule: ["a.ts#old"] })).toEqual(["rule: b.ts#new"]);
     expect(additions({ rule: ["b.ts#new"] }, { rule: [] })).toHaveLength(1);
     expect(additions({ rule: [] }, { rule: ["a.ts#old"] })).toEqual([]);
+  });
+  it("removing an earlier identical call preserves identities and duplicate caps", () => {
+    const calls = (text: string) => {
+      const sites: string[] = [];
+      walk(syntax(text, "a.ts"), (node) => {
+        if (ts.isCallExpression(node)) sites.push(identity(node));
+      });
+      return { rule: sites };
+    };
+    const two = calls("function owner() { fetch('a'); fetch('b'); }");
+    const one = calls("function owner() { fetch('b'); }");
+    expect(new Set(two.rule).size).toBe(1);
+    expect(two.rule).toHaveLength(2);
+    expect(additions(one, two)).toEqual([]);
+    expect(additions(two, one)).toEqual([`rule: ${one.rule[0]}`]);
   });
   it("identities survive blank lines and distinguish sites", () => {
     const sites = (text: string) => {

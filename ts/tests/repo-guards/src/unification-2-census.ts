@@ -40,7 +40,7 @@ function scope(node: ts.Node): string {
       parts.unshift(current.name?.getText() ?? "anonymous");
   return parts.join("/");
 }
-/** Stable semantic ancestry plus occurrence among identical syntax, never a line number. */
+/** Semantic ancestry and syntax identify a bucket; repeated sites retain multiplicity. */
 export function identity(node: ts.Node): string {
   const owner = scope(node);
   const text = ts.isCallExpression(node)
@@ -48,21 +48,7 @@ export function identity(node: ts.Node): string {
     : ts.isImportDeclaration(node) || ts.isExportDeclaration(node)
       ? node.getText().replaceAll(/\s+/g, " ")
       : ts.SyntaxKind[node.kind];
-  let ordinal = 0;
-  walk(node.getSourceFile(), (candidate) => {
-    if (
-      candidate.pos < node.pos &&
-      candidate.kind === node.kind &&
-      (ts.isCallExpression(candidate)
-        ? candidate.expression.getText()
-        : ts.isImportDeclaration(candidate) || ts.isExportDeclaration(candidate)
-          ? candidate.getText().replaceAll(/\s+/g, " ")
-          : ts.SyntaxKind[candidate.kind]) === text &&
-      scope(candidate) === owner
-    )
-      ordinal++;
-  });
-  return `${node.getSourceFile().fileName}#${owner}:${text}@${ordinal}`;
+  return `${node.getSourceFile().fileName}#${owner}:${text}`;
 }
 
 /** Any array in an authored schema counts, including object and union members.
@@ -321,7 +307,7 @@ function structuralCensus() {
   }
 
   return Object.fromEntries(
-    Object.entries(result).map(([law, sites]) => [law, [...new Set(sites)].sort()]),
+    Object.entries(result).map(([law, sites]) => [law, [...sites].sort()]),
   );
 }
 
@@ -366,9 +352,16 @@ export function census(): Record<string, string[]> {
 export type OffenderSets = Record<string, string[]>;
 export const baselinePath = "ts/tests/repo-guards/src/unification-2.baseline.json";
 export function additions(actual: OffenderSets, allowed: OffenderSets): string[] {
-  return Object.entries(actual).flatMap(([law, sites]) =>
-    sites.filter((site) => !allowed[law]?.includes(site)).map((site) => `${law}: ${site}`),
-  );
+  return Object.entries(actual).flatMap(([law, sites]) => {
+    const remaining = new Map<string, number>();
+    for (const site of allowed[law] ?? []) remaining.set(site, (remaining.get(site) ?? 0) + 1);
+    return sites.flatMap((site) => {
+      const count = remaining.get(site) ?? 0;
+      if (count === 0) return [`${law}: ${site}`];
+      remaining.set(site, count - 1);
+      return [];
+    });
+  });
 }
 
 /** Read-only history check. Legacy numeric baselines cannot bless a new identity. The first
@@ -490,7 +483,6 @@ export function legacyInventory(input?: Record<string, string>) {
       ? resolved(file, alias, seen)
       : key;
   }
-  const occurrences = new Map<string, number>();
   for (const [file, source] of sources)
     walk(source, (node) => {
       if (!ts.isCallExpression(node)) return;
@@ -498,15 +490,13 @@ export function legacyInventory(input?: Record<string, string>) {
       if (rule) {
         const argument = node.arguments[0]?.getText() ?? "missing";
         const site = `${file}#${scope(node)}:${resolved(file, node.expression)}[${argument}]`;
-        const ordinal = occurrences.get(site) ?? 0;
-        occurrences.set(site, ordinal + 1);
-        sites[rule]!.push(`${site}@${ordinal}`);
+        sites[rule]!.push(site);
       }
     });
   return {
     graphs: graphs.sort((a, b) => a.file.localeCompare(b.file)),
     sites: Object.fromEntries(
-      Object.entries(sites).map(([rule, ids]) => [rule, [...new Set(ids)].sort()]),
+      Object.entries(sites).map(([rule, ids]) => [rule, [...ids].sort()]),
     ),
   };
 }
@@ -643,7 +633,7 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
     }
   }
   return Object.fromEntries(
-    Object.entries(result).map(([law, sites]) => [law, [...new Set(sites)].sort()]),
+    Object.entries(result).map(([law, sites]) => [law, [...sites].sort()]),
   );
 }
 
