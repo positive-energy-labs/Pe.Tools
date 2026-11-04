@@ -83,16 +83,30 @@ test("schema-derived typed Work paths agree with runtime admission", () => {
     expect(() => admittedWorkPatches(data, schemas, [patch]), JSON.stringify(patch)).toThrow();
 });
 
-
 test("root cell families enumerate only their declared keys", () => {
-  const cells = createAdmittedCells({
-    work: {route: "fans", schema: "work", version: 1, migrations: {}},
-    cells: {
-      designFriction: {segment: null, value: "cell", groupOf: "group", deps: {page: [], work: [], readings: []}},
-      named: {segment: null, key: "keys", value: "cell", groupOf: "group", deps: {page: [], work: [], readings: []}},
+  const cells = createAdmittedCells(
+    {
+      work: { route: "fans", schema: "work", version: 1, migrations: {} },
+      cells: {
+        designFriction: {
+          segment: null,
+          value: "cell",
+          groupOf: "group",
+          deps: { page: [], work: [], readings: [] },
+        },
+        named: {
+          segment: null,
+          key: "keys",
+          value: "cell",
+          groupOf: "group",
+          deps: { page: [], work: [], readings: [] },
+        },
+      },
     },
-  }, {cell: z.unknown(), keys: z.enum(["a", "b"])}, {group: {run: () => []}});
-  cells.update({designFriction: {value: 1}, a: {value: 2}, b: {value: 3}, unrelated: {}});
-  expect(cells.rows().designFriction?.map(row => row.key)).toEqual(["designFriction"]);
-  expect(cells.rows().named?.map(row => row.key)).toEqual(["a", "b"]);
+    { cell: z.unknown(), keys: z.enum(["a", "b"]) },
+    { group: { run: () => [] } },
+  );
+  cells.update({ designFriction: { value: 1 }, a: { value: 2 }, b: { value: 3 }, unrelated: {} });
+  expect(cells.rows().designFriction?.map((row) => row.key)).toEqual(["designFriction"]);
+  expect(cells.rows().named?.map((row) => row.key)).toEqual(["a", "b"]);
 });

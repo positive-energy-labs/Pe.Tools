@@ -9,20 +9,34 @@ export function createAdmittedRetention<V>(limits: { entries: number; bytes: num
   };
   return {
     get: (id: string) => rows.get(id)?.value,
-    values: () => [...rows.values()].map(row => row.value),
+    values: () => [...rows.values()].map((row) => row.value),
     entries: () => [...rows].map(([id, row]): [string, V] => [id, row.value]),
     delete: remove,
     set(id: string, value: V) {
       const size = new TextEncoder().encode(JSON.stringify(value)).byteLength;
       const prior = rows.get(id)?.bytes ?? 0;
-      if (rows.size + (rows.has(id) ? 0 : 1) > limits.entries || bytes - prior + size > limits.bytes)
-        return { kind: "overload", entries: limits.entries, bytes: limits.bytes } satisfies {kind: "overload" | "stored"; entries?: number; bytes?: number};
+      if (
+        rows.size + (rows.has(id) ? 0 : 1) > limits.entries ||
+        bytes - prior + size > limits.bytes
+      )
+        return { kind: "overload", entries: limits.entries, bytes: limits.bytes } satisfies {
+          kind: "overload" | "stored";
+          entries?: number;
+          bytes?: number;
+        };
       remove(id);
-      rows.set(id, {value, bytes: size});
+      rows.set(id, { value, bytes: size });
       bytes += size;
-      return {kind: "stored"} satisfies {kind: "overload" | "stored"; entries?: number; bytes?: number};
+      return { kind: "stored" } satisfies {
+        kind: "overload" | "stored";
+        entries?: number;
+        bytes?: number;
+      };
     },
-    clear() {rows.clear(); bytes = 0;},
+    clear() {
+      rows.clear();
+      bytes = 0;
+    },
   };
 }
 export class InvocationOverload extends Error {

@@ -2,31 +2,34 @@ import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/rou
 import type { EntryTable } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import {
-createRouteEnvironmentIssuer,
-type KernelServices
+  createRouteEnvironmentIssuer,
+  type KernelServices,
 } from "../../../../packages/agent-contracts/src/route-kernel-environment";
-import type { FieldControls,InvocationToken,PagePort,SchemaTable } from "../../../../packages/agent-contracts/src/route-kernel-page";
+import type {
+  FieldControls,
+  InvocationToken,
+  PagePort,
+  SchemaTable,
+} from "../../../../packages/agent-contracts/src/route-kernel-page";
 import {
-createAdmittedRouteRegistry,
-resolveRouteBindings,
+  createAdmittedRouteRegistry,
+  resolveRouteBindings,
 } from "../../../../packages/agent-contracts/src/route-module";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { createAdmittedAddress } from "./admitted-address";
 import { createAdmittedBody } from "./admitted-body.ts";
-import { createAdmittedCellActions,createAdmittedCells } from "./admitted-cells";
+import { createAdmittedCellActions, createAdmittedCells } from "./admitted-cells";
 import { createAdmittedGeometry } from "./admitted-geometry";
 import { createAdmittedHistory } from "./admitted-history.ts";
 import { createAdmittedInvocation } from "./admitted-invoke.ts";
 import { createAdmittedObservers } from "./admitted-observers";
 import type { PlaceInput } from "./admitted-place";
 import { createAdmittedReadings } from "./admitted-readings.ts";
-import { createAdmittedEnvironment,createAdmittedScope } from "./admitted-scope.ts";
+import { createAdmittedEnvironment, createAdmittedScope } from "./admitted-scope.ts";
 import { createAdmittedWork } from "./admitted-work";
-import {
-createApplicationWorkRegistry
-} from "./application-work-registry";
+import { createApplicationWorkRegistry } from "./application-work-registry";
 import { fixtureGeometryDoor } from "./fixture-geometry-door";
-import { createPagePorts,freezePage } from "./page-port";
+import { createPagePorts, freezePage } from "./page-port";
 import { createWorkFeedClient } from "./work-feed-client";
 export { ReviewRefusal } from "./admitted-invoke.ts";
 
@@ -66,7 +69,10 @@ export class PlaceWriteRefusal extends Error {
 export function createRouteShell(services: Omit<KernelServices, "target">) {
   const liveDoor = services.work ?? createWorkFeedClient();
   const workRegistry = createApplicationWorkRegistry();
-  const sourceTimeline = new WeakMap<object, import("../../../../packages/runtime/src/work-journal.ts").TimelineEntry[]>();
+  const sourceTimeline = new WeakMap<
+    object,
+    import("../../../../packages/runtime/src/work-journal.ts").TimelineEntry[]
+  >();
   return {
     mount<
       G extends RouteGraphJson,
@@ -77,9 +83,27 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
     >(admitted: AdmittedRoute<G, S, E, Render, W>, input: PlaceInput) {
       const { address, fixture, target, memory } = input;
       const route = admitted;
-      const scope = createAdmittedScope({route, input, workRegistry, snapshots: () => readings.snapshots(),
-        closed: () => closed, observeReceipts: () => readings.observeReceipts(), notify: () => notify()});
-      const {registry, registration, resolve, bindings, policy, issuer, owner, read, entryFor, mountJournal, workSpec} = scope;
+      const scope = createAdmittedScope({
+        route,
+        input,
+        workRegistry,
+        snapshots: () => readings.snapshots(),
+        closed: () => closed,
+        observeReceipts: () => readings.observeReceipts(),
+        notify: () => notify(),
+      });
+      const {
+        registry,
+        registration,
+        resolve,
+        bindings,
+        policy,
+        issuer,
+        owner,
+        read,
+        entryFor,
+        mountJournal,
+      } = scope;
       const observers = createAdmittedObservers(route.data, bindings.bodies);
       const cells = createAdmittedCells(
         route.data,
@@ -101,25 +125,62 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         }
       };
       const schedule = (): void => readings.sync();
-      const readings: ReturnType<typeof createAdmittedReadings<W>> = createAdmittedReadings({ route, owner, read, bindings, input, services,
-        environmentIssuer, observers, cells, geometry: () => geometry, environment: () => environment,
-        schedule, notify, settle: () => {resolve(); work.sync(); historyOwner.sync();},
+      const readings: ReturnType<typeof createAdmittedReadings<W>> = createAdmittedReadings({
+        route,
+        owner,
+        read,
+        bindings,
+        input,
+        services,
+        environmentIssuer,
+        observers,
+        cells,
+        geometry: () => geometry,
+        environment: () => environment,
+        schedule,
+        notify,
+        settle: () => {
+          resolve();
+          work.sync();
+          historyOwner.sync();
+        },
         syncInvocation: () => invocation.sync(),
-        beforeSync: () => {if (drawing) throw Error("Admitted observers cannot run during render");},
-        available: () => !closed && resources === "held" && input.custody.current(), closed: () => closed,
-        entryFor, resolve, logEvidence: (readingId, value) => {
+        beforeSync: () => {
+          if (drawing) throw Error("Admitted observers cannot run during render");
+        },
+        available: () => !closed && resources === "held" && input.custody.current(),
+        closed: () => closed,
+        entryFor,
+        resolve,
+        logEvidence: (readingId, value) => {
           const key = read().scope.identity.work;
           if (!key) return;
           const entry = entryFor(key);
           const rows = sourceTimeline.get(entry) ?? [];
-          rows.push(freezePage({kind: "feed", at: services.clock.now(), subject: readingId, basis: value}));
+          rows.push(
+            freezePage({
+              kind: "feed",
+              at: services.clock.now(),
+              subject: readingId,
+              basis: value,
+            }),
+          );
           if (rows.length > 200) rows.shift();
           sourceTimeline.set(entry, rows);
         },
       });
-      const {plan, queryInputs, queryLandings, demanded, generations, retire} = readings;
-      const environment = createAdmittedEnvironment({...scope, route}, {
-        input, services, liveDoor, environmentIssuer, plan, ownsKey: readings.ownsKey});
+      const { plan, queryInputs, queryLandings, demanded, generations, retire } = readings;
+      const environment = createAdmittedEnvironment(
+        { ...scope, route },
+        {
+          input,
+          services,
+          liveDoor,
+          environmentIssuer,
+          plan,
+          ownsKey: readings.ownsKey,
+        },
+      );
       const door =
         fixture === null
           ? liveDoor
@@ -152,13 +213,45 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         if (closed) throw Error("Mount closed");
         if (!input.custody.current() || input.target === null) throw new PlaceWriteRefusal();
       };
-      const invocation = createAdmittedInvocation({ route, owner, read, work, bindings, door,
-        fixture, target, services, action, resolve, notify, schedule,
-        snapshots: readings.snapshots, queryInputs, queryLandings, demanded, generations, retire, geometry });
+      const invocation = createAdmittedInvocation({
+        route,
+        owner,
+        read,
+        work,
+        bindings,
+        door,
+        fixture,
+        target,
+        services,
+        action,
+        resolve,
+        notify,
+        schedule,
+        snapshots: readings.snapshots,
+        queryInputs,
+        queryLandings,
+        demanded,
+        generations,
+        retire,
+        geometry,
+      });
       const { invoke, place, workBasis } = invocation;
-      const historyOwner = createAdmittedHistory({route, owner, read, work, bindings, fixture,
-        action, resolve, notify, closed: () => closed, snapshots: readings.snapshots, mountJournal, invocation});
-      const {history, salvage, recovery, startFresh, restore, journal} = historyOwner;
+      const historyOwner = createAdmittedHistory({
+        route,
+        owner,
+        read,
+        work,
+        bindings,
+        fixture,
+        action,
+        resolve,
+        notify,
+        closed: () => closed,
+        snapshots: readings.snapshots,
+        mountJournal,
+        invocation,
+      });
+      const { history, salvage, recovery, startFresh, restore, journal } = historyOwner;
       let transport: ReturnType<typeof createAdmittedAddress> | undefined;
       let unsubscribeOwner = () => {};
       const close = () => {
@@ -198,8 +291,16 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         close();
         throw error;
       }
-      const transitionCell = createAdmittedCellActions({route, owner, read, work, cells,
-        snapshots: readings.snapshots, action, resolve});
+      const transitionCell = createAdmittedCellActions({
+        route,
+        owner,
+        read,
+        work,
+        cells,
+        snapshots: readings.snapshots,
+        action,
+        resolve,
+      });
       return {
         // The exact admission supplies both these schemas and field roles.
         page: ports.page as PagePort<G, S>,
@@ -297,9 +398,25 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         ),
         restore: () => transport!.restore(),
         ...readings.public,
-        read: createAdmittedBody({route, read, resolve, ports, snapshots: readings.snapshots,
-          geometry, observers, invocation, historyOwner, transitionCell,
-          duringDraw<T>(draw: () => T): T {drawing = true; try {return draw();} finally {drawing = false;}},
+        read: createAdmittedBody({
+          route,
+          read,
+          resolve,
+          ports,
+          snapshots: readings.snapshots,
+          geometry,
+          observers,
+          invocation,
+          historyOwner,
+          transitionCell,
+          duringDraw<T>(draw: () => T): T {
+            drawing = true;
+            try {
+              return draw();
+            } finally {
+              drawing = false;
+            }
+          },
         }),
         close,
       };
@@ -307,4 +424,3 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
   };
 }
 export type AdmittedMount = ReturnType<ReturnType<typeof createRouteShell>["mount"]>;
-

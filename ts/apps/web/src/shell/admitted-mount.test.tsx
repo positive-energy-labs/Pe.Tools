@@ -503,7 +503,11 @@ async function workRoute(
               label: "cellLabel",
               focus: "cellFocus",
               ...(cellBodies === "draft" ? {} : { take: "cellTake" }),
-              deps: { page: ["query"], work: cellBodies === "draft" ? [] : ["amount"], readings: ["notes"] },
+              deps: {
+                page: ["query"],
+                work: cellBodies === "draft" ? [] : ["amount"],
+                readings: ["notes"],
+              },
             },
           },
         } as const)
@@ -594,7 +598,11 @@ async function workRoute(
           }
         : {}),
     },
-    schemas: { ...schemas, work: z.object({ amount: cellBodies === "draft" ? draftCellSchema(z.number()) : z.number() }), number: z.number() },
+    schemas: {
+      ...schemas,
+      work: z.object({ amount: cellBodies === "draft" ? draftCellSchema(z.number()) : z.number() }),
+      number: z.number(),
+    },
     bodies: {
       ...bodies,
       ...(readingWork
@@ -640,12 +648,16 @@ async function workRoute(
               source,
               run: (key: string) => [key],
             },
-            ...(cellBodies === "draft" ? {} : { cellShow: {
-              slot: "cells.amount.show",
-              kind: "show",
-              source,
-              run: (value: number) => String(value),
-            } }),
+            ...(cellBodies === "draft"
+              ? {}
+              : {
+                  cellShow: {
+                    slot: "cells.amount.show",
+                    kind: "show",
+                    source,
+                    run: (value: number) => String(value),
+                  },
+                }),
             cellLabel: {
               slot: "cells.amount.label",
               kind: "label",
@@ -658,21 +670,25 @@ async function workRoute(
               source,
               run: (key: string) => ({ query: key }),
             },
-            ...(cellBodies === "draft" ? {} : { cellTake: {
-              slot: "cells.amount.take",
-              kind: "take",
-              source,
-              run: (ctx: {
-                page: { query: string };
-                work: { amount: number };
-                readings: Record<string, unknown>;
-              }) => {
-                expect(Object.keys(ctx.page)).toEqual(["query"]);
-                expect(Object.keys(ctx.work)).toEqual(["amount"]);
-                expect(Object.keys(ctx.readings)).toEqual(["notes"]);
-                return [{ path: ["amount"], value: ctx.work.amount + 1 }];
-              },
-            } }),
+            ...(cellBodies === "draft"
+              ? {}
+              : {
+                  cellTake: {
+                    slot: "cells.amount.take",
+                    kind: "take",
+                    source,
+                    run: (ctx: {
+                      page: { query: string };
+                      work: { amount: number };
+                      readings: Record<string, unknown>;
+                    }) => {
+                      expect(Object.keys(ctx.page)).toEqual(["query"]);
+                      expect(Object.keys(ctx.work)).toEqual(["amount"]);
+                      expect(Object.keys(ctx.readings)).toEqual(["notes"]);
+                      return [{ path: ["amount"], value: ctx.work.amount + 1 }];
+                    },
+                  },
+                }),
           }
         : {}),
       ...(presenter
@@ -2449,13 +2465,33 @@ test("ModelWrite refuses a stale rendered Work basis before acquiring any previe
 
 test("a mount never receives an admission referring to another route's Work", async () => {
   const owner = await workRoute();
-  const { createAdmittedRouteRegistry, resolveRouteBindings } = await import("../../../../packages/agent-contracts/src/route-module");
+  const { createAdmittedRouteRegistry, resolveRouteBindings } =
+    await import("../../../../packages/agent-contracts/src/route-module");
   const registry = createAdmittedRouteRegistry();
   const registration = registry.register(owner);
-  const module = { ...resolveRouteBindings(registry, owner)!, data: { ...owner.data, key: "foreign", address: "/foreign", work: { ...owner.data.work!, route: "note" } } };
-  const envelope = { source: "builtin-closure" as const, version: 1 as const, data: module.data, hostVersion: "test", variants: [{ client: "web" as const, entry: "witness.ts" }], modules: [{ id: "witness.ts", sha256: "a".repeat(64) }], inputs: [], externals: [] };
+  const module = {
+    ...resolveRouteBindings(registry, owner)!,
+    data: {
+      ...owner.data,
+      key: "foreign",
+      address: "/foreign",
+      work: { ...owner.data.work!, route: "note" },
+    },
+  };
+  const envelope = {
+    source: "builtin-closure" as const,
+    version: 1 as const,
+    data: module.data,
+    hostVersion: "test",
+    variants: [{ client: "web" as const, entry: "witness.ts" }],
+    modules: [{ id: "witness.ts", sha256: "a".repeat(64) }],
+    inputs: [],
+    externals: [],
+  };
   const fingerprint = await builtinClosureFingerprint(envelope);
-  const inventory = createBuiltinRouteInventory({ foreign: { module, closure: { envelope, fingerprint }, catalog: [] } });
+  const inventory = createBuiltinRouteInventory({
+    foreign: { module, closure: { envelope, fingerprint }, catalog: [] },
+  });
   const result = (await inventory.prepare("foreign", fingerprint)).admitUnknown(module);
   expect(result.ok).toBe(false);
   registration.deactivate();
@@ -2956,25 +2992,35 @@ test("resource release never withdraws the Place's write authority", async () =>
   );
 });
 
-
 test.each(["take", "unsuggest", "clear"] as const)(
   "cell %s captures its channel and label and refuses stale readings or lost custody",
   async (kind) => {
     const t = transports();
     const initial = { amount: { edit: { value: 3 }, suggestion: { value: 7 } } };
     const store = createFixtureWorkDoor(
-      { route: "note", title: "", description: "", schema: z.object({ amount: draftCellSchema(z.number()) }) },
+      {
+        route: "note",
+        title: "",
+        description: "",
+        schema: z.object({ amount: draftCellSchema(z.number()) }),
+      },
       initial,
     );
     const submit = vi.spyOn(store, "submitWork");
     let custody: "current" | "departed" = "current";
     const route = await workRoute("none", false, "nothing", undefined, "draft", {
-      output: z.unknown(), run: () => ({}), pane: (ctx) => ctx,
+      output: z.unknown(),
+      run: () => ({}),
+      pane: (ctx) => ctx,
     });
-    const mount = createRouteShell({ ...t.services, work: store }).mount(route,
-      placeInput(locationPort().address, { custody: { current: () => custody === "current" } }));
+    const mount = createRouteShell({ ...t.services, work: store }).mount(
+      route,
+      placeInput(locationPort().address, { custody: { current: () => custody === "current" } }),
+    );
     closes.push(mount.close);
-    const cellContext = mount.read("main") as { cells: Record<typeof kind, (id: string, key: string) => Observation<WorkWriteOutcome>> };
+    const cellContext = mount.read("main") as {
+      cells: Record<typeof kind, (id: string, key: string) => Observation<WorkWriteOutcome>>;
+    };
     const run = () => cellContext.cells[kind]("amount", "amount");
     expect(() => run()).toThrow("Reading unavailable: notes");
     expect(submit).not.toHaveBeenCalled();
@@ -2987,32 +3033,44 @@ test.each(["take", "unsuggest", "clear"] as const)(
     const label = `${kind === "take" ? "Take" : kind === "unsuggest" ? "Unsuggest" : "Clear"} amount`;
     expect(submit.mock.calls[0]?.[1]).toMatchObject({ label });
     expect(submit.mock.calls[0]?.[2]).toMatchObject({ token: { channel: `cell-${kind}:amount` } });
-    expect(mount.work()?.value).toEqual({ amount: kind === "take"
-      ? { edit: { value: 7, by: "human", base: 0, at: expect.any(String) }, suggestion: null }
-      : kind === "unsuggest" ? { edit: { value: 3 }, suggestion: null }
-      : { edit: null, suggestion: { value: 7 } } });
+    expect(mount.work()?.value).toEqual({
+      amount:
+        kind === "take"
+          ? { edit: { value: 7, by: "human", base: 0, at: expect.any(String) }, suggestion: null }
+          : kind === "unsuggest"
+            ? { edit: { value: 3 }, suggestion: null }
+            : { edit: null, suggestion: { value: 7 } },
+    });
   },
 );
 
-
 test("recovery replaces saved evidence with a problem and clears it on a new attempt", async () => {
-  const saved = vi.spyOn(workHost, "salvageRouteWork").mockResolvedValue({from: "old", value: {amount: 12}});
+  const saved = vi
+    .spyOn(workHost, "salvageRouteWork")
+    .mockResolvedValue({ from: "old", value: { amount: 12 } });
   const t = transports();
   const store = createFixtureWorkDoor(
-    {route: "note", title: "", description: "", schema: z.object({amount: z.number()})},
-    {amount: 6},
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 6 },
   );
-  const mount = createRouteShell({...t.services, work: store}).mount(
-    await workRoute("none", false, "nothing", undefined, true), placeInput(locationPort().address),
+  const mount = createRouteShell({ ...t.services, work: store }).mount(
+    await workRoute("none", false, "nothing", undefined, true),
+    placeInput(locationPort().address),
   );
   closes.push(mount.close);
   try {
     await vi.waitFor(() => expect(mount.recovery().carryOver).toBe(true));
     saved.mockRejectedValueOnce(Error("salvage offline"));
     await expect(mount.salvage()).rejects.toThrow("salvage offline");
-    expect(mount.recovery()).toMatchObject({problem: "Error: salvage offline", busy: false, carryOver: false});
+    expect(mount.recovery()).toMatchObject({
+      problem: "Error: salvage offline",
+      busy: false,
+      carryOver: false,
+    });
     await mount.salvage();
-    expect(mount.recovery()).toMatchObject({problem: null, busy: false});
+    expect(mount.recovery()).toMatchObject({ problem: null, busy: false });
     expect(mount.review("work.salvage")).not.toBeNull();
-  } finally { saved.mockRestore(); }
+  } finally {
+    saved.mockRestore();
+  }
 });
