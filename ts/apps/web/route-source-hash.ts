@@ -74,7 +74,8 @@ export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
   );
   if (externals.size !== (options.externals ?? []).length)
     throw Error("Duplicate external integrity");
-  for (const variant of options.variants) {
+  // Client labels share one resolver config; identical entries need only one closure build.
+  for (const entry of new Set(options.variants.map((variant) => variant.entry))) {
     const capture: Plugin = {
       name: "builtin-source-closure",
       enforce: "pre",
@@ -134,7 +135,7 @@ export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
         write: false,
         minify: false,
         sourcemap: false,
-        lib: { entry: variant.entry, formats: ["es"] },
+        lib: { entry, formats: ["es"] },
         rolldownOptions: {
           ...options.config?.build?.rolldownOptions,
           external: [...externals.keys()],
