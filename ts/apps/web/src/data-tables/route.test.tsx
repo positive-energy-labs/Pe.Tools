@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import * as hostRuntime from "#/host/runtime";
 import { peReadings } from "#/readings";
-import type { GraphMount, MountAdapters, MountScope } from "#/shell/mount";
-import type { ReadingContext, ReadingDelivery } from "#/shell/readings";
-import { workKey, type WorkKey } from "@pe/agent-contracts";
+import type { GraphMount } from "#/shell/mount";
+import * as workScope from "#/shell/use-work-scope";
+import * as workHost from "#/route/host";
+import { readingKey, workKey, type WorkKey, type WorkWrite } from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -11,8 +12,9 @@ import {
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
+import { RouteWorkspace, observeResources } from "@pe/runtime";
 import { Route as root } from "../routes/__root";
+import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import {
   dataTablesWorkSchema,
   draftFrom,
@@ -22,38 +24,7 @@ import {
   type TableHandle,
 } from "./graph";
 import { dataTablesAdapters, dataTablesRoute } from "./route";
-import { dataTablesSources } from "./sources";
 
-const door = vi.hoisted(() => ({ ports: null as object | null }));
-const command = vi.hoisted(() => ({ run: vi.fn() }));
-vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (original) => ({
-  ...(await original<
-    typeof import("../../../../packages/mcps/src/shared/takeoff-action-client")
-  >()),
-  runSemanticAction: (
-    ...args: Parameters<
-      typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
-    >
-  ) =>
-    /\.preview$|^ducts\.preview-/.test(String(args[0]))
-      ? Promise.resolve({ state: "succeeded", result: {} } as Awaited<
-          ReturnType<
-            typeof import("../../../../packages/mcps/src/shared/takeoff-action-client").runSemanticAction
-          >
-        >)
-      : command.run(...args),
-}));
-vi.mock("../shell/use-work-scope", () => ({
-  useWorkScope: () => ({
-    ...door.ports,
-    status: {
-      resolution: { kind: "resolved", target: { kind: "host" } },
-      bindingLost: null,
-      targetProvenance: { source: "none" },
-      closed: false,
-    },
-  }),
-}));
 vi.mock("../routes/__root", async () => {
   const { createRootRoute, Outlet } = await import("@tanstack/react-router");
   return { Route: createRootRoute({ component: Outlet }) };
@@ -74,11 +45,6 @@ const table: TableHandle = {
 };
 const releases: (() => void)[] = [];
 beforeEach(() => {
-  command.run.mockReset();
-  vi.spyOn(hostRuntime, "hostFetch").mockImplementation(
-    async () => new Response(JSON.stringify({ tables: [table], issues: [] })),
-  );
-  vi.spyOn(peReadings, "subscribe").mockImplementation(() => () => {});
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -90,7 +56,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
-  for (const release of releases.splice(0)) release();
+  for (const release of releases.splice(0).reverse()) release();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -123,98 +89,117 @@ async function mounted() {
       },
     },
   });
-  let scope: MountScope<DataTablesWork> = {
-    target: { kind: "document", ref: { session, openId: "document-a" } },
-    work: { handle: { key, revision: 0 }, doc: dataTablesWorkSchema.parse({}) },
+  let openIds = ["document-a", "document-b"];
+  const documents = () => openIds.map((openId) => ({
+    openId, title: openId, address: null, isFamilyDocument: false, isActive: false,
+  }));
+  const inventory = () => ({
+    sessions: [{ sessionId: session, connected: true,
+      openDocumentCount: openIds.length, openDocuments: documents() }],
+  });
+  const censusSubscribers = new Set<() => void>();
+  const observe = observeResources(workspace, { observe: () => () => {} }, (request, publish) => {
+    const key = readingKey(request);
+    if (request.kind === "inventory" || request.kind === "machine") {
+      const emit = () => publish({ kind: "snapshot", key, value: request.kind === "inventory"
+        ? inventory() : machineFixture([{ session, documents: documents() }]) });
+      censusSubscribers.add(emit);
+      emit();
+      return () => { censusSubscribers.delete(emit); };
+    }
+    if (request.kind !== "receipts") throw Error(`Unexpected external Reading: ${request.kind}`);
+    publish({ kind: "snapshot", key, value: [] });
+    return () => {};
+  });
+  vi.spyOn(peReadings, "subscribe").mockImplementation((request, publish) => {
+    const release = observe(request, publish);
+    releases.push(release);
+    return release;
+  });
+  const write = vi.spyOn(workHost, "writeRouteWork").mockImplementation(
+    (requested, write) => workspace.write(requested, "data-tables", "human", write),
+  );
+  // Call-through observation only: the route receives the real hook's exact ports and status.
+  const scopes = vi.spyOn(workScope, "useWorkScope");
+  const ports = () => {
+    const result = scopes.mock.results.at(-1)!;
+    if (result.type !== "return") throw Error("Work scope did not return");
+    return result.value as workScope.WorkScopePorts<DataTablesWork>;
   };
-  const listeners = new Set<() => void>();
-  const ports: Pick<
-    MountAdapters<DataTablesPage, DataTablesWork>,
-    "getSnapshot" | "subscribe" | "write" | "subscribeAcceptedDeltas"
-  > = {
-    getSnapshot: () => scope,
-    subscribe: (notify) => {
-      listeners.add(notify);
-      return () => {
-        listeners.delete(notify);
-      };
-    },
-    write: async (requested, write) => {
-      const result = await workspace.write(requested, requested.route, "human", write);
-      if (result.ok) {
-        const envelope = await workspace.read(requested, requested.route);
-        scope = {
-          ...scope,
-          work: {
-            handle: { key: requested, revision: envelope!.revision },
-            doc: envelope!.doc as DataTablesWork,
-          },
-        };
-        for (const notify of listeners) notify();
-      }
-      return result;
-    },
-    subscribeAcceptedDeltas: (requested, accept) =>
-      workspace.subscribe((event) => {
-        if (event.ok && workKey(event.key) === workKey(requested)) accept(event);
-      }),
-  };
-  door.ports = ports;
-  let deliver!: ReadingDelivery;
-  const source = dataTablesAdapters.sources["data-tables.tables"]!;
-  vi.spyOn(source as { open: (...args: any[]) => unknown }, "open").mockImplementation(
-    (_context, publish) => {
-      deliver = publish;
-      publish({ kind: "complete", value: structuredClone([table]), revision: 1 });
+  let nativeTables = [table];
+  const fetch = vi.spyOn(hostRuntime, "hostFetch").mockImplementation(
+    async (path, init) => {
+      if (path !== "/call" || JSON.parse(String(init?.body)).key !== "revit.detail.data-tables")
+        throw Error(`Unexpected native request: ${path}`);
+      return new Response(JSON.stringify({ tables: nativeTables, issues: [] }));
     },
   );
   let owner!: GraphMount<DataTablesPage, DataTablesWork>;
+  const previousWrap = dataTablesAdapters.wrap;
+  releases.push(() => { dataTablesAdapters.wrap = previousWrap; });
   dataTablesAdapters.wrap = (current, children) => {
     owner = current;
     return children;
   };
   const router = createRouter({
     routeTree: root.addChildren([dataTablesRoute]),
-    history: createMemoryHistory({ initialEntries: ["/data-tables"] }),
+    history: createMemoryHistory({ initialEntries: [
+      `/data-tables?target=${encodeURIComponent(JSON.stringify({ kind: "open", ref: key.open }))}`,
+    ] }),
   });
   await router.load();
   const view = render(<RouterProvider router={router} />);
   await view.findByRole("button", { name: "Open table" });
+  await waitFor(() => expect(ports().getSnapshot().work?.handle.key).toEqual(key));
   releases.push(() => owner.dispose());
   return {
     view,
     owner: () => owner,
-    scope: () => scope,
-    workspace,
-    write: ports.write,
+    scope: () => ports().getSnapshot(),
+    ports,
+    write,
+    fetch,
     key,
+    persisted: () => structuredClone([...stored]),
     selectDocument: async (openId: string) => {
-      const ref = { session, openId };
-      const selected: WorkKey = { binding: "open", route: "data-tables", target: null, open: ref };
-      const envelope = await workspace.view(selected, "data-tables");
-      scope = {
-        target: { kind: "document", ref },
-        work: {
-          handle: { key: selected, revision: envelope!.revision },
-          doc: dataTablesWorkSchema.parse(envelope!.doc),
-        },
-      };
-      for (const notify of listeners) notify();
+      await router.navigate({ to: "/data-tables", search: {
+        target: JSON.stringify({ kind: "open", ref: { session, openId } }),
+      } });
+      await waitFor(() => expect(ports().getSnapshot().work?.handle.key).toEqual({
+        ...key, open: { session, openId },
+      }));
     },
-    deliver: (value: TableHandle[]) => deliver({ kind: "complete", value, revision: 2 }),
+    closeDocument: (openId: string) => {
+      openIds = openIds.filter((id) => id !== openId);
+      for (const emit of censusSubscribers) emit();
+    },
+    refresh: (tables: TableHandle[]) => {
+      nativeTables = tables;
+      owner.readings.refresh(["tables"]);
+    },
   };
 }
 
 test("the real graph mount copies native values into Work once and a refresh preserves edits", async () => {
   const f = await mounted();
   fireEvent.click(f.view.getByRole("button", { name: "Open table" }));
-  await waitFor(() => expect(f.scope().work?.doc.draft).toEqual(draftFrom(table)));
+  await waitFor(() => expect(f.scope().work?.doc.draft).toMatchObject({
+    name: "Loads", isNew: false, rows: table.rows, columns: table.columns,
+  }));
   expect(f.view.getByText(/M101/)).toBeTruthy();
+  expect(f.fetch).toHaveBeenCalledWith("/call", expect.objectContaining({
+    method: "POST", body: JSON.stringify({ key: "revit.detail.data-tables", request: {} }),
+    headers: expect.objectContaining({
+      [HOST_RPC_BRIDGE_SESSION_HEADER]: f.key.open!.session,
+      [HOST_RPC_DOCUMENT_HEADER]: "document-a",
+    }),
+  }));
   const name = await f.view.findByPlaceholderText("Table name");
   fireEvent.change(name, { target: { value: "Edited" } });
   await waitFor(() => expect(f.scope().work?.doc.draft?.name).toBe("Edited"));
-  await act(async () => f.deliver([{ ...table, rows: [] }]));
-  expect(f.scope().work?.doc.draft?.rows).toEqual(draftFrom(table).rows);
+  await act(async () => f.refresh([{ ...table, rows: [] }]));
+  await waitFor(() => expect(f.owner().readings.get("tables").value).toEqual([{ ...table, rows: [] }]));
+  expect(f.scope().work?.doc.draft?.rows).toEqual(table.rows);
   expect(f.scope().work?.doc.draft?.name).toBe("Edited");
   expect(f.owner().journal(f.scope().work!.handle.key).read().undo).toHaveLength(2);
 });
@@ -266,43 +251,47 @@ test("review counts native destination rows missing by key, including rename col
   expect(pruneReview({ ...draft, isNew: true }, [table]).deletedRows).toBe(1);
 });
 
-test("the native source carries the selected document headers and preserves placements", async () => {
-  const fetch = vi
-    .spyOn(hostRuntime, "hostFetch")
-    .mockResolvedValue(new Response(JSON.stringify({ tables: [table], issues: [] })));
-  const target = {
-    kind: "document" as const,
-    ref: { session: "chosen-session", openId: "chosen-document" },
+test("real selected Work refuses foreign identity, stale revision and a closed document without changing disk", async () => {
+  const f = await mounted();
+  const a = f.scope().work!.handle;
+  await act(async () => f.selectDocument("document-b"));
+  const b = f.scope().work!.handle;
+  expect(a.revision).toBe(b.revision);
+  expect(workKey(a.key)).not.toBe(workKey(b.key));
+  expect(f.ports().status.resolution).toEqual({ kind: "resolved", target: {
+    kind: "document", ref: { session: f.key.open!.session, openId: "document-b" },
+  } });
+  const attempted: WorkWrite = { kind: "apply", expectedRevision: b.revision, press: "foreign",
+    patches: [{ path: ["draft"], value: { ...draftFrom(table), name: "Unsafe replacement" } }],
   };
-  const source = dataTablesSources()["data-tables.tables"];
-  const publications: unknown[] = [];
-  await source.open(
-    {
-      target,
-      workKey: null,
-      workRevision: null,
-      page: { table: "" },
-      work: null,
-      attempt: { target, workKey: null, generation: 1 },
-      trigger: { kind: "demand" },
-      args: null,
-      inputs: {},
-      signal: new AbortController().signal,
-    } satisfies ReadingContext,
-    (publication) => {
-      publications.push(publication);
-    },
-  );
-  expect(fetch).toHaveBeenCalledWith(
-    "/call",
-    expect.objectContaining({
-      method: "POST",
-      body: JSON.stringify({ key: "revit.detail.data-tables", request: {} }),
-      headers: expect.objectContaining({
-        [HOST_RPC_BRIDGE_SESSION_HEADER]: "chosen-session",
-        [HOST_RPC_DOCUMENT_HEADER]: "chosen-document",
-      }),
-    }),
-  );
-  expect(publications).toEqual([{ kind: "complete", value: [table], revision: 1 }]);
+  const beforeForeign = f.persisted();
+  expect(await f.ports().write(a.key, attempted)).toMatchObject({ ok: false, kind: "refused" });
+  expect(f.write).not.toHaveBeenCalled();
+  expect(f.persisted()).toEqual(beforeForeign);
+
+  // Advance B through the actual editor, then reuse B's earlier numeric revision at the host.
+  fireEvent.click(f.view.getByRole("button", { name: "New table" }));
+  await waitFor(() => expect(f.scope().work?.doc.draft?.isNew).toBe(true));
+  expect(f.scope().work!.handle.revision).toBe(b.revision + 1);
+  expect(f.write).toHaveBeenCalledOnce();
+  const beforeStale = f.persisted();
+  await act(async () => {
+    expect(await f.ports().write(b.key, { ...attempted, press: "stale" })).toMatchObject({
+      ok: false, code: "stale_revision",
+    });
+  });
+  expect(f.write).toHaveBeenCalledTimes(2);
+  expect(f.persisted()).toEqual(beforeStale);
+
+  const current = f.scope().work!.handle;
+  await act(async () => f.closeDocument("document-b"));
+  await waitFor(() => expect(f.ports().status.closed).toBe(true));
+  expect(f.ports().status.resolution).toMatchObject({ kind: "choose", reason: "document-closed" });
+  expect(f.scope().work!.handle).toEqual(current);
+  expect(f.scope().work!.doc.draft?.isNew).toBe(true);
+  const beforeClosed = f.persisted();
+  expect(await f.ports().write(current.key, { ...attempted, expectedRevision: current.revision,
+    press: "closed" })).toMatchObject({ ok: false, kind: "refused" });
+  expect(f.write).toHaveBeenCalledTimes(2);
+  expect(f.persisted()).toEqual(beforeClosed);
 });
