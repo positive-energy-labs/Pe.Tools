@@ -1,5 +1,6 @@
 /** Original retained-owner evidence; native bytes remain in the one taking store. */
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
+import { attemptFor, CurrentInputAttempt, CurrentInputConsumption } from "./input-occurrence.ts";
 import { z } from "zod";
 import { ductsReadingSchema, readingKey, type DuctsReadingRequest } from "@pe/agent-contracts";
 import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
@@ -90,11 +91,25 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
           : !basis.target.documentRef && "kind" in taking.outcome.actualTarget.openDocumentLifetime);
     };
     const codec = Schema.declare(validate);
-    const recorded = lane.kind === "recording" ? yield* replayInput(store, basisInput, scope, codec,
-      lane.bindings?.get(inputBindingKey(basisInput, scope))) : undefined;
-    if (recorded && lane.kind === "recording" &&
-        lane.bindings?.get(yield* nativeInputIdentity(input)) !== recorded.nativeTakingId)
-      return yield* refused("The native read binding does not name this retained basis taking");
+    // A consumer's basis occurrence is reserved ONCE, here at prepare; link and consume reuse it.
+    const consumption = yield* Effect.serviceOption(CurrentInputConsumption);
+    const reserved = yield* attemptFor(basisInput, scope);
+    if (reserved && Result.isFailure(reserved)) {
+      if (lane.kind === "recording") return yield* reserved.failure;
+      yield* stopCapture(reserved.failure);
+    }
+    const attempt = reserved && Result.isSuccess(reserved) ? reserved.success : undefined;
+    const under = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      attempt ? Effect.provideService(effect, CurrentInputAttempt, attempt) : effect;
+    const recorded = lane.kind === "recording" ? yield* under(replayInput(store, basisInput, scope, codec,
+      lane.bindings?.get(inputBindingKey(basisInput, scope)))) : undefined;
+    // The original native acquisition this consumer's basis rests on: its stored link, else the
+    // root's exact binding. Never a scan by request id.
+    const nativeLink = recorded && consumption._tag === "Some"
+      ? yield* consumption.value.taking("native")
+      : recorded && lane.kind === "recording" ? lane.bindings?.get(yield* nativeInputIdentity(input)) : undefined;
+    if (recorded && nativeLink !== recorded.nativeTakingId)
+      return yield* refused("The native read link does not name this retained basis taking");
     const checked = (id: string | undefined) => {
       const taking = id ? store.taking(id) : undefined;
       return taking && matches(taking) && taking.outcome.kind === "answered" ? taking : null;
@@ -127,8 +142,11 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
           native: { key: taking.input.key, args: taking.input.args, scope: taking.scope } };
         if (!validate(basis) || (recorded && !sameTarget(recorded, basis)))
           return yield* refused("Retained owner evidence disagrees with the original basis");
-        if (lane.kind === "live") yield* captureInput(lane.captureStore!, basisInput, scope, codec,
-          Effect.succeed(basis), observed);
+        if (lane.kind !== "live") return;
+        yield* under(captureInput(lane.captureStore!, basisInput, scope, codec, Effect.succeed(basis), observed));
+        // Hits included: the ORIGINAL durable native acquisition; a hit adds no native taking.
+        if (consumption._tag === "Some" && !lane.captureStore!.capture.truncated())
+          yield* consumption.value.linkTaking("native", taking.id);
       }).pipe(Effect.catch(stopCapture)),
     } satisfies DuctsBasisRead;
   }) };

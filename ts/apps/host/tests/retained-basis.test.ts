@@ -1,7 +1,8 @@
 import { mkdtemp, rm, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Result, Schema } from "effect";
+import { CurrentInputConsumption, HostInputReadSets, type InputConsumption } from "../src/input-occurrence.ts";
 import { HttpRouter } from "effect/http";
 import { afterEach, expect, test } from "vite-plus/test";
 import { addressSchema, DUCTS_BODY_VERSION_HEADER, DUCTS_REFRESH_HEADER } from "@pe/agent-contracts";
@@ -40,16 +41,19 @@ const inventory = Layer.succeed(HostSessionInventory, {
   document: () => Effect.succeed(row),
 });
 function router(lane: HostInputLane, owner: DuctsReadings, counts: { reads: number },
-  observed: (taking: Taking) => Effect.Effect<void> = () => Effect.void) {
+  observed: (taking: Taking) => Effect.Effect<void> = () => Effect.void,
+  consumer?: { current: InputConsumption | undefined }) {
   const basis = createDuctsBodyBasis(lane, observed)!;
   const live = lane.kind === "recording" ? Layer.effect(HostNativeRead, Effect.die("Live native factory constructed")) : producer(counts);
   const docs = lane.kind === "recording" ? HostSessionInventory.recorded(lane.recordingStore, lane.bindings) :
     lane.kind === "live" && lane.captureStore ? HostSessionInventory.capturing(lane.captureStore, observed).pipe(Layer.provide(inventory)) : inventory;
   const web = HttpRouter.toWebHandler(HttpRouter.add("POST", "/call", (req) => Effect.gen(function* () {
     const documents = yield* HostSessionInventory;
-    return yield* retainedDuctsRead(owner, input,
+    const read = retainedDuctsRead(owner, input,
       { version: req.headers[DUCTS_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] },
       { document: documents.document, basis });
+    // The caller's own retained-call child, provided as the request's consumption (Sol wires this).
+    return yield* (consumer?.current ? Effect.provideService(read, CurrentInputConsumption, consumer.current) : read);
   })).pipe(Layer.provide(httpProblems), HttpRouter.provideRequest(Layer.mergeAll(
     hostNativeReadFor(lane, live, basis.observed), docs))), { disableLogger: true });
   return { close: web.dispose, post: (headers: Record<string, string> = {}, anonymous = false) => web.handler(
@@ -221,4 +225,47 @@ test("deadline during deferred basis capture retires the flight before ready pub
   const refused = expect(result).rejects.toMatchObject({ statusCode: 409 });
   try { await expect.poll(() => frames.includes("failed")).toBe(true); gate.resolve(); await refused; expect(frames).not.toContain("ready"); }
   finally { gate.resolve(); stop(); }
+});
+
+test("retained calls in their own child contexts link the original native taking; replay needs no bindings", async () => {
+  const dir = await temp(); const writer = await run(openRecordingWriter(dir, identity, bounds));
+  const takes: Taking[] = []; const counts = { reads: 0 }; const consumer = { current: undefined as InputConsumption | undefined };
+  const web = router({ kind: "live", captureStore: writer }, new DuctsReadings(), counts,
+    (taking) => Effect.sync(() => { takes.push(taking); }), consumer);
+  const sets = Context.get(await run(Effect.scoped(Layer.build(HostInputReadSets.layer({ kind: "live", captureStore: writer })))), HostInputReadSets);
+  const recipe = { key: "ducts.sheet", input: { fan: "F-1" }, scope: canonicalJson(ref) };
+  const retained = (role: string) => ({ key: "ducts.retained", input: { key: input.key, role }, scope: canonicalJson(scope) });
+  const root = await run(sets.open(recipe, null));
+  const child = (role: string) => { const made = root.child(retained(role)); if (Result.isFailure(made)) throw made.failure; return made.success; };
+  consumer.current = child("acquire");
+  const first = await web.post(); expect(first.status, await first.clone().text()).toBe(200);
+  const version = first.headers.get(DUCTS_BODY_VERSION_HEADER)!;
+  consumer.current = child("validate");
+  const hit = await web.post({ [DUCTS_BODY_VERSION_HEADER]: version });
+  expect(hit.headers.get("x-pe-ducts-reused")).toBe("true");
+  await run(root.seal); await web.close();
+  const native = takes.filter((taking) => taking.input.kind === "native");
+  expect(native).toHaveLength(1); // the hit added no native taking
+  const reader = await run(openRecordingReader(dir, identity, bounds));
+  const stored = await run(reader.readSets.get(root.id));
+  const children = await Promise.all(stored.children.map((entry) => run(reader.readSets.get(entry.readSetId))));
+  expect(children.map((entry) => entry.takingLinks.native)).toEqual([native[0]!.id, native[0]!.id]);
+  const basisIds = children.map((entry) => entry.inputs.find((item) => item.input.kind === "document")!.takingId);
+  expect(new Set(basisIds).size).toBe(2);
+  // Replay: the same consumers, no binding map, no live factory.
+  const lane = { kind: "recording", recordingStore: reader, at: null } as const;
+  const historical = Context.get(await run(Effect.scoped(Layer.build(HostInputReadSets.layer(lane)))), HostInputReadSets);
+  const replayedRoot = await run(historical.open(recipe, root.id));
+  const replayCounts = { reads: 0 }; const replayed = { current: undefined as InputConsumption | undefined };
+  const again = router(lane, new DuctsReadings(), replayCounts, undefined, replayed);
+  try {
+    for (const role of ["acquire", "validate"]) {
+      const made = replayedRoot.child(retained(role)); if (Result.isFailure(made)) throw made.failure;
+      replayed.current = made.success;
+      const answer = await again.post(role === "validate" ? { [DUCTS_BODY_VERSION_HEADER]: version } : {});
+      expect(answer.status, await answer.clone().text()).toBe(200);
+      expect(answer.headers.get(DUCTS_BODY_VERSION_HEADER)).toBe(version);
+    }
+  } finally { await again.close(); }
+  expect(replayCounts.reads).toBe(0);
 });
