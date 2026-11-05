@@ -5,6 +5,8 @@ import { Cause, Context, Effect, Exit, Layer, Logger, References, Scope } from "
 import { TestClock } from "effect/testing";
 import { onTestFinished, test, type TestContext } from "vite-plus/test";
 import { FamiliesReader } from "../src/families-reader.ts";
+import { RevitBridge, RevitBridgeDetached, type BridgeSessionView } from "../src/bridge.ts";
+import type { BridgeStateSnapshot } from "@pe/host-contracts/contracts";
 import { HarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
 import { CaptureStore, type TakeoffCaptures } from "../src/takeoff-captures.ts";
 import {
@@ -78,24 +80,52 @@ export const captureLogs = () => {
   return { lines, layer };
 };
 
-/**
- * {@link RunConsents} for Promise tests: the live layer, built in a scope the running test closes
- * (a module-level fixture's scope lives with its worker). Closing it interrupts open windows.
- */
-export const consentService = (): RunConsents["Service"] => {
+/** Build `layer` in a scope the running test closes; a module fixture's scope lives with its worker. */
+const testScoped = <S, E>(layer: Layer.Layer<S, E>) => {
   const scope = Scope.makeUnsafe();
-  // effect-edge: test-runner
-  const context = Effect.runSync(
-    Layer.buildWithScope(RunConsents.layer.pipe(Layer.provide(NodeCrypto.layer)), scope),
-  );
   try {
     // effect-edge: test-runner
     onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
   } catch {
     // Outside a running test: a module fixture, closed with its worker.
   }
-  return Context.get(context, RunConsents);
+  // effect-edge: test-runner
+  return Effect.runSync(Layer.buildWithScope(layer, scope));
 };
+
+/**
+ * {@link RunConsents} for Promise tests: the live layer, built in a scope the running test closes
+ * (a module-level fixture's scope lives with its worker). Closing it interrupts open windows.
+ */
+export const consentService = (): RunConsents["Service"] => {
+  return Context.get(testScoped(RunConsents.layer.pipe(Layer.provide(NodeCrypto.layer))), RunConsents);
+};
+
+/** {@link RevitBridgeDetached} as a value, built in a scope the running test closes. */
+export const detachedBridge = (overrides?: Partial<RevitBridge["Service"]>) =>
+  Context.get(testScoped(RevitBridgeDetached(overrides)), RevitBridge);
+
+type DocumentView = BridgeStateSnapshot["openDocuments"][number];
+const emptyState = {
+  activeDocumentCloudModelGuid: null, activeDocumentCloudModelUrn: null, activeDocumentCloudProjectGuid: null,
+  activeDocumentIsFamilyDocument: false, activeDocumentIsModelInCloud: false, activeDocumentIsWorkshared: false,
+  activeDocumentKey: null, activeDocumentObservedAtUnixMs: 0, activeDocumentPath: null, activeDocumentTitle: null,
+  documentIdentity: null, hasActiveDocument: false, revitVersion: "test", runtimeAssemblies: [],
+  runtimeFramework: "test", sharedParametersFilename: null,
+} satisfies Omit<BridgeStateSnapshot, "openDocuments">;
+/** A session row for a `list` override; unnamed state is empty, documents unsaved and inactive. */
+export const sessionView = ({ state, ...view }: Omit<BridgeSessionView, "state"> & {
+  state?: Partial<Omit<BridgeStateSnapshot, "openDocuments">> & { openDocuments: readonly (Partial<DocumentView> & { openId: string })[] };
+}): BridgeSessionView => ({
+  ...view,
+  state: {
+    ...emptyState,
+    ...state,
+    openDocuments: (state?.openDocuments ?? []).map((document) => ({
+      title: "", address: null, isFamilyDocument: false, isActive: false, ...document,
+    })),
+  },
+});
 
 /** The Promise face with a transcript sink attached; persist defaults to a no-op, auto-approve on. */
 export const testConsents = (
@@ -203,32 +233,12 @@ export const machineOwner = (
   sources: PromiseMachineSources,
   options?: MachineOptions,
 ): MachineOwnerPromise => {
-  const scope = Scope.makeUnsafe();
-  // effect-edge: test-runner
-  const context = Effect.runSync(
-    Layer.buildWithScope(MachineOwner.layer(liftLegs(sources), options), scope),
-  );
-  try {
-    // effect-edge: test-runner
-    onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-  } catch {
-    // Outside a running test: a module fixture, closed with its worker.
-  }
-  return machineOwnerPromise(Context.get(context, MachineOwner));
+  return machineOwnerPromise(Context.get(testScoped(MachineOwner.layer(liftLegs(sources), options)), MachineOwner));
 };
 
 /** The live {@link Spawner} for Promise tests, owned like {@link captureStore}'s scope. */
 export const testSpawner = (): Spawner["Service"] => {
-  const scope = Scope.makeUnsafe();
-  // effect-edge: test-runner
-  const context = Effect.runSync(Layer.buildWithScope(Spawner.live, scope));
-  try {
-    // effect-edge: test-runner
-    onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-  } catch {
-    // Outside a running test: a module fixture, closed with its worker.
-  }
-  return Context.get(context, Spawner);
+  return Context.get(testScoped(Spawner.live), Spawner);
 };
 
 /**
@@ -236,18 +246,7 @@ export const testSpawner = (): Spawner["Service"] => {
  * running test closes. Two calls over one directory are two layers over the same files.
  */
 export const captureStore = (directory: string, apsCachePath?: string): TakeoffCaptures => {
-  const scope = Scope.makeUnsafe();
-  // effect-edge: test-runner
-  const context = Effect.runSync(
-    Layer.buildWithScope(CaptureStore.layer(directory, apsCachePath), scope),
-  );
-  try {
-    // effect-edge: test-runner
-    onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-  } catch {
-    // Outside a running test: a module fixture, closed with its worker.
-  }
-  return Context.get(context, CaptureStore);
+  return Context.get(testScoped(CaptureStore.layer(directory, apsCachePath)), CaptureStore);
 };
 
 /** A real adapter owned by the running test's scope. */

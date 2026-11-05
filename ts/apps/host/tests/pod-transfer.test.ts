@@ -2,7 +2,7 @@
  * Host-local pod reads and archive transport over the production `/call` route. No Revit: the
  * bridge is a stub that fails the test if anything reaches it.
  */
-import { captureStore } from "./effect-test.ts";
+import { detachedBridge, captureStore } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
 import { mkdir, mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/promises";
@@ -35,13 +35,12 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "pe-pod-transfer-"));
   process.env[homeVariable] = join(root, "Documents", "Pe.Tools");
   pods = join(root, "Documents", "Pe.Tools", "Pods");
-  const bridge = {
-    list: Effect.succeed([]),
+  const bridge = detachedBridge({
     invoke: (key: string) => {
       nativeCalls.push(key);
       return Effect.die(`native call ${key}`);
     },
-  } as unknown as RevitBridge["Service"];
+  });
   web = HttpRouter.toWebHandler(
     makeCallRoute(
       new ActionJournal(join(root, "journal.json")),

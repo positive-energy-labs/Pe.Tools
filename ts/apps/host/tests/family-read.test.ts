@@ -8,7 +8,8 @@ import {
   familyDraftRouteState,
 } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
-import { CANCEL_OPERATION_KEY, type RevitBridge } from "../src/bridge.ts";
+import { CANCEL_OPERATION_KEY } from "../src/bridge.ts";
+import { detachedBridge, sessionView } from "./effect-test.ts";
 import { readFamily } from "../src/family-actions.ts";
 import type { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -42,20 +43,21 @@ function fixture() {
     },
   });
   const invoke = vi.fn(
-    (key: string, _input: unknown, _session: string, _openId: string, _requestId?: string) =>
+    (key: string, _input: unknown, _session?: string, _openId?: string | null, _requestId?: string) =>
       Effect.promise(async () => {
-        if (key === CANCEL_OPERATION_KEY) return { value: {} };
+        if (key === CANCEL_OPERATION_KEY) return { target: { session: "bridge-a", document: null }, value: {} };
         await duringRead?.();
         return {
+          target: { session: "bridge-a", document: null },
           value: {
             modelJson: JSON.stringify({ family: { name: "Live" }, unmodeled: ["native-only"] }),
           },
         };
       }),
   );
-  const bridge = {
+  const bridge = detachedBridge({
     list: Effect.sync(() => [
-      {
+      sessionView({
         sessionId: target.session,
         connected: true,
         ...hostOwnership,
@@ -66,11 +68,10 @@ function fixture() {
             { openId: target.openId, address: openedAddress, isFamilyDocument: family },
           ],
         },
-      },
+      }),
     ]),
-    subscribe: () => () => {},
     invoke,
-  } as unknown as RevitBridge["Service"];
+  });
   // Live reads publish Work, but file no captures, Pod members or command receipts.
   const captures = {} as TakeoffCaptures;
   const read = (key = "family.read", where = target) =>

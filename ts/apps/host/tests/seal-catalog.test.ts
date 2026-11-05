@@ -1,11 +1,10 @@
-import { captureStore } from "./effect-test.ts";
+import { detachedBridge, captureStore } from "./effect-test.ts";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { commands, type Consumed, type Command } from "@pe/agent-contracts";
 import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
 import { commandRegistry } from "../src/command-registry.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
-import type { RevitBridge } from "../src/bridge.ts";
 import { writeSeal } from "../src/work-write-boundary.ts";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -31,7 +30,7 @@ function reorder(value: any): any {
   return value && typeof value === "object"
     ? Object.fromEntries(Object.entries(value).reverse().map(([k, v]) => [k, reorder(v)])) : value;
 }
-const resolve = commandRegistry({} as RevitBridge["Service"], captureStore("unused-seal-test"), {}, async () => { throw Error("No I/O in seal properties"); });
+const resolve = commandRegistry(detachedBridge(), captureStore("unused-seal-test"), {}, async () => { throw Error("No I/O in seal properties"); });
 const writes = Object.entries(commandCatalogAxes).filter(([, axes]) => axes.effect === "ModelWrite");
 
 test("live MUAS preview/apply seals ignore traversal diagnostics but retain model dependencies", () => {

@@ -9,11 +9,10 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { HOST_CONTEXT_HEADER, HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { makeCallRoute } from "../src/call-route.ts";
-import { RevitBridge } from "../src/bridge.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { replayAnswer } from "./sdk-replay.ts";
 import { machineAcquisition, machineSessionAcquisition, unavailableShare } from "../src/machine.ts";
-import { captureStore, machineOwner } from "./effect-test.ts";
+import { detachedBridge, captureStore, machineOwner } from "./effect-test.ts";
 import { bindControl, mintContext } from "../src/control.ts";
 import type { ThreadHead } from "@pe/agent-contracts";
 import { docListArgv, type SessionObservation } from "@pe/host-contracts/pe-revit-contract";
@@ -23,13 +22,7 @@ import { serveRoutes } from "./real-server.ts";
 import { acquiredOpenIds, acquisitionSessionId, foldAcquisitions } from "../src/acquisition.ts";
 import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 // Instances owns its SDK transport. These HTTP witnesses expose no bridge attachment or dispatch.
-const sdkOnlyBridge = {
-  list: Effect.succeed([]),
-  subscribe: () => () => {},
-  invoke: () => {
-    throw Error("Instances must dispatch through the SDK");
-  },
-} as unknown as RevitBridge["Service"];
+const sdkOnlyBridge = detachedBridge();
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();

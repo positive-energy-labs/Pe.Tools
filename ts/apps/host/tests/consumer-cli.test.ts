@@ -8,7 +8,8 @@ import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { runPeaMain } from "../../pea/src/cli.ts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { RevitBridge } from "../src/bridge.ts";
+import { RevitBridge, type BridgeSessionView } from "../src/bridge.ts";
+import { detachedBridge, sessionView } from "./effect-test.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { opsCatalogRoute } from "../src/ops-catalog.ts";
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
@@ -27,11 +28,11 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
     throw new Error("SDK discovery should not run without a bridge attachment");
   });
   const invoke = vi.fn(() => Effect.die("native catalog should not run"));
-  let attachments: unknown[] = [];
-  const bridge = {
+  let attachments: BridgeSessionView[] = [];
+  const bridge = detachedBridge({
     list: Effect.sync(() => attachments),
     invoke,
-  } as unknown as RevitBridge["Service"];
+  });
   const web = HttpRouter.toWebHandler(
     opsCatalogRoute(() => Effect.die("not navigation"), sdk).pipe(
       Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
@@ -84,7 +85,7 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
       expect(body.operations.filter((row: { key: string }) => row.key === op.key)).toEqual([op]);
 
     // A nonempty attachment inventory enters SDK resolution. Its ambiguity is not catalog absence.
-    attachments = [{ sessionId: "one" }, { sessionId: "two" }];
+    attachments = [{ connected: true, sessionId: "one" }, { connected: true, sessionId: "two" }];
     sdk.mockRejectedValueOnce(Error("Several Revit sessions match; select one."));
     source.invalidate();
     const ambiguous = await source.read();
@@ -134,11 +135,11 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
       }),
     },
   ];
-  const bridge = {
+  const bridge = detachedBridge({
     list: Effect.sync(() =>
       gone
         ? []
-        : ["A", "B"].map((sessionId) => ({
+        : ["A", "B"].map((sessionId) => sessionView({
             sessionId,
             connected: true,
             lane: hostOwnership.lane,
@@ -162,12 +163,12 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
         if (gone) throw Error("session/catalogue gone");
         if (key === "host.ops.catalog") {
           expect(openId).toBeNull();
-          return { value: { operations }, target: null };
+          return { value: { operations }, target: { session: session!, document: null } };
         }
         effects.push({ key, input, session, openId, id });
-        return { value: partial, target: null };
+        return { value: partial, target: { session: session!, document: null } };
       }),
-  } as unknown as RevitBridge["Service"];
+  });
   const makeWeb = () =>
     HttpRouter.toWebHandler(
       Layer.mergeAll(

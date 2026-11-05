@@ -1,4 +1,4 @@
-import { captureStore, settle } from "./effect-test.ts";
+import { detachedBridge, captureStore, settle } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -7,7 +7,7 @@ import { Effect, Exit, Scope } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { address, bindWork } from "@pe/agent-contracts";
 import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
-import { CANCEL_OPERATION_KEY, type RevitBridge } from "../src/bridge.ts";
+import { CANCEL_OPERATION_KEY } from "../src/bridge.ts";
 import { familiesReader } from "./effect-test.ts";
 import { commandRegistry } from "../src/command-registry.ts";
 import type { CommandContext } from "../src/command-executor.ts";
@@ -46,13 +46,11 @@ async function fixture(blockSecond: boolean, scope?: Scope.Closeable) {
     placedInstanceCount: 0,
   }));
   const reader = await familiesReader(scope);
-  const bridge = {
-    list: Effect.succeed([]),
-    subscribe: () => () => {},
-    invoke: (key: string, input: Input, _session: string, _openId?: string, requestId?: string) =>
+  const bridge = detachedBridge({
+    invoke: (key: string, input: any, _session?: string, _openId?: string | null, requestId?: string) =>
       Effect.promise(async () => {
         calls.push({ key, input, requestId });
-        if (key === CANCEL_OPERATION_KEY) return { value: {} };
+        if (key === CANCEL_OPERATION_KEY) return { target: { session: "bridge-a", document: null }, value: {} };
         let value: Matrix;
         if (input.phase === "Prepare")
           value = {
@@ -69,9 +67,9 @@ async function fixture(blockSecond: boolean, scope?: Scope.Closeable) {
           if (input.familyId === 2 && blockSecond) await blocked;
           value = { families: [families[input.familyId! - 1]!], issues: [], elapsedMs: 1000 };
         } else value = { families, issues: [] };
-        return { value };
+        return { target: { session: "bridge-a", document: null }, value };
       }),
-  } as unknown as RevitBridge["Service"];
+  });
   return {
     captures,
     calls,

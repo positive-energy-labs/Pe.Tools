@@ -1,5 +1,5 @@
 import { fansDocumentSchema } from "@pe/agent-contracts";
-import { consentService, harnessThreads, testSpawner, settle } from "./effect-test.ts";
+import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle } from "./effect-test.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
@@ -48,7 +48,6 @@ import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
-import type { RevitBridge } from "../src/bridge.ts";
 import { buildCapabilities, peFind, peRead } from "@pe/mcps";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 
@@ -214,25 +213,24 @@ test.each(["claude", "codex"] as const)(
       ),
     );
     const writes: unknown[] = [];
-    const bridge = {
-      subscribe: () => () => {},
+    const bridge = detachedBridge({
       list: Effect.succeed([
-        {
+        sessionView({
           sessionId: "A",
           connected: true,
           ...hostOwnership,
           processId: 42,
           processStartUtcUnixMs: 1000,
           state: { openDocuments: [{ ...target, address, isFamilyDocument: false }] },
-        },
+        }),
       ]),
-      invoke: (op: string, input: unknown, _session: string, _doc: string, requestId: string) =>
+      invoke: (op: string, input: unknown, _session?: string, _doc?: string | null, requestId?: string) =>
         Effect.promise(async () => {
           let value: unknown;
           if (op.startsWith("ducts.snapshot.")) value = snapshot;
           else if (op === "ducts.tables") value = { tables: {}, missing: [], unsupported: [] };
           else if (op === "ducts.apply") {
-            await journal.markDispatched(requestId);
+            await journal.markDispatched(requestId!);
             writes.push(input);
             value = {
               previewOnly: false,
@@ -244,7 +242,7 @@ test.each(["claude", "codex"] as const)(
           } else throw Error(`Unexpected bridge op ${op}`);
           return { value, target: { session: "A", document: address, documentRef: target } };
         }),
-    } as unknown as RevitBridge["Service"];
+    });
     const executors = ductsExecutors(bridge, { sdk: sdkSessions });
     const entries = Object.fromEntries(
       Object.entries(executors)

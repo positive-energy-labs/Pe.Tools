@@ -11,6 +11,7 @@ import {
   HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
 import { RevitBridge, type HostBridgeEvent } from "../src/bridge.ts";
+import { detachedBridge, sessionView } from "./effect-test.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { asCaller, human, pea } from "./callers.ts";
@@ -21,9 +22,9 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
   const target = { session: "bridge-a", openId: "open-a" };
   const listeners = new Set<(event: HostBridgeEvent) => void>();
   let reads = 0;
-  const bridge = {
+  const bridge = detachedBridge({
     list: Effect.succeed([
-      {
+      sessionView({
         connected: true,
         sessionId: target.session,
         sdkSessionId: "dev",
@@ -42,7 +43,7 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
             },
           ],
         },
-      },
+      }),
     ]),
     subscribe: (listener: (event: HostBridgeEvent) => void) => {
       listeners.add(listener);
@@ -64,7 +65,7 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
                   { key: "ducts.tables", intent: "Read", subject: "None", touches: "Metadata", effect: "Read", cardinality: "One", costTier: "Bounded", needs: "nothing" },
                 ],
               },
-              target: null,
+              target: { session: target.session, document: null },
             }
           : {
               value: { nativeRead: ++reads },
@@ -75,7 +76,7 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
               },
             },
       ),
-  } as unknown as RevitBridge["Service"];
+  });
   const web = HttpRouter.toWebHandler(
     makeCallRoute(
       new ActionJournal(join(dir, "journal.jsonl")),

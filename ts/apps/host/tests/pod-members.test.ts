@@ -1,4 +1,4 @@
-import { captureStore } from "./effect-test.ts";
+import { detachedBridge, captureStore } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Effect, FileSystem, PlatformError } from "effect";
 import { NodeServices } from "@effect/platform-node";
@@ -19,7 +19,6 @@ import {
   writeMember,
   type PodContext,
 } from "../src/settings.ts";
-import type { RevitBridge } from "../src/bridge.ts";
 import { crossingOf } from "./callers.ts";
 let root: string;
 const member = { pod: "sample", path: "settings/file.json" };
@@ -191,7 +190,7 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
   );
   if (!authored.ok) throw Error("Expected accepted authored Work");
   const owner = new ActionJournal(join(root, "journal.json"));
-  const bridge = {} as RevitBridge["Service"];
+  const bridge = detachedBridge();
   bindCommandRuntime(
     owner,
     bridge,

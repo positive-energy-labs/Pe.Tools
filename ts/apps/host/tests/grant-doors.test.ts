@@ -20,7 +20,7 @@ import {
 } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { ActionJournal } from "../src/action-journal.ts";
-import { RevitBridge } from "../src/bridge.ts";
+import { RevitBridgeDetached } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { admitCrossing, bindControl } from "../src/control.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
@@ -51,7 +51,7 @@ beforeEach(async () => {
         // `pod.list` is host-local: it answers without Revit, so a read needs no bridge.
         dispatch: () => Effect.succeed({ pods: [] }),
       },
-    ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, {} as RevitBridge["Service"]))),
+    ).pipe(Layer.provideMerge(RevitBridgeDetached())),
     { disableLogger: true },
   );
   // Every document is in a session the person owns, unless a test says otherwise.

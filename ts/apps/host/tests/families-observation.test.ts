@@ -1,4 +1,4 @@
-import { captureStore } from "./effect-test.ts";
+import { detachedBridge, sessionView, captureStore } from "./effect-test.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -67,11 +67,11 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
       },
     },
   });
-  const bridge = {
+  const bridge = detachedBridge({
     list: Effect.sync(() =>
       connected
         ? [
-            {
+            sessionView({
               sessionId: target.session,
               connected: true,
               processId: 42,
@@ -89,14 +89,15 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
                   },
                 ],
               },
-            },
+            }),
           ]
         : [],
     ),
-    invoke: (key: string, input: { phase?: string; familyId?: number }) =>
+    invoke: (key: string, input: any) =>
       Effect.promise(async () => {
         if (key === "host.ops.catalog")
           return {
+            target: { session: "bridge-a", document: null },
             value: {
               operations: [
                 {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap",
@@ -112,6 +113,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
             matrixCalls++;
             if (fail) throw Error("native failed");
             return {
+              target: { session: "bridge-a", document: null },
               value: {
                 families: [],
                 issues: [],
@@ -125,13 +127,12 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
             };
           }
           if (input.phase === "Extract")
-            return { value: { families: result.families, issues: [], elapsedMs: 1 } };
-          return { value: result };
+            return { target: { session: "bridge-a", document: null }, value: { families: result.families, issues: [], elapsedMs: 1 } };
+          return { target: { session: "bridge-a", document: null }, value: result };
         }
         throw Error(`Unexpected ${key}`);
       }),
-    subscribe: () => () => {},
-  } as unknown as RevitBridge["Service"];
+  });
   const families = await familiesReader();
   const handlers = new Map<TakeoffCaptures, ReturnType<typeof HttpRouter.toWebHandler>>();
   const handler = (captures: TakeoffCaptures) => {

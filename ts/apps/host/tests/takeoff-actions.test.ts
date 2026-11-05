@@ -1,4 +1,4 @@
-import { testConsents, captureStore } from "./effect-test.ts";
+import { detachedBridge, sessionView, testConsents, captureStore } from "./effect-test.ts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,7 +12,6 @@ import { markDispatched } from "../src/action-dispatch.ts";
 import { commandResources } from "../src/command-reads.ts";
 import { takeoffExecutors } from "../src/takeoff-actions.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
-import type { RevitBridge } from "../src/bridge.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
@@ -43,10 +42,9 @@ test.each(["selected", "unrelated", "none"] as const)(
     const run = { thread: "rooms-thread", turn: "rooms-turn" };
     runs.open(run);
     bindControl({ runs });
-    const bridge = {
-      subscribe: () => () => {},
+    const bridge = detachedBridge({
       list: Effect.succeed([
-        {
+        sessionView({
           sessionId: target.session,
           connected: true,
           processId: 42,
@@ -65,17 +63,18 @@ test.each(["selected", "unrelated", "none"] as const)(
               },
             ],
           },
-        },
+        }),
       ]),
-      invoke: (key: string, input: unknown, _session: string, _document: string, id: string) =>
+      invoke: (key: string, input: unknown, _session?: string, _document?: string | null, id?: string) =>
         Effect.promise(async () => {
-          await markDispatched(id);
+          await markDispatched(id!);
           calls.push({ key, input });
           return {
+            target: { session: _session!, document: null },
             value: key === "takeoffs.initialize-carrier" ? { remaining: [] } : { written: 1 },
           };
         }),
-    } as unknown as RevitBridge["Service"];
+    });
     try {
       await work.publish(
         key,

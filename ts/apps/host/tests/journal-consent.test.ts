@@ -1,4 +1,4 @@
-import { settle, testConsents } from "./effect-test.ts";
+import { detachedBridge, settle, testConsents } from "./effect-test.ts";
 import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,7 +16,6 @@ import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
-import type { RevitBridge } from "../src/bridge.ts";
 import { saveMember } from "../src/settings.ts";
 import type { PodMemberSaveRequest } from "@pe/host-contracts/operation-types";
 
@@ -32,7 +31,7 @@ async function files() {
   const runs = testConsents((_, event) => events.push(event));
   runs.open(run);
   bindControl({ runs, acquired: () => null });
-  const bridge = { list: Effect.succeed([]) } as unknown as RevitBridge["Service"];
+  const bridge = detachedBridge();
   const captures = new TakeoffCaptures(join(dir, "captures"), join(dir, "aps.json"), () =>
     new Date().toISOString(),
   );

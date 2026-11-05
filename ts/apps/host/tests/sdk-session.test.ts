@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect";
 import { expect } from "vite-plus/test";
-import { effectTest } from "./effect-test.ts";
+import { detachedBridge, sessionView, effectTest } from "./effect-test.ts";
 import { SdkSession, SdkDriver } from "../src/sdk-session.ts";
 import { RevitBridge, type HostBridgeEvent } from "../src/bridge.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
@@ -16,16 +16,16 @@ effectTest(
       let sourceRoot = hostOwnership.sourceRoot;
       let calls = 0;
       let changed: (() => void) | undefined;
-      const bridge = {
+      const bridge = detachedBridge({
         list: Effect.sync(() => [
-          {
+          sessionView({
             ...hostOwnership,
             connected: true,
             sessionId: "attachment",
             processId: process.pid,
             processStartUtcUnixMs: startedAt,
             state: { openDocuments: [{ openId: "open" }] },
-          },
+          }),
         ]),
         subscribe: (listener: (event: HostBridgeEvent) => void) => {
           changed = () => listener({ kind: "state-sync", sessionId: "attachment" });
@@ -33,7 +33,7 @@ effectTest(
             changed = undefined;
           };
         },
-      } as unknown as RevitBridge["Service"];
+      });
       const driver = () =>
         Effect.sync(() => {
           calls++;

@@ -1,4 +1,4 @@
-import { testConsents } from "./effect-test.ts";
+import { detachedBridge, sessionView, testConsents } from "./effect-test.ts";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +7,6 @@ import { Effect, Layer } from "effect";
 import { expect, test } from "vite-plus/test";
 import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
 import { bindControl, mintContext } from "../src/control.ts";
@@ -30,9 +29,9 @@ const other = {
 };
 
 function humanRevit(sent: Sent[], openDocuments: (typeof other)[], onCatalog: () => void) {
-  return {
+  return detachedBridge({
     list: Effect.sync(() => [
-      {
+      sessionView({
         sessionId: doc.session,
         connected: true,
         lane: hostOwnership.lane,
@@ -43,9 +42,9 @@ function humanRevit(sent: Sent[], openDocuments: (typeof other)[], onCatalog: ()
         state: {
           openDocuments: [...openDocuments],
         },
-      },
+      }),
     ]),
-    invoke: (key: string, request: Record<string, unknown>, _s: string, openId: string | null) =>
+    invoke: (key: string, request: any, session?: string, openId?: string | null) =>
       Effect.promise(async () => {
         await new Promise((resolve) => setTimeout(resolve, 5));
         if (key === "host.ops.catalog") {
@@ -63,13 +62,13 @@ function humanRevit(sent: Sent[], openDocuments: (typeof other)[], onCatalog: ()
                 {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "model.census", intent: "Read", needs: "document", actor: "any" },
               ],
             },
-            target: null,
+            target: { session: session!, document: null },
           };
         }
-        sent.push({ key, request, openId });
-        return { value: { status: "Succeeded", data: { types: 2 } }, target: null };
+        sent.push({ key, request, openId: openId ?? null });
+        return { value: { status: "Succeeded", data: { types: 2 } }, target: { session: session!, document: null } };
       }),
-  } as unknown as RevitBridge["Service"];
+  });
 }
 
 async function serve(onCatalog?: (documents: (typeof other)[]) => void) {

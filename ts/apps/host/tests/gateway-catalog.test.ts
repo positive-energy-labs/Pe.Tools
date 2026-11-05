@@ -1,7 +1,8 @@
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { operationDefinition, requireEligibleCaller } from "../src/gateway-actions.ts";
-import type { RevitBridge, HostBridgeEvent } from "../src/bridge.ts";
+import type { HostBridgeEvent } from "../src/bridge.ts";
+import { detachedBridge } from "./effect-test.ts";
 import type { SdkSession } from "../src/sdk-session.ts";
 
 const target = {
@@ -20,14 +21,14 @@ const fixture = () => {
     actor: "human",
     requestSchemaJson: "{}",
   };
-  const invoke = vi.fn(() => Effect.succeed({ value: { operations: [row] }, target: null }));
-  const bridge = {
+  const invoke = vi.fn(() => Effect.succeed({ value: { operations: [row] }, target: { session: "exact", document: null } }));
+  const bridge = detachedBridge({
     invoke,
     subscribe: (next: typeof listener) => {
       listener = next;
       return () => {};
     },
-  } as unknown as RevitBridge["Service"];
+  });
   return {
     bridge,
     invoke,
@@ -84,12 +85,12 @@ test("late catalog from a superseded socket cannot populate or authorize its suc
   const f = fixture();
   const pending = Promise.withResolvers<{
     value: { operations: (typeof f.row)[] };
-    target: null;
+    target: { session: string; document: null };
   }>();
   f.invoke.mockImplementationOnce(() => Effect.promise(() => pending.promise));
   const first = operationDefinition("read", f.bridge, target);
   f.event("connected");
-  pending.resolve({ value: { operations: [f.row] }, target: null });
+  pending.resolve({ value: { operations: [f.row] }, target: { session: "exact", document: null } });
   await expect(first).rejects.toThrow("attachment changed");
   await operationDefinition("read", f.bridge, target);
   expect(f.invoke).toHaveBeenCalledTimes(2);

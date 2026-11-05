@@ -11,6 +11,7 @@ import { HttpRouter } from "effect/http";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
+import { detachedBridge, sessionView } from "./effect-test.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { mintContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -52,12 +53,12 @@ it.each([
                 ],
               }
             : result,
-        target: null,
+        target: { session: "bridge-script", document: null },
       }),
     );
-    const bridge = {
+    const bridge = detachedBridge({
       list: Effect.succeed([
-        {
+        sessionView({
           sessionId: "bridge-script",
           connected: true,
           lane: hostOwnership.lane,
@@ -75,11 +76,10 @@ it.each([
               },
             ],
           },
-        },
+        }),
       ]),
-      subscribe: () => () => {},
       invoke,
-    } as unknown as RevitBridge["Service"];
+    });
     const server = createServer();
     const port = () => {
       const address = server.address();

@@ -8,7 +8,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Effect } from "effect";
 import { existsSync, readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
-import type { RevitBridge } from "../src/bridge.ts";
+import { detachedBridge } from "./effect-test.ts";
 import { DuctsReadings } from "../src/ducts-readings.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 
@@ -23,7 +23,7 @@ test.skipIf(!existsSync(retained))(
     const target = { session: "retained-chadds", openId: "chadds-open" };
     const owner = new DuctsReadings();
     const requests: unknown[] = [];
-    const bridge = {
+    const bridge = detachedBridge({
       invoke: (key: string, request: unknown) =>
         Effect.sync(() => {
           expect(["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"]).toContain(key);
@@ -35,7 +35,7 @@ test.skipIf(!existsSync(retained))(
             target: { session: target.session, document: "Chadds", documentRef: target },
           };
         }),
-    } as unknown as RevitBridge["Service"];
+    });
     const routes = createPeRoutes({
       registrations: [],
       heads: { observe: () => () => {} },

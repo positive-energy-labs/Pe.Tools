@@ -11,6 +11,7 @@ import { HttpRouter, HttpServerResponse } from "effect/http";
 import { afterEach, expect, test } from "vite-plus/test";
 import { captureListSchema } from "@pe/agent-contracts";
 import { RevitBridge } from "../src/bridge.ts";
+import { detachedBridge, sessionView } from "./effect-test.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { CaptureStore, capturesRoute } from "../src/captures-route.ts";
@@ -32,9 +33,9 @@ async function host(
 ) {
   const dir = await mkdtemp(join(tmpdir(), "pe-captures-"));
   const store = new CaptureStore(join(dir, "store"));
-  const bridge = {
+  const bridge = detachedBridge({
     list: Effect.succeed([
-      {
+      sessionView({
         sessionId: "bridge-a",
         connected: true,
         lane: hostOwnership.lane,
@@ -52,16 +53,16 @@ async function host(
             },
           ],
         },
-      },
+      }),
     ]),
-    invoke: (key: string, input: { target?: { name?: string } }) =>
+    invoke: (key: string, input: any) =>
       Effect.promise(async () => {
         if (key === "host.ops.catalog")
           return {
             value: {
               operations: [hostOpCatalog.find((op) => op.key === "revit.context.view-image")!],
             },
-            target: null,
+            target: { session: "bridge-a", document: null },
           };
         const name = input.target?.name ?? "L1";
         const filePath = join(dir, `${name}.png`);
@@ -89,7 +90,7 @@ async function host(
           target: { session: "bridge-a", document: "C:/HVAC.rvt" },
         };
       }),
-  } as unknown as RevitBridge["Service"];
+  });
   const spa = () => Effect.succeed(HttpServerResponse.text("spa"));
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(

@@ -3,13 +3,12 @@ import { Context, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { NodeCrypto } from "@effect/platform-node";
 import { RunConsents } from "../src/run-consent.ts";
-import { effectTest } from "./effect-test.ts";
+import { detachedBridge, sessionView, effectTest } from "./effect-test.ts";
 import { z } from "zod";
 import { commands, tools, writePreviewSchema, type Command, type ActionReceipt } from "@pe/agent-contracts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
-import type { RevitBridge } from "../src/bridge.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
@@ -43,10 +42,9 @@ async function fixture() {
     key: { binding: "open" as const, route: "schedules", target: null, open: { ...ref } },
     revision: 1,
   };
-  const bridge = {
-    subscribe: () => () => {},
+  const bridge = detachedBridge({
     list: Effect.succeed([
-      {
+      sessionView({
         sessionId: "A",
         connected: true,
         lane: hostOwnership.lane,
@@ -55,9 +53,9 @@ async function fixture() {
         processId: 42,
         processStartUtcUnixMs: 1000,
         state: { openDocuments: [{ ...ref, isFamilyDocument: false }] },
-      },
+      }),
     ]),
-  } as unknown as RevitBridge["Service"];
+  });
   const receipts: ActionReceipt[] = [];
   let request = "one";
   let evidence: unknown = { model: 1 };
@@ -232,7 +230,7 @@ test("write admission refuses a producer without a semantic projection", () => {
   expect(() => workWriteBoundary({
     definition: commands["schedule.apply"], prepared: z.unknown(),
     bind: async () => ({ effects: [] }), run: async () => null,
-  }, {} as RevitBridge["Service"])).toThrow("producer-owned seal projection");
+  }, detachedBridge())).toThrow("producer-owned seal projection");
 });
 
 

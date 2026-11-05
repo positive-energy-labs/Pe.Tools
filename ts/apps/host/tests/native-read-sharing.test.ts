@@ -1,7 +1,7 @@
 import { Context, Deferred, Effect, Fiber, Layer, Schema } from "effect";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { expect } from "vite-plus/test";
-import { effectTest } from "./effect-test.ts";
+import { detachedBridge, sessionView, effectTest } from "./effect-test.ts";
 import { NativeReads, NativeReadLimits } from "../src/native-reads.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { prepareRead } from "../../../packages/host-internal/src/read-admission.ts";
@@ -39,7 +39,7 @@ const makeHarness = (holdCancel = false) =>
     }[] = [];
     const cancels: string[] = [];
     let cancelWaiters = 0;
-    const bridge = {
+    const bridge = detachedBridge({
       invokeHandle: (
         _key: string,
         _input: unknown,
@@ -56,7 +56,7 @@ const makeHarness = (holdCancel = false) =>
           jobs.push(job);
           return { answer: Deferred.await(job.answer), terminal: Deferred.await(job.terminal) };
         }),
-      invoke: (_key: string, input: { requestId: string }) =>
+      invoke: (_key: string, input: any) =>
         Effect.gen(function* () {
           cancels.push(input.requestId);
           if (holdCancel) {
@@ -71,7 +71,7 @@ const makeHarness = (holdCancel = false) =>
           }
           return { value: {}, target: { session: "session", document: null } };
         }),
-    } as unknown as RevitBridge["Service"];
+    });
     const services = yield* Layer.build(
       NativeReads.layer.pipe(Layer.provide(Layer.succeed(RevitBridge, bridge))),
     );
@@ -214,9 +214,9 @@ effectTest(
           };
         },
       } as unknown as ActionJournal;
-      const bridge = {
+      const bridge = detachedBridge({
         list: Effect.succeed([
-          {
+          sessionView({
             ...hostOwnership,
             connected: true,
             sessionId: "session",
@@ -233,10 +233,9 @@ effectTest(
                 },
               ],
             },
-          },
+          }),
         ]),
-        subscribe: () => () => {},
-      } as unknown as RevitBridge["Service"];
+      });
       const sdkDriver = () =>
         Effect.succeed(
           replay("doc-list", {

@@ -1,4 +1,4 @@
-import { consentService } from "./effect-test.ts";
+import { detachedBridge, consentService } from "./effect-test.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -23,7 +23,7 @@ import { NodeServices } from "@effect/platform-node";
 import { MachineOwner } from "../src/machine.ts";
 import { hostActionJournal } from "../src/gateway-owner.ts";
 import { createReceiptExport } from "../src/receipt-export.ts";
-import type { RevitBridge, HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
+import type { HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
 import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
 import { withInvocationContext } from "@pe/runtime/context";
 import type { Caller } from "@pe/agent-contracts";
@@ -357,7 +357,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
       Effect.scoped(
         Effect.gen(function* () {
           const events = yield* PubSub.unbounded<HostBridgeEvent>();
-          const bridge = {
+          const bridge = detachedBridge({
             events,
             list: Effect.sync(() => sessions),
             snapshot: () => Effect.sync(() => sessions[0] ?? { connected: false }),
@@ -365,7 +365,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
               listeners.add(listener);
               return () => listeners.delete(listener);
             },
-          } as unknown as RevitBridge["Service"];
+          });
           const telemetry = createReceiptExport({
             journal: hostActionJournal(),
             root: directory,

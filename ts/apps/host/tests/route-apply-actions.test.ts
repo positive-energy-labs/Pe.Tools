@@ -3,7 +3,7 @@ import { commands } from "@pe/agent-contracts";
 import { catalogEntries, linkCatalog } from "@pe/agent-contracts/pe-api";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import type { CommandExecutor, CommandContext } from "../src/command-executor.ts";
-import type { RevitBridge } from "../src/bridge.ts";
+import { detachedBridge } from "./effect-test.ts";
 import { z } from "zod";
 
 vi.mock("../src/family-actions.ts", async (actual) => ({
@@ -49,9 +49,7 @@ test.each(writes)(
         })(),
       },
     } as unknown as CommandContext;
-    const boundary = workWriteBoundary(executor, {
-      subscribe: () => () => {},
-    } as unknown as RevitBridge["Service"]);
+    const boundary = workWriteBoundary(executor, detachedBridge());
     await expect(boundary.bind(ctx)).rejects.toThrow("another document");
     expect(() =>
       workWriteBoundary(

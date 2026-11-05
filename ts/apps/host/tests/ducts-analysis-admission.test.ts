@@ -10,17 +10,16 @@ import { ductsNativeRead } from "../src/ducts-analysis.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { mintContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import type { RevitBridge } from "../src/bridge.ts";
+import { detachedBridge, sessionView } from "./effect-test.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { serveRoutes } from "./real-server.ts";
 
 test("the analysis read adapter preserves Pea admission and never borrows a human principal", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-ducts-analysis-"));
   let nativeReads = 0;
-  const bridge = {
-    subscribe: () => () => {},
+  const bridge = detachedBridge({
     list: Effect.succeed([
-      {
+      sessionView({
         sessionId: "bridge-a",
         connected: true,
         lane: hostOwnership.lane,
@@ -33,7 +32,7 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
             { openId: "open-a", address: "C:/HVAC.rvt", title: "HVAC", isFamilyDocument: false },
           ],
         },
-      },
+      }),
     ]),
     invoke: (key: string) =>
       Effect.promise(async () => {
@@ -50,7 +49,7 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
                 },
               ],
             },
-            target: null,
+            target: { session: "bridge-a", document: null },
           };
         nativeReads++;
         return {
@@ -62,7 +61,7 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
           },
         };
       }),
-  } as unknown as RevitBridge["Service"];
+  });
   const server = await serveRoutes(
     makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, { sdk: sdkSessions }),
     bridge,

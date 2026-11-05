@@ -9,7 +9,7 @@ import ts from "typescript";
 import { expect, test, vi } from "vite-plus/test";
 import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { RevitBridge } from "../src/bridge.ts";
+import { detachedBridge, sessionView } from "./effect-test.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { CaptureStore } from "../src/captures-route.ts";
 import { mintBrowserContext, mintContext } from "../src/control.ts";
@@ -225,10 +225,12 @@ test("the harness, Page and route-state doors carry their caller through the rea
   }
 }, 30_000);
 
-const bridgeA = (onInvoke: (key: string) => unknown) =>
-  ({
+const bridgeA = (
+  onInvoke: (key: string) => { value: unknown; target?: { session: string; document: string | null } },
+) =>
+  detachedBridge({
     list: Effect.succeed([
-      {
+      sessionView({
         sessionId: "bridge-a",
         connected: true,
         lane: hostOwnership.lane,
@@ -246,15 +248,15 @@ const bridgeA = (onInvoke: (key: string) => unknown) =>
             },
           ],
         },
-      },
+      }),
     ]),
     invoke: (key: string) =>
       Effect.promise(async () => {
         // A macrotask hop, as a real bridge answer arrives on a socket callback.
         await new Promise((resolve) => setTimeout(resolve, 5));
-        return onInvoke(key);
+        return { target: { session: "bridge-a", document: null }, ...onInvoke(key) };
       }),
-  }) as unknown as RevitBridge["Service"];
+  });
 const scoped = { "x-pe-bridge-session-id": "bridge-a", "x-pe-open-document-id": "open-a" };
 
 /** `/call` reads the caller after the body and the bridge answer: a capture's origin is the caller. */
@@ -273,7 +275,6 @@ test("/call attributes a view-image capture to the caller it was carried by", as
             value: {
               operations: [hostOpCatalog.find((op) => op.key === "revit.context.view-image")!],
             },
-            target: null,
           }
         : {
             value: {
@@ -349,9 +350,8 @@ test("action controls and the Families reading judge their real caller", async (
                 },
               ],
             },
-            target: null,
           }
-        : { value: {}, target: null },
+        : { value: {} },
     ),
   );
   const human = token(mintContext({ kind: "human", via: "cli" }));

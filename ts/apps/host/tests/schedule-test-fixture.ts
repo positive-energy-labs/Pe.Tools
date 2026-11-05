@@ -1,4 +1,4 @@
-import { captureStore } from "./effect-test.ts";
+import { detachedBridge, sessionView, captureStore } from "./effect-test.ts";
 import { createPeClient, httpRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterEach, expect, vi } from "vite-plus/test";
 import { Effect, Layer } from "effect";
@@ -16,7 +16,7 @@ import {
   type RouteStatePatch,
 } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { RevitBridge, BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
+import { BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 import { documentMarks } from "../src/document-marks.ts";
 import { makeCallRoute } from "../src/call-route.ts";
@@ -143,34 +143,38 @@ export async function setup() {
   };
   // External native source only: answers and document events. Work, admission and recovery
   // belong to the production routes below; these values never decide their expected outcomes.
-  const bridge = {
-    list: Effect.sync(sessions),
+  const bridge = detachedBridge({
+    list: Effect.sync(() => sessions().map(sessionView)),
     snapshot: (id?: string) => Effect.sync(() => ({ connected: true, sessionId: id })),
     subscribe: (listener: (event: HostBridgeEvent) => void) => {
       bridgeListeners.add(listener);
       return () => bridgeListeners.delete(listener);
     },
-    invoke: (key: string, input: unknown, session: string, openId: string, id?: string) =>
+    invoke: (key: string, input: unknown, session?: string, openId?: string | null, id?: string) =>
       Effect.tryPromise({
         try: async () => {
           if (id) await markDispatched(id);
-          sent.push({ key, input, session, openId, id });
+          sent.push({ key, input, session: session!, openId: openId!, id });
           if (key === "revit.catalog.schedules")
-            return { value: { entries: structuredClone(catalog) } };
+            return { target: { session: session!, document: null }, value: { entries: structuredClone(catalog) } };
           if (key === "revit.detail.schedules") {
             readCount++;
             if (readbackFails && sent.some((s) => s.key === "schedule.cells.apply"))
               throw Error("readback unavailable");
-            return { value: structuredClone(detail) };
+            return { target: { session: session!, document: null }, value: structuredClone(detail) };
           }
           if (key !== "schedule.cells.apply") throw Error(`Unexpected ${key}`);
           await hold;
           if (unknown) throw new BridgeError("lost native reply", 503);
-          return { value: structuredClone(response) };
+          return { target: { session: session!, document: null }, value: structuredClone(response) };
         },
-        catch: (error) => error,
+        catch: (error) => {
+          // Only a BridgeError is a typed native failure; any other throw stays a defect.
+          if (error instanceof BridgeError) return error;
+          throw error;
+        },
       }),
-  } as unknown as RevitBridge["Service"];
+  });
   // One observer for the whole fixture, as the host builds it: one mark holder, one bridge tap.
   const marks = documentMarks(bridge);
   const observeHost = hostResourceObserver(

@@ -9,11 +9,10 @@ import { downloadCloudVersion } from "../src/cloud-version.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { Effect } from "effect";
-import type { RevitBridge } from "../src/bridge.ts";
 import { crossingOf } from "./callers.ts";
 import { replay } from "./sdk-replay.ts";
 import { unavailableShare } from "../src/machine.ts";
-import { captureStore, machineOwner } from "./effect-test.ts";
+import { detachedBridge, captureStore, machineOwner } from "./effect-test.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 const folders: string[] = [];
 afterEach(async () => {
@@ -197,7 +196,7 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
     expect(args[2]).not.toContain("cld:");
     return replay("doc-open", { result: { document: { path: args[2], openId: "e".repeat(32) } } });
   };
-  const bridge = { list: Effect.succeed([]) } as unknown as RevitBridge["Service"];
+  const bridge = detachedBridge();
   bindCommandRuntime(
     owner,
     bridge,

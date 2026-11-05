@@ -6,7 +6,7 @@ import type {
   DuctsTablesReading,
 } from "@pe/agent-contracts";
 import { canonicalDuctsSession, DuctsReadings } from "../src/ducts-readings.ts";
-import type { RevitBridge } from "../src/bridge.ts";
+import { detachedBridge } from "./effect-test.ts";
 
 const target = { session: "bridge-a", openId: "open-a" };
 const snapshot: DuctsSnapshotReading = { kind: "ducts-snapshot", target, selector: { kind: "roster" } };
@@ -156,20 +156,20 @@ test("entry count and UTF-8 byte budgets evict idle bodies; live bodies are neve
 });
 
 test("SDK alias and canonical bridge id resolve to one identity, ambiguity is refused", async () => {
-  const bridge = {
+  const bridge = detachedBridge({
     list: Effect.succeed([{ connected: true, sessionId: "bridge-a", sdkSessionId: "dev" }]),
-  } as unknown as RevitBridge["Service"];
+  });
   expect(await canonicalDuctsSession(bridge, "dev")).toBe(
     await canonicalDuctsSession(bridge, "bridge-a"),
   );
   await expect(
     canonicalDuctsSession(
-      {
+      detachedBridge({
         list: Effect.succeed([
           { connected: true, sessionId: "a", sdkSessionId: "dev" },
           { connected: true, sessionId: "b", sdkSessionId: "dev" },
         ]),
-      } as unknown as RevitBridge["Service"],
+      }),
       "dev",
     ),
   ).rejects.toMatchObject({ statusCode: 409 });

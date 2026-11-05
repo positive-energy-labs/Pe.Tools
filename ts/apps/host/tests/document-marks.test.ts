@@ -3,7 +3,7 @@
  * The host derives it once, against when the Reading it serves was taken, and republishes the
  * envelope; no consumer compares clocks and no consumer can miss the fact by missing an event.
  */
-import { captureStore } from "./effect-test.ts";
+import { detachedBridge, captureStore } from "./effect-test.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -15,7 +15,7 @@ import {
   familiesMatrixEnvelopeSchema,
   type ReadingFrame,
 } from "@pe/agent-contracts";
-import type { HostBridgeEvent, RevitBridge } from "../src/bridge.ts";
+import type { HostBridgeEvent } from "../src/bridge.ts";
 import { assertFresh, documentMarks, STALE_READ } from "../src/document-marks.ts";
 import { setup } from "./schedule-test-fixture.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
@@ -29,7 +29,7 @@ function fakeBridge() {
     for (const listener of listeners) listener(event);
   };
   return {
-    bridge: {
+    bridge: detachedBridge({
       list: Effect.sync(() => [
         { sessionId: "S1", connected: true },
         { sessionId: "S2", connected: true },
@@ -39,7 +39,7 @@ function fakeBridge() {
         return () => listeners.delete(listener);
       },
       snapshot: (sessionId?: string) => Effect.sync(() => ({ connected: true, sessionId })),
-    } as unknown as RevitBridge["Service"],
+    }),
     changed: (session: string, ...openIds: string[]) =>
       emit({
         sessionId: session,

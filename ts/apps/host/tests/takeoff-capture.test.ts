@@ -1,4 +1,4 @@
-import { captureStore } from "./effect-test.ts";
+import { detachedBridge, sessionView, captureStore } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -51,9 +51,9 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const bridge = {
+  const bridge = detachedBridge({
     list: Effect.succeed([
-      {
+      sessionView({
         sessionId: target.session,
         connected: true,
         processId: 42,
@@ -66,9 +66,9 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
             { openId: target.openId, address: at, title: "Capture.rvt", isActive: true },
           ],
         },
-      },
+      }),
     ]),
-    invoke: (key: string, _payload: unknown, session: string, openId: string) =>
+    invoke: (key: string, _payload: unknown, session?: string, openId?: string | null) =>
       Effect.promise(async () => {
         expect({ session, openId }).toEqual(target);
         if (key === "takeoffs.snapshot") {
@@ -77,10 +77,10 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
         }
         return {
           value: key === "takeoffs.snapshot" ? raw : { views: [] },
-          target: { session, document: at },
+          target: { session: session!, document: at },
         };
       }),
-  } as unknown as RevitBridge["Service"];
+  });
   const web = HttpRouter.toWebHandler(
     makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), captures, {
       sdk: sdkSessions,
@@ -172,9 +172,9 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const bridge = {
+  const bridge = detachedBridge({
     list: Effect.sync(() => [
-      {
+      sessionView({
         sessionId: target.session,
         connected: true,
         processId: 42,
@@ -185,7 +185,7 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
         state: {
           openDocuments: open ? [{ openId: target.openId, address: at, title: "Capture.rvt" }] : [],
         },
-      },
+      }),
     ]),
     invoke: (key: string) =>
       Effect.promise(async () => {
@@ -199,7 +199,7 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
           target: { session: target.session, document: at },
         };
       }),
-  } as unknown as RevitBridge["Service"];
+  });
   const web = HttpRouter.toWebHandler(
     makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), captures, {
       sdk: sdkSessions,

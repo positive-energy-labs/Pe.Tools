@@ -1,7 +1,8 @@
 import { expect, test, vi } from "vite-plus/test";
 import { readingFrameSchema, readingKey, type ReadingFrame } from "@pe/agent-contracts";
 import { resourceResponse } from "@pe/runtime";
-import type { HostBridgeEvent, RevitBridge } from "../src/bridge.ts";
+import type { HostBridgeEvent } from "../src/bridge.ts";
+import { detachedBridge } from "./effect-test.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 
 const world = { kind: "world" } as const;
@@ -10,7 +11,7 @@ const key = readingKey(world);
 test.each([false, true])("a quiet world acquires with bridge=%s", (connected) => {
   const releaseBridge = vi.fn();
   const subscribe = vi.fn(() => releaseBridge);
-  const bridge = connected ? ({ subscribe } as unknown as RevitBridge["Service"]) : undefined;
+  const bridge = connected ? detachedBridge({ subscribe }) : undefined;
   const frames: ReadingFrame[] = [];
   const release = hostResourceObserver(bridge)(world, (frame) => frames.push(frame));
   try {
@@ -27,12 +28,12 @@ test.each([false, true])("a quiet world acquires with bridge=%s", (connected) =>
 test("world stream keeps its initial gap and forwards events after acquisition", async () => {
   let emit!: (event: HostBridgeEvent) => void;
   const releaseBridge = vi.fn();
-  const bridge = {
+  const bridge = detachedBridge({
     subscribe: (listener: typeof emit) => {
       emit = listener;
       return releaseBridge;
     },
-  } as unknown as RevitBridge["Service"];
+  });
   const url = new URL("http://host/pe/resources");
   url.searchParams.set("keys", JSON.stringify([world]));
   const reader = resourceResponse(new Request(url), hostResourceObserver(bridge)).body!.getReader();

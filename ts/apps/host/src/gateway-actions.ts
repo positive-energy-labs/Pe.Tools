@@ -60,8 +60,6 @@ async function operationRows(bridge: RevitBridge["Service"], target: SdkSession)
     if (!Array.isArray(rows)) throw refused("Operation catalog unavailable");
     return rows;
   };
-  // An adapter without lifecycle observations cannot safely retain authorization metadata.
-  if (typeof bridge.subscribe !== "function") return read();
   let held = catalogs.get(bridge);
   if (!held) {
     held = new Map();

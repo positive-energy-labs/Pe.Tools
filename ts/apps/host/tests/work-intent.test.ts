@@ -5,10 +5,9 @@ import { commands, tools, type Command } from "@pe/agent-contracts";
 import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
 import { workIntentBoundary } from "../src/work-write-boundary.ts";
 import { commandRegistry } from "../src/command-registry.ts";
-import { captureStore } from "./effect-test.ts";
+import { detachedBridge, sessionView, captureStore } from "./effect-test.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
-import type { RevitBridge } from "../src/bridge.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
@@ -44,7 +43,7 @@ test("the seal follows the axis: a ModelWrite is sealed and nothing else carries
 
 test("the registry derives a capture's input from Work and never seals it", () => {
   const resolve = commandRegistry(
-    {} as RevitBridge["Service"],
+    detachedBridge(),
     captureStore("unused-intent-test"),
     {},
     async () => {
@@ -64,10 +63,9 @@ async function fixture() {
     key: { binding: "open" as const, route: "schedules", target: null, open: { ...ref } },
     revision: 1,
   };
-  const bridge = {
-    subscribe: () => () => {},
+  const bridge = detachedBridge({
     list: Effect.succeed([
-      {
+      sessionView({
         sessionId: "A",
         connected: true,
         lane: hostOwnership.lane,
@@ -76,9 +74,9 @@ async function fixture() {
         processId: 42,
         processStartUtcUnixMs: 1000,
         state: { openDocuments: [{ ...ref, isFamilyDocument: false }] },
-      },
+      }),
     ]),
-  } as unknown as RevitBridge["Service"];
+  });
   const authored = { pod: "p", scheduleId: 7 };
   const doc = tools.schedules.work.schema.parse({
     writeIntent: { "schedule.capture": { edit: { value: authored } } },

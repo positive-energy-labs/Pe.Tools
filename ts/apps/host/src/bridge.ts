@@ -644,3 +644,16 @@ export const RevitBridgeLive = Layer.effect(
     };
   }),
 );
+
+/**
+ * {@link RevitBridgeLive} with no socket attached: every member it does not override gives the live
+ * no-session answer (`NoRevitSession`, an empty list, `connected: false`). Its PubSub and listeners
+ * close with the layer's scope. `overrides` replace members by name.
+ */
+export const RevitBridgeDetached = (overrides: Partial<RevitBridge["Service"]> = {}) =>
+  Layer.effect(
+    RevitBridge,
+    Effect.gen(function* () {
+      return { ...(yield* RevitBridge), ...overrides };
+    }),
+  ).pipe(Layer.provide(RevitBridgeLive));
