@@ -329,7 +329,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     };
     await step("standalone tool creates no conversation and remembers its own Place", async () => {
       const before = network.length;
-      await p.open(url(seed.placeUrl));
+      await p.open(url(`${seed.workUrl}&system=${encodeURIComponent(seed.retainedPage)}`));
       await p.send("Page.bringToFront");
       await p.until(
         async () => network.some((event) => event.build === head.slice(0, 12)),
@@ -1168,27 +1168,12 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
   const route = (target: string, operation = "") =>
     `/pe/route-state/fans${operation ? `/${operation}` : ""}?target=${encodeURIComponent(target)}`;
   const request = (target: string, operation = "", body?: unknown) =>
-    page.evaluate(
-      async ({ url, bodyJson, moduleUrl }) => {
-        const { hostFetch } = await import(moduleUrl);
-        const response = await hostFetch(
-          url,
-          bodyJson === null
-            ? undefined
-            : {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: bodyJson,
-              },
-        );
-        return { status: response.status, body: await response.json() };
-      },
-      {
-        url: route(target, operation),
-        bodyJson: body === undefined ? null : (JSON.stringify(body) ?? null),
-        moduleUrl: "/src/host/runtime.ts",
-      },
-    );
+    // Keep the browser import in source text: Vite rewrites imports inside serialized callbacks.
+    page.read<{ status: number; body: ReturnType<typeof JSON.parse> }>(`(async () => {
+      const { hostFetch } = await import('/src/host/runtime.ts');
+      const response = await hostFetch(${JSON.stringify(route(target, operation))}, ${body === undefined ? "undefined" : JSON.stringify({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })});
+      return {status: response.status, body: await response.json()};
+    })()`);
   const frames = () =>
     page.read<
       {

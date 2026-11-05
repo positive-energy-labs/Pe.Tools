@@ -18,6 +18,7 @@ const { values } = parseArgs({
     target: { type: "string" },
     suite: { type: "string", default: "chaos" },
     seed: { type: "string", default: "20261023" },
+    test: { type: "string" },
     require: { type: "string", default: "refresh,reconnect,worker" },
   },
 });
@@ -44,6 +45,7 @@ const dir = resolve(
 await mkdir(dir, { recursive: true });
 const receipt = {
   suite: values.suite,
+  test: values.test ?? null,
   mode: values.attached ? "attached" : "owned-source-no-revit-no-tray",
   inference: conversation ? "substituted-acp-adapter" : "none",
   hostSource: {
@@ -349,7 +351,14 @@ try {
       : "route-chaos";
   testProcess = spawn(
     process.execPath,
-    ["node_modules/vite-plus/bin/vp", "test", "run", "--config", `tests/e2e/${config}.config.ts`],
+    [
+      "node_modules/vite-plus/bin/vp",
+      "test",
+      "run",
+      "--config",
+      `tests/e2e/${config}.config.ts`,
+      ...(values.test ? ["--testNamePattern", values.test] : []),
+    ],
     {
       cwd: testTs,
       env: testEnv,
