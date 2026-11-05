@@ -2,7 +2,7 @@
 
     python eval/partition/metrics.py .artifacts/runs/bench/<stamp>
 
-Reads <fixture>/answer.json and ink.json written by Pe.Partition.Tests/Bench.cs, writes
+Reads <fixture>/answer.json and ink.json written by Pe.Shared.Tests/Partition/Bench.cs, writes
 <fixture>/metrics.json and <run>/TABLE.md, prints one table for the run and a delta table against
 the previous run under the same parent. Every number moves along an axis a person sees on the render
 (diagonals, curves, wobble, slivers, holes, floating edges); none rewards room count.

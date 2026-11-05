@@ -2,7 +2,7 @@
 
 ## Scope
 
-Owns ordinary non-Revit tests for shared contracts, host boundaries, APS boundaries, product layout, storage runtime, and automation DTOs.
+Owns ordinary non-Revit tests for shared contracts, host boundaries, APS boundaries, product layout, storage runtime, automation DTOs, bridge request evidence, partition geometry, and takeoff workflows.
 
 ## Purpose
 
@@ -11,7 +11,7 @@ Owns ordinary non-Revit tests for shared contracts, host boundaries, APS boundar
 ## Validation
 
 ```powershell
-dotnet test dotnet/Pe.Shared.Tests/Pe.Shared.Tests.csproj
+dotnet tool run pe-revit -- test --project dotnet/Pe.Shared.Tests/Pe.Shared.Tests.csproj
 ```
 
 Deterministic proof; no Revit. A passing run proves ordinary package behavior only; it does not prove loaded Revit runtime freshness.
