@@ -290,3 +290,31 @@ test("a closure import resolves without a disk copy", () => {
   expect(resolve("../rooms/source-closure.generated.json", id)).toBe(closure);
   expect(resolve("./graph.ts", id)).toBeUndefined();
 });
+
+test("overlapping edits rebuild the latest sources once and reload once", async () => {
+  let finish!: () => void;
+  let revision = 0;
+  const built: number[] = [];
+  const generate = vi.fn(async () => {
+    built.push(revision);
+    if (built.length === 1) await new Promise<void>((resolve) => (finish = resolve));
+  });
+  const plugin = routeModuleHash(generate);
+  const server = { moduleGraph: { invalidateAll: vi.fn() }, ws: { send: vi.fn() } };
+  const update = () => (plugin.handleHotUpdate as Function)({ file: id, server });
+  const edits = [update()];
+  await Promise.resolve();
+  for (revision = 1; revision <= 20; revision++) edits.push(update());
+  revision = 20;
+  let served = false;
+  const request = (plugin.transform as Function)("", id).then(() => (served = true));
+  await Promise.resolve();
+  expect(served).toBe(false);
+  finish();
+  await Promise.all(edits);
+  await request;
+  expect(built).toEqual([0, 20]);
+  expect(served).toBe(true);
+  expect(server.moduleGraph.invalidateAll).toHaveBeenCalledOnce();
+  expect(server.ws.send).toHaveBeenCalledOnce();
+});
