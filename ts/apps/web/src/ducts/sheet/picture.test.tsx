@@ -9,17 +9,19 @@ import { AttentionRoot } from "#/attention";
 import { boundsOfPoints } from "#/scene/orbit";
 import type { ModelPicture } from "#/scene/picture/model";
 import type { PictureStage } from "#/scene/stage-controller";
+import { renderPicturePane } from "#/scene/picture/picture";
 import { SceneMeshes } from "#/scene/types";
 import { makeAtomRegistry } from "#/shell/owner";
 import { RegistryContext } from "@effect/atom-react";
 import { routeAddress } from "@pe/agent-contracts";
 import { attention, elementKey, setHovered, type SubjectKey } from "@pe/kit/lang/attention";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import * as Atom from "effect/reactivity/Atom";
 import { createElement, type ComponentProps } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { NAVIGATION_FIXTURE } from "../navigation.fixture";
-import type { OpenSheet } from "../neutral.ts";
+import { openSheetSchema, type OpenSheet } from "../neutral.ts";
+import sheetFixture from "./sheet.fixture.json";
 import { selectedFans, type FanPort } from "./model";
 import type { SheetPictureProps } from "./picture";
 import { beyondPicture, SheetPicture } from "./picture";
@@ -88,6 +90,7 @@ function mount(
   open: OpenSheet | null = sheet,
   layers = ["meshes", "halo", "findings"],
   fans?: FanPort[],
+  full = false,
 ) {
   const sceneSession = crypto.randomUUID();
   if (typeof ResizeObserver === "undefined")
@@ -151,13 +154,13 @@ function mount(
           fans={fans}
           systemFans={() => []}
           blockers={[]}
-          renderPane={(body) => body}
+          renderPane={full ? renderPicturePane : (body) => body}
         />
       </AttentionRoot>
     </RegistryContext>
   );
   const view = render(tree());
-  return { registry, page, setPage, rerender: () => view.rerender(tree()) };
+  return { ...view, registry, page, setPage, rerender: () => view.rerender(tree()) };
 }
 
 it("a pick writes the page's selection and the stage pivot follows it", () => {
@@ -252,8 +255,85 @@ it.each([1, 3, "all"] as const)(
     expect(io.call.mock.calls[0]![1]).toMatchObject({
       elementIds: fans.map((fan) => fan.unitId),
       contextRepresentation: "overview",
-      contextPaddingFt: 0,
+      contextPaddingFt: 10,
       focusOnly: false,
     });
   },
 );
+
+it("reads a selected duct and run from the current sheet, including missing data and provenance", () => {
+  const leg = { ...sheetFixture.legs.legs[0], elementId: a!.id, flowCfm: 120, velocityFpm: null };
+  const emptySide = { runs: [], sections: [], worstKnownInWg: null, elementSections: {} };
+  const open = openSheetSchema.parse({
+    ...sheetFixture,
+    elements: { ...sheetFixture.elements, walkedElementIds: [a!.id], beyond: [] },
+    worstLegs: [],
+    worksheet: {
+      target: sheetFixture.legs.target,
+      basis: "picture-readout",
+      kind: "worksheet",
+      limits: { supplyFpm: 900, returnFpm: 700, source: "firm" },
+      legs: { [leg.id]: leg },
+      supply: {
+        ...emptySide,
+        runs: [
+          {
+            id: "r1",
+            side: "supply",
+            end: { kind: "terminal", elementId: a!.id },
+            legIds: [leg.id],
+            sectionIds: [],
+            cfm: 120,
+            telFt: 12,
+            knownInWg: 0.012,
+            complete: false,
+            residualInWg: null,
+            critical: true,
+            maxFpm: null,
+            overLegIds: [],
+          },
+        ],
+      },
+      return: emptySide,
+    },
+  });
+  const view = mount(open);
+  act(() => view.registry.set(view.page, { selected: String(a!.id), issue: "" }));
+  view.rerender();
+  const duct = render(<>{seen.model!.readout}</>);
+  expect(duct.container.querySelector(`[data-facts="${a!.id}"]`)).not.toBeNull();
+  const facts = duct.container.querySelector(`[data-leg-facts="${leg.id}"]`)!;
+  expect(facts.textContent).toContain("120 cfm");
+  expect(facts.textContent).toContain("missing fpm");
+  expect(facts.textContent).toContain("friction: galvanized");
+  duct.unmount();
+  act(() => view.registry.set(view.page, { selected: "run:r1", issue: "" }));
+  view.rerender();
+  const run = render(<>{seen.model!.readout}</>);
+  expect(run.container.querySelector('[data-run-facts="r1"]')?.textContent).toContain(
+    "0.0120 in-wg known",
+  );
+  expect(run.container.textContent).toContain("incomplete");
+});
+
+it("restores all nine encodings and makes a choice draw its centrelines through Page", async () => {
+  const view = mount(sheet, ["meshes"], undefined, true);
+  fireEvent.click(view.getByRole("button", { name: "lines show health" }));
+  for (const label of [
+    "none",
+    "health",
+    "size",
+    "flow",
+    "velocity (Revit)",
+    "pressure drop (Revit)",
+    "loss (Pe)",
+    "legs",
+    "provenance",
+  ])
+    expect((await view.findAllByText(label, { exact: true })).length).toBeGreaterThan(0);
+  fireEvent.click(view.getByText("size", { exact: true }));
+  expect(view.setPage).toHaveBeenLastCalledWith(
+    { encoding: "size", layers: ["meshes", "centrelines"] },
+    { history: "push" },
+  );
+});

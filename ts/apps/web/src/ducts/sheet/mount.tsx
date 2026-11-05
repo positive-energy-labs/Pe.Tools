@@ -1,3 +1,4 @@
+import { renderPicturePane } from "#/scene/picture/picture";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { StateCell, cellFromDraft } from "@pe/kit/lang/cell";
 import { reviewTransitions } from "#/components/work/band";
@@ -10,7 +11,6 @@ import { pointerRefs } from "../pointer-refs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { NativeObservationScope } from "#/revit/observation";
 import { useRouteSearchSlice } from "#/route/activity";
-import { PaneActions } from "#/shell/pane-actions";
 import { picturePageMove } from "#/shell/picture-page";
 import { useAdmittedSubject } from "#/shell/subject";
 import { settleWork } from "#/shell/work-door-observation";
@@ -522,12 +522,7 @@ function PictureContent({
       renderPane={renderPane}
       jump={jump}
     />
-  ))((body, furniture) => (
-    <>
-      {body}
-      <PaneActions pane="sheet-picture">{furniture?.actions}</PaneActions>
-    </>
-  ));
+  ))(renderPicturePane);
   return (
     <SheetFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf} jump={jump}>
       {ownPane}

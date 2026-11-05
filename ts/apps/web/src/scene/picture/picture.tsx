@@ -23,7 +23,7 @@ import { Button } from "@pe/kit/lang/button";
 import { land } from "@pe/kit/lang/land";
 import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
 import type { Chord } from "@pe/kit/keys";
-import { PaneOverlay } from "@pe/kit/lang/pane";
+import { Pane, PaneOverlay } from "@pe/kit/lang/pane";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -68,6 +68,13 @@ import { useCapture, usePictureRead } from "./read";
 import { strandFixture, strandFixtureOn } from "./strand-fixture";
 
 export { idOf, type PictureLayer, type PictureLine, type PictureOverlayFrame, type PictureStrand };
+
+/** Preserve the picture's complete furniture when hosted by a kernel pane. */
+export const renderPicturePane: TeachingPaneRender = (body, furniture) => (
+  <Pane picture scroll="clip" flush {...furniture} legend={furniture?.legend}>
+    {body}
+  </Pane>
+);
 
 /** Everything a surface says about its picture. Numeric ids stop at the renderer adapter. */
 export interface PictureContent<L extends string = string, F extends string = string> {
@@ -309,12 +316,15 @@ export function Picture<L extends string, F extends string>({
       content.capture?.maxTriangles,
     ],
   );
+  const overviewRequest = request
+    ? { ...request, contextRepresentation: "overview" as const }
+    : content.geometry.overview;
   const captured = useCapture(
-    pictureSize ? (contextRepresentation === "meshes" ? request : content.geometry.overview) : null,
+    pictureSize ? (contextRepresentation === "meshes" ? request : overviewRequest) : null,
     native,
     source.version,
     content.capture?.cuts,
-    content.geometry.overview,
+    overviewRequest,
   );
   const fixture = content.capture?.meshes;
   const capture = fixture ? { ...captured, meshes: fixture, focusMeshes: fixture } : captured;
@@ -339,9 +349,17 @@ export function Picture<L extends string, F extends string>({
     [content.members, strands],
   );
   useMembers(doc, members);
+  // Fit once per document/mode. Resizes, selection and newly acquired geometry cannot move the eye.
+  const cameraScope = `${pictureKey}/${page.picture}`;
+  const initial = useRef<{ scope: string; pose: OrbitViewport | null }>({
+    scope: cameraScope,
+    pose: null,
+  });
+  if (initial.current.scope !== cameraScope) initial.current = { scope: cameraScope, pose: null };
+  if (!initial.current.pose) initial.current.pose = poseOf(null, bounds, pictureSize);
   const pose = useMemo(
-    () => poseOf(page.viewport, bounds, pictureSize),
-    [page.viewport, bounds, pictureSize],
+    () => (page.viewport ? poseOf(page.viewport, bounds, pictureSize) : initial.current.pose),
+    [page.viewport, bounds, pictureSize, cameraScope],
   );
   const landing = useRef<(() => void) | null>(null);
   const pictureJump = useRef<((key: SubjectKey) => void) | null>(null);
@@ -354,11 +372,12 @@ export function Picture<L extends string, F extends string>({
       if (jump.current === callback) jump.current = null;
     };
   });
+  // Kernel projections clone Page values. Equal pose data is an acknowledgement, not a flight.
   const orbit = useLiveOrbit(
     pose,
     stageViewport(setPage),
-    `${pictureKey}/${page.picture}`,
-    page.viewport,
+    cameraScope,
+    JSON.stringify(page.viewport),
     bounds?.scene,
     landing,
   );
@@ -406,7 +425,12 @@ export function Picture<L extends string, F extends string>({
 
   // The page's element pick; a claim or a row selects through `issue` and its members.
   const pickedId = /^\d+$/.test(page.selected) ? Number(page.selected) : null;
-  const pickedKey = pickedId == null ? null : elementKey(pickedId);
+  const pickedKey: SubjectKey | null =
+    pickedId != null
+      ? elementKey(pickedId)
+      : page.selected.includes(":")
+        ? (page.selected as SubjectKey)
+        : null;
   const widen = content.widen;
   const selectionOf = (id: number) =>
     new Set([id, ...(widen?.(elementKey(id)) ?? []).map(idOf).filter(Number.isFinite)]);
@@ -576,6 +600,18 @@ export function Picture<L extends string, F extends string>({
             contextMode={
               // Layer visibility changes drawing only; detailed acquisition stays explicit.
               CONTEXT_KEYS.some((key) => layers.has(key)) ? page.contextStyle : "off"
+            }
+            onContextMode={(mode) =>
+              setPage(
+                {
+                  ...(mode === "off" ? {} : { contextStyle: mode }),
+                  layers:
+                    mode === "off"
+                      ? visibleLayers.filter((key) => !CONTEXT_KEYS.includes(key))
+                      : [...new Set([...visibleLayers, "context" as L])],
+                },
+                { history: "push" },
+              )
             }
             kinds={content.kinds}
             colour={content.colour}
