@@ -261,7 +261,7 @@ export const fansInputRoutes = (inputs: HostInputContext["Service"], options: {
   const run = <A, E>(effect: Effect.Effect<A, E>) => runPods({}, Effect.provide(effect, provided));
   const registrations = createRouteRegistrations();
   const workspace = new RouteWorkspace({ registrations: constructorWorkRegistrations(registrations),
-    ...(recorded ? { recorded: recordedWorkSource(lane.recordingStore, run) } :
+    ...(recorded ? { recorded: recordedWorkSource(lane.recordingStore) } :
       { store: options.store!, ...(writer ? { capture: capturedWorkReads(writer, run, options.observed) } : {}) }),
     authorizeMutation: (verb) => { const refusal = inputs.check({ kind: "work", verb }); if (refusal) throw refusal; },
   });
@@ -279,7 +279,12 @@ export const fansInputRoutes = (inputs: HostInputContext["Service"], options: {
   };
   const sealed = (current: InputConsumption) => current.seal.pipe(Effect.tap(() => Effect.gen(function* () {
     const request = yield* Effect.serviceOption(RequestIdentity);
-    if (writer && !writer.capture.truncated()) options.observedReadSet?.(current.recipe, current.id, Option.isSome(request) ? request.value.requestId : undefined);
+    if (writer && !writer.capture.truncated()) yield* Effect.try(() =>
+      options.observedReadSet?.(current.recipe, current.id, Option.isSome(request) ? request.value.requestId : undefined),
+    ).pipe(Effect.catch(() => {
+      const at = writer.capture.begin();
+      return at === null ? Effect.void : writer.capture.stop(at, "observer");
+    }));
   })));
   const retained = (current: InputConsumption, input: NativeReadInput,
     readOptions: { version?: string; refresh?: string }, role: "acquire" | "validate" | "join" | "beyond" | undefined,
@@ -401,7 +406,10 @@ export const fansInputRoutes = (inputs: HostInputContext["Service"], options: {
     return { sheets: source, work: source.inputs!.work,
       document: (ref) => runPods({}, Effect.provide(inventory.document(ref), Context.add(admitted, CurrentInputConsumption, consumption))), observe,
       finish: async (result) => {
-        if (stream) return;
+        if (stream) {
+          if ("error" in result || !result.response.ok) await invoke(consumption.close);
+          return;
+        }
         try { if ("response" in result && result.response.ok) await complete(consumption); }
         finally { await invoke(consumption.close); }
       },

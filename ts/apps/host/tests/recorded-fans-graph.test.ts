@@ -2,12 +2,13 @@ import { readFileSync, existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
-import { bindWork, address, type Caller, type ReadingRequest } from "@pe/agent-contracts";
+import { bindWork, address, DUCTS_BODY_VERSION_HEADER, type Caller, type ReadingRequest } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
 import { fansInputRoutes } from "../src/app.ts";
@@ -57,6 +58,10 @@ const bounds = { maxBytes: 512 * 1024 * 1024, maxTakings: 2000 };
 const run = Effect.runPromise;
 const caller = { kind: "human" as const, via: "local" as const };
 const key = (route: string) => bindWork(route, path, undefined, ref);
+const nativeValue = async (response: Response) => ({
+  sha256: createHash("sha256").update(canonicalJson(await response.json())).digest("hex"),
+  nativeRequestId: response.headers.get("x-pe-native-request-id"), version: response.headers.get(DUCTS_BODY_VERSION_HEADER),
+});
 
 async function firstFrame(response: Response) {
   expect(response.status).toBe(200);
@@ -128,8 +133,10 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
   const capture = async (url: string, body?: unknown, stream = false, who: Caller = caller) => {
     const identity = admitted(who); const response = await send(live, url, body, identity);
     if (!stream) expect(response.status, await response.clone().text()).toBe(200);
-    const value = stream ? await firstFrame(response) : await response.json();
-    const key = stream ? "resource.frame" : url.endsWith("/sheet") ? "ducts.sheet" : url.includes("route-state") ? "work.get" : "ducts.roster";
+    const value = stream ? await firstFrame(response) : url === "/call" ? await nativeValue(response) : await response.json();
+    if (stream) expect(value.kind, JSON.stringify(value)).toBe("snapshot");
+    if (url === "/call") { expect(response.headers.get("x-pe-ducts-reused")).toBe("true"); expect(value.nativeRequestId).not.toBe(identity.requestId); }
+    const key = stream ? "resource.frame" : url === "/call" ? "native.call" : url.endsWith("/sheet") ? "ducts.sheet" : url.includes("route-state") ? "work.get" : "ducts.roster";
     const roots = completed.filter((entry) => entry.requestId === identity.requestId && entry.recipe.key === key);
     expect(roots, "The actual consumer must complete exactly one stored read set").toHaveLength(1);
     cases.push({ url, body, value, readSet: roots[0]!.id, stream, caller: who }); return value;
@@ -153,6 +160,28 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
       expect(detail.kind).toBe(kind);
       expect(detail.basis).toBe(overview.basis);
     }
+    const storedOverview = await run(writer.readSets.get(cases.filter((entry) => entry.value.kind === "overview")[0]!.readSet));
+    const acquiredWalk = storedOverview.children.filter((entry) => entry.recipe.key === "ducts.retained" &&
+      Schema.is(Schema.Struct({ key: Schema.Literal("ducts.snapshot.walk"), role: Schema.Literal("acquire") }))(entry.recipe.input));
+    expect(acquiredWalk).toHaveLength(1);
+    const acquisition = Schema.decodeUnknownSync(Schema.Struct({ request: Schema.Json }))(acquiredWalk[0]!.recipe.input);
+    const beforeHit = nativeCalls;
+    await capture("/call", { key: "ducts.snapshot.walk", request: acquisition.request });
+    expect(nativeCalls).toBe(beforeHit);
+    const hitOnly = cases.filter((entry) => entry.url === "/call");
+    expect(hitOnly).toHaveLength(1);
+    const prefix = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
+    const prefixInputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: prefix, at: null }))));
+    historical = HttpRouter.toWebHandler(fansInputRoutes(prefixInputs, { readSet: hitOnly[0]!.readSet,
+      get live(): never { poisoned++; throw Error("cold hit constructed live inputs"); },
+      get store(): never { poisoned++; throw Error("cold hit constructed a Work store"); },
+    }), { disableLogger: true });
+    const cold = await send(historical, hitOnly[0]!.url, hitOnly[0]!.body);
+    expect(cold.status, await cold.clone().text()).toBe(200);
+    expect(await nativeValue(cold)).toEqual(hitOnly[0]!.value);
+    expect(cold.headers.get("x-pe-ducts-reused")).toBe("false");
+    expect(nativeCalls).toBe(beforeHit);
+    await historical.dispose(); historical = undefined;
     const fans = builtinEnrollments.find((entry) => entry.routeKey === "fans")!;
     const fingerprint = workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`);
     for (const route of ["fans", "ducts"]) {
@@ -204,6 +233,7 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
     expect(basis(original)[0]!.takingId).not.toBe(basis(current)[0]!.takingId);
     const calls = nativeCalls;
     for (const recorded of cases) {
+      if (recorded.url === "/call") continue; // the hit-only set was already replayed cold above
       const lane: HostInputLane = { kind: "recording", recordingStore: reader, at: null };
       const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer(lane))));
       // Each request has an explicit trusted read set; repeated occurrences have no guessed binding.
@@ -219,7 +249,8 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
         expect(provenance).toMatchObject({ kind: "recording", at: null, ...identity,
           coverage: expect.arrayContaining(["native", "document", "work", "files", "marks"]) });
         expect(JSON.stringify(provenance)).not.toContain(dir);
-        const replay = recorded.stream ? await firstFrame(response) : await response.json();
+        const replay = recorded.stream ? await firstFrame(response) : recorded.url === "/call" ? await nativeValue(response) : await response.json();
+        if (recorded.url === "/call") expect(response.headers.get("x-pe-ducts-reused")).toBe("false");
         expect(replay).toEqual(recorded.value);
       }
       const refused = await send(historical, "/pe/route-state/fans/apply?open=captured-chadds/chadds-open", { patches: [], expectedRevision: 2, press: crypto.randomUUID() });

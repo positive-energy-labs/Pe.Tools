@@ -1480,11 +1480,14 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
     if (canonicalRouteInput(answer.actualTarget) !== canonicalRouteInput(target))
       throw new InvalidRead({ message: "Ducts native response changed its admitted target", status: 409, problem: "read.target" });
     const actual = answer.actualTarget.openDocumentLifetime;
-    const document = "openId" in actual
+    // A cold historical owner reconstructs the original retained body, including its admitted
+    // target metadata. A live hit did not consume another inventory row to record for this child.
+    const capturedTarget = basis?.recorded?.target;
+    const document = !capturedTarget && "openId" in actual
       ? await run(source.document({ session: input.scope.bridgeSessionId!, openId: actual.openId })) : undefined;
     const nativeTakingId = basis ? await run(basis.link(answer)) : undefined;
     return { value: answer.value, nativeRequestId: answer.nativeRequestId, nativeTakingId,
-      target: { session: input.scope.bridgeSessionId!, document: document?.address ?? null,
+      target: capturedTarget ?? { session: input.scope.bridgeSessionId!, document: document?.address ?? null,
         ...(document ? { documentRef: { session: document.session, openId: document.openId } } : {}) } };
   }, { ...options, ...(basis ? { source: {
     revision: basis.recorded?.version,
