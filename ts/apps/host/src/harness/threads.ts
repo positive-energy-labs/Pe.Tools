@@ -59,6 +59,8 @@ import {
   questionResponseSchema,
   threadHeadSchema,
   traitRequestSchema,
+  type Pointer,
+  type Pointers,
   type HarnessEvent,
   type HarnessThreadBody,
   type HarnessThreadSummary,
@@ -97,7 +99,6 @@ import {
 import { Clock, Context, DateTime, Effect, Layer, Schema } from "effect";
 import { runConsentsPromise, type RunConsents } from "../run-consent.ts";
 import { z } from "zod";
-import type { Pointer, Pointers } from "../../../../packages/agent-contracts/src/pointers.ts";
 
 /** Tolerant decode of a thread's stored pointers; a stale shape reads as none, never as an error. */
 const pointersSchema = z.array(
