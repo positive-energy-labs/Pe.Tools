@@ -14,6 +14,7 @@ import {
 } from "./route-field.ts";
 import { routeAddresses } from "./routes/index.ts";
 import { threadListFields } from "./routes/shared.ts";
+import { admittedBuiltinKeys } from "./admitted-builtin-keys.ts";
 
 /**
  * A route's address, deep: `routeAddress(route)` is the one door every caller reaches a route through,
@@ -430,6 +431,19 @@ export function routeAddress<R extends RouteKey>(route: R): RouteAddress<R> {
   if (!found) built.set(route, (found = build(route)));
   // `build` runs over untyped fields; the declaration in `routes/<route>.ts` is what types them.
   return found as unknown as RouteAddress<R>;
+}
+
+/** An admitted Page's owner decodes its values; Places and thread context retain its encoded link. */
+export function canonicalPlace(route: RouteKey, link: string) {
+  if (!admittedBuiltinKeys.includes(route)) return routeAddress(route).tab(link);
+  const url = new URL(link, "http://tab.invalid");
+  const path = routeAddress(route).path;
+  if (url.origin !== "http://tab.invalid" || url.hash || url.pathname !== path)
+    return { ok: false as const, error: `a ${route} tab links ${path}, not ${link}` };
+  if (url.searchParams.has("thread"))
+    return { ok: false as const, error: `a ${route} tab link carries no 'thread'` };
+  url.searchParams.delete("shell");
+  return { ok: true as const, link: `${url.pathname}${url.search}` };
 }
 
 /* ── The registry ────────────────────────────────────────────────────────────── */

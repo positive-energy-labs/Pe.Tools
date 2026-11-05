@@ -13,7 +13,7 @@ import {
   hostProcessIdentity,
   productInstallLayout,
 } from "@pe/host-contracts/contracts";
-import { checkoutLayout } from "@pe/host-contracts/service-identity";
+import { checkoutLayout, sourceRootVariable } from "@pe/host-contracts/service-identity";
 import { codexStandaloneRelease, installCommand } from "./install.ts";
 import { AdapterPackage, Win32Rows } from "./edge-schemas.ts";
 import { Cause, Effect, Exit, Schema, Scope, Stream } from "effect";
@@ -371,6 +371,7 @@ export function peaMcpServer(
 ) {
   const ts = sourceRoot ? join(sourceRoot, checkoutLayout.ts) : null;
   const mcp = ["mcp", "--host", hostBaseUrl];
+  const productHome = process.env.PE_TOOLS_PRODUCT_HOME?.trim();
   return {
     name: "pea",
     command: ts
@@ -392,6 +393,11 @@ export function peaMcpServer(
     env: [
       { name: hostProcessIdentity.hostBaseUrlVariable, value: hostBaseUrl },
       { name: HOST_CONTEXT_VARIABLE, value: context },
+      // Carry verified ownership through the MCP server's declared environment.
+      { name: "PE_LANE", value: hostOwnership.lane },
+      ...(productHome ? [{ name: "PE_TOOLS_PRODUCT_HOME", value: productHome }] : []),
+      { name: hostProcessIdentity.serviceNameVariable, value: hostOwnership.serviceName },
+      ...(sourceRoot ? [{ name: sourceRootVariable, value: sourceRoot }] : []),
     ],
   };
 }

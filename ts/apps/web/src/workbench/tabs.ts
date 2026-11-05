@@ -5,6 +5,7 @@ import { z } from "zod";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import {
   routeAddress,
+  canonicalPlace,
   admittedBuiltinKeys,
   routeViewOpenSchema,
   THREAD_TABS_MAX,
@@ -92,17 +93,6 @@ const params = (link: string) =>
  * checked here, and a value its codec refuses is refused by the admitted owner on restore.
  */
 const admitted = (route: string) => admittedBuiltinKeys.includes(route);
-function canonicalTab(route: RouteKey, link: string) {
-  if (!admitted(route)) return routeAddress(route).tab(link);
-  const url = new URL(link, "http://tab.invalid");
-  const path = routeAddress(route).path;
-  if (url.origin !== "http://tab.invalid" || url.hash || url.pathname !== path)
-    return { ok: false as const, error: `a ${route} tab links ${path}, not ${link}` };
-  if (url.searchParams.has("thread"))
-    return { ok: false as const, error: `a ${route} tab link carries no 'thread'` };
-  url.searchParams.delete("shell");
-  return { ok: true as const, link: `${url.pathname}${url.search}` };
-}
 
 /**
  * The Place link while no owner link is known. Until its owner mounts, an admitted Place takes the
@@ -416,7 +406,7 @@ export function useRouteTabs() {
                 work: explicit !== undefined ? explicit.work : carry.work,
               },
             );
-      const canonical = canonicalTab(targetRoute, nextLink);
+      const canonical = canonicalPlace(targetRoute, nextLink);
       if (!canonical.ok) throw Error(canonical.error);
       const id = existing ? existing.id : crypto.randomUUID();
       put(id, targetRoute, canonical.link);
@@ -439,7 +429,7 @@ export function useRouteTabs() {
       )
         return;
       if (event.thread !== router.state.location.search.thread) return;
-      const canonical = canonicalTab(event.route as RouteKey, event.link);
+      const canonical = canonicalPlace(event.route as RouteKey, event.link);
       if (!canonical.ok) return;
       const wanted = bindingOf(event.route as RouteKey, canonical.link);
       // The exact binding's Place is focused with its saved Page unchanged (Pea patches only the
