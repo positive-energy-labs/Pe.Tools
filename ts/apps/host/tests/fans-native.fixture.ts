@@ -129,6 +129,8 @@ export async function nativeFixture(
     ]);
     let stored: DuctSnapshot["store"];
     let storeRevision = 0;
+    /** Set to make the next ducts.apply.plan Read refuse every write, as a shared type it cannot scope does. */
+    const planRefusal = { reason: null as string | null };
     const dispatched: { key: string; input: Record<string, unknown> }[] = [];
     await settle(
       Effect.forkIn(
@@ -182,7 +184,7 @@ export async function nativeFixture(
                 outcome: string;
                 before: string;
                 after: string;
-                reason: null;
+                reason: string | null;
               }[] = (
                 [
                   ["terminalFlows", "terminal-flow", "cfm", "cfm"],
@@ -202,10 +204,10 @@ export async function nativeFixture(
                   return {
                     id,
                     kind,
-                    outcome: preview ? "planned" : "written",
+                    outcome: !preview ? "written" : planRefusal.reason ? "refused" : "planned",
                     before: `${before} ${unit}`,
                     after: `${after} ${unit}`,
-                    reason: null,
+                    reason: preview ? planRefusal.reason : null,
                   };
                 }),
               );
@@ -213,10 +215,10 @@ export async function nativeFixture(
                 writes.push({
                   id: null,
                   kind: "store",
-                  outcome: preview ? "planned" : "written",
+                  outcome: !preview ? "written" : planRefusal.reason ? "refused" : "planned",
                   before: stored ? "revision " + storeRevision : "absent",
                   after: "updated",
-                  reason: null,
+                  reason: preview ? planRefusal.reason : null,
                 });
                 if (!preview) {
                   stored = structuredClone(input.store);
@@ -338,6 +340,7 @@ export async function nativeFixture(
       events,
       native,
       dispatched,
+      planRefusal,
       readDucts,
       observeHostResource,
       post,

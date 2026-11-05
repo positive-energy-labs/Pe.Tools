@@ -1,6 +1,7 @@
 import { nativeRequestSchema } from "@pe/host-contracts/decoders";
 import { Ajv, type ValidateFunction } from "ajv";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { hostOpSafety } from "@pe/host-contracts/generated";
 import { refused } from "./command-executor.ts";
 import { z } from "zod";
 import type { HostOperationKey, OpRequestOf } from "@pe/host-contracts/operation-types";
@@ -10,6 +11,9 @@ const compiled = new Map<string, ValidateFunction>();
 const contracts = new Map<string, string | null | undefined>(
   hostOpCatalog.map((operation) => [operation.key, operation.requestSchemaJson]),
 );
+/** The generated catalog's declared effect for a native key; undefined for an uncataloged key. */
+export const nativeEffect = (key: string) =>
+  Object.hasOwn(hostOpSafety, key) ? hostOpSafety[key as keyof typeof hostOpSafety].effect : undefined;
 
 /** C# request metadata validates captured execution again after persistence or recovery. */
 function nativeInputProblem(key: string, input: unknown, json = contracts.get(key)): string | null {

@@ -5,6 +5,7 @@ import { footprintSchema, commandConsentSchema } from "./run-consent.ts";
 import { executionTargetSchema } from "./target.ts";
 import { consumedSchema, claimSchema, commandRefusalSchema } from "./command.ts";
 import { nativeProcessSchema } from "./native-process.ts";
+import { opEffect } from "@pe/host-contracts/generated";
 export { nativeProcessSchema, type NativeProcess } from "./native-process.ts";
 
 /** One public outcome vocabulary across host receipts, Pea and the shell Timeline. */
@@ -35,6 +36,9 @@ const stepIntent = z.object({
   id: z.string(),
   key: z.string(),
   kind: z.enum(["native", "file", "publication"]),
+  /** Host-stamped from the generated op catalog when a native step is recorded. A succeeded Read or
+   * rolled-back TransactRead changed no model; an unstamped step (older rows, files) is an effect. */
+  effect: z.enum(opEffect).optional(),
   input: z.unknown(),
   process: nativeProcessSchema.optional(),
   releases: z.array(z.strictObject({ action: z.string(), claim: claimSchema })).optional(),

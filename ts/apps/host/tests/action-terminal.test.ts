@@ -10,7 +10,7 @@ import { BridgeError } from "../src/bridge.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
 import { crossingOf } from "./callers.ts";
-import type { StepRecovery } from "../src/command-executor.ts";
+import { refused, type StepRecovery } from "../src/command-executor.ts";
 
 type Outcome = "succeeded" | "failed" | "dispatchedFailure" | "cancelled" | "unknown";
 type Terminal = { state: ActionReceipt["state"]; notDispatched: boolean };
@@ -98,6 +98,40 @@ const restarts: [ActionStep["state"][], boolean, Terminal][] = [
 ];
 test.each(restarts)("restart with steps %j, prepared %s", async (steps, prepared, expected) => {
   expect(terminal(await restart(steps, prepared))).toEqual(expected);
+});
+
+// The generated catalog, never the key's spelling, says a succeeded step changed nothing (Read, or a
+// TransactRead that rolls back). A refusal after one is a known refusal; after any other step it is partial.
+const plan = { fittings: [], terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [], store: {} };
+async function refusedAfter(path: string, key: string) {
+  const journal = new ActionJournal(path);
+  const id = randomUUID();
+  let crash = "";
+  await invokeCommand(journal, admission(id), async () => ({}), async (execution) => {
+    await execution.step("native", key, plan, async () => ({ ok: true }));
+    crash = await readFile(path, "utf8");
+    throw refused("Shared type cannot be scoped", "ducts.plan-refused");
+  });
+  const row = await journal.wait(id);
+  await journal.close();
+  return { id, row, crash };
+}
+test.each([
+  ["ducts.apply.plan", { state: "failed", notDispatched: false }],
+  ["ducts.apply", { state: "incomplete", notDispatched: false }],
+  ["uncataloged.step", { state: "incomplete", notDispatched: false }],
+] as const)("a refusal after a succeeded %s step settles %j", async (key, expected) => {
+  const { row } = await refusedAfter(await journalPath(), key);
+  expect(terminal(row)).toEqual(expected);
+  expect(row.outcome?.state).toBe(expected.state === "failed" ? "refused" : "outcome-unknown");
+});
+test("a recovered Read step without its catalog stamp stays a conservative effect", async () => {
+  const path = await journalPath();
+  const { id, crash } = await refusedAfter(path, "ducts.apply.plan");
+  expect(crash).toMatch(/"effect":"Read",?/);
+  await writeFile(path, crash.replace(/"effect":"Read",?/g, ""));
+  const [reloaded] = await new ActionJournal(path).list(undefined, id);
+  expect(terminal(reloaded!)).toEqual({ state: "incomplete", notDispatched: false });
 });
 
 // Hazard 3 (headless research, 2026-09-26): a crashed script's unknown action refused every action
