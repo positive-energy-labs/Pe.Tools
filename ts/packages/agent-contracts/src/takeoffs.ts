@@ -2,7 +2,7 @@ import { writeIntentSchema } from "./write-intent.ts";
 import { z } from "zod";
 
 import { type RouteStatePatch, type RouteStateSpec } from "./route-state.ts";
-import { transitionPatches, draftCellSchema, type CellLike } from "./draft.ts";
+import { cellPatches, draftCellSchema, type CellLike } from "./draft.ts";
 import { observationSchema } from "./reading.ts";
 import { addressSchema } from "./target.ts";
 import { documentRefSchema } from "./target.ts";
@@ -421,15 +421,13 @@ const takeoffsDocumentSchema = z
         ctx.addIssue({ code: "custom", path: ["edits", key], message: `no room field '${field}'` });
         continue;
       }
-      for (const rung of ["suggestion", "edit"] as const) {
-        const value = cell[rung]?.value;
-        if (value !== undefined && !schema.unwrap().safeParse(value).success)
-          ctx.addIssue({
-            code: "custom",
-            path: ["edits", key, rung, "value"],
-            message: `not a ${field} value`,
-          });
-      }
+      const value = cell.edit?.value;
+      if (value !== undefined && !schema.unwrap().safeParse(value).success)
+        ctx.addIssue({
+          code: "custom",
+          path: ["edits", key, "edit", "value"],
+          message: `not a ${field} value`,
+        });
     }
   });
 export type TakeoffsRouteDocument = z.infer<typeof takeoffsDocumentSchema>;
@@ -467,7 +465,7 @@ export function stagedReviewFlags(doc: TakeoffsRouteDocument): Record<string, st
 /** Either author clears every current room edit; optional suggestions stay. */
 export const takeoffDiscardEdits = (doc: TakeoffsRouteDocument): RouteStatePatch[] =>
   Object.entries(doc.edits).flatMap(([key, cell]) =>
-    cell.edit ? transitionPatches(["edits"], key, cell, { kind: "clear" }) : [],
+    cell.edit ? cellPatches(["edits"], key, cell, { kind: "clear" }) : [],
   );
 
 /** Either author flags or unflags a review shape; unflag clears the shape's current edit. */
@@ -478,7 +476,7 @@ export function takeoffFlagToggle(
 ): RouteStatePatch[] {
   const key = takeoffFlagKey(zoneKey, shapeKey);
   const cell = doc.reviewFlags[key] ?? {};
-  return transitionPatches(
+  return cellPatches(
     ["reviewFlags"],
     key,
     cell,
@@ -505,8 +503,8 @@ export function takeoffEditPatches(
       const cell = doc.edits[key] ?? {};
       const value = next[field];
       if (value === undefined)
-        return cell.edit ? transitionPatches(["edits"], key, cell, { kind: "clear" }) : [];
-      return transitionPatches(["edits"], key, cell, {
+        return cell.edit ? cellPatches(["edits"], key, cell, { kind: "clear" }) : [];
+      return cellPatches(["edits"], key, cell, {
         kind: "set",
         rung: { value },
         ...(baseline[field] === undefined ? {} : { baseline: { value: baseline[field] } }),

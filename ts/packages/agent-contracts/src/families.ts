@@ -301,14 +301,14 @@ export type FamilyExclusions = Record<string, { by: z.infer<typeof exclusionAuth
 /**
  * The Families route document is authored Work and nothing else. The spec is the page's member
  * (one address, sent as `source`) or the members plan generates from edited cells;
- * plans and receipts are results. This document holds only the scope, edits and optional suggestions,
+ * plans and receipts are results. This document holds only the scope and staged edits,
  * and what a human or pea held back.
  */
 const familiesDocumentSchema = z
   .object({
     writeIntent: writeIntentSchema.optional(),
     /**
-     * The audited scope is a shared cell: either author edits or suggests it, and plan reads the
+     * The audited scope is a shared cell: either author stages it, and plan reads the
      * current edit. A bare filter is old Work, so it fails closed.
      */
     scope: familyFilterCellSchema.default({}),
@@ -388,7 +388,7 @@ export const familiesRouteState = {
     "propose",
   ],
   description:
-    "Shared Family Foundry Work. Set scope.edit to {value:{categoryNames,familyNames,placementScope}}. Set cells.<key>.edit for a canonical [familyName,typeName,parameter] identity from scopeTypes, or patch.edit for exact native patch source bytes. Either author may replace or clear current edits and exclusions at the expected Work revision. Optional suggestion slots are review content. Apply plans/checks/writes/readbacks the submitted edits; native patch and per-type edits are mutually exclusive.",
+    "Shared Family Foundry Work. Set scope.edit to {value:{categoryNames,familyNames,placementScope}}. Set cells.<key>.edit for a canonical [familyName,typeName,parameter] identity from scopeTypes, or patch.edit for exact native patch source bytes. Either author may replace or clear staged edits (last writer wins) and exclusions at the expected Work revision. Apply plans/checks/writes/readbacks the submitted edits; native patch and per-type edits are mutually exclusive.",
   schema: familiesDocumentSchema,
 
   // Planning and applying are the `families.plan` and `families.apply` workflows. Neither is

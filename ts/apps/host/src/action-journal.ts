@@ -31,7 +31,7 @@ import {
   editableCells,
   type Command,
   workKey,
-  transitionPatches,
+  cellPatches,
   type CellLike,
   type WorkPath,
   type ActionStep,
@@ -1437,13 +1437,13 @@ export class ActionJournal implements ReceiptReader {
                   const before = valueAt(original.expected, path) as CellLike | undefined;
                   const now = valueAt(current.doc, path) as CellLike | undefined;
                   if (!before?.edit || !now) continue;
-                  const next = transitionPatches(
+                  const next = cellPatches(
                     path.slice(0, -1).map(String),
                     String(path.at(-1)),
                     now,
                     { kind: "retire", consumed: before.edit },
                   );
-                  if (next.some((patch) => patch.path.at(-1) === "edit")) retired.push([...path]);
+                  if (next.length) retired.push([...path]);
                   patches.push(...next);
                 }
                 if (patches.length) {

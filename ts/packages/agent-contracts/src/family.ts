@@ -34,7 +34,7 @@ export const familyDraftRouteState = {
   route: "family",
   title: "Family",
   description:
-    "A captured family draft baseline with cells keyed by JSON pointer. Either author writes cells.*.edit at the expected Work revision; cells.*.suggestion is optional review content.",
+    "A captured family draft baseline with cells keyed by JSON pointer. Either author writes cells.*.edit at the expected Work revision; the last writer wins.",
   schema: familyDraftSchema,
 } satisfies RouteStateSpec<typeof familyDraftSchema>;
 

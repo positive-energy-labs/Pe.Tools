@@ -672,9 +672,7 @@ export function familyExecutors(
         scope,
         excluded: doc.excluded,
         ...(source.familyNames ? { familyNames: source.familyNames } : {}),
-        written: Object.keys(doc.cells).filter(
-          (cell) => doc.cells[cell]!.edit || doc.cells[cell]!.suggestion,
-        ),
+        written: Object.keys(doc.cells).filter((cell) => doc.cells[cell]!.edit),
       },
     };
   };
@@ -1380,7 +1378,7 @@ export function familyExecutors(
         throw refused("Saved member changed; read it and adopt the current bytes");
       if (
         !input.replaceEdits &&
-        Object.values(doc.fields).some((cell) => cell.edit || cell.suggestion)
+        Object.values(doc.fields).some((cell) => cell.edit)
       )
         throw refused(
           "Pending edits retain their original basis; explicitly replace edits to adopt another baseline",
@@ -1688,18 +1686,10 @@ export async function readFamily(
   const view = await deps.workspace.read(scope, "parameter-links");
   if (!view) throw refused("Author this route's Work before reading it");
   const document = parameterLinksRouteState.schema.parse(view.doc);
-  const { evaluate, subject } = familyReads["parameter-links.read"].input.parse(input);
-  // The staged profile, or a labelled preview of Pea's proposal; nothing else is evaluated.
-  const profile =
-    subject === "suggestion"
-      ? (document.profile.suggestion?.value ?? null)
-      : stagedParameterProfile(document);
-  if (evaluate && !profile)
-    throw refused(
-      subject === "suggestion"
-        ? "Pea has proposed no profile"
-        : "Stage a profile before evaluating it",
-    );
+  const { evaluate } = familyReads["parameter-links.read"].input.parse(input);
+  // Only the staged profile is evaluated, whoever staged it.
+  const profile = stagedParameterProfile(document);
+  if (evaluate && !profile) throw refused("Stage a profile before evaluating it");
   const data = evaluate
     ? await native("revit.apply.parameter-links.preview", { profile, reconcile: false })
     : await native("revit.detail.parameter-links", { includeEvaluation: false });
@@ -1707,10 +1697,9 @@ export async function readFamily(
     kind: "parameter-links",
     value: parameterLinksReadingSchema.parse({
       ...(data as object),
-      basis: parameterLinksBasis(document, subject),
+      basis: parameterLinksBasis(document),
       workRevision: view.revision,
       evaluated: evaluate,
-      subject,
       // What Revit holds arrives as `profile`; `stored` names it for what it is.
       stored: (data as { profile?: unknown }).profile ?? null,
       // A stored-profile read observes Revit, never the staged profile: it carries no

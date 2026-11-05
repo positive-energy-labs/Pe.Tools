@@ -130,7 +130,7 @@ for (const [spec, saved] of [
   });
 }
 
-test("/family: shared suggestions retain either author; legacy slots require explicit conversion", async () => {
+test("/family: a legacy proposal reads as the staged edit with its author; legacy slots require explicit conversion", async () => {
   const scope: WorkKey = { binding: "address" as const, route: "family", target };
   const state = new Map<string, unknown>();
   const setState = vi.fn(async () => {});
@@ -158,7 +158,7 @@ test("/family: shared suggestions retain either author; legacy slots require exp
       revision: 2,
       doc: {
         reading: "{}",
-        cells: { "/a": { suggestion: { value: 1, by, at: null, base: null }, edit: null } },
+        cells: { "/a": { edit: { value: 1, by, at: null, base: null } } },
       },
     });
     expect(setState).not.toHaveBeenCalled();

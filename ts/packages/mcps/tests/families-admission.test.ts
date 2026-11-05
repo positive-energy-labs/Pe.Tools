@@ -63,7 +63,7 @@ const propose = (familyName: string, typeName = "12 X 4") => ({
   path: [
     "cells",
     familyCellKey({ familyName, typeName, parameter: "View Description" }),
-    "suggestion",
+    "edit",
   ],
   value: { value: { value: "Base", storageType: "String" } },
 });
@@ -155,7 +155,7 @@ const casework = (familyNames: string[]) => ({
   placementScope: "AllLoaded",
 });
 
-test("both authors share editable family scope and optional suggestions", async () => {
+test("both authors stage the one family scope; the last writer wins", async () => {
   const { work } = await workspace();
   expect(
     await work.apply(
@@ -171,7 +171,7 @@ test("both authors share editable family scope and optional suggestions", async 
       scope,
       "families",
       "pea",
-      [{ path: ["scope", "suggestion"], value: { value: casework([]), note: "all casework" } }],
+      [{ path: ["scope", "edit"], value: { value: casework([]), note: "all casework" } }],
       1,
     ),
   ).toMatchObject({ ok: true, revision: 2 });
@@ -188,7 +188,6 @@ test("both authors share editable family scope and optional suggestions", async 
     (await work.view(scope, "families"))!.doc,
   );
   expect(cell.edit).toMatchObject({ value: casework([]), by: "pea", base: 2 });
-  expect(cell.suggestion).toMatchObject({ value: casework([]), by: "pea", base: 1 });
 });
 
 // M13-1: a stale rung never blocks its own correction. project-a loads only "Price LBP15A Exhaust";
@@ -220,7 +219,7 @@ test("M13-2 (d): Pea proposes a scope, then cells in it, with nothing edit; the 
     at,
     "families",
     "pea",
-    [{ path: ["scope", "suggestion"], value: { value: exhaustScope } }],
+    [{ path: ["scope", "edit"], value: { value: exhaustScope } }],
     1,
   );
   expect(scoped).toMatchObject({ ok: true, revision: 2 });
@@ -237,7 +236,7 @@ test("M13-2 (d): Pea proposes a scope, then cells in it, with nothing edit; the 
       "families",
       "pea",
       [
-        { path: ["scope", "suggestion"], value: { value: exhaustScope } },
+        { path: ["scope", "edit"], value: { value: exhaustScope } },
         propose("Price LBP15A Exhaust"),
       ],
       1,
