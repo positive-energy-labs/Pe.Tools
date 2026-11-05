@@ -88,12 +88,42 @@ const recipeKey = (recipe: ConsumerRecipe) =>
   canonicalJson([recipe.key, recipe.input, recipe.scope]);
 const mint = () => randomUUID() as ReadSetId;
 
-/** One root tree's shared budget and lifetime. */
-interface Tree {
+/** One root tree's shared budget. Lifetime is per node: a child closes only itself and below. */
+interface Budget {
   children: number;
   starts: number;
-  closed: boolean;
 }
+type Life = "open" | "sealed" | "closed";
+/** A node accepts starts and mutations only while it and every ancestor are open. */
+const lifetime = (parentOpen: () => boolean) => {
+  let life: Life = "open";
+  return {
+    open: () => life === "open" && parentOpen(),
+    end: (to: Exclude<Life, "open">) => {
+      const was = life;
+      if (life === "open") life = to;
+      return was === "open";
+    },
+  };
+};
+const closed = () => refuse("context", "This consumption is sealed or closed");
+/** A mutation that refuses once the node is sealed or closed. */
+const whileOpen = (open: () => boolean, mutate: () => Effect.Effect<void, InvalidRead>) =>
+  Effect.suspend(() => (open() ? mutate() : Effect.fail(closed())));
+const nextOf = (counters: Map<string, number>) => (key: string) => {
+  const start = counters.get(key) ?? 0;
+  counters.set(key, start + 1);
+  return start;
+};
+/** A dependency binds once; the same id again is a no-op, another id refuses. */
+const bindOnce = (dependencies: Record<string, string>, name: string, id: string) =>
+  name in dependencies
+    ? dependencies[name] === id
+      ? Effect.void
+      : Effect.fail(refuse("ambiguous", `Dependency ${name} is already bound`))
+    : Effect.sync(() => {
+        dependencies[name] = id;
+      });
 
 type LiveNode = InputConsumption & {
   readonly record: () => InputReadSetRecord | null;
@@ -103,24 +133,20 @@ type LiveNode = InputConsumption & {
 function liveContext(
   writer: RecordingWriter | undefined,
   recipe: ConsumerRecipe,
-  tree: Tree,
+  budget: Budget,
   limits: InputReadSetLimits,
+  parentOpen: () => boolean,
   release: () => void,
 ): LiveNode {
   const id = mint();
-  const counters = new Map<string, number>();
+  const life = lifetime(parentOpen);
+  const next = nextOf(new Map());
   const inputs: { input: RecordedInput; scope: string; start: number; takingId: string | null }[] =
     [];
   const children: { recipe: ConsumerRecipe; start: number; node: LiveNode }[] = [];
   const takingLinks: Record<string, string> = {};
   const dependencies: Record<string, string> = {};
   const exports: { kind: "ducts.sheet"; basis: string }[] = [];
-  let sealed = false;
-  const next = (key: string) => {
-    const start = counters.get(key) ?? 0;
-    counters.set(key, start + 1);
-    return start;
-  };
   const record = (): InputReadSetRecord | null => {
     if (!writer) return null;
     const complete =
@@ -160,27 +186,31 @@ function liveContext(
     record,
     childNodes: () => children.map((child) => child.node),
     child: (childRecipe) => {
-      if (tree.closed) return Result.fail(refuse("context", "This consumption is closed"));
-      if (tree.children + 1 > limits.childrenPerRoot)
+      if (!life.open()) return Result.fail(closed());
+      if (budget.children + 1 > limits.childrenPerRoot)
         return Result.fail(refuse("full", "This consumption has too many child contexts"));
-      tree.children++;
-      const node = liveContext(writer, childRecipe, tree, limits, () => {});
+      budget.children++;
+      const node = liveContext(writer, childRecipe, budget, limits, life.open, () => {});
       children.push({ recipe: childRecipe, start: next(recipeKey(childRecipe)), node });
       return Result.succeed(node);
     },
     start: (input, scope) => {
-      if (tree.closed) return Result.fail(refuse("context", "This consumption is closed"));
-      if (tree.starts + 1 > limits.startsPerRoot)
+      if (!life.open()) return Result.fail(closed());
+      if (budget.starts + 1 > limits.startsPerRoot)
         return Result.fail(refuse("full", "This consumption has too many input starts"));
-      tree.starts++;
-      const key = occurrenceKey(input, scope);
-      const entry = { input, scope, start: next(key), takingId: null as string | null };
+      budget.starts++;
+      const entry = {
+        input,
+        scope,
+        start: next(occurrenceKey(input, scope)),
+        takingId: null as string | null,
+      };
       inputs.push(entry);
       return Result.succeed({
         occurrence: { readSet: id, input, scope, start: entry.start },
         selected: Effect.fail(refuse("context", "A live attempt selects no recorded taking")),
         observed: (taking: Taking) =>
-          Effect.suspend(() =>
+          whileOpen(life.open, () =>
             inputIdentity(taking.input) !== inputIdentity(input) || taking.scope !== scope
               ? Effect.fail(refuse("mismatch", "The appended taking is not this attempt's input"))
               : entry.takingId !== null
@@ -192,7 +222,7 @@ function liveContext(
       });
     },
     linkTaking: (name, takingId) =>
-      Effect.suspend(() =>
+      whileOpen(life.open, () =>
         name in takingLinks && takingLinks[name] !== takingId
           ? Effect.fail(refuse("ambiguous", `Taking link ${name} is already bound`))
           : Effect.sync(() => {
@@ -206,9 +236,7 @@ function liveContext(
           : Effect.fail(refuse("miss", `No taking link ${name}`)),
       ),
     linkReadSet: (name, readSet) =>
-      Effect.sync(() => {
-        dependencies[name] = readSet;
-      }),
+      whileOpen(life.open, () => bindOnce(dependencies, name, readSet)),
     dependency: (name) =>
       Effect.suspend(() =>
         name in dependencies
@@ -216,15 +244,17 @@ function liveContext(
           : Effect.fail(refuse("miss", `No read-set dependency ${name}`)),
       ),
     exportBasis: (basis) =>
-      Effect.sync(() => {
-        if (!exports.some((entry) => entry.basis === basis))
-          exports.push({ kind: "ducts.sheet", basis });
-      }),
+      whileOpen(life.open, () =>
+        Effect.sync(() => {
+          if (!exports.some((entry) => entry.basis === basis))
+            exports.push({ kind: "ducts.sheet", basis });
+        }),
+      ),
     seal: Effect.suspend(() => {
-      if (sealed || !writer) return Effect.void;
-      sealed = true;
+      if (!life.open()) return Effect.fail(closed());
+      life.end("sealed");
       // A truncated capture never publishes a complete read set.
-      if (writer.capture.truncated()) return Effect.void;
+      if (!writer || writer.capture.truncated()) return Effect.void;
       const records: InputReadSetRecord[] = [];
       const walk = (node: LiveNode) => {
         const value = node.record();
@@ -251,9 +281,7 @@ function liveContext(
       );
     }),
     close: Effect.sync(() => {
-      if (tree.closed) return;
-      tree.closed = true;
-      release();
+      if (life.end("closed")) release();
     }),
   };
   return self;
@@ -264,96 +292,103 @@ interface Loaded {
   readonly record: InputReadSetRecord;
   readonly children: ReadonlyMap<string, Loaded>;
 }
+/** The whole replay graph shares one budget: nodes beyond the root, bytes, and depth. */
 const load = (
   reader: RecordingReader,
   id: string,
   limits: InputReadSetLimits,
+  budget: { nodes: number; bytes: number } = { nodes: -1, bytes: 0 },
   path: readonly string[] = [],
 ): Effect.Effect<Loaded, InvalidRead> =>
   Effect.gen(function* () {
     if (path.includes(id)) return yield* refuse("mismatch", `Read set ${id} depends on itself`);
     if (path.length > limits.dependencyDepth)
       return yield* refuse("full", "Read-set dependencies are too deep");
+    if (++budget.nodes > limits.childrenPerRoot)
+      return yield* refuse("full", "This read-set graph has too many nodes");
     const record = yield* reader.readSets.get(id);
+    budget.bytes += Buffer.byteLength(JSON.stringify(record));
+    if (budget.bytes > limits.metadataBytesPerRoot)
+      return yield* refuse("full", "This read-set graph exceeds its metadata bound");
     if (record.state !== "complete")
       return yield* refuse("context", `Read set ${id} is incomplete`);
     const children = new Map<string, Loaded>();
     for (const child of record.children) {
-      const loaded = yield* load(reader, child.readSetId, limits, [...path, id]);
+      const key = canonicalJson([recipeKey(child.recipe), child.start]);
+      if (children.has(key))
+        return yield* refuse("ambiguous", `Read set ${id} names one child occurrence twice`);
+      const loaded = yield* load(reader, child.readSetId, limits, budget, [...path, id]);
       if (recipeKey(loaded.record.recipe) !== recipeKey(child.recipe))
         return yield* refuse("mismatch", `Child read set ${child.readSetId} has another recipe`);
-      children.set(canonicalJson([recipeKey(child.recipe), child.start]), loaded);
+      children.set(key, loaded);
     }
     // Dependencies must resolve and stay acyclic; they are opened by their own consumer.
     for (const dependency of Object.values(record.dependencies))
-      yield* load(reader, dependency, limits, [...path, id]);
+      yield* load(reader, dependency, limits, budget, [...path, id]);
     return { record, children };
   });
 
 /** Replay: every start and child resolves the stored occurrence, or refuses before any access. */
-function recordedContext(loaded: Loaded, tree: Tree): InputConsumption {
+function recordedContext(loaded: Loaded, parentOpen: () => boolean = () => true): InputConsumption {
   const { record } = loaded;
-  const counters = new Map<string, number>();
-  const next = (key: string) => {
-    const start = counters.get(key) ?? 0;
-    counters.set(key, start + 1);
-    return start;
-  };
+  const life = lifetime(parentOpen);
+  const next = nextOf(new Map());
   const id = record.id as ReadSetId;
+  const same = (matches: boolean, what: string) =>
+    whileOpen(life.open, () =>
+      matches ? Effect.void : Effect.fail(refuse("mismatch", `${what} differs from the recording`)),
+    );
   return {
     id,
     recipe: record.recipe,
     child: (recipe) => {
-      if (tree.closed) return Result.fail(refuse("context", "This consumption is closed"));
+      if (!life.open()) return Result.fail(closed());
       const child = loaded.children.get(
         canonicalJson([recipeKey(recipe), next(recipeKey(recipe))]),
       );
       return child
-        ? Result.succeed(recordedContext(child, tree))
+        ? Result.succeed(recordedContext(child, life.open))
         : Result.fail(refuse("miss", `Read set ${id} holds no such child occurrence`));
     },
     start: (input, scope) => {
-      if (tree.closed) return Result.fail(refuse("context", "This consumption is closed"));
+      if (!life.open()) return Result.fail(closed());
       const key = occurrenceKey(input, scope);
       const start = next(key);
-      const entry = record.inputs.find(
+      const entries = record.inputs.filter(
         (candidate) =>
           occurrenceKey(candidate.input, candidate.scope) === key && candidate.start === start,
       );
-      if (!entry)
+      if (entries.length > 1)
+        return Result.fail(refuse("ambiguous", `Read set ${id} names occurrence ${start} twice`));
+      if (!entries[0])
         return Result.fail(
           refuse("miss", `Read set ${id} holds no occurrence ${start} of this input`),
         );
       return Result.succeed({
         occurrence: { readSet: id, input, scope, start },
-        selected: Effect.succeed(entry.takingId),
+        selected: Effect.succeed(entries[0].takingId),
         observed: () => Effect.fail(refuse("historical", "A recording keeps no new taking")),
       });
     },
     linkTaking: (name, takingId) =>
-      record.takingLinks[name] === takingId
-        ? Effect.void
-        : Effect.fail(refuse("mismatch", `Taking link ${name} differs from the recording`)),
+      same(record.takingLinks[name] === takingId, `Taking link ${name}`),
     taking: (name) =>
       name in record.takingLinks
         ? Effect.succeed(record.takingLinks[name]!)
         : Effect.fail(refuse("miss", `Read set ${id} has no taking link ${name}`)),
     linkReadSet: (name, readSet) =>
-      record.dependencies[name] === readSet
-        ? Effect.void
-        : Effect.fail(refuse("mismatch", `Dependency ${name} differs from the recording`)),
+      same(record.dependencies[name] === readSet, `Dependency ${name}`),
     dependency: (name) =>
       name in record.dependencies
         ? Effect.succeed(record.dependencies[name] as ReadSetId)
         : Effect.fail(refuse("miss", `Read set ${id} has no dependency ${name}`)),
     exportBasis: (basis) =>
-      record.exports.some((entry) => entry.basis === basis)
-        ? Effect.void
-        : Effect.fail(refuse("mismatch", "The recomputed basis differs from the recorded export")),
-    seal: Effect.void,
-    close: Effect.sync(() => {
-      tree.closed = true;
-    }),
+      same(
+        record.exports.some((entry) => entry.basis === basis),
+        "The recomputed basis",
+      ),
+    seal: Effect.suspend(() => (life.end("sealed") ? Effect.void : Effect.fail(closed()))),
+    close: Effect.sync(() => void life.end("closed")),
   };
 }
 
@@ -382,9 +417,7 @@ export class HostInputReadSets extends Context.Service<
             return load(lane.recordingStore, selected, limits).pipe(
               Effect.flatMap((loaded) =>
                 recipeKey(loaded.record.recipe) === recipeKey(recipe)
-                  ? Effect.succeed(
-                      recordedContext(loaded, { children: 0, starts: 0, closed: false }),
-                    )
+                  ? Effect.succeed(recordedContext(loaded))
                   : Effect.fail(
                       refuse("mismatch", `Read set ${selected} was taken by another consumer`),
                     ),
@@ -396,11 +429,17 @@ export class HostInputReadSets extends Context.Service<
           if (open + 1 > limits.openRoots)
             return Effect.fail(refuse("full", "Too many open input consumptions"));
           open++;
-          const tree: Tree = { children: 0, starts: 0, closed: false };
           return Effect.succeed(
-            liveContext(lane.captureStore, recipe, tree, limits, () => {
-              open--;
-            }),
+            liveContext(
+              lane.captureStore,
+              recipe,
+              { children: 0, starts: 0 },
+              limits,
+              () => true,
+              () => {
+                open--;
+              },
+            ),
           );
         }),
     });

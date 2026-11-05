@@ -6,7 +6,8 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Context, Deferred, Effect, Fiber, Layer, Schema } from "effect";
+import { randomUUID } from "node:crypto";
+import { Context, Deferred, Effect, Fiber, Layer, Result, Schema } from "effect";
 import { expect } from "vite-plus/test";
 import { effectTest } from "./effect-test.ts";
 import {
@@ -14,6 +15,7 @@ import {
   HostInputReadSets,
   type ConsumerRecipe,
   type InputReadSetLimits,
+  type ReadSetId,
 } from "../src/input-occurrence.ts";
 import {
   captureInput,
@@ -22,6 +24,8 @@ import {
   openRecordingWriter,
   replayInput,
   type HostInputLane,
+  type InputReadSetRecord,
+  type Taking,
 } from "../src/native-recording.ts";
 
 const identity = { build: "build-1", catalog: nativeCatalogIdentity() };
@@ -145,3 +149,115 @@ effectTest("live context loss truncates capture and keeps the live answer unchan
     expect(yield* problem(reader.readSets.get(consumption.id))).toBe("recording.context");
   }),
 );
+
+const child = (key: string): ConsumerRecipe => ({ key, input: {}, scope: "{}" });
+const ok = <A>(result: Result.Result<A, unknown>) => {
+  if (Result.isFailure(result)) throw result.failure;
+  return result.success;
+};
+const failed = (result: Result.Result<unknown, unknown>) =>
+  Result.isFailure(result) ? (result.failure as { problem?: string }).problem : "ok";
+
+effectTest("closing a child closes only that child; closing the root closes the tree", () =>
+  Effect.gen(function* () {
+    const writer = yield* openRecordingWriter(yield* bundle, identity, bounds);
+    const live = yield* readSets({ kind: "live", captureStore: writer });
+    const root = yield* live.open(recipe, null);
+    const a = ok(root.child(child("ducts.retained")));
+    const b = ok(root.child(child("ducts.retained")));
+    yield* a.close;
+    expect(failed(a.start(FIRM, "{}"))).toBe("recording.context");
+    expect(failed(b.start(FIRM, "{}"))).toBe("ok");
+    expect(failed(root.start(FIRM, "{}"))).toBe("ok");
+    yield* root.close;
+    expect(failed(b.start(FIRM, "{}"))).toBe("recording.context");
+    expect(failed(root.child(child("ducts.retained")))).toBe("recording.context");
+  }),
+);
+
+effectTest("no mutation after seal or close, and a dependency never rebinds", () =>
+  Effect.gen(function* () {
+    const writer = yield* openRecordingWriter(yield* bundle, identity, bounds);
+    const live = yield* readSets({ kind: "live", captureStore: writer });
+    const root = yield* live.open(recipe, null);
+    const attempt = ok(root.start(FIRM, "{}"));
+    const first = randomUUID() as ReadSetId;
+    yield* root.linkReadSet("overview", first);
+    expect(yield* problem(root.linkReadSet("overview", randomUUID() as ReadSetId))).toBe(
+      "recording.ambiguous",
+    );
+    yield* root.linkReadSet("overview", first);
+    yield* root.seal;
+    const late = { id: "late", input: FIRM, scope: "{}" } as unknown as Taking;
+    expect(yield* problem(attempt.observed(late))).toBe("recording.context");
+    expect(yield* problem(root.linkTaking("native", "t1"))).toBe("recording.context");
+    expect(yield* problem(root.linkReadSet("other", first))).toBe("recording.context");
+    expect(yield* problem(root.exportBasis("basis"))).toBe("recording.context");
+    expect(failed(root.start(FIRM, "{}"))).toBe("recording.context");
+    const closed = yield* live.open(recipe, null);
+    yield* closed.close;
+    expect(yield* problem(closed.linkTaking("native", "t1"))).toBe("recording.context");
+  }),
+);
+
+const record = (
+  fields: Partial<InputReadSetRecord> & { id: string; recipe: ConsumerRecipe },
+): InputReadSetRecord => ({
+  version: 1,
+  identity,
+  state: "complete",
+  inputs: [],
+  children: [],
+  takingLinks: {},
+  dependencies: {},
+  exports: [],
+  ...fields,
+});
+
+effectTest(
+  "replay refuses duplicate exact child occurrences and bounds the whole loaded graph",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bundle;
+      const writer = yield* openRecordingWriter(dir, identity, bounds);
+      const leaf = record({ id: randomUUID(), recipe: child("ducts.retained") });
+      const other = record({ id: randomUUID(), recipe: child("ducts.retained") });
+      yield* writer.readSets.keep(leaf);
+      yield* writer.readSets.keep(other);
+      const duplicate = record({
+        id: randomUUID(),
+        recipe,
+        children: [
+          { recipe: child("ducts.retained"), start: 0, readSetId: leaf.id },
+          { recipe: child("ducts.retained"), start: 0, readSetId: other.id },
+        ],
+      });
+      const wide = record({
+        id: randomUUID(),
+        recipe,
+        children: [{ recipe: child("ducts.retained"), start: 0, readSetId: leaf.id }],
+        dependencies: { overview: other.id },
+      });
+      yield* writer.readSets.keep(duplicate);
+      yield* writer.readSets.keep(wide);
+      const reader = yield* openRecordingReader(dir, identity, bounds);
+      const lane = { kind: "recording", recordingStore: reader, at: null } as const;
+      const historical = yield* readSets(lane);
+      expect(yield* problem(historical.open(recipe, duplicate.id as ReadSetId))).toBe(
+        "recording.ambiguous",
+      );
+      yield* historical.open(recipe, wide.id as ReadSetId);
+      // A child and a dependency are two loaded nodes beyond the root: one allowed node refuses.
+      const narrow = yield* readSets(lane, { ...limits, childrenPerRoot: 1 });
+      expect(yield* problem(narrow.open(recipe, wide.id as ReadSetId))).toBe("recording.full");
+      const small = yield* readSets(lane, { ...limits, metadataBytesPerRoot: 400 });
+      expect(yield* problem(small.open(recipe, wide.id as ReadSetId))).toBe("recording.full");
+    }),
+);
+const limits: InputReadSetLimits = {
+  openRoots: 4,
+  childrenPerRoot: 8,
+  startsPerRoot: 8,
+  metadataBytesPerRoot: 65_536,
+  dependencyDepth: 4,
+};
