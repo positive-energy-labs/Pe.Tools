@@ -15,7 +15,7 @@ effectTest(
       let sdkStart = 1000;
       let sourceRoot = hostOwnership.sourceRoot;
       let calls = 0;
-      let changeDuringResolution = false;
+      let changesDuringResolution = 0;
       let changed: (() => void) | undefined;
       const bridge = detachedBridge({
         list: Effect.sync(() => [
@@ -38,8 +38,8 @@ effectTest(
       const driver = () =>
         Effect.sync(() => {
           calls++;
-          if (changeDuringResolution) {
-            changeDuringResolution = false;
+          if (changesDuringResolution > 0) {
+            changesDuringResolution--;
             changed!();
           }
           return replay("doc-list", {
@@ -81,14 +81,30 @@ effectTest(
       changed!();
       yield* resolve;
       expect(calls).toBe(2);
-      changeDuringResolution = true;
+      // One frame mid-admission: the SDK owner re-admits from scratch (a second SDK read) and succeeds.
       changed!();
+      changesDuringResolution = 1;
+      expect((yield* resolve).processIncarnation).toEqual({ pid: process.pid, startedAt: 1000 });
+      expect(calls).toBe(4);
+      // Frames on every pass: bounded at one re-admission, then the refusal stands.
+      changed!();
+      changesDuringResolution = 2;
       const raced = yield* resolve.pipe(Effect.result);
       expect(raced._tag).toBe("Failure");
       if (raced._tag === "Failure")
         expect(raced.failure.message).toContain("SDK attachment changed during resolution");
-      // Admission, rather than a write retry, must start again after the event settles.
-      expect((yield* resolve).processIncarnation).toEqual({ pid: process.pid, startedAt: 1000 });
+      expect(calls).toBe(6);
+      const closed = { bridgeSessionId: "attachment", openDocumentId: "closed" };
+      const closedRead = sdk
+        .resolve(closed)
+        .pipe(
+          Effect.provideService(
+            RequestIdentity,
+            admittedRequestIdentity({ kind: "anonymous" }, closed),
+          ),
+          Effect.result,
+        );
+      expect((yield* closedRead)._tag).toBe("Failure");
       startedAt = 2000;
       changed!();
       expect((yield* resolve.pipe(Effect.result))._tag).toBe("Failure");
