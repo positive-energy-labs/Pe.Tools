@@ -312,13 +312,14 @@ effectTest(
       expect((yield* resolve({}, "missing.operation")).status).toBe(409);
       const schemaUrl = "http://host/schemas/settings/ff/Family.json";
       const request = (call = false, anonymous = false) => Effect.promise(() => web.handler(
-        call ? new Request("http://host/call", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "settings.schema", request: { schemaUrl } }) }) : new Request(schemaUrl),
+        call ? new Request("http://host/call", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "settings.schema", request: { schemaUrl } }) }) : new Request(schemaUrl, { headers: { host: "host" } }),
         Context.make(RequestIdentity, admittedRequestIdentity(anonymous ? { kind: "anonymous" } : { kind: "human", via: "local" }, { bridgeSessionId: "session" })),
       ));
       const call = yield* request(true).pipe(Effect.forkScoped);
       yield* until(() => jobs.length === 1);
       const sibling = yield* request().pipe(Effect.forkScoped);
       while ((yield* sharedReads!.retained).joiners !== 2) yield* Effect.yieldNow;
+      expect((yield* sharedReads!.retained).entries).toBe(1);
       expect(jobs).toHaveLength(1);
       expect((yield* request(false, true)).status).toBe(403);
       expect(jobs).toHaveLength(1);

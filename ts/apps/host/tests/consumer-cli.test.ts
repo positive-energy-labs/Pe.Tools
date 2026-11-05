@@ -1,3 +1,6 @@
+import { NodeHttpClient, NodeServices } from "@effect/platform-node";
+import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
+import { readSessionScope } from "../src/sdk-session.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { testHostInputs } from "./effect-test.ts";
@@ -37,13 +40,13 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
     invoke,
   });
   const web = HttpRouter.toWebHandler(
-    opsCatalogRoute(() => Effect.die("not navigation")).pipe(nativeReadRoot(Layer.succeed(SdkDriver, () => Effect.promise(() => sdk())))).pipe(
+    opsCatalogRoute(() => Effect.die("not navigation")).pipe(nativeReadRoot(Layer.succeed(SdkDriver, () => Effect.tryPromise({ try: () => sdk(), catch: (error) => error })))).pipe(
       Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
     ),
     { disableLogger: true },
   );
   try {
-    const response = await web.handler(new Request("http://host/ops"), Context.empty() as never);
+    const response = await web.handler(new Request("http://host/ops"), Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, {})));
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toEqual({
@@ -59,7 +62,7 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
     vi.stubGlobal("fetch", async (input: string | URL | Request) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
       return url.pathname === "/ops"
-        ? web.handler(new Request(url), Context.empty() as never)
+        ? web.handler(new Request(url), Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, {})))
         : Response.json({ result: { recents: [] } });
     });
     const source = createCapabilityCatalogSource({
@@ -177,7 +180,10 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
       Layer.mergeAll(
         makeCallRoute(owner, undefined, { sdk: sdkSessions }).pipe(Layer.provide(testHostInputs)),
         opsCatalogRoute(() => Effect.die("not navigation")),
-      ).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args))))).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+      ).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args))))).pipe(
+        HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
+        Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
+      ),
       { disableLogger: true },
     );
   let web = makeWeb();
@@ -198,7 +204,7 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
             headers: req.headers as Record<string, string>,
             ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
           }),
-          Context.empty() as never,
+          Context.make(RequestIdentity, admittedRequestIdentity(minted.caller, readSessionScope(req.headers as Record<string, string>))),
         ),
       );
       if (lose && req.method === "POST" && req.url === "/actions") {

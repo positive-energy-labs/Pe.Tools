@@ -38,7 +38,8 @@ export const opsCatalogRoute = (spa: SpaFallback) =>
       const result = yield* Effect.result(
         Effect.gen(function* () {
           const scope = yield* Effect.try(() => readSessionScope(req.headers));
-          // Attachment observation is an input-owner read, not native content dispatch.
+          // ADR 0029 rule 16 exception: bridge.list preserves the no-attachment metadata fallback.
+          // Native content dispatch uses HostNativeRead; this observation never launches an op.
           if (!scope.session && !scope.bridgeSessionId && !scope.openDocumentId && !sessionParam &&
               (yield* (yield* RevitBridge).list).length === 0)
             return yield* Effect.fail(new NoRevitSession());

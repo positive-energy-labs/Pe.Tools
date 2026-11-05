@@ -87,7 +87,7 @@ export const settingsSchemaRoute = HttpRouter.add("GET", "/schemas/settings/*", 
         { status: result.failure.status },
       );
     const value = result.success.value;
-    const schemaJson = value && typeof value === "object" && !Array.isArray(value) ? value.schemaJson : undefined;
+    const schemaJson = value && typeof value === "object" && "schemaJson" in value ? value.schemaJson : undefined;
     if (typeof schemaJson !== "string" || !schemaJson)
       return Response.jsonUnsafe({ error: `No schema at ${schemaUrl}` }, { status: 404 });
     return Response.text(schemaJson, {
