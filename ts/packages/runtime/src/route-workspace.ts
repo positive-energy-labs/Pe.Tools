@@ -82,21 +82,65 @@ export const DEFAULT_WORK_HISTORY_LIMITS = { maxCount: 256, maxBytes: 512 * 1024
 export type WorkReadView = "read" | "raw" | "view";
 /** The admitted feed's two shapes: the view with history (`work`), or the snapshot acks follow (`work-acks`). */
 export type WorkFeedShape = "work" | "work-acks";
+/** One Work read as it starts: the exact request a host consumer reserves its occurrence for. */
+export type WorkReadRequest =
+  | { readonly kind: "read"; readonly key: WorkKey; readonly view: WorkReadView }
+  | {
+      readonly kind: "feed";
+      readonly key: WorkKey;
+      readonly admission: WorkAdmission;
+      readonly shape: WorkFeedShape;
+    };
+/**
+ * An opaque per-attempt token the host mints when a read begins. Runtime never looks inside it; it
+ * only carries it through the queue back into that same host's hooks, which validate it by class.
+ */
+export abstract class WorkCarriage {
+  declare private readonly workCarriage: never;
+}
+export type WorkReadBegin =
+  | { readonly ok: true; readonly carriage: WorkCarriage | undefined }
+  | { readonly ok: false; readonly error: unknown };
+/** A request's explicit Work carriage: begun synchronously at read start, before any queue. */
+export interface WorkReadContext {
+  begin(request: WorkReadRequest): WorkReadBegin;
+}
 /** A recorded Work read source (ADR 0031): each canonical read as recorded, or a typed rejection. */
 export interface WorkReadSource {
-  read(key: WorkKey, view: WorkReadView): Promise<unknown>;
-  feed(key: WorkKey, admission: WorkAdmission, shape: WorkFeedShape): Promise<unknown>;
+  /** Refuses (`ok: false`) before any access when the read cannot be served historically. */
+  begin(request: WorkReadRequest, context: WorkReadContext | undefined): WorkReadBegin;
+  read(key: WorkKey, view: WorkReadView, carriage: WorkCarriage | undefined): Promise<unknown>;
+  feed(
+    key: WorkKey,
+    admission: WorkAdmission,
+    shape: WorkFeedShape,
+    carriage: WorkCarriage | undefined,
+  ): Promise<unknown>;
 }
 /** Live capture of the value about to be delivered. The host adapter truncates on its own capture loss
  * (K4); a rejection here is a port fault: it fails that read and ends an admitted feed. */
 export interface WorkReadCapture {
-  read(key: WorkKey, view: WorkReadView, value: unknown): Promise<void>;
+  /** A capture that cannot begin leaves this read uncaptured; the live read is unchanged (K4). */
+  begin(request: WorkReadRequest, context: WorkReadContext | undefined): WorkReadBegin;
+  read(key: WorkKey, view: WorkReadView, value: unknown, carriage: WorkCarriage | undefined): Promise<void>;
   /** A live body read that failed after admission; the caller still receives the original error. */
-  readFailed(key: WorkKey, view: WorkReadView, error: unknown): Promise<void>;
-  feedFailed(key: WorkKey, admission: WorkAdmission, shape: WorkFeedShape, error: unknown): Promise<void>;
+  readFailed(key: WorkKey, view: WorkReadView, error: unknown, carriage: WorkCarriage | undefined): Promise<void>;
+  feedFailed(
+    key: WorkKey,
+    admission: WorkAdmission,
+    shape: WorkFeedShape,
+    error: unknown,
+    carriage: WorkCarriage | undefined,
+  ): Promise<void>;
   /** Stops capture as truncated now, in memory; the promise is only its best-effort persistence. */
   stop(reason: "backlog"): Promise<void>;
-  feed(key: WorkKey, admission: WorkAdmission, shape: WorkFeedShape, value: unknown): Promise<void>;
+  feed(
+    key: WorkKey,
+    admission: WorkAdmission,
+    shape: WorkFeedShape,
+    value: unknown,
+    carriage: WorkCarriage | undefined,
+  ): Promise<void>;
 }
 export type RouteWorkspaceOptions = {
   registrations: readonly RouteWorkspaceRegistration[];
@@ -150,8 +194,11 @@ export class RouteWorkspace {
     return this.options.store;
   }
   /** A recorded value is served only as the Work it was requested for. */
-  async #recorded(scope: WorkKey, view: WorkReadView) {
-    return this.#requested(scope, await this.options.recorded!.read(scope, view));
+  async #recorded(scope: WorkKey, view: WorkReadView, context: WorkReadContext | undefined) {
+    const source = this.options.recorded!;
+    const begun = source.begin({ kind: "read", key: scope, view }, context);
+    if (!begun.ok) throw begun.error;
+    return this.#requested(scope, await source.read(scope, view, begun.carriage));
   }
   #requested<A>(scope: WorkKey, value: A): A {
     const handle = (value as { handle?: { key?: WorkKey } } | null)?.handle;
@@ -438,25 +485,33 @@ export class RouteWorkspace {
   }
 
   /** The route's Work at the scope; null when the route is unregistered or no Work exists yet. */
-  async read(scope: WorkKey, route: string) {
-    return this.#captured(scope, "read", () => this.#read(scope, route, false));
+  async read(scope: WorkKey, route: string, context?: WorkReadContext) {
+    return this.#captured(scope, "read", context, () => this.#read(scope, route, false, false, context));
   }
   /**
    * Live capture records exactly the value delivered, a null "no Work" included, before it is
    * returned. A failed body read is offered to capture, then its original error is rethrown.
    */
-  async #captured<A>(scope: WorkKey, view: WorkReadView, live: () => Promise<A>): Promise<A> {
+  async #captured<A>(
+    scope: WorkKey,
+    view: WorkReadView,
+    context: WorkReadContext | undefined,
+    live: () => Promise<A>,
+  ): Promise<A> {
     const capture = this.options.capture;
     if (!capture) return live();
+    // Begun at read start, before the live thunk is queued; a failed begin reads uncaptured.
+    const begun = capture.begin({ kind: "read", key: scope, view }, context);
+    const carriage = begun.ok ? begun.carriage : undefined;
     let value: A;
     try {
       value = await live();
     } catch (error) {
       // The original error wins; a capture port fault on this path cannot replace it.
-      await capture.readFailed(scope, view, error).catch(() => undefined);
+      await capture.readFailed(scope, view, error, carriage).catch(() => undefined);
       throw error;
     }
-    await capture.read(scope, view, value);
+    await capture.read(scope, view, value, carriage);
     return value;
   }
 
@@ -468,11 +523,12 @@ export class RouteWorkspace {
   async readRaw(
     scope: WorkKey,
     route: string,
+    context?: WorkReadContext,
   ): Promise<{ doc: unknown; revision: number; handle: WorkHandle } | null> {
     if (!this.#registry.has(route)) return null;
     if (this.options.recorded)
-      return (await this.#recorded(scope, "raw")) as { doc: unknown; revision: number; handle: WorkHandle } | null;
-    return this.#captured(scope, "raw", async () => {
+      return (await this.#recorded(scope, "raw", context)) as { doc: unknown; revision: number; handle: WorkHandle } | null;
+    return this.#captured(scope, "raw", context, async () => {
       const raw = await this.#serialized(() => this.#carryOver(scope, route));
       if (raw == null) return null;
       const envelope = envelopeSchema.safeParse(raw);
@@ -485,18 +541,24 @@ export class RouteWorkspace {
    * A reader's view of the route: absent Work reads as the empty document at r0, the one `apply`
    * starts from. Null only for an unregistered route, so a registered route never reads unknown.
    */
-  async view(scope: WorkKey, route: string) {
-    return this.#captured(scope, "view", () => this.#read(scope, route, true));
+  async view(scope: WorkKey, route: string, context?: WorkReadContext) {
+    return this.#captured(scope, "view", context, () => this.#read(scope, route, true, false, context));
   }
 
-  async #read(scope: WorkKey, route: string, orEmpty: boolean, withHistory = false) {
+  async #read(
+    scope: WorkKey,
+    route: string,
+    orEmpty: boolean,
+    withHistory = false,
+    context?: WorkReadContext,
+  ) {
     const registration = this.#registry.get(route);
     if (!registration) return null;
     const { spec } = registration;
     if (this.options.recorded) {
       // A recorded history is the admitted feed's, bound with its admission; never a view plus guesses.
       if (withHistory) throw Error("A recorded Work feed is served only through observeAdmittedFeed");
-      return (await this.#recorded(scope, orEmpty ? "view" : "read")) as Awaited<ReturnType<typeof live>>;
+      return (await this.#recorded(scope, orEmpty ? "view" : "read", context)) as Awaited<ReturnType<typeof live>>;
     }
     const live = () => this.#serialized(async () => {
       const envelope = await this.#load(scope, spec, orEmpty);
@@ -1038,8 +1100,10 @@ export class RouteWorkspace {
     deliver: (value: OwnerValue<unknown>) => void,
     ack: (ack: WorkWriteAck) => void,
     failed: (error: unknown) => void,
+    context?: WorkReadContext,
   ): () => void {
     const { recorded, capture } = this.options;
+    const request = { kind: "feed", key: scope, admission, shape } as const;
     if (!recorded && !capture)
       return shape === "work"
         ? this.observe(scope, scope.route, deliver, true, true)
@@ -1068,12 +1132,18 @@ export class RouteWorkspace {
       }
     };
     if (recorded) {
-      void acquire(recorded.feed(scope, admission, shape).then((value) => this.#requested(scope, value)))
-        .then((got) => got && deliver(got));
+      // Begun before the recorded acquisition is constructed; a refusal touches no source.
+      const begun = recorded.begin(request, context);
+      void acquire(
+        begun.ok
+          ? recorded.feed(scope, admission, shape, begun.carriage).then((value) => this.#requested(scope, value))
+          : Promise.reject(begun.error),
+      ).then((got) => got && deliver(got));
       return close;
     }
     // A failed acquisition is offered to capture first; the original failure is what follows.
-    const lost = (error: unknown) => capture!.feedFailed(scope, admission, shape, error).catch(() => undefined);
+    const lost = (error: unknown, carriage: WorkCarriage | undefined) =>
+      capture!.feedFailed(scope, admission, shape, error, carriage).catch(() => undefined);
     let capturing = true;
     let pending = 0;
     let fellBack!: () => void;
@@ -1089,10 +1159,14 @@ export class RouteWorkspace {
       fellBack();
     };
     /** Resolves once this value is recorded, or as soon as capture stops; a late completion loses. */
-    const captured = (record: () => Promise<unknown>): Promise<unknown> => {
+    const captured = (record: (carriage: WorkCarriage | undefined) => Promise<unknown>): Promise<unknown> => {
       if (!capturing) return Promise.resolve();
       if (++pending > limit) return Promise.resolve(overflow());
-      const done = captures.then(() => (capturing ? record() : undefined)).finally(() => pending--);
+      // Each owner value begins its own attempt here, before the capture queue; after the
+      // fallback nothing is captured, so nothing begins.
+      const begun = capture!.begin(request, context);
+      const carriage = begun.ok ? begun.carriage : undefined;
+      const done = captures.then(() => (capturing ? record(carriage) : undefined)).finally(() => pending--);
       captures = done.catch(() => undefined);
       return Promise.race([done, fallback]);
     };
@@ -1106,8 +1180,12 @@ export class RouteWorkspace {
           if (closed) return;
           const ready =
             "error" in value
-              ? captured(() => lost(value.error)).then(() => value)
-              : acquire(captured(() => capture!.feed(scope, admission, shape, value.value)).then(() => value.value));
+              ? captured((carriage) => lost(value.error, carriage)).then(() => value)
+              : acquire(
+                  captured((carriage) => capture!.feed(scope, admission, shape, value.value, carriage)).then(
+                    () => value.value,
+                  ),
+                );
           deliveries = deliveries.then(async () => {
             const got = await ready;
             if (got && !closed) deliver(got);
@@ -1121,7 +1199,9 @@ export class RouteWorkspace {
       stop = this.observeFeed(
         scope,
         (snapshot) =>
-          void acquire(captured(() => capture!.feed(scope, admission, shape, snapshot)).then(() => snapshot)).then(
+          void acquire(
+            captured((carriage) => capture!.feed(scope, admission, shape, snapshot, carriage)).then(() => snapshot),
+          ).then(
             (got) => {
               if (!got) return;
               deliver(got);
@@ -1134,7 +1214,7 @@ export class RouteWorkspace {
           if (!held) return ack(write);
           if (held.push(write) > limit) overflow();
         },
-        (error) => void captured(() => lost(error)).then(() => end(error)),
+        (error) => void captured((carriage) => lost(error, carriage)).then(() => end(error)),
       );
     }
     if (closed) stop(); // a synchronous failure ended the feed before its subscription was known

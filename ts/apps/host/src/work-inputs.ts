@@ -3,7 +3,7 @@
  * identity, and its authoritative codec. The canonical RouteWorkspace reads live, captures what it
  * delivers, or replays through these adapters over the one taking store; never a second Work store.
  */
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import { z } from "zod";
 import {
   workHandleSchema,
@@ -15,15 +15,24 @@ import {
 } from "@pe/agent-contracts";
 import { canonicalJson } from "@pe/host-internal/native-read";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
-import type {
-  RouteWorkspace,
-  WorkFeedShape,
-  WorkReadCapture,
-  WorkReadSource,
+import {
+  WorkCarriage,
+  type RouteWorkspace,
+  type WorkFeedShape,
+  type WorkReadBegin,
+  type WorkReadCapture,
+  type WorkReadContext,
+  type WorkReadRequest,
+  type WorkReadSource,
 } from "@pe/runtime";
 import {
+  CurrentInputAttempt,
+  CurrentInputConsumption,
+  type InputConsumption,
+} from "./input-occurrence.ts";
+import { InvalidRead } from "./native-reads.ts";
+import {
   captureInput,
-  inputBindingKey,
   replayInput,
   type RecordingReader,
   type RecordingWriter,
@@ -94,36 +103,96 @@ export const workInputScope = (
 /** The composition's captured Effect edge; it rejects with the DoorFailure itself, class and status kept. */
 export type WorkInputRunner = <A>(effect: Effect.Effect<A, DoorFailure>) => Promise<A>;
 
+/** One begun Work read: its runner provides the request's consumption and this reserved attempt. */
+class WorkAttempt extends WorkCarriage {
+  constructor(readonly run: WorkInputRunner) {
+    super();
+  }
+}
+/** The only carriage these hooks accept: the host's own attempt, checked by class, never cast. */
+const attemptOf = (carriage: WorkCarriage | undefined) =>
+  carriage instanceof WorkAttempt ? carriage : undefined;
+const occurrenceOf = (request: WorkReadRequest) =>
+  request.kind === "read"
+    ? { input: workInput(request.key, request.view), scope: workInputScope(request.key) }
+    : { input: workInput(request.key, "feed"), scope: workInputScope(request.key, request) };
+
 /**
- * Historical Work: each canonical read and admitted feed answered only by its recorded taking.
- * `bindings` names the exact taking per `inputBindingKey`; an unbound repeat stays ambiguous.
+ * A request's Work carriage over its own consumption. `begin` reserves the occurrence
+ * synchronously at read start; the attempt's runner is the request's captured `run` with that same
+ * consumption and the reserved attempt provided, so the Work queue cannot cross-bind requests.
  */
-export const recordedWorkSource = (
-  reader: RecordingReader,
-  run: WorkInputRunner,
-  bindings: ReadonlyMap<string, string> = new Map(),
-): WorkReadSource => {
-  const replay = <A>(input: WorkInput, scope: string, codec: Schema.Codec<A, Schema.Json>) =>
-    run(replayInput(reader, input, scope, codec, bindings.get(inputBindingKey(input, scope))));
+export const workReadContext = (consumption: InputConsumption, run: WorkInputRunner): WorkReadContext => ({
+  begin: (request) => {
+    const { input, scope } = occurrenceOf(request);
+    const started = consumption.start(input, scope);
+    if (Result.isFailure(started)) return { ok: false, error: started.failure };
+    const attempt = started.success;
+    return {
+      ok: true,
+      carriage: new WorkAttempt((effect) =>
+        run(
+          effect.pipe(
+            Effect.provideService(CurrentInputAttempt, attempt),
+            Effect.provideService(CurrentInputConsumption, consumption),
+          ),
+        ),
+      ),
+    };
+  },
+});
+
+const noContext = () =>
+  new InvalidRead({
+    message: "Historical Work needs its consumer's read context",
+    status: 409,
+    problem: "recording.context",
+  });
+
+/**
+ * Historical Work: each canonical read and admitted feed answered only by the taking its own
+ * consumer's attempt selects. Without that context it refuses before any access; no root fallback.
+ */
+export const recordedWorkSource = (reader: RecordingReader): WorkReadSource => {
+  const replay = <A>(carriage: WorkCarriage | undefined, request: WorkReadRequest, codec: Schema.Codec<A, Schema.Json>) => {
+    const attempt = attemptOf(carriage);
+    if (!attempt) return Promise.reject(noContext());
+    const { input, scope } = occurrenceOf(request);
+    return attempt.run(replayInput(reader, input, scope, codec));
+  };
   return {
-    read: (key, view) => replay(workInput(key, view), workInputScope(key), workInputCodecs[view]),
-    feed: (key, admission, shape) =>
-      replay(workInput(key, "feed"), workInputScope(key, { admission, shape }), workFeedCodecs[shape]),
+    begin: (request, context) => (context ? context.begin(request) : { ok: false, error: noContext() }),
+    read: (key, view, carriage) => replay(carriage, { kind: "read", key, view }, workInputCodecs[view]),
+    feed: (key, admission, shape, carriage) =>
+      replay(carriage, { kind: "feed", key, admission, shape }, workFeedCodecs[shape]),
   };
 };
 
 /**
  * Live capture of the value a Work read is about to deliver, through the one taking store. Capture
- * is ancillary (K4): a value that cannot be serialized or fails its codec, like a full store, I/O or
- * observer failure, stops the writer's capture as truncated and never fails the live Work.
+ * is ancillary (K4): a missing context, a value that cannot be serialized or fails its codec, like a
+ * full store, I/O or observer failure, stops the writer's capture as truncated and never fails the
+ * live Work. Each hook runs on its own attempt's runner; `latchRun` only persists a latch stop.
  */
 export const capturedWorkReads = (
   writer: RecordingWriter,
-  run: WorkInputRunner,
+  latchRun: WorkInputRunner,
   observed?: TakingObserver,
 ): WorkReadCapture => {
-  const keep = (input: WorkInput, scope: string, codec: Schema.Codec<unknown, Schema.Json>, value: unknown) =>
-    run(
+  // The latch is set synchronously; this adapter owns the best-effort marker writes.
+  let persisting: Promise<void> = Promise.resolve();
+  const stopNow = (reason: "backlog" | "unsupported") => {
+    const at = writer.capture.begin();
+    if (at === null) return persisting;
+    const persisted = latchRun(writer.capture.stop(at, reason)).catch(() => undefined);
+    return (persisting = persisting.then(() => persisted));
+  };
+  const uncaptured: WorkReadBegin = { ok: true, carriage: undefined };
+  const keep = (carriage: WorkCarriage | undefined, request: WorkReadRequest, codec: Schema.Codec<unknown, Schema.Json>, value: unknown) => {
+    const attempt = attemptOf(carriage);
+    if (!attempt) return Promise.resolve(); // never begun: capture already stopped
+    const { input, scope } = occurrenceOf(request);
+    return attempt.run(
       Effect.gen(function* () {
         // The recorded observation is the delivered value's JSON; an undefined root is not a null.
         const serialized = yield* Effect.try(() => {
@@ -139,24 +208,34 @@ export const capturedWorkReads = (
         }),
       ),
     );
+  };
   // A failed live read, kept through the one store: a supported DoorFailure as its class-faithful
   // taking, anything else stops capture as `unsupported`. Its exit is the failure itself, which the
   // workspace already rethrows as the original; only the taking matters here.
-  const lose = (input: WorkInput, scope: string, codec: Schema.Codec<unknown, Schema.Json>, error: unknown) =>
-    run(Effect.asVoid(Effect.exit(captureInput(writer, input, scope, codec, Effect.fail(error as DoorFailure), observed))));
+  const lose = (carriage: WorkCarriage | undefined, request: WorkReadRequest, codec: Schema.Codec<unknown, Schema.Json>, error: unknown) => {
+    const attempt = attemptOf(carriage);
+    if (!attempt) return Promise.resolve();
+    const { input, scope } = occurrenceOf(request);
+    return attempt.run(
+      Effect.asVoid(Effect.exit(captureInput(writer, input, scope, codec, Effect.fail(error as DoorFailure), observed))),
+    );
+  };
+  const readCodec = (view: keyof typeof workInputCodecs) =>
+    workInputCodecs[view] as Schema.Codec<unknown, Schema.Json>;
   return {
-    read: (key, view, value) =>
-      keep(workInput(key, view), workInputScope(key), workInputCodecs[view] as Schema.Codec<unknown, Schema.Json>, value),
-    feed: (key, admission, shape, value) =>
-      keep(workInput(key, "feed"), workInputScope(key, { admission, shape }), workFeedCodecs[shape], value),
-    readFailed: (key, view, error) =>
-      lose(workInput(key, view), workInputScope(key), workInputCodecs[view] as Schema.Codec<unknown, Schema.Json>, error),
-    feedFailed: (key, admission, shape, error) =>
-      lose(workInput(key, "feed"), workInputScope(key, { admission, shape }), workFeedCodecs[shape], error),
-    // The same writer's latch: set synchronously; the marker write is the returned best effort.
-    stop: (reason) => {
-      const at = writer.capture.begin();
-      return at === null ? Promise.resolve() : run(writer.capture.stop(at, reason));
+    // No context, or a start that cannot be reserved: stop capture now (K4); the read stays live.
+    begin: (request, context) => {
+      const begun = context?.begin(request);
+      if (begun?.ok) return begun;
+      void stopNow("unsupported");
+      return uncaptured;
     },
+    read: (key, view, value, carriage) => keep(carriage, { kind: "read", key, view }, readCodec(view), value),
+    feed: (key, admission, shape, value, carriage) =>
+      keep(carriage, { kind: "feed", key, admission, shape }, workFeedCodecs[shape], value),
+    readFailed: (key, view, error, carriage) => lose(carriage, { kind: "read", key, view }, readCodec(view), error),
+    feedFailed: (key, admission, shape, error, carriage) =>
+      lose(carriage, { kind: "feed", key, admission, shape }, workFeedCodecs[shape], error),
+    stop: (reason) => stopNow(reason),
   };
 };
