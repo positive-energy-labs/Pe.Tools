@@ -48,7 +48,7 @@ test("a targeted Work verb lands in the owner's journal through the declared rea
       if (event.ok) acks.push({ by: event.by, label: event.label, route: event.route });
     }),
   );
-  const pair = ["10:1", "30:1"] as const;
+  const pair: [string, string] = ["10:1", "30:1"];
   const ledger = f.fans.read("sheet-ledger");
   if (!isValidElement<Parameters<typeof LedgerBody>[0]>(ledger))
     throw Error("Fans Ledger did not render");
