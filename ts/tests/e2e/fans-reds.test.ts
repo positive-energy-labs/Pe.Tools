@@ -20,18 +20,21 @@ function find(page: TypedPage, scope: string, pattern: string) {
   return page.evaluate(
     (scope, pattern) => {
       const re = new RegExp(pattern, "i");
+      const name = (e: HTMLElement) =>
+        (e.innerText ?? "").trim() || e.getAttribute("aria-label") || "";
       const element = [
         ...document.querySelectorAll<HTMLElement>(
           `${scope} :is(button, a, [role="button"], [role="tab"], [role="option"], [tabindex])`,
         ),
       ]
-        .filter((e) => e.getClientRects().length > 0 && re.test((e.innerText ?? "").trim()))
+        // An icon-only control (a folded pane rail's expand press) is named by its aria-label.
+        .filter((e) => e.getClientRects().length > 0 && re.test(name(e)))
         .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0];
       if (!element) return null;
       element.scrollIntoView({ block: "center" });
       const rect = element.getBoundingClientRect();
       return {
-        text: element.innerText.trim(),
+        text: name(element),
         title: element.title || element.getAttribute("aria-description") || "",
         disabled: element.matches(':disabled, [aria-disabled="true"]'),
         selected: !!element.closest('[aria-selected="true"]'),
@@ -186,7 +189,7 @@ test("MUAS-1 return join is accepted from a visible enabled control and stages a
       await page.send("Page.navigate", { url: new URL("/ducts", process.env.E2E_WEB!).href });
       scope = '[data-pane-id="e-inbox"]';
       await new Promise((done) => setTimeout(done, 10_000));
-      if (!(await find(page, scope, "."))) await press(page, "body", "^Rulings$");
+      if (!(await find(page, scope, "."))) await press(page, "body", "^Expand Rulings$");
       control = await drawn(scope, "^accept join");
       seen.push({ route: "/ducts", control });
     }
