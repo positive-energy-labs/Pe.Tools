@@ -195,6 +195,7 @@ export function createCapabilityCatalogSource(options: {
         ...(admitted.status === "fulfilled" ? admitted.value : { packages: [], skills: [] }),
       }),
     };
+    cache.clear();
     cache.set(cacheKey, { at: Date.now(), catalog });
     return catalog;
   }

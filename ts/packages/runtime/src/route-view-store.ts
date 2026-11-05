@@ -125,7 +125,9 @@ export class RouteViewStore {
     const fields = this.admitted(lease.view.route)?.fields ?? null;
     const settable = fields && new Set(agentFields(fields, "set").map(([key]) => key));
     // A Pod has no builtin address: only the legacy branch reads one.
-    const agent = settable ? null : routeAddress(legacyViewRoute(lease.view.route)!).agent;
+    const builtin = legacyViewRoute(lease.view.route);
+    const agent = settable || !builtin ? null : routeAddress(builtin).agent;
+    if (!settable && !agent) return { ok: false, error: "view unavailable" };
     if (
       !Object.keys(patch).length ||
       (settable

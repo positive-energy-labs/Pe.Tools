@@ -75,6 +75,8 @@ describe("mounted route view custody", () => {
     store.publish({ ...ducts(id1), route: "acme-fans", page: { fan: text } });
     store.ack({ outcome: "rendered", instance: id1, commandId: intent!.commandId, revision: lease.revision, page: { fan: text }, facts: ducts(id1).facts });
     expect(await result).toMatchObject({ ok: true });
+    registered.length = 0;
+    await expect(store.set("t", "acme-fans", id1, lease.revision, { fan: text })).resolves.toMatchObject({ ok: false });
   });
 
   it("refuses ambiguity and only acknowledges the rendered patch on the exact context", async () => {
