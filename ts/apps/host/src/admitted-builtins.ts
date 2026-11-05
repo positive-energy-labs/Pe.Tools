@@ -32,11 +32,18 @@ export class AdmittedBuiltins extends Context.Service<
   }
 >()("pe/AdmittedBuiltins") {}
 
+/**
+ * Duplicate-owner guard, not a discovery filter: an admitted builtin registers into the same workspace through
+ * registerAdmitted, and RouteWorkspace.register refuses a second owner for a key. Discovery stays unfiltered.
+ */
+export const constructorWorkRegistrations = (registrations: readonly HostWorkRegistration[]) =>
+  registrations.filter((r) => !admittedBuiltinKeys.includes(r.spec.route));
+
 /** Acquisition precedes HTTP publication. The workspace remains the composition root's instance. */
 export function admittedBuiltinsLayer(
   workspace: RouteWorkspace,
   inventory: readonly BuiltinEnrollment[] = builtinEnrollments,
-  registrations: readonly HostWorkRegistration[] = createRouteRegistrations({ admittedKeys: [] }),
+  registrations: readonly HostWorkRegistration[] = createRouteRegistrations(),
 ) {
   return Layer.effect(
     AdmittedBuiltins,

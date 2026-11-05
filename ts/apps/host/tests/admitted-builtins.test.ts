@@ -10,6 +10,7 @@ import {
   AdmittedBuiltins,
   admittedBuiltinsLayer,
   BuiltinEnrollmentFailed,
+  constructorWorkRegistrations,
 } from "../src/admitted-builtins.ts";
 import { builtinEnrollments, type BuiltinEnrollment } from "../src/builtin-enrollment.ts";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -92,7 +93,7 @@ test("Ducts and Fans own independent canonical host Work registrations", async (
     });
     expect(presenter.resolvedWork!.spec.route).toBe("fans");
     expect(owner.resolvedWork!.spec.route).toBe("ducts");
-    expect(createRouteRegistrations().some((row) => row.spec.route === "ducts")).toBe(false);
+    expect(createRouteRegistrations().filter((row) => row.spec.route === "ducts")).toHaveLength(1);
   } finally {
     await close(run.scope);
   }
@@ -135,13 +136,42 @@ test("partial startup failure unwinds prior Work registration with a typed failu
     }),
   ).toMatchObject({ code: "WorkRouteUnregistered" });
 });
-test("cutover excludes the admitted owner from legacy Work registration", () => {
-  const keys = createRouteRegistrations().map((r) => r.spec.route);
-  expect(keys).not.toContain("captures");
-  expect(keys.length).toBeGreaterThan(0);
-  expect(
-    createRouteRegistrations({ admittedKeys: [keys[0]!] }).some((r) => r.spec.route === keys[0]),
-  ).toBe(false);
+test("Pea's catalog lists admitted Work; the constructor guard keeps one registry owner per key", async () => {
+  const registrations = createRouteRegistrations();
+  for (const key of ["fans", "ducts", "families"])
+    expect(registrations.filter((r) => r.spec.route === key), key).toHaveLength(1);
+  const root = mkdtempSync(join(tmpdir(), "pe-builtins-"));
+  roots.push(root);
+  const ws = new RouteWorkspace({
+    registrations: constructorWorkRegistrations(registrations),
+    store: fileRouteDocumentStore(root),
+  });
+  const run = await open(ws);
+  try {
+    if (!run.service) throw Error(JSON.stringify(run.result));
+    const listed = ws.list().map((r) => r.route);
+    for (const key of ["fans", "ducts"]) expect(listed.filter((r) => r === key), key).toHaveLength(1);
+    // The same owner answers the browser pane and Pea's work.* doors: a write lands one revision both read.
+    const key = bindWork("fans", null);
+    expect(
+      await ws.write(key, "fans", "pea", {
+        kind: "apply",
+        press: null,
+        expectedRevision: 0,
+        patches: [{ path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } } }],
+      }),
+    ).toMatchObject({ ok: true });
+    expect((await ws.view(key, "fans"))!.revision).toBe(1);
+  } finally {
+    await close(run.scope);
+  }
+  // Falsifier: without the guard the admitted owner collides with the constructor seat.
+  const unguarded = new RouteWorkspace({ registrations, store: fileRouteDocumentStore(root) });
+  const collided = await open(unguarded);
+  expect(collided.service).toBeUndefined();
+  expect(String(collided.result._tag === "Failure" ? Cause.pretty(collided.result.cause) : "")).toMatch(
+    /duplicate route/,
+  );
 });
 
 test("shutdown fences a neutral load that resolves after its acquisition scope closes", async () => {

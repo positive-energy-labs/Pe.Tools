@@ -34,7 +34,7 @@ async function admittedWorkspace(
       admittedBuiltinsLayer(
         work,
         builtinEnrollments.filter((entry) => entry.routeKey === "families"),
-        createRouteRegistrations({ admittedKeys: [], loadedFamilies }),
+        createRouteRegistrations({ loadedFamilies }),
       ),
       scope,
     ),

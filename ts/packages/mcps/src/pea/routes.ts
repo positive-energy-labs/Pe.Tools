@@ -1,9 +1,7 @@
 /**
- * The server-side route registry — the ONE place a new collaborative route is
- * wired. The host composition root registers
- * every entry; nothing else enumerates routes.
+ * The catalog projection of every Work route (ADR 0030 rule 1): Pea's doors list every entry, admitted or not.
+ * The host composition root decides which owner registers each key; nothing here filters routes out.
  */
-import { admittedBuiltinKeys } from "../../../agent-contracts/src/admitted-builtin-keys.ts";
 import type { HostWorkRegistration } from "../../../agent-contracts/src/host-route-admission.ts";
 import { tools } from "@pe/agent-contracts";
 
@@ -19,14 +17,10 @@ export function createRouteRegistrations(
   options: {
     hostBaseUrl?: string;
     loadedFamilies?: LoadedFamilies;
-    admittedKeys?: readonly string[];
   } = {},
 ): RouteRegistration[] {
   return Object.values(tools)
-    .filter(
-      (tool) =>
-        "work" in tool && !(options.admittedKeys ?? admittedBuiltinKeys).includes(tool.work.route),
-    )
+    .filter((tool) => "work" in tool)
     .map((tool) => ({
       spec: (tool as import("@pe/agent-contracts").Tool).work!,
       ...(tool.name === "families"

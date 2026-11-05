@@ -24,10 +24,7 @@ test.each(
   const loadedFamilies = vi.fn(async () => [
     { familyName: "Loaded family", types: [{ typeName: "Loaded type" }] },
   ]);
-  const legacyRegistration = createRouteRegistrations({
-    admittedKeys: [],
-    loadedFamilies,
-  }).find((r) => r.spec.route === "families")!;
+  const legacyRegistration = createRouteRegistrations({ loadedFamilies }).find((r) => r.spec.route === "families")!;
   expect(legacyRegistration.admit).toBeTypeOf("function");
   const module = composeHostRouteRegistration(familiesHostModule, [legacyRegistration]);
   const envelope = {

@@ -56,7 +56,6 @@ async function fixture(unreadable = false) {
   const entry = builtinEnrollments.find((e) => e.routeKey === "families")!;
   expect(entry).toBeDefined();
   const registrations = createRouteRegistrations({
-    admittedKeys: [],
     loadedFamilies: async () =>
       DEMO_FAMILIES.map((f) => ({
         familyName: f.familyName,
@@ -71,7 +70,7 @@ async function fixture(unreadable = false) {
     module,
   );
   if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
-  expect(createRouteRegistrations().some((r) => r.spec.route === "families")).toBe(false);
+  expect(createRouteRegistrations().filter((r) => r.spec.route === "families")).toHaveLength(1);
   let saved: any = {
     version: 1,
     schemaVersion: 1,
@@ -88,7 +87,8 @@ async function fixture(unreadable = false) {
     };
   const states = new Map<string, unknown>([["families", saved]]);
   const host = new RouteWorkspace({
-    registrations: createRouteRegistrations(),
+    // The constructor seat leaves families to its admitted owner, as the host composition root does.
+    registrations: createRouteRegistrations().filter((r) => r.spec.route !== "families"),
     store: {
       getState: async ({ route }) => states.get(route),
       setState: async ({ route, value }) => {

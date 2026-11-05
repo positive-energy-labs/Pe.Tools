@@ -1,4 +1,3 @@
-import { admittedBuiltinKeys } from "../../../packages/agent-contracts/src/admitted-builtin-keys.ts";
 import { Spawner } from "./harness/spawner.ts";
 import { currentMachine } from "./machine.ts";
 import { sdkSession } from "./sdk-session.ts";
@@ -24,7 +23,7 @@ import { join } from "node:path";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { RouteWorkspace, type PeaRuntimeCapabilities } from "@pe/runtime";
 import { createRouteRegistrations } from "@pe/mcps";
-import { admittedBuiltinsLayer } from "./admitted-builtins.ts";
+import { admittedBuiltinsLayer, constructorWorkRegistrations } from "./admitted-builtins.ts";
 import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { productRouteWorkPath } from "./product-paths.ts";
@@ -256,15 +255,14 @@ export function makeHttpLive(options: HttpLiveOptions) {
     const address = nodeServer.address();
     return address && typeof address !== "string" ? address.port : options.port;
   };
-  const allRegistrations = (options.routeRegistrations ?? createRouteRegistrations)({
-    admittedKeys: [],
+  const registrations = (options.routeRegistrations ?? createRouteRegistrations)({
     loadedFamilies: (...args) => hostLoadedFamilies(`http://127.0.0.1:${port()}`)(...args),
   });
-  const registrations = allRegistrations.filter((r) => !admittedBuiltinKeys.includes(r.spec.route));
   const work: HostWork = {
+    // Pea's catalog lists every Work route (ADR 0030 rule 1).
     registrations,
     workspace: new RouteWorkspace({
-      registrations,
+      registrations: constructorWorkRegistrations(registrations),
       store: fileRouteDocumentStore(productRouteWorkPath()),
     }),
   };
@@ -348,7 +346,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
       Layer.provide(ReceiptsLive),
       Layer.provide(NodeServices.layer),
       Layer.provide(ReceiptLifetime),
-      Layer.provide(admittedBuiltinsLayer(work.workspace, undefined, allRegistrations)),
+      Layer.provide(admittedBuiltinsLayer(work.workspace, undefined, registrations)),
     );
   }
 
@@ -380,6 +378,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provide(ReceiptsLive),
     Layer.provide(NodeServices.layer),
     Layer.provide(ReceiptLifetime),
-    Layer.provide(admittedBuiltinsLayer(work.workspace, undefined, allRegistrations)),
+    Layer.provide(admittedBuiltinsLayer(work.workspace, undefined, registrations)),
   );
 }

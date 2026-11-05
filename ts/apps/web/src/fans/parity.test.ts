@@ -263,12 +263,14 @@ test("the independent Ducts/Fans census classifies all 63 rows with an executabl
     }
 });
 
-test("one builtin manifest enrolls Ducts and Fans exactly once and legacy owns neither", async () => {
+test("one builtin manifest enrolls Ducts and Fans exactly once and the catalog lists each once", async () => {
   expect(builtinRouteKeys.length).toBeGreaterThan(0);
   expect(builtinRouteKeys.filter((key) => key === "ducts")).toHaveLength(1);
   expect(builtinRouteKeys.filter((key) => key === "fans")).toHaveLength(1);
-  expect(createRouteRegistrations().map((row) => row.spec.route)).not.toContain("ducts");
-  expect(createRouteRegistrations().map((row) => row.spec.route)).not.toContain("fans");
+  // Pea's catalog lists each admitted route once (ADR 0030 rule 1); the admitted owner registers it.
+  const listed = createRouteRegistrations().map((row) => row.spec.route);
+  expect(listed.filter((key) => key === "ducts")).toHaveLength(1);
+  expect(listed.filter((key) => key === "fans")).toHaveLength(1);
   const owner = await loadBuiltinRoute("ducts", builtinRouteStamp("ducts"));
   const fans = await loadBuiltinRoute("fans", builtinRouteStamp("fans"));
   expect(owner.ok && fans.ok).toBe(true);
