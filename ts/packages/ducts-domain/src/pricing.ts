@@ -521,13 +521,13 @@ export function applyRequest(
   ].sort((a, b) => a.id - b.id);
   const components = drops(priced.edit.componentDrops);
   const flowWrite = (id: number, cfm: number, source: string | null) => ({ id, cfm, source });
+  // A derived flow needs its network group's air mover. An authored flow inside a fan walk needs no
+  // group: the walk starts at its unit, which is the air mover (a fan walk snapshot has no groups).
+  const driven = (node: DuctSnapshot["nodes"][number]) =>
+    priced.next.byGroup[node.groupId ?? ""]?.hasAirMover ||
+    (snapshot.walk != null && priced.edit.flows[String(node.id)] != null);
   const terminalFlows = snapshot.nodes
-    .filter(
-      (node) =>
-        node.kind === "terminal" &&
-        inScope(node.id) &&
-        priced.next.byGroup[node.groupId ?? ""]?.hasAirMover,
-    )
+    .filter((node) => node.kind === "terminal" && inScope(node.id) && driven(node))
     .flatMap((node) => {
       const flow = priced.flows.get(node.id);
       if (flow?.cfm == null) return [];
