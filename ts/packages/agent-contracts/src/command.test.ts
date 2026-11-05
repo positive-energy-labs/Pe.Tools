@@ -35,7 +35,7 @@ describe("portable tool consumers", () => {
         "/empty": {},
       },
     });
-    expect(workCounts(doc, tools.pods.work.editable)).toEqual({ proposals: 1, unfinished: 2 });
+    expect(workCounts(doc, tools.pods.work.editable)).toEqual({ unfinished: 1 });
     expect(editableCells(doc, tools.pods.work.editable).map(({ path }) => path)).toEqual([
       ["fields", "/payload"],
       ["fields", "/empty"],

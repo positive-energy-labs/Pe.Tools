@@ -92,8 +92,7 @@ const snap = (segments: Segment[], order: string[] | null = ORDER): DuctSnapshot
       : {}),
   };
 };
-const working = (phase: string | null, rung: "edit" | "suggestion" = "edit") =>
-  designOf({ workingPhase: { [rung]: { value: phase } } });
+const working = (phase: string | null) => designOf({ workingPhase: { edit: { value: phase } } });
 
 /** Project A's shape: Existing run 1 -> 2; Future duct 3 joined to 2's end and lying inside duct 4. */
 const projectA = () => {
@@ -149,10 +148,12 @@ it("a demolished element, and one only proximity would join, warn too; one touch
   ]);
 });
 
-it("the route reads the edit working phase, else Pea's suggestion; a person's edit null reads every element", () => {
+it("the route reads the edit working phase; an edit null reads every element", () => {
+  expect(workingPhaseOf(working("Existing"))).toBe("Existing");
+  expect(workingPhaseOf(working(null))).toBeNull();
   const before = projectA();
   // Proximity never sees the left-out duct: no inference joins duct 2's freed end to it.
-  const t = tolerated(before, working("Existing", "suggestion"));
+  const t = tolerated(before, working("Existing"));
   expect(t.snapshot.segments.map((s) => s.id)).toEqual([1, 2, 4]);
   expect(t.findings.map((f) => f.id)).toEqual(["out-of-phase:3"]);
   // With no working phase the Future duct is in the network: duct 4's end, inside it, taps it.

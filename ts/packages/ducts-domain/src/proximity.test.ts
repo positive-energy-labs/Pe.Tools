@@ -529,7 +529,7 @@ const pair = (gapIn: number, lateralIn = 0, deg = 0) => {
   ];
 };
 
-it("a edit connect confirms an inference on its link; a suggestion does not", () => {
+it("an edit connect confirms an inference on its link", () => {
   const before = snap(pair(0.3, 0.6));
   const id = "proximity:1:2|2:1";
   expect(tolerate(before).links).toEqual([

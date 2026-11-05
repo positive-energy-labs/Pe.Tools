@@ -83,6 +83,7 @@ test("Families admission preserves axes and the mount journals preview with capt
           seal: {
             requestHash: "sealed",
             work: { handle: admission.input.work },
+            documentMark: { session: "", openId: "", observedSince: null, changedAt: null },
             incarnation: {},
             dependencies: "deps",
           },
@@ -117,6 +118,8 @@ test("Families admission preserves axes and the mount journals preview with capt
     readings: {
       lifetime: "subscription",
       subscribe(request, token, deliver) {
+        // The route's loaded-families catalog reading is declared but not under test here.
+        if (request.key.op === "revit.catalog.loaded-families") return () => {};
         if (request.key.op !== "families.read")
           return source.readings.subscribe(request, token, deliver);
         deliver(matrix as any);
@@ -151,7 +154,8 @@ test("Families admission preserves axes and the mount journals preview with capt
     await vi.waitFor(() =>
       expect(mount.review("apply")?.preview).toMatchObject({ previewOnly: true }),
     );
-    expect(native).not.toHaveBeenCalled();
+    // The preview never takes the native /call door; the shared freshness probe may still resolve.
+    expect(native.mock.calls.map(([path]) => path)).not.toContain("/call");
     const advanced = store.submitWork(
       {
         route: "families",

@@ -35,7 +35,12 @@ const snapshot = (revision: number) =>
   ({
     kind: "snapshot",
     key: "work",
-    value: { revision, doc: { amount: revision }, history: { from: revision + 1, acks: [] } },
+    value: {
+      handle: { key, revision },
+      revision,
+      doc: { amount: revision },
+      history: { from: revision + 1, acks: [] },
+    },
   }) as Frame;
 function harness(replay: Frame[] = []) {
   const listeners = new Map<string, (frame: Frame) => void>();
@@ -73,6 +78,7 @@ test("subscribe before snapshot, buffer and sort acks, drop revisions covered by
   h.emit("work", {
     ...frame,
     value: {
+      handle: { key, revision: 1 },
       revision: 1,
       doc: { amount: 1 },
       history: { from: 1, acks: [(ack(1) as Extract<Frame, { kind: "event" }>).value] },

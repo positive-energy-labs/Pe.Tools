@@ -117,7 +117,14 @@ test("decoded subject opens existing host Work and never opens an encoded worksp
   );
   try {
     await acceptedWork(mount);
-    expect(mount.work()).toEqual({ revision: 1, value: { amount: 41, note: "" } });
+    expect(mount.work()).toEqual({
+      handle: {
+        key: { binding: "workspace", route: "tiny", target: null, work: "schedule:fixture" },
+        revision: 1,
+      },
+      revision: 1,
+      value: { amount: 41, note: "" },
+    });
     expect(opened.length).toBeGreaterThan(0);
     expect(
       opened.every(

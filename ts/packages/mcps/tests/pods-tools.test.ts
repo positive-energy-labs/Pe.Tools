@@ -86,26 +86,26 @@ test("Pea enumerates Pod members and proposes revision-checked Work without rout
       ok: true,
       result: { revision: 1, doc: { basis: { member } } },
     });
-    const suggestion = {
+    const edit = {
       key: "route:pods.edit",
       workspaceId: "member-a",
       expectedRevision: 1,
-      input: { patches: [{ path: ["fields", "/x", "suggestion"], value: { value: 2 } }] },
+      input: { patches: [{ path: ["fields", "/x", "edit"], value: { value: 2 } }] },
     };
-    expect(await run(peDo, suggestion)).toMatchObject({
+    expect(await run(peDo, edit)).toMatchObject({
       ok: true,
       result: { write: { by: "pea", press: null } },
     });
-    expect(await run(peDo, suggestion)).toMatchObject({ ok: false });
+    expect(await run(peDo, edit)).toMatchObject({ ok: false });
     expect(
       await run(peDo, {
-        ...suggestion,
+        ...edit,
         expectedRevision: 2,
         input: { patches: [{ path: ["basis"], value: null }] },
       }),
     ).toMatchObject({ ok: false });
     expect(await run(peRead, { key: "route:pods", workspaceId: "member-a" })).toMatchObject({
-      result: { doc: { basis: { sha256: "v1" }, fields: { "/x": { suggestion: { value: 2 } } } } },
+      result: { doc: { basis: { sha256: "v1" }, fields: { "/x": { edit: { value: 2 } } } } },
     });
     expect(registrations.every((row) => !("handlers" in row))).toBe(true);
     expect(settingsRouteState).not.toHaveProperty("commands");

@@ -201,8 +201,10 @@ async function hostWorkDoor(seed: unknown) {
     doc: scheduleGridRouteState.schema.parse(seed),
     history: [],
   };
-  const registrations = createRouteRegistrations();
-  expect(registrations.some((r) => r.spec.route === "schedules")).toBe(false);
+  // Pea's catalog lists admitted Work once (805b9990); the constructor seat leaves schedules to its
+  // admitted owner, as the host composition root does.
+  expect(createRouteRegistrations().filter((r) => r.spec.route === "schedules")).toHaveLength(1);
+  const registrations = createRouteRegistrations().filter((r) => r.spec.route !== "schedules");
   const ws = new RouteWorkspace({
     registrations,
     store: {
@@ -449,6 +451,7 @@ test("push traverses U8s preview, review, real consent owner, commit and retaine
         seal: {
           requestHash: "sealed",
           work: { handle: admission.input.work },
+          documentMark: { session: "", openId: "", observedSince: null, changedAt: null },
           incarnation: {},
           dependencies: "deps",
         },

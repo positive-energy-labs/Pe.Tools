@@ -306,7 +306,7 @@ test("Rulings use explicit pills and stage marks without replacing an excluding 
     ],
   });
   expect(edit.container.querySelector('[data-key="rules:one"]')?.getAttribute("data-stage")).toBe(
-    "proposed",
+    "edit",
   );
 });
 
