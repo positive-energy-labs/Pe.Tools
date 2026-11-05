@@ -92,10 +92,10 @@ const previewResult = (derivedRequest: unknown) => ({
   seal: {
     requestHash: "sealed",
     work: { handle: previewInput.work },
+    documentMark: { ...previewTarget.ref, observedSince: null, changedAt: null },
     incarnation: {},
     dependencies: "deps",
   },
-  takenAt: "2026-11-03T00:00:00Z",
 });
 function previewReceipt(key: string, input: unknown, result: unknown) {
   const receipt = actionReceiptSchema.parse({
@@ -117,7 +117,7 @@ function previewReceipt(key: string, input: unknown, result: unknown) {
 }
 
 function openPreview(
-  key: "ducts.preview-losses" | "families.apply.preview",
+  key: "ducts.plan-losses" | "families.apply.preview",
   input = previewInput,
 ) {
   const issuer = createRouteTokenIssuer();
@@ -146,7 +146,7 @@ function openPreview(
 }
 
 test.each([
-  ["ducts.preview-losses", { edits: [{ element: "duct-A", size: 12 }] }],
+  ["ducts.plan-losses", { edits: [{ element: "duct-A", size: 12 }] }],
   ["families.apply.preview", { familyNames: ["Pump"] }],
 ] as const)(
   "%s publishes sealed result and receipt with exact Work/target",
