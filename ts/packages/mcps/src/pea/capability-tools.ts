@@ -946,7 +946,7 @@ async function dispatch(
               target: { session: null, document: null },
             }
           : await routeWorkScope(workTarget);
-        const result = await routeFetch(parsed.route, scope.query);
+        const result = peaWorkValue(await routeFetch(parsed.route, scope.query), payload.schema === true);
         if (parsed.route === familiesRouteState.route && !("isError" in result))
           result.hint =
             "This is authored Work. Read route:families.view for the currently visible matrix or past reading; no matrix read is started.";
@@ -1038,6 +1038,17 @@ async function dispatch(
 }
 
 /** Workspace Work and browser leases keep their own addressing contracts. */
+/**
+ * Pea's Work value: doc, revision, handle and provenance as the host read them. The transport JSON
+ * Schema (74557 bytes against a 180-byte /fans doc, Driver C13) stays out unless the read asks
+ * `{schema: true}`; the host still validates every write against it.
+ */
+export function peaWorkValue(result: Record<string, unknown>, withSchema = false) {
+  if (withSchema || "isError" in result || !("schema" in result)) return result;
+  const { schema: _schema, ...work } = result;
+  return { ...work, schemaHint: "Pass input {schema: true} to this read for the Work JSON Schema." };
+}
+
 function documentWork(row: Capability): boolean {
   const route = parseRouteKey(row.key);
   return (

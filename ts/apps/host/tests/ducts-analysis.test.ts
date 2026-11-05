@@ -527,19 +527,11 @@ test("canonical staged component constraints drive shared analysis without claim
     ],
     source: "One component design",
   };
-  let staged = fansDocumentSchema.parse({
-    ...doc,
-    calculation: { ...doc.calculation, flow: { suggestion: { value: design } } },
-  });
-  f.sources.readWork = works(() => staged, 2);
-  const proposal = await f.api.read(
-    read({ kind: "fresh", target: f.target }, { kind: "document" }, { projection: "components" }),
-  );
-  expect(proposal.rows[0]!.component?.status).toBe("underdetermined");
-  staged = fansDocumentSchema.parse({
+  const staged = fansDocumentSchema.parse({
     ...doc,
     calculation: { ...doc.calculation, flow: { edit: { value: design } } },
   });
+  f.sources.readWork = works(() => staged, 2);
   const fresh = ductsAnalysisResponseSchema.parse(
     await f.api.read(
       read(
@@ -817,7 +809,6 @@ function candidateWork() {
     terminalDrops: {
       "2": {
         edit: { value: { inWg: 0.12, source: "Approved purpose point" } },
-        suggestion: { value: { inWg: 9, source: "Not accepted" } },
       },
     },
     componentDrops: { "3": { edit: { value: { inWg: 0.02, source: "Stated component" } } } },
@@ -1004,11 +995,9 @@ test("apply-request refuses changed producer outputs, custody, Work and unsuppor
     ).toBe(false);
 });
 
-test("apply-request cannot turn proposal-only or physical fan required head into native writes", async () => {
+test("apply-request cannot turn empty Work or physical fan required head into native writes", async () => {
   const f = fixture();
-  let doc = fansDocumentSchema.parse({
-    terminalDrops: { "2": { suggestion: { value: { inWg: 2, source: "Unaccepted" } } } },
-  });
+  let doc = fansDocumentSchema.parse({});
   f.sources.readWork = works(() => doc, 1);
   let initial = await f.api.read(read({ kind: "fresh", target: f.target }));
   await expect(f.api.read(candidateRead(initial.analysisId))).rejects.toThrow(

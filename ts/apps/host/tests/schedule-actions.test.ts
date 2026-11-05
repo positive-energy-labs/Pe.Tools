@@ -172,7 +172,7 @@ test("partial native outcome clears only a completely acknowledged cell and keep
   expect((await f.view()).doc.cells["2::2"].edit.value).toBe("200 VA");
 });
 
-test("Work edits finish while native execution waits and settlement preserves later staged/proposed values", async () => {
+test("Work edits finish while native execution waits and settlement retires only the consumed value, so a later staged value survives", async () => {
   const f = await setup();
   f.hold();
   const admission = await f.admission();
@@ -181,14 +181,12 @@ test("Work edits finish while native execution waits and settlement preserves la
   expect(
     await f.patch([
       { path: ["cells", "1::2", "edit"], value: { value: "200 VA" } },
-      { path: ["cells", "1::2", "suggestion"], value: { value: "220 VA", by: "pea" } },
     ]),
   ).toMatchObject({ ok: true });
   f.release();
   await f.owner().wait(admission.id);
   expect((await f.view()).doc.cells["1::2"]).toMatchObject({
     edit: { value: "200 VA" },
-    suggestion: { value: "220 VA" },
   });
 });
 
