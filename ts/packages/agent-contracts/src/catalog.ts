@@ -79,13 +79,14 @@ export function linkCatalog(entries: readonly CatalogLink[]): string[] {
       errors.push(`${entry.key}: geometry over many subjects requires a cap`);
     byKey.set(entry.key, entry);
   }
-  // Seal at preview binds to a rolled-back read of the same footprint; recheck at apply binds to the write.
+  // The seal binds at the plan (ADR 0030 rule 4): a Read with an empty footprint, or a TransactRead
+  // rehearsal that rolls back (the rollback check above). Recheck at apply binds to the write.
   for (const entry of byKey.values()) {
     if (!entry.previewBy) continue;
     const preview = byKey.get(entry.previewBy);
     if (!preview) errors.push(`${entry.key}: unknown preview ${entry.previewBy}`);
-    else if (preview.effect !== "TransactRead")
-      errors.push(`${entry.key}: preview ${preview.key} is ${preview.effect}, not TransactRead`);
+    else if (preview.effect !== "Read" && preview.effect !== "TransactRead")
+      errors.push(`${entry.key}: plan ${preview.key} is ${preview.effect}, not Read or TransactRead`);
     else if ([...preview.touches].sort().join() !== [...entry.touches].sort().join())
       errors.push(`${entry.key}: preview ${preview.key} touches differ`);
   }
