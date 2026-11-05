@@ -60,7 +60,7 @@
     "./table/view": "./src/components/master-table/view.ts",
     "./theme": "./src/theme.ts",
     "./lang/popover": "./src/components/lang/popover.tsx",
-    "./lang/preview-action": "./src/components/lang/preview-action.tsx",
+    "./lang/write-action": "./src/components/lang/write-action.tsx",
     "./lang/hover-card": "./src/components/lang/hover-card.tsx",
     "./lang/outcome": "./src/components/lang/outcome.tsx",
     "./lang/surface": "./src/components/lang/surface.tsx",

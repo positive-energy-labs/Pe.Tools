@@ -39,14 +39,15 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
     revision: 1,
   };
   const seal = (s: typeof snapshot) =>
-    writeSeal(
-      applyRequest(s, price(s, {}, work, (work) ?? neutralFansWork, EMPTY_CATALOGS), "", []),
-      work,
-      handle,
-      { openId: "doc" },
-      [],
-      ductWriteEvidence(s),
-    );
+    writeSeal({
+      request: applyRequest(s, price(s, {}, work, (work) ?? neutralFansWork, EMPTY_CATALOGS), "", []),
+      input: work,
+      work: handle,
+      incarnation: { openId: "doc" },
+      documentMark: { session: "A", openId: "doc", observedSince: null, changedAt: null },
+      consumed: [],
+      evidence: ductWriteEvidence(s),
+    });
   snapshot.walk = {
     startId: 14577391,
     hops: 1,

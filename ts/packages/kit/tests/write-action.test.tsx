@@ -3,7 +3,7 @@ import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { PreviewAction, type PreviewHeld } from "../src/components/lang/preview-action";
+import { WriteAction, type WriteHeld } from "../src/components/lang/write-action";
 import { TooltipProvider } from "../src/components/lang/tooltip";
 
 afterEach(() => {
@@ -11,7 +11,7 @@ afterEach(() => {
   spy.mockClear();
 });
 
-const HELD: PreviewHeld = { word: "heal · previewed 3", summary: "3 pass · 1 refused" };
+const HELD: WriteHeld = { word: "heal · previewed 3", summary: "3 pass · 1 refused" };
 
 const spy = vi.fn();
 
@@ -28,13 +28,13 @@ function Route({ commit }: { commit?: () => Promise<{ message: string } | null> 
   return (
     <TooltipProvider delay={0}>
       <button onClick={() => setInput((n) => n + 1)}>change input</button>
-      <PreviewAction
+      <WriteAction
         label="preview heal"
         says="Preview healing"
         held={held ? HELD : null}
         stale={rest !== null && !held ? "changed since preview" : null}
-        preview={previewed}
-        commit={{
+        plan={previewed}
+        apply={{
           label: "apply heal",
           says: "Heal what passed",
           run: commit ?? (async () => null),
@@ -46,8 +46,7 @@ function Route({ commit }: { commit?: () => Promise<{ message: string } | null> 
 }
 
 const previewed = () => spy;
-const mark = () =>
-  document.querySelector("[data-preview-action]")!.getAttribute("data-preview-action");
+const mark = () => document.querySelector("[data-write-action]")!.getAttribute("data-write-action");
 
 test("idle, previewing, armed; Escape keeps it armed; reopening does not re-preview; an input change disarms", async () => {
   render(<Route />);
@@ -89,14 +88,14 @@ test("committing ends in done or refused, in the popover", async () => {
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "preview heal" })));
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "apply heal" })));
   expect(commit).toHaveBeenCalledTimes(1);
-  expect(document.querySelector('[data-preview-outcome="done"]')?.textContent).toBe("healed 3");
+  expect(document.querySelector('[data-write-outcome="done"]')?.textContent).toBe("healed 3");
   cleanup();
 
   const refuse = vi.fn().mockResolvedValue({ message: "Revit refused the transaction" });
   render(<Route commit={refuse} />);
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "preview heal" })));
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "apply heal" })));
-  expect(document.querySelector('[data-preview-outcome="refused"]')?.textContent).toBe(
+  expect(document.querySelector('[data-write-outcome="refused"]')?.textContent).toBe(
     "Revit refused the transaction",
   );
   // a refused commit leaves the preview armed to try again
@@ -106,13 +105,13 @@ test("committing ends in done or refused, in the popover", async () => {
 test("a held preview reopens even while a fresh preview is refused", async () => {
   render(
     <TooltipProvider delay={0}>
-      <PreviewAction
+      <WriteAction
         label="preview heal"
         says="Preview healing"
         refusal="An open document is required"
         held={HELD}
-        preview={async () => null}
-        commit={{ label: "apply heal", says: "Heal", run: async () => null, done: "healed" }}
+        plan={async () => null}
+        apply={{ label: "apply heal", says: "Heal", run: async () => null, done: "healed" }}
       />
     </TooltipProvider>,
   );

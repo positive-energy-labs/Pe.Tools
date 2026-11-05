@@ -5,7 +5,8 @@ import { commands, type Consumed, type Command } from "@pe/agent-contracts";
 import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
 import { commandRegistry } from "../src/command-registry.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
-import { writeSeal } from "../src/work-write-boundary.ts";
+import { writeSeal, type WriteSealInput } from "../src/work-write-boundary.ts";
+const MARK = { session: "A", openId: "doc", observedSince: null, changedAt: null };
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import livePair from "./fixtures/ducts-live-seal-20261102.json" with { type: "json" };
@@ -59,7 +60,7 @@ test("live MUAS preview/apply seals ignore traversal diagnostics but retain mode
       },
     };
     const projection = executor.seal!(value);
-    return writeSeal(projection.request, capture.input, capture.work as any, capture.incarnation, capture.dependencies as Consumed[], projection.evidence);
+    return writeSeal({ request: projection.request, input: capture.input, work: capture.work as any, incarnation: capture.incarnation, documentMark: MARK, consumed: capture.dependencies as WriteSealInput["consumed"], evidence: projection.evidence });
   };
   expect(seal(apply)).toEqual(seal(preview));
   for (const mutate of [
@@ -80,13 +81,13 @@ test.each(writes)("%s seals semantic evidence across permutation/refetch", (key)
   expect(executor.sealInput, `${key} has no typed producer input`).toBeDefined();
   const raw = specimen(z.toJSONSchema(executor.sealInput!, { unrepresentable: "any" }));
   const work = { key: { binding: "open" as const, route: key, target: null, open: { session: "A", openId: "doc" } }, revision: 1 };
-  const consumed: Consumed[] = [
+  const consumed: WriteSealInput["consumed"][number][] = [
     { kind: "file", probe: { path: "a" }, expected: "1" },
     { kind: "work", probe: { handle: work, paths: [["a"], ["b"]], edits: [["a"], ["b"]] }, expected: { a: 1 } },
   ];
   const seal = (p: unknown, dependencies = consumed, handle = work, intent: unknown = { a: 1 }, incarnation: unknown = { openId: "doc" }) => {
     const projection = executor.seal!(p);
-    return writeSeal(projection.request, intent, handle, incarnation, dependencies, projection.evidence);
+    return writeSeal({ request: projection.request, input: intent, work: handle, incarnation, documentMark: MARK, consumed: dependencies, evidence: projection.evidence });
   };
   const baseline = seal(raw);
   for (let seed = 0; seed < 32; seed++) {
@@ -115,7 +116,8 @@ test.each(writes)("%s seals semantic evidence across permutation/refetch", (key)
   };
   expect(mutations(raw).some(changed => JSON.stringify(executor.seal!(changed)) !== JSON.stringify(executor.seal!(raw))), `${key}: projection dropped every semantic fact`).toBe(true);
   const p = executor.seal!(raw);
-  expect(writeSeal([p.request, "a"], {}, work, {}, [], p.evidence)).not.toEqual(writeSeal(["a", p.request], {}, work, {}, [], p.evidence));
+  const at = (request: unknown) => writeSeal({ request, input: {}, work, incarnation: {}, documentMark: MARK, consumed: [], evidence: p.evidence });
+  expect(at([p.request, "a"])).not.toEqual(at(["a", p.request]));
 });
 
 test.each(writes)("%s preview round-trips its public response contract", async (key) => {
@@ -126,7 +128,7 @@ test.each(writes)("%s preview round-trips its public response contract", async (
     value,
     previewOnly: true,
     takenAt: "2026-11-02T15:17:11.675Z",
-    seal: { requestHash: "request", work: {}, incarnation: {}, dependencies: "dependencies" },
+    seal: { requestHash: "request", work: {}, documentMark: MARK, incarnation: {}, dependencies: "dependencies" },
   };
   const result = await executor.run(
     {

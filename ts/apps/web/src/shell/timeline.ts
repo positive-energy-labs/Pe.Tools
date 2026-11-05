@@ -1,4 +1,4 @@
-import type { InvocationOutcome } from "@pe/agent-contracts";
+import type { InvocationOutcome, VerbDecl } from "@pe/agent-contracts";
 import { receiptBarrier, type TimelineBarrier, type TimelineEntry } from "@pe/runtime/work-journal";
 export { receiptBarrier } from "@pe/runtime/work-journal";
 export type { TimelineBarrier, TimelineEntry } from "@pe/runtime/work-journal";
@@ -66,4 +66,30 @@ export function activityTime(at: TimelineEntry["at"], startedAt?: TimelineEntry[
   return Number.isFinite(elapsed) && elapsed >= 0
     ? `${clock} · ${(elapsed / 1000).toFixed(1)} s`
     : clock;
+}
+
+/**
+ * ADR 0030 rule 11: the Timeline is a projection. One row per invocation start, receipt, open
+ * consent window and Work journal entry, all of which `createRouteTimeline` already holds as
+ * entries. Labels derive here from the verb declarations; nothing stores one, so a label can never
+ * contradict its receipt.
+ */
+export interface TimelineRow {
+  at: TimelineEntry["at"];
+  press: string;
+  kind: "press" | "receipt" | "consent" | "journal";
+  /** Derived: the route verb whose `does` is the receipt's command, else the command key. */
+  verb: string;
+  outcome?: InvocationOutcome;
+  /** Open Reject? window: present only while the receipt's consent window is still open. */
+  consentUntil?: string;
+}
+export function projectTimeline(
+  _entries: readonly TimelineEntry[],
+  _verbs: Readonly<Record<string, VerbDecl>>,
+): TimelineRow[] {
+  // ponytail: skeleton. Fill derives `verb` from `_verbs`, a consent row from `basis.receipt.consentWindow`,
+  // and journal rows from recorded entries; then delete the stored `verb` written at append in
+  // mount-timeline-owner.ts and the `verb` field on TimelineEntry.
+  throw Error("projectTimeline is a step 2 scaffold; its fill follows");
 }

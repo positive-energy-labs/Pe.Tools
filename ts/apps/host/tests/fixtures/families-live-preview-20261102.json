@@ -78,6 +78,7 @@
     },
     "seal": {
       "requestHash": "dbf003733a49243ade9a1a9c0302c11affa98d2c916f4ccd24836b73b1ee53d7",
+      "documentMark": { "session": "", "openId": "", "observedSince": null, "changedAt": null },
       "work": {
         "handle": {
           "key": {
@@ -272,6 +273,7 @@
     ],
     "seal": {
       "requestHash": "f19094c551f4eebe4c96c3c16f6131268482dc302334e2060c1a0b77407b83da",
+      "documentMark": { "session": "", "openId": "", "observedSince": null, "changedAt": null },
       "work": {
         "handle": {
           "key": {
