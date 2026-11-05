@@ -12,7 +12,7 @@ import type {
 } from "./route-kernel-page.ts";
 import type { RouteStateWriteResult, WorkKey, WorkWrite, WorkWriteAck } from "./route-state.ts";
 import type { ActionAdmission } from "./semantic-actions.ts";
-import type { ActionReceipt } from "./action-receipts.ts";
+import type { ActionStatus } from "./action-receipts.ts";
 
 declare const journalCommandId: unique symbol;
 /** The existing journal command id, validated by the host adapter; no new wire identity. */
@@ -108,7 +108,8 @@ declare const receiptCursor: unique symbol;
 /** Monotonic within one observation; never compare cursors across observations. */
 export type ReceiptCursor = number & { readonly [receiptCursor]: true };
 
-/** Receipts are host-authored ActionReceipts, never derived from a submission result in the browser.
+/** Receipts are host-authored ActionStatus projections, never derived from a submission result in the
+ * browser. The full ActionReceipt (steps, preparation, result) stays with the durable journal and HTTP.
  * One receipt changes state over time (waiting -> running -> terminal). Each change is a new emission
  * with a higher cursor. The consumer keys rows by receipt.id; the higher cursor wins. */
 export type ReceiptFeedState =
@@ -118,14 +119,14 @@ export type ReceiptFeedState =
       readonly kind: "ready";
       readonly receipts: {
         /** Latest state of each retained receipt in this scope, ordered by cursor, through `through`. */
-        readonly rows: readonly ActionReceipt[];
+        readonly rows: readonly ActionStatus[];
         /** First cursor still retained. Barriers and Timeline never claim completeness below it. */
         readonly from: ReceiptCursor;
         /** Cursor of the last emission the rows include. Live emissions are strictly after it. */
         readonly through: ReceiptCursor;
       };
     }
-  | { readonly kind: "receipt"; readonly cursor: ReceiptCursor; readonly receipt: ActionReceipt }
+  | { readonly kind: "receipt"; readonly cursor: ReceiptCursor; readonly receipt: ActionStatus }
   | {
       readonly kind: "gap";
       /** First missing cursor, inclusive. */

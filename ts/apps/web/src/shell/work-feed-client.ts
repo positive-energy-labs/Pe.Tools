@@ -5,7 +5,7 @@ import {
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { z } from "zod";
 import {
-  actionReceiptSchema,
+  actionStatusSchema,
   workHandleSchema,
   workKey,
   workWriteAckSchema,
@@ -32,12 +32,12 @@ const receiptFeedSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("ready"),
     receipts: z.object({
-      rows: actionReceiptSchema.array(),
+      rows: actionStatusSchema.array(),
       from: cursorSchema,
       through: cursorSchema,
     }),
   }),
-  z.object({ kind: z.literal("receipt"), cursor: cursorSchema, receipt: actionReceiptSchema }),
+  z.object({ kind: z.literal("receipt"), cursor: cursorSchema, receipt: actionStatusSchema }),
   z.object({ kind: z.literal("gap"), from: cursorSchema, to: cursorSchema }),
 ]);
 const snapshotSchema = z.object({
