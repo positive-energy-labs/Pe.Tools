@@ -5,6 +5,7 @@ import {
   opCardinality,
   opCost,
 } from "@pe/host-contracts/generated";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
 export { opSubject, opTouches, opEffect, opCardinality, opCost };
 type Value<T> = T[keyof T];
 export interface CatalogAxes {
@@ -31,7 +32,7 @@ export interface CatalogLink extends CatalogAxes {
 }
 const weight = { Cheap: 1, Bounded: 10, Expensive: 100, Mutation: 100 };
 /** Validate edges only. Execution, derivation and preview remain in named runtime functions. */
-export function linkCatalog(entries: readonly CatalogLink[]): string[] {
+function check(entries: readonly CatalogLink[]): string[] {
   const errors: string[] = [];
   const byKey = new Map<string, CatalogLink>();
   for (const entry of entries) {
@@ -125,16 +126,9 @@ export function linkCatalog(entries: readonly CatalogLink[]): string[] {
   return errors;
 }
 
-/** Runtime trust boundary: boot and dynamic admission use the same linker. */
-export function requireLinkedCatalog(entries: readonly CatalogLink[]): void {
-  const errors = linkCatalog(entries);
-  if (errors.length) throw Error(`Catalog refused:\n${errors.join("\n")}`);
-}
-
 /**
- * Step 5 seam: the one linked export. Every axis, edge, plan binding and cost is checked once
- * (`linkCatalog`); host boot, route admission, trusted Pod admission and Pea read this, never a flat
- * array they relink. Callers still on `linkCatalog`/`requireLinkedCatalog` move here in the fill.
+ * The one linked export (ADR 0028). Every axis, edge, plan binding and cost is checked once; host boot,
+ * route admission, trusted Pod admission and Pea read this, never a flat array they relink.
  */
 export interface LinkedCatalog<E extends CatalogLink = CatalogLink> {
   readonly entries: ReadonlyMap<string, Readonly<E>>;
@@ -148,7 +142,7 @@ export type LinkResult<E extends CatalogLink = CatalogLink> =
   | { readonly ok: false; readonly errors: readonly string[] };
 
 export function link<E extends CatalogLink>(entries: readonly E[]): LinkResult<E> {
-  const errors = linkCatalog(entries);
+  const errors = check(entries);
   if (errors.length) return { ok: false, errors: Object.freeze(errors) };
   const byKey = new Map(entries.map((entry) => [entry.key, Object.freeze({ ...entry })]));
   const order = new Set<string>();
@@ -164,4 +158,35 @@ export function link<E extends CatalogLink>(entries: readonly E[]): LinkResult<E
     extend: <X extends CatalogLink>(more: readonly X[]) => link<E | X>([...entries, ...more]),
   });
   return { ok: true, catalog };
+}
+
+/** Runtime trust boundary: boot and dynamic admission refuse what does not link. */
+export function requireLinkedCatalog<E extends CatalogLink>(
+  result: LinkResult<E>,
+): LinkedCatalog<E> {
+  if (!result.ok) throw Error(`Catalog refused:\n${result.errors.join("\n")}`);
+  return result.catalog;
+}
+
+/**
+ * The one command-to-edge mapping, for builtin and Pod commands alike: its native `uses` (a command
+ * named for its own native op uses it), its derivation, and the plan its apply is sealed at. `prefix`
+ * is the key space: `command:` in the global catalog, `""` in a route's admission catalog, whose
+ * bindings name entries by their bare key.
+ */
+export function commandLink(
+  key: string,
+  command: import("./command.ts").Command,
+  axes: CatalogAxes,
+  prefix: "command:" | "" = "command:",
+): CatalogLink {
+  const boundary = (command as { writeBoundary?: import("./write-intent.ts").WriteBoundaryBinding })
+    .writeBoundary;
+  return {
+    key: `${prefix}${key}`,
+    uses: command.native ?? (hostOpCatalog.some((op) => op.key === key) ? [key] : []),
+    ...axes,
+    ...(boundary ? command.derivation : {}),
+    ...(boundary?.phase === "apply" ? { previewBy: `${prefix}${boundary.previewKey}` } : {}),
+  };
 }

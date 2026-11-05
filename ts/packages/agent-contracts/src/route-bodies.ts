@@ -10,7 +10,7 @@ import {
 } from "./route-kernel-data.ts";
 import { canonicalRouteJson } from "./route-graph.ts";
 import { bare } from "./route-field.ts";
-import { linkCatalog, type CatalogLink } from "./catalog.ts";
+import { link, type CatalogLink } from "./catalog.ts";
 
 const fn = z.custom<(...args: unknown[]) => unknown>((value) => typeof value === "function");
 const schema = z.custom<z.ZodType>((value) => value instanceof z.ZodType);
@@ -336,9 +336,13 @@ export function linkRouteBodies(
       body(id, `work.migrations.${version}`, "migration");
     }
   }
-  const linked = new Map(catalog.map((entry) => [entry.key, entry]));
-  for (const message of linkCatalog(catalog))
-    fail("entries", "", "linked catalog", message, "policy");
+  const result = link(catalog);
+  if (!result.ok)
+    for (const message of result.errors) fail("entries", "", "linked catalog", message, "policy");
+  // A refused catalog still names its entries, so every later reference is diagnosed too.
+  const linked: ReadonlyMap<string, CatalogLink> = result.ok
+    ? result.catalog.entries
+    : new Map(catalog.map((entry) => [entry.key, entry]));
   const checkEffects = (key: string, path: string, read: boolean, seen = new Set<string>()) => {
     if (seen.has(key)) return;
     seen.add(key);

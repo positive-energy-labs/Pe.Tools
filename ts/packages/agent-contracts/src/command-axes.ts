@@ -1,7 +1,6 @@
 import type { CatalogAxes } from "./catalog.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { hostActions } from "./semantic-actions.ts";
-import { catalogWorkCommands, catalogWorks } from "./catalog-work.ts";
 
 type HostActionKey = keyof typeof hostActions;
 /** Keys built as the plan half of a Work write; their axes derive from the write. */
@@ -11,20 +10,15 @@ type PreviewKey = {
     : never;
 }[HostActionKey];
 
-type CatalogApplyKey = {
-  [K in keyof typeof catalogWorkCommands]: (typeof catalogWorkCommands)[K]["writeBoundary"]["phase"] extends "apply"
-    ? K
-    : never;
-}[keyof typeof catalogWorkCommands];
-/** A catalog Work's apply carries its native ModelWrite's axes; nobody declares them twice. */
-const catalogApplyAxes = Object.fromEntries(
-  Object.entries(catalogWorkCommands).flatMap(([key, entry]) => {
-    if (entry.writeBoundary.phase !== "apply") return [];
-    const op = catalogWorks[entry.work.route as keyof typeof catalogWorks].op;
-    const leaf = hostOpCatalog.find((candidate) => candidate.key === op)!;
-    return [[key, { subject: leaf.subject, touches: [leaf.touches], effect: leaf.effect, cost: "Mutation", cardinality: leaf.cardinality }]];
-  }),
-) as unknown as Record<CatalogApplyKey, CatalogAxes>;
+/** Keys whose entry declares its own axes (catalog Work commands, from their native leaf). */
+type OwnAxesKey = {
+  [K in HostActionKey]: (typeof hostActions)[K] extends { axes: CatalogAxes } ? K : never;
+}[HostActionKey];
+const ownAxes = Object.fromEntries(
+  Object.entries(hostActions).flatMap(([key, action]) =>
+    "axes" in action ? [[key, action.axes as CatalogAxes]] : [],
+  ),
+) as Record<OwnAxesKey, CatalogAxes>;
 
 /** Explicit command budgets; adding a command requires an axis declaration. */
 const handAxes = {
@@ -417,21 +411,20 @@ const handAxes = {
     cost: "Mutation",
     cardinality: "One",
   },
-} satisfies Record<Exclude<HostActionKey, PreviewKey | CatalogApplyKey>, CatalogAxes>;
-const declaredAxes: Record<Exclude<HostActionKey, PreviewKey>, CatalogAxes> = { ...handAxes, ...catalogApplyAxes };
+} satisfies Record<Exclude<HostActionKey, PreviewKey | OwnAxesKey>, CatalogAxes>;
+const declaredAxes: Record<Exclude<HostActionKey, PreviewKey>, CatalogAxes> = { ...handAxes, ...ownAxes };
 
 /**
  * A preview has the write's subject, Touches and cost by construction. Its Effect is its native leaf's
  * (ADR 0030 rule 4): a Read plan opens no transaction; anything else is a TransactRead rehearsal that
  * declares rollback. The linker refuses a ModelWrite whose preview binding breaks that.
  */
-const isReadPlan = (action: { writeBoundary: { route: string } }) =>
-  // A catalog Work plan only derives the request from Work, so it opens no transaction.
-  action.writeBoundary.route in catalogWorks ||
+// No native leaf never means Read: families.apply.preview has none and still rehearses (0b001e2f).
+const isReadPlan = (action: object) =>
   hostOpCatalog.find((op) => op.key === (action as { native?: readonly string[] }).native?.[0])?.effect === "Read";
 const previewAxes = Object.fromEntries(
   Object.entries(hostActions).flatMap(([key, action]) =>
-    "writeBoundary" in action && action.writeBoundary.phase === "preview"
+    "writeBoundary" in action && action.writeBoundary.phase === "preview" && !("axes" in action)
       ? [
           [
             key,
