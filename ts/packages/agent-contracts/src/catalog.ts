@@ -130,3 +130,38 @@ export function requireLinkedCatalog(entries: readonly CatalogLink[]): void {
   const errors = linkCatalog(entries);
   if (errors.length) throw Error(`Catalog refused:\n${errors.join("\n")}`);
 }
+
+/**
+ * Step 5 seam: the one linked export. Every axis, edge, plan binding and cost is checked once
+ * (`linkCatalog`); host boot, route admission, trusted Pod admission and Pea read this, never a flat
+ * array they relink. Callers still on `linkCatalog`/`requireLinkedCatalog` move here in the fill.
+ */
+export interface LinkedCatalog<E extends CatalogLink = CatalogLink> {
+  readonly entries: ReadonlyMap<string, Readonly<E>>;
+  /** Dependency order: each key after every key it uses. */
+  readonly order: readonly string[];
+  /** Link a route module's or trusted Pod's entries against this catalog, as one new export. */
+  extend<X extends CatalogLink>(more: readonly X[]): LinkResult<E | X>;
+}
+export type LinkResult<E extends CatalogLink = CatalogLink> =
+  | { readonly ok: true; readonly catalog: LinkedCatalog<E> }
+  | { readonly ok: false; readonly errors: readonly string[] };
+
+export function link<E extends CatalogLink>(entries: readonly E[]): LinkResult<E> {
+  const errors = linkCatalog(entries);
+  if (errors.length) return { ok: false, errors: Object.freeze(errors) };
+  const byKey = new Map(entries.map((entry) => [entry.key, Object.freeze({ ...entry })]));
+  const order = new Set<string>();
+  const visit = (key: string) => {
+    if (order.has(key)) return;
+    for (const use of byKey.get(key)!.uses) visit(typeof use === "string" ? use : use.key);
+    order.add(key);
+  };
+  byKey.forEach((_, key) => visit(key));
+  const catalog: LinkedCatalog<E> = Object.freeze({
+    entries: byKey,
+    order: Object.freeze([...order]),
+    extend: <X extends CatalogLink>(more: readonly X[]) => link<E | X>([...entries, ...more]),
+  });
+  return { ok: true, catalog };
+}
