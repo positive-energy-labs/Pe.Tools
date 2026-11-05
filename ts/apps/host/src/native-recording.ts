@@ -8,7 +8,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Cause, Clock, Effect, Exit, Layer, Option, Result, Schema } from "effect";
-import { attemptFor } from "./input-occurrence.ts";
+import { attemptFor, CurrentInputConsumption } from "./input-occurrence.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { validationIssueSchema } from "@pe/host-contracts/contracts";
 import { BridgeError } from "@pe/host-internal/dispatch";
@@ -759,12 +759,22 @@ const replaying = (store: RecordingReader, bindings: ReadonlyMap<string, string>
     const input = { kind: "native" as const, key: request.key, args };
     const identity = inputIdentity(input);
     const scope = yield* scopeOf(request);
+    // A retained-call child names its original native acquisition: that exact link serves both
+    // resolve and read (a cold hit-only child has no acquisition occurrence of its own).
+    const consumption = yield* Effect.serviceOption(CurrentInputConsumption);
+    const linked = Option.isSome(consumption)
+      ? yield* Effect.option(consumption.value.taking("native"))
+      : Option.none();
     const taking = yield* chooseTaking(
       store,
       identity,
       scope,
       request.key,
-      consume ? yield* selectedFor(input, scope, bindings.get(identity)) : bindings.get(identity),
+      Option.isSome(linked)
+        ? linked.value
+        : consume
+          ? yield* selectedFor(input, scope, bindings.get(identity))
+          : bindings.get(identity),
     );
     if (taking.outputVersion !== (yield* versionOf(request.key)))
       return yield* refuse(
