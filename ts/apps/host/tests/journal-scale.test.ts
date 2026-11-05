@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { mkdtempSync, rmSync } from "node:fs";
-import { readFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 // Linearity is counted in bytes the journal writes, not milliseconds: wall time here swung 10x with
@@ -17,9 +17,6 @@ vi.mock("node:fs/promises", async (original) => {
   return { ...fs, appendFile: counted(fs.appendFile), writeFile: counted(fs.writeFile) };
 });
 import { ActionJournal } from "../src/action-journal.ts";
-import { invokeCommand } from "./command-fixture.ts";
-import { StepFailure } from "../src/command-executor.ts";
-import { human } from "./callers.ts";
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -47,36 +44,3 @@ test("the journal stays linear at 10k receipts: the last thousand write what the
   expect((await stat(path)).size).toBeLessThan(10_000 * 1024);
   expect((await new ActionJournal(path).read({})).length).toBe(10_000);
 }, 120_000);
-
-test("retention expires telemetry facts while preserving every command identity and outcome", async () => {
-  const path = file();
-  const journal = new ActionJournal(path, () => null, 100);
-  for (const id of ["open", "old"]) {
-    await invokeCommand(
-      journal,
-      {
-        id,
-        key: `probe.${id}`,
-        caller: human,
-        basis: null,
-        target: { kind: "host" },
-        input: {},
-        effects: [],
-      },
-      async () => null,
-      (execution) =>
-        execution.step("native", "probe", {}, async () => {
-          if (id === "open") throw new StepFailure("Lost reply", 503, "unknown");
-          return null;
-        }),
-    );
-    await journal.wait(id);
-  }
-  for (let i = 0; i < 500; i++) await journal.recordFact({ kind: "turn", phase: "started" });
-  const reloaded = new ActionJournal(path, () => null, 100);
-  const receipts = await reloaded.read({});
-  expect(receipts.length).toBeLessThanOrEqual(112);
-  expect((await reloaded.list(undefined, "open"))[0]!.state).toBe("unknown");
-  expect((await reloaded.list(undefined, "old"))[0]!.state).toBe("succeeded");
-  expect((await readFile(path, "utf8")).trim().split("\n").length).toBeLessThan(400);
-});

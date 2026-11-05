@@ -4,10 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect } from "vite-plus/test";
 import { ActionJournal } from "../src/action-journal.ts";
-import { fixtureCommand, registerFixtureCommand } from "./command-fixture.ts";
+import { Context, Effect, Exit, Layer, Scope } from "effect";
+import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
+import { bindCommandRuntime } from "../src/command-registry.ts";
+import { captureStore } from "./effect-test.ts";
 
 test("the v5 reader preserves original bytes, facts and uncertainty without authorizing new execution", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-v5-import-"));
+  const scope = Scope.makeUnsafe();
+  const services = await Effect.runPromise(Layer.buildWithScope(RevitBridgeLive, scope));
   try {
     const path = join(dir, "journal.jsonl");
     const id = "old-action",
@@ -69,6 +74,19 @@ test("the v5 reader preserves original bytes, facts and uncertainty without auth
     );
     await writeFile(path, bytes);
     const owner = new ActionJournal(path);
+    bindCommandRuntime(
+      owner,
+      Context.get(services, RevitBridge),
+      captureStore(join(dir, "captures")),
+      {
+        sdk: async () => {
+          throw Error("Historical data cannot execute SDK commands");
+        },
+      },
+      async () => {
+        throw Error("Historical data cannot execute local commands");
+      },
+    );
     const [row] = await owner.list(undefined, id);
     expect(row).toMatchObject({
       state: "unknown",
@@ -84,21 +102,11 @@ test("the v5 reader preserves original bytes, facts and uncertainty without auth
     expect(provenance.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
     expect((await readFile(path, "utf8")).split("\n")[0]).toBe('{"version":7}');
     expect((await new ActionJournal(path).list(undefined, id))[0]).toEqual(row);
-    let executions = 0;
-    registerFixtureCommand(
-      owner,
-      row!.key,
-      fixtureCommand(
-        [],
-        async () => null,
-        async () => ++executions,
-      ),
-    );
     await expect(
       owner.resume(id, { caller: row!.caller, basis: row!.basis }),
     ).resolves.toMatchObject({ refusal: { code: "historical-schema" } });
-    expect(executions).toBe(0);
   } finally {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
     await rm(dir, { recursive: true, force: true });
   }
 });
@@ -107,9 +115,12 @@ test.each([4, 6])(
   "v%s imports retain terminal outcomes, uncertain reservations and the exact archive",
   async (version) => {
     const dir = await mkdtemp(join(tmpdir(), `pe-v${version}-import-`));
+    const scope = Scope.makeUnsafe();
+    const services = await Effect.runPromise(Layer.buildWithScope(RevitBridgeLive, scope));
+    let sdkReads = 0;
     try {
       const path = join(dir, "journal.jsonl");
-      const claim = { kind: "receipt" as const, id: "historical-single-use-plan" };
+      const claim = { kind: "session-slot" as const, selector: { year: "2025", selection: {} } };
       const states = ["running", "succeeded", "failed", "cancelled"] as const;
       const receipts = states.map((state) => {
         const id = `old-${state}`;
@@ -185,6 +196,20 @@ test.each([4, 6])(
       );
       await writeFile(path, bytes);
       const owner = new ActionJournal(path);
+      bindCommandRuntime(
+        owner,
+        Context.get(services, RevitBridge),
+        captureStore(join(dir, "captures")),
+        {
+          sdk: async () => {
+            sdkReads++;
+            throw Error("A historical reservation must refuse before SDK execution");
+          },
+        },
+        async () => {
+          throw Error("No local effect belongs to Instances start");
+        },
+      );
       const rows = await owner.list();
       expect(rows.map((row) => row.state)).toEqual(["unknown", "succeeded", "failed", "cancelled"]);
       expect(rows[1]).toMatchObject({
@@ -202,33 +227,17 @@ test.each([4, 6])(
       const provenance = rows[0]!.recovery.at(-1)!.evidence as { archive: string; sha256: string };
       expect(await readFile(provenance.archive)).toEqual(bytes);
       expect(provenance.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
-      let executions = 0;
-      registerFixtureCommand(
-        owner,
-        "historical.native",
-        fixtureCommand(
-          [],
-          async () => null,
-          async () => ++executions,
-        ),
-      );
       await expect(
         owner.resume("old-running", { caller: rows[0]!.caller, basis: rows[0]!.basis }),
       ).resolves.toMatchObject({ refusal: { code: "historical-schema" } });
       if (version === 6) {
-        registerFixtureCommand(
-          owner,
-          "new.claim",
-          fixtureCommand(
-            [],
-            async () => null,
-            async () => ++executions,
-            [],
-            [claim],
-          ),
-        );
         await owner.invoke(
-          { id: "new", key: "new.claim", target: { kind: "host" }, input: {} },
+          {
+            id: "new",
+            key: "instances.start",
+            target: { kind: "host" },
+            input: { year: "2025", owner: "you", addins: "on" },
+          },
           { caller: rows[0]!.caller, basis: rows[0]!.basis },
         );
         expect(await owner.wait("new")).toMatchObject({
@@ -236,9 +245,11 @@ test.each([4, 6])(
           refusal: { kind: "claimed", by: "old-running" },
         });
       }
-      expect(executions).toBe(0);
+      expect(sdkReads).toBe(0);
+      await owner.close();
       expect((await readFile(path, "utf8")).split("\n")[0]).toBe('{"version":7}');
     } finally {
+      await Effect.runPromise(Scope.close(scope, Exit.void));
       await rm(dir, { recursive: true, force: true });
     }
   },
