@@ -120,8 +120,8 @@ export function RouteRetention({
         (entry) =>
           !entry.isRoot &&
           (entry.fullPath === pathname ||
-            router.state.matches.some(
-              (match) => match.routeId === entry.id && match.pathname === pathname,
+            router.matchRoutes(location).some(
+              (match) => match.routeId === entry.id,
             )),
       )?.options.component;
       if (!Component) throw Error(`No route component registered for ${pathname}`);

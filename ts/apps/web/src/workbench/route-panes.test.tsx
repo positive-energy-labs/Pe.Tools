@@ -925,6 +925,7 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
     const worksheet = JSON.stringify(["snowdon-circuits", "voltage-drop"]);
     const query = new URLSearchParams({
       worksheet,
+      selected: "[]",
       target: 'C:/Jobs/100%25 "glass".rvt',
       work: "worksheet%25",
     });
@@ -958,10 +959,11 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
     );
     const saved = places().find((tab) => tab.route === podRoute!.data.key)!;
     expect(saved.link).toBe(link);
-    expect(screen.getByRole("button", { name: /Circuit voltage drop/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Circuit voltage drop/ })).toBeTruthy();
     expect(
       new URL(router.history.location.href, "http://place.invalid").searchParams.get("target"),
     ).toBe(query.get("target"));
+    const priorHref = router.history.location.href;
     const published = hostCalls("view.publish").filter(([, input]) =>
       (input as { body: { route: string } }).body.route === podRoute!.data.key,
     ).at(-1)![1] as { body: { instance: string } };
@@ -990,6 +992,9 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
         new URL(router.history.location.href, "http://place.invalid").searchParams.get("worksheet"),
       ).toBe(worksheet),
     );
+    expect(router.history.location.href).toBe(priorHref);
+    await act(() => router.navigate({ to: "/fans", search: { thread: "T", fixture: "layout" } } as never));
+    const priorFans = router.history.location.href;
     deliver();
     await settle();
     expect(
@@ -997,7 +1002,12 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
         .filter((tab) => tab.route === podRoute!.data.key)
         .map((tab) => tab.id),
     ).toEqual([saved.id]);
-    fireEvent.click(screen.getByRole("button", { name: "Open another Place on this route" }));
+    await act(() => router.history.back());
+    await waitFor(() => expect(router.history.location.href).toBe(priorFans));
+    await settle();
+    deliver();
+    await waitFor(() => expect(router.state.location.pathname).toBe(podRoute!.data.address));
+    fireEvent.click(await screen.findByRole("button", { name: "Open another Place on this route" }));
     await waitFor(() => expect(places().filter((tab) => tab.route === podRoute!.data.key)).toHaveLength(2));
     expect(places().filter((tab) => tab.route === podRoute!.data.key).map((tab) => tab.link)).toEqual([link, link]);
     await act(() => router.history.back());
