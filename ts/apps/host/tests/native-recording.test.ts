@@ -365,7 +365,8 @@ effectTest(
   "recorded Refused and evidence-classified BridgeErrors replay unchanged through the HTTP problem mapper",
   () =>
     Effect.gen(function* () {
-      const store = yield* openRecordingStore(yield* bundle, identity, bounds);
+      const dir = yield* bundle;
+      const store = yield* openRecordingStore(dir, identity, bounds);
       const served = (lane: InputLane) => {
         const web = HttpRouter.toWebHandler(
           HttpRouter.add("GET", "/read/*", (req) =>
@@ -427,5 +428,15 @@ effectTest(
         ),
       );
       expect((failed as BridgeError).outcome).toBe("failed");
+      const path = join(dir, "takings.jsonl");
+      const lines = (yield* Effect.promise(() => readFile(path, "utf8")))
+        .trim().split("\n").map((line) => JSON.parse(line));
+      const damaged = lines.find((taking) => taking.outcome.failure?.tag === "BridgeError");
+      expect(damaged).toBeDefined();
+      damaged.outcome.failure.evidence.notDispatched = "yes";
+      yield* Effect.promise(() => writeFile(path, lines.map((line) => JSON.stringify(line)).join("\n") + "\n"));
+      expect(yield* outcome(openRecordingStore(dir, identity, bounds))).toMatchObject({
+        problem: "recording.tamper",
+      });
     }),
 );

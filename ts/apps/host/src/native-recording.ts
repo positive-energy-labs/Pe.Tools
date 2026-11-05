@@ -8,6 +8,7 @@ import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Cause, Clock, Effect, Exit, Layer, Option, Schema } from "effect";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import { validationIssueSchema } from "@pe/host-contracts/contracts";
 import { BridgeError } from "@pe/host-internal/dispatch";
 import { HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
@@ -49,6 +50,20 @@ const actualTarget = Schema.Struct({
  * constructor. Any other failure is refused at capture, before a taking exists.
  */
 const plainFailure = { message: Schema.String, status: Schema.Number, problem: Schema.String };
+const recordedEvidence = Schema.StructWithRest(
+  Schema.Struct({
+    nativeRequestId: Schema.optionalKey(Schema.String),
+    receiptId: Schema.optionalKey(Schema.String),
+    actualTarget: Schema.optionalKey(actualTarget),
+    notDispatched: Schema.optionalKey(Schema.Literal(true)),
+    dispatched: Schema.optionalKey(Schema.Literal(true)),
+    nativeOutcome: Schema.optionalKey(Schema.String),
+    issues: Schema.optionalKey(Schema.NullOr(Schema.Array(validationIssueSchema))),
+    result: Schema.optionalKey(Schema.Json),
+    resolvedTarget: Schema.optionalKey(Schema.Struct({ session: Schema.String, document: Schema.NullOr(Schema.String) })),
+  }),
+  [Schema.Record(Schema.String, Schema.Json)],
+);
 const failure = Schema.Union([
   Schema.Struct({
     tag: Schema.Literals(["InvalidRequest", "ReadBusy", "ReadRetiring"]),
@@ -60,7 +75,7 @@ const failure = Schema.Union([
     ...plainFailure,
     nativeOutcome: Schema.optionalKey(nativeOutcome),
     // The whole serializable dispatch evidence: BridgeError.outcome reads notDispatched/dispatched/issues.
-    evidence: Schema.Json,
+    evidence: recordedEvidence,
   }),
 ]);
 // Decoded before any path is built: a taking cannot name a file outside its observations.
@@ -316,7 +331,7 @@ const failureOf = (error: DoorFailure): Option.Option<typeof failure.Type> => {
       refusal,
     }));
   if (error instanceof BridgeError)
-    return Option.map(Schema.decodeUnknownOption(Schema.Json)(error.evidence), (evidence) => ({
+    return Option.map(Schema.decodeUnknownOption(recordedEvidence)(error.evidence), (evidence) => ({
       tag: "BridgeError" as const,
       message: error.message,
       status: error.status,
@@ -351,7 +366,7 @@ const replayFailure = Effect.fn("Recording.failure")(function* (recorded: typeof
       status: recorded.status,
       problem: recorded.problem,
       ...(recorded.nativeOutcome ? { nativeOutcome: recorded.nativeOutcome } : {}),
-      evidence: recorded.evidence as never,
+      evidence: recorded.evidence,
     });
   const { tag, ...fields } = recorded;
   return new plainClasses[tag](fields);
@@ -422,7 +437,7 @@ const capturing = (store: RecordingStore) =>
                       ...(outcome.failure.nativeOutcome
                         ? { nativeOutcome: outcome.failure.nativeOutcome }
                         : {}),
-                      evidence: outcome.failure.evidence as never,
+                      evidence: outcome.failure.evidence,
                     }
                   : {};
             yield* store.append(taking, outcome).pipe(
