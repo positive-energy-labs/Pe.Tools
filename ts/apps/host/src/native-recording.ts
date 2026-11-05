@@ -60,7 +60,9 @@ const recordedEvidence = Schema.StructWithRest(
     nativeOutcome: Schema.optionalKey(Schema.String),
     issues: Schema.optionalKey(Schema.NullOr(Schema.Array(validationIssueSchema))),
     result: Schema.optionalKey(Schema.Json),
-    resolvedTarget: Schema.optionalKey(Schema.Struct({ session: Schema.String, document: Schema.NullOr(Schema.String) })),
+    resolvedTarget: Schema.optionalKey(
+      Schema.Struct({ session: Schema.String, document: Schema.NullOr(Schema.String) }),
+    ),
   }),
   [Schema.Record(Schema.String, Schema.Json)],
 );
@@ -143,21 +145,29 @@ const observationSha = (outputVersion: string, bytes: string) =>
   createHash("sha256").update(`native-read\n${outputVersion}\n${bytes}`).digest("hex");
 const identityOf = (key: string, args: string) => canonicalJson(["native-read", key, args]);
 
-export interface RecordingStore {
+/** A historical bundle, read only: replay can select and read takings but never add one. */
+export interface RecordingReader {
   readonly identity: RecordingIdentity;
-  /** Visible to `candidates` only after its observation and line are durable. */
-  readonly append: (input: TakingInput, outcome: Outcome) => Effect.Effect<Taking, InvalidRead>;
   /** Every taking of one input identity, oldest first; equal bytes never merge takings. */
   readonly candidates: (identity: string) => readonly Taking[];
   readonly taking: (id: string) => Taking | undefined;
   readonly observation: (taking: Taking) => Effect.Effect<Schema.Json, InvalidRead>;
 }
+/** The one capture writer of a bundle in this process (no cross-process lock is claimed). */
+export interface RecordingWriter extends RecordingReader {
+  /** Visible to `candidates` only after its observation and line are durable. */
+  readonly append: (input: TakingInput, outcome: Outcome) => Effect.Effect<Taking, InvalidRead>;
+}
 
-/** Opens or creates one bundle. A different build or catalog, a damaged line or an oversized file refuses. */
-export const openRecordingStore = Effect.fn("Recording.open")(function* (
+/**
+ * Decodes one bundle for either side: manifest identity, size-bounded files, hash-named
+ * observations. Only a capture writer may create a missing bundle; a reader refuses and writes nothing.
+ */
+const loadBundle = Effect.fn("Recording.load")(function* (
   dir: string,
   identity: RecordingIdentity,
   bounds: RecordingBounds,
+  create: boolean,
 ) {
   const manifestPath = join(dir, "manifest.json");
   const takingsPath = join(dir, "takings.jsonl");
@@ -185,6 +195,7 @@ export const openRecordingStore = Effect.fn("Recording.open")(function* (
     );
   const existing = yield* bounded(manifestPath, null);
   if (existing === null) {
+    if (!create) return yield* refuse("missing", `No recording bundle at ${dir}`, 404);
     yield* io(() => mkdir(observations, { recursive: true }));
     yield* io(() => writeFile(manifestPath, JSON.stringify(manifest)));
   } else {
@@ -215,6 +226,47 @@ export const openRecordingStore = Effect.fn("Recording.open")(function* (
     }
   if (used > bounds.maxBytes || takings.length > bounds.maxTakings)
     return yield* refuse("full", "Recording exceeds its bounds", 507);
+  const reader: RecordingReader = {
+    identity,
+    candidates: (wanted: string) =>
+      takings.filter((taking) => identityOf(taking.input.key, taking.input.args) === wanted),
+    taking: (id: string) => takings.find((taking) => taking.id === id),
+    observation: Effect.fn("Recording.observation")(function* (taking: Taking) {
+      if (taking.outcome.kind !== "answered")
+        return yield* refuse("miss", "This taking holds no observation");
+      const sha = taking.outcome.observation;
+      const bytes = (yield* bounded(join(observations, `${sha}.json`), null)) ?? "";
+      if (observationSha(taking.outputVersion, bytes) !== sha)
+        return yield* refuse("tamper", `Observation ${sha} does not hash to its name`);
+      return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(bytes).pipe(
+        Effect.mapError(() => refuse("tamper", `Observation ${sha} is not JSON`)),
+      );
+    }),
+  };
+  return { reader, takings, stored, used, takingsPath, observations };
+});
+
+/** Opens an existing bundle for replay. A missing, damaged, foreign or oversized bundle refuses. */
+export const openRecordingReader = (
+  dir: string,
+  identity: RecordingIdentity,
+  bounds: RecordingBounds,
+): Effect.Effect<RecordingReader, InvalidRead> =>
+  loadBundle(dir, identity, bounds, false).pipe(Effect.map((bundle) => bundle.reader));
+
+/** Opens or creates the bundle capture appends to, under the same identity and bounds checks. */
+export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
+  dir: string,
+  identity: RecordingIdentity,
+  bounds: RecordingBounds,
+) {
+  const { reader, takings, stored, takingsPath, observations, ...loaded } = yield* loadBundle(
+    dir,
+    identity,
+    bounds,
+    true,
+  );
+  let used = loaded.used;
   // In-flight observation writes, so two equal observations share one durable write.
   const writing = new Map<string, Promise<void>>();
   let reserved = 0;
@@ -235,7 +287,7 @@ export const openRecordingStore = Effect.fn("Recording.open")(function* (
     return write;
   };
   return {
-    identity,
+    ...reader,
     append: Effect.fn("Recording.append")(function* (input: TakingInput, outcome: Outcome) {
       const bytes = outcome.kind === "answered" ? canonicalJson(outcome.value) : "";
       const sha = outcome.kind === "answered" ? observationSha(input.outputVersion, bytes) : "";
@@ -279,29 +331,15 @@ export const openRecordingStore = Effect.fn("Recording.open")(function* (
       takings.push(taking);
       return taking;
     }),
-    candidates: (wanted: string) =>
-      takings.filter((taking) => identityOf(taking.input.key, taking.input.args) === wanted),
-    taking: (id: string) => takings.find((taking) => taking.id === id),
-    observation: Effect.fn("Recording.observation")(function* (taking: Taking) {
-      if (taking.outcome.kind !== "answered")
-        return yield* refuse("miss", "This taking holds no observation");
-      const sha = taking.outcome.observation;
-      const bytes = (yield* bounded(join(observations, `${sha}.json`), null)) ?? "";
-      if (observationSha(taking.outputVersion, bytes) !== sha)
-        return yield* refuse("tamper", `Observation ${sha} does not hash to its name`);
-      return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(bytes).pipe(
-        Effect.mapError(() => refuse("tamper", `Observation ${sha} is not JSON`)),
-      );
-    }),
-  } satisfies RecordingStore;
+  } satisfies RecordingWriter;
 });
 
 /** Where native reads come from (host-native only; not yet the canonical whole-product lane). */
 export type InputLane =
-  | { readonly kind: "live"; readonly capture?: RecordingStore }
+  | { readonly kind: "live"; readonly capture?: RecordingWriter }
   | {
       readonly kind: "recording";
-      readonly store: RecordingStore;
+      readonly store: RecordingReader;
       /** Input identity to taking id; a binding picks among takings but never crosses the scope fence. */
       readonly bindings?: ReadonlyMap<string, string>;
     };
@@ -376,7 +414,7 @@ const replayFailure = Effect.fn("Recording.failure")(function* (recorded: typeof
  * Live reads, captured into `store` when the lane asks. A taking that cannot be kept (full or
  * failed I/O) fails the read with that refusal, carrying the live read's dispatch evidence.
  */
-const capturing = (store: RecordingStore) =>
+const capturing = (store: RecordingWriter) =>
   Layer.effect(
     HostNativeRead,
     Effect.gen(function* () {
@@ -458,7 +496,7 @@ const capturing = (store: RecordingStore) =>
   );
 
 /** Recorded reads only: no live layer is built, and a miss is a typed refusal. */
-const replaying = (store: RecordingStore, bindings: ReadonlyMap<string, string> = new Map()) => {
+const replaying = (store: RecordingReader, bindings: ReadonlyMap<string, string> = new Map()) => {
   const select = Effect.fn("Recording.select")(function* (request: NativeReadInput) {
     yield* admitNativeCaller(request.key);
     const args = yield* argsOf(request);

@@ -17,7 +17,8 @@ import {
   hostNativeReadFor,
   nativeCatalogIdentity,
   nativeInputIdentity,
-  openRecordingStore,
+  openRecordingReader,
+  openRecordingWriter,
   type InputLane,
 } from "../src/native-recording.ts";
 import { InvalidRead, NativeReads } from "../src/native-reads.ts";
@@ -146,7 +147,7 @@ effectTest(
       const dir = yield* bundle;
       const capture = {
         kind: "live",
-        capture: yield* openRecordingStore(dir, identity, bounds),
+        capture: yield* openRecordingWriter(dir, identity, bounds),
       } as const;
       const recorded = live();
       const answered = yield* run(capture, recorded)(read("host.ops.catalog"));
@@ -160,7 +161,7 @@ effectTest(
       const replayed = live();
       const lane = {
         kind: "recording",
-        store: yield* openRecordingStore(dir, identity, bounds),
+        store: yield* openRecordingReader(dir, identity, bounds),
       } as const;
       const again = yield* run(lane, replayed)(read("host.ops.catalog"));
       expect(again).toEqual({ ...answered, value: catalogAnswer });
@@ -188,7 +189,7 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const dir = yield* bundle;
-      const store = yield* openRecordingStore(dir, identity, bounds);
+      const store = yield* openRecordingWriter(dir, identity, bounds);
       const recorded = live();
       yield* run({ kind: "live", capture: store }, recorded)(read("host.ops.catalog"));
       yield* run({ kind: "live", capture: store }, recorded)(read("host.ops.catalog"));
@@ -213,7 +214,7 @@ effectTest(
 effectTest("a miss, another build, a tampered observation and a full bundle each refuse", () =>
   Effect.gen(function* () {
     const dir = yield* bundle;
-    const store = yield* openRecordingStore(dir, identity, bounds);
+    const store = yield* openRecordingWriter(dir, identity, bounds);
     const taken = yield* run({ kind: "live", capture: store })(read("host.ops.catalog"));
     expect(taken.value).toEqual(catalogAnswer);
     expect(
@@ -222,7 +223,7 @@ effectTest("a miss, another build, a tampered observation and a full bundle each
       problem: "recording.miss",
     });
     expect(
-      yield* outcome(openRecordingStore(dir, { ...identity, build: "build-2" }, bounds)),
+      yield* outcome(openRecordingReader(dir, { ...identity, build: "build-2" }, bounds)),
     ).toMatchObject({
       problem: "recording.mismatch",
     });
@@ -238,7 +239,7 @@ effectTest("a miss, another build, a tampered observation and a full bundle each
     ).toMatchObject({
       problem: "recording.tamper",
     });
-    const full = yield* openRecordingStore(yield* bundle, identity, {
+    const full = yield* openRecordingWriter(yield* bundle, identity, {
       maxBytes: 1_000_000,
       maxTakings: 1,
     });
@@ -264,7 +265,7 @@ effectTest(
   "replay admits each caller and fences the recorded document, even through a binding",
   () =>
     Effect.gen(function* () {
-      const store = yield* openRecordingStore(yield* bundle, identity, bounds);
+      const store = yield* openRecordingWriter(yield* bundle, identity, bounds);
       yield* run({ kind: "live", capture: store })(
         read("ducts.snapshot.walk", {}, { openDocumentId: "doc-A" }),
       ).pipe(Effect.ignore);
@@ -305,7 +306,7 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const dir = yield* bundle;
-      const broken = yield* openRecordingStore(dir, identity, bounds);
+      const broken = yield* openRecordingWriter(dir, identity, bounds);
       yield* Effect.promise(() => rm(join(dir, "observations"), { recursive: true, force: true }));
       expect(
         yield* outcome(run({ kind: "live", capture: broken })(read("host.ops.catalog"))),
@@ -314,10 +315,10 @@ effectTest(
       });
       const key = yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope: {} });
       expect(broken.candidates(key)).toEqual([]);
-      expect((yield* openRecordingStore(dir, identity, bounds)).candidates(key)).toEqual([]);
+      expect((yield* openRecordingReader(dir, identity, bounds)).candidates(key)).toEqual([]);
 
       const fresh = yield* bundle;
-      const store = yield* openRecordingStore(fresh, identity, bounds);
+      const store = yield* openRecordingWriter(fresh, identity, bounds);
       const source = live();
       yield* Effect.all(
         [1, 2].map(() => run({ kind: "live", capture: store }, source)(read("host.ops.catalog"))),
@@ -326,7 +327,7 @@ effectTest(
         },
       );
       expect(yield* Effect.promise(() => readdir(join(fresh, "observations")))).toHaveLength(1);
-      const reopened = yield* openRecordingStore(fresh, identity, bounds);
+      const reopened = yield* openRecordingReader(fresh, identity, bounds);
       const takings = reopened.candidates(key);
       expect(takings).toHaveLength(2);
       const bound = {
@@ -343,18 +344,18 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const dir = yield* bundle;
-      const store = yield* openRecordingStore(dir, identity, bounds);
+      const store = yield* openRecordingWriter(dir, identity, bounds);
       yield* run({ kind: "live", capture: store })(read("host.ops.catalog"));
       const path = join(dir, "takings.jsonl");
       const line = (yield* Effect.promise(() => readFile(path, "utf8"))).trim();
       const sha = (JSON.parse(line) as { outcome: { observation: string } }).outcome.observation;
       yield* Effect.promise(() => writeFile(path, `${line.replace(sha, "../../manifest")}\n`));
-      expect(yield* outcome(openRecordingStore(dir, identity, bounds))).toMatchObject({
+      expect(yield* outcome(openRecordingReader(dir, identity, bounds))).toMatchObject({
         problem: "recording.tamper",
       });
       yield* Effect.promise(() => writeFile(path, `${line}\n`));
       expect(
-        yield* outcome(openRecordingStore(dir, identity, { maxBytes: 64, maxTakings: 100 })),
+        yield* outcome(openRecordingReader(dir, identity, { maxBytes: 64, maxTakings: 100 })),
       ).toMatchObject({
         problem: "recording.full",
       });
@@ -366,7 +367,7 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const dir = yield* bundle;
-      const store = yield* openRecordingStore(dir, identity, bounds);
+      const store = yield* openRecordingWriter(dir, identity, bounds);
       const served = (lane: InputLane) => {
         const web = HttpRouter.toWebHandler(
           HttpRouter.add("GET", "/read/*", (req) =>
@@ -430,13 +431,51 @@ effectTest(
       expect((failed as BridgeError).outcome).toBe("failed");
       const path = join(dir, "takings.jsonl");
       const lines = (yield* Effect.promise(() => readFile(path, "utf8")))
-        .trim().split("\n").map((line) => JSON.parse(line));
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
       const damaged = lines.find((taking) => taking.outcome.failure?.tag === "BridgeError");
       expect(damaged).toBeDefined();
       damaged.outcome.failure.evidence.notDispatched = "yes";
-      yield* Effect.promise(() => writeFile(path, lines.map((line) => JSON.stringify(line)).join("\n") + "\n"));
-      expect(yield* outcome(openRecordingStore(dir, identity, bounds))).toMatchObject({
+      yield* Effect.promise(() =>
+        writeFile(path, lines.map((line) => JSON.stringify(line)).join("\n") + "\n"),
+      );
+      expect(yield* outcome(openRecordingReader(dir, identity, bounds))).toMatchObject({
         problem: "recording.tamper",
       });
+    }),
+);
+
+effectTest(
+  "a historical reader refuses a missing bundle without creating it and exposes no append",
+  () =>
+    Effect.gen(function* () {
+      const root = yield* bundle;
+      const absent = join(root, "never-recorded");
+      expect(yield* outcome(openRecordingReader(absent, identity, bounds))).toMatchObject({
+        status: 404,
+        problem: "recording.missing",
+      });
+      expect(yield* Effect.promise(() => readdir(root))).toEqual([]);
+      yield* run({ kind: "live", capture: yield* openRecordingWriter(absent, identity, bounds) })(
+        read("host.ops.catalog"),
+      );
+      const before = yield* Effect.promise(() => readFile(join(absent, "takings.jsonl"), "utf8"));
+      const reader = yield* openRecordingReader(absent, identity, bounds);
+      expect(Object.keys(reader).sort()).toEqual([
+        "candidates",
+        "identity",
+        "observation",
+        "taking",
+      ]);
+      expect(
+        (yield* run({ kind: "recording", store: reader })(read("host.ops.catalog"))).value,
+      ).toEqual(catalogAnswer);
+      yield* outcome(
+        run({ kind: "recording", store: reader })(read("host.ops.catalog", { other: 1 })),
+      );
+      expect(yield* Effect.promise(() => readFile(join(absent, "takings.jsonl"), "utf8"))).toBe(
+        before,
+      );
     }),
 );
