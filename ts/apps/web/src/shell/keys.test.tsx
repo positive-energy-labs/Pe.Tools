@@ -1,4 +1,3 @@
-import {testSubject,testFields,testReadings} from '../test-route-subject';
 // @vitest-environment jsdom
 import { expect, test, vi } from "vite-plus/test";
 import { createRef } from "react";
@@ -14,12 +13,12 @@ import {
 } from "./keys";
 
 function fixture() {
-  const graph: RouteGraph = {...testSubject,
+  const graph: RouteGraph = {
     key: "keys-proof",
     address: "/keys-proof",
     name: "Keys proof",
-    fields: {...testFields,},
-    readings: {...testReadings,},
+    fields: {},
+    readings: {},
     verbs: {
       apply: {
         kind: "command",

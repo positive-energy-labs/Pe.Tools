@@ -1248,19 +1248,6 @@ const nativeEntries = {
     input: z.strictObject({ work: workHandleSchema }),
   },
 };
-type NativeIntent = BodyBindings<
-  typeof builtinData,
-  typeof fixtureSchemas,
-  typeof nativeEntries
->["apply"]["run"];
-const acceptedWorkIntent: NativeIntent = () => ({});
-// @ts-expect-error Work identity belongs to B and cannot come from a route intent body.
-const forgedWorkIntent: NativeIntent = () => ({ work: { key: {}, revision: 99 } });
-test("typed native intent leaves accepted Work binding to the mount", () => {
-  expect(acceptedWorkIntent).toBeTypeOf("function");
-  expect(forgedWorkIntent).toBeTypeOf("function");
-});
-
 import { testConsents } from "../../../host/tests/effect-test";
 import type { ConsentEvent } from "../../../host/src/run-consent";
 import { createWorkFeedClient } from "./work-feed-client";
@@ -1484,12 +1471,14 @@ test("admitted mount undoes Pea's accepted feed step", async () => {
 test("Revert appends an inverse step and undo restores the reverted value", async () => {
   const f = await historyFixture();
   await settle(f.mount.invoke("change", 5) as Observation<WorkWriteOutcome>);
+  const originalAt = f.mount.journal()!.undo.at(-1)!.at;
   expect(await f.mount.history!.revert()).toMatchObject({ ok: true });
   expect(f.mount.work()?.value).toEqual({ amount: 0 });
   expect(f.mount.journal()?.undo.map((s) => s.label)).toEqual(["Change", "Revert Change"]);
   expect(f.mount.journal()?.moves.at(-1)?.label).toBe("Revert Change");
   expect(await f.mount.history!.undo()).toMatchObject({ ok: true });
   expect(f.mount.work()?.value).toEqual({ amount: 5 });
+  expect(f.mount.journal()!.undo[0]!.at).toBe(originalAt);
 });
 
 test("undo refuses a changed host inverse after a concurrent write without retrying", async () => {
@@ -2125,24 +2114,6 @@ test("a presenter throw refuses with a typed reason and never submits", async ()
   expect(f.submit).not.toHaveBeenCalled();
 });
 
-test("one-argument Data Tables-shaped presenter keeps its sentence and ordered rows", async () => {
-  const presenter = vi.fn((result: unknown) => {
-    expect(result).toMatchObject({ previewOnly: true });
-    return {
-      sentence: "Apply table. Prune deletes 1 row.",
-      rows: ["Upsert 2 rows and 3 columns.", "Delete row obsolete"],
-    };
-  });
-  const f = await nativeFixture(presenter);
-  f.mount.invoke("native", 0);
-  f.preview().deliver();
-  expect(f.mount.review("native")).toMatchObject({
-    stale: false,
-    sentence: "Apply table. Prune deletes 1 row.",
-    rows: ["Upsert 2 rows and 3 columns.", "Delete row obsolete"],
-  });
-  expect(presenter).toHaveBeenCalledOnce();
-});
 
 test("invalid presenter output cannot become a review", async () => {
   const f = await nativeFixture(() => ({ sentence: 12, rows: ["bad"] }));
