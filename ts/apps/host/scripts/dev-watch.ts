@@ -1,5 +1,4 @@
-import { promisify } from "node:util";
-import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { statSync, watch } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
@@ -61,13 +60,7 @@ process.once("SIGTERM", interrupt);
 try {
   do {
     restart = false;
-    // jiti reads builtin closures from disk: write the untracked build output before each start.
-    // An unchanged closure is not rewritten, and web/src is outside the watch roots.
-    await promisify(execFile)(process.execPath, [
-      fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)),
-      "--builtin-closure-only",
-    ]);
-    if (stopped) break;
+    // src/dev.ts prepares builtin closures itself, so attach and the supervisor share one path.
     child = spawn(
       process.execPath,
       [

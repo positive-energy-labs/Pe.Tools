@@ -8,7 +8,11 @@ import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { serviceFilePath } from "@pe/host-contracts/pe-service";
 import { publishDevTraySession } from "../scripts/dev-tray-session.ts";
 import { hostOwnership } from "./host-ownership.ts";
-import { hostProgram } from "./host-program.ts";
+import { prepareSourceClosures } from "./source-closures.ts";
+
+// The host graph imports closures from disk: prepare them, then link it (see source-closures.ts).
+await prepareSourceClosures();
+const { hostProgram } = await import("./host-program.ts");
 
 if (process.argv.includes("--share"))
   throw new Error("--share was removed. Use the Share switch on the installed host (/pe/share).");

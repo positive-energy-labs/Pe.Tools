@@ -49,6 +49,8 @@ test("dev takeover keeps the incumbent serving until the SDK claim can proceed",
     child.stderr?.on("data", (data) => (output += String(data)));
     return { child, output: () => output };
   };
+  // Each source start runs the builtin closure producer before it links the host graph.
+  const start = 120_000;
   try {
     const first = launch(false);
     let incumbent = await readServiceFile(appBase, name);
@@ -58,7 +60,7 @@ test("dev takeover keeps the incumbent serving until the SDK claim can proceed",
           incumbent = await readServiceFile(appBase, name);
           return incumbent?.pid;
         },
-        { timeout: 30_000 },
+        { timeout: start },
       )
       .toBe(first.child.pid);
     const oldUrl = `http://127.0.0.1:${incumbent!.port}`;
@@ -75,7 +77,7 @@ test("dev takeover keeps the incumbent serving until the SDK claim can proceed",
     );
     const second = launch(true);
     await expect
-      .poll(() => second.output().includes("pe-host binding"), { timeout: 30_000 })
+      .poll(() => second.output().includes("pe-host binding"), { timeout: start })
       .toBe(true);
     expect(await health(oldUrl)).toBe(200);
 
@@ -106,4 +108,4 @@ test("dev takeover keeps the incumbent serving until the SDK claim can proceed",
     else process.env.LOCALAPPDATA = previousLocalAppData;
     rmSync(state, { recursive: true, force: true });
   }
-}, 75_000);
+}, 300_000);
