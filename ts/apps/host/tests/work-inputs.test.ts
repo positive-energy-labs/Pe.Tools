@@ -4,25 +4,30 @@ import { join } from "node:path";
 import { Cause, Context, Effect, Exit, Layer, Schema, Scope } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
 import { address, bindWork } from "@pe/agent-contracts";
-import { RouteWorkspace, type RouteDocumentStore, type WorkReadSource } from "@pe/runtime";
+import {
+  RouteWorkspace,
+  type RouteDocumentStore,
+  type WorkReadContext,
+  type WorkReadSource,
+} from "@pe/runtime";
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
 import { AdmittedBuiltins, admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
 import { builtinEnrollments } from "../src/builtin-enrollment.ts";
 import {
-  inputBindingKey,
   nativeCatalogIdentity,
   openRecordingReader,
   openRecordingWriter,
   type Taking,
 } from "../src/native-recording.ts";
 import { InvalidRead } from "../src/native-reads.ts";
+import type { HostInputLane } from "../src/native-recording.ts";
+import { HostInputReadSets, type ConsumerRecipe, type ReadSetId } from "../src/input-occurrence.ts";
 import {
   capturedWorkReads,
   recordedWorkSource,
   workFeedCodecs,
-  workInput,
   workInputCodecs,
-  workInputScope,
+  workReadContext,
   type WorkInputRunner,
 } from "../src/work-inputs.ts";
 
@@ -75,7 +80,7 @@ const memory = (): RouteDocumentStore => {
   };
 };
 /** The first delivery of the admitted feed, with every ack seen while it was open. */
-const firstFeed = (workspace: RouteWorkspace, shape: "work" | "work-acks") =>
+const firstFeed = (workspace: RouteWorkspace, shape: "work" | "work-acks", context?: WorkReadContext) =>
   new Promise<{ value: unknown; acks: unknown[] }>((resolve, reject) => {
     const acks: unknown[] = [];
     const stop = workspace.observeAdmittedFeed(
@@ -88,8 +93,21 @@ const firstFeed = (workspace: RouteWorkspace, shape: "work" | "work-acks") =>
       },
       (ack) => acks.push(ack),
       reject,
+      context,
     );
   });
+
+const recipe: ConsumerRecipe = { key: "ducts.sheet", input: { fan: "F-1" }, scope: '["work-inputs"]' };
+/** One request's consumption over a real lane, and the Work context it carries explicitly. */
+async function consumer(lane: HostInputLane, selected: ReadSetId | null = null) {
+  const scope = await Effect.runPromise(Scope.make());
+  scopes.push(scope);
+  const built = await Effect.runPromise(Layer.buildWithScope(HostInputReadSets.layer(lane), scope));
+  const consumption = await Effect.runPromise(
+    Context.get(built, HostInputReadSets).open(recipe, selected),
+  );
+  return { consumption, context: workReadContext(consumption, run) };
+}
 
 test("a recorded workspace with no store serves the delivered Work, feed and history; it never mutates", async () => {
   const { dir, writer } = await bundle();
@@ -100,38 +118,44 @@ test("a recorded workspace with no store serves the delivered Work, feed and his
     capture: capturedWorkReads(writer, run, (taking) => Effect.sync(() => void takings.push(taking))),
   });
   await admit(live);
+  const request = await consumer({ kind: "live", captureStore: writer });
   for (const [revision, cfm] of [[0, 250], [1, 300]] as const)
     expect(
       await live.apply(key, "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm } } }], revision),
     ).toMatchObject({ ok: true });
   const delivered = {
-    raw: await live.readRaw(key, "fans"),
-    view: JSON.parse(JSON.stringify(await live.view(key, "fans"))),
-    feed: (await firstFeed(live, "work-acks")).value,
+    raw: await live.readRaw(key, "fans", request.context),
+    view: JSON.parse(JSON.stringify(await live.view(key, "fans", request.context))),
+    feed: (await firstFeed(live, "work-acks", request.context)).value,
   };
+  await run(request.consumption.seal);
   expect(delivered.feed).toMatchObject({ revision: 2, history: { from: 1 } });
   // The observer is told each durable taking before the read answers.
   expect(takings.map((taking) => (taking.input as { view: string }).view)).toEqual(["raw", "view", "feed"]);
 
   const recorded = new RouteWorkspace({
     registrations: [],
-    recorded: recordedWorkSource(await reader(dir), run),
+    recorded: recordedWorkSource(await reader(dir)),
     authorizeMutation: (verb) => {
       if (verb === "start-fresh") throw Object.assign(Error("historical Work is read-only"), { code: "WorkHistorical" });
     },
   });
   await admit(recorded);
-  expect(await recorded.readRaw(key, "fans")).toEqual(delivered.raw);
-  expect(await recorded.view(key, "fans")).toEqual(delivered.view);
+  const { context: again } = await consumer(
+    { kind: "recording", recordingStore: await reader(dir), at: null },
+    request.consumption.id,
+  );
+  expect(await recorded.readRaw(key, "fans", again)).toEqual(delivered.raw);
+  expect(await recorded.view(key, "fans", again)).toEqual(delivered.view);
   // Once, with its original handle and history; a recording invents no acks.
-  expect(await firstFeed(recorded, "work-acks")).toEqual({ value: delivered.feed, acks: [] });
+  expect(await firstFeed(recorded, "work-acks", again)).toEqual({ value: delivered.feed, acks: [] });
   // A taking never made is the store's typed miss, never an empty r0 Work.
-  await expect(recorded.readRaw(other, "fans")).rejects.toMatchObject({
+  await expect(recorded.readRaw(other, "fans", again)).rejects.toMatchObject({
     _tag: "InvalidRequest",
     problem: "recording.miss",
   });
-  // The view-with-history shape was never delivered live; its scope fence refuses the other shape's taking.
-  await expect(firstFeed(recorded, "work")).rejects.toMatchObject({ problem: "recording.scope" });
+  // The view-with-history shape was never delivered live: this consumer has no such start.
+  await expect(firstFeed(recorded, "work", again)).rejects.toMatchObject({ problem: "recording.miss" });
   await expect(
     recorded.apply(key, "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm: 1 } } }], 2),
   ).rejects.toThrow("recorded workspace refuses Work edit");
@@ -155,7 +179,11 @@ test("a recorded feed re-admits after acquisition, and a valid handle for other 
     await admit(live);
     return live.view(other, "fans");
   });
-  const source: WorkReadSource = { read: async () => foreign, feed: () => pending };
+  const source: WorkReadSource = {
+    begin: () => ({ ok: true, carriage: undefined }),
+    read: async () => foreign,
+    feed: () => pending,
+  };
   const recorded = new RouteWorkspace({ registrations: [], recorded: source });
   const retire = await admit(recorded);
   await expect(recorded.view(key, "fans")).rejects.toThrow("belongs to another key");
@@ -201,6 +229,7 @@ test.each(["work", "work-acks"] as const)(
       read: async () => {},
       readFailed: async () => {},
       feedFailed: async () => {},
+      begin: () => ({ ok: true, carriage: undefined }),
       stop: async () => {},
       feed: async () => {
         captures++;
@@ -222,6 +251,7 @@ test.each(["work", "work-acks"] as const)(
   async (shape) => {
     const { writer } = await bundle();
     const real = capturedWorkReads(writer, run);
+    const request = await consumer({ kind: "live", captureStore: writer });
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     let feeds = 0;
@@ -241,6 +271,7 @@ test.each(["work", "work-acks"] as const)(
       (value) => seen.push("error" in value ? -1 : (value.value as { revision: number }).revision),
       (ack) => seen.push(ack.revision),
       (error) => failures.push(error),
+      request.context,
     );
     await settled();
     for (let i = 0; i < 3; i++) await f.write(); // the third exceeds maxCount 2 while capture holds
@@ -262,45 +293,27 @@ test.each(["work", "work-acks"] as const)(
   },
 );
 
-test("a recorded read is bound to its exact taking; an unbound repeat is ambiguous and a foreign id refuses", async () => {
-  const { dir, writer } = await bundle();
-  const takings: Taking[] = [];
-  const live = new RouteWorkspace({
-    registrations: [],
-    store: memory(),
-    capture: capturedWorkReads(writer, run, (taking) => Effect.sync(() => void takings.push(taking))),
-  });
-  await admit(live);
-  const first = await live.readRaw(key, "fans");
-  await live.apply(key, "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm: 9 } } }], 0);
-  await live.readRaw(key, "fans");
-  await live.view(key, "fans");
-  const [raw0, , view] = takings;
-  const binding = inputBindingKey(workInput(key, "raw"), workInputScope(key));
-  const reader_ = await reader(dir);
-  const replay = async (bindings?: Map<string, string>) => {
-    const recorded = new RouteWorkspace({ registrations: [], recorded: recordedWorkSource(reader_, run, bindings) });
-    await admit(recorded); // an unadmitted route reads null before any source (the preserved red)
-    return recorded.readRaw(key, "fans");
-  };
-  await expect(replay()).rejects.toMatchObject({ problem: "recording.ambiguous" });
-  expect(await replay(new Map([[binding, raw0!.id]]))).toEqual(first);
-  await expect(replay(new Map([[binding, view!.id]]))).rejects.toMatchObject({ problem: "recording.mismatch" });
-});
-
 test("Work that cannot be recorded truncates capture; the live Work still answers and replay stays strict", async () => {
   const { dir, writer } = await bundle();
   const capture = capturedWorkReads(writer, run);
   const live = new RouteWorkspace({ registrations: [], store: memory(), capture });
   await admit(live);
-  const { title: _title, ...missingTitle } = (await live.view(key, "fans"))!;
-  await capture.read(key, "raw", undefined); // an undefined root is not a recorded null
+  const request = await consumer({ kind: "live", captureStore: writer });
+  const { title: _title, ...missingTitle } = (await live.view(key, "fans", request.context))!;
+  const carriage = (view: "raw" | "view") => {
+    const begun = capture.begin({ kind: "read", key, view }, request.context);
+    return begun.ok ? begun.carriage : undefined;
+  };
+  await capture.read(key, "raw", undefined, carriage("raw")); // an undefined root is not a recorded null
   expect(writer.truncation).toEqual({ at: 2, reason: "encoding" });
-  await capture.read(key, "view", missingTitle);
+  await capture.read(key, "view", missingTitle, carriage("view"));
   // Capture stopped at the first loss; later live reads answer and keep no taking.
-  expect(await live.view(key, "fans")).toMatchObject({ revision: 0 });
-  const recorded = recordedWorkSource(await reader(dir), run);
-  await expect(recorded.read(key, "raw")).rejects.toMatchObject({ problem: "recording.miss" });
+  expect(await live.view(key, "fans", request.context)).toMatchObject({ revision: 0 });
+  await run(request.consumption.seal);
+  // A truncated capture keeps no complete read set: the consumer is not replayable at all.
+  await expect(
+    consumer({ kind: "recording", recordingStore: await reader(dir), at: null }, request.consumption.id),
+  ).rejects.toMatchObject({ problem: "recording.context" });
   expect((await reader(dir)).truncation).toEqual({ at: 2, reason: "encoding" });
 });
 
@@ -312,7 +325,8 @@ test("a failing taking observer truncates capture without failing the live read"
     capture: capturedWorkReads(writer, run, () => Effect.fail(new InvalidRead({ message: "observer down", status: 500, problem: "provenance.down" }))),
   });
   await admit(live);
-  expect(await live.view(key, "fans")).toMatchObject({ revision: 0 });
+  const request = await consumer({ kind: "live", captureStore: writer });
+  expect(await live.view(key, "fans", request.context)).toMatchObject({ revision: 0 });
   expect(writer.truncation).toMatchObject({ reason: "observer" });
 });
 
@@ -329,28 +343,94 @@ test("a live Work body read failure is recorded as its exact DoorFailure, or tru
   };
   const live = new RouteWorkspace({ registrations: [], store, capture: capturedWorkReads(writer, run) });
   await admit(live); // admission is not a body read; the store is poisoned only after it
+  const request = await consumer({ kind: "live", captureStore: writer });
   const busy = new InvalidRead({ message: "Work store poisoned", status: 503, problem: "work.read" });
   poison = busy;
-  await expect(live.readRaw(key, "fans")).rejects.toBe(busy);
-  await expect(live.view(key, "fans")).rejects.toBe(busy);
-  await expect(live.read(key, "fans")).rejects.toBe(busy);
-  await expect(firstFeed(live, "work-acks")).rejects.toBe(busy);
+  await expect(live.readRaw(key, "fans", request.context)).rejects.toBe(busy);
+  await expect(live.view(key, "fans", request.context)).rejects.toBe(busy);
+  await expect(live.read(key, "fans", request.context)).rejects.toBe(busy);
+  await expect(firstFeed(live, "work-acks", request.context)).rejects.toBe(busy);
   expect(writer.truncation).toBeNull();
+  await run(request.consumption.seal);
 
-  const recorded = new RouteWorkspace({ registrations: [], recorded: recordedWorkSource(await reader(dir), run) });
+  const recorded = new RouteWorkspace({ registrations: [], recorded: recordedWorkSource(await reader(dir)) });
   await admit(recorded);
+  const { context: again } = await consumer(
+    { kind: "recording", recordingStore: await reader(dir), at: null },
+    request.consumption.id,
+  );
   const same = { _tag: "InvalidRequest", status: 503, problem: "work.read", message: "Work store poisoned" };
-  await expect(recorded.readRaw(key, "fans")).rejects.toMatchObject(same);
-  await expect(recorded.view(key, "fans")).rejects.toMatchObject(same);
-  await expect(recorded.read(key, "fans")).rejects.toMatchObject(same);
-  await expect(firstFeed(recorded, "work-acks")).rejects.toMatchObject(same);
+  await expect(recorded.readRaw(key, "fans", again)).rejects.toMatchObject(same);
+  await expect(recorded.view(key, "fans", again)).rejects.toMatchObject(same);
+  await expect(recorded.read(key, "fans", again)).rejects.toMatchObject(same);
+  await expect(firstFeed(recorded, "work-acks", again)).rejects.toMatchObject(same);
 
   // A failure no taking can hold faithfully stops capture; the caller still gets it unchanged.
   const plain = Error("plain store fault");
   poison = plain;
-  await expect(live.view(other, "fans")).rejects.toBe(plain);
+  const later = await consumer({ kind: "live", captureStore: writer });
+  await expect(live.view(other, "fans", later.context)).rejects.toBe(plain);
   expect(writer.truncation).toMatchObject({ reason: "unsupported" });
   // The `work` frame reaches the owner as its message only; live delivers it as it always did.
   poison = busy;
-  await expect(firstFeed(live, "work")).rejects.toBe("Work store poisoned");
+  await expect(firstFeed(live, "work", later.context)).rejects.toBe("Work store poisoned");
+});
+
+test("two request contexts cross the Work queue with reverse capture completion; each replays its own starts", async () => {
+  const { dir, writer } = await bundle();
+  const real = capturedWorkReads(writer, run);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  let held = true;
+  const live = new RouteWorkspace({
+    registrations: [],
+    store: memory(),
+    capture: {
+      ...real,
+      read: (...args) => {
+        if (!held) return real.read(...args);
+        held = false; // the human's first capture completes last
+        return gate.then(() => real.read(...args));
+      },
+    },
+  });
+  await admit(live);
+  const human = await consumer({ kind: "live", captureStore: writer });
+  const pea = await consumer({ kind: "live", captureStore: writer });
+  const first = live.view(key, "fans", human.context);
+  await live.apply(key, "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm: 7 } } }], 0);
+  expect(await live.view(key, "fans", pea.context)).toMatchObject({ revision: 1 });
+  release();
+  expect(await first).toMatchObject({ revision: 0 });
+  expect(await live.view(key, "fans", human.context)).toMatchObject({ revision: 1 }); // a repeat start
+  for (const { consumption } of [human, pea]) await run(consumption.seal);
+
+  const reader_ = await reader(dir);
+  const recorded = new RouteWorkspace({ registrations: [], recorded: recordedWorkSource(reader_) });
+  await admit(recorded);
+  const again = async (id: ReadSetId) => (await consumer({ kind: "recording", recordingStore: reader_, at: null }, id)).context;
+  const humanAgain = await again(human.consumption.id);
+  expect(await recorded.view(key, "fans", humanAgain)).toMatchObject({ revision: 0 });
+  expect(await recorded.view(key, "fans", humanAgain)).toMatchObject({ revision: 1 });
+  const peaAgain = await again(pea.consumption.id);
+  expect(await recorded.view(key, "fans", peaAgain)).toMatchObject({ revision: 1 });
+  await expect(recorded.view(key, "fans", peaAgain)).rejects.toMatchObject({ problem: "recording.miss" });
+});
+
+test("no context: a recording refuses before access; capture truncates and live Work is unchanged", async () => {
+  const { dir, writer } = await bundle();
+  const live = new RouteWorkspace({ registrations: [], store: memory(), capture: capturedWorkReads(writer, run) });
+  await admit(live);
+  expect(await live.view(key, "fans")).toMatchObject({ revision: 0 });
+  expect(writer.truncation).toMatchObject({ reason: "unsupported" });
+  let touched = 0;
+  const source = recordedWorkSource(await reader(dir));
+  const recorded = new RouteWorkspace({
+    registrations: [],
+    recorded: { ...source, read: (...args) => (touched++, source.read(...args)) },
+  });
+  await admit(recorded);
+  await expect(recorded.view(key, "fans")).rejects.toMatchObject({ _tag: "InvalidRequest", problem: "recording.context" });
+  await expect(firstFeed(recorded, "work-acks")).rejects.toMatchObject({ problem: "recording.context" });
+  expect(touched).toBe(0);
 });
