@@ -288,7 +288,9 @@ export class RouteWorkspace {
       };
     const reading = admission.reading ? registered.readings[admission.reading] : undefined;
     const workRoute = admission.reading
-      ? reading?.kind === "work" ? reading.route : null
+      ? reading?.kind === "work"
+        ? reading.route
+        : null
       : registered.workRoute;
     if (key.route !== workRoute)
       return {
@@ -338,7 +340,10 @@ export class RouteWorkspace {
         let state: "ready" | "unreadable" | "unregistered" = spec ? "unreadable" : "unregistered";
         if (spec) {
           try {
-            const envelope = parseEnvelope(retireSuggestionLane(record.value)?.value ?? record.value, spec);
+            const envelope = parseEnvelope(
+              this.#retireSuggestions(record.targetKey, record.route, record.value),
+              spec,
+            );
             revision = envelope.revision;
             ({ unfinished } = workCounts(envelope.doc, spec.editable ?? []));
             state = "ready";
@@ -702,8 +707,8 @@ export class RouteWorkspace {
     const { spec } = registration;
     const targetKey = workKey(scope);
     return this.#serialized(async () => {
-      const raw = await this.options.store.getState({ targetKey, route });
-      if (raw == null || readable(raw, spec))
+      const { original: raw, value } = await this.#raw(targetKey, route);
+      if (value == null || readable(value, spec))
         return refuse("refused", "this route's Work is readable", "Nothing to set aside.");
       // Recovery also covers unreadable values at the current schema (U8rv). The
       // older-schema-only rule would strand these bytes; newer/unknown schemas stay closed.
@@ -715,8 +720,7 @@ export class RouteWorkspace {
           "Only a known current or older schema permits Start fresh.",
         );
       let slot = 1;
-      while ((await this.options.store.getState({ targetKey, route: aside(route, slot) })) != null)
-        slot++;
+      while ((await this.#raw(targetKey, aside(route, slot))).original != null) slot++;
       await this.options.store.setState({ targetKey, route: aside(route, slot), value: raw });
       const fresh = emptyEnvelope(spec);
       const prior = envelopeSchema.safeParse(raw);
@@ -794,11 +798,11 @@ export class RouteWorkspace {
         );
       }
     };
-    const raw = await this.options.store.getState({ targetKey, route });
+    const { value: raw } = await this.#raw(targetKey, route);
     if (raw != null && !readable(raw, spec)) return extract("unreadable", raw);
     let newest: { slot: number; raw: unknown } | null = null;
     for (let slot = 1; ; slot++) {
-      const found = await this.options.store.getState({ targetKey, route: aside(route, slot) });
+      const { value: found } = await this.#raw(targetKey, aside(route, slot));
       if (found == null) break;
       newest = { slot, raw: found };
     }
@@ -990,17 +994,23 @@ export class RouteWorkspace {
   async #carryOver(scope: WorkKey, route: string): Promise<unknown> {
     const { store } = this.options;
     const targetKey = workKey(scope);
-    const raw = this.#retireSuggestions(targetKey, route, await store.getState({ targetKey, route }));
+    const { value: raw } = await this.#raw(targetKey, route);
     const openWork =
       scope.binding === "address" && scope.from
         ? bindWork(scope.route, null, undefined, scope.from)
         : null;
     if (raw != null || !openWork) return raw;
-    const carried = await store.getState({ targetKey: workKey(openWork), route });
-    if (carried == null) return null;
-    await store.setState({ targetKey, route, value: carried });
+    const carried = await this.#raw(workKey(openWork), route);
+    if (carried.original == null) return null;
+    await store.setState({ targetKey, route, value: carried.original });
     await store.setState({ targetKey: workKey(openWork), route, value: null });
-    return this.#retireSuggestions(targetKey, route, carried);
+    return carried.value;
+  }
+
+  /** Keep original bytes for recovery and Save As; all consumers see the retired cell shape. */
+  async #raw(targetKey: string, route: string) {
+    const original = await this.options.store.getState({ targetKey, route });
+    return { original, value: this.#retireSuggestions(targetKey, route, original) };
   }
 
   /**
@@ -1039,15 +1049,17 @@ export class RouteWorkspace {
    * schema. Stored bytes stay as saved: a step whose detail no longer decodes is marked, not rewritten. */
   #stored(history: unknown, scope: WorkKey): z.infer<typeof historySchema> {
     const schema = this.#registry.get(scope.route)?.historyDetail;
-    return historySchema.parse(history ?? []).map(({ write: { detail: _, ...write }, ...record }) => ({
-      ...record,
-      write: {
-        ...write,
-        key: scope,
-        ...(write.meta !== undefined &&
-          !schema?.safeParse(write.meta).success && { detail: "unavailable" as const }),
-      },
-    }));
+    return historySchema
+      .parse(history ?? [])
+      .map(({ write: { detail: _, ...write }, ...record }) => ({
+        ...record,
+        write: {
+          ...write,
+          key: scope,
+          ...(write.meta !== undefined &&
+            !schema?.safeParse(write.meta).success && { detail: "unavailable" as const }),
+        },
+      }));
   }
 
   #retain(records: z.infer<typeof historySchema>, revision: number) {

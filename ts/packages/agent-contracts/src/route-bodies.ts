@@ -433,7 +433,8 @@ export function linkRouteBodies(
   for (const [key, reading] of Object.entries(data.readings)) {
     const closure = visit(key, new Set());
     if (
-      reading.kind !== "derive" && reading.kind !== "work" &&
+      reading.kind !== "derive" &&
+      reading.kind !== "work" &&
       geometryEntry(reading.entry) &&
       (reading.kind !== "use" || !reading.geometry)
     )
@@ -584,7 +585,7 @@ export function linkRouteBodies(
     schemaRef(cell.value, `${path}.value`);
     deps(cell.deps, `${path}.deps`);
     body(cell.groupOf, `${path}.groupOf`, "group");
-    for (const key of ["show", "label", "focus", "take", "admit"] as const)
+    for (const key of ["show", "label", "focus", "admit"] as const)
       body(cell[key], `${path}.${key}`, key);
   }
   list(workKeys, Object.keys(data.workFields), "workFields", "Work field");

@@ -455,7 +455,10 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
     "plugins.routeTrust": route(
       "PUT",
       "/pe/plugin-routes/:key/trust",
-      z.strictObject({ fingerprint: z.string().regex(/^pod-bytes:[a-f0-9]{64}$/), trusted: z.boolean() }),
+      z.strictObject({
+        fingerprint: z.string().regex(/^pod-bytes:[a-f0-9]{64}$/),
+        trusted: z.boolean(),
+      }),
       z.array(podRouteDescriptorSchema),
       "human",
       "plugins",
@@ -1469,11 +1472,10 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     subject: "None",
     touches: "Metadata",
     cardinality: "One",
-    // Not stateless: point/dismiss rewrite the calling thread's meta.json `pointers` list. The
-    // boundary that makes Read honest is metadata-only: no Revit call, no document or Work read or
-    // write, no selection/URL/camera. Read keeps it out of the write consent window (ADR 0027).
-    effect: "Read",
-    principal: ["human", "pea"],
+    // Read intent permits the metadata door without write consent; SessionWrite records its
+    // thread-meta effect. Neither pointing nor dismissing changes Revit, Work, selection or camera.
+    effect: "SessionWrite",
+    principal: ["pea"],
     origin: "host-local",
     displayName: "Point At",
     description:
@@ -1491,15 +1493,11 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     subject: "None",
     touches: "Metadata",
     cardinality: "One",
-    // Not stateless: point/dismiss rewrite the calling thread's meta.json `pointers` list. The
-    // boundary that makes Read honest is metadata-only: no Revit call, no document or Work read or
-    // write, no selection/URL/camera. Read keeps it out of the write consent window (ADR 0027).
     effect: "Read",
     principal: ["human", "pea"],
     origin: "host-local",
     displayName: "Pointers",
-    description:
-      "List what this thread is pointing at, newest last.",
+    description: "List what this thread is pointing at, newest last.",
     intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",
@@ -1513,15 +1511,11 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     subject: "None",
     touches: "Metadata",
     cardinality: "One",
-    // Not stateless: point/dismiss rewrite the calling thread's meta.json `pointers` list. The
-    // boundary that makes Read honest is metadata-only: no Revit call, no document or Work read or
-    // write, no selection/URL/camera. Read keeps it out of the write consent window (ADR 0027).
-    effect: "Read",
+    effect: "SessionWrite",
     principal: ["human", "pea"],
     origin: "host-local",
     displayName: "Dismiss Pointer",
-    description:
-      "Remove one pointer from this thread's list by id.",
+    description: "Remove one pointer from this thread's list by id.",
     intent: "Read",
     visibility: "DefaultVisible",
     costTier: "Cheap",

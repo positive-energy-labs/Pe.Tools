@@ -511,7 +511,6 @@ async function workRoute(
               ...(cellBodies === "draft" ? {} : { show: "cellShow" }),
               label: "cellLabel",
               focus: "cellFocus",
-              ...(cellBodies === "draft" ? {} : { take: "cellTake" }),
               deps: {
                 page: ["query"],
                 work: cellBodies === "draft" ? [] : ["amount"],
@@ -680,25 +679,6 @@ async function workRoute(
               source,
               run: (key: string) => ({ query: key }),
             },
-            ...(cellBodies === "draft"
-              ? {}
-              : {
-                  cellTake: {
-                    slot: "cells.amount.take",
-                    kind: "take",
-                    source,
-                    run: (ctx: {
-                      page: { query: string };
-                      work: { amount: number };
-                      readings: Record<string, unknown>;
-                    }) => {
-                      expect(Object.keys(ctx.page)).toEqual(["query"]);
-                      expect(Object.keys(ctx.work)).toEqual(["amount"]);
-                      expect(Object.keys(ctx.readings)).toEqual(["notes"]);
-                      return [{ path: ["amount"], value: ctx.work.amount + 1 }];
-                    },
-                  },
-                }),
           }
         : {}),
       ...(presenter

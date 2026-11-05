@@ -225,12 +225,14 @@ export const RouteGraphJson = z.strictObject({
   subjectText: ref.optional(),
   /** Neutral schema for route-owned history metadata. */
   historyDetail: ref.optional(),
-  work: z.strictObject({
-    schema: ref,
-    route: ref,
-    version: z.number().int().positive(),
-    migrations: z.record(z.string().regex(/^[1-9][0-9]*$/), ref),
-  }).optional(),
+  work: z
+    .strictObject({
+      schema: ref,
+      route: ref,
+      version: z.number().int().positive(),
+      migrations: z.record(z.string().regex(/^[1-9][0-9]*$/), ref),
+    })
+    .optional(),
   readings: z.record(ref, routeReadingJsonSchema),
   verbs: z.record(ref, routeVerbJsonSchema),
   panes: z.record(ref, pane),
@@ -255,7 +257,6 @@ export const RouteGraphJson = z.strictObject({
       show: ref.optional(),
       label: ref.optional(),
       focus: ref.optional(),
-      take: ref.optional(),
       admit: ref.optional(),
       deps: dependencies,
     }),

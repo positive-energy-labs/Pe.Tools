@@ -263,7 +263,6 @@ export const podData = {
       value: "number",
       groupOf: "cellGroup",
       focus: "cellFocus",
-      take: "cellTake",
       deps: { ...emptyDeps, work: ["amount"] },
     },
   },
@@ -323,12 +322,6 @@ export const podBodies = {
     run: (key) => [key === "voltage" ? "electrical" : "layout"],
   },
   cellFocus: { slot: "cells.input.focus", kind: "focus", source, run: (key) => ({ search: key }) },
-  cellTake: {
-    slot: "cells.input.take",
-    kind: "take",
-    source,
-    run: ({ work }, key) => [{ path: ["amount"], value: key === "length" ? work.amount : 120 }],
-  },
 } satisfies BodyBindings<typeof podData, typeof schemas, typeof podEntries, string>;
 
 const builtinCodecs = {

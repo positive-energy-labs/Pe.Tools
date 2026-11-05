@@ -494,12 +494,6 @@ type CellSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         (key: CellKey<S, G["cells"][K]>) => PagePatch<G, S>
       >
     | Slot<
-        At<G["cells"][K], "take">,
-        `cells.${K}.take`,
-        "take",
-        (ctx: Ctx<G, S, E, G["cells"][K]>, key: CellKey<S, G["cells"][K]>) => WorkPatches<G, S>
-      >
-    | Slot<
         At<G["cells"][K], "admit">,
         `cells.${K}.admit`,
         "admit",

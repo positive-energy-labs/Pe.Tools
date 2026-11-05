@@ -1,6 +1,6 @@
 /*
- * Step 3 frozen contract (ADR 0030 rule 10). TEMPORARY SCAFFOLD: types only, nothing reads them yet.
- * Pointers is a shell list per thread, "Pea is pointing at", kept until dismissed. A Pointer
+ * Pointers is the shell list per thread (ADR 0030 rule 10), "Pea is pointing at", kept until dismissed.
+ * The thread stores it and the route owns its highlight. A Pointer
  * highlights; it never writes the page's selection, its attention fields or the camera.
  */
 

@@ -1099,11 +1099,11 @@ test("pressing take on a cell row is one journal step and Mod+Z restores it", as
 test("a graph verb colliding with a cell verb id is refused at admission, not at render", async () => {
   const f = await fixture(true);
   cellRows(f);
-  (f.graph.verbs as Record<string, unknown>)["cell:rules.take"] = f.graph.verbs.other;
+  (f.graph.verbs as Record<string, unknown>)["cell:rules.clear"] = f.graph.verbs.other;
   const get = vi.spyOn(f.adapters, "getSnapshot");
   const Component = mountRoute(f.graph, f.adapters);
   const view = render(<Component />);
-  expect(view.getByRole("alert").textContent).toContain("cell:rules.take");
+  expect(view.getByRole("alert").textContent).toContain("cell:rules.clear");
   expect(get).not.toHaveBeenCalled();
   expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
 });

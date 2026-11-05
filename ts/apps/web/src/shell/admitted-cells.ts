@@ -54,7 +54,7 @@ export function admittedWorkPatches(
   );
 }
 
-/** Cell display is cached at publication; focus/take remain explicit actions on the shared owners. */
+/** Cell display is cached at publication; focus and clear act through the shared owners. */
 export function createAdmittedCells(
   data: Pick<RouteGraphJson, "work" | "cells">,
   schemas: SchemaTable,
