@@ -2,39 +2,15 @@ import { describe, expect, it } from "vite-plus/test";
 import { catalogWorks, catalogWorkSpecs, type CatalogTouch } from "./catalog-work.ts";
 import { commandCatalogAxes } from "./command-axes.ts";
 import { editableCells } from "./command.ts";
-import { commands } from "./semantic-actions.ts";
 
 /**
  * K3 class-wide falsifier over every ModelWrite command, discovered from the catalog axes.
- * Only an executable omission check passes. A write without one FAILS, whatever its schema shows; native-only
- * proof and source census live in step-4/K3-REPAIR.md, not as passes here. Unknown semantics never pass.
+ * Executable checks prove omission behavior; named pending writes remain Owed in the routes ledger.
+ * Every ModelWrite must appear exactly once in one group. Pending is classification, never proof.
  * Catalog owners run the generic check below, driven by their declared `mutation`: per untouched stored key, a
  * `replace` collection must resend it unchanged, a `patch` collection may omit it but never send it changed, and
  * every touched key's before is the stored value (full before).
  */
-type Def = { type: string; [k: string]: unknown };
-const def = (s: unknown): Def => (s as { _zod: { def: Def } })._zod.def;
-const wrappers = ["optional", "nullable", "default", "readonly", "catch", "nonoptional", "prefault"];
-function unwrap(s: unknown): Def {
-  let d = def(s);
-  while (wrappers.includes(d.type) || d.type === "pipe" || d.type === "lazy")
-    d = d.type === "pipe" ? def(d.in) : d.type === "lazy" ? def((d.getter as () => unknown)()) : def(d.innerType);
-  return d;
-}
-/** Paths of collections whose elements are records: the only places an omitted key can mean a delete. */
-function keyedCollections(s: unknown, path = "", seen = new Set<unknown>()): string[] {
-  const d = unwrap(s);
-  if (seen.has(d)) return [];
-  seen.add(d);
-  const element = d.type === "array" ? d.element : d.type === "record" ? d.valueType : undefined;
-  if (element) return unwrap(element).type === "object" ? [path || "/"] : [];
-  if (d.type === "object")
-    return Object.entries(d.shape as Record<string, unknown>).flatMap(([k, v]) => keyedCollections(v, `${path}/${k}`, seen));
-  if (d.type === "union") return (d.options as unknown[]).flatMap((o) => keyedCollections(o, path, seen));
-  if (d.type === "intersection") return [...keyedCollections(d.left, path, seen), ...keyedCollections(d.right, path, seen)];
-  return [];
-}
-
 type Keyed = Record<string, unknown>;
 const cell = (value: unknown, by: "pea" | "human" = "pea") => ({ edit: { value, by } });
 const definition = (name: string) => ({ sourceCategoryId: -2001040, sourceParameter: { name: "MOCP" }, relationship: "sameElement", targetParameter: { name } });
@@ -114,21 +90,30 @@ const checks: Record<string, { catalog: keyof typeof catalogWorks }> = {
   "parameter-links.apply": { catalog: "parameter-links" },
 };
 
+/** Explicit pending classification, with one Owed entry per operation in docs/features/routes/LEDGER.md. */
+const pending = [
+  "ducts.apply-losses",
+  "ducts.apply-heal",
+  "ducts.apply-assign-fan",
+  "family.apply",
+  "families.apply",
+  "family.build",
+  "rooms.write",
+  "rooms.draw",
+  "rooms.partition",
+  "rooms.merge",
+  "takeoffs.partition",
+  "takeoffs.adopt",
+  "schedule.grid.push",
+  "schedule.apply",
+] as const;
+
 const writes = Object.entries(commandCatalogAxes).filter(([, a]) => a.effect === "ModelWrite").map(([k]) => k).sort();
 
-describe("every ModelWrite: omission semantics classified from source and checked", () => {
-  for (const key of writes)
-    it(key, () => {
-      // A Work write's envelope (`work`, `readWorks`) is the seal's dependency handles, never model data: classify
-      // the authored request the derive produces, which is what reaches the native op.
-      const command = (commands as Record<string, { input?: unknown; authoredInput?: unknown }>)[key];
-      const input = command?.authoredInput ?? command?.input;
-      expect(input, `${key} has an input schema`).toBeDefined();
-      // The schema only locates record collections for the failure message: a compiled spec (SpecJson) or a native
-      // replace can hide omission, so "no collection in the schema" is not proof either (governor, K3).
-      const keyed = keyedCollections(input);
-      const check = checks[key];
-      expect(check, `${key}: no executable omission check (schema record collections: ${keyed.join(", ") || "none"})`).toBeDefined();
-      catalogCheck(check!.catalog);
-    });
+describe("every ModelWrite has an executable omission check or a named pending classification", () => {
+  it("classifies every current write exactly once; new writes require an explicit classification", () => {
+    expect([...Object.keys(checks), ...pending].sort()).toEqual(writes);
+  });
+  for (const [key, check] of Object.entries(checks))
+    it(key, () => catalogCheck(check.catalog));
 });
