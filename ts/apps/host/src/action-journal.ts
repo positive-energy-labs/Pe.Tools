@@ -1929,6 +1929,8 @@ export class ActionJournal implements ReceiptReader {
    * write tail. The flush is the journal's last write: every write after it is refused.
    */
   async close(): Promise<void> {
+    // Idempotent: a runtime's scope finalizer may follow an explicit close.
+    if (this.flushed) return;
     this.closing = true;
     while (this.pending.size) await Promise.allSettled([...this.pending.values()]);
     await this.serial(async () => {
