@@ -3,7 +3,6 @@ import { callerSchema } from "./caller.ts";
 import { runRefSchema, type RunConsent } from "./run-consent.ts";
 import { mentionSchema } from "./mention.ts";
 import { documentRequestSchema, threadHeadSchema } from "./target.ts";
-import { routeKeys } from "./route-address.ts";
 import { turnElementNameSchema, turnElementNamesSnapshotSchema } from "./turn-element-names.ts";
 
 /**
@@ -504,7 +503,8 @@ export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
 export const THREAD_TABS_MAX = 12;
 export const threadTabSchema = z.strictObject({
   id: z.uuid(),
-  route: z.enum(routeKeys),
+  /** A builtin key or a registered route's key; `canonicalPlace` checks it against live registration. */
+  route: z.string().min(1).max(256),
   link: z.string().min(1).max(8192),
   at: z.iso.datetime(),
 });

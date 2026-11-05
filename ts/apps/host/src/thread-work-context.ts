@@ -99,13 +99,11 @@ export function rememberTarget(
 /** A visited Place links existing Work; closing the tab never deletes that relationship. */
 export function rememberPlace(
   context: ThreadWorkContext,
-  route: RouteKey,
+  route: string,
   link: string,
   observe?: ObserveDocument,
 ): ThreadWorkContext {
-  const at = routeAddress(route).read(
-    Object.fromEntries(new URL(link, "http://place.invalid").searchParams),
-  );
+  const at = { carry: placeCarry(route, link) };
   let document: ThreadWorkContext["documents"][number] | null = null;
   if (at.carry.target) {
     const namedAddress = addressSchema.safeParse(at.carry.target);
