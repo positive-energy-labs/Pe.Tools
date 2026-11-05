@@ -10,4 +10,4 @@ global using Pe.Bcl.Compat;
 global using Pe.Revit.Compat;
 global using Pe.Shared.RevitData.Takeoffs;
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Pe.Revit.Tests")]
-[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Pe.Takeoff.Tests")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Pe.Shared.Tests")]
