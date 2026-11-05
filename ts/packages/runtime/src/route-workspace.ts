@@ -94,6 +94,8 @@ export interface WorkReadCapture {
   /** A live body read that failed after admission; the caller still receives the original error. */
   readFailed(key: WorkKey, view: WorkReadView, error: unknown): Promise<void>;
   feedFailed(key: WorkKey, admission: WorkAdmission, shape: WorkFeedShape, error: unknown): Promise<void>;
+  /** Stops capture as truncated now, in memory; the promise is only its best-effort persistence. */
+  stop(reason: "backlog"): Promise<void>;
   feed(key: WorkKey, admission: WorkAdmission, shape: WorkFeedShape, value: unknown): Promise<void>;
 }
 export type RouteWorkspaceOptions = {
@@ -1025,8 +1027,9 @@ export class RouteWorkspace {
    * The admitted Work feed, for a caller that has already admitted it. Its acquisition is admitted
    * again after any asynchronous capture or replay, so a replacement or retirement meanwhile refuses.
    * A recording delivers its bound snapshot once and no acks. Live capture records each delivered
-   * value under its exact admission; frames and acks waiting on it are bounded by the history
-   * limit. A capture, admission or backlog failure is terminal: reported once, then detached.
+   * value under its exact admission. Past the history limit of frames or acks waiting on it, capture
+   * stops as truncated and the same feed continues in order, uncaptured (K4). A capture port fault
+   * or an admission failure is terminal: reported once, then detached.
    */
   observeAdmittedFeed(
     scope: WorkKey,
@@ -1053,12 +1056,6 @@ export class RouteWorkspace {
       failed(error);
     };
     const limit = (this.options.workHistoryLimits ?? DEFAULT_WORK_HISTORY_LIMITS).maxCount;
-    const backlog = () =>
-      end({
-        kind: "failed",
-        code: "WorkFeedBacklog",
-        message: `More than ${limit} Work frames waited on capture`,
-      } satisfies WorkFeedFailure);
     /** Records (or replays) one value and re-admits it; resolves undefined once the feed has ended. */
     const acquire = async (value: Promise<unknown>) => {
       try {
@@ -1075,22 +1072,44 @@ export class RouteWorkspace {
         .then((got) => got && deliver(got));
       return close;
     }
-    const keep = (value: unknown) => capture!.feed(scope, admission, shape, value).then(() => value);
     // A failed acquisition is offered to capture first; the original failure is what follows.
     const lost = (error: unknown) => capture!.feedFailed(scope, admission, shape, error).catch(() => undefined);
+    let capturing = true;
+    let pending = 0;
+    let fellBack!: () => void;
+    const fallback = new Promise<void>((resolve) => (fellBack = resolve));
+    // One capture at a time; this chain also owns the backlog marker's persistence.
+    let captures: Promise<unknown> = Promise.resolve();
+    /** Past the bound (K4), capture stops as truncated and every waiting value proceeds uncaptured. */
+    const overflow = () => {
+      if (!capturing) return;
+      capturing = false;
+      const persisted = capture!.stop("backlog").catch(() => undefined);
+      captures = captures.then(() => persisted);
+      fellBack();
+    };
+    /** Resolves once this value is recorded, or as soon as capture stops; a late completion loses. */
+    const captured = (record: () => Promise<unknown>): Promise<unknown> => {
+      if (!capturing) return Promise.resolve();
+      if (++pending > limit) return Promise.resolve(overflow());
+      const done = captures.then(() => (capturing ? record() : undefined)).finally(() => pending--);
+      captures = done.catch(() => undefined);
+      return Promise.race([done, fallback]);
+    };
     if (shape === "work") {
-      let pending = 0;
-      let chain = Promise.resolve();
+      // One delivery chain keeps observation order, captured or not.
+      let deliveries = Promise.resolve();
       stop = this.observe(
         scope,
         scope.route,
         (value) => {
           if (closed) return;
-          if (++pending > limit) return backlog();
-          // One capture at a time keeps delivery in observation order.
-          chain = chain.then(async () => {
-            const got = "error" in value ? await lost(value.error).then(() => value) : await acquire(keep(value.value));
-            pending--;
+          const ready =
+            "error" in value
+              ? captured(() => lost(value.error)).then(() => value)
+              : acquire(captured(() => capture!.feed(scope, admission, shape, value.value)).then(() => value.value));
+          deliveries = deliveries.then(async () => {
+            const got = await ready;
             if (got && !closed) deliver(got);
           });
         },
@@ -1102,18 +1121,20 @@ export class RouteWorkspace {
       stop = this.observeFeed(
         scope,
         (snapshot) =>
-          void acquire(keep(snapshot)).then((got) => {
-            if (!got) return;
-            deliver(got);
-            for (const write of held ?? []) ack(write);
-            held = null;
-          }),
+          void acquire(captured(() => capture!.feed(scope, admission, shape, snapshot)).then(() => snapshot)).then(
+            (got) => {
+              if (!got) return;
+              deliver(got);
+              for (const write of held ?? []) ack(write);
+              held = null;
+            },
+          ),
         (write) => {
           if (closed) return;
           if (!held) return ack(write);
-          if (held.push(write) > limit) backlog();
+          if (held.push(write) > limit) overflow();
         },
-        (error) => void lost(error).then(() => end(error)),
+        (error) => void captured(() => lost(error)).then(() => end(error)),
       );
     }
     if (closed) stop(); // a synchronous failure ended the feed before its subscription was known

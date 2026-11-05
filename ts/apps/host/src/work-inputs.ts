@@ -154,5 +154,10 @@ export const capturedWorkReads = (
       lose(workInput(key, view), workInputScope(key), workInputCodecs[view] as Schema.Codec<unknown, Schema.Json>, error),
     feedFailed: (key, admission, shape, error) =>
       lose(workInput(key, "feed"), workInputScope(key, { admission, shape }), workFeedCodecs[shape], error),
+    // The same writer's latch: set synchronously; the marker write is the returned best effort.
+    stop: (reason) => {
+      const at = writer.capture.begin();
+      return at === null ? Promise.resolve() : run(writer.capture.stop(at, reason));
+    },
   };
 };
