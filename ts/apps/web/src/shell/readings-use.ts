@@ -119,7 +119,9 @@ export function openSourceReading<T>(
       }
     }),
   );
-  arm();
+  // A transport may replay a current cached answer inside open(); its complete frame already
+  // disarmed the deadline. Pending/stale frames arm their own timer above.
+  if (value === undefined && !failed) arm();
   let closed = false;
   return () => {
     if (closed) return;

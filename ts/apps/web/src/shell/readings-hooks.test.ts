@@ -82,3 +82,18 @@ test("a silent hook subject fails at its deadline; one holding evidence goes sta
   a.stop();
   b.stop();
 });
+
+test("a synchronous cached answer stays current past the initial silence deadline", async () => {
+  vi.useFakeTimers();
+  const source = {
+    subscribe(_request: unknown, listener: (frame: unknown) => void) {
+      listener({ kind: "snapshot", value: { a: 1 } });
+      return () => {};
+    },
+  } as never;
+  const w = watch(source);
+  expect(w.read()).toEqual({ state: "ready", observation: { a: 1 } });
+  await vi.advanceTimersByTimeAsync(31_000);
+  expect(w.read()).toEqual({ state: "ready", observation: { a: 1 } });
+  w.stop();
+});
