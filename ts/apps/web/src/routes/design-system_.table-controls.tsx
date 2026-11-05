@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Lineup } from "#/prototypes/table-controls/lineup";
+import { Lineup } from "#/design-system/specimens/table-controls/lineup";
 
 /** Dev specimen of the shared table query; the tables are the real TableFrame and Table. */
 export const Route = createFileRoute("/design-system_/table-controls")({
