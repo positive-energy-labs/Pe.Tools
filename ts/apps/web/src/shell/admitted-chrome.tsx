@@ -23,7 +23,7 @@ import {
   useRouteKeysPrimary,
   useHasGlobalNavigation,
 } from "../navigation/route-controls";
-import { SituationBand, TimelineHead } from "./situation-band";
+import { SituationBand, TimelineHead, consentThread } from "./situation-band";
 import { ReviewSurface } from "./review-surface";
 import { WriteAction, writeWord, type WriteCell, type WriteRun } from "@pe/kit/lang/write-action";
 import { writeResponseSchema } from "@pe/agent-contracts";
@@ -224,28 +224,24 @@ export function admittedLayout(
 /** A reviewed command is a write: the one kit button draws it (ADR 0030 rule 6). */
 const drawsWrite = (verb: RouteGraphJson["verbs"][string] | undefined) =>
   verb?.kind === "command" && verb.review === "shown";
-/** The thread a receipt's consent window belongs to: the Pea thread that ran it, never this page's. */
-export const originThread = (entry: TimelineEntry) => {
-  const caller = (entry.basis as { receipt?: { caller?: { kind: string; thread?: string } } })
-    ?.receipt?.caller;
-  return caller?.kind === "pea" ? (caller.thread ?? null) : null;
-};
 /** The open Reject? window on this verb's receipt; the ActionJournal receipt is its only source. */
 export function writeReject(
   entries: readonly TimelineEntry[],
   ids: readonly string[],
   reject: (thread: string, requestId: string) => void,
+  boundThread?: string,
 ) {
   const open = projectTimeline(entries, {}).find((row) => {
     const key = (row.entry.basis as { receipt?: { key?: string } } | undefined)?.receipt?.key;
     return row.kind === "consent" && ids.includes(key ?? row.entry.verb ?? "");
   });
   if (!open) return null;
-  const thread = originThread(open.entry);
+  const thread = consentThread(open.entry, boundThread);
+  if (!thread) return null;
   const requestId = open.outcome!.consentWindow!.requestId;
   return {
     until: open.consentUntil ? `${secondsLeft(open.consentUntil)}s` : "awaiting approval",
-    run: () => (thread ? reject(thread, requestId) : undefined),
+    run: () => reject(thread, requestId),
   };
 }
 /** What a held plan says: armed only from a sealed Read; any consumed change makes it stale. */
@@ -299,6 +295,7 @@ export function AdmittedWrite({ mount, data, id }: { mount: AdmittedMount; data:
       }}
       reject={writeReject(mount.timeline(), [id, "entry" in verb ? verb.entry : id], (thread, requestId) =>
         void harnessClient(resolveWorkbenchConfig().origin).permission(thread, requestId, "stop_writes"),
+        typeof mount.page.read().thread === "string" ? String(mount.page.read().thread) : undefined,
       )}
     />
   );

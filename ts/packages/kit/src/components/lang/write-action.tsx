@@ -163,10 +163,10 @@ export function WriteAction({
             {held.cells?.map((cell) => (
               <div key={cell.key} data-write-cell={cell.key} className="flex flex-col">
                 <span className="t-small text-ink-2">
-                  {cell.label} · was <span data-write-before="">{cell.before ?? "unknown"}</span> ·{" "}
+                  {cell.label} ·{" "}
                   <span data-write-author={cell.author}>{AUTHOR[cell.author]}</span>
                 </span>
-                <StateCell value={cell.after} author={cell.author} stage="edit" />
+                <StateCell value={cell.after} modelValue={cell.before ?? "unknown"} agree="drift" author={cell.author} stage="edit" />
               </div>
             ))}
             {held.rows?.map((row, index) => (

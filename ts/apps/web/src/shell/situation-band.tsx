@@ -80,7 +80,7 @@ export function rankVerbs(ids: readonly string[], verbs: Readonly<Record<string,
 }
 
 /** The thread whose run consent a receipt waits on: Pea's own, else the route's bound thread. */
-function consentThread(entry: TimelineEntry, bound?: string) {
+export function consentThread(entry: TimelineEntry, bound?: string) {
   const caller = (entry.basis as { receipt?: { caller?: { kind: string; thread?: string } } })
     ?.receipt?.caller;
   return caller?.kind === "pea" ? caller.thread : bound;

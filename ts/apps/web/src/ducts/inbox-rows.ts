@@ -164,7 +164,7 @@ function healRow(
     status: "review repairs",
     ...(blocks ? { tone: "alarm" as const } : { blocks: false as const }),
     ids: [...new Set(g.items.flatMap((i) => i.ids))],
-    note: `${g.items.map(line).join("; ")}. Review runs each repair and Pe's check in Revit and rolls it back; commit applies the same request.`,
+    note: `${g.items.map(line).join("; ")}. The plan describes each repair; apply uses the sealed request.`,
     verbs: [
       {
         kind: "command",

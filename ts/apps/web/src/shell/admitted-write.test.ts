@@ -45,8 +45,9 @@ test("Reject? answers the thread that ran the receipt, not this page", () => {
   writeReject([entry({ kind: "pea", thread: "thread-A" })], ["heal"], reject)!.run();
   expect(reject).toHaveBeenCalledWith("thread-A", "q1");
   reject.mockClear();
-  writeReject([entry({ kind: "human" })], ["heal"], reject)!.run();
-  expect(reject).not.toHaveBeenCalled();
+  expect(writeReject([entry({ kind: "human" })], ["heal"], reject)).toBeNull();
+  writeReject([entry({ kind: "human" })], ["heal"], reject, "bound-thread")!.run();
+  expect(reject).toHaveBeenCalledWith("bound-thread", "q1");
   expect(writeReject([entry({ kind: "pea", thread: "t" }, "assign")], ["heal"], reject)).toBeNull();
 });
 
