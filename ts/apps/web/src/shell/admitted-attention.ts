@@ -15,16 +15,19 @@ export function createAttention(
   graphFields: AdmittedFields,
   codecs: RouteBindings["codecs"],
 ): Attention | null {
-  const fields = agentFields(graphFields).map(
-    ([key, field]) => [key, codecs[(field as { codec: string }).codec]!] as const,
-  );
+  const fields = agentFields(graphFields).map(([key, field]) => {
+    if (!("codec" in field)) throw Error(`Attention field ${key} has no codec`);
+    const codec = codecs[field.codec];
+    if (!codec) throw Error(`Attention field ${key} needs codec ${field.codec}`);
+    return [key, codec] as const;
+  });
   if (!fields.length) return null;
   const byKey = new Map(fields);
   return {
     keys: fields.map(([key]) => key),
     write: (page) =>
       Object.fromEntries(
-        fields.map(([key, codec]) => {
+        fields.filter(([key]) => Object.hasOwn(page, key)).map(([key, codec]) => {
           const text = codec.encode((page as Record<string, unknown>)[key]);
           if (typeof text !== "string") throw Error(`Attention codec for ${key} wrote no text`);
           return [key, text];

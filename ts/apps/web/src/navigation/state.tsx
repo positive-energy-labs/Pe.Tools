@@ -67,7 +67,7 @@ export function useDestination() {
       query.delete("shell");
       if (host.surface === "tray") query.set("shell", "tray");
       void commitAddress(router, url.pathname, query, {
-        state: { ...router.state.location.state },
+        state: {},
         hash: url.hash,
       });
       return true;

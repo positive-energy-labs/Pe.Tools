@@ -57,23 +57,22 @@ export function useRouteLease<R extends RouteViewRoute, P extends object>(
   } = {},
 ) {
   const url = shown.url ?? true;
-  const addressedThread = useRouteSearchSlice((search) => search.thread);
   useRouteViewBridge({
     route,
-    thread: shown.thread ?? (url ? addressedThread : undefined),
+    thread: shown.thread,
     surface: url ? "route" : "chat",
     visible: shown.visible ?? true,
     page: page as Partial<RoutePage<R>>,
-    apply: (patch) => setPage(patch as Partial<P>, { history: "push" }),
+    apply: (patch) => applyPageIntent(page, () => setPage(patch as Partial<P>, { history: "push" })),
     context: shown.context ?? {},
     facts: shown.facts ?? {},
     codec: shown.codec,
   });
 }
 
-function useRouteViewBridge<R extends RouteViewRoute>({
+export function useRouteViewBridge<R extends RouteViewRoute>({
   route,
-  thread,
+  thread: explicitThread,
   surface,
   visible,
   page,
@@ -88,15 +87,17 @@ function useRouteViewBridge<R extends RouteViewRoute>({
   /** False while the route shows nothing Pea could address (no thread, hidden, or a stage with no view). */
   visible: boolean;
   /** The route's Page; the lease carries its agent keys, as their codecs write them (`agent.write`). */
-  page: Partial<RoutePage<R>>;
+  page: object;
   /** Applies Pea's patch, typed (`agent.read`), through the route's Page as one pushed move. */
-  apply: (patch: Partial<RoutePage<R>>) => void;
+  apply: (patch: object) => PageIntent;
   /** Identity of what is shown; an ack fails if it moves while a command is pending. */
   context: Record<string, unknown>;
   /** What the shown Page derives; the ack echoes it. */
   facts: Record<string, unknown>;
   codec?: ViewCodec;
 }) {
+  const addressedThread = useRouteSearchSlice((search) => search.thread);
+  const thread = explicitThread ?? (surface === "route" ? addressedThread : undefined);
   const routeCurrent = useRouteCurrent();
   const instance = useRef(crypto.randomUUID());
   const revision = useRef<number | null>(null);
@@ -258,7 +259,7 @@ function useRouteViewBridge<R extends RouteViewRoute>({
       } catch (cause) {
         return refused(refuse("failed", causeRefusal(cause).message));
       }
-      const result = applyPageIntent(currentPage.current, () => applyRef.current(patch));
+      const result = applyRef.current(patch);
       if (!result.ok) return refused(result.refusal);
       // No move: only a page that already holds the patch may acknowledge it (against the unchanged
       // snapshot); otherwise the Page did nothing Pea asked for, and says so.
