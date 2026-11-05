@@ -29,7 +29,7 @@ function fixture() {
     doc: familyDraftRouteState.schema.parse({
       reading: "Before",
       cells: {
-        "/parameters/Model": { edit: { value: "Staged" }, suggestion: { value: "Proposed" } },
+        "/parameters/Model": { edit: { value: "Staged" } },
       },
     }),
   };

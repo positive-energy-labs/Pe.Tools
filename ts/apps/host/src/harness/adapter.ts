@@ -371,6 +371,7 @@ export function peaMcpServer(
 ) {
   const ts = sourceRoot ? join(sourceRoot, checkoutLayout.ts) : null;
   const mcp = ["mcp", "--host", hostBaseUrl];
+  const productHome = process.env.PE_TOOLS_PRODUCT_HOME?.trim();
   return {
     name: "pea",
     command: ts
@@ -392,9 +393,9 @@ export function peaMcpServer(
     env: [
       { name: hostProcessIdentity.hostBaseUrlVariable, value: hostBaseUrl },
       { name: HOST_CONTEXT_VARIABLE, value: context },
-      // Codex forwards only declared MCP variables; ownership must survive that clean environment.
+      // Carry verified ownership through the MCP server's declared environment.
       { name: "PE_LANE", value: hostOwnership.lane },
-      { name: "PE_TOOLS_PRODUCT_HOME", value: hostOwnership.rootPath },
+      ...(productHome ? [{ name: "PE_TOOLS_PRODUCT_HOME", value: productHome }] : []),
       { name: hostProcessIdentity.serviceNameVariable, value: hostOwnership.serviceName },
       ...(sourceRoot ? [{ name: sourceRootVariable, value: sourceRoot }] : []),
     ],

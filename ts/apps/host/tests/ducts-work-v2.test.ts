@@ -10,7 +10,7 @@ import { address, bindWork, ductsDocumentSchema, workKey } from "@pe/agent-contr
 import { settle } from "./effect-test.ts";
 import { AdmittedBuiltins, admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
 
-const rungs = <V>(value: V) => ({ suggestion: { value }, edit: { value } });
+const rungs = <V>(value: V) => ({ edit: { value } });
 const kept = {
   criteria: rungs({ allowanceInWg: { return: 0.35 } }),
   kinds: { [JSON.stringify(["FCU", "A"])]: rungs({ kind: "fan-coil" }) },

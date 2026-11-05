@@ -120,7 +120,7 @@ export type RouteDocOf<TSpec> =
 /** A segment-array patch. Omit `value` to delete. Host-issued restore may replace the root at []. */
 export const routeStatePatchSchema = z.object({
   path: z.array(z.union([z.string(), z.number()]), {
-    error: 'must be a segment array, e.g. ["scope","suggestion"]',
+    error: 'must be a segment array, e.g. ["scope","edit"]',
   }),
   value: z.unknown().optional(),
 });

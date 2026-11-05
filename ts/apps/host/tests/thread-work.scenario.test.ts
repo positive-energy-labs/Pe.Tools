@@ -263,11 +263,11 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
           "pea",
           [
             {
-              path: ["flows", "1002", "suggestion"],
+              path: ["flows", "1002", "edit"],
               value: { value: { cfm: 220, source: "alternative" } },
             },
             {
-              path: ["flows", "1003", "suggestion"],
+              path: ["flows", "1003", "edit"],
               value: { value: { cfm: 300, source: "proposal" } },
             },
           ],
@@ -370,7 +370,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
       )
     ).json();
     expect(retained.doc.flows["1001"].edit.value.source).toBe("human effort");
-    expect(retained.doc.flows["1002"].suggestion.value.cfm).toBe(220);
+    expect(retained.doc.flows["1002"].edit.value.cfm).toBe(220);
     expect(await fileBytes()).toEqual(saved);
     abort.abort();
     await threads.close();
@@ -535,7 +535,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
           "pea",
           [
             {
-              path: ["flows", "12", "suggestion"],
+              path: ["flows", "12", "edit"],
               value: { value: { cfm: 120, source: "Proposal" } },
             },
           ],
@@ -587,7 +587,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
       doc: {
         flows: {
           "11": { edit: { value: { cfm: 110, source: "Retain me" } } },
-          "12": { suggestion: { value: { cfm: 120, source: "Proposal" } } },
+          "12": { edit: { value: { cfm: 120, source: "Proposal" } } },
         },
       },
     });
