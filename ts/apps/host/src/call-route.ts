@@ -16,6 +16,7 @@ import {
 import { sdkSession, SdkSession, SdkDriverLive, SdkDriver } from "./sdk-session.ts";
 import { readSchedule } from "./schedule-actions.ts";
 import { actionControls, commandTool, receiptsForWork } from "@pe/agent-contracts";
+import { dismiss, point, pointerThread, readPointers } from "./pointers.ts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { operationDefinition, gatewayTarget, requireEligibleCaller } from "./gateway-actions.ts";
 import {
@@ -528,7 +529,7 @@ export function makeCallRoute(
       }
       const result = isTsOnlyOperationKey(key)
         ? {
-            value: yield* dispatch(key, request, scope, bridge, observations()),
+            value: yield* dispatch(key, request, scope, bridge, observations(), caller),
             target: null,
           }
         : entry.snapshot
@@ -1249,8 +1250,9 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   scope: HostSessionScope | undefined,
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
+  caller: Caller,
 ) {
-  return yield* localEntries[key]({ request, scope, bridge, captures });
+  return yield* localEntries[key]({ request, scope, bridge, captures, caller });
 });
 
 type LocalCall = {
@@ -1258,8 +1260,21 @@ type LocalCall = {
   scope: HostSessionScope | undefined;
   bridge: RevitBridge["Service"];
   captures: TakeoffCaptures;
+  caller: Caller;
 };
 const localEntries = {
+  "pointers.point": Effect.fnUntraced(function* ({ request, caller }: LocalCall) {
+    const input = yield* decodeRequest("pointers.point", request);
+    return point(pointerThread(caller, undefined), input);
+  }),
+  "pointers.list": Effect.fnUntraced(function* ({ request, caller }: LocalCall) {
+    const input = yield* decodeRequest("pointers.list", request);
+    return readPointers(pointerThread(caller, input.thread));
+  }),
+  "pointers.dismiss": Effect.fnUntraced(function* ({ request, caller }: LocalCall) {
+    const input = yield* decodeRequest("pointers.dismiss", request);
+    return dismiss(pointerThread(caller, input.thread), input.id);
+  }),
   "takeoffs.saved": Effect.fnUntraced(function* ({ request, captures }: LocalCall) {
     return yield* savedTakeoffs(request, captures);
   }),
@@ -1529,7 +1544,7 @@ function executeGatewayLocal(
   if (!callEntries.get(key)?.shell)
     // effect-edge: island, phase 5
     return Effect.runPromise(
-      dispatchTsOnlyOperation(key, input, undefined, bridge, captures).pipe(
+      dispatchTsOnlyOperation(key, input, undefined, bridge, captures, { kind: "anonymous" }).pipe(
         Effect.provide(NodeServices.layer),
         Effect.provide(NodeHttpClient.layerUndici),
       ),

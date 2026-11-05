@@ -31,6 +31,7 @@ import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { projectTimeline } from "./timeline";
 import { GraphHistory } from "./mount-timeline";
+import { PointerList } from "./pointer-list";
 import { secondsLeft } from "./countdown";
 import { worksharingOf } from "./verbs";
 import type { TimelineEntry } from "./timeline";
@@ -450,7 +451,12 @@ function Chrome({
                 <span>{mount.subjectDisplay()}</span>
               </>
             }
-            alerts={children}
+            alerts={
+              <>
+                {children}
+                <PointerList route={data.key} />
+              </>
+            }
             verbs={(stage?.verbs ?? []).map((id) => (
               <AdmittedActions key={id} mount={mount} data={data} ids={[id]} />
             ))}

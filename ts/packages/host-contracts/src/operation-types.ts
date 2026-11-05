@@ -128,6 +128,34 @@ export const hostShellOpenDataSchema = Schema.Struct({
 });
 export type HostShellOpenData = Schema.Schema.Type<typeof hostShellOpenDataSchema>;
 
+// --- Pointers (ADR 0030 rule 10; agent-contracts pointers.ts): per-thread, kept until dismissed ---
+const pointerSchema = Schema.Struct({
+  id: Schema.String,
+  route: Schema.String,
+  place: Schema.Record(Schema.String, Schema.String),
+  label: Schema.String,
+  at: Schema.String,
+});
+export const pointersPointRequestSchema = Schema.Struct({
+  route: Schema.String,
+  place: Schema.Record(Schema.String, Schema.String),
+  label: Schema.String,
+});
+/** A person names the thread; Pea's own thread comes from its caller context, never its input. */
+export const pointersThreadRequestSchema = Schema.Struct({ thread: Schema.optional(Schema.String) });
+export const pointersDismissRequestSchema = Schema.Struct({
+  thread: Schema.optional(Schema.String),
+  id: Schema.String,
+});
+export const pointersDataSchema = Schema.Struct({
+  threadId: Schema.String,
+  pointers: Schema.Array(pointerSchema),
+});
+export type PointersPointRequest = Schema.Schema.Type<typeof pointersPointRequestSchema>;
+export type PointersThreadRequest = Schema.Schema.Type<typeof pointersThreadRequestSchema>;
+export type PointersDismissRequest = Schema.Schema.Type<typeof pointersDismissRequestSchema>;
+export type PointersData = Schema.Schema.Type<typeof pointersDataSchema>;
+
 // --- Pod members (host-local: the host owns member I/O so the web works offline) -------------
 
 /** A pod member, everywhere: manifest `id` plus the member's pod-relative path. */
@@ -831,6 +859,9 @@ export const tsOnlyOperationSchemas = {
     request: hostShellOpenRequestSchema,
     response: hostShellOpenDataSchema,
   },
+  "pointers.point": { request: pointersPointRequestSchema, response: pointersDataSchema },
+  "pointers.list": { request: pointersThreadRequestSchema, response: pointersDataSchema },
+  "pointers.dismiss": { request: pointersDismissRequestSchema, response: pointersDataSchema },
   "host.topology": {
     response: hostTopologyDataSchema,
   },

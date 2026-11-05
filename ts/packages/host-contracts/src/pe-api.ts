@@ -1465,6 +1465,69 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     searchTerms: ["takeoffs", "saved", "capture", "offline", "geometry", "review"],
   },
   {
+    key: "pointers.point",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    // Pointing is shell-only thread state, never document state: Read keeps it out of the write
+    // consent window (ADR 0027) while the host still attributes it to the caller's thread.
+    effect: "Read",
+    principal: ["human", "pea"],
+    origin: "host-local",
+    displayName: "Point At",
+    description:
+      "Show the person a route place in this thread's 'Pea is pointing at' list and highlight it, without changing their selection, URL or camera. place is the route's attention field text (route:<r>.view fields). Kept until the person dismisses it.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    needs: "nothing",
+    requestTypeName: "PointersPointRequest",
+    responseTypeName: "PointersData",
+    searchTerms: ["point", "point at", "highlight", "show me", "this one", "pointer", "attention"],
+  },
+  {
+    key: "pointers.list",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    // Pointing is shell-only thread state, never document state: Read keeps it out of the write
+    // consent window (ADR 0027) while the host still attributes it to the caller's thread.
+    effect: "Read",
+    principal: ["human", "pea"],
+    origin: "host-local",
+    displayName: "Pointers",
+    description:
+      "List what this thread is pointing at, newest last.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    needs: "nothing",
+    requestTypeName: "PointersThreadRequest",
+    responseTypeName: "PointersData",
+    searchTerms: ["pointers", "pointing", "highlighted"],
+  },
+  {
+    key: "pointers.dismiss",
+    subject: "None",
+    touches: "Metadata",
+    cardinality: "One",
+    // Pointing is shell-only thread state, never document state: Read keeps it out of the write
+    // consent window (ADR 0027) while the host still attributes it to the caller's thread.
+    effect: "Read",
+    principal: ["human", "pea"],
+    origin: "host-local",
+    displayName: "Dismiss Pointer",
+    description:
+      "Remove one pointer from this thread's list by id.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    needs: "nothing",
+    requestTypeName: "PointersDismissRequest",
+    responseTypeName: "PointersData",
+    searchTerms: ["dismiss", "pointer", "unpoint"],
+  },
+  {
     key: "host.shell.open",
     subject: "None",
     touches: "Metadata",
