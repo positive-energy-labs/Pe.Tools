@@ -12,7 +12,6 @@ import {
   type ReadingRequest,
   type WorkHandle,
   type WorkKey,
-  type WorkWriteAck,
 } from "@pe/agent-contracts";
 import { canonicalJson } from "@pe/host-internal/native-read";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";

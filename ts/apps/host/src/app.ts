@@ -1,5 +1,5 @@
 import { HostInputContext } from "./input-context.ts";
-import type { TakingObserver, HostInputLane } from "./native-recording.ts";
+import type { TakingObserver } from "./native-recording.ts";
 import { recordedWorkSource, capturedWorkReads } from "./work-inputs.ts";
 import { HostSessionInventory } from "./session-inventory.ts";
 import { createDuctsBodyBasis } from "./ducts-body-basis.ts";
@@ -12,7 +12,6 @@ import { markReadings } from "./resource-adapters.ts";
 import { retainedDuctsRead } from "./call-route.ts";
 import { HttpServerResponse } from "effect/http";
 import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
-import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
 import { hostNativeReadFor } from "./native-recording.ts";
 import { httpProblems } from "./http-problems.ts";
 import { InvalidRead } from "./native-reads.ts";
