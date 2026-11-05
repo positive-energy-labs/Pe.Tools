@@ -50,6 +50,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
     closed,
     entryFor,
     resolve,
+    sourceTimeline,
   } = context;
 
   const { target } = input;
@@ -213,8 +214,12 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
   function observeReceipts() {
     const key = owner.read()?.scope.identity.work;
     if (!key) return;
-    const receipts = entryFor(key).activity();
+    const entry = entryFor(key);
+    const receipts = entry.activity();
     const ids = new Set(receipts.map((receipt) => receipt.id));
+    // Once the host owns this press, a bounded receipt snapshot cannot resurrect its local start.
+    const starts = sourceTimeline.get(entry);
+    if (starts) sourceTimeline.set(entry, starts.filter((start) => !ids.has(start.press ?? "")));
     for (const id of seenReceipts.keys()) if (!ids.has(id)) seenReceipts.delete(id);
     for (const receipt of receipts) {
       const stamp = canonicalEnvironmentInput([receipt.state, receipt.effects]);

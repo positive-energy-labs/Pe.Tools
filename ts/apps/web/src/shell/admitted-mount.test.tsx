@@ -2314,11 +2314,13 @@ async function landingFixture(
   let kept: import("../../../../packages/agent-contracts/src/work-journal-door").AcceptedResult = {
     kind: "pending",
   };
+  let receiptFeed: (value: import("../../../../packages/agent-contracts/src/work-journal-door").ReceiptFeedState) => void = () => {};
   const land = vi.fn((result: unknown, current: unknown) => ({
     query: `${(current as { query: string }).query}${result === undefined ? "outputless" : (result as { name: string }).name}`,
   }));
   const door: WorkJournalDoor = {
     ...store,
+    receipts: () => ({ subscribe(deliver) { receiptFeed = deliver; return () => {}; } }),
     submit: (command) => ({
       key: submissionKey ?? command.key,
       lifetime: "command",
@@ -2357,8 +2359,29 @@ async function landingFixture(
     land,
     deliver: (result: Parameters<typeof deliver>[0]) => deliver(result),
     door,
+    receiptFeed: (value: Parameters<typeof receiptFeed>[0]) => receiptFeed(value),
   };
 }
+
+test("a completed receipt never resurrects its local start when a later snapshot omits it", async () => {
+  const { projectTimeline } = await import("./timeline");
+  const f = await landingFixture();
+  const id = f.submission.handle.id;
+  const rows = () => projectTimeline(f.mount.timeline(), f.route.data.verbs);
+  expect(rows().find((row) => row.entry.press === id)?.outcome?.state).toBe("running");
+  const receipt = actionReceiptSchema.parse({
+    id, key: f.submission.key, state: "succeeded", result: {},
+    caller: { kind: "human", via: "local" }, target: { kind: "host" }, input: {},
+    basis: null, prepared: { state: "unprepared" }, steps: [], recovery: [], consumes: [],
+    startedAt: "2026-11-05T08:53:19Z",
+  });
+  f.receiptFeed({ kind: "ready", receipts: { rows: [receipt], from: 1, through: 1 } });
+  expect(rows().filter((row) => row.outcome?.id === id)).toMatchObject([
+    { kind: "receipt", outcome: { state: "succeeded" } },
+  ]);
+  f.receiptFeed({ kind: "ready", receipts: { rows: [], from: 2, through: 2 } });
+  expect(rows().some((row) => row.entry.press === id && row.outcome?.state === "running")).toBe(false);
+});
 
 test("lands accepts an authoritative successful result through Page policy", async () => {
   const f = await landingFixture();
