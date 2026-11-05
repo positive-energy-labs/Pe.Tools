@@ -22,3 +22,4 @@ export {
 } from "./route-field.ts";
 
 export * from "./duct-catalog.ts";
+export * from "./input-lane.ts";
