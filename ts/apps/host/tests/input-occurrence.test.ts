@@ -158,6 +158,20 @@ const ok = <A>(result: Result.Result<A, unknown>) => {
 const failed = (result: Result.Result<unknown, unknown>) =>
   Result.isFailure(result) ? (result.failure as { problem?: string }).problem : "ok";
 
+effectTest("closing a sealed root releases its slot exactly once", () =>
+  Effect.gen(function* () {
+    const live = yield* readSets({ kind: "live" }, { ...limits, openRoots: 1 });
+    const root = yield* live.open(recipe, null);
+    yield* root.seal;
+    yield* root.close;
+    yield* root.close;
+    const next = yield* live.open(recipe, null);
+    expect(yield* problem(live.open(recipe, null))).toBe("recording.full");
+    yield* next.close;
+    yield* (yield* live.open(recipe, null)).close;
+  }),
+);
+
 effectTest("closing a child closes only that child; closing the root closes the tree", () =>
   Effect.gen(function* () {
     const writer = yield* openRecordingWriter(yield* bundle, identity, bounds);
