@@ -128,6 +128,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
+- Wave 2 engine cutover: legacy `shell/mount-readings-owner.ts` still constructs `createReadingGraph`, while admitted routes use `createAdmittedReadings`. Source opening is shared at 27510ae6; dependency ownership and the hook context's empty Page are not. Migrate or retire the remaining legacy route declarations with their Page and Work doors in Step 8, then delete the legacy scheduler; do not nest two engines or claim this as completed by sharing acquisition.
+
 - After root integrates testing-world, retire the campaign checkouts and schedule-worktree residue named in the [delivery report](C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/deterministic-20261104-testing-world-implementation/pillar/REPORT.md). Worker processes are stopped; Git removed the schedule registration but left files, and automatic approval review blocked residue deletion.
 
 - RATCHET-GREEN, 2026-11-04: `src/neutral-imports.guard.test.ts > neutral modules never import web UI, React, web aliases or styles` remains Owed. Remove forbidden UI/transitive imports from the ducts and fans neutral modules. Keep the law; do not raise its allowance.
