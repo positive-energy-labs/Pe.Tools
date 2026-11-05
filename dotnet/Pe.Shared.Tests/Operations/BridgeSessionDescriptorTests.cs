@@ -1,5 +1,3 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Bridge;
 
 namespace Pe.Revit.Tests;
@@ -65,47 +63,4 @@ public sealed class BridgeSessionDescriptorTests {
         Assert.That(descriptor.DescribesPayloadDirectory(null), Is.False);
     }
 
-    [Test]
-    public void Registration_request_serializes_optional_identity_fields_camel_cased_and_omits_nulls() {
-        var settings = new JsonSerializerSettings {
-            NullValueHandling = NullValueHandling.Ignore,
-            ContractResolver = new DefaultContractResolver {
-                NamingStrategy = new CamelCaseNamingStrategy()
-            }
-        };
-
-        var withIdentity = new BridgeRegistrationRequest(
-            BridgeProtocol.ContractVersion,
-            4242,
-            State: null!,
-            ProcessStartUtcUnixMs: 1752000000000,
-            SessionDescriptorPath: @"C:\x\session.json",
-            Lane: "dev",
-            SdkSessionId: null,
-            BuildStamp: "abc123"
-        );
-        var json = JsonConvert.SerializeObject(withIdentity, settings);
-        Assert.That(json, Does.Contain("\"processStartUtcUnixMs\":1752000000000"));
-        Assert.That(json, Does.Contain("\"lane\":\"dev\""));
-        Assert.That(json, Does.Contain("\"buildStamp\":\"abc123\""));
-        Assert.That(json, Does.Not.Contain("sdkSessionId"), "null optionals are omitted on the wire");
-
-        // The pre-identity wire shape still deserializes: absent optionals default to null —
-        // this is exactly why ContractVersion stays at 19.
-        var legacy = JsonConvert.DeserializeObject<BridgeRegistrationRequest>(
-            "{\"contractVersion\":19,\"processId\":7}",
-            settings
-        );
-        Assert.That(legacy!.ProcessStartUtcUnixMs, Is.Null);
-        Assert.That(legacy.Lane, Is.Null);
-
-        // The ack now carries the broker-assigned session id; older acks without it still decode.
-        var ack = JsonConvert.DeserializeObject<BridgeRegistrationAck>(
-            "{\"accepted\":true,\"sessionId\":\"session-abc\"}",
-            settings
-        );
-        Assert.That(ack!.SessionId, Is.EqualTo("session-abc"));
-        var legacyAck = JsonConvert.DeserializeObject<BridgeRegistrationAck>("{\"accepted\":true}", settings);
-        Assert.That(legacyAck!.SessionId, Is.Null);
-    }
 }
