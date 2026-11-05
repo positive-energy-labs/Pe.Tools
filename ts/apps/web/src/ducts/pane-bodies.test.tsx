@@ -171,40 +171,70 @@ test("no open fan is absence and every sheet pane renders without a native decod
 
 
 
-test("a read-only fan rule link restores its rule without fabricating bounded system context", async () => {
+test("/fans edits Ducts criteria and a criterion choice in place through the ducts owner handle", async () => {
   const f = await createWitness(closes, new Map(), {
     "ducts.sheet": { kind: "use", open(_ctx, deliver) {
       deliver({ kind: "complete", revision: 1, value: {
         rows: sheetFixture.roster.rows, progress: null, opened: [],
         open: { overview: sheetFixture.overview, elements: null, legs: null, worstLegs: [], worksheet: null,
-          inputs: { ...sheetFixture.inputs, inputs: { ...sheetFixture.inputs.inputs,
-            tables: { "tap-std": { value: "SD5-10", source: "Work", units: null, version: null, status: "valid" } },
-          } },
-        },
+          inputs: sheetFixture.inputs },
       } });
     } },
     "ducts.sheet-snapshot": { kind: "use", open(_ctx, deliver) {
       deliver({ kind: "complete", value: { ...snapshot, systems: [] }, revision: 1 });
     } },
   });
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
-  const source = render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
-  const link = source.container.querySelector<HTMLAnchorElement>('[data-fitting-group^="rule:"] a');
-  if (!link) throw Error("The pinned fan has no rule owner link");
-  const group = link.closest("[data-fitting-group]")?.getAttribute("data-fitting-group");
-  if (!group) throw Error("The owner link has no rule identity");
-  const url = new URL(link.href);
-  const destination = f.mount(f.admitted.owner, url.searchParams, "rule-crossing");
-  expect(destination.page.read().selected.map(item => localSubject(item.id))).toEqual([group]);
-  // F6: an ids snapshot has no canonical roster; the owner link must omit system scope.
-  expect(url.searchParams.has("system")).toBe(false);
-  expect(destination.page.read().system).toEqual({ kind: "ids", ids: [] });
-  source.unmount();
-  await vi.waitFor(() => expect(destination.readingStatus("pricing").snapshot.current).toBe(true));
-  const view = render(<RegistryContext value={registry()}>{nodeFor(destination, "e-rules-all")}</RegistryContext>);
-  const row = view.container.querySelector(`[data-key="${group.slice(5)}"]`);
-  expect(row).not.toBeNull();
-  expect(row?.hasAttribute("data-landed")).toBe(true);
+  await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
+  const acks: { route: string; label?: string }[] = [];
+  closes.push(f.ws.subscribe((event) => {
+    if (event.ok) acks.push({ route: event.route, label: event.label });
+  }));
+  const ducts0 = f.owner.work()?.revision ?? 0;
+  const fans0 = f.fans.work()?.revision;
+  const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
+  // The criterion is a cell now, labelled with its owner, not a link to /ducts.
+  const field = view.container.querySelector('[data-input-field="terminalDropInWg"]')!;
+  expect(field.querySelector("a")).toBeNull();
+  expect(field.textContent).toContain("from /ducts");
+  const input = field.querySelector<HTMLInputElement>("input.dl-cell-input")!;
+  fireEvent.change(input, { target: { value: "0.07" } });
+  fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
+  await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 1));
+  expect(f.owner.work()?.value).toMatchObject({ criteria: { edit: { value: { terminalDropInWg: 0.07 } } } });
+  // A criterion choice goes through the same owner handle.
+  const split = view.container.querySelector<HTMLElement>('[data-input-field="splitPolicy"]')!;
+  expect(split.querySelector("a")).toBeNull();
+  expect(split.textContent).toContain("from /ducts");
+  const trigger = split.querySelector<HTMLElement>("[data-choice-cell] button")!;
+  fireEvent.click(trigger);
+  const pick = await vi.waitFor(() => {
+    const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+    const other = options.find((o) => o.getAttribute("aria-selected") !== "true" && o.getAttribute("aria-disabled") !== "true");
+    if (!other) throw Error("no other table choice");
+    return other;
+  });
+  fireEvent.click(pick);
+  await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 2));
+  // Fans Work never moves; every ack is the ducts owner's, labelled from /ducts.
+  expect(f.fans.work()?.revision).toBe(fans0);
+  expect(acks.filter((a) => a.route === "fans")).toEqual([]);
+  expect(acks.filter((a) => a.route === "ducts").map((a) => a.label)).toEqual([
+    expect.stringContaining("· from /ducts"),
+    expect.stringContaining("· from /ducts"),
+  ]);
+  expect(f.owner.work()?.value).toMatchObject({ criteria: { edit: { value: { splitPolicy: expect.any(String) } } } });
+  // Clearing the typed criterion (an emptied cell commits null) takes the same owner path.
+  await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.current).toBe(true));
+  view.rerender(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
+  const typed = view.container.querySelector<HTMLInputElement>('[data-input-field="terminalDropInWg"] input.dl-cell-input')!;
+  fireEvent.change(typed, { target: { value: "" } });
+  fireEvent.keyDown(typed, { key: "Enter", code: "Enter" });
+  await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 3));
+  expect((f.owner.work()?.value as { criteria?: { edit?: { value?: Record<string, unknown> } } }).criteria?.edit?.value?.terminalDropInWg).toBeUndefined();
+  expect(f.fans.work()?.revision).toBe(fans0);
+  expect(acks.at(-1)).toMatchObject({ route: "ducts", label: expect.stringContaining("Revert") });
 });
 
 test("a rule owner crossing without system context still lands on its rule", async () => {

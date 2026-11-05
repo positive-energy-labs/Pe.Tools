@@ -11,12 +11,15 @@ import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 
 export type WorkCell = Parameters<typeof cellFromDraft>[0];
 
-/** The write's outcome as the cell's commit: nothing to refuse once it lands (the sheet shows refusals). */
+/** The write's outcome as the cell's commit: a refused write (`{message}`) restores the cell and says why. */
 const settled = (out: void | Promise<unknown>) =>
   out instanceof Promise
     ? out.then(
-        () => undefined,
-        () => undefined,
+        (result) =>
+          result && typeof result === "object" && "message" in result
+            ? String((result as { message: unknown }).message)
+            : undefined,
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
       )
     : undefined;
 

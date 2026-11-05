@@ -278,7 +278,6 @@ function InputsContent({
       void ctx.history?.undo(press);
     },
   };
-  const search = useRouteSearchSlice((search) => search);
   const fanReading = fans.value;
   const friction = ctx.work?.designFriction ?? {};
   const ownPane = (
@@ -409,7 +408,6 @@ function InputsContent({
           })}
       </section>
       <InputsSurface
-        ductsHref={(destination) => ductsLink(sheetSystems(snapshot), search, destination)}
         ctx={{
           snapshot,
           doc: workDoc,

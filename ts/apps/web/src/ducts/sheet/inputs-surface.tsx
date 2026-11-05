@@ -3,7 +3,6 @@ DuctsDesign,
 DuctsSheetEdits,
 Resolved,
 } from "@pe/agent-contracts";
-import type { DuctsDestination } from "../neutral.ts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { SubjectText } from "@pe/kit/lang/subject-text";
@@ -270,7 +269,19 @@ function RowVerb({
   );
 }
 
-function FittingGroupRows({ group, ductsHref }: { group: FittingGroup; ductsHref: (destination: DuctsDestination) => string }) {
+/** /ducts owns criteria, kinds, rules, assignments and catalog links: these cells write there through ductsEdit. */
+const FROM_DUCTS = " · from /ducts";
+function FittingGroupRows({
+  group,
+  refusal,
+  apply,
+  history,
+}: {
+  group: FittingGroup;
+  refusal: string | null;
+  apply: (edits: DuctsSheetEdits, meta: EditMeta) => void | Promise<unknown>;
+  history: InputsHistory;
+}) {
   const [open, setOpen] = useState(group.unpriced > 0 || group.members.length <= 3);
   return (
     <div className="contents" data-fitting-group={group.key} data-fitting-source={group.source}>
@@ -300,11 +311,37 @@ function FittingGroupRows({ group, ductsHref }: { group: FittingGroup; ductsHref
       ) : (
         <span className="t-small text-ink-2">none on this fan</span>
       )}
-      <a href={ductsHref(group.kind === "rule" ? { kind: "rule", key: group.key.slice(5) } : { kind: "route" })}>{group.table ?? "Choose a duct rule"}</a>
+      <ChoiceCell
+        label={`${group.title} table`}
+        options={group.choices.map((choice) => ({
+          key: choice.label,
+          label: choice.label,
+          description: choice.sub,
+        }))}
+        current={group.choices.find((choice) => choice.current)?.label ?? null}
+        cell={undefined}
+        path={null}
+        show={(v) => String(v ?? "—")}
+        refusal={refusal}
+        pick={(key) => {
+          const choice = group.choices.find((c) => c.label === key);
+          if (choice?.edits)
+            void apply(choice.edits, { label: `${group.title} → ${key}`, rowKey: group.key });
+        }}
+      />
       <span className="t-small min-w-0 truncate text-ink-2" data-input-source={group.source}>
         {group.source}
+        {FROM_DUCTS}
       </span>
-      <span />
+      <RowVerb
+        rowKey={group.key}
+        clear={group.clear}
+        history={history}
+        refusal={refusal}
+        apply={apply}
+        label={group.title}
+        was={`${group.title} ${group.table ?? "unpriced"} (${group.source})`}
+      />
       {open &&
         group.members.map((m) => (
           <div key={m.key} className="contents" data-fitting={m.key}>
@@ -388,9 +425,27 @@ function InputRowView({
         />
       ) : c.kind === "kind" ? (
         <>
-          <span>{c.value}</span>
+          <ChoiceCell
+            label={`${row.label} ${who}`}
+            options={c.options.map((o) => ({
+              key: o.kind,
+              label: o.kind,
+              description: o.meaning,
+              ...(o.disabled ? { disabled: o.disabled } : {}),
+            }))}
+            current={c.value}
+            cell={c.cell}
+            path={null}
+            show={(v) => String((v as { kind?: string } | undefined)?.kind ?? v ?? "—")}
+            refusal={c.edit ? refusal : (refusal ?? "Wait for the element snapshot")}
+            pick={(kind) => {
+              if (c.edit && kind !== c.value)
+                void apply(c.edit(kind as never), meta(`${row.label} ${who} → ${kind}`));
+            }}
+          />
           <span className="t-small min-w-0 truncate text-ink-2" data-input-source={row.source}>
             {row.source}
+            {FROM_DUCTS}
           </span>
         </>
       ) : (
@@ -403,8 +458,7 @@ function InputRowView({
       )}
       <RowVerb
         rowKey={row.key}
-        // Q2a: kinds belong to /ducts; the role selector above owns role edits on /fans.
-        clear={c.kind === "number" ? row.clear : null}
+        clear={row.clear}
         history={history}
         refusal={refusal}
         apply={apply}
@@ -436,9 +490,7 @@ export function InputsSurface({
   history,
   nameOf,
   act,
-  ductsHref,
 }: {
-  ductsHref: (destination: DuctsDestination) => string;
   ctx: InputContext;
   busy: boolean;
   elementName: string | null;
@@ -504,8 +556,53 @@ export function InputsSurface({
           {fields.criteria.map((row) => (
             <div key={row.key} className="contents" data-input-field={row.key}>
               <span className="min-w-0 break-words text-ink-2">{row.label}</span>
-              <a href={ductsHref({ kind: "route" })}>{String(row.value ?? "—")}</a>
-              <span className="text-ink-2">{row.source}</span>
+              {row.kind === "number" ? (
+                <SheetCell
+                  label={`${row.label} ${row.unit}`}
+                  value={row.value}
+                  unit={{ label: row.unit }}
+                  digits={3}
+                  source={`${row.source}${FROM_DUCTS}`}
+                  cell={row.cell}
+                  refusal={criteriaRefusal}
+                  positive={row.positive}
+                  clearable={row.cell?.edit != null}
+                  onValue={(value) =>
+                    apply(row.edit(value), {
+                      label:
+                        value == null ? `Revert ${row.label}` : `${row.label} → ${value} ${row.unit}`,
+                      rowKey: row.key,
+                      ...(value == null ? { clear: true } : {}),
+                    })
+                  }
+                />
+              ) : (
+                <>
+                  <ChoiceCell
+                    label={row.label}
+                    options={[
+                      { key: "even", label: "even" },
+                      { key: "proportional", label: "proportional" },
+                    ]}
+                    current={row.value}
+                    cell={row.cell}
+                    path={null}
+                    show={(v) => String(v ?? "—")}
+                    refusal={criteriaRefusal}
+                    pick={(key) => {
+                      if (key !== row.value)
+                        void apply(row.edit(key as "even" | "proportional"), {
+                          label: `${row.label} → ${key}`,
+                          rowKey: row.key,
+                        });
+                    }}
+                  />
+                  <span className="t-small text-ink-2" data-input-source={row.source}>
+                    {row.source}
+                    {FROM_DUCTS}
+                  </span>
+                </>
+              )}
               <span />
             </div>
           ))}
@@ -550,7 +647,13 @@ export function InputsSurface({
         </p>
         <div className={ROWS}>
           {groups.map((group) => (
-            <FittingGroupRows key={group.key} group={group} ductsHref={ductsHref} />
+            <FittingGroupRows
+              key={group.key}
+              group={group}
+              refusal={criteriaRefusal}
+              apply={apply}
+              history={history}
+            />
           ))}
           {groups.length === 0 && (
             <p className="col-span-4 text-ink-2">
