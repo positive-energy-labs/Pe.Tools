@@ -1,5 +1,3 @@
-import { useList } from "@pe/kit/lang/collection";
-import { ListView } from "@pe/kit/lang/list-view";
 import { HostedChrome } from "../route/hosted-chrome";
 import { useMemo, useRef, useState, useEffect, useContext, type ReactNode } from "react";
 import { z } from "zod";
@@ -25,13 +23,15 @@ import {
   useRouteKeysPrimary,
   useHasGlobalNavigation,
 } from "../navigation/route-controls";
-import { SituationBand, TimelineHead, JournalButtons } from "./situation-band";
+import { SituationBand, TimelineHead } from "./situation-band";
 import { ReviewSurface } from "./review-surface";
 import { WriteAction, writeWord, type WriteRun } from "@pe/kit/lang/write-action";
 import { writeResponseSchema } from "@pe/agent-contracts";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
-import { openConsentWindows } from "./situation-band";
+import { projectTimeline } from "./timeline";
+import { GraphHistory } from "./mount-timeline";
+import { secondsLeft } from "./countdown";
 import { worksharingOf } from "./verbs";
 import type { TimelineEntry } from "./timeline";
 
@@ -236,12 +236,15 @@ export function writeReject(
   ids: readonly string[],
   reject: (thread: string, requestId: string) => void,
 ) {
-  const open = openConsentWindows(entries).find(({ entry }) => ids.includes(entry.verb ?? ""));
+  const open = projectTimeline(entries, {}).find((row) => {
+    const key = (row.entry.basis as { receipt?: { key?: string } } | undefined)?.receipt?.key;
+    return row.kind === "consent" && ids.includes(key ?? row.entry.verb ?? "");
+  });
   if (!open) return null;
   const thread = originThread(open.entry);
-  const requestId = open.entry.outcome!.consentWindow!.requestId;
+  const requestId = open.outcome!.consentWindow!.requestId;
   return {
-    until: open.left === null ? "awaiting approval" : `${open.left}s`,
+    until: open.consentUntil ? `${secondsLeft(open.consentUntil)}s` : "awaiting approval",
     run: () => (thread ? reject(thread, requestId) : undefined),
   };
 }
@@ -321,52 +324,10 @@ export function AdmittedActions({
   );
 }
 function History({ mount, data }: { mount: AdmittedMount; data: RouteGraphJson }) {
-  const journal = mount.journal();
-  const timeline: readonly TimelineEntry[] = mount.timeline();
-  const list = useList({
-    items: [
-      ...(journal?.moves ?? []).map((move) => ({
-        key: `work:${move.revision}:${move.kind}`,
-        label: move.label,
-        sub: `${move.kind} / ${move.by === "pea" ? "Pea" : "you"} / r${move.revision}`,
-        actions: undefined,
-      })),
-      ...mount.activity().map((receipt) => ({
-        key: receipt.id,
-        label:
-          Object.values(data.verbs).find((v) => "entry" in v && v.entry === receipt.key)?.label ??
-          "Command",
-        sub: receipt.state,
-        actions: ["waiting", "running", "unknown"].includes(receipt.state) ? (
-          <Button label="Stop command" onClick={() => void mount.stopCommand(receipt.id)}>
-            Stop
-          </Button>
-        ) : undefined,
-      })),
-    ],
-    keyOf: (row) => row.key,
-    search: (row) => ({ text: [row.label, row.sub] }),
-    select: "none",
-  });
+  // The Timeline projection owns moves, starts, receipts and feed rows; only refused edits stay here.
   return (
     <section aria-label="History">
-      <JournalButtons owner={mount} words />
-      <ListView
-        list={list}
-        aria-label="History"
-        maxHeight="min(24rem, 60vh)"
-        row={(row) => ({ label: row.label, sub: row.sub, actions: row.actions, lines: 2 })}
-        empty={{ message: "No activity yet", exit: "Run a command or edit Work" }}
-      />
-      {timeline
-        .filter((entry) => entry.kind === "feed")
-        .map((entry, index) => (
-          <p key={`feed:${index}`} role="status">
-            {typeof (entry.subject as { message?: unknown } | undefined)?.message === "string"
-              ? (entry.subject as { message: string }).message
-              : "Source update"}
-          </p>
-        ))}
+      <GraphHistory owner={mount} verbs={data.verbs} />
       {mount.refusedEdits().map((edit) => (
         <p key={edit.id} role="status">
           Unaccepted edit: {edit.refusal.error}
