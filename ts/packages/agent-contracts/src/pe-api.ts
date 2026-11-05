@@ -155,10 +155,12 @@ export function nativeEntry(op: HostOperationDefinition): CatalogRow {
     cardinality: op.cardinality as CatalogRow["cardinality"],
     internal: op.internal,
     rollsBack: op.rollsBack,
-    // A native write leaf with a `<key>.preview` sibling is bound to it, so the linker checks its axis.
-    ...(hostOpCatalog.some((other) => other.key === `${op.key}.preview`)
-      ? { previewBy: `${op.key}.preview` }
-      : {}),
+    // A native write leaf with a `<key>.plan` (Read) or `<key>.preview` (rehearsal) sibling is bound to it,
+    // so the linker checks its axis (ADR 0030 rule 4).
+    ...[`${op.key}.plan`, `${op.key}.preview`]
+      .filter((sibling) => hostOpCatalog.some((other) => other.key === sibling))
+      .slice(0, 1)
+      .map((previewBy) => ({ previewBy }))[0],
     uses: [],
   };
 }

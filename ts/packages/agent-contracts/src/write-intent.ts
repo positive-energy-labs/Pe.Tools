@@ -47,12 +47,13 @@ export interface WorkIntentBinding {
 }
 
 /**
- * A ModelWrite is two catalog entries: a TransactRead preview that seals what it would send, and
+ * A ModelWrite is two catalog entries: a plan (a Read, or a TransactRead rehearsal that rolls back;
+ * ADR 0030 rule 4) that seals what it would send, and
  * the ModelWrite that rechecks that seal and commits. The mode is the entry, never an input flag
  * (ADR 0028 write boundary rulings): a preview cannot reach a committing leaf by setting a boolean.
  */
 export interface WriteBoundaryBinding extends WorkIntentBinding {
-  /** The TransactRead entry whose sealed receipt the write rechecks. */
+  /** The plan entry (Read or rolled-back TransactRead) whose sealed receipt the write rechecks. */
   previewKey: string;
   phase: "preview" | "apply";
   preview(request: unknown): unknown;
@@ -134,7 +135,7 @@ export function workIntent<const K extends string, const C extends Command>(
 
 /**
  * Primitive 2, only for a command whose catalog axis reaches Revit (Effect ModelWrite): the apply
- * entry plus its sealed TransactRead preview. `command-axes.ts` refuses a boundary on any other axis.
+ * entry plus its sealed plan. `command-axes.ts` refuses a boundary on any other axis.
  */
 export function workWriteCommands<
   const K extends string,
@@ -176,12 +177,12 @@ export function workWriteCommands<
       },
     };
   };
-  // A Pod entry carries its own axes; its preview inherits them as a rolled-back read.
+  // A Pod entry carries its own axes; its preview inherits them as a Read plan (a Pod cannot rehearse in Revit).
   const axes = (definition as { axes?: import("./catalog.ts").CatalogAxes }).axes;
   const previewDefinition = (options.preview?.definition ?? {
     ...definition,
     says: `Preview, nothing committed: ${definition.says}`,
-    ...(axes ? { axes: { ...axes, effect: "TransactRead", rollsBack: true } } : {}),
+    ...(axes ? { axes: { ...axes, effect: "Read" } } : {}),
   }) as PC;
   return {
     [key]: entry(definition, "apply"),

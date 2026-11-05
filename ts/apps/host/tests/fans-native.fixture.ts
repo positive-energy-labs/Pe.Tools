@@ -172,9 +172,9 @@ export async function nativeFixture(
               value = { tables: {}, missing: [], unsupported: [] };
             else if (
               req.operationKey === "ducts.apply" ||
-              req.operationKey === "ducts.apply.preview"
+              req.operationKey === "ducts.apply.plan"
             ) {
-              const preview = req.operationKey.endsWith(".preview");
+              const preview = req.operationKey === "ducts.apply.plan";
               const writes: {
                 id: number | null;
                 kind: string;

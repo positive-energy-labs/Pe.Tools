@@ -249,7 +249,7 @@ export const entries = {
   "ducts.preview-losses": {
     input: commands["ducts.preview-losses"].input,
     output: commands["ducts.preview-losses"].result,
-    axes: { ...commandCatalogAxes["ducts.preview-losses"], effect: "TransactRead" as const },
+    axes: commandCatalogAxes["ducts.preview-losses"],
   },
   "ducts.preview-heal": {
     input: commands["ducts.preview-heal"].input,

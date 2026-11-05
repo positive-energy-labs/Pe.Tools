@@ -1,8 +1,9 @@
 import type { CatalogAxes } from "./catalog.ts";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { hostActions } from "./semantic-actions.ts";
 
 type HostActionKey = keyof typeof hostActions;
-/** Keys built as the TransactRead half of a Work write; their axes derive from the write. */
+/** Keys built as the plan half of a Work write; their axes derive from the write. */
 type PreviewKey = {
   [K in HostActionKey]: (typeof hostActions)[K] extends { writeBoundary: { phase: "preview" } }
     ? K
@@ -387,9 +388,12 @@ const declaredAxes = {
 } satisfies Record<Exclude<HostActionKey, PreviewKey>, CatalogAxes>;
 
 /**
- * A preview has the write's subject, Touches and cost by construction, Effect TransactRead and a
- * declared rollback; the linker refuses a ModelWrite whose preview binding breaks that.
+ * A preview has the write's subject, Touches and cost by construction. Its Effect is its native leaf's
+ * (ADR 0030 rule 4): a Read plan opens no transaction; anything else is a TransactRead rehearsal that
+ * declares rollback. The linker refuses a ModelWrite whose preview binding breaks that.
  */
+const isReadPlan = (action: object) =>
+  hostOpCatalog.find((op) => op.key === (action as { native?: readonly string[] }).native?.[0])?.effect === "Read";
 const previewAxes = Object.fromEntries(
   Object.entries(hostActions).flatMap(([key, action]) =>
     "writeBoundary" in action && action.writeBoundary.phase === "preview"
@@ -398,8 +402,7 @@ const previewAxes = Object.fromEntries(
             key,
             {
               ...declaredAxes[action.writeBoundary.key as keyof typeof declaredAxes],
-              effect: "TransactRead",
-              rollsBack: true,
+              ...(isReadPlan(action) ? { effect: "Read" } : { effect: "TransactRead", rollsBack: true }),
             },
           ],
         ]
@@ -416,8 +419,7 @@ export const commandCatalogAxes: Record<HostActionKey, CatalogAxes> = {
 for (const [key, action] of Object.entries(hostActions)) {
   const phase = "writeBoundary" in action ? action.writeBoundary.phase : undefined;
   const effect = commandCatalogAxes[key as HostActionKey].effect;
-  if (phase && effect !== (phase === "apply" ? "ModelWrite" : "TransactRead"))
-    throw Error(
-      `${key}: a ${phase} write boundary needs Effect ${phase === "apply" ? "ModelWrite" : "TransactRead"}, not ${effect}`,
-    );
+  const allowed = phase === "apply" ? ["ModelWrite"] : ["Read", "TransactRead"];
+  if (phase && !allowed.includes(effect))
+    throw Error(`${key}: a ${phase} write boundary needs Effect ${allowed.join(" or ")}, not ${effect}`);
 }

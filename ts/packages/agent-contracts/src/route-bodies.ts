@@ -418,8 +418,12 @@ export function linkRouteBodies(
     if (seen.has(id)) return false;
     seen.add(id);
     const entry = linked.get(id);
-    // Journal previews own rollback reads; Touches does not select the geometry door.
-    if (entry?.effect === "TransactRead" && entry.rollsBack && isWritePreviewKey(id)) return false;
+    // Journal plans (a Read, or a rehearsal that rolls back) own their reads; Touches does not select the geometry door.
+    if (
+      isWritePreviewKey(id) &&
+      (entry?.effect === "Read" || (entry?.effect === "TransactRead" && entry.rollsBack))
+    )
+      return false;
     return (
       !!entry &&
       (entry.touches.includes("Geometry") ||

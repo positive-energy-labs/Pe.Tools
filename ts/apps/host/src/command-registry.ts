@@ -96,7 +96,7 @@ export function commandRegistry(
   }
   // The wrap is keyed on the catalog axis, never on a definition's shape: a ModelWrite whose
   // definition carries no typed apply-phase `writeBoundary` is refused at boot instead of running unsealed.
-  // Previews (TransactRead) carry the preview phase and are wrapped too; every other command is untouched.
+  // Plans (Read or rolled-back TransactRead) carry the preview phase and are wrapped too; every other command is untouched.
   for (const [key, entry] of Object.entries(implementations)) {
     const modelWrite =
       commandCatalogAxes[key as keyof typeof commandCatalogAxes]?.effect === "ModelWrite";

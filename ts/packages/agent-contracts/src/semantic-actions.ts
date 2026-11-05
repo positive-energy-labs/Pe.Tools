@@ -124,7 +124,7 @@ export const ductsActions = {
     dirties: ["snapshot"],
   },
   "ducts.preview-losses": {
-    native: ["ducts.apply.preview"],
+    native: ["ducts.apply.plan"],
     says: "First stage the fan walk { unitId, portIndex } from route:ducts.roster in route:fans writeIntent, and cells naming exactly the cells requested (fan cells are route:fans Work, rule cells route:ducts Work). Then plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
     needs: "project-document",
     effect: "query",
@@ -496,7 +496,7 @@ export type SemanticPreviewKey = {
     ? K
     : never;
 }[SemanticActionKey];
-/** The TransactRead half of a Work write: its receipt is review evidence, never a commit. */
+/** The plan half of a Work write: its receipt is review evidence, never a commit. */
 export function isWritePreviewKey(key: string): boolean {
   const command = commands[key as SemanticActionKey] as
     | { writeBoundary?: { phase: string } }

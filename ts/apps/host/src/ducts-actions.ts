@@ -267,18 +267,21 @@ export function ductsExecutors(
     const entry = {
       losses: {
         key: "ducts.apply",
+        plan: "ducts.apply.plan",
         retires: (input: Record<string, unknown>, value: unknown) =>
           appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response),
       },
       heal: {
         key: "ducts.heal",
+        plan: "ducts.heal.preview",
         retires: (input: Record<string, unknown>, value: unknown) =>
           healedCellPaths(input, value as DuctsHeal.Res.Response),
       },
-      "assign-fan": { key: "ducts.assign-fan", retires: () => [] as string[][] },
+      "assign-fan": { key: "ducts.assign-fan", plan: "ducts.assign-fan.preview", retires: () => [] as string[][] },
     }[kind];
-    // A preview calls the native TransactRead sibling; only the apply entry reaches the ModelWrite leaf.
-    const key = preview ? `${entry.key}.preview` : entry.key;
+    // The preview phase calls the native plan sibling (a Read for losses, a TransactRead rehearsal for the others);
+    // only the apply entry reaches the ModelWrite leaf.
+    const key = preview ? entry.plan : entry.key;
     const value = await execution.step(
       "native",
       key,

@@ -98,7 +98,7 @@ export type RouteBodyRender<B> =
     : never;
 /** TODO: A validates linked catalog footprint, not route opt-in: every native Geometry read and
  * transitive native geometry dependency requires an overview or explicit-detail declaration.
- * Journal-owned semantic previews retain their Geometry/TransactRead/rollback axes without that policy. Default
+ * Journal-owned semantic plans retain their Geometry and Read or rolled-back TransactRead axes without that policy. Default
  * overview closure contains no detailed request. Detail demand AND refresh must be explicit.
  * Validate mixed-subject schema/identity agreement, finite dependency keys and the complete
  * migration chain (saved age to work.version), then hash migration bytes with all other bodies. */

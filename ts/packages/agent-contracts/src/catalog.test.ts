@@ -52,16 +52,18 @@ describe("catalog dependency graph", () => {
       linkCatalog([{ ...parent, uses: [{ key: "walk", cardinality: "Many" }] }, child]).join(),
     ).toContain("understates");
   });
-  test("binds every ModelWrite's seal step to a rolled-back read of the same footprint", () => {
+  test("binds every ModelWrite's seal step to a plan (Read or rolled-back TransactRead) of the same footprint", () => {
     const derivation = { derive: (work: unknown) => work, preview: (request: unknown) => request };
     const write = { ...leaf("command:x.apply"), ...derivation, effect: "ModelWrite" as const, previewBy: "command:x.preview" };
     const preview = { ...leaf("command:x.preview"), effect: "TransactRead" as const, rollsBack: true };
     expect(linkCatalog([write, preview])).toEqual([]);
-    // A preview that may commit is refused, whatever it is called.
+    // ADR 0030 rule 4: a plan that opens no transaction is a Read and links.
+    expect(linkCatalog([write, { ...preview, effect: "Read", rollsBack: undefined }])).toEqual([]);
+    // A plan that may write is refused, whatever it is called.
     expect(linkCatalog([write, { ...preview, effect: "ModelWrite" }])).toContain(
-      "command:x.apply: preview command:x.preview is ModelWrite, not TransactRead",
+      "command:x.apply: plan command:x.preview is ModelWrite, not Read or TransactRead",
     );
-    expect(linkCatalog([write, { ...preview, effect: "Read" }]).join()).toContain("not TransactRead");
+    expect(linkCatalog([write, { ...preview, effect: "SessionWrite" }]).join()).toContain("not Read or TransactRead");
     expect(linkCatalog([write, { ...preview, rollsBack: false }])).toContain(
       "command:x.preview: TransactRead must declare rollback",
     );
@@ -75,11 +77,16 @@ describe("catalog dependency graph", () => {
   });
   test("the shipped write leaves split preview from commit", () => {
     const byKey = new Map(catalogEntries.map((row) => [row.key, row]));
-    for (const key of ["ducts.apply", "ducts.heal", "ducts.assign-fan", "revit.apply.parameter-links"]) {
+    // ducts.apply plans with no transaction (a Read); the others rehearse and roll back.
+    expect(byKey.get("ducts.apply")).toMatchObject({ effect: "ModelWrite", internal: true, previewBy: "ducts.apply.plan" });
+    expect(byKey.get("ducts.apply.plan")).toMatchObject({ effect: "Read", rollsBack: false });
+    expect(byKey.get("ducts.apply.preview")).toBeUndefined();
+    expect(byKey.get("command:ducts.preview-losses")).toMatchObject({ effect: "Read" });
+    for (const key of ["ducts.heal", "ducts.assign-fan", "revit.apply.parameter-links"]) {
       expect(byKey.get(key)).toMatchObject({ effect: "ModelWrite", internal: true, previewBy: `${key}.preview` });
       expect(byKey.get(`${key}.preview`)).toMatchObject({ effect: "TransactRead", rollsBack: true });
     }
     for (const row of catalogEntries.filter((row) => row.key.startsWith("command:") && row.effect === "ModelWrite"))
-      expect(byKey.get(row.previewBy!)?.effect).toBe("TransactRead");
+      expect(["Read", "TransactRead"]).toContain(byKey.get(row.previewBy!)?.effect);
   });
 });

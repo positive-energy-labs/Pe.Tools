@@ -112,13 +112,13 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("ducts.apply", OpSubject.Document, OpTouches.Geometry, OpEffect.ModelWrite, Internal = true, Does = "Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. ducts.apply.preview plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after.", Title = "Apply Duct Losses", Finds = ["ducts", "apply", "pressure", "loss", "coefficient", "terminal", "fan-static", "critical-path", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"fittings\": [{ \"id\": 12345, \"method\": \"pe-server\", \"coefficient\": 0.25, \"table\": \"CD3-1\", \"ruleKey\": \"elbow-1d-le10\" }, { \"id\": 12346, \"method\": \"pe-server\", \"coefficient\": 0.35, \"table\": \"SD5-10\", \"ruleKey\": \"tap-std\" }], \"terminals\": [], \"components\": [], \"equipment\": [], \"store\": { \"version\": 1 } }")]
+    [Op("ducts.apply", OpSubject.Document, OpTouches.Geometry, OpEffect.ModelWrite, Internal = true, Does = "Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. ducts.apply.plan plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after.", Title = "Apply Duct Losses", Finds = ["ducts", "apply", "pressure", "loss", "coefficient", "terminal", "fan-static", "critical-path", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"fittings\": [{ \"id\": 12345, \"method\": \"pe-server\", \"coefficient\": 0.25, \"table\": \"CD3-1\", \"ruleKey\": \"elbow-1d-le10\" }, { \"id\": 12346, \"method\": \"pe-server\", \"coefficient\": 0.35, \"table\": \"SD5-10\", \"ruleKey\": \"tap-std\" }], \"terminals\": [], \"components\": [], \"equipment\": [], \"store\": { \"version\": 1 } }")]
     private static DuctApplyResult ApplyDuctsCore(DuctApplyRequest request, ProjectDocument activeDocument) =>
         ApplyDucts(request, activeDocument, false);
 
-    // The preview is its own TransactRead leaf, not a flag on the ModelWrite: the bridge gate refuses a
-    // TransactRead that does not declare rollback, and the host binds this key to the Work seal step.
-    [Op("ducts.apply.preview", OpSubject.Elements, OpTouches.Geometry, OpEffect.TransactRead, RollsBack = true, Does = "Plan every duct loss write and refusal ducts.apply would make, without opening a transaction. Same request and result as ducts.apply; nothing is committed.", Title = "Preview Duct Losses", Finds = ["ducts", "preview", "pressure", "loss"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    // A plan, not a rehearsal (ADR 0030 rule 4): it opens no transaction, so it is a Read with an empty
+    // footprint. The host binds this key to the Work seal step; ducts.apply rechecks the seal.
+    [Op("ducts.apply.plan", OpSubject.Elements, OpTouches.Geometry, OpEffect.Read, Does = "Plan every duct loss write and refusal ducts.apply would make, without opening a transaction. Same request and result as ducts.apply; nothing is committed.", Title = "Plan Duct Losses", Finds = ["ducts", "plan", "preview", "pressure", "loss"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static DuctApplyResult PreviewDuctsCore(DuctApplyRequest request, ProjectDocument activeDocument) =>
         ApplyDucts(request, activeDocument, true);
 
@@ -128,7 +128,7 @@ internal sealed class RevitDataRequestService {
             throw BridgeOperationExceptions.Conflict(
                 "The active project document is read-only.",
                 [BridgeOperationExceptions.Issue("$", "DuctsDocumentReadOnly", "The active project document is read-only.",
-                    "Open a writable project document and retry, or preview with ducts.apply.preview.")]);
+                    "Open a writable project document and retry, or plan with ducts.apply.plan.")]);
         if (request.Store is null)
             throw BridgeOperationExceptions.Conflict(
                 "ducts.apply needs the store read from ducts.snapshot.",
@@ -140,7 +140,7 @@ internal sealed class RevitDataRequestService {
             throw;
         } catch (Exception ex) {
             Serilog.Log.Error(ex, "ducts.apply failed outside a stage");
-            throw BridgeOperationExceptions.Unexpected("DuctsApplyException", ex, "Run ducts.apply.preview and read each refusal, then retry.");
+            throw BridgeOperationExceptions.Unexpected("DuctsApplyException", ex, "Run ducts.apply.plan and read each refusal, then retry.");
         }
     }
 

@@ -5,10 +5,10 @@ using Pe.Shared.RevitData.Serialization;
 namespace Pe.Shared.RevitData.Ducts;
 
 // The `ducts.apply` contract: write fitting coefficients, terminal and component drops, fan static
-// into Revit, plus Pe's provenance store. Its TransactRead sibling `ducts.apply.preview` plans every write and
+// into Revit, plus Pe's provenance store. Its Read sibling `ducts.apply.plan` plans every write and
 // opens no transaction; the request carries no preview flag, the op key is the mode.
 
-/// <summary>Host-priced losses, drops in in-wg and design flows in cfm. Preview opens no transaction.</summary>
+/// <summary>Host-priced losses, drops in in-wg and design flows in cfm. The plan opens no transaction.</summary>
 public sealed record DuctApplyRequest(
     DuctParameterSlotOverrides? Slots,
     IReadOnlyList<DuctFittingWrite> Fittings,

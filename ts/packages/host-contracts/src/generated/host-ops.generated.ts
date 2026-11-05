@@ -167,7 +167,7 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
-/** Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. ducts.apply.preview plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
+/** Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. ducts.apply.plan plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
 export namespace DuctsApply {
   export namespace Req {
     /**
@@ -176,7 +176,7 @@ export namespace DuctsApply {
     export type DuctFittingMethod = "pe-server" | "specific-coefficient";
 
     /**
-     * Host-priced losses, drops in in-wg and design flows in cfm. Preview opens no transaction.
+     * Host-priced losses, drops in in-wg and design flows in cfm. The plan opens no transaction.
      */
     export interface Request {
       slots?: null | DuctParameterSlotOverrides;
@@ -411,7 +411,7 @@ export namespace DuctsApply {
 }
 
 /** Plan every duct loss write and refusal ducts.apply would make, without opening a transaction. Same request and result as ducts.apply; nothing is committed. */
-export namespace DuctsApplyPreview {
+export namespace DuctsApplyPlan {
   export namespace Req {
     /**
      * Consume host results in Pe's server, or freeze one coefficient for export.
@@ -419,7 +419,7 @@ export namespace DuctsApplyPreview {
     export type DuctFittingMethod = "pe-server" | "specific-coefficient";
 
     /**
-     * Host-priced losses, drops in in-wg and design flows in cfm. Preview opens no transaction.
+     * Host-priced losses, drops in in-wg and design flows in cfm. The plan opens no transaction.
      */
     export interface Request {
       slots?: null | DuctParameterSlotOverrides;
@@ -10958,7 +10958,7 @@ export interface HostOps {
   "document.temporary.release": { request: DocumentTemporaryRelease.Req.Request; response: DocumentTemporaryRelease.Res.Response };
   "document.temporary.status": { request: DocumentTemporaryStatus.Req.Request; response: DocumentTemporaryStatus.Res.Response };
   "ducts.apply": { request: DuctsApply.Req.Request; response: DuctsApply.Res.Response };
-  "ducts.apply.preview": { request: DuctsApplyPreview.Req.Request; response: DuctsApplyPreview.Res.Response };
+  "ducts.apply.plan": { request: DuctsApplyPlan.Req.Request; response: DuctsApplyPlan.Res.Response };
   "ducts.assign-fan": { request: DuctsAssignFan.Req.Request; response: DuctsAssignFan.Res.Response };
   "ducts.assign-fan.preview": { request: DuctsAssignFanPreview.Req.Request; response: DuctsAssignFanPreview.Res.Response };
   "ducts.family-patch": { request: DuctsFamilyPatch.Req.Request; response: DuctsFamilyPatch.Res.Response };
@@ -11060,7 +11060,7 @@ export const hostOpKeys = [
   "document.temporary.release",
   "document.temporary.status",
   "ducts.apply",
-  "ducts.apply.preview",
+  "ducts.apply.plan",
   "ducts.assign-fan",
   "ducts.assign-fan.preview",
   "ducts.family-patch",
@@ -11162,7 +11162,7 @@ export const hostOpSafety = {
   "document.temporary.release": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"None","touches":"Metadata","effect":"SessionWrite","cardinality":"One","internal":false,"rollsBack":false},
   "document.temporary.status": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "ducts.apply": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"Document","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
-  "ducts.apply.preview": {"intent":"Read","costTier":"Mutation","usesTransactions":false,"subject":"Elements","touches":"Geometry","effect":"TransactRead","cardinality":"One","internal":false,"rollsBack":true},
+  "ducts.apply.plan": {"intent":"Read","costTier":"Mutation","usesTransactions":false,"subject":"Elements","touches":"Geometry","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},
   "ducts.assign-fan": {"intent":"Mutate","costTier":"Mutation","usesTransactions":true,"subject":"System","touches":"Topology","effect":"ModelWrite","cardinality":"One","internal":true,"rollsBack":false},
   "ducts.assign-fan.preview": {"intent":"Read","costTier":"Mutation","usesTransactions":true,"subject":"System","touches":"Topology","effect":"TransactRead","cardinality":"One","internal":false,"rollsBack":true},
   "ducts.family-patch": {"intent":"Read","costTier":"Cheap","usesTransactions":false,"subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false,"rollsBack":false},

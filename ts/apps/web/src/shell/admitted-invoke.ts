@@ -274,12 +274,15 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
             ? command.writeBoundary.previewKey
             : `${declaration.entry}.preview`;
         const previewEntry = bindings.entries[previewKey];
+        // ADR 0030 rule 4: the plan is a Read, or a rehearsal that rolls back.
         if (
           !previewEntry ||
-          previewEntry.axes.effect !== "TransactRead" ||
-          !previewEntry.axes.rollsBack
+          !(
+            previewEntry.axes.effect === "Read" ||
+            (previewEntry.axes.effect === "TransactRead" && previewEntry.axes.rollsBack)
+          )
         )
-          throw Error("ModelWrite requires its rolled-back catalog preview");
+          throw Error("ModelWrite requires its catalog plan");
         const candidates = Object.entries(route.data.readings).filter(
           ([, reading]) =>
             reading.kind === "use" && reading.entry === previewKey && reading.demand === "explicit",

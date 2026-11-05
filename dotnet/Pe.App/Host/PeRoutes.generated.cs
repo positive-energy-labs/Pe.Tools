@@ -126,17 +126,6 @@ internal static class PeRoutes {
         }
     }
 
-    /// <summary>Data Tables: <c>/data-tables</c>.</summary>
-    internal static class DataTables {
-        public const string Path = "/data-tables";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Table = "table";
-        }
-    }
-
     /// <summary>Design System: <c>/design-system</c>.</summary>
     internal static class DesignSystem {
         public const string Path = "/design-system";
@@ -182,18 +171,6 @@ internal static class PeRoutes {
             public const string Drill = "drill";
             public const string Inspector = "inspector";
             public const string Doc = "doc";
-        }
-    }
-
-    /// <summary>Grilles: <c>/grilles</c>.</summary>
-    internal static class Grilles {
-        public const string Path = "/grilles";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Row = "row";
-            public const string Sheet = "sheet";
         }
     }
 
@@ -247,28 +224,6 @@ internal static class PeRoutes {
         }
     }
 
-    /// <summary>Parameter Links: <c>/parameter-links</c>.</summary>
-    internal static class ParameterLinks {
-        public const string Path = "/parameter-links";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Rail = "rail";
-        }
-    }
-
-    /// <summary>Pod administration: <c>/pod-admin</c>.</summary>
-    internal static class PodAdmin {
-        public const string Path = "/pod-admin";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Pod = "pod";
-        }
-    }
-
     /// <summary>Pods: <c>/pods</c>.</summary>
     internal static class Pods {
         public const string Path = "/pods";
@@ -279,23 +234,6 @@ internal static class PeRoutes {
             public const string Pod = "pod";
             public const string Path = "path";
             public const string Runs = "runs";
-        }
-    }
-
-    /// <summary>RHVAC sync: <c>/rhvac-sync</c>.</summary>
-    internal static class RhvacSync {
-        public const string Path = "/rhvac-sync";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Level = "level";
-            public const string Zone = "zone";
-            public const string Room = "room";
-            public const string Viewport = "viewport";
-            public const string Views = "views";
-            public const string Zones = "zones";
-            public const string R10 = "r10";
         }
     }
 
@@ -338,24 +276,6 @@ internal static class PeRoutes {
         }
     }
 
-    /// <summary>Space: <c>/space</c>.</summary>
-    internal static class Space {
-        public const string Path = "/space";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Scene = "scene";
-            public const string Mode = "mode";
-            public const string Viewport = "viewport";
-            public const string Cuts = "cuts";
-            public const string Selected = "selected";
-            public const string Hidden = "hidden";
-            public const string Isolated = "isolated";
-            public const string Layers = "layers";
-        }
-    }
-
     /// <summary>View adoption: <c>/takeoffs</c>.</summary>
     internal static class Takeoffs {
         public const string Path = "/takeoffs";
@@ -367,23 +287,6 @@ internal static class PeRoutes {
             public const string Zone = "zone";
             public const string Room = "room";
             public const string Viewport = "viewport";
-        }
-    }
-
-    /// <summary>Zone audit: <c>/zone-audit</c>.</summary>
-    internal static class ZoneAudit {
-        public const string Path = "/zone-audit";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Level = "level";
-            public const string Zone = "zone";
-            public const string Room = "room";
-            public const string Viewport = "viewport";
-            public const string Views = "views";
-            public const string Zones = "zones";
-            public const string R10 = "r10";
         }
     }
 }

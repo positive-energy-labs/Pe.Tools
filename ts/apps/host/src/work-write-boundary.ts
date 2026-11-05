@@ -149,7 +149,7 @@ export function workWriteBoundary(
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader } = {},
   registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
-  /** The preview entry has its own executor (a native TransactRead leaf); otherwise it is synthesized. */
+  /** The preview entry has its own executor (a native plan leaf); otherwise it is synthesized. */
   ownsPreview = false,
 ): CommandExecutor {
   const definition = executor.definition as import("@pe/agent-contracts").Command & {
@@ -172,7 +172,7 @@ export function workWriteBoundary(
     bind: async (ctx) => {
       documentMarks(bridge);
       const takenAt = new Date().toISOString();
-      // The entry is the mode: seal at the TransactRead preview, recheck at the ModelWrite.
+      // The entry is the mode: seal at the plan, recheck at the ModelWrite.
       const previewOnly = hooks.phase === "preview";
       const { work, input, target, observed } = await deriveFromWork(
         ctx,

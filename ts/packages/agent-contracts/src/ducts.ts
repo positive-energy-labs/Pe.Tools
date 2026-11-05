@@ -466,7 +466,7 @@ export const workingPhaseOf = (doc: DuctsRouteDocument | null) => {
 
 /**
  * What `ducts.preview-losses` and `ducts.apply-losses` send; the host calls the native
- * `ducts.apply.preview` (TransactRead) or `ducts.apply` (ModelWrite). Mirrors the generated `DuctsApply.Req.Request` field for field (the web
+ * `ducts.apply.plan` (Read) or `ducts.apply` (ModelWrite). Mirrors the generated `DuctsApply.Req.Request` field for field (the web
  * test pins the two types to each other). Built by the web from the edited cells and Pe's own
  * lookup: one fitting row per instance of an edited rule under the rule's chosen table; the
  * equipment rows are the edited `esp`, through the `fanStatic` slot, and the flow rows the resolved

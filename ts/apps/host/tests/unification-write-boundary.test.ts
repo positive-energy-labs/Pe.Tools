@@ -422,7 +422,7 @@ test("host-derived preview and apply send the captured Work flow and retire only
         expect(next.kind, JSON.stringify(next)).toBe("dispatch");
         // The preview reaches the TransactRead leaf; only the apply entry reaches the ModelWrite leaf.
         expect(next.frame.request!.operationKey).toBe(
-          previewOnly ? "ducts.apply.preview" : "ducts.apply",
+          previewOnly ? "ducts.apply.plan" : "ducts.apply",
         );
         const native = JSON.parse(next.frame.request!.payloadJson);
         expect(native).not.toHaveProperty("previewOnly");
