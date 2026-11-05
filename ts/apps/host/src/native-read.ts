@@ -4,19 +4,13 @@
  * answer never admits an operation, including itself.
  */
 import { Effect, Layer } from "effect";
-import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { nativePrincipals } from "@pe/agent-contracts";
 import { HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
 import { prepareRead } from "../../../packages/host-internal/src/read-admission.ts";
-import { admitAnonymousCall } from "./control.ts";
-import { gatewayTarget, requireEligibleCaller } from "./gateway-actions.ts";
-import { isDoorFailure } from "./http-problems.ts";
-import { InvalidRead, NativeReads } from "./native-reads.ts";
-import { ReadFreshness, readSchemas, RequestIdentity } from "./request-services.ts";
+import { gatewayTarget } from "./gateway-actions.ts";
+import { admitNativeCaller, admitted, readRefusal as refusal } from "./native-read-policy.ts";
+import { NativeReads } from "./native-reads.ts";
+import { ReadFreshness, readSchemas } from "./request-services.ts";
 import { SdkSession } from "./sdk-session.ts";
-
-const refusal = (message: string, problem: string, status = 409) =>
-  new InvalidRead({ message, status, problem });
 
 export const HostNativeReadLive = Layer.effect(
   HostNativeRead,
@@ -26,27 +20,7 @@ export const HostNativeReadLive = Layer.effect(
     const reads = yield* NativeReads;
     // Admission is per call: a shared flight never lends one caller another's permission.
     const admit = Effect.fn("HostNativeRead.admit")(function* (request: NativeReadInput) {
-      const { caller } = yield* RequestIdentity;
-      const definition = hostOpCatalog.find((entry) => entry.key === request.key);
-      if (
-        definition?.intent !== "Read" ||
-        (definition.effect !== "Read" && definition.effect !== "TransactRead")
-      )
-        return yield* refusal("Only declared native Reads can be admitted", "read.intent");
-      const admitted = <A>(check: () => A) =>
-        Effect.try({
-          try: check,
-          catch: (error) =>
-            isDoorFailure(error) ? error : refusal(String(error), "read.admission"),
-        });
-      yield* admitted(() => {
-        admitAnonymousCall(caller, request.key);
-        requireEligibleCaller(
-          { ...definition, principal: nativePrincipals(definition.actor) },
-          caller,
-          "native-read",
-        );
-      });
+      const definition = yield* admitNativeCaller(request.key);
       const session = yield* sessions.resolve(request.scope);
       // The explicit document, else the session's one active document; gatewayTarget refuses the rest.
       const active = session.state?.openDocuments.filter((document) => document.isActive) ?? [];
