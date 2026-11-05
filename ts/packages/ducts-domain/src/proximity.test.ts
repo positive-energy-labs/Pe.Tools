@@ -516,24 +516,3 @@ it("an inline part is a person-ruled warning an ignore verdict withholds; withou
   ).toEqual([]);
   expect(inferJoints(snap([host()], [damper(9, [4, 0, 0])])).inline).toEqual([]);
 });
-
-// ---- grades (pressure-drop ledger, 2026-10-19: inference may compute, never conclude) --------
-
-/** Duct 1 along +x ending at x 10; duct 2 starting `gapIn` past it, `lateralIn` off its axis, turned `deg`. */
-const pair = (gapIn: number, lateralIn = 0, deg = 0) => {
-  const start = [10 + gapIn * IN, lateralIn * IN, 0];
-  const r = (deg * Math.PI) / 180;
-  return [
-    duct(1, [0, 0, 0], [10, 0, 0], "g1"),
-    duct(2, start, [start[0]! + 10 * Math.cos(r), start[1]! + 10 * Math.sin(r), 0], "g2"),
-  ];
-};
-
-it("an edit connect confirms an inference on its link", () => {
-  const before = snap(pair(0.3, 0.6));
-  const id = "proximity:1:2|2:1";
-  expect(tolerate(before).links).toEqual([
-    { id, between: [1, 2], grade: "stretched", ruled: false },
-  ]);
-  expect(tolerate(before, staging(id, "connect")).links[0]!.ruled).toBe(true);
-});

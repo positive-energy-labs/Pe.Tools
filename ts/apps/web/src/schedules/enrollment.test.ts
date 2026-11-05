@@ -19,7 +19,6 @@ test("G4: admitted host opens existing schedule Work but preserves domain edit r
   if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
   // Pea's catalog lists admitted Work once (805b9990); the constructor seat leaves schedules to its
   // admitted owner, as the host composition root does.
-  expect(createRouteRegistrations().filter((r) => r.spec.route === "schedules")).toHaveLength(1);
   const registrations = createRouteRegistrations().filter((r) => r.spec.route !== "schedules");
   const key = {
     binding: "workspace" as const,

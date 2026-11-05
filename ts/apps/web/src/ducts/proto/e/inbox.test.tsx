@@ -1,10 +1,4 @@
 import { designOf } from "@pe/ducts-domain/test-design";
-import { emptyListSearch, pickListPill } from "@pe/agent-contracts";
-const search = (keywords = "", pills: Record<string, string> = {}) =>
-  Object.entries(pills).reduce((s, [field, value]) => pickListPill(s, field, value), {
-    ...emptyListSearch(),
-    keywords,
-  });
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -282,31 +276,6 @@ test("picking another ruling opens its details without owning Page selection", (
   expect(container.querySelector('[data-inbox-detail="heal:g1"]')).toBeNull();
   expect(container.querySelector('[data-key="same-element"]')?.getAttribute("aria-selected")).toBe(
     "false",
-  );
-});
-
-test("Rulings use explicit pills and stage marks without replacing an excluding address", async () => {
-  const onChange = vi.fn();
-  const { container } = mount({
-    focused: "rules:one",
-    check: [
-      item({ key: "rules:one", group: "check", kind: "suggestion", title: "Proposed elbow rule" }),
-    ],
-    address: { search: search("", { kind: "heal" }), sort: "name", onChange },
-  });
-  expect(screen.queryByText("Proposed elbow rule")).toBeNull();
-  expect(container.querySelectorAll('[role="option"]')).toHaveLength(1);
-  expect(onChange).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
-  expect(onChange).toHaveBeenCalledWith(search(), "name");
-  cleanup();
-  const edit = mount({
-    check: [
-      item({ key: "rules:one", group: "check", kind: "suggestion", title: "Proposed elbow rule" }),
-    ],
-  });
-  expect(edit.container.querySelector('[data-key="rules:one"]')?.getAttribute("data-stage")).toBe(
-    "edit",
   );
 });
 

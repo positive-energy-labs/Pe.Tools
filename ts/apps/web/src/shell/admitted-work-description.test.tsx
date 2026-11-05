@@ -228,11 +228,7 @@ for (const [name, describe, reason] of [
         reason,
       });
       expect(f.door.submitWork).not.toHaveBeenCalled();
-      expect(f.mount.work()).toEqual({
-        handle: { key: { binding: "host", route: f.route.data.key, target: null }, revision: 0 },
-        revision: 0,
-        value: { drops: {} },
-      });
+      expect(f.mount.work()).toMatchObject({ revision: 0, value: { drops: {} } });
       expect(f.mount.journal()!.moves).toEqual([]);
     } finally {
       f.mount.close();

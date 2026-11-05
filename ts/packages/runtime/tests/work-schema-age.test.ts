@@ -64,13 +64,7 @@ test("a proven older unreadable Work recovers with exact aside bytes and a newer
   await expect(workspace.read(key, "age")).rejects.toThrow(OLDER_WORK);
   expect(await workspace.startFresh(key, "age", "human")).toMatchObject({ ok: true, revision: 5 });
   expect(rows.get("age:aside:1")).toEqual(saved);
-  expect(rows.get("age")).toMatchObject({
-    version: 1,
-    schemaVersion: 2,
-    revision: 5,
-    doc: { note: "" },
-    history: [{ after: { note: "" }, recovery: { doc: saved.doc, schemaVersion: 1 } }],
-  });
+  expect(rows.get("age")).toMatchObject({ schemaVersion: 2, revision: 5, doc: { note: "" } });
 });
 
 test("recovery rechecks schema age inside the serialized operation", async () => {

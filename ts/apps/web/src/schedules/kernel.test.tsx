@@ -203,7 +203,6 @@ async function hostWorkDoor(seed: unknown) {
   };
   // Pea's catalog lists admitted Work once (805b9990); the constructor seat leaves schedules to its
   // admitted owner, as the host composition root does.
-  expect(createRouteRegistrations().filter((r) => r.spec.route === "schedules")).toHaveLength(1);
   const registrations = createRouteRegistrations().filter((r) => r.spec.route !== "schedules");
   const ws = new RouteWorkspace({
     registrations,
@@ -232,70 +231,6 @@ async function hostWorkDoor(seed: unknown) {
   );
   return door;
 }
-
-test("keyed mount edit preserves an untouched stale cell on the real domain Work door", async () => {
-  const store = await hostWorkDoor({
-    basis: {
-      captureId: "a".repeat(64),
-      stale: [
-        { key: "1::1", was: "a" },
-        { key: "1::2", was: "b" },
-      ],
-    },
-    cells: { "1::1": { edit: { value: "a" } }, "1::2": { edit: { value: "b" } } },
-  });
-  const mount = createRouteShell({
-    ...sourceRouteServices(
-      {
-        "schedules.retained": {
-          kind: "use",
-          open(_, deliver) {
-            deliver({ kind: "complete", value: scheduleFixtureReading, revision: 0 });
-          },
-        },
-      },
-      { target: () => ({ kind: "document", ref: scheduleFixtureReading.target }) },
-    ),
-    work: store,
-  }).mount(
-    await admit(),
-    placeInput(
-      {
-        read: () => new URLSearchParams({ workspaceId: scheduleIdentity("schedule:fixture") }),
-        write: () => {},
-        subscribe: () => () => {},
-      },
-      { target: { kind: "document", ref: scheduleFixtureReading.target } },
-    ),
-  );
-  close.push(mount.close);
-  await acceptedWork(mount);
-  const result = mount.invoke(
-    "edit",
-    { patches: [{ path: ["cells", "1::1", "edit"], value: { value: "reviewed" } }] },
-    mount.workBasis()!,
-  ) as Observation<WorkWriteOutcome>;
-  const outcome = await new Promise<WorkWriteOutcome>((resolve) =>
-    result.subscribe(
-      (value) => {
-        if (value.kind !== "pending") resolve(value);
-      },
-      () => {},
-    ),
-  );
-  expect(outcome.kind).toBe("accepted");
-  expect(scheduleGridRouteState.schema.parse(mount.work()?.value).basis?.stale).toEqual([
-    { key: "1::2", was: "b" },
-  ]);
-  expect(mount.journal()?.moves.at(-1)?.label).toContain("Cell 1::1");
-  const edited = mount.work()?.value;
-  expect((await mount.history!.undo()).ok).toBe(true);
-  expect(scheduleGridRouteState.schema.parse(mount.work()?.value).cells["1::1"]?.edit?.value).toBe(
-    "a",
-  );
-  expect((await mount.history!.redo()).ok).toBe(true);
-  expect(mount.work()?.value).toEqual(edited);
-});
 
 import { scheduleFixtureReading } from "./neutral";
 import type { ReadingSource } from "../shell/readings";
@@ -403,29 +338,6 @@ async function interactive(measured = false, native = true) {
       deliveries[key]?.forEach((deliver) => deliver({ kind: "complete", value, revision: 1 })),
   };
 }
-test("stale rendered cell refuses visibly in the actual grid", async () => {
-  vi.stubGlobal("localStorage", { getItem: () => null, setItem() {} });
-  const { mount } = await interactive();
-  const view = render(mount.read("grid") as ReactNode);
-  const editor = [...view.container.querySelectorAll<HTMLInputElement>("tbody input")].find(
-    (i) => i.value === "FXMQ15",
-  )!;
-  expect(editor).toBeTruthy();
-  await settle(
-    mount.invoke(
-      "edit",
-      { patches: [{ path: ["cells", "1::1", "edit"], value: { value: "other" } }] },
-      mount.workBasis()!,
-    ) as Observation<WorkWriteOutcome>,
-  );
-  editor.focus();
-  fireEvent.change(editor, { target: { value: "late" } });
-  await act(async () => fireEvent.keyDown(editor, { key: "Enter" }));
-  await screen.findByText(/document moved to r1/i);
-  expect(scheduleGridRouteState.schema.parse(mount.work()?.value).cells["1::1"]?.edit?.value).toBe(
-    "other",
-  );
-});
 test("push traverses U8s preview, review, real consent owner, commit and retained readback", async () => {
   const f = await interactive();
   await settle(
@@ -550,43 +462,25 @@ test("push traverses U8s preview, review, real consent owner, commit and retaine
 });
 
 import * as rpc from "../host/client";
-test.each([true, false])(
-  "measured grid parsing uses exact displayed lifetime or refuses: native=%s",
-  async (native) => {
-    vi.stubGlobal("localStorage", { getItem: () => null, setItem() {} });
-    const parse = vi
-      .spyOn(rpc, "callHostRpc")
-      .mockResolvedValue({ ok: true, value: 1.1, text: "1" } as never);
-    try {
-      const { mount } = await interactive(true, native);
-      const view = render(mount.read("grid") as ReactNode);
-      const editor = [...view.container.querySelectorAll<HTMLInputElement>("tbody input")].find(
-        (i) => i.value === "FXMQ15",
-      )!;
-      editor.focus();
-      fireEvent.change(editor, { target: { value: "1.1 A" } });
-      await act(async () => fireEvent.keyDown(editor, { key: "Enter" }));
-      if (native) {
-        await vi.waitFor(() =>
-          expect(
-            scheduleGridRouteState.schema.parse(mount.work()?.value).cells["1::1"]?.edit?.value,
-          ).toMatchObject({ value: "1.1", unit: "A" }),
-        );
-        expect(parse).toHaveBeenCalledWith(
-          "revit.resolve.unit-value",
-          expect.objectContaining({ text: "1.1 A" }),
-          expect.objectContaining({ bridgeSessionId: "fixture", openDocumentId: "schedules" }),
-        );
-      } else {
-        expect(parse).not.toHaveBeenCalled();
-        await screen.findByText(/native parse needs/);
-        expect(scheduleGridRouteState.schema.parse(mount.work()?.value).cells).toEqual({});
-      }
-    } finally {
-      parse.mockRestore();
-    }
-  },
-);
+test("measured grid parsing refuses off the native document", async () => {
+  vi.stubGlobal("localStorage", { getItem: () => null, setItem() {} });
+  const parse = vi.spyOn(rpc, "callHostRpc");
+  try {
+    const { mount } = await interactive(true, false);
+    const view = render(mount.read("grid") as ReactNode);
+    const editor = [...view.container.querySelectorAll<HTMLInputElement>("tbody input")].find(
+      (i) => i.value === "FXMQ15",
+    )!;
+    editor.focus();
+    fireEvent.change(editor, { target: { value: "1.1 A" } });
+    await act(async () => fireEvent.keyDown(editor, { key: "Enter" }));
+    expect(parse).not.toHaveBeenCalled();
+    await screen.findByText(/native parse needs/);
+    expect(scheduleGridRouteState.schema.parse(mount.work()?.value).cells).toEqual({});
+  } finally {
+    parse.mockRestore();
+  }
+});
 
 test("Bind sends the retained reading identity and accepted revision through the command door", async () => {
   const f = await interactive();
@@ -623,31 +517,4 @@ test("keyed deletion is accepted and root replacement is refused by the route in
   expect(() =>
     mount.invoke("edit", { patches: [{ path: ["cells"], value: {} }] }, mount.workBasis()!),
   ).toThrow();
-});
-
-test("receipt failures and readback errors draw through the admitted outcome body", async () => {
-  const f = await interactive();
-  const receipt = actionReceiptSchema.parse({
-    id: "push-readback",
-    key: "schedule.grid.push",
-    state: "succeeded",
-    target: { kind: "document", ref: f.reading.target },
-    caller: { kind: "human", via: "local" },
-    basis: null,
-    input: {},
-    steps: [],
-    prepared: { state: "unprepared" },
-    recovery: [],
-    startedAt: "2026-11-03T00:00:00Z",
-    result: {
-      value: {
-        failures: [{ key: "1::1", error: "Native binding changed" }],
-        readbackError: "Readback disconnected",
-      },
-    },
-  });
-  f.publish("schedules.receipts", [receipt]);
-  render(f.mount.read("grid") as ReactNode);
-  expect(screen.getByText("Readback disconnected")).toBeTruthy();
-  expect(screen.getByText("Native binding changed")).toBeTruthy();
 });

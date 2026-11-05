@@ -78,9 +78,7 @@ test("subscribe before snapshot, buffer and sort acks, drop revisions covered by
   h.emit("work", {
     ...frame,
     value: {
-      handle: { key, revision: 1 },
-      revision: 1,
-      doc: { amount: 1 },
+      ...frame.value,
       history: { from: 1, acks: [(ack(1) as Extract<Frame, { kind: "event" }>).value] },
     },
   });

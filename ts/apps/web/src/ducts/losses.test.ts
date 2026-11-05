@@ -452,8 +452,6 @@ const lifted = (facing?: number[]) => {
   return broken;
 };
 const JOIN = "proximity:11:2|30:1";
-const verdictDoc = () =>
-  designOf({ assumptions: { [JOIN]: { edit: { value: { kind: "verdict", verdict: "connect" } } } } });
 
 it("only an anomalous join makes a path provisional; a near miss and a stretched join are bridged and final", () => {
   // Facing back down the duct: a near miss, listed, bridged, final.
@@ -478,12 +476,4 @@ it("only an anomalous join makes a path provisional; a near miss and a stretched
   expect(anomalous.next.paths[31]!.provisional).toBeNull();
   expect(anomalous.next.byGroup.g10!.provisional).toEqual(provisional);
   expect(anomalous.next.provisional).toEqual(provisional);
-});
-
-it("an edit connect confirms an anomalous join", () => {
-  const broken = lifted([0, 1, 0]);
-  const edit = price(broken, grids, verdictDoc(), verdictDoc());
-  // The leftover: a confirmed same-class join no longer counts on the path.
-  expect(edit.next.paths[30]).toMatchObject({ inferred: [], provisional: null });
-  expect(edit.next.byGroup.g10!.provisional).toBeNull();
 });

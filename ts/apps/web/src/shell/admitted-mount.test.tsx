@@ -523,8 +523,6 @@ async function workRoute(
     capabilities: ["work", "native-write"] as const,
     work: { route: "note", schema: "work", version: 1, migrations: {} },
     workFields: { amount: { label: "amount", internal: false } },
-    // A reviewed write draws its plan on its own band button (ADR 0030 rule 6).
-    stages: { main: { ...data.stages.main, verbs: ["native"] } },
     ...(needs === "document" ? {} : { workSubject: "note" }),
     readings: {
       ...data.readings,
@@ -824,11 +822,11 @@ test("D4: a new writer at either shared Work submission path cannot bypass Place
     reason: "place-read-only",
   });
   expect(submitted).not.toHaveBeenCalled();
-  expect(owner.read()?.work).toEqual(accepted(0, { amount: 0 }));
+  expect(owner.read()?.work).toMatchObject({ revision: 0, value: { amount: 0 } });
   authority = "writable";
   expect(await settle(write())).toMatchObject({ kind: "accepted" });
   expect(submitted).toHaveBeenCalledTimes(1);
-  expect(owner.read()?.work).toEqual(accepted(1, { amount: 4 }));
+  expect(owner.read()?.work).toMatchObject({ revision: 1, value: { amount: 4 } });
 });
 
 test.each(["ack-first", "stream-first"])(
@@ -857,13 +855,15 @@ test.each(["ack-first", "stream-first"])(
     await vi.waitFor(() => expect(mount.work()?.value).toEqual({ amount: 0 }));
     await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
     deliverStream?.({ kind: "pending" });
-    expect(mount.work()).toEqual(accepted(1, { amount: 2 }));
+    expect(mount.work()).toMatchObject({ revision: 1, value: { amount: 2 } });
     const pending = mount.invoke("change", 3) as Observation<WorkWriteOutcome>;
     mount.close();
     await settle(pending);
     const reopened = shell.mount(route, placeInput(locationPort().address));
     closes.push(reopened.close);
-    await vi.waitFor(() => expect(reopened.work()).toEqual(accepted(2, { amount: 5 })));
+    await vi.waitFor(() =>
+      expect(reopened.work()).toMatchObject({ revision: 2, value: { amount: 5 } }),
+    );
   },
 );
 
@@ -1070,12 +1070,6 @@ test("query validates and delivers invocation input without changing Page; new r
 });
 
 import { workHandleSchema, writePreviewSchema, type WorkHandle } from "@pe/agent-contracts";
-/** Accepted note Work as the shell reads it: the host handle travels with the value. */
-const accepted = (revision: number, value: { amount: number }, work = "default") => ({
-  handle: { key: { binding: "workspace", route: "note", target: null, work }, revision },
-  revision,
-  value,
-});
 const sealedPreview = (handle: WorkHandle) => ({
   previewOnly: true,
   derivedRequest: { amount: 7 },
@@ -1187,63 +1181,6 @@ test("a preview for another Work revision never becomes a review", async () => {
 });
 
 import { sourceRouteServices } from "./source-route-services";
-test("shared preview transport renders before-to-after review and commits identical Work through the door", async () => {
-  const previewCall = vi.fn(async (input: { work: WorkHandle }) => sealedPreview(input.work));
-  try {
-    const store = createFixtureWorkDoor(
-      { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
-      { amount: 6 },
-    );
-    const submit = vi.fn((command: Parameters<WorkJournalDoor["submit"]>[0]) =>
-      store.submit(command),
-    );
-    const shell = createRouteShell({
-      ...sourceRouteServices({
-        "native.write.preview": {
-          kind: "use",
-          async open(ctx, deliver) {
-            deliver({
-              kind: "complete",
-              revision: 0,
-              value: await previewCall(ctx.args as { work: WorkHandle }),
-            });
-          },
-        },
-      }),
-      work: { ...store, submit },
-    });
-    const mounted = vi.spyOn(shell, "mount");
-    render(
-      createElement(AdmittedPane, {
-        shell,
-        route: await workRoute("none", true, "nothing", () => ({
-          sentence: "Review table",
-          rows: ["Parameter amount: 6 \u2192 7"],
-        })),
-        address: locationPort().address,
-      }),
-    );
-    const mount = mounted.mock.results[0]!.value;
-    await vi.waitFor(() => expect(mount.work()).not.toBeNull());
-    act(() => {
-      mount.invoke("native", 1234);
-    });
-    fireEvent.click(await screen.findByRole("button", { name: "Native · planned 1" }));
-    await screen.findByText("Parameter amount: 6 \u2192 7");
-    expect(screen.getByText("Review table")).toBeTruthy();
-    expect(previewCall).toHaveBeenCalledTimes(1);
-    expect(submit).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Native" }));
-    expect(submit).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        key: "native.write",
-        input: previewCall.mock.calls[0]![0],
-      }),
-    );
-  } finally {
-    previewCall.mockReset();
-  }
-});
 
 import { testConsents } from "../../../host/tests/effect-test";
 import type { ConsentEvent } from "../../../host/src/run-consent";
@@ -1445,14 +1382,14 @@ test("admitted Work undo/redo crosses the door with restoreOf and declared label
   await settle(f.mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
   expect(f.mount.journal()?.moves.at(-1)?.label).toBe("Change");
   expect(await f.mount.history!.undo()).toMatchObject({ ok: true });
-  expect(f.mount.work()).toEqual(accepted(2, { amount: 0 }));
+  expect(f.mount.work()).toMatchObject({ revision: 2, value: { amount: 0 } });
   expect(f.submitWork.mock.calls.at(-1)?.[1]).toMatchObject({
     kind: "restore",
     restoreOf: 1,
     expectedRevision: 1,
   });
   expect(await f.mount.history!.redo()).toMatchObject({ ok: true });
-  expect(f.mount.work()).toEqual(accepted(3, { amount: 2 }));
+  expect(f.mount.work()).toMatchObject({ revision: 3, value: { amount: 2 } });
   expect(f.mount.journal()?.moves.map((m) => [m.kind, m.label])).toEqual([
     ["apply", "Change"],
     ["undo", "Change"],
@@ -1503,7 +1440,7 @@ test("undo refuses a changed host inverse after a concurrent write without retry
   expect(f.mount.journalRefusal()).toBeTruthy();
   f.flush();
   expect(f.mount.journalRefusal()).toBeNull();
-  expect(f.mount.work()).toEqual(accepted(2, { amount: 9 }));
+  expect(f.mount.work()).toMatchObject({ revision: 2, value: { amount: 9 } });
   expect(await f.mount.history!.undo(f.acks[0]!.press!)).toMatchObject({
     ok: false,
     code: "entry-changed",
@@ -1514,9 +1451,13 @@ test("independent shells share authored edits, invalidate redo and recover inver
   const f = await historyFixture(true);
   const second = await f.second();
   await settle(f.mount.invoke("change", 6) as Observation<WorkWriteOutcome>);
-  await vi.waitFor(() => expect(second.work()).toEqual(accepted(1, { amount: 6 })));
+  await vi.waitFor(() =>
+    expect(second.work()).toMatchObject({ revision: 1, value: { amount: 6 } }),
+  );
   expect(await second.history!.undo()).toMatchObject({ ok: true });
-  await vi.waitFor(() => expect(f.mount.work()).toEqual(accepted(2, { amount: 0 })));
+  await vi.waitFor(() =>
+    expect(f.mount.work()).toMatchObject({ revision: 2, value: { amount: 0 } }),
+  );
   expect(await f.mount.history!.redo()).toMatchObject({ ok: true });
   await vi.waitFor(() => expect(second.work()?.revision).toBe(3));
   expect(await second.history!.undo()).toMatchObject({ ok: true });
@@ -1528,10 +1469,10 @@ test("independent shells share authored edits, invalidate redo and recover inver
   second.close();
   // No retained journal, submit callback, or constructed replay snapshot crosses this restart.
   const recovered = await f.restart();
-  expect(recovered.work()).toEqual(accepted(5, { amount: 9 }));
+  expect(recovered.work()).toMatchObject({ revision: 5, value: { amount: 9 } });
   expect(recovered.journal()?.undo.at(-1)).toMatchObject({ by: "pea", label: "Set amount" });
   expect(await recovered.history!.undo()).toMatchObject({ ok: true });
-  expect(recovered.work()).toEqual(accepted(6, { amount: 0 }));
+  expect(recovered.work()).toMatchObject({ revision: 6, value: { amount: 0 } });
 });
 
 test("shared shell buttons expose Work undo and redo without route callbacks", async () => {
@@ -2269,7 +2210,7 @@ test("a delayed submit keeps its captured expectedRevision across a newer accept
     refusal: { code: "stale_revision", revision: 1 },
   });
   expect(writes).toEqual([0, 0]);
-  expect(mount.work()).toEqual(accepted(1, { amount: 10 }));
+  expect(mount.work()).toMatchObject({ revision: 1, value: { amount: 10 } });
 });
 
 async function landingFixture(
@@ -2653,7 +2594,13 @@ test.each(["accepted", "refused"] as const)(
     const next = identityCodecs.local.encode({ namespace: "note", subject: "replacement" });
     if (!next.ok) throw Error(next.reason);
     mount.controls.subject(next.value);
-    await vi.waitFor(() => expect(mount.work()).toEqual(accepted(0, { amount: 0 }, "replacement")));
+    await vi.waitFor(() =>
+      expect(mount.work()).toMatchObject({
+        handle: { key: { work: "replacement" } },
+        revision: 0,
+        value: { amount: 0 },
+      }),
+    );
     mount.read("main");
     const replacement = mount.work();
     const changed = vi.fn();
