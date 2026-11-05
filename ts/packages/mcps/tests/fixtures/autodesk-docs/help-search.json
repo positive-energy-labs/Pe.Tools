@@ -1,0 +1,63 @@
+{
+  "status": "Completed",
+  "totalResult": "1502",
+  "bin": [
+    { "type": "source", "label": "Source", "value": "CloudHelp", "ndocs": "1502" },
+    {
+      "type": "ADSKContentGroup",
+      "label": "Information Category",
+      "value": "Developer's Documentation",
+      "ndocs": "1502"
+    },
+    { "type": "MediaType", "label": "Media", "value": "Text Only", "ndocs": "1502" },
+    { "type": "ADSKUserType", "label": "User Type", "value": "User", "ndocs": "1502" },
+    {
+      "type": "ADSKKnowledgeSource",
+      "label": "Knowledge Source",
+      "value": "Product Documentation",
+      "ndocs": "1502"
+    },
+    {
+      "type": "ADSKContentProvider",
+      "label": "Content Provider",
+      "value": "Autodesk",
+      "ndocs": "1502"
+    },
+    { "type": "experiencelevel", "label": "Skill Level", "value": "Intermediate", "ndocs": "43" }
+  ],
+  "entries": {
+    "item": [
+      {
+        "url": "https://help.autodesk.com/cloudhelp/2027/ENU/Revit-API/files/Revit_API_Developers_Guide/Discipline_Specific_Functionality/MEP_Engineering/Revit_API_Revit_API_Developers_Guide_Discipline_Specific_Functionality_MEP_Engineering_MEP_Systems_html.html",
+        "title": "MEP Systems",
+        "snippet": "MEP Duct/Pipe Pressure <span class=\"vivbold qt0\"> Loss </span> Calculations The members: MEPAnalyticalSegment.OverrideType MEPAnalyticalSegment.SetOverrideType() MEPAnalyticalSegment.GetLossCoefficientOverride() MEPAnalyticalSegment.",
+        "source": "CloudHelp",
+        "publishDate": "2026-04-27",
+        "topicId": "Revit_API_Revit_API_Developers_Guide_Discipline_Specific_Functionality_MEP_Engineering_MEP_Systems_html",
+        "caasKey": "caas/CloudHelp/cloudhelp/2027/ENU/Revit-API/files/Revit-API-Developers-Guide/Discipline-Specific-Functionality/MEP-Engineering/Revit-API-Revit-API-Developers-Guide-Discipline-Specific-Functionality-MEP-Engineering-MEP-Systems-html-html.html",
+        "knowledgeSource": ["Product Documentation"]
+      },
+      {
+        "url": "https://help.autodesk.com/cloudhelp/2027/ENU/Revit-API-MainReference/files/html/64b45968-97cf-a797-09a6-4583ad9069f7.htm",
+        "title": "MEPAnalyticalSegment Class",
+        "snippet": "SetComments Sets the comments for this <span class=\"vivbold qt0\"> analytical </span> <span class=\"vivbold qt0\"> segment </span> . SetLossCoefficientOverride Sets the overridden value of <span class=\"vivbold qt0\"> loss </span> <span class=\"vivbold qt0\"> coefficient </span> .",
+        "source": "CloudHelp",
+        "shortDescription": "Represents an analytical segment of the MEP analytical model.",
+        "publishDate": "2026-09-22",
+        "topicId": "64b45968-97cf-a797-09a6-4583ad9069f7",
+        "caasKey": "caas/CloudHelp/cloudhelp/2027/ENU/Revit-API-MainReference/files/html/64b45968-97cf-a797-09a6-4583ad9069f7-htm.html",
+        "knowledgeSource": ["Product Documentation"]
+      },
+      {
+        "url": "https://help.autodesk.com/cloudhelp/2027/ENU/Revit-API-MainReference/files/html/9151ca5b-d3e8-3bae-e932-fd74ac38dee5.htm",
+        "title": "MEPAnalyticalSegment Methods",
+        "snippet": "SetComments Sets the comments for this <span class=\"vivbold qt0\"> analytical </span> <span class=\"vivbold qt0\"> segment </span> . SetLossCoefficientOverride Sets the overridden value of <span class=\"vivbold qt0\"> loss </span> <span class=\"vivbold qt0\"> coefficient </span> .",
+        "source": "CloudHelp",
+        "publishDate": "2026-09-23",
+        "topicId": "9151ca5b-d3e8-3bae-e932-fd74ac38dee5",
+        "caasKey": "caas/CloudHelp/cloudhelp/2027/ENU/Revit-API-MainReference/files/html/9151ca5b-d3e8-3bae-e932-fd74ac38dee5-htm.html",
+        "knowledgeSource": ["Product Documentation"]
+      }
+    ]
+  }
+}

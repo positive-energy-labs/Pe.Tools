@@ -137,11 +137,3 @@ const toolOutputSchemas = {
   searchResponseRvtDocsComSchema,
   searchResponseRevitApiDocsComSchema,
 };
-
-export const revitApiQueryInputSchema = z.object({
-  queryString: toolInputArgSchemas.queryString,
-  queryTypes: toolInputArgSchemas.queryTypes,
-  year: toolInputArgSchemas.year,
-  maxResults: toolInputArgSchemas.maxResults,
-  extractFirstResult: toolInputArgSchemas.extractFirstResult,
-});

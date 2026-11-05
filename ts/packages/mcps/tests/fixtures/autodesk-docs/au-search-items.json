@@ -1,0 +1,1650 @@
+[
+  {
+    "fields": {
+      "stillOffered": true,
+      "overview": "This technical instruction will demonstrate how to eliminate tedious manual duct takeoffs by developing a Revit add-in that automatically extracts duct information and calculates external static pressure. MEP engineers currently waste hours manually measuring ducts and entering data into spreadsheets for ESP calculations. The session will look at using the Revit API to capture duct parameters directly from the model, apply the same calculation logic as traditional spreadsheets, and integrate an artificial intelligence (AI) chatbot to handle multiple Automation, Integration, & Customization tasks. You’ll see a live demonstration of the working add-in, explore the core C# components, and learn how to integrate multiple tools under a unified AI interface.",
+      "industrySubSegment": [
+        {
+          "fields": {
+            "displayName": "MEP engineering",
+            "guid": "de0300ac-2976-450f-bbcd-4f1e85c5e7d8"
+          }
+        },
+        {
+          "fields": {
+            "displayName": "Architecture"
+          }
+        }
+      ],
+      "featured": false,
+      "targetLocale": "en",
+      "moduleType": "Explore",
+      "keywords": "Building Services;Design Review;MEP Design",
+      "overviewImage": {
+        "fields": {
+          "file": {
+            "url": "//images.ctfassets.net/ooioaq2tbzyk/6qn3hx0AVbsou8gUxbfb94/cc60bd9739d178860ec32242cdb95843/image.jpg.jpeg",
+            "details": {
+              "size": 46410,
+              "image": {
+                "width": 1280,
+                "height": 720
+              }
+            },
+            "fileName": "image.jpg.jpeg",
+            "contentType": "image/jpeg"
+          },
+          "title": "1mV4VuOda2mckXDRrsVsPp-image.jpg"
+        }
+      },
+      "relatedProducts": [
+        {
+          "fields": {
+            "capability": [
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "04d7cec2-b9ac-45ad-9f55-7e0b9f4d7be8",
+                  "description": "The ability to provide detailed description and representation of how the contractor plans to construct the project’s work scope. That work scope is represented by the schedule’s work activities, how long they’re going to take, and their sequence.",
+                  "label": "Construction Master Scheduling and Simulation"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "4e57e379-71c0-4bc0-968c-b4d023c75006",
+                  "description": "The ability to estimate the cost of projects, including managing vendor relationships that derive costs, general conditions, fees, contingency and other project specific variables.",
+                  "label": "Estimating"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "22e9d2ad-92e8-4c6a-abcd-55dd418ac6c9",
+                  "description": "The ability to evolve the designs for the individual trades into a fabrication/ready state.",
+                  "label": "Fabrication Planning"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "514f5b69-6f7e-448a-8e45-27f0c41ba185",
+                  "description": "The ability to customize a product to meet the needs of a customer, from the initial sales engagement to production.",
+                  "label": "Product Configuration"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "6885c1aa-a55f-4f95-9e38-f2678d9e49ad",
+                  "description": "The ability to enable the OEM, third party, service teams or customer to access service part information to support the installation, operation or maintenance of equipment.",
+                  "label": "Service Parts Management"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "ce72e388-8442-4c6e-a060-8820b126284e",
+                  "description": "The ability to break down the design and construction information into packages that allows individual trades to undertake work based off a set of information that is tailor made to their needs.",
+                  "label": "Work Packaging"
+                }
+              },
+              {
+                "fields": {
+                  "guid": "38ed1822-244d-4113-b5b0-9fd341f6fadc",
+                  "description": "The ability to collaborate with multiple departments, external stakeholders, and clients via a centralized repository",
+                  "label": "Design Collaboration"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "02fcd0d3-c3e8-445d-a141-69cf3f99fea4",
+                  "description": "The ability to simulate and assess the factory production environment through geometry and event simulation.",
+                  "label": "Factory Simulation"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "df848f7a-ed39-4686-986e-0f58f3d48c49",
+                  "description": "The ability to simulate and assess the machine production process through geometry and event simulation.",
+                  "label": "Machine Simulation"
+                }
+              }
+            ],
+            "upiCode": "A360WS",
+            "displayName": "Autodesk Platform Services",
+            "plc": "A360WS",
+            "productCenterUrl": "https://aps.autodesk.com/",
+            "guid": "b5c2e981-6d99-44b1-9719-630776231232",
+            "iconUrl": "https://files.upskill-dev.autodesk.com/public/training-and-certification-docs/logos/autodesk-2023-badge-75x75.svg",
+            "channelVisibility": ["AU Online"]
+          }
+        },
+        {
+          "fields": {
+            "capability": [
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "06c0343c-717b-4e7f-9f2f-951639e4555b",
+                  "description": "The ability to create and manage a document set that describes the architetural design of a built asset from a Building Information (BIM) model. This can include the existing conditions, detailed design and fabrication detailing.",
+                  "label": "Architectural Modeling"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "22e9d2ad-92e8-4c6a-abcd-55dd418ac6c9",
+                  "description": "The ability to evolve the designs for the individual trades into a fabrication/ready state.",
+                  "label": "Fabrication Planning"
+                }
+              },
+              {
+                "fields": {
+                  "guid": "457b0c83-1f67-439e-aeda-3ad116a0e7c9",
+                  "description": "The ability to create 3D models from photographs or laser scans captured digitally as point clouds  with hardware such as a laser scanners or camera-mounted UAVs.",
+                  "label": "Reality Capture"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "81519b58-4af2-45e1-a006-b834f73d9e05",
+                  "description": "The ability to design and specify connections between elements in a timber structure, and create documentation (which might  include shop drawings and/or machine code to drive manufacturing processes) to facilitate either offsite and onsite fabrication.",
+                  "label": "Timber Detailing & Fabrication"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "90406afa-b6d9-43dc-8a04-8ee5b86020fe",
+                  "description": "The ability to assess the expected performance of a given building design in terms of solar gain, airflow and energy usage.",
+                  "label": "Architectural Analysis"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "fb6d69da-8fe1-412e-b2ea-9dc2bdadf8ee",
+                  "description": "The ability to translate a design brief into an outline architectural design in terms of form and function. Include using computational techniques to aid form finding.",
+                  "label": "Architectural Conceptual Design"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "46b5b470-0908-42d4-b5c6-b4472836a645",
+                  "description": "The ability to ensure that models are developed and shared in a consistent manner, ensuring maximum benefit through the full Asset lifecycle.",
+                  "label": "BIM Standards Management"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "8e4a67d7-7637-425b-a04c-fce185ed241e",
+                  "description": "The ability to develop and deliver a Building Information Model (BIM) of the Civil Structures design.",
+                  "label": "Civil Structure Modeling"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "96d2ee89-fa83-4508-9e76-9941ee1a5b50",
+                  "description": "The ability for multiple parties to concurrently author a Building Information Model (BIM) irresepctive of location.",
+                  "label": "Collaborative Authoring"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "cc08bd2e-a2a1-4713-9e35-9425af68242b",
+                  "description": "The ability to iteratively evalutate large numbers of design options to coverge on a solution that best meets desired perfromance criteria.",
+                  "label": "Computational and Generative Design"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "dee1bce5-9a7c-44a1-811d-b93d4dc9af59",
+                  "description": "The ability to design and convery the size, location, type, placement, splices, and termination of reinforcement in a concrete structure. For precast or pre-fabricated elements, this might also include shop drawings and/or machine code to drive bar-bending machines and other manufacturing processes.",
+                  "label": "Concrete Detailing & Fabrication"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "e6b5de8a-679c-4199-8b93-56031927809c",
+                  "description": "The ability to create 2D renderings, 3D visualizations and animations of a proposed design.",
+                  "label": "Design Visualization"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "519c8303-ff00-4aca-9183-3f40f281d192",
+                  "description": "The ability to embed the \"I\" in BIM. Ensuring model data is added, managed and delivered in an effective and efficient manner.",
+                  "label": "Information Management"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "9db5742a-3cab-49b8-a6a1-747b84c585e1",
+                  "description": "The ability to analyse the performance of mechanincal, electrical and plumbing systems in a propsed design to ensure it meets desired specification and local codes.",
+                  "label": "MEP Analysis"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "4fd70281-0a28-472b-975b-d51f88e03248",
+                  "description": "The ability to create and manage a document set that describes the MEP design of a built asset from a Building Information (BIM) model. This can include the existing conditions, schematic design, detailed design and equipment specifications.",
+                  "label": "MEP Modeling"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "7ff37892-f15e-4dbc-ae2b-58164be8de3b",
+                  "description": "The ability to design and fabricate custom fabricated elements of MEP systems. For ductwork, this might include shop drawings and/or machine code to drive manufacturing processes.",
+                  "label": "MEP Detailing & Fabrication"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "5bb296d7-3d37-475b-b93e-9d6f16042622",
+                  "description": "The ability to manage the quality of the built design in terms of value engineering and constructability with an emphasis on checking contractual deliverables.",
+                  "label": "Quality Control"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "e0985bc6-cbf4-45e5-b848-e8a2f11f84a4",
+                  "description": "The ability to design and specify connections between elements in a steel structure, and create documentation (which might  include shop drawings and/or machine code to drive manufacturing processes) to facilitate either offsite and onsite fabrication.",
+                  "label": "Steel Detailing & Fabrication​"
+                }
+              }
+            ],
+            "upiCode": "RVT",
+            "displayName": "Revit",
+            "plc": "RVT",
+            "productCenterUrl": "https://www.autodesk.com/products/revit/overview",
+            "guid": "3246c4f4-d665-54ea-8a02-1064f3faf001",
+            "relatedIndustry": [
+              {
+                "fields": {
+                  "displayName": "AEC",
+                  "guid": "bff6b27e-8440-4049-8f94-32b867c5de63",
+                  "industry": "AEC"
+                }
+              }
+            ],
+            "iconUrl": "https://damassets.autodesk.net/content/dam/autodesk/www/products/responsive-imagery/responsive-badges-compare/2017/revit-2017-badge-75x75.png",
+            "channelVisibility": ["Learning and Certification"],
+            "lightLogoUrl": "https://damassets.autodesk.net/content/dam/autodesk/www/product-imagery/lockup-610x66/revit-2023-white-lockup-610x66.png",
+            "logoUrl": "https://damassets.autodesk.net/content/dam/autodesk/www/product-imagery/lockup-610x66/revit-lockup-610x66.png",
+            "relatedIndustrySubSegment": [
+              {
+                "fields": {
+                  "displayName": "Architecture",
+                  "guid": "eaf8ac62-c7b1-4aeb-bce0-b9005f59f3be"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Building owners and operators",
+                  "guid": "6eabe884-5cc0-4035-8fc8-57ea661d9705"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Civil / Site development contractors",
+                  "guid": "2e7db524-694a-4020-ac69-e1874fb4eb20"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Energy and utilities owners and operators",
+                  "guid": "4be9dc99-85a5-4843-8593-f5aeee5c7c03"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Finishing contractors",
+                  "guid": "666c77d3-ccb5-47f6-ad0a-18cd63429f5f"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "General contractors",
+                  "guid": "f1431691-94cc-4ed6-b792-16e9d0c58c45"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "MEP contractors",
+                  "guid": "ba7844e4-30db-4eba-9201-69beee651094"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "MEP engineering",
+                  "guid": "de0300ac-2976-450f-bbcd-4f1e85c5e7d8"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Mining and quarrying",
+                  "guid": "b71553af-15c7-4e7f-863b-390b19c0b414"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Oil and gas",
+                  "guid": "592f3829-359a-4755-a9dc-e7b84e357666"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Plants",
+                  "guid": "c1b77f1e-85ce-407d-af1e-4b14400fc6c7"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Site Development (General civil engineering)",
+                  "guid": "43d47754-8249-48e0-acf3-42f27921db1e"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Structural contractors",
+                  "guid": "f81c8120-2e98-4728-ac2f-970c0e327337"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Structural engineering",
+                  "guid": "216b0f8c-6294-477c-ac82-4ca0a0b2dd85"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Transportation",
+                  "guid": "1db7eb37-717c-463a-8630-dbc6982eadcc"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Transportation owners and operators",
+                  "guid": "f50e0e1a-3564-46e2-a320-42ac0794462f"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Utilities and telecom",
+                  "guid": "dec4e813-dd15-4b6a-b8bf-28b8978c2146"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Water",
+                  "guid": "eed88998-d40d-4bbf-b593-5a9bf66e281a"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Water owners and operators",
+                  "guid": "12c2dbbe-355e-4e99-b6b6-bf05831330be"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "fields": {
+            "displayName": "Takeoff"
+          }
+        }
+      ],
+      "learningObjectives": [
+        "Discover opportunities to automate repetitive MEP calculations using the Revit API and C#.",
+        "Learn how to implement code to extract duct information and parameters from Revit models.",
+        "Learn about developing a calculation engine that processes duct data to determine external static pressure.",
+        "Learn how to integrate an AI chatbot interface to unify multiple Automation, Integration, & Customization tools within a single Revit add-in."
+      ],
+      "moduleMediaTypes": "Text and Video",
+      "effort": 0,
+      "auTopics": [
+        {
+          "fields": {
+            "name": "Artificial Intelligence",
+            "guid": "fa58bb71-833a-4b1c-8fd4-94775276a7d4",
+            "parents": [
+              {
+                "fields": {
+                  "name": "Automation, Integration, & Customization",
+                  "guid": "369fa868-08cf-46e1-bbc2-2beafd7af4e3",
+                  "parents": [
+                    {
+                      "fields": {
+                        "name": "Software Development",
+                        "guid": "d71ae3f4-e256-443b-a74b-a606c561dc79",
+                        "channelVisibility": ["AU Online", "AU Online", "AU Online"]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "fields": {
+            "name": "Automation, Integration, & Customization",
+            "guid": "369fa868-08cf-46e1-bbc2-2beafd7af4e3",
+            "parents": [
+              {
+                "fields": {
+                  "name": "Software Development",
+                  "guid": "d71ae3f4-e256-443b-a74b-a606c561dc79",
+                  "channelVisibility": ["AU Online", "AU Online", "AU Online"]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "fields": {
+            "name": "Mechanical Design",
+            "guid": "061f208a-5af2-456e-8479-da13da09eb95",
+            "parents": [
+              {
+                "fields": {
+                  "name": "Product Design",
+                  "guid": "9cc60542-253d-4e88-97a9-66f45c7013a5",
+                  "parents": [
+                    {
+                      "fields": {
+                        "name": "Design",
+                        "guid": "b2808616-ef4a-45e5-855a-eccef0139b3b"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "fields": {
+            "name": "Software Development"
+          }
+        }
+      ],
+      "industry": [
+        {
+          "fields": {
+            "displayName": "AEC",
+            "guid": "bff6b27e-8440-4049-8f94-32b867c5de63",
+            "industry": "AEC"
+          }
+        }
+      ],
+      "shortDescription": "This technical instruction will demonstrate how to eliminate tedious manual duct takeoffs by developing a Revit add-in that automatically extracts duct information and calculates external static pressure. MEP engineers currently waste hours manually measuring ducts and entering data into spreadsheets for ESP calculations. The session will look at using the Revit API to capture duct parameters directly from the model, apply the same calculation logic as traditional spreadsheets, and integrate an artificial intelligence (AI) chatbot to handle multiple automation tasks. You’ll see a live demonstration of the working add-in, explore the core C# components, and learn how to integrate multiple tools under a unified AI interface.",
+      "units": [
+        {
+          "fields": {
+            "eventId": "BES4475",
+            "attachments": [
+              {
+                "fields": {
+                  "pdfUrl": "https://static.au-uw2-prd.autodesk.com/BES4475_RevitAI_-_AU_Presentation_-_Final_1756736296764001GbMv.pdf",
+                  "pages": 33,
+                  "objectKey": "BES4475_RevitAI_-_AU_Presentation_-_Final_1756736296764001GbMv.pdf",
+                  "label": "presentation"
+                }
+              },
+              {
+                "fields": {
+                  "pdfUrl": "https://static.au-uw2-prd.autodesk.com/BES4475_RevitAI_-_AU_Presentation_-_Handout_1756736319809001krfD.pdf",
+                  "pages": 18,
+                  "objectKey": "BES4475_RevitAI_-_AU_Presentation_-_Handout_1756736319809001krfD.pdf",
+                  "label": "handout"
+                }
+              }
+            ],
+            "targetLocale": "en",
+            "eventLocation": {
+              "fields": {
+                "name": "Nashville"
+              }
+            },
+            "eventTime": "2025-09-16T00:00:00.000Z",
+            "videos": [
+              {
+                "fields": {
+                  "duration": 0,
+                  "label": "brightcove://6377948010112"
+                }
+              }
+            ],
+            "source": "AU",
+            "title": "Smarter Ductwork: Automating Static Pressure with Revit API and AI Tools",
+            "auLearningContentType": {
+              "fields": {
+                "name": "Instructional Demo",
+                "smartLogicGuid": "64d3224d-cc0d-4e5d-a39a-08da8ddc8833"
+              }
+            }
+          }
+        }
+      ],
+      "source": "AU",
+      "title": "Smarter Ductwork: Automating Static Pressure with Revit API and AI Tools",
+      "moduleLevel": "Professional",
+      "learningMode": "microlearning",
+      "visibleInBrowse": true,
+      "isStandAlone": true,
+      "slug": "Smarter-Ductwork-Automating-Static-Pressure-with-Revit-API-and-AI-Tools-2025",
+      "targetChannels": ["AU Online"]
+    }
+  },
+  {
+    "fields": {
+      "stillOffered": true,
+      "overview": "\"Revit 2026 introduces powerful new capabilities that transform how MEP designers work. In this session, we’ll explore two major enhancements that give users unprecedented control and flexibility over electrical and mechanical systems. You’ll also learn how to apply Dynamo scripts to automate the task. \n\nOn the electrical side, we’ll cover the newly introduced user-controllable conductor sizes and cable configuration tools. These updates eliminate long-standing limitations, enabling both imperial and metric workflows with custom logic to automate conductor sizing and assign cables to circuits based on your own standards and rules. \n\nOn the mechanical side, we’ll showcase a highly requested feature: the ability to override pressure loss coefficients for ducts and pipes. This gives mechanical engineers precise control over pressure drop calculations, ensuring more accurate sizing, balancing, and performance simulations across HVAC and hydronic systems. \n\nBy the end of this session, attendees will gain insight into how Revit 2026 empowers MEP professionals to create smarter, more adaptable, and globally compliant designs—all from within the native Revit environment. \"",
+      "industrySubSegment": [
+        {
+          "fields": {
+            "displayName": "MEP engineering",
+            "guid": "de0300ac-2976-450f-bbcd-4f1e85c5e7d8"
+          }
+        },
+        {
+          "fields": {
+            "displayName": "Architecture"
+          }
+        }
+      ],
+      "featured": false,
+      "targetLocale": "en",
+      "moduleType": "Explore",
+      "keywords": "Design Optimization;MEP Design;MEP Engineering",
+      "overviewImage": {
+        "fields": {
+          "file": {
+            "url": "//images.ctfassets.net/ooioaq2tbzyk/5QVy6dYPjpCqqac3duKDl3/0a87d2f385ef621fa12107b85772f5bd/image.jpg.jpeg",
+            "details": {
+              "size": 58778,
+              "image": {
+                "width": 1280,
+                "height": 720
+              }
+            },
+            "fileName": "image.jpg.jpeg",
+            "contentType": "image/jpeg"
+          },
+          "title": "3ILO5qHS5oJrtiEcS8CGjg-image.jpg"
+        }
+      },
+      "relatedProducts": [
+        {
+          "fields": {
+            "upiCode": "DYNPRODUCTS",
+            "displayName": "Dynamo",
+            "plc": "DYNSTD",
+            "productCenterUrl": "https://www.autodesk.com/products/dynamo-studio/overview",
+            "guid": "827007dc-c31b-4988-a753-a9d9dc043280",
+            "relatedIndustry": [
+              {
+                "fields": {
+                  "displayName": "AEC",
+                  "guid": "bff6b27e-8440-4049-8f94-32b867c5de63",
+                  "industry": "AEC"
+                }
+              }
+            ],
+            "iconUrl": "https://files.upskill-dev.autodesk.com/public/training-and-certification-docs/logos/autodesk-2023-badge-75x75.svg",
+            "channelVisibility": ["AU Online"],
+            "relatedIndustrySubSegment": [
+              {
+                "fields": {
+                  "displayName": "Architecture",
+                  "guid": "eaf8ac62-c7b1-4aeb-bce0-b9005f59f3be"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Building owners and operators",
+                  "guid": "6eabe884-5cc0-4035-8fc8-57ea661d9705"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Civil / Site development contractors",
+                  "guid": "2e7db524-694a-4020-ac69-e1874fb4eb20"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Energy and utilities owners and operators",
+                  "guid": "4be9dc99-85a5-4843-8593-f5aeee5c7c03"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Finishing contractors",
+                  "guid": "666c77d3-ccb5-47f6-ad0a-18cd63429f5f"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "General contractors",
+                  "guid": "f1431691-94cc-4ed6-b792-16e9d0c58c45"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "MEP contractors",
+                  "guid": "ba7844e4-30db-4eba-9201-69beee651094"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "MEP engineering",
+                  "guid": "de0300ac-2976-450f-bbcd-4f1e85c5e7d8"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Mining and quarrying",
+                  "guid": "b71553af-15c7-4e7f-863b-390b19c0b414"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Oil and gas",
+                  "guid": "592f3829-359a-4755-a9dc-e7b84e357666"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Plants",
+                  "guid": "c1b77f1e-85ce-407d-af1e-4b14400fc6c7"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Site Development (General civil engineering)",
+                  "guid": "43d47754-8249-48e0-acf3-42f27921db1e"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Structural contractors",
+                  "guid": "f81c8120-2e98-4728-ac2f-970c0e327337"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Structural engineering",
+                  "guid": "216b0f8c-6294-477c-ac82-4ca0a0b2dd85"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Transportation",
+                  "guid": "1db7eb37-717c-463a-8630-dbc6982eadcc"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Transportation owners and operators",
+                  "guid": "f50e0e1a-3564-46e2-a320-42ac0794462f"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Utilities and telecom",
+                  "guid": "dec4e813-dd15-4b6a-b8bf-28b8978c2146"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Water",
+                  "guid": "eed88998-d40d-4bbf-b593-5a9bf66e281a"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Water owners and operators",
+                  "guid": "12c2dbbe-355e-4e99-b6b6-bf05831330be"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "fields": {
+            "capability": [
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "06c0343c-717b-4e7f-9f2f-951639e4555b",
+                  "description": "The ability to create and manage a document set that describes the architetural design of a built asset from a Building Information (BIM) model. This can include the existing conditions, detailed design and fabrication detailing.",
+                  "label": "Architectural Modeling"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "22e9d2ad-92e8-4c6a-abcd-55dd418ac6c9",
+                  "description": "The ability to evolve the designs for the individual trades into a fabrication/ready state.",
+                  "label": "Fabrication Planning"
+                }
+              },
+              {
+                "fields": {
+                  "guid": "457b0c83-1f67-439e-aeda-3ad116a0e7c9",
+                  "description": "The ability to create 3D models from photographs or laser scans captured digitally as point clouds  with hardware such as a laser scanners or camera-mounted UAVs.",
+                  "label": "Reality Capture"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "81519b58-4af2-45e1-a006-b834f73d9e05",
+                  "description": "The ability to design and specify connections between elements in a timber structure, and create documentation (which might  include shop drawings and/or machine code to drive manufacturing processes) to facilitate either offsite and onsite fabrication.",
+                  "label": "Timber Detailing & Fabrication"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "90406afa-b6d9-43dc-8a04-8ee5b86020fe",
+                  "description": "The ability to assess the expected performance of a given building design in terms of solar gain, airflow and energy usage.",
+                  "label": "Architectural Analysis"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "fb6d69da-8fe1-412e-b2ea-9dc2bdadf8ee",
+                  "description": "The ability to translate a design brief into an outline architectural design in terms of form and function. Include using computational techniques to aid form finding.",
+                  "label": "Architectural Conceptual Design"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "46b5b470-0908-42d4-b5c6-b4472836a645",
+                  "description": "The ability to ensure that models are developed and shared in a consistent manner, ensuring maximum benefit through the full Asset lifecycle.",
+                  "label": "BIM Standards Management"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "8e4a67d7-7637-425b-a04c-fce185ed241e",
+                  "description": "The ability to develop and deliver a Building Information Model (BIM) of the Civil Structures design.",
+                  "label": "Civil Structure Modeling"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "96d2ee89-fa83-4508-9e76-9941ee1a5b50",
+                  "description": "The ability for multiple parties to concurrently author a Building Information Model (BIM) irresepctive of location.",
+                  "label": "Collaborative Authoring"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "cc08bd2e-a2a1-4713-9e35-9425af68242b",
+                  "description": "The ability to iteratively evalutate large numbers of design options to coverge on a solution that best meets desired perfromance criteria.",
+                  "label": "Computational and Generative Design"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "dee1bce5-9a7c-44a1-811d-b93d4dc9af59",
+                  "description": "The ability to design and convery the size, location, type, placement, splices, and termination of reinforcement in a concrete structure. For precast or pre-fabricated elements, this might also include shop drawings and/or machine code to drive bar-bending machines and other manufacturing processes.",
+                  "label": "Concrete Detailing & Fabrication"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "e6b5de8a-679c-4199-8b93-56031927809c",
+                  "description": "The ability to create 2D renderings, 3D visualizations and animations of a proposed design.",
+                  "label": "Design Visualization"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "519c8303-ff00-4aca-9183-3f40f281d192",
+                  "description": "The ability to embed the \"I\" in BIM. Ensuring model data is added, managed and delivered in an effective and efficient manner.",
+                  "label": "Information Management"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "9db5742a-3cab-49b8-a6a1-747b84c585e1",
+                  "description": "The ability to analyse the performance of mechanincal, electrical and plumbing systems in a propsed design to ensure it meets desired specification and local codes.",
+                  "label": "MEP Analysis"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "4fd70281-0a28-472b-975b-d51f88e03248",
+                  "description": "The ability to create and manage a document set that describes the MEP design of a built asset from a Building Information (BIM) model. This can include the existing conditions, schematic design, detailed design and equipment specifications.",
+                  "label": "MEP Modeling"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "7ff37892-f15e-4dbc-ae2b-58164be8de3b",
+                  "description": "The ability to design and fabricate custom fabricated elements of MEP systems. For ductwork, this might include shop drawings and/or machine code to drive manufacturing processes.",
+                  "label": "MEP Detailing & Fabrication"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "5bb296d7-3d37-475b-b93e-9d6f16042622",
+                  "description": "The ability to manage the quality of the built design in terms of value engineering and constructability with an emphasis on checking contractual deliverables.",
+                  "label": "Quality Control"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "e0985bc6-cbf4-45e5-b848-e8a2f11f84a4",
+                  "description": "The ability to design and specify connections between elements in a steel structure, and create documentation (which might  include shop drawings and/or machine code to drive manufacturing processes) to facilitate either offsite and onsite fabrication.",
+                  "label": "Steel Detailing & Fabrication​"
+                }
+              }
+            ],
+            "upiCode": "RVT",
+            "displayName": "Revit",
+            "plc": "RVT",
+            "productCenterUrl": "https://www.autodesk.com/products/revit/overview",
+            "guid": "3246c4f4-d665-54ea-8a02-1064f3faf001",
+            "relatedIndustry": [
+              {
+                "fields": {
+                  "displayName": "AEC",
+                  "guid": "bff6b27e-8440-4049-8f94-32b867c5de63",
+                  "industry": "AEC"
+                }
+              }
+            ],
+            "iconUrl": "https://damassets.autodesk.net/content/dam/autodesk/www/products/responsive-imagery/responsive-badges-compare/2017/revit-2017-badge-75x75.png",
+            "channelVisibility": ["Learning and Certification"],
+            "lightLogoUrl": "https://damassets.autodesk.net/content/dam/autodesk/www/product-imagery/lockup-610x66/revit-2023-white-lockup-610x66.png",
+            "logoUrl": "https://damassets.autodesk.net/content/dam/autodesk/www/product-imagery/lockup-610x66/revit-lockup-610x66.png",
+            "relatedIndustrySubSegment": [
+              {
+                "fields": {
+                  "displayName": "Architecture",
+                  "guid": "eaf8ac62-c7b1-4aeb-bce0-b9005f59f3be"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Building owners and operators",
+                  "guid": "6eabe884-5cc0-4035-8fc8-57ea661d9705"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Civil / Site development contractors",
+                  "guid": "2e7db524-694a-4020-ac69-e1874fb4eb20"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Energy and utilities owners and operators",
+                  "guid": "4be9dc99-85a5-4843-8593-f5aeee5c7c03"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Finishing contractors",
+                  "guid": "666c77d3-ccb5-47f6-ad0a-18cd63429f5f"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "General contractors",
+                  "guid": "f1431691-94cc-4ed6-b792-16e9d0c58c45"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "MEP contractors",
+                  "guid": "ba7844e4-30db-4eba-9201-69beee651094"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "MEP engineering",
+                  "guid": "de0300ac-2976-450f-bbcd-4f1e85c5e7d8"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Mining and quarrying",
+                  "guid": "b71553af-15c7-4e7f-863b-390b19c0b414"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Oil and gas",
+                  "guid": "592f3829-359a-4755-a9dc-e7b84e357666"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Plants",
+                  "guid": "c1b77f1e-85ce-407d-af1e-4b14400fc6c7"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Site Development (General civil engineering)",
+                  "guid": "43d47754-8249-48e0-acf3-42f27921db1e"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Structural contractors",
+                  "guid": "f81c8120-2e98-4728-ac2f-970c0e327337"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Structural engineering",
+                  "guid": "216b0f8c-6294-477c-ac82-4ca0a0b2dd85"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Transportation",
+                  "guid": "1db7eb37-717c-463a-8630-dbc6982eadcc"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Transportation owners and operators",
+                  "guid": "f50e0e1a-3564-46e2-a320-42ac0794462f"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Utilities and telecom",
+                  "guid": "dec4e813-dd15-4b6a-b8bf-28b8978c2146"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Water",
+                  "guid": "eed88998-d40d-4bbf-b593-5a9bf66e281a"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Water owners and operators",
+                  "guid": "12c2dbbe-355e-4e99-b6b6-bf05831330be"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "learningObjectives": [
+        "Understand limitations in previous versions of Revit related to electrical wire sizing and mechanical pressure loss handling.",
+        "Learn step-by-step how to assign electrical conductors to circuits and automate the process using Dynamo.",
+        "Learn step-by-step of how to override duct and pipe static pressure loss coefficients for precise mechanical system tuning.",
+        "Discover how these improvements open up opportunities for custom Automation, Integration, & Customization and regional adaptation through Dynamo and third-party add-ins."
+      ],
+      "moduleMediaTypes": "Text and Video",
+      "effort": 0,
+      "auTopics": [
+        {
+          "fields": {
+            "name": "Building Information Modeling (BIM)",
+            "guid": "e13cb618-8edb-4a86-a964-8b4312f4bd79",
+            "channelVisibility": ["AU Online", "AU Online", "AU Online"],
+            "parents": [
+              {
+                "fields": {
+                  "name": "Virtual Design & Construction",
+                  "guid": "f0d379e7-dd3f-41a5-90ef-ff7eaa88bbdb",
+                  "channelVisibility": ["AU Online", "AU Online", "AU Online"]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "fields": {
+            "name": "Software Training",
+            "guid": "1f337b51-8055-45c0-a460-7c76c38f3914",
+            "channelVisibility": ["AU Online", "AU Online", "AU Online"],
+            "parents": [
+              {
+                "fields": {
+                  "name": "Technology Management",
+                  "guid": "c237008c-071b-48e8-985d-002eb273c621"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "fields": {
+            "name": "Computational Design",
+            "guid": "d1b705ee-d228-4963-8a91-4fa6283a6cf9",
+            "channelVisibility": ["AU Online", "AU Online", "AU Online"],
+            "parents": [
+              {
+                "fields": {
+                  "name": "Design",
+                  "guid": "b2808616-ef4a-45e5-855a-eccef0139b3b"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "fields": {
+            "name": "Simulation & Analysis"
+          }
+        }
+      ],
+      "industry": [
+        {
+          "fields": {
+            "displayName": "AEC",
+            "guid": "bff6b27e-8440-4049-8f94-32b867c5de63",
+            "industry": "AEC"
+          }
+        }
+      ],
+      "shortDescription": "\"Revit 2026 introduces powerful new capabilities that transform how MEP designers work. In this session, we’ll explore two major enhancements that give users unprecedented control and flexibility over electrical and mechanical systems. You’ll also learn how to apply Dynamo scripts to automate the task. \n\nOn the electrical side, we’ll cover the newly introduced user-controllable conductor sizes and cable configuration tools. These updates eliminate long-standing limitations, enabling both imperial and metric workflows with custom logic to automate conductor sizing and assign cables to circuits based on your own standards and rules. \n\nOn the mechanical side, we’ll showcase a highly requested feature: the ability to override pressure loss coefficients for ducts and pipes. This gives mechanical engineers precise control over pressure drop calculations, ensuring more accurate sizing, balancing, and performance simulations across HVAC and hydronic systems. \n\nBy the end of this session, attendees will gain insight into how Revit 2026 empowers MEP professionals to create smarter, more adaptable, and globally compliant designs—all from within the native Revit environment. \"",
+      "units": [
+        {
+          "fields": {
+            "eventId": "BES2227",
+            "attachments": [
+              {
+                "fields": {
+                  "pdfUrl": "https://static.au-uw2-prd.autodesk.com/BES2227_ClassHandout-2227-Fu-AU2025_1757769710402001oZWT.pdf",
+                  "pages": 53,
+                  "objectKey": "BES2227_ClassHandout-2227-Fu-AU2025_1757769710402001oZWT.pdf",
+                  "label": "handout"
+                }
+              },
+              {
+                "fields": {
+                  "objectKey": "BES2227_AdditionalMaterials-2227-Fu-AU2025_1757753511877001POrb.zip",
+                  "downloadUrl": "https://static.au-uw2-prd.autodesk.com/BES2227_AdditionalMaterials-2227-Fu-AU2025_1757753511877001POrb.zip",
+                  "label": "material"
+                }
+              },
+              {
+                "fields": {
+                  "pdfUrl": "https://static.au-uw2-prd.autodesk.com/BES2227_ClassPresentation-2227-Fu-AU2025_1757753257116001E7x7.pdf",
+                  "objectKey": "BES2227_ClassPresentation-2227-Fu-AU2025_1757753257116001E7x7.pdf",
+                  "label": "presentation"
+                }
+              }
+            ],
+            "targetLocale": "en",
+            "eventLocation": {
+              "fields": {
+                "name": "Nashville"
+              }
+            },
+            "eventTime": "2025-09-16T00:00:00.000Z",
+            "videos": [
+              {
+                "fields": {
+                  "duration": 0,
+                  "label": "brightcove://6377920525112"
+                }
+              }
+            ],
+            "source": "AU",
+            "title": "Extending Automated MEP Analysis in Revit 2026 ",
+            "auLearningContentType": {
+              "fields": {
+                "name": "Instructional Demo",
+                "smartLogicGuid": "64d3224d-cc0d-4e5d-a39a-08da8ddc8833"
+              }
+            }
+          }
+        }
+      ],
+      "source": "AU",
+      "title": "Extending Automated MEP Analysis in Revit 2026 ",
+      "moduleLevel": "Associate",
+      "learningMode": "microlearning",
+      "visibleInBrowse": true,
+      "isStandAlone": true,
+      "slug": "Extending-Automated-MEP-Analysis-in-Revit-2026-2025",
+      "targetChannels": ["AU Online"]
+    }
+  },
+  {
+    "fields": {
+      "stillOffered": true,
+      "overview": "Mechanical modeling in Revit software entails creating graphical information in 2D and 3D. However, the efficacy of mechanical systems lies in comprehensively analyzing the nongraphical information within the model. This session will showcase how to analyze every duct and pipe segment in mechanical systems to meet design constraints. We will demonstrate how to ensure that every part of a mechanical system is logically and physically connected for optimal performance. We'll illustrate system flow and engineering inspections within mechanical intelligent models in Revit. And we'll showcase how to size mechanical equipment to overcome every system pressure standing in the way of best performance. The session will also demonstrate the extraction of information from intelligent models for optimal performance and design improvements.",
+      "industrySubSegment": [
+        {
+          "fields": {
+            "displayName": "Structural engineering",
+            "guid": "216b0f8c-6294-477c-ac82-4ca0a0b2dd85"
+          }
+        },
+        {
+          "fields": {
+            "displayName": "MEP engineering",
+            "guid": "de0300ac-2976-450f-bbcd-4f1e85c5e7d8"
+          }
+        },
+        {
+          "fields": {
+            "displayName": "Architecture"
+          }
+        }
+      ],
+      "featured": false,
+      "targetLocale": "en",
+      "moduleType": "Explore",
+      "keywords": "Energy Efficiency;MEP Engineering;Systems Analysis",
+      "overviewImage": {
+        "fields": {
+          "file": {
+            "url": "//images.ctfassets.net/ooioaq2tbzyk/5kqBcaJL5LV2RGNqudnhva/0ed3f1ed3c510244c5d0ec1ac315174a/image.jpg.jpeg",
+            "details": {
+              "size": 76452,
+              "image": {
+                "width": 1280,
+                "height": 720
+              }
+            },
+            "fileName": "image.jpg.jpeg",
+            "contentType": "image/jpeg"
+          },
+          "title": "2fHDKv0MKhUuHlUNJClTUD-image.jpg"
+        }
+      },
+      "relatedProducts": [
+        {
+          "fields": {
+            "capability": [
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "06c0343c-717b-4e7f-9f2f-951639e4555b",
+                  "description": "The ability to create and manage a document set that describes the architetural design of a built asset from a Building Information (BIM) model. This can include the existing conditions, detailed design and fabrication detailing.",
+                  "label": "Architectural Modeling"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "22e9d2ad-92e8-4c6a-abcd-55dd418ac6c9",
+                  "description": "The ability to evolve the designs for the individual trades into a fabrication/ready state.",
+                  "label": "Fabrication Planning"
+                }
+              },
+              {
+                "fields": {
+                  "guid": "457b0c83-1f67-439e-aeda-3ad116a0e7c9",
+                  "description": "The ability to create 3D models from photographs or laser scans captured digitally as point clouds  with hardware such as a laser scanners or camera-mounted UAVs.",
+                  "label": "Reality Capture"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "81519b58-4af2-45e1-a006-b834f73d9e05",
+                  "description": "The ability to design and specify connections between elements in a timber structure, and create documentation (which might  include shop drawings and/or machine code to drive manufacturing processes) to facilitate either offsite and onsite fabrication.",
+                  "label": "Timber Detailing & Fabrication"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "90406afa-b6d9-43dc-8a04-8ee5b86020fe",
+                  "description": "The ability to assess the expected performance of a given building design in terms of solar gain, airflow and energy usage.",
+                  "label": "Architectural Analysis"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "fb6d69da-8fe1-412e-b2ea-9dc2bdadf8ee",
+                  "description": "The ability to translate a design brief into an outline architectural design in terms of form and function. Include using computational techniques to aid form finding.",
+                  "label": "Architectural Conceptual Design"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "46b5b470-0908-42d4-b5c6-b4472836a645",
+                  "description": "The ability to ensure that models are developed and shared in a consistent manner, ensuring maximum benefit through the full Asset lifecycle.",
+                  "label": "BIM Standards Management"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "8e4a67d7-7637-425b-a04c-fce185ed241e",
+                  "description": "The ability to develop and deliver a Building Information Model (BIM) of the Civil Structures design.",
+                  "label": "Civil Structure Modeling"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "96d2ee89-fa83-4508-9e76-9941ee1a5b50",
+                  "description": "The ability for multiple parties to concurrently author a Building Information Model (BIM) irresepctive of location.",
+                  "label": "Collaborative Authoring"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "cc08bd2e-a2a1-4713-9e35-9425af68242b",
+                  "description": "The ability to iteratively evalutate large numbers of design options to coverge on a solution that best meets desired perfromance criteria.",
+                  "label": "Computational and Generative Design"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "dee1bce5-9a7c-44a1-811d-b93d4dc9af59",
+                  "description": "The ability to design and convery the size, location, type, placement, splices, and termination of reinforcement in a concrete structure. For precast or pre-fabricated elements, this might also include shop drawings and/or machine code to drive bar-bending machines and other manufacturing processes.",
+                  "label": "Concrete Detailing & Fabrication"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "e6b5de8a-679c-4199-8b93-56031927809c",
+                  "description": "The ability to create 2D renderings, 3D visualizations and animations of a proposed design.",
+                  "label": "Design Visualization"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "519c8303-ff00-4aca-9183-3f40f281d192",
+                  "description": "The ability to embed the \"I\" in BIM. Ensuring model data is added, managed and delivered in an effective and efficient manner.",
+                  "label": "Information Management"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "9db5742a-3cab-49b8-a6a1-747b84c585e1",
+                  "description": "The ability to analyse the performance of mechanincal, electrical and plumbing systems in a propsed design to ensure it meets desired specification and local codes.",
+                  "label": "MEP Analysis"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "4fd70281-0a28-472b-975b-d51f88e03248",
+                  "description": "The ability to create and manage a document set that describes the MEP design of a built asset from a Building Information (BIM) model. This can include the existing conditions, schematic design, detailed design and equipment specifications.",
+                  "label": "MEP Modeling"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "7ff37892-f15e-4dbc-ae2b-58164be8de3b",
+                  "description": "The ability to design and fabricate custom fabricated elements of MEP systems. For ductwork, this might include shop drawings and/or machine code to drive manufacturing processes.",
+                  "label": "MEP Detailing & Fabrication"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "5bb296d7-3d37-475b-b93e-9d6f16042622",
+                  "description": "The ability to manage the quality of the built design in terms of value engineering and constructability with an emphasis on checking contractual deliverables.",
+                  "label": "Quality Control"
+                }
+              },
+              {
+                "fields": {
+                  "capabilityMaturity": [],
+                  "guid": "e0985bc6-cbf4-45e5-b848-e8a2f11f84a4",
+                  "description": "The ability to design and specify connections between elements in a steel structure, and create documentation (which might  include shop drawings and/or machine code to drive manufacturing processes) to facilitate either offsite and onsite fabrication.",
+                  "label": "Steel Detailing & Fabrication​"
+                }
+              }
+            ],
+            "upiCode": "RVT",
+            "displayName": "Revit",
+            "plc": "RVT",
+            "productCenterUrl": "https://www.autodesk.com/products/revit/overview",
+            "guid": "3246c4f4-d665-54ea-8a02-1064f3faf001",
+            "relatedIndustry": [
+              {
+                "fields": {
+                  "displayName": "AEC",
+                  "guid": "bff6b27e-8440-4049-8f94-32b867c5de63",
+                  "industry": "AEC"
+                }
+              }
+            ],
+            "iconUrl": "https://damassets.autodesk.net/content/dam/autodesk/www/products/responsive-imagery/responsive-badges-compare/2017/revit-2017-badge-75x75.png",
+            "channelVisibility": ["Learning and Certification"],
+            "lightLogoUrl": "https://damassets.autodesk.net/content/dam/autodesk/www/product-imagery/lockup-610x66/revit-2023-white-lockup-610x66.png",
+            "logoUrl": "https://damassets.autodesk.net/content/dam/autodesk/www/product-imagery/lockup-610x66/revit-lockup-610x66.png",
+            "relatedIndustrySubSegment": [
+              {
+                "fields": {
+                  "displayName": "Architecture",
+                  "guid": "eaf8ac62-c7b1-4aeb-bce0-b9005f59f3be"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Building owners and operators",
+                  "guid": "6eabe884-5cc0-4035-8fc8-57ea661d9705"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Civil / Site development contractors",
+                  "guid": "2e7db524-694a-4020-ac69-e1874fb4eb20"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Energy and utilities owners and operators",
+                  "guid": "4be9dc99-85a5-4843-8593-f5aeee5c7c03"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Finishing contractors",
+                  "guid": "666c77d3-ccb5-47f6-ad0a-18cd63429f5f"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "General contractors",
+                  "guid": "f1431691-94cc-4ed6-b792-16e9d0c58c45"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "MEP contractors",
+                  "guid": "ba7844e4-30db-4eba-9201-69beee651094"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "MEP engineering",
+                  "guid": "de0300ac-2976-450f-bbcd-4f1e85c5e7d8"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Mining and quarrying",
+                  "guid": "b71553af-15c7-4e7f-863b-390b19c0b414"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Oil and gas",
+                  "guid": "592f3829-359a-4755-a9dc-e7b84e357666"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Plants",
+                  "guid": "c1b77f1e-85ce-407d-af1e-4b14400fc6c7"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Site Development (General civil engineering)",
+                  "guid": "43d47754-8249-48e0-acf3-42f27921db1e"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Structural contractors",
+                  "guid": "f81c8120-2e98-4728-ac2f-970c0e327337"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Structural engineering",
+                  "guid": "216b0f8c-6294-477c-ac82-4ca0a0b2dd85"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Transportation",
+                  "guid": "1db7eb37-717c-463a-8630-dbc6982eadcc"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Transportation owners and operators",
+                  "guid": "f50e0e1a-3564-46e2-a320-42ac0794462f"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Utilities and telecom",
+                  "guid": "dec4e813-dd15-4b6a-b8bf-28b8978c2146"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Water",
+                  "guid": "eed88998-d40d-4bbf-b593-5a9bf66e281a"
+                }
+              },
+              {
+                "fields": {
+                  "displayName": "Water owners and operators",
+                  "guid": "12c2dbbe-355e-4e99-b6b6-bf05831330be"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "learningObjectives": [
+        "Discover and learn how to resolve system disconnects, errors, and warnings for mechanical systems in Revit.",
+        "Closely examine every portion of a mechanical system against established design criteria for optimal system performance.",
+        "Accurately size the equipment for mechanical systems, accounting for all system pressure losses.",
+        "nan"
+      ],
+      "moduleMediaTypes": "Text and Video",
+      "effort": 51,
+      "auTopics": [
+        {
+          "fields": {
+            "name": "Architect",
+            "guid": "10e84be1-21cc-4b5e-83ac-b78a32b91701"
+          }
+        },
+        {
+          "fields": {
+            "name": "Consultant",
+            "guid": "132e5e3d-273a-4861-aeda-40e1694cdc16"
+          }
+        },
+        {
+          "fields": {
+            "name": "Building Information Modeling (BIM)",
+            "guid": "e13cb618-8edb-4a86-a964-8b4312f4bd79",
+            "channelVisibility": ["AU Online", "AU Online", "AU Online"],
+            "parents": [
+              {
+                "fields": {
+                  "name": "Virtual Design & Construction",
+                  "guid": "f0d379e7-dd3f-41a5-90ef-ff7eaa88bbdb",
+                  "channelVisibility": ["AU Online", "AU Online", "AU Online"]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "fields": {
+            "name": "Simulation & Analysis",
+            "guid": "0c3390b3-6f01-47f2-bfc1-710b40d41f36",
+            "channelVisibility": ["AU Online", "AU Online", "AU Online"]
+          }
+        },
+        {
+          "fields": {
+            "name": "Mechanical Design",
+            "guid": "061f208a-5af2-456e-8479-da13da09eb95",
+            "parents": [
+              {
+                "fields": {
+                  "name": "Product Design",
+                  "guid": "9cc60542-253d-4e88-97a9-66f45c7013a5",
+                  "parents": [
+                    {
+                      "fields": {
+                        "name": "Design",
+                        "guid": "b2808616-ef4a-45e5-855a-eccef0139b3b"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "fields": {
+            "name": "Sustainable Design",
+            "guid": "848ad1f7-220a-4f74-9cb0-4c4b265e0cb7",
+            "parents": [
+              {
+                "fields": {
+                  "name": "Design",
+                  "guid": "b2808616-ef4a-45e5-855a-eccef0139b3b"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "fields": {
+            "name": "Mechanical Engineer",
+            "guid": "654a43e3-4c11-4599-8517-ef9e40fe72c0",
+            "parents": [
+              {
+                "fields": {
+                  "name": "Engineer",
+                  "guid": "eebe583f-74b4-4e52-a39d-1578ffe53aae"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "industry": [
+        {
+          "fields": {
+            "displayName": "AEC",
+            "guid": "bff6b27e-8440-4049-8f94-32b867c5de63",
+            "industry": "AEC"
+          }
+        }
+      ],
+      "shortDescription": "Mechanical modeling in Revit software entails creating graphical information in 2D and 3D. However, the efficacy of mechanical systems lies in comprehensively analyzing the nongraphical information within the model. This session will showcase how to analyze every duct and pipe segment in mechanical systems to meet design constraints. We will demonstrate how to ensure that every part of a mechanical system is logically and physically connected for optimal performance. We'll illustrate system flow and engineering inspections within mechanical intelligent models in Revit. And we'll showcase how to size mechanical equipment to overcome every system pressure standing in the way of best performance. The session will also demonstrate the extraction of information from intelligent models for optimal performance and design improvements.",
+      "units": [
+        {
+          "fields": {
+            "eventId": "BES1413",
+            "attachments": [
+              {
+                "fields": {
+                  "pdfUrl": "https://static.au-uw2-prd.autodesk.com/Presentationt-BES1413-Udeze-AU2024_1726135700200001XUp1.pdf",
+                  "pages": 25,
+                  "objectKey": "Presentationt-BES1413-Udeze-AU2024_1726135700200001XUp1.pdf",
+                  "label": "presentation"
+                }
+              },
+              {
+                "fields": {
+                  "pdfUrl": "https://static.au-uw2-prd.autodesk.com/ClassHandout-BES1413-Udeze-AU2024_1726135629671001WnUK.pdf",
+                  "objectKey": "ClassHandout-BES1413-Udeze-AU2024_1726135629671001WnUK.pdf",
+                  "label": "handout"
+                }
+              },
+              {
+                "fields": {
+                  "objectKey": "Materials-BES1413-Udeze-AU2024_1726136842894001YJnv.zip",
+                  "downloadUrl": "https://static.au-uw2-prd.autodesk.com/Materials-BES1413-Udeze-AU2024_1726136842894001YJnv.zip",
+                  "label": "material"
+                }
+              }
+            ],
+            "targetLocale": "en",
+            "eventLocation": {
+              "fields": {
+                "name": "San Diego"
+              }
+            },
+            "seoDescription": "Mechanical modeling in Revit software entails creating graphical information in 2D and 3D. However, the efficacy of mechanical systems lies in comprehensively a",
+            "eventTime": "2024-10-15T00:00:00.000Z",
+            "videos": [
+              {
+                "fields": {
+                  "duration": 3044,
+                  "label": "brightcove://6362811439112"
+                }
+              }
+            ],
+            "source": "AU",
+            "title": "Five Advanced Mechanical Analysis Techniques in Revit for Sustainable Space Design",
+            "auLearningContentType": {
+              "fields": {
+                "name": "Instructional Demo",
+                "smartLogicGuid": "64d3224d-cc0d-4e5d-a39a-08da8ddc8833"
+              }
+            }
+          }
+        }
+      ],
+      "source": "AU",
+      "title": "Five Advanced Mechanical Analysis Techniques in Revit for Sustainable Space Design",
+      "moduleLevel": "Professional",
+      "learningMode": "microlearning",
+      "visibleInBrowse": true,
+      "isStandAlone": true,
+      "slug": "Five-Advanced-Mechanical-Analysis-Techniques-in-Revit-for-Sustainable-Space-Design-2024",
+      "targetChannels": ["AU Online"]
+    }
+  }
+]

@@ -89,8 +89,8 @@ export const TOOL_TITLES: Record<string, string> = {
   read_image: "Look at an image",
   capture_view: "Capture a view",
   diagram: "Draw a diagram",
-  revit_api_docs_search: "Search the Revit docs",
-  revit_api_docs_fetch: "Read the Revit docs",
+  revit_docs_search: "Search the Revit docs",
+  revit_docs_fetch: "Read the Revit docs",
 };
 
 /** `pe_read`/`pe_do` args → the route and member of a `route:` key, when the call targets a route. */

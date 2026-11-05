@@ -434,7 +434,7 @@ export function searchLocalDocs(
   }
 }
 
-/** Full doc text for one member, rendered as markdown. Used by revit_api_docs_fetch for local: slugs. */
+/** Full doc text for one member, rendered as markdown. Used by revit_docs_fetch for local: slugs. */
 export function fetchLocalDoc(
   memberId: string,
   year: number,

@@ -1,0 +1,32 @@
+[
+  {
+    "id": 4992,
+    "date": "2015-06-24T04:13:28",
+    "link": "https:\/\/blog.autodesk.io\/reading-loss-methods-available-on-revit-mep\/",
+    "title": { "rendered": "Reading Loss Methods available on Revit MEP" },
+    "excerpt": {
+      "rendered": "<p>By Augusto Goncalves At this previous blog post you can find how to read ASHRAE table of a specific element. Basically a GUID is stored at the Built in parameter as a string: RBS_DUCT_FITTING_LOSS_METHOD_SERVER_PARAM But where can we get the list of Loss Methods available? The following sample show the getLossMethods function that will read [&hellip;]<\/p>\n",
+      "protected": false
+    }
+  },
+  {
+    "id": 15273,
+    "date": "2009-10-19T05:00:00",
+    "link": "https:\/\/blog.autodesk.io\/modeless-pressure-drop-tool\/",
+    "title": { "rendered": "Modeless Pressure Drop Tool" },
+    "excerpt": {
+      "rendered": "<p>This weekend I went with a couple of men friends to spend two days together in Arcegno near Locarno. One afternoon we went climbing together in Ponte Brolla at the end of the Maggia Valley. We did some very easy climbs, because some of us were absolute beginners, Jimmy (4b), Ostro (5a), Mekka (4c), and [&hellip;]<\/p>\n",
+      "protected": false
+    }
+  },
+  {
+    "id": 6298,
+    "date": "2024-05-28T05:00:00",
+    "link": "https:\/\/blog.autodesk.io\/revit-20251-and-handling-lack-of-ui-in-da\/",
+    "title": { "rendered": "Revit 2025.1 and Handling Lack of UI in DA" },
+    "excerpt": {
+      "rendered": "<p>The Revit 2025.1 update release, placing a detail group in ASP Design Automation, lacking the UI, a hacker&#8217;s guide to LLM and an LLM retrieval augmented generation in 10 lines of code&#8230;<\/p>\n",
+      "protected": false
+    }
+  }
+]

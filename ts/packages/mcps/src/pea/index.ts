@@ -2,7 +2,7 @@ import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import { readImage } from "../shared/read-image.ts";
 import { createCaptureViewTool } from "../shared/capture-view.ts";
 import { diagram } from "../shared/diagram.ts";
-import { revitApiFetch, revitApiSearch } from "../shared/rvt-api.ts";
+import { revitDocsFetch, revitDocsSearch } from "../shared/revit-docs.ts";
 import {
   peDo,
   peFeedback,
@@ -87,6 +87,6 @@ export const peaProductTools = {
   [captureView.id]: captureView,
   [readImage.id]: readImage,
   [diagram.id]: diagram,
-  [revitApiSearch.id]: revitApiSearch,
-  [revitApiFetch.id]: revitApiFetch,
+  [revitDocsSearch.id]: revitDocsSearch,
+  [revitDocsFetch.id]: revitDocsFetch,
 };

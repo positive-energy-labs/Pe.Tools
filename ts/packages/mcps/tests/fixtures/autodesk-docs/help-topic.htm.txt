@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta name="topic-type" content="task-adsk"/>
+<meta name="helpsystempath" content="/view/RVT/2027/ENU/"/>
+<meta name="product" content="RVT"/>
+<meta name="release" content="2027"/>
+<meta name="book" content="GeneralUser"/>
+<meta name="component" content="Revit-MEPEng"/>
+<meta name="created" content="15/9/2026"/>
+<meta name="generatedby" content="TRIDION"/>
+<meta name="user-comments" content="disable"/>
+<meta name="description" content="You can generate a pressure loss report for duct or pipe systems in your project."/>
+<meta name="indexterm" content="pressure loss report; duct system: pressure loss report; pipe system: pressure loss report"/>
+<meta name="indexterm" content="pressure loss: duct"/>
+<meta name="indexterm" content="pressure loss: pipe"/>
+<meta name="contextid" content="HID_MEP_DUCT_PRESSURE_LOSS_REPORT"/>
+<meta name="contextid" content="HID_MEP_PIPE_PRESSURE_LOSS_REPORT"/>
+<meta name="contextid" content="HID_MEP_SELECT_DUCT_PRESSURE_LOSS_REPORT"/>
+<meta name="contextid" content="HID_MEP_SELECT_PIPE_PRESSURE_LOSS_REPORT"/>
+<meta name="contextid" content="HDAILOG_BUILDINGSYSTEMS_DUCT_PRESSURE_LOSS_REPORT"/>
+<meta name="contextid" content="HDAILOG_BUILDINGSYSTEMS_PIPE_PRESSURE_LOSS_REPORT"/>
+<meta name="contextid" content="HDIALOG_PIPEPRESSURELOSSREPORT_SYSTEMSELECTORDLG"/>
+<meta name="contextid" content="HDIALOG_DUCTPRESSURELOSSREPORT_SYSTEMSELECTORDLG"/>
+<meta name="contextid" content="HDIALOG_PIPEPRESSURELOSSREPORTDLG"/>
+<meta name="contextid" content="HDIALOG_DUCTPRESSURELOSSREPORTDLG"/>
+<meta name="contextid" content="HPID_MEP_ANALYTICAL_CRITICALSEQUENCE"/>
+<meta name="experiencelevel" content="general"/>
+<meta name="modified" content="21/03/2025"/>
+<meta name="topicid" content="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3"/>
+<meta name="language" content="ENU"/>
+<title>Generate a Pressure Loss Report</title>
+
+	<link rel="stylesheet" type="text/css" href="/view/clientframework/client.css"/>
+	<script type="text/javascript" src="/view/clientframework/client.js"><!--filler--></script>
+</head>
+<body id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3">
+<div class="head"><div class="head-block"><div class="button-info"><span id="infoline"> </span></div>
+<div class="ancestry"> </div>
+<div class="head-text"><h1>Generate a Pressure Loss Report</h1></div>
+</div>
+</div>
+
+<div class="body taskbody-adsk"><p class="shortdesc"> You can generate a pressure loss report for duct or pipe systems in your project. 
+</p>
+<p class="p"><a class="xref" href="GUID-1DDA1C3C-E065-4134-8BCA-DA036AEA8A3B.htm" title="Pressure reports evaluate a system and provide loss coefficients for system elements."><img class="image" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__IMAGE_35B15E9E345447AC99FB68A35E4FA232" src="../images/GUID-DA753359-811C-4D52-9C73-A48A9A0D5A89.png"/> Video: Generate a Pressure Loss Report for Duct</a> 
+</p>
+<div class="p" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-23504542-649F-495C-BE31-6B07F6C00DA2"> 
+   
+   
+  <div class="note note" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-733BED02-4624-4DB3-BCD8-AF0F4BA98234"><span class="notetitle">Note:</span> Use the duct sizing and pipe sizing tools for the systems in your project before you generate a pressure loss report. 
+  </div>
+ 
+</div>
+<p class="p" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-B97CDC1B-BD52-4106-B16A-9601D0241A43">To generate the report, first, specify the systems to include in the report, then set up the report. When setting up the report, you can specify which fields, such as diameter, height, and width, are included. You can also specify whether additional information such as system information and critical path is displayed in the report. The output from the report can be saved as an HTML or CSV file. 
+</p>
+<div class="section" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__SECTION_446914D3A7BC437B85A6850D800CF6FA"><h2 class="title sectiontitle">Selecting the systems for the report</h2> 
+   
+  <div class="p" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-B8179820-A3C5-43C8-BC13-345179FE7511">You can select the systems before or after you start the command to generate the pressure loss report. For example, you can 
+  <ul class="ul" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__UL_C8288E68F31849538EAE53AD78D50DFB"><li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_A2FE6EF7969749728ECB0D4ECB806751">Select one or more systems in the drawing area and click Duct Pressure Loss Report or Pipe Pressure Loss Report. 
+	 </li>
+<li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_AF12BBD2F4F94B1091D16958EB11E518">Select one or more systems in the System Browser, right-click and click Pressure Loss Report. 
+	 </li>
+<li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_8F27145B8D914C01B8526E8F5A01A37F">Click Analyze tab<span name="glyph_span" class="glyphArrow"><img src="../images/ac.menuaro.gif"/></span>Reports &amp; Schedules panel<span name="glyph_span" class="glyphArrow"><img src="../images/ac.menuaro.gif"/></span><img class="image" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__IMAGE_6AAA11703E9944ECAE06957261635114" src="../images/GUID-3B8A30CF-FF00-45D1-89A1-9C03FFB1D498.png"/> (Duct Pressure Loss Report) or 
+		<img class="image" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__IMAGE_498BA3627CF1459991FEC4F4A944A3DA" src="../images/GUID-7D8CE736-5F3F-4118-A834-78E4E5D32F7F.png"/> (Pipe Pressure Loss Report) and select one or more systems in the Pressure Loss Report - System Selector dialog. 
+		<p class="p" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-881761DA-C031-4849-8EA2-104068CD9578">To filter the systems in the list, click System Type Filter. 
+		</p>
+ 
+	 </li>
+</ul>
+ 
+  </div>
+ 
+  <p class="p" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-51D66D83-79DC-4DA9-A987-CAE68EA75684">You can select a system for which calculations are set to All. If calculations are set to Flow Only or None, a warning displays or the system will not display in the list. 
+  </p>
+ 
+  <p class="p" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-24B15C24-A035-44D8-A4E5-EC2A3368513E">A pressure loss report cannot be generated for a fire protection system, or a gravity flow system, such as a sanitary system. 
+  </p>
+ 
+  <p class="p" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-37C9DF61-F540-4BB1-83C8-A28AB63E1254"> A system must be well connected in order to generate a pressure loss report. Use the System Inspector to determine if a system is well connected before attempting to generate a pressure loss report. 
+  </p>
+ 
+</div>
+<div class="section" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__SECTION_C3DD77B2AF474E0FA3E340CF2C73A0AF"><h2 class="title sectiontitle">Setting up the report</h2> 
+   
+  <p class="p" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-E183560F-661A-484A-A8A4-E4AD1756B056">After you select the systems you want to include, you can set up the report. 
+  </p>
+ 
+</div>
+<ol class="ol instructions" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-3348E6A7-9130-4364-9303-FBEC58D1F1E2"><li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_67F8836BF60D44409D91D5FDFE7E72CE">If you have previously saved a report format, in the Pressure Loss Report Setting dialog, you can select one from the list. 
+  <div class="note tip" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-5FD8A1D6-7CF6-4063-9039-42E9C98584AC"><span class="tiptitle">Tip:</span> To save a report format, specify the desired settings in the dialog and click Save. Enter a Format Name and click OK. 
+	 <p class="p" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-83D9D197-7B52-4F53-9926-A5B032B3A84C">The duct pressure loss and pipe pressure loss reports each have their own report format. They are saved in the same location as the default template. 
+	 </p>
+ 
+  </div>
+ 
+</li>
+<li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_6C97B26249A04113ABF32507580CB968">Select from the list of available fields the ones you want to include in the report. 
+</li>
+<li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_29BC96C5D4104A719421529E78564622">Enable or disable the display of the following items as desired: 
+  <ul class="ul" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__UL_AB384EA4A55D48BA9DCA92D64E627476"><li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_10636C42043544E5B1335490ED16A6C8">System information 
+	 </li>
+<li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_760B31F481B34D70857E9161C871DCAB">Critical path: 
+		<span class="ph msgph prodname" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-45405CE4-D629-4299-8061-0EAE22657EB4">Revit</span> calculates the pressure drop of each path and specifies the one with the largest pressure drop as the critical path. 
+	 </li>
+<li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_C283F762716146D0B49BE7BA2CBB324A">Detail information of straight segment by sections 
+	 </li>
+<li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_366F9C99A21E45329B2AA48B6A052A20">Fitting and accessory loss coefficient summary by section 
+	 </li>
+<li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_1A7FC7305CD74F67B4E500A50737D5C0">Parallel pump set information (pipe pressure loss report only) 
+	 </li>
+</ul>
+ 
+</li>
+<li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_5A807BFFE43D4252AF546E0BBC65E2AC">If desired, enable the option to open the pressure loss report after it is generated. 
+</li>
+<li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_A2767BFB4B314CA4B07D914C4FF31A7A">Click Generate. 
+</li>
+<li class="li" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__LI_BAC2129ECBD941A4A940C85C74469F8F">In the Save As dialog, enter a file name, specify the file extension as HTML or CSV, and click Save. 
+</li>
+<div class="p" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-6EBB68FC-9488-4507-B8DA-AAD27F81685C"> 
+  <div class="fig fignone" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__FIG_8B4828AE6B284454AE4DDF18340922A4"><img class="image" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__IMAGE_90359D36E41D4831BD2A4BC67968C3DB" src="../images/GUID-862942B3-C122-430D-A557-C117FDA1B149.png"/></div>
+ 
+</div>
+<div class="p" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-6390F2D9-AE4D-4395-A59B-A16F633541F3"> 
+  <div class="note note" id="GUID-3A1DE269-1524-48AB-88B5-82F1E0A968A3__GUID-FCB33F9A-8F3C-467C-A732-A124D078D9D2"><span class="notetitle">Note:</span> If you have specified a 3rd party calculation method that is not available, the value for Pressure Loss will show as Not Computed. 
+  </div>
+ 
+</div>
+</ol>
+</div>
+<div class="related-links">
+<div class="familylinks">
+<div class="parentlink"><strong>Parent topic:</strong> <a class="link" href="GUID-B413758F-1A4B-46C1-9E10-1D8EC9E73334.htm" title="Revit provides the following tools for creating supply, return, and exhaust duct systems in a project.">Working with Duct Components</a></div>
+</div>
+
+<div class="familylinks">
+<div class="parentlink"><strong>Parent topic:</strong> <a class="link" href="GUID-795F02C8-2C46-43D0-91FA-C460E5F8D70C.htm" title="Perform common tasks to work with piping components in your project.">Working with Piping Components</a></div>
+</div>
+<div class="relinfo relconcepts"><h4 class="related">Related Concepts</h4>
+<ul><li><a class="link" href="GUID-99B57EF9-BBDD-4C34-8AE2-50EA6AE446E7.htm" title="In Revit, air density, air dynamic viscosity, and air flow are used to calculate duct sizing.">Duct Sizing</a></li><li><a class="link" href="GUID-687B295F-42A9-400E-B3E3-D8977F53DDFF.htm" title="In Revit, you use the Pipe Sizing dialog to specify the method used to automatically size or calculate sections of pipe using friction and/or velocity sizing methods.">Pipe Sizing Examples</a></li></ul></div>
+</div>
+
+</body>
+</html>
