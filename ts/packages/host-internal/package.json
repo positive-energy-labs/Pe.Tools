@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./dispatch": "./src/dispatch.ts",
+    "./native-read": "./src/native-read.ts",
     "./request-contracts": {
       "types": "./src/request-contracts.d.ts"
     }
