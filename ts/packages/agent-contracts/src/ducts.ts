@@ -1,5 +1,5 @@
 /**
- * /ducts Work, every segment a family of shared cells with edits and optional suggestions. The
+ * /ducts Work, every segment a family of cells with one staged edit each. The
  * fan-side cells live in the /fans Work (`fans.ts`, FANSPLIT); pricing reads both (`ductsDesign`).
  * - `assumptions`, keyed by what the assumption is about: an issue id from the snapshot
  *   (`open-end:g123:456:1`) holds a verdict; `flex-roughness:<flex type>`,
@@ -11,10 +11,10 @@
  * - The scene (pressure-drop ledger, 2026-10-19): `subject`, keyed by group id, each cell an ORDERED
  *   element-id list (a claim shows only on the groups that hold its ids, `claimsForGroup`); `claims`, keyed by claim id, a sentence pinned to element ids with the author's state and a
  *   verdict slot; `labelParameter`, one cell naming the instance parameter whose value names
- *   equipment for people (`ducts.snapshot` reads it into `DuctNode.label`). Either author edits or
- *   suggests all three; a verdict in the current edit is the verdict record.
+ *   equipment for people (`ducts.snapshot` reads it into `DuctNode.label`). Either author stages
+ *   all three; a verdict in the staged edit is the verdict record.
  * - `workingPhase` (kaitpw 2026-10-19), one cell naming the phase the firm's views show (a name in
- *   the snapshot's `phases.order`); either author edits or suggests it from the snapshot's view
+ *   the snapshot's `phases.order`); either author stages it from the snapshot's view
  *   census, and the route leaves out every element that does not exist in it (`phases.ts`).
  * `ducts.apply` writes the edited rules, rulings and the fans Work's drops, flows, esp and slots to Revit.
  */
@@ -29,7 +29,7 @@ export const ductAssumptionSchema = z.discriminatedUnion("kind", [
   /**
    * capped: the open end carries no flow; connect: it must be connected in the model; ignore: leave
    * it out. On a proximity finding id: ignore breaks the inference; connect confirms it (and joins a
-   * near miss across classifications anyway). Only an edited verdict rules; a suggestion never does.
+   * near miss across classifications anyway). Only a staged verdict rules.
    */
   z.strictObject({ kind: z.literal("verdict"), verdict: z.enum(["capped", "connect", "ignore"]) }),
   z.strictObject({ kind: z.literal("flex-roughness"), ft: z.number().positive() }),
@@ -356,16 +356,15 @@ export const ductsDocumentSchema = z
     systemColours: draftCellSchema(ductSystemColoursSchema).default({}),
   })
   .superRefine((doc, ctx) => {
-    for (const [key, cell] of Object.entries(doc.assumptions))
-      for (const rung of ["suggestion", "edit"] as const) {
-        const value = cell[rung]?.value;
-        if (value && value.kind !== kindOfKey(key))
-          ctx.addIssue({
-            code: "custom",
-            path: ["assumptions", key, rung, "value"],
-            message: `the key ${key} holds a ${kindOfKey(key)}, not a ${value.kind}`,
-          });
-      }
+    for (const [key, cell] of Object.entries(doc.assumptions)) {
+      const value = cell.edit?.value;
+      if (value && value.kind !== kindOfKey(key))
+        ctx.addIssue({
+          code: "custom",
+          path: ["assumptions", key, "edit", "value"],
+          message: `the key ${key} holds a ${kindOfKey(key)}, not a ${value.kind}`,
+        });
+    }
   });
 export type DuctsRouteDocument = z.infer<typeof ductsDocumentSchema>;
 
@@ -392,7 +391,7 @@ const v1Rung = z.looseObject({
   value: z.looseObject({ cells: z.array(z.tuple([z.string(), z.string()])).optional() }).optional(),
 });
 const v1Doc = z.looseObject({
-  writeIntent: z.looseObject({ suggestion: v1Rung.nullish(), edit: v1Rung.nullish() }).optional(),
+  writeIntent: z.looseObject({ edit: v1Rung.nullish() }).optional(),
 });
 export function dropFanCells(doc: unknown): unknown {
   const { writeIntent, ...saved } = v1Doc.parse(doc);
@@ -410,7 +409,6 @@ export function dropFanCells(doc: unknown): unknown {
     ...kept,
     writeIntent: {
       ...writeIntent,
-      suggestion: scope(writeIntent.suggestion),
       edit: scope(writeIntent.edit),
     },
   };
@@ -430,7 +428,7 @@ const stagedOf = <V>(cells: Record<string, { edit?: { value?: V } | null } | und
     ),
   ) as Record<string, V>;
 
-/** Current edits only, per segment; optional suggestions remain review content. */
+/** Staged edits only, per segment. */
 export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) {
   return {
     calculation: stagedOf(fans.calculation),
@@ -456,13 +454,11 @@ export function stagedDucts(doc: DuctsRouteDocument | null, fans: FansDocument) 
 }
 
 /**
- * The phase the route reads the network in: the current edit, else an optional suggestion, so either
- * author can inspect a suggested phase before editing; an edited null reads every element.
+ * The phase the route reads the network in: the staged edit, whoever wrote it; an edited null
+ * reads every element.
  */
-export const workingPhaseOf = (doc: DuctsRouteDocument | null) => {
-  const cell = doc?.workingPhase;
-  return (cell?.edit ? cell.edit.value : cell?.suggestion?.value) ?? null;
-};
+export const workingPhaseOf = (doc: DuctsRouteDocument | null) =>
+  doc?.workingPhase?.edit?.value ?? null;
 
 /**
  * What `ducts.plan-losses` and `ducts.apply-losses` send; the host calls the native

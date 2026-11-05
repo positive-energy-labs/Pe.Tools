@@ -1,6 +1,6 @@
 /**
  * /fans Work (FANSPLIT, routes LEDGER 2026-11-03): the fan-side cells, split out of the ducts Work.
- * Every segment is a family of shared cells with edits and optional suggestions:
+ * Every segment is a family of cells with one staged edit each:
  * - `terminalDrops` (terminal id) and `componentDrops` (fitting or accessory id): a stated drop in
  *   in-wg and where it came from.
  * - `esp` (air mover id): the external static Pe writes to a unit, in in-wg.

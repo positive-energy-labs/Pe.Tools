@@ -52,7 +52,6 @@ test("instance discovery validates actual persisted Work and never reads, create
       title: "Family",
       revision: 5,
       state: "ready",
-      proposals: 0,
       unfinished: 0,
     },
   ]);

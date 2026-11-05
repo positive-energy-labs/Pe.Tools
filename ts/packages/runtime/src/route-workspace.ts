@@ -12,6 +12,7 @@ import type {
   WorkFeedFailure,
 } from "../../agent-contracts/src/work-journal-door.ts";
 import { WorkMigrationFailure } from "./work-migration-failure.ts";
+import { retireSuggestionLane } from "./work-cutover.ts";
 import { createWorkJournal } from "./work-journal.ts";
 import { bindWork, workCounts, workKey, workKeySchema, type WorkKey } from "@pe/agent-contracts";
 import { z } from "zod";
@@ -333,14 +334,13 @@ export class RouteWorkspace {
         }
         const spec = this.#registry.get(record.route)?.spec;
         let revision: number | null = null;
-        let proposals = 0;
         let unfinished = 0;
         let state: "ready" | "unreadable" | "unregistered" = spec ? "unreadable" : "unregistered";
         if (spec) {
           try {
-            const envelope = parseEnvelope(record.value, spec);
+            const envelope = parseEnvelope(retireSuggestionLane(record.value)?.value ?? record.value, spec);
             revision = envelope.revision;
-            ({ proposals, unfinished } = workCounts(envelope.doc, spec.editable ?? []));
+            ({ unfinished } = workCounts(envelope.doc, spec.editable ?? []));
             state = "ready";
           } catch (error) {
             console.warn(
@@ -358,7 +358,6 @@ export class RouteWorkspace {
             title: spec?.title ?? record.route,
             revision,
             state,
-            proposals,
             unfinished,
           },
         ];
@@ -991,7 +990,7 @@ export class RouteWorkspace {
   async #carryOver(scope: WorkKey, route: string): Promise<unknown> {
     const { store } = this.options;
     const targetKey = workKey(scope);
-    const raw = await store.getState({ targetKey, route });
+    const raw = this.#retireSuggestions(targetKey, route, await store.getState({ targetKey, route }));
     const openWork =
       scope.binding === "address" && scope.from
         ? bindWork(scope.route, null, undefined, scope.from)
@@ -1001,7 +1000,23 @@ export class RouteWorkspace {
     if (carried == null) return null;
     await store.setState({ targetKey, route, value: carried });
     await store.setState({ targetKey: workKey(openWork), route, value: null });
-    return carried;
+    return this.#retireSuggestions(targetKey, route, carried);
+  }
+
+  /**
+   * The suggestion-lane retirement (ADR 0030 rule 8) on every raw read. A read never writes: the
+   * next accepted write persists the collapsed doc and history, so a dropped counter-proposal is
+   * logged on each read until then and its bytes survive until a write.
+   */
+  #retireSuggestions(targetKey: string, route: string, raw: unknown): unknown {
+    const retired = retireSuggestionLane(raw);
+    if (!retired) return raw;
+    if (retired.dropped.length)
+      console.warn(
+        `ts/packages/runtime/src/route-workspace.ts: ${route} Work ${targetKey} dropped ${retired.dropped.length} suggestion(s) that differed from the staged edit`,
+        retired.dropped,
+      );
+    return retired.value;
   }
 
   async #persist(

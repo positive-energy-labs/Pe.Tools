@@ -190,14 +190,17 @@ export type GraphTransition<P> = (
   | { readonly patch: Partial<P> }
   | { readonly refusal: { readonly code: RouteViewRefusalCode; readonly message: string } };
 
-/** The kernel-owned lifecycle verbs of a Work's authored cells; their ids are reserved. */
-export const CELL_VERB_KINDS = ["take", "reject", "reopen", "delete"] as const;
+/** The kernel-owned verbs of a Work's staged cells; their ids are reserved. Typing is the set. */
+export const CELL_VERB_KINDS = ["clear", "delete"] as const;
 export type CellVerbKind = (typeof CELL_VERB_KINDS)[number];
 
 /** One family of authored cells in a route's Work, as the Situation and the Chat head read it. */
 export interface CellsDecl<W = unknown> {
-  /** Extra patches accepted with a proposal, in the same CAS write and inverse journal step. */
-  take?: (
+  /**
+   * Companion patches written with every staged `set` on this family, by either author, in the same
+   * CAS write and inverse journal step (takeoffs records the observed base the value was staged on).
+   */
+  stage?: (
     doc: W,
     key: string,
     readings: Readonly<Record<string, { value?: unknown; current: boolean }>>,

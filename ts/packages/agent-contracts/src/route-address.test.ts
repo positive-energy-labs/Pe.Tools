@@ -7,7 +7,15 @@ import {
 } from "./list-search.ts";
 import { threadSearchDefault } from "./routes/shared.ts";
 import type { OrbitViewport } from "./page-keys.ts";
-import { routeAddress, routeAt, routeOf } from "./route-address.ts";
+import { canonicalPlace, routeAddress, routeAt, routeOf } from "./route-address.ts";
+
+test("an admitted Place retains its owner's JSON query bytes through thread context", () => {
+  const link = '/fans?inputSort=%22%22&contextStyle=%22glass%22&fan=%7B%22kind%22%3A%22ids%22%2C%22ids%22%3A%5B%5D%7D';
+  expect(routeAddress("fans").tab(link).ok).toBe(false);
+  expect(canonicalPlace("fans", link)).toEqual({ ok: true, link });
+  expect(canonicalPlace("fans", `${link}&thread=another` ).ok).toBe(false);
+  expect(canonicalPlace("fans", "https://elsewhere.test/fans").ok).toBe(false);
+});
 
 describe("a layers field", () => {
   test("opens on its declared set, and the address stays bare there", () => {

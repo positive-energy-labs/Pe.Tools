@@ -11,7 +11,7 @@ import { familiesRouteState, familyCellKey } from "./families.ts";
 import { familyDraftRouteState } from "./family.ts";
 import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { settingsRouteState } from "./settings.ts";
-import { transitionPatches, type Rung } from "./draft.ts";
+import { cellPatches, type Rung } from "./draft.ts";
 
 const familyKey = familyCellKey({ familyName: "F", typeName: "T", parameter: "P" });
 type Route = [string, RouteStateSpec<z.ZodType>, string, string, Rung];
@@ -32,7 +32,7 @@ const stage = ([, spec, container, cell]: Route, rung: Rung) =>
     spec,
     { version: 1, revision: 0, doc: spec.schema.parse({}) } as RouteEnvelope<unknown>,
     "human",
-    transitionPatches([container], cell, {}, { kind: "set", rung }),
+    cellPatches([container], cell, {}, { kind: "set", rung }),
     0,
   );
 

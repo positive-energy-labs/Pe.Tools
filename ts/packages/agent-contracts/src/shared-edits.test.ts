@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { draftCellSchema, availableTransitions } from "./draft.ts";
+import { draftCellSchema } from "./draft.ts";
 import { applyPatches, type RouteEnvelope } from "./route-doc.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 
@@ -55,11 +55,6 @@ test("either author knowingly replaces the current edit; provenance cannot be fo
         12,
       ),
     ).toMatchObject({ ok: false, code: "stale_revision" });
-    expect(
-      availableTransitions(envelope.doc.cells.width!, {
-        lock: null,
-      }),
-    ).toContain("set");
   }
 });
 

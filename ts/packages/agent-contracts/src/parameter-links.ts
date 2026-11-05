@@ -122,7 +122,7 @@ export const parameterLinksDataSchema = z.object({
 export type ParameterLinksData = z.infer<typeof parameterLinksDataSchema>;
 
 /**
- * The Parameter Links document is one shared authored cell. Either author edits or suggests
+ * The Parameter Links document is one shared authored cell. Either author stages
  * a profile; evaluate/apply consume its current edit. Strict, so the old `{ draft }` shape
  * fails closed rather than lose its value.
  */
@@ -138,15 +138,9 @@ export const stagedParameterProfile = (work: ParameterLinksDocument): ParameterL
 
 /**
  * The exact profile an observation was taken against. Identical on the client and the server.
- * An optional suggestion preview has a distinct basis from the current edit consumed by Apply.
  */
-export const parameterLinksBasis = (
-  work: ParameterLinksDocument,
-  subject: "edit" | "suggestion" = "edit",
-): string =>
-  subject === "edit"
-    ? canonicalRouteInput(stagedParameterProfile(work))
-    : `suggestion:${canonicalRouteInput(work.profile.suggestion?.value ?? null)}`;
+export const parameterLinksBasis = (work: ParameterLinksDocument): string =>
+  canonicalRouteInput(stagedParameterProfile(work));
 
 /** A host reading, stored by the capture owner: what Revit holds and what the draft would do. */
 export const parameterLinksReadingSchema = z.object({
@@ -154,8 +148,6 @@ export const parameterLinksReadingSchema = z.object({
   workRevision: z.number().int().nonnegative(),
   /** `stored` observes Revit; `evaluation` observes the profile named by `basis`. */
   evaluated: z.boolean(),
-  /** What was evaluated: the current edit or an optional suggestion preview. */
-  subject: z.enum(["edit", "suggestion"]).default("edit"),
   stored: parameterLinkProfileSchema.nullish().default(null),
   status: parameterLinksRuntimeStatusSchema,
   evaluation: parameterLinkEvaluationSchema.nullish().default(null),
@@ -168,10 +160,9 @@ export const parameterLinksRouteState = {
   route: "parameter-links",
   title: "Parameter Links",
   description:
-    "Either author edits a model-owned parameter linkage profile, evaluates it, and reconciles it through the host. Optional suggestion previews are labelled separately from the current edit used by Apply.",
+    "Either author stages a model-owned parameter linkage profile, evaluates it, and reconciles it through the host.",
   schema: parameterLinksDocumentSchema,
-  // Evaluate and Apply consume the shared current edit; suggestions remain optional review content.
-
+  // Evaluate and Apply consume the one staged edit, whoever wrote it last.
   // Reading and applying are host ports, not route commands: an observation of Revit can
   // never be written into authored Work.
 } satisfies RouteStateSpec<typeof parameterLinksDocumentSchema>;

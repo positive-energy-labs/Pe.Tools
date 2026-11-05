@@ -309,7 +309,7 @@ description: Edit shared tool Work and apply it through the same semantic comman
 # Edit shared Work
 
 1. Discover the tool and read route:<tool> with an exact target or workspaceId. Thread targets supply defaults only.
-2. Read the revision and schema. Call route:<tool>.edit with expectedRevision and patches to edit or suggestion. A patch path is an array, such as ["cells", "<key>", "edit"]. Set {value: ...}; clear with null. Host stamps the author, time and base revision. Never patch observation, basis, readback, consent or receipts.
+2. Read the revision and schema. Call route:<tool>.edit with expectedRevision and patches to the cell's one staged edit. A patch path is an array, such as ["cells", "<key>", "edit"]. Set {value: ...}; clear with null. Host stamps the author, time and base revision. Never patch observation, basis, readback, consent or receipts.
 3. Either author may knowingly replace the current edit. A stale revision refuses; reread and submit a new explicit edit. Suggestions are optional review content, available to either author.
 4. For Families, set scope.edit with exact loaded family names before writing its cells. Keys are JSON arrays of [family, type, parameter]. The host validates those identities against Revit.
 5. Run the semantic apply/save/push/sync command yourself when the user authorized execution. Family apply accepts {source, include: "all"}, several sources, a prior preview plan id, or the reviewed Work drafts when no source is supplied. The host plans, checks freshness, applies, reads back and retires only unchanged consumed edits. Preview is optional inspection, never an actor gate.

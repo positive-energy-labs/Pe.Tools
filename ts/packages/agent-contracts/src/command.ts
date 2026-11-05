@@ -210,8 +210,7 @@ export function editableCells(
 export function workCounts(doc: unknown, paths: readonly WorkPath[]) {
   const cells = editableCells(doc, paths).map((entry) => entry.cell);
   return {
-    proposals: cells.filter((cell) => cell.suggestion != null).length,
-    unfinished: cells.filter((cell) => cell.edit != null || cell.suggestion != null).length,
+    unfinished: cells.filter((cell) => cell.edit != null).length,
   };
 }
 

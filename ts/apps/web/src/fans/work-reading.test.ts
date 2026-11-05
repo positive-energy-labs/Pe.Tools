@@ -90,7 +90,9 @@ test("the host refuses cross-route patches and the declared Work reading observe
   const after = f.fans.readingStatus("ductsWork").snapshot;
   expect(after.current && before.current && after.hash !== before.hash).toBe(true);
   expect(f.fans.work()?.revision).toBe(0);
-  expect(fanCalls()).toEqual(calls);
+  // Only readings declaring ductsWork (sheet, and sheetSnapshot through it) re-read; nothing else.
+  const reread = new Set(["fans:ducts.sheet", "fans:ducts.sheet-snapshot"]);
+  expect(fanCalls()).toEqual(calls.map(([key, n]) => [key, reread.has(key) ? n + 1 : n]));
   expect(f.fans.readingStatus("pricing").snapshot.current).toBe(false);
   f.fans.refresh("pricing");
   expect(f.fans.readingStatus("pricing").snapshot).toMatchObject({
