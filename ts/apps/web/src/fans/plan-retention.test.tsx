@@ -40,7 +40,7 @@ test("P1: rendered Fans plan retains exact evidence without copying the large MU
     },
   });
   await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
-  const key = f.fans.work()!.handle.key;
+  const key = f.fans.workBasis()!.token.scope.identity.work!;
   await f.ws.apply(
     key,
     "fans",
