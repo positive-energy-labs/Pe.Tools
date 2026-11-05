@@ -97,6 +97,71 @@ function useSheetData(
     busy: reading.status === "pending",
   };
 }
+const FAN_CELLS = ["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows"] as const;
+/**
+ * The person's explicit fan write scope (lossReady needs `writeIntent.walk`). Offered from the HOST
+ * sheet's open fan and the cells staged on elements of that sheet's snapshot; staged only on a pick,
+ * never from the Page or a plan. Another fan's standing scope is shown, not replaced on navigation.
+ */
+function WriteScope({
+  ctx,
+  snapshot,
+  fan,
+  write,
+}: {
+  ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-inputs">;
+  snapshot: DuctSnapshot;
+  fan: { unitId: number; portIndex: number; mark: string } | null;
+  write: (patches: RouteStatePatch[], history?: EditMeta) => Promise<{ code: string; message: string } | null>;
+}) {
+  const intent = ctx.work?.writeIntent ?? {};
+  const standing = intent.edit?.value;
+  const here = new Set([...snapshot.nodes, ...snapshot.segments].map((e) => String(e.id)));
+  const cells = FAN_CELLS.flatMap((segment) =>
+    Object.entries(ctx.work?.[segment] ?? {})
+      .filter(([id, cell]) => cell.edit != null && here.has(id))
+      .map(([id]) => [segment, id] as [(typeof FAN_CELLS)[number], string]),
+  );
+  const offered = fan
+    ? schemas.scope.safeParse({
+        walk: { unitId: fan.unitId, portIndex: fan.portIndex },
+        ...(cells.length ? { cells } : {}),
+      })
+    : null;
+  const mine = !!fan && standing?.walk?.unitId === fan.unitId && standing.walk.portIndex === fan.portIndex;
+  const current = mine ? "fan" : standing ? "other" : "none";
+  const label = (value: unknown) => {
+    const v = value as typeof standing;
+    if (!v?.walk) return "None";
+    return `${v.walk.unitId === fan?.unitId && v.walk.portIndex === fan?.portIndex ? fan.mark : `unit ${v.walk.unitId}`} · ${v.cells?.length ?? 0} staged`;
+  };
+  return (
+    <span data-sheet-cell="Write scope" className="flex items-baseline gap-2">
+      <span>Write scope</span>
+      <ChoiceCell
+        label="Write scope"
+        options={[
+          ...(offered?.success
+            ? [{ key: "fan", label: label(offered.data), description: "Write this fan's walk and its staged cells" }]
+            : []),
+          ...(current === "other" ? [{ key: "other", label: label(standing), description: "Another fan's scope, still standing" }] : []),
+          { key: "none", label: "None", description: "Clear the write scope" },
+        ]}
+        current={current}
+        cell={intent}
+        path={null}
+        show={label}
+        refusal={!ctx.workBasis ? "Read Work before editing" : !offered?.success ? "Open a fan first" : null}
+        pick={(key) => {
+          if (key === "fan" && offered?.success && ctx.workBasis)
+            void settleWork(ctx.verbs.scope(offered.data, ctx.workBasis));
+          if (key === "none" && intent.edit)
+            void write(cellPatches([], "writeIntent", intent, { kind: "clear" }), { label: "Clear write scope" });
+        }}
+      />
+    </span>
+  );
+}
 export function RosterBody({
   ctx,
 }: {
@@ -213,12 +278,12 @@ function InputsContent({
       void ctx.history?.undo(press);
     },
   };
-  const search = useRouteSearchSlice((search) => search);
   const fanReading = fans.value;
   const friction = ctx.work?.designFriction ?? {};
   const ownPane = (
     <>
       <section aria-label="Fan settings" className="flex flex-col gap-2 p-1">
+        <WriteScope ctx={ctx} snapshot={snapshot} fan={sheet?.overview.fan ?? null} write={write} />
         <span
           data-sheet-cell="Design friction"
           aria-label="Design friction"
@@ -343,7 +408,6 @@ function InputsContent({
           })}
       </section>
       <InputsSurface
-        ductsHref={(destination) => ductsLink(sheetSystems(snapshot), search, destination)}
         ctx={{
           snapshot,
           doc: workDoc,
