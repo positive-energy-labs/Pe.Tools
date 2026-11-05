@@ -264,7 +264,19 @@ test("runtime projections replace stale disk content without writing it", async 
   expect(readFileSync(id, "utf8")).toBe(before);
 });
 
-test("dev startup and HMR select memory projections; build checks committed pins", async () => {
+test("drift refusal stops dev startup before serving a projection", async () => {
+  const before = readFileSync(id, "utf8");
+  const plugin = routeModuleHash(async () => {
+    throw Error("Generated route artifacts drifted");
+  });
+  (plugin.configResolved as Function)({ command: "serve", mode: "development" });
+  await expect((plugin.buildStart as Function).call({ addWatchFile: vi.fn() })).rejects.toThrow(
+    "Generated route artifacts drifted",
+  );
+  expect(readFileSync(id, "utf8")).toBe(before);
+});
+
+test("dev startup and HMR select validation; tests select memory projections", async () => {
   const generate = vi.fn(async (_mode: "dev" | "build" | "test") => ({}));
   for (const [command, mode, expected] of [
     ["serve", "development", "dev"],
