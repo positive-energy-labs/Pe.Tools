@@ -46,11 +46,11 @@ Progress 2026-11-05: steps 0–5 landed on main at the Driver's exact GREEN SHA 
 
 kaitpw, 2026-11-05: the Driver uses a real PDF and real cells on `/family`; no mock witness counts. Preserve the doc-lab flow ([ledger](LEDGER.md#decided)); source census: `purge/step-0/DOCLAB-CENSUS.md` at `23867de7`.
 
-1. Pea proposes a value with a citation to a page, block or image region; hovering the citation lights that evidence.
-2. Pin keeps the proposed value and citation through review.
+1. Pea stages a cited value as a Pea StateCell inside the Reject window, with a citation to a page, block or image region; hovering the citation lights that evidence.
+2. Pin keeps the staged value and citation through review.
 3. `attach_spec` accepts a path, a URL and an upload.
 4. A saved member reopens without reparsing the PDF.
-5. Accept and Reject sit beside the highlighted evidence and act on the proposed value.
+5. Beside the highlighted evidence, the person keeps or reverts that same StateCell; there is no separate Accept/Reject lane (ADR 0030 rule 8).
 
 Kit has one owner thread per wave; route threads add red `kernel gap:` tests, never local kit patches. Merge main daily.
 
