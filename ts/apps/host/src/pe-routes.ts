@@ -38,7 +38,6 @@ import {
   routeViewOpenSchema,
   routeViewSetSchema,
   routeViewSchema,
-  routeViewRoutes,
   readingKey,
   recentRows,
   START_FRESH,
@@ -677,12 +676,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
       });
     }
 
-    // One channel for every route that leases a view (`routeViewRoutes`); the route is a path segment.
-    if (
-      parts[0] === "route-view" &&
-      parts[1] &&
-      (routeViewRoutes as readonly string[]).includes(parts[1])
-    ) {
+    // One channel for every route that leases a view (`leasesView`): builtin or registered opt-in.
+    if (parts[0] === "route-view" && parts[1] && views.leasesView(parts[1])) {
       const route = parts[1];
       const instance = parts[2];
       if (method === "POST" && instance === "open") {
@@ -694,7 +689,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
             { ok: false, error: "A Pea context may only open a tool for its own conversation" },
             403,
           );
-        const result = views.open(route as Parameters<typeof views.open>[0], parsed.data);
+        const result = views.open(route, parsed.data);
         return json(result, result.ok ? 200 : 400);
       }
       if (method === "PUT" && !instance) {

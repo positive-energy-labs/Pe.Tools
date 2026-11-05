@@ -70,7 +70,7 @@ export function useRouteLease<R extends RouteViewRoute, P extends object>(
   });
 }
 
-export function useRouteViewBridge<R extends RouteViewRoute>({
+export function useRouteViewBridge({
   route,
   thread: explicitThread,
   surface,
@@ -80,8 +80,11 @@ export function useRouteViewBridge<R extends RouteViewRoute>({
   context,
   facts,
   codec,
-}: {
-  route: R;
+}: (
+  | { route: RouteViewRoute; codec?: ViewCodec }
+  /** A registered route leases with its owner codec; the host checks it is registered and opted in. */
+  | { route: string; codec: ViewCodec }
+) & {
   thread?: string;
   surface: "chat" | "route";
   /** False while the route shows nothing Pea could address (no thread, hidden, or a stage with no view). */
@@ -94,7 +97,6 @@ export function useRouteViewBridge<R extends RouteViewRoute>({
   context: Record<string, unknown>;
   /** What the shown Page derives; the ack echoes it. */
   facts: Record<string, unknown>;
-  codec?: ViewCodec;
 }) {
   const addressedThread = useRouteSearchSlice((search) => search.thread);
   const thread = explicitThread ?? (surface === "route" ? addressedThread : undefined);
@@ -119,8 +121,8 @@ export function useRouteViewBridge<R extends RouteViewRoute>({
     changed();
     return () => document.removeEventListener("visibilitychange", changed);
   }, []);
-  // A generic R defers the address's lease type, so the lease is taken over every leasing route.
-  const lease: ViewCodec = codec ?? routeAddress<RouteViewRoute>(route).agent;
+  // No codec means the builtin branch: only a `RouteViewRoute` may omit one.
+  const lease: ViewCodec = codec ?? routeAddress(route as RouteViewRoute).agent;
   // The explicit Pea open this rendered Place answers (page-local history, set by the Places'
   // route-view-open listener); MCP waits for its own id, so an older lease never satisfies it.
   // Read at render: the navigation that sets it re-renders this route; a chat pane has no router.
@@ -252,10 +254,10 @@ export function useRouteViewBridge<R extends RouteViewRoute>({
           .catch((cause) =>
             reportFault({ code: "host.failed", routeCode: route, streamKind: "view.ack" }, cause),
           );
-      let patch: Partial<RoutePage<R>>;
+      let patch: object;
       try {
         // `value` is the view this hook published, so its codec is this lease's.
-        patch = lease.read(event.patch) as Partial<RoutePage<R>>;
+        patch = lease.read(event.patch);
       } catch (cause) {
         return refused(refuse("failed", causeRefusal(cause).message));
       }

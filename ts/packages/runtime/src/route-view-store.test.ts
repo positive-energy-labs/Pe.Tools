@@ -51,6 +51,29 @@ describe("mounted route view custody", () => {
     expect(patch).toEqual({ fan: text });
   });
 
+  it("leases only a builtin agent address or a registered opt-in Pod, through the owner codec", async () => {
+    const pod = { fan: { role: "subject", agent: "set" } } as never;
+    const silent = { fan: { role: "subject", agent: "none" } } as never;
+    const registered = new Map<string, never>([["acme-fans", pod], ["acme-quiet", silent]]);
+    const store = new RouteViewStore((route) => registered.get(route) ?? null);
+    expect(store.leasesView("families")).toBe(true);
+    expect(store.leasesView("acme-unregistered")).toBe(false);
+    expect(store.leasesView("acme-quiet")).toBe(false);
+    expect(store.leasesView("acme-fans")).toBe(true);
+    expect(store.open("acme-fans", { thread: "t", link: "/tool/acme-fans" }).ok).toBe(false);
+    const lease = store.publish({ ...ducts(id1), route: "acme-fans", page: { fan: "" } });
+    let intent: { commandId: string; patch: unknown } | undefined;
+    store.subscribe((value) => {
+      if (value.type === "route-view-intent") intent = value;
+    });
+    const text = JSON.stringify({ kind: "ids", ids: [7] });
+    const result = store.set("t", "acme-fans", id1, lease.revision, { fan: text });
+    expect(intent?.patch).toEqual({ fan: text });
+    store.publish({ ...ducts(id1), route: "acme-fans", page: { fan: text } });
+    store.ack({ outcome: "rendered", instance: id1, commandId: intent!.commandId, revision: lease.revision, page: { fan: text }, facts: ducts(id1).facts });
+    expect(await result).toMatchObject({ ok: true });
+  });
+
   it("refuses ambiguity and only acknowledges the rendered patch on the exact context", async () => {
     const store = new RouteViewStore();
     const first = store.publish(view(id1));

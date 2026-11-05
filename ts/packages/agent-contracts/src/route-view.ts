@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { routeViewRoutes } from "./route-address.ts";
+import { routeViewRoutes, type RouteViewRoute } from "./route-address.ts";
 import type { RouteGraphJson } from "./route-kernel-data.ts";
 
 /**
@@ -22,9 +22,24 @@ export const agentFields = (fields: AdmittedFields, policy?: "read" | "set") =>
     ([, field]) => "agent" in field && field.agent !== "none" && (!policy || field.agent === policy),
   );
 
-/** Browser-owned Page state of one mounted, visible view. `page` holds exactly the agent keys. */
+/** A builtin address that declares an `agent` lease, or null. */
+export const legacyViewRoute = (route: string): RouteViewRoute | null =>
+  routeViewRoutes.find((key) => key === route) ?? null;
+/**
+ * The one route-view identity authority (ADR 0030 rule 10): a builtin address with an `agent`
+ * lease, or a registered admission (`admitted` is its live receipt's fields) that opts a field in.
+ * An unregistered key, and a registered Pod whose fields are all agent "none", lease nothing.
+ */
+export const leasesView = (route: string, admitted: AdmittedFields | null) =>
+  (admitted !== null && agentFields(admitted).length > 0) || legacyViewRoute(route) !== null;
+
+/**
+ * Browser-owned Page state of one mounted, visible view. `page` holds exactly the agent keys.
+ * `route` is a registered key, so its shape is checked here and its identity by `leasesView` at the
+ * one store that leases it; a builtin-only enum would refuse every registered Pod.
+ */
 export const routeViewSchema = z.strictObject({
-  route: z.enum(routeViewRoutes),
+  route: z.string().min(1).max(128),
   thread: z.string().min(1),
   instance: z.uuid(),
   /** The explicit open command this browser rendered; absent for ordinary human navigation. */
