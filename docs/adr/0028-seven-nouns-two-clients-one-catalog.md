@@ -1,6 +1,6 @@
 # 0028: Seven nouns; Pea and the web are two clients of one catalog
 
-Date: 2026-11-02. Status: accepted. Source: kaitpw ("agreed on all! and especially 34, cant emphasize that enough"), after the catalog muse, an adversarial review and two big-picture critics (`.artifacts/tmp/unification-2/`). Completes [ADR 0027](0027-one-route-one-subject-one-consent.md) with the technical end state of unification wave 2. Frontier and cutover: [routes MAP](../features/routes/MAP.md).
+Date: 2026-11-02. Status: accepted; items 3 (Page), 4 (Work) and 6 (Timeline) and the seal-at-preview sentence are amended by [ADR 0030](0030-pea-first-goal-core-plan-statecell.md); the `?at=` Owed is taken up by [ADR 0031](0031-recording-at-host-input-services-history-in-the-shell.md). Source: kaitpw ("agreed on all! and especially 34, cant emphasize that enough"), after the catalog muse, an adversarial review and two big-picture critics (`.artifacts/tmp/unification-2/`). Completes [ADR 0027](0027-one-route-one-subject-one-consent.md) with the technical end state of unification wave 2. Frontier and cutover: [routes MAP](../features/routes/MAP.md).
 
 ## Context
 
@@ -27,5 +27,5 @@ Route splits (ADR 0027 rule 1): `/ducts` and `/fans`; `/open` and session admini
 ## Consequences
 
 - Rejected: generating UI or domain logic from the catalog (schemas carry no subject meaning or geometry trust); one mutable universal route object; Pea and the web as literally one client (Pea has no camera or hover; it uses the lease).
-- The `?at=` snapshot feature stays Owed; its groundwork (content-hashed readings, Timeline references) is in this wave.
+- The `?at=` snapshot feature stays Owed; its groundwork (content-hashed readings, Timeline references) is in this wave. ADR 0031 owns its shape and step order.
 - The cutover order, ratchets and proof bar are in the routes MAP; ADR 0027 rule 15 governs process.

@@ -1,6 +1,6 @@
 # One route shell: the manifest is the graph
 
-Date: 2026-10-29. Status: accepted; amended by [ADR 0027](0027-one-route-one-subject-one-consent.md): one subject per route, `pick: false` and review `required` deleted, Pea's Work edits are undo steps. kaitpw ruled "yes to all 9" on the contact sheet of this thread (f3440d56). Evidence lineage: `.artifacts/runs/shell-census-20261029/` (six census lines) and `.artifacts/runs/shell-muse-20261029/` (ten muse lines, five cross-examiners); the sheet is `SHEET.md` there. All claims are source-read, not run.
+Date: 2026-10-29. Status: accepted; amended by [ADR 0027](0027-one-route-one-subject-one-consent.md): one subject per route, `pick: false` and review `required` deleted, Pea's Work edits are undo steps; and by [ADR 0030](0030-pea-first-goal-core-plan-statecell.md): the Timeline is a projection, and Pea reaches a Page through attention and Pointers, not through a lease on every page. kaitpw ruled "yes to all 9" on the contact sheet of this thread (f3440d56). Evidence lineage: `.artifacts/runs/shell-census-20261029/` (six census lines) and `.artifacts/runs/shell-muse-20261029/` (ten muse lines, five cross-examiners); the sheet is `SHEET.md` there. All claims are source-read, not run.
 
 ## Context
 

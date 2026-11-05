@@ -1,6 +1,6 @@
 # 0027: One route, one subject; one consent
 
-Date: 2026-11-02. Status: accepted. Source: kaitpw, grill rounds 1 and 2 in the route-kernel thread (c0340432), after the `/ducts` real-use drive and four reviews (`.artifacts/tmp/unification-2/`). Amends [ADR 0026](0026-one-route-shell.md). Supersedes the per-turn consent of [ADR 0024](0024-root-run-consent-and-shared-work.md) and the access switch of [ADR 0021](0021-one-access-switch-and-document-targets.md).
+Date: 2026-11-02. Status: accepted. Source: kaitpw, grill rounds 1 and 2 in the route-kernel thread (c0340432), after the `/ducts` real-use drive and four reviews (`.artifacts/tmp/unification-2/`). Amends [ADR 0026](0026-one-route-shell.md). Rule 10 is amended by [ADR 0030](0030-pea-first-goal-core-plan-statecell.md): a write shows its plan, and a rehearsal in Revit is optional. Supersedes the per-turn consent of [ADR 0024](0024-root-run-consent-and-shared-work.md) and the access switch of [ADR 0021](0021-one-access-switch-and-document-targets.md).
 
 ## Context
 

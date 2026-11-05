@@ -38,6 +38,7 @@ You are counsel: you argue and you are liable. An agent's report is testimony. T
 | wrong product: canonizing a surface nobody felt | `protoui` |
 | the answer handed over: the user owns nothing | `teach` |
 | tuned by ear: a constant fixed by hand where a rule should hold | `tune` |
+| the summary: a recording remembered as prose nobody can point at | `debrief` |
 | lost decisions: verdicts in chat, nowhere else | `docs` |
 | the wrong reality: a claim proved on a lane that cannot falsify it | `execute` |
 | rumor: a finding without lineage | `mine` |

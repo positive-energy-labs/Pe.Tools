@@ -58,3 +58,55 @@ _Avoid_: margin, panel
 **Page log**:
 The one event log at the bottom of a route; every route event is a row and a row opens its receipt.
 _Avoid_: activity, details
+
+## Core and writes (ADR 0030)
+
+**Goal**:
+The output of a route's core: the unresolved closers, the assumed closers, `next`, the inputs as StateCells, and a result that is complete or a greyed estimate with sources. Pea and the UI read the same Goal.
+_Avoid_: readiness, assessment, obligations
+
+**Closer**:
+One unresolved item in a Goal, with its kind and its resolver (person, Pea or op).
+_Avoid_: blocker (the old sheet word), todo
+
+**StateCell**:
+The one drawing of a value Pea can touch: current value, model value struck, pending author, drift, freshness, source. Pea stages into it; last writer wins; undo restores.
+_Avoid_: suggestion, proposal, input (for the drawing)
+
+**Plan**:
+A Read with an empty footprint that derives a write's request from Work and returns its seal. Every ModelWrite binds one.
+_Avoid_: preview (that is a rehearsal), dry run
+
+**Rehearse**:
+An optional TransactRead that runs the write inside Revit and rolls back. It alone earns "checked in Revit". It refuses when it would borrow elements.
+_Avoid_: preview with no transaction, validate
+
+**Seal**:
+What a plan returns and apply rechecks: request hash, consumed Work handles and revisions, document mark, dependency hash.
+_Avoid_: ticket, token
+
+**Pointer**:
+An entry in the shell's per-thread "Pea is pointing at" list. It highlights and never selects or moves the camera; it stays until dismissed.
+_Avoid_: annotation, claim
+
+**Attention**:
+What Pea knows of a person's open work, published as a read projection by routes that declare an agent block. Not a lease.
+_Avoid_: lease, control
+
+## Recording (ADR 0031)
+
+**Taking**:
+One consumed input recorded at the host's input services: content hash, time, coverage and an outcome kind (answered, refused, unknown). Repeated identical reads are distinct takings.
+_Avoid_: observation (that is the stored bytes), sample
+
+**Epoch**:
+A named point per document (after write, synced, captured) over a range of takings and the bindings that say what each pane showed.
+_Avoid_: snapshot (ADR 0028's reference triple), frame, version
+
+**Recording**:
+A bundle of takings and observations that answers the host's input services in place of Revit. Users read it; only a developer build edits on it; a plan runs and rehearse and apply refuse.
+_Avoid_: fixture (hand-authored seeds), cassette, replay (the act)
+
+**History rail**:
+The shell's list of named points for the open document. A route writes nothing for it.
+_Avoid_: history pane (per route), timeline (the projection it derives from)

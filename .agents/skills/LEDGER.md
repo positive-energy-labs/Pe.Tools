@@ -26,6 +26,19 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ### Additions
 
+- 2026-11-03, `slot.debrief` added after the Revit Development Meetup debrief, at kaitpw's request: "Ive never had it go this smoothly… the real differentiator was the thoroughness." What carried it:
+  - custody of the raw record (transcript verified per line, 1 fps timestamped frames, contact sheets);
+  - six segment agents with 2–5 stills per on-screen moment;
+  - machine records aligned to the video clock from four anchors;
+  - model elements resolved to ids from snapshots and one controlled read;
+  - a full-transcript expert-rules pass;
+  - user corrections appended and relayed at once;
+  - judging against the pending branch;
+  - a rulings sheet, concise in prose and dense in images and links.
+  The polish the user wanted skipped next time is in `artifacts.md`. Cold-reader test not run.
+  - 2026-11-04, first field run (pdrop training brainstorm, Codex). The custody, Drive corroboration and expert passes held. The output did not: prose was dense with hedges, text was corrupted (dropped spaces before numbers, curly quotes as `?`), stills were grid-sampled with template captions, zooms left the cited values unreadable, and options only said "be careful". Fixes: hedges confined to Provenance, a text lint in the merge, still and zoom rules in the brief, a test that every option changes something, and expert questions moved out of the rulings. Two corrections from kaitpw: judging against code runs only when the meeting gave product feedback ("it was of a different nature"), and a product-number replay is wanted but runs deterministic by default, because browser, server or Revit replays need the user's go ("revits r not cheap… collision possiblitiy with ongoiing dev work").
+  - 2026-11-04, generalized to two modes after a Codex run on three Autodesk University classes that never triggered the skill. The research was sound: all resources downloaded, the Dynamo sample read, the official API found, and a WHY-NOT-REVIT claim caught. The output had no images, and the stance was defensive: it listed the 2024 handout's sizing dialog (pp. 8–9), System Inspector and balancing (pp. 14–20) and the conditional schedules (pp. 25–30), then closed each as "deferred", "owed" or "out of scope". kaitpw called those pages gems "i had never seen before" and said the run "wasnt speculative enough". Added: talk mode with a scout stance (ideas tagged IDEA, never closed for being owed), every page rendered and read, a NEW/KNOWN/OWED/CONTRADICTS-US/IDEA harvest, `watch-or-skip.md`, and new triggers. `prevents` now reads "recording".
+
 - 2026-10-10, `pass.release` governs every release through final artifact identity, the prior consumer's upgrade path and independently verified outcomes. It delegates commands to `execute` and evidence standards to `prove`; publication alone is not completion.
 
 - 2026-10-04, `loop.tune` added after the TC perf round (Tuner with the fork; prevents "tuned by ear"). It owns the measure, census, rule, purge, re-measure loop; the browser-measurement mechanics went to `execute` and the sequence-by-collision law to `delegate`. The round's evidence: three measurement passes lost to throttling, reloads and CLI-per-call before one counted; every guessed constant was wrong within the hour and every rule held.

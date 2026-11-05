@@ -11,6 +11,9 @@ restated here.
 
 ## Decided
 
+- 2026-11-04, kaitpw: agent workflows are trialed on real work, never on a charter-scripted demo; the kernel crusade runs on the amended `delegate` and `execute` laws as the hypothesis, compared afterward on coordination share of messages, launch-to-first-proof time, hand-ferried commits, root-main custody incidents and leftover worktrees. Evidence: `.artifacts/runs/retro-20261104-testing-pilot/REPORT.md`.
+- 2026-11-04, kaitpw: the one testing law is that test support never implements a second copy of production semantics, while expected outcomes and hostile inputs stay independently authored. Mechanisms to delete on sight: simulated transports, fixtures tracking private representation, a separate admission/seed world, validation that writes tracked artifacts, guards that trust their own baseline. Source: `.artifacts/runs/retro-20261104-agent-time/REPORT.md`.
+
 - 2026-10-27, kaitpw accepted excluding short-ID levels because "modeled elements are far more important": infer prose references only from at least five consecutive digits, and leave comma-formatted numbers plain. Tool snapshots do not limit eligible IDs; structured references retain short IDs. The Chadds census found 55 of 348,990 elements below five digits, including two levels and no family instances.
 
 - 2026-10-27, fresh adversarial Fable approved source `4f3b0d24` after rejecting `7e2ce31a`: one runtime-bound registry and Work owner, engine-owned selection/freshness/dispatch/settlement, and domain-only command entries replace the old parallel lifecycle paths. Six independent falsifier cases and 169 focused assertions passed; root independently reran 24 dispatch/dependency/consent assertions. Growth is +1,312 production lines including relocated current decoding, with +87 historical lines; approval rests on removed caller knowledge, not a net-negative LOC claim. Full verify retains inherited failures; native and installed limits below remain.
@@ -139,6 +142,8 @@ restated here.
 
 ## Tried & rejected
 
+- 2026-11-04, a charter-scripted workflow trial (fixed peers, thread cap, prescribed message protocol, a "blind" control the reviewer could see, one heavy-execution slot granted by the pillar): it measured obedience, not the workflow; 121 of 171 pillar messages negotiated a slot, and the owner revoked the shape twice. Retro: `.artifacts/runs/retro-20261104-testing-pilot/REPORT.md`.
+
 - 2026-10-26, run-consent shapes rejected in the Astra/Fable workshop: a mandate record `{birth, scope, until}` beside the turn (three owners for one fact); a second command kernel with its own submit, observe and cancel (it duplicates `ActionJournal.admit`); a two-slot cell with an actor rule (it recreates the permission ladder; base-revision concurrency serves both authors); `reads = dirties.length === 0` (cache invalidation is not effect policy; use explicit `effect`); a hold after prepare to name the footprint (it reopens a freshness gap; `footprintOf` at submit); `t.running` at submit as run identity (not causal for persistent children; use a run token captured at MCP tool entry); Pea-specific CLI run inheritance through env (a persistent process cannot receive a per-turn env).
 - 2026-10-22, opening a tool by proposing and then withdrawing a proposal: it writes two Work revisions and a false "Pea proposed 1 change" record, and it races the person's staging.
 - 2026-10-22, one generic `ui:open {tool, fields}` row: it is a second path beside `route:<tool>.set-view` for the same change, and one capability gets one path.
@@ -181,6 +186,8 @@ restated here.
 
 ## Owed
 
+- Before the kernel crusade launches: pins and root-main fast-forwards belong to one named integrator only; audit how the wave-3 UI worker committed bb62d577 on root main despite an isolated-checkout binding (2026-11-04, `.artifacts/runs/retro-20261104-testing-pilot/REPORT.md`).
+- Make `pnpm verify` green at its owning seams (336 formatting findings, 12 repo-guard failures at 8c3d6158) before the kernel crusade, so green means green; not by bulk-formatting (2026-11-04).
 - Remove the unregistered INT scratch directory `C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-12242741/.artifacts/tmp/int/kdedupe-baseline-4f23`. Its detached 4f23c1e2 baseline proof is complete and its worktree registration is removed; files remain after git removal reported Directory not empty. Automatic approval review blocked the verified-path native PowerShell cleanup (blocked by policy); no alternate deletion was attempted. Evidence: `.artifacts/tmp/int/kdedupe/scratch-cleanup.log` and `KDEDUPE-INTEGRATION.md`. (INT, 2026-11-03)
 - Direction (kaitpw, 2026-11-03): kaitpw wants a first-class, easy-to-understand way to point the app at a different home root, so tests can hide existing Pods, expose only some, or try new skills. PE_TOOLS_PRODUCT_HOME is the existing seam (env-only, not user-facing). Design later; ISOFIX-R must keep that seam clean and unchanged.
 - Pea has not walked heal, airflow or assign-fan live from a vague prompt; the skill steps are written, the `pea --prompt` probe is not run. The two probe prompts: "does Project A have any runs ready to run a pressure drop on?" and "how bad is sa 19 … i think its fc-23" (a deliberate system mismatch Pea should notice and ask about). (moved from the ducts ledger 2026-11-03, CONVERGENCE (h): an honest gap owned by Pea, not reopened by the meeting.)
