@@ -1,6 +1,10 @@
 import { Spawner } from "./harness/spawner.ts";
 import { currentMachine } from "./machine.ts";
-import { sdkSession } from "./sdk-session.ts";
+import { SdkSession, SdkDriverLive } from "./sdk-session.ts";
+import { ReadFreshness, RequestIdentity } from "./request-services.ts";
+import { NativeReads } from "./native-reads.ts";
+import { HostNativeRead } from "@pe/host-internal/native-read";
+import { HostNativeReadLive } from "./native-read.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
 import { createDevices, type Devices } from "./remote-device.ts";
 import { deviceRoutes } from "./device-routes.ts";
@@ -68,22 +72,23 @@ const bridgeWsRoute = HttpRouter.add("GET", BRIDGE_PATH, (req) =>
 // Live settings authoring schema, straight from the connected session. This is
 // the $schema URL settings documents carry — IDE JSON LSPs fetch it on open.
 // Never persisted: value-domain samples inside are derived from the open document.
-const settingsSchemaRoute = HttpRouter.add("GET", "/schemas/settings/*", (req) =>
+export const settingsSchemaRoute = HttpRouter.add("GET", "/schemas/settings/*", (req) =>
   Effect.gen(function* () {
-    const bridge = yield* RevitBridge;
+    const identity = yield* RequestIdentity;
     const schemaUrl = new URL(req.url, `http://${req.headers.host ?? "127.0.0.1"}`).href;
     if (!isSettingsSchemaUrl(schemaUrl))
       return Response.jsonUnsafe({ error: `No schema at ${schemaUrl}` }, { status: 404 });
     const result = yield* Effect.result(
-      bridge.invoke("settings.schema", { schemaUrl }, (yield* sdkSession(bridge)).sessionId),
+      (yield* HostNativeRead).read({ key: "settings.schema", input: { schemaUrl }, scope: identity.scope }),
     );
     if (result._tag === "Failure")
       return Response.jsonUnsafe(
         { error: String(result.failure.message ?? result.failure) },
-        { status: 503 },
+        { status: result.failure.status },
       );
-    const schemaJson = (result.success.value as { schemaJson?: string } | null)?.schemaJson;
-    if (!schemaJson)
+    const value = result.success.value;
+    const schemaJson = value && typeof value === "object" && !Array.isArray(value) ? value.schemaJson : undefined;
+    if (typeof schemaJson !== "string" || !schemaJson)
       return Response.jsonUnsafe({ error: `No schema at ${schemaUrl}` }, { status: 404 });
     return Response.text(schemaJson, {
       headers: { "content-type": "application/json", "cache-control": "no-cache" },
@@ -164,6 +169,18 @@ function makeRevitComposition(
     ),
   };
 }
+
+/** Build once outside sibling routes, then expose that exact context to each request. */
+export const nativeReadRoot = (driver = SdkDriverLive) => <A, E, R>(routes: Layer.Layer<A, E, R>) =>
+  Layer.unwrap(Effect.gen(function* () {
+    const reads = yield* Layer.build(HostNativeReadLive.pipe(
+      Layer.provideMerge(Layer.mergeAll(
+        SdkSession.layer.pipe(Layer.provide(driver)), ReadFreshness.layer, NativeReads.layer,
+      )),
+    ));
+    const provided = Layer.succeedContext(reads);
+    return routes.pipe(HttpRouter.provideRequest(provided), Layer.provide(provided));
+  }));
 
 export interface HttpLiveOptions {
   /** Preferred listen port (0 = ephemeral, used by the boundary test). */
@@ -348,7 +365,9 @@ export function makeHttpLive(options: HttpLiveOptions) {
   return ServiceFileLive.pipe(
     Layer.provideMerge(
       HttpRouter.serve(
-        Layer.mergeAll(composition.routes, CommonAppLive).pipe(Layer.provide(identity)),
+        Layer.mergeAll(composition.routes, CommonAppLive).pipe(
+          Layer.provide(identity), nativeReadRoot(),
+        ),
       ).pipe(Layer.provideMerge(ServerLive)),
     ),
     Layer.provide(NodeHttpClient.layerUndici),

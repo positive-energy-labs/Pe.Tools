@@ -1,5 +1,4 @@
-import type { SdkReceiptReader } from "./native-receipts.ts";
-import { readSessionScope, sdkSession } from "./sdk-session.ts";
+import { readSessionScope, SdkSession } from "./sdk-session.ts";
 import { Effect } from "effect";
 import {
   HttpRouter,
@@ -11,7 +10,9 @@ import {
   isTsOnlyOperationKey,
   tsOnlyOperationCatalog,
 } from "@pe/host-contracts/operation-types";
-import { NoRevitSession, RevitBridge } from "./bridge.ts";
+import { RevitBridge } from "./bridge.ts";
+import { NoRevitSession } from "@pe/host-internal/dispatch";
+import { HostNativeRead } from "@pe/host-internal/native-read";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 // A selected bridge supplies its current catalog. Without one, C#-generated metadata keeps the
 // vocabulary discoverable; bridgeCatalogError reports availability, never permission to execute.
@@ -22,11 +23,10 @@ export type SpaFallback = (
 export const isNavigation = (req: HttpServerRequest.HttpServerRequest) =>
   (req.headers.accept ?? "").includes("text/html");
 
-export const opsCatalogRoute = (spa: SpaFallback, sdk?: SdkReceiptReader) =>
+export const opsCatalogRoute = (spa: SpaFallback) =>
   HttpRouter.add("GET", "/ops", (req) =>
     Effect.gen(function* () {
       if (isNavigation(req)) return yield* spa(req);
-      const bridge = yield* RevitBridge;
       const sessionParam =
         new URL(req.url, "http://localhost").searchParams.get("session") ?? undefined;
       const sessionHeader = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim() || undefined;
@@ -38,20 +38,15 @@ export const opsCatalogRoute = (spa: SpaFallback, sdk?: SdkReceiptReader) =>
       const result = yield* Effect.result(
         Effect.gen(function* () {
           const scope = yield* Effect.try(() => readSessionScope(req.headers));
-          if (
-            !scope.session &&
-            !scope.bridgeSessionId &&
-            !scope.openDocumentId &&
-            !sessionParam &&
-            (yield* bridge.list).length === 0
-          )
+          // Attachment observation is an input-owner read, not native content dispatch.
+          if (!scope.session && !scope.bridgeSessionId && !scope.openDocumentId && !sessionParam &&
+              (yield* (yield* RevitBridge).list).length === 0)
             return yield* Effect.fail(new NoRevitSession());
-          const session = yield* sdkSession(
-            bridge,
-            { ...scope, bridgeSessionId: sessionHeader ?? sessionParam },
-            sdk,
-          );
-          const result = yield* bridge.invoke("host.ops.catalog", {}, session.sessionId, null);
+          const selected = { ...scope, bridgeSessionId: sessionHeader ?? sessionParam };
+          const session = yield* (yield* SdkSession).resolve(selected);
+          const result = yield* (yield* HostNativeRead).read({
+            key: "host.ops.catalog", input: {}, scope: { ...selected, bridgeSessionId: session.sessionId },
+          });
           return { ...result, sessionId: session.sessionId };
         }),
       );
@@ -78,7 +73,7 @@ export const opsCatalogRoute = (spa: SpaFallback, sdk?: SdkReceiptReader) =>
         body.constants = (result.success.value as { constants?: unknown }).constants;
       if (result._tag === "Failure") {
         body.bridgeCatalogError = String(result.failure.message ?? result.failure);
-        if ("evidence" in result.failure) body.sdk = result.failure.evidence.result;
+        if ("evidence" in result.failure) body.sdk = result.failure.evidence?.result;
       }
       return Response.jsonUnsafe(body);
     }),

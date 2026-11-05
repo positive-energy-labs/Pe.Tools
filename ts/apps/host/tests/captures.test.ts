@@ -1,3 +1,5 @@
+import { SdkDriver } from "../src/sdk-session.ts";
+import { nativeReadRoot } from "../src/app.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { invocationContext } from "@pe/runtime/context";
 import { readSessionScope } from "../src/sdk-session.ts";
@@ -109,9 +111,9 @@ async function host(
     Layer.mergeAll(
       makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, {
           sdk: sdkSessions,
-      }, { sdkDriver: (args) => Effect.promise(() => sdkSessions(args)) }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(Layer.succeed(PictureCaptureStore, store)), Layer.provide(HostDocumentMarks.layer)),
+      }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(Layer.succeed(PictureCaptureStore, store)), Layer.provide(HostDocumentMarks.layer)),
       capturesRoute(spa),
-    ).pipe(
+    ).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args))))).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
           Layer.succeed(RevitBridge, bridge),

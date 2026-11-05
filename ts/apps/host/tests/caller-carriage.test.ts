@@ -1,3 +1,4 @@
+import { SdkDriver } from "../src/sdk-session.ts";
 import { acknowledgedReadBridge } from "./effect-test.ts";
 import { testHostInputs } from "./effect-test.ts";
 import { pictureCaptures } from "./effect-test.ts";
@@ -273,7 +274,7 @@ test("/call attributes a view-image capture to the caller it was carried by", as
   const server = await serveRoutes(
     makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, {
       sdk: sdkSessions,
-    }, { sdkDriver: (args) => Effect.promise(() => sdkSessions(args)) }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(Layer.succeed(PictureCaptureStore, store)), Layer.provide(HostDocumentMarks.layer)),
+    }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(Layer.succeed(PictureCaptureStore, store)), Layer.provide(HostDocumentMarks.layer)),
     bridgeA((key) =>
       key === "host.ops.catalog"
         ? {
@@ -293,6 +294,7 @@ test("/call attributes a view-image capture to the caller it was carried by", as
             target: { session: "bridge-a", document: "C:/HVAC.rvt" },
           },
     ),
+    Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args))),
   );
   try {
     for (const caller of [

@@ -1,3 +1,6 @@
+import { opsCatalogRoute } from "../src/ops-catalog.ts";
+import { SdkDriver } from "../src/sdk-session.ts";
+import { nativeReadRoot, settingsSchemaRoute } from "../src/app.ts";
 import { testHostInputs } from "./effect-test.ts";
 import { Context, Deferred, Effect, Fiber, Layer, Schema } from "effect";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
@@ -215,18 +218,31 @@ effectTest(
           };
         },
       } as unknown as ActionJournal;
+      let activeOpen = "open-a";
+      let processStart = 1000;
+      let connected = true;
+      let sdkCalls = 0;
+      let sharedReads: NativeReads["Service"] | undefined;
+      const jobs: { id: string; openId: string; start: number; answer: Deferred.Deferred<NativeAnswer<unknown, "unavailable">, DoorFailure>; terminal: Deferred.Deferred<NativeOutcome> }[] = [];
       const bridge = detachedBridge({
-        list: Effect.succeed([
+        invokeHandle: (_key, _input, _session, openId, id) => Effect.gen(function* () {
+          const job = { id: id!, openId: openId!, start: processStart,
+            answer: yield* Deferred.make<NativeAnswer<unknown, "unavailable">, DoorFailure>(),
+            terminal: yield* Deferred.make<NativeOutcome>() };
+          jobs.push(job);
+          return { answer: Deferred.await(job.answer), terminal: Deferred.await(job.terminal) };
+        }),
+        list: Effect.sync(() => connected ? [
           sessionView({
             ...hostOwnership,
             connected: true,
             sessionId: "session",
             processId: process.pid,
-            processStartUtcUnixMs: 1000,
+            processStartUtcUnixMs: processStart,
             state: {
               openDocuments: [
                 {
-                  openId: "open-a",
+                  openId: activeOpen,
                   isActive: true,
                   isFamilyDocument: false,
                   title: "Model",
@@ -235,10 +251,11 @@ effectTest(
               ],
             },
           }),
-        ]),
+        ] : []),
       });
-      const sdkDriver = () =>
-        Effect.succeed(
+      const sdkDriver = () => {
+        sdkCalls++;
+        return Effect.succeed(
           replay("doc-list", {
             result: { documents: [] },
             resolved: {
@@ -246,7 +263,7 @@ effectTest(
               sourceRoot: hostOwnership.sourceRoot,
               installedRoot: hostOwnership.installedRoot,
               pid: process.pid,
-              processStartUtc: new Date(1000).toISOString(),
+              processStartUtc: new Date(processStart).toISOString(),
               id: null,
               how: null,
               buildStamp: null,
@@ -255,17 +272,14 @@ effectTest(
             },
           }),
         );
+      };
       const web = HttpRouter.toWebHandler(
-        makeCallRoute(journal, {} as TakeoffCaptures, {}, { sdkDriver }).pipe(Layer.provide(testHostInputs)).pipe(
-          HttpRouter.provideRequest(
-            Layer.succeed(
-              RequestIdentity,
-              admittedRequestIdentity(
-                { kind: "human", via: "local" },
-                { bridgeSessionId: "session" },
-              ),
-            ),
-          ),
+        Layer.mergeAll(
+          makeCallRoute(journal, {} as TakeoffCaptures, {}).pipe(Layer.provide(testHostInputs)),
+          settingsSchemaRoute,
+          opsCatalogRoute(() => Effect.die("not navigation")),
+          Layer.effectDiscard(Effect.gen(function* () { sharedReads = yield* NativeReads; })),
+        ).pipe(nativeReadRoot(Layer.succeed(SdkDriver, sdkDriver))).pipe(
           HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
           Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
         ),
@@ -279,7 +293,7 @@ effectTest(
               headers: { "content-type": "application/json" },
               body: JSON.stringify({ operationKey, input }),
             }),
-            Context.empty(),
+            Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, { bridgeSessionId: "session" })),
           );
           return { status: response.status, body: await response.json() };
         });
@@ -296,5 +310,57 @@ effectTest(
       const afterWrite = yield* resolve({ elementIds: [3, 2], contextRepresentation: "overview" });
       expect(afterWrite.body.freshnessGeneration).not.toBe(first.body.freshnessGeneration);
       expect((yield* resolve({}, "missing.operation")).status).toBe(409);
+      const schemaUrl = "http://host/schemas/settings/ff/Family.json";
+      const request = (call = false, anonymous = false) => Effect.promise(() => web.handler(
+        call ? new Request("http://host/call", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "settings.schema", request: { schemaUrl } }) }) : new Request(schemaUrl),
+        Context.make(RequestIdentity, admittedRequestIdentity(anonymous ? { kind: "anonymous" } : { kind: "human", via: "local" }, { bridgeSessionId: "session" })),
+      ));
+      const call = yield* request(true).pipe(Effect.forkScoped);
+      yield* until(() => jobs.length === 1);
+      const sibling = yield* request().pipe(Effect.forkScoped);
+      while ((yield* sharedReads!.retained).joiners !== 2) yield* Effect.yieldNow;
+      expect(jobs).toHaveLength(1);
+      expect((yield* request(false, true)).status).toBe(403);
+      expect(jobs).toHaveLength(1);
+      activeOpen = "open-b";
+      const replacementDoc = yield* request().pipe(Effect.forkScoped);
+      yield* until(() => jobs.length === 2);
+      accepted!();
+      const nextGeneration = yield* request().pipe(Effect.forkScoped);
+      yield* until(() => jobs.length === 3);
+      processStart = 2000;
+      const replacementProcess = yield* request().pipe(Effect.forkScoped);
+      yield* until(() => jobs.length === 4);
+      expect(jobs.map((job) => [job.openId, job.start])).toEqual([
+        ["open-a", 1000], ["open-b", 1000], ["open-b", 1000], ["open-b", 2000],
+      ]);
+      for (const job of jobs) {
+        yield* Deferred.succeed(job.answer, { value: { schemaJson: "{}" }, nativeRequestId: job.id,
+          actualTarget: { processIncarnation: { pid: process.pid, startedAt: job.start }, openDocumentLifetime: { openId: job.openId } },
+          freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" }, cost: {}, outcome: "native-acknowledged" });
+        yield* Deferred.succeed(job.terminal, "native-acknowledged");
+      }
+      const callResponse = yield* Fiber.join(call);
+      expect(callResponse.status).toBe(200);
+      expect(yield* Effect.promise(() => callResponse.json())).toEqual({ schemaJson: "{}" });
+      for (const fiber of [sibling, replacementDoc, nextGeneration, replacementProcess]) {
+        const response = yield* Fiber.join(fiber);
+        expect(response.status).toBe(200);
+        expect(yield* Effect.promise(() => response.text())).toBe("{}");
+      }
+
+      const conflict = yield* Effect.promise(() => web.handler(new Request("http://host/ops?session=other", { headers: { "x-pe-bridge-session-id": "session" } }),
+        Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, {}))));
+      expect(conflict.status).toBe(400);
+      connected = false;
+      const beforeFallback = sdkCalls;
+      const fallback = yield* Effect.promise(() => web.handler(new Request("http://host/ops"),
+        Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, {}))));
+      expect(fallback.status).toBe(200);
+      const catalog = yield* Effect.promise(() => fallback.json());
+      expect(catalog.operations.some((op: { key: string }) => op.key === "revit.detail.elements")).toBe(true);
+      expect(catalog.bridgeCatalogError).toBe("No Revit session is connected to the bridge.");
+      expect(sdkCalls).toBe(beforeFallback);
+
     }),
 );

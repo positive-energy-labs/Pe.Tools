@@ -10,7 +10,7 @@ import { productPathNames } from "@pe/host-contracts/contracts";
 import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
-import { makeHttpLive } from "../src/app.ts";
+import { nativeReadRoot, makeHttpLive } from "../src/app.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
@@ -23,6 +23,7 @@ import { requestIdentityLayer } from "../src/request-identity.ts";
 export async function serveRoutes<E, R>(
   routes: Layer.Layer<never, E, R>,
   bridge: RevitBridge["Service"],
+  driver?: Parameters<typeof nativeReadRoot>[0],
 ) {
   const nodeServer = createServer();
   const port = () => {
@@ -44,7 +45,7 @@ export async function serveRoutes<E, R>(
         },
       }),
       routes,
-    ),
+    ).pipe(nativeReadRoot(driver)),
     { disableLogger: true },
   ).pipe(
     Layer.provide(Layer.succeed(RevitBridge, bridge)),

@@ -1,3 +1,4 @@
+import { nativeReadRoot } from "../src/app.ts";
 import { testHostInputs } from "./effect-test.ts";
 import { detachedBridge, sessionView, captureStore } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -85,7 +86,7 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
   const web = HttpRouter.toWebHandler(
     makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), captures, {
       sdk: sdkSessions,
-    }).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+    }).pipe(nativeReadRoot()).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },
   );
   // As the identity middleware would: a person reads takeoffs; an anonymous /call reads only Pods.
@@ -204,7 +205,7 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
   const web = HttpRouter.toWebHandler(
     makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), captures, {
       sdk: sdkSessions,
-    }).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+    }).pipe(nativeReadRoot()).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },
   );
   const read = asCaller(human, () =>
@@ -238,7 +239,7 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
       makeCallRoute(
         new ActionJournal(join(dir, "restored-journal.jsonl")),
         captureStore(dir),
-      ).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+      ).pipe(nativeReadRoot()).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       {
         disableLogger: true,
       },

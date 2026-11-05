@@ -1,9 +1,9 @@
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { NativeReads, InvalidRead } from "./native-reads.ts";
-import { ReadFreshness, readSchemas, RequestIdentity } from "./request-services.ts";
-import { prepareRead } from "../../../packages/host-internal/src/read-admission.ts";
+import { InvalidRead } from "./native-reads.ts";
+import { ReadFreshness, RequestIdentity } from "./request-services.ts";
+import { HostNativeRead } from "@pe/host-internal/native-read";
 import { ductsSnapshotReadingSchema, nativePrincipals } from "@pe/agent-contracts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { peRoutes, linkedCatalog } from "@pe/agent-contracts/pe-api";
@@ -13,7 +13,7 @@ import {
   DUCTS_REFRESH_HEADER,
   type DuctsReadingRequest,
 } from "@pe/agent-contracts";
-import { sdkSession, SdkSession, SdkDriverLive, SdkDriver } from "./sdk-session.ts";
+import { sdkSession, SdkSession } from "./sdk-session.ts";
 import { readSchedule } from "./schedule-actions.ts";
 import { actionControls, commandTool, receiptsForWork } from "@pe/agent-contracts";
 import { pointerThread, type ThreadPointers } from "./thread-pointers.ts";
@@ -164,7 +164,6 @@ export function makeCallRoute(
     launchShell?: (path: string) => Promise<void>;
   } = {},
   composition?: {
-    readonly sdkDriver?: Context.Service.Shape<typeof SdkDriver>;
     readonly forwardBase?: string | null;
     readonly dispatch?: CallRouteDispatch;
     readonly origin?: () => string;
@@ -210,43 +209,6 @@ export function makeCallRoute(
     const active = session?.state?.openDocuments.filter((document) => document.isActive) ?? [];
     return active.length === 1 ? active[0]!.openId : undefined;
   };
-  const prepareNativeRead = Effect.fn("NativeReadDoor.resolve")(function* (
-    key: string,
-    input: unknown,
-    session: SdkSession,
-    openId: string | null | undefined,
-  ) {
-    const schemas = yield* readSchemas(key);
-    const freshness = yield* ReadFreshness;
-    return yield* prepareRead(
-      {
-        operationKey: key,
-        operation: { key, intent: "Read" },
-        processIncarnation: { pid: session.processId, startedAt: session.processStartUtcUnixMs },
-        openDocumentLifetime: typeof openId === "string" ? { openId } : { kind: "session-only" },
-        freshnessGeneration: freshness.current(),
-        representation:
-          isRecord(input) &&
-          input.contextRepresentation !== undefined &&
-          input.contextRepresentation !== "overview"
-            ? "detail"
-            : "overview",
-        responseSchemaVersion: schemas.version,
-      },
-      input,
-      schemas.request,
-      schemas.response,
-    ).pipe(
-      Effect.mapError(
-        () =>
-          new InvalidRead({
-            message: "Native input violates its operation Schema",
-            status: 400,
-            problem: "read.input",
-          }),
-      ),
-    );
-  });
   const resolveRead = HttpRouter.add(
     nativeReadResolveEndpoint.method,
     nativeReadResolveEndpoint.path,
@@ -264,42 +226,11 @@ export function makeCallRoute(
               }),
           ),
         );
-        const definition = hostOpCatalog.find((entry) => entry.key === input.operationKey);
-        if (!definition || definition.intent !== "Read")
-          return yield* new InvalidRead({
-            message: "Only declared native Reads can be resolved",
-            status: 409,
-            problem: "read.intent",
-          });
-        yield* Effect.try({
-          try: () => {
-            admitAnonymousCall(identity.caller, input.operationKey);
-            requireEligibleCaller(
-              { ...definition, principal: nativePrincipals(definition.actor) },
-              identity.caller,
-              nativeReadResolveEndpoint.path,
-            );
-          },
-          catch: (error) => error,
+        const descriptor = yield* (yield* HostNativeRead).resolve({
+          key: input.operationKey,
+          input: input.input,
+          scope: identity.scope,
         });
-        const session = yield* (yield* SdkSession).resolve(identity.scope);
-        const target = yield* Effect.try({
-          try: () =>
-            gatewayTarget(
-              input.operationKey,
-              definition.needs,
-              session,
-              admittedOpenId(session, identity.scope.openDocumentId) ?? undefined,
-            ),
-          catch: (error) => error,
-        });
-        const read = yield* prepareNativeRead(
-          input.operationKey,
-          input.input,
-          session,
-          target.kind === "document" ? target.ref.openId : null,
-        );
-        const { operation: _, responseSchemaVersion: __, ...descriptor } = read.descriptor;
         return Response.jsonUnsafe(descriptor);
       }).pipe(
         Effect.catch((error) => {
@@ -595,7 +526,7 @@ export function makeCallRoute(
               catch: (error) =>
                 error instanceof BridgeError ? error : new BridgeError(String(error), 409),
             })
-          : intent === "Read"
+          : intent === "Read" && !entry.script
             ? yield* Effect.gen(function* () {
                 if (!resolvedSession || !bridgeSessionId)
                   return yield* new InvalidRead({
@@ -603,14 +534,14 @@ export function makeCallRoute(
                     status: 409,
                     problem: "read.target",
                   });
-                const prepared = yield* prepareNativeRead(
+                const answer = yield* (yield* HostNativeRead).read({
                   key,
-                  request ?? {},
-                  resolvedSession,
-                  openDocumentId,
-                );
-                const reads = yield* NativeReads;
-                const answer = yield* reads.join(prepared, bridgeSessionId);
+                  input: request ?? {},
+                  scope: { ...scope, bridgeSessionId, openDocumentId: openDocumentId ?? undefined },
+                });
+                if (answer.actualTarget.processIncarnation.pid !== resolvedSession.processId ||
+                    answer.actualTarget.processIncarnation.startedAt !== resolvedSession.processStartUtcUnixMs)
+                  return yield* new InvalidRead({ message: "Native read incarnation changed during admission", status: 409, problem: "read.target" });
                 const actualOpen =
                   "openId" in answer.actualTarget.openDocumentLifetime
                     ? answer.actualTarget.openDocumentLifetime.openId
@@ -1138,16 +1069,10 @@ export function makeCallRoute(
     ...controls,
   ).pipe(
     HttpRouter.provideRequest(Layer.effect(PictureCaptureStore, PictureCaptureStore)),
-    HttpRouter.provideRequest(NativeReads.layer),
-    HttpRouter.provideRequest(
-      SdkSession.layer.pipe(
-        Layer.provide(
-          composition?.sdkDriver ? Layer.succeed(SdkDriver, composition.sdkDriver) : SdkDriverLive,
-        ),
-      ),
-    ),
-    HttpRouter.provideRequest(ReadFreshness.layer),
-    Layer.provide(ReadFreshness.layer),
+    HttpRouter.provideRequest(Layer.effectContext(Effect.gen(function* () {
+      return Context.make(HostNativeRead, yield* HostNativeRead)
+        .pipe(Context.add(SdkSession, yield* SdkSession));
+    }))),
   );
 }
 

@@ -1,3 +1,4 @@
+import { nativeReadRoot } from "../src/app.ts";
 import { testHostInputs } from "./effect-test.ts";
 import { pictureCaptures } from "./effect-test.ts";
 /**
@@ -47,7 +48,7 @@ beforeEach(async () => {
     makeCallRoute(
       new ActionJournal(join(root, "journal.json")),
       captureStore(join(root, "captures")),
-    ).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+    ).pipe(nativeReadRoot()).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },
   );
 });

@@ -1,3 +1,5 @@
+import { SdkDriver } from "../src/sdk-session.ts";
+import { nativeReadRoot } from "../src/app.ts";
 import { testHostInputs } from "./effect-test.ts";
 import { test, expect, vi } from "vite-plus/test";
 import { createServer } from "node:http";
@@ -35,7 +37,7 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
     invoke,
   });
   const web = HttpRouter.toWebHandler(
-    opsCatalogRoute(() => Effect.die("not navigation"), sdk).pipe(
+    opsCatalogRoute(() => Effect.die("not navigation")).pipe(nativeReadRoot(Layer.succeed(SdkDriver, () => Effect.promise(() => sdk())))).pipe(
       Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
     ),
     { disableLogger: true },
@@ -174,8 +176,8 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     HttpRouter.toWebHandler(
       Layer.mergeAll(
         makeCallRoute(owner, undefined, { sdk: sdkSessions }).pipe(Layer.provide(testHostInputs)),
-        opsCatalogRoute(() => Effect.die("not navigation"), sdkSessions),
-      ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+        opsCatalogRoute(() => Effect.die("not navigation")),
+      ).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args))))).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       { disableLogger: true },
     );
   let web = makeWeb();

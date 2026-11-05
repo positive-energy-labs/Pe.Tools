@@ -1,3 +1,4 @@
+import { nativeReadRoot } from "../src/app.ts";
 import { HostFiles } from "../src/host-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
@@ -100,7 +101,7 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
       makeCallRoute(owner, captureStore(join(dir, "captures")), {
         sdk,
         workspace: work,
-      }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, marks))).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+      }).pipe(nativeReadRoot()).pipe(Layer.provide(HostFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, marks))).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       { disableLogger: true },
     );
     const post = (body: unknown) =>

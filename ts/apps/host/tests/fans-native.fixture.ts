@@ -1,3 +1,4 @@
+import { nativeReadRoot } from "../src/app.ts";
 import { testHostInputs } from "./effect-test.ts";
 import { testHostFiles } from "./effect-test.ts";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -93,9 +94,8 @@ export async function nativeFixture(
         Context.get(context, CaptureStore),
         { sdk: sdkSessions, workspace: saved },
         {
-          sdkDriver: (args) => Effect.promise(() => sdkSessions(args)),
         },
-      ).pipe(Layer.provide(testHostInputs)).pipe(
+      ).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args))))).pipe(Layer.provide(testHostInputs)).pipe(
         Layer.provideMerge(
           Layer.mergeAll(
             Layer.succeed(RevitBridge, bridge),
