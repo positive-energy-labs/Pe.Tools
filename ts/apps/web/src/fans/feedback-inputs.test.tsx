@@ -51,7 +51,7 @@ test("F6 an acknowledged role edit renders the option label with its author, nev
     current: "passive",
     cell: {},
     path: null,
-    show: JSON.stringify,
+    show: (value: unknown) => String((value as { role: string }).role),
     refusal: null,
     pick: vi.fn(),
   };
@@ -93,6 +93,42 @@ test("F5 live parameter metadata reaches the picker and the slot stages the name
   expect(await screen.findByText("Shared · Double · pressure")).toBeTruthy();
   fireEvent.click(screen.getByRole("option", { name: /Available ESP/ }));
   await waitFor(() => expect(commit).toHaveBeenCalledWith("Available ESP"));
+});
+
+test("a staged write scope keeps its own cell census rather than today's offered scope", () => {
+  const view = render(
+    <ChoiceCell
+      label="Write scope"
+      current="fan"
+      options={[{ key: "fan", label: "FC-23 / 7 staged" }]}
+      cell={{ edit: { value: { walk: { unitId: 1, portIndex: 0 }, cells: [] }, by: "human" } }}
+      path={null}
+      show={() => "FC-23 / 2 staged"}
+      refusal={null}
+      pick={vi.fn()}
+    />,
+  );
+  expect(view.container.textContent).toContain("FC-23 / 2 staged");
+  expect(view.container.textContent).not.toContain("7 staged");
+});
+
+test("F5 no unit identities never widens parameter discovery to the document", () => {
+  render(
+    <EspParameter
+      target={{ session: "s", openId: "d" }}
+      units={[]}
+      cell={{}}
+      model="ESP"
+      transitions={[]}
+      commit={vi.fn()}
+    />,
+  );
+  expect(live.read).toHaveBeenLastCalledWith(
+    { session: "s", openId: "d" },
+    undefined,
+    expect.anything(),
+  );
+  expect(screen.queryByRole("button", { name: "ESP" })).toBeNull();
 });
 
 test.each(["loading", "failed"])("F5 %s options cannot stage a stale choice", (state) => {
@@ -143,7 +179,18 @@ test("F3/F4 the roster always exposes search and forwards all/clear as one subje
 
 test("F3 keyboard selection still opens a fan through the roster's subject door", () => {
   const open = vi.fn();
-  render(<Roster props={{ roster: ductsRosterResponseSchema.parse(fixture.roster).rows.slice(0, 2), picked: [], nameOf: String, open, busy: false, loading: false }} />);
+  render(
+    <Roster
+      props={{
+        roster: ductsRosterResponseSchema.parse(fixture.roster).rows.slice(0, 2),
+        picked: [],
+        nameOf: String,
+        open,
+        busy: false,
+        loading: false,
+      }}
+    />,
+  );
   const list = screen.getByRole("listbox", { name: "fans" });
   list.focus();
   fireEvent.keyDown(list, { key: "ArrowDown" });

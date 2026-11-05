@@ -96,6 +96,20 @@ test("Q2a keeps kind and colour editors on ducts and fan settings on fans", asyn
   );
 });
 
+test("F6 the real Inputs pane renders an acknowledged role edit as a choice label", async () => {
+  const f = await createWitness(closes);
+  await vi.waitFor(() => expect(f.fans.readingStatus("sheetSnapshot").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
+  const unit = snapshot.nodes.find((node) => node.kind === "equipment")!;
+  const id = String(unit.id);
+  f.fans.invoke("edit", { patches: [{ path: ["roles", id], value: { edit: { value: { role: "fan" } } } }] }, f.fans.workBasis()!);
+  await vi.waitFor(() => expect(f.fans.work()?.value).toMatchObject({ roles: { [id]: { edit: { value: { role: "fan" } } } } }));
+  const view = render(<RegistryContext value={registry()}>{nodeFor(f.fans, "sheet-inputs")}</RegistryContext>);
+  const roles = [...view.container.querySelectorAll('[data-choice-cell^="Unit role "]')];
+  expect(roles.some((role) => role.textContent?.includes("Fan"))).toBe(true);
+  expect(roles.every((role) => !role.textContent?.includes('{"role"'))).toBe(true);
+});
+
 test("an admitted network pane runs no sibling body when another pane is hidden", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));

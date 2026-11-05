@@ -45,15 +45,17 @@ export function EspParameter({
   );
   const reason = !target
     ? "Choose a document for parameter options"
-    : reading.state === "failed"
-      ? reading.message
-      : reading.state !== "ready"
-        ? "Reading unit parameters"
-        : data?.result.kind !== "Success"
-          ? (data?.result.message ?? "Parameter options unavailable")
-          : !options.length
-            ? "No numeric parameters on these units"
-            : null;
+    : !units.length
+      ? "No unit identities in this fan scope"
+      : reading.state === "failed"
+        ? reading.message
+        : reading.state !== "ready"
+          ? "Reading unit parameters"
+          : data?.result.kind !== "Success"
+            ? (data?.result.message ?? "Parameter options unavailable")
+            : !options.length
+              ? "No numeric parameters on these units"
+              : null;
   return (
     <StateCell
       {...cellFromDraft(cell, {
