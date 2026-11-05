@@ -184,7 +184,7 @@ export function AdmittedSubjectPicker({
   const open = options.filter((o) => selected.includes(identity(o.id)));
   return (
     <>
-      {/* Many: every open subject is its own chip with its own Ã—; the trigger only adds. */}
+      {/* Many: every open subject is its own chip with its own ×; the trigger only adds. */}
       {many &&
         (all ? (
           <NarrowChip
@@ -621,6 +621,17 @@ function PaneStatus({ mount, draws }: { mount: AdmittedMount; draws: readonly st
   return readings.some((r) => !r.snapshot.current) ? <span role="status">Reading...</span> : null;
 }
 
+export function admittedSubjectDoor(mount: AdmittedMount, data: RouteGraphJson): AdmittedSubject {
+  return {
+    toggle: (id) => subjectOf(mount, data)?.toggle(id),
+    add: (ids) => subjectOf(mount, data)?.add(ids),
+    remove: (id) => subjectOf(mount, data)?.remove(id),
+    setActive: (id) => subjectOf(mount, data)?.setActive(id),
+    all: () => { mount.controls.subject({ kind: "all" }); },
+    clear: () => { mount.controls.subject(data.fields[data.subject.field]?.cardinality === "many" ? { kind: "ids", ids: [] } : null); },
+  };
+}
+
 export function AdmittedChrome(props: {
   mount: AdmittedMount;
   data: RouteGraphJson;
@@ -631,12 +642,7 @@ export function AdmittedChrome(props: {
   const { mount, data } = props;
   // Read at call time, so the door never holds a stale subject.
   const door = useMemo<AdmittedSubject>(
-    () => ({
-      toggle: (id) => subjectOf(mount, data)?.toggle(id),
-      add: (ids) => subjectOf(mount, data)?.add(ids),
-      remove: (id) => subjectOf(mount, data)?.remove(id),
-      setActive: (id) => subjectOf(mount, data)?.setActive(id),
-    }),
+    () => admittedSubjectDoor(mount, data),
     [mount, data],
   );
   return (
