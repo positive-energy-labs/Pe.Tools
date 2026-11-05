@@ -11,7 +11,7 @@
         "room"
       ],
       "segment": "edits",
-      "take": {
+      "stage": {
         "runtime": true
       }
     },
@@ -441,7 +441,7 @@
     "size": 100,
     "sized": "start"
   },
-  "moduleHash": "2d8989a5c8ecbf34d1a31397486b3959d4f927db1dc1759e76836d647e583954",
+  "moduleHash": "1d637ab91e61174d2df58e9011f6c73d1ed8fbd1672b7f706d9de5531c914db5",
   "name": "View adoption",
   "needs": "project",
   "panes": {
@@ -988,93 +988,6 @@
                   "type": "null"
                 }
               ]
-            },
-            "suggestion": {
-              "anyOf": [
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "at": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "base": {
-                      "anyOf": [
-                        {
-                          "maximum": 9007199254740991,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
-                      "type": "string"
-                    },
-                    "confidence": {
-                      "anyOf": [
-                        {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "delete": {
-                      "not": {}
-                    },
-                    "note": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "value": {
-                      "properties": {
-                        "checked": {
-                          "type": "boolean"
-                        },
-                        "name": {
-                          "type": "string"
-                        },
-                        "systemTag": {
-                          "type": "string"
-                        }
-                      },
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "value"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ]
             }
           },
           "type": "object"
@@ -1147,86 +1060,6 @@
           "additionalProperties": false,
           "properties": {
             "edit": {
-              "anyOf": [
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "at": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "base": {
-                      "anyOf": [
-                        {
-                          "maximum": 9007199254740991,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
-                      "type": "string"
-                    },
-                    "confidence": {
-                      "anyOf": [
-                        {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "delete": {
-                      "not": {}
-                    },
-                    "note": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "value": {
-                      "enum": [
-                        "accept",
-                        "dismiss"
-                      ],
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "value"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "suggestion": {
               "anyOf": [
                 {
                   "additionalProperties": false,
@@ -1401,89 +1234,6 @@
                   "type": "null"
                 }
               ]
-            },
-            "suggestion": {
-              "anyOf": [
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "at": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "base": {
-                      "anyOf": [
-                        {
-                          "maximum": 9007199254740991,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
-                      "type": "string"
-                    },
-                    "confidence": {
-                      "anyOf": [
-                        {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "delete": {
-                      "not": {}
-                    },
-                    "note": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "value": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "value"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ]
             }
           },
           "type": "object"
@@ -1574,83 +1324,6 @@
                   "type": "null"
                 }
               ]
-            },
-            "suggestion": {
-              "anyOf": [
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "at": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "base": {
-                      "anyOf": [
-                        {
-                          "maximum": 9007199254740991,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
-                      "type": "string"
-                    },
-                    "confidence": {
-                      "anyOf": [
-                        {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "delete": {
-                      "not": {}
-                    },
-                    "note": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "value": {
-                      "const": true,
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "value"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ]
             }
           },
           "type": "object"
@@ -1666,88 +1339,6 @@
           "additionalProperties": false,
           "properties": {
             "edit": {
-              "anyOf": [
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "at": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "base": {
-                      "anyOf": [
-                        {
-                          "maximum": 9007199254740991,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
-                      "type": "string"
-                    },
-                    "confidence": {
-                      "anyOf": [
-                        {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "delete": {
-                      "not": {}
-                    },
-                    "note": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "value": {
-                      "additionalProperties": {
-                        "$ref": "#/$defs/__schema0"
-                      },
-                      "propertyNames": {
-                        "type": "string"
-                      },
-                      "type": "object"
-                    }
-                  },
-                  "required": [
-                    "value"
-                  ],
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "suggestion": {
               "anyOf": [
                 {
                   "additionalProperties": false,
