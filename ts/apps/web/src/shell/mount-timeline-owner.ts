@@ -1,5 +1,4 @@
 import {
-  canonicalRouteInput,
   invocationOutcome,
   commands,
   workKey,
@@ -29,7 +28,6 @@ export function createMountTimeline<W>(
   const timeline = createRouteTimeline();
   const unsettledWorks = new Map<string, WorkKey | null>();
   const sequenceReceipts = new Map<string, ActionReceipt[]>();
-  const receiptStamps = new Map<string, string>();
   const acceptReceipt = (
     receipt: ActionReceipt | ActionStatus,
     key: WorkKey | null,
@@ -37,7 +35,6 @@ export function createMountTimeline<W>(
     invalidate = true,
   ) => {
     if (target.disposed) return;
-
     key = unsettledWorks.has(receipt.id)
       ? unsettledWorks.get(receipt.id)!
       : press && ports.dispatch(press)
@@ -48,24 +45,12 @@ export function createMountTimeline<W>(
     if (invalidate) ports.readings().acceptReceipt(receipt, declaration?.dirties ?? []);
     const identity = key ? workKey(key) : null;
     if (key) ports.journal(key);
-    const stamp = canonicalRouteInput([
-      receipt.id,
-      receipt.state,
-      receipt.effects,
-      receipt.consentWindow,
-    ]);
-    if (receiptStamps.get(receipt.id) === stamp) return;
-    receiptStamps.set(receipt.id, stamp);
     timeline.append({
       kind: "receipt",
       outcome: invocationOutcome(receipt),
       at: receipt.startedAt,
       receiptId: receipt.id,
       press: press ?? receipt.id,
-      // ADR 0028: a receipt is a Timeline invocation; name it by the route verb that does its command.
-      verb:
-        Object.keys(ports.verbs()).find((id) => ports.verbs()[id]!.does === receipt.key) ??
-        receipt.key,
       paths:
         key && "steps" in receipt && (receipt.effects.length || receipt.state === "succeeded")
           ? adapters.receiptPaths?.(receipt, key)

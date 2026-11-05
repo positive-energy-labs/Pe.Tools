@@ -6,7 +6,7 @@ import { RefreshCw, Save, Upload } from "lucide-react";
 
 import { SelectInRevitIcon, SelectionBoxKey } from "@pe/kit/lang/gesture-glyph";
 import { ActionGroup, Button } from "@pe/kit/lang/button";
-import { PreviewAction } from "@pe/kit/lang/preview-action";
+import { WriteAction } from "@pe/kit/lang/write-action";
 import { HotkeyCommand, HotkeyHint } from "#/components/lang/hotkey-command";
 import { Section } from "@pe/kit/lang/section";
 
@@ -35,38 +35,36 @@ const readVerb = {
 
 const KINDS = ["quiet", "framed", "commit"] as const;
 
-/** A preview-then-do verb on a fake route: its preview rests on `input`, and moving it makes it stale. */
-function PreviewActionSpecimen() {
+/** A plan-then-apply verb on a fake route: its plan rests on `input`, and moving it makes it stale. */
+function WriteActionSpecimen() {
   const [input, setInput] = useState(1);
   const [rest, setRest] = useState<number | null>(null);
   const held = rest === input;
   return (
     <div className="flex items-center gap-3">
-      <PreviewAction
-        label="preview heal"
-        says="Preview healing 2 caps in Revit, rolled back"
+      <WriteAction
+        label="plan heal"
+        says="Plan healing 2 caps from the current Work"
         held={
           held
             ? {
-                word: "heal · previewed 2",
+                word: "heal · planned 2",
                 summary: "2 pass · 0 refused",
-                lines: (
-                  <ul className="m-0 list-none p-0 t-small">
-                    <li>cap duct 12 (end 1)</li>
-                    <li>cap duct 18 (end 0)</li>
-                  </ul>
-                ),
+                cells: [
+                  { key: "12", label: "duct 12 end 1", before: "open", after: "capped", author: "pea" },
+                  { key: "18", label: "duct 18 end 0", before: "open", after: "capped", author: "human" },
+                ],
               }
             : null
         }
-        stale={rest !== null && !held ? "changed since preview" : null}
-        preview={async () => {
+        stale={rest !== null && !held ? "changed since plan" : null}
+        plan={async () => {
           setRest(input);
           return null;
         }}
-        commit={{
+        apply={{
           label: "apply heal",
-          says: "Heal the items the preview passed, in one transaction",
+          says: "Heal what the plan sealed, in one transaction",
           run: async () => {
             setRest(null);
             return null;
@@ -187,10 +185,10 @@ export function LangPressSpecimens() {
         </ActionGroup>
       </Section>
       <SpecimenFrame
-        name="PreviewAction · idle, previewing, armed (popover open or closed), stale, committed"
-        importPath="@pe/kit/lang/preview-action"
+        name="WriteAction · idle, planning, armed (popover open or closed), stale, committed"
+        importPath="@pe/kit/lang/write-action"
       >
-        <PreviewActionSpecimen />
+        <WriteActionSpecimen />
       </SpecimenFrame>
       <SpecimenFrame
         name="Subject reference · rest, its block hovered, lit (token hovered or focused); the picture's badge"

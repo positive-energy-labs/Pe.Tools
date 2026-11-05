@@ -161,7 +161,7 @@ test("D03/C07: admitted losses preview is read-only, names sealed rows and commi
   const f = await fixture();
   const work = await stage(f);
   const before = [...f.native];
-  await command(f, "preview", "ducts.preview-losses", work);
+  await command(f, "preview", "ducts.plan-losses", work);
   const preview = await f.journal.wait("preview");
   if (preview.state !== "succeeded") throw Error(JSON.stringify(preview));
   expect([...f.native]).toEqual(before);
@@ -182,7 +182,7 @@ test.each(["reject", "deadline"] as const)(
   async (mode) => {
     const f = await fixture();
     const work = await stage(f);
-    await command(f, "preview", "ducts.preview-losses", work);
+    await command(f, "preview", "ducts.plan-losses", work);
     expect((await f.journal.wait("preview")).state).toBe("succeeded");
     const run = { thread: `fans-${mode}`, turn: "one" };
     f.runs.open(run);
@@ -220,7 +220,7 @@ test.each(["reject", "deadline"] as const)(
 test("a stale Fans revision refuses sealed apply before native dispatch", async () => {
   const f = await fixture();
   const work = await stage(f);
-  await command(f, "preview-two", "ducts.preview-losses", work);
+  await command(f, "preview-two", "ducts.plan-losses", work);
   expect(await f.journal.wait("preview-two")).toMatchObject({ state: "succeeded", result: { seal: { work: {
     consumed: expect.arrayContaining(["ducts", "fans"].map((route) => expect.objectContaining({
       kind: "work", probe: expect.objectContaining({ handle: expect.objectContaining({ key: expect.objectContaining({ route }) }) }),

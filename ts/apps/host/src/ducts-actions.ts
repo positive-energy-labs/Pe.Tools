@@ -32,6 +32,8 @@ const targetOf = (ctx: CommandContext) => {
   return ctx.admission.target.ref;
 };
 type Kind = "losses" | "heal" | "assign-fan";
+/** plan seals (Read), rehearse rolls back (TransactRead, never seal authority), apply commits. */
+type Phase = "plan" | "rehearse" | "apply";
 
 /** Resolve group seeds through metadata, then read only their systems' complete geometry. */
 export async function healSnapshot(
@@ -93,12 +95,12 @@ export function healedCellPaths(
     : [];
 }
 
-/** Work is the only authored input. Preview and apply share the same derivation and journal. */
+/** Work is the only authored input. Plan, rehearsal and apply share the same derivation and journal. */
 export function ductsExecutors(
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader } = {},
 ) {
-  const bind = async (ctx: CommandContext, kind: Kind, previewOnly: boolean) => {
+  const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
     const target = targetOf(ctx);
     const raw = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
     const { process } = await lifetime(bridge, target, "project", deps);
@@ -118,21 +120,23 @@ export function ductsExecutors(
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
     }));
     const design = ductsDesign(doc, fans);
-    const preview = ctx.read
+    // The store's appliedAt is stamped at the plan and reused by apply, so an unchanged plan seals the same request.
+    const plan = ctx.read
       .receipts()
       .filter(
         (r) =>
-          r.key === `ducts.preview-${kind}` &&
+          r.key === `ducts.plan-${kind}` &&
           r.state === "succeeded" &&
           canonicalRouteInput(r.target) === canonicalRouteInput(ctx.admission.target),
       )
       .at(-1);
-    const appliedAt = previewOnly
-      ? new Date().toISOString()
-      : preview?.state === "succeeded"
-        ? (preview.result as { derivedRequest?: { store?: { appliedAt?: string } } }).derivedRequest
-            ?.store?.appliedAt
-        : undefined;
+    const appliedAt =
+      phase === "plan"
+        ? new Date().toISOString()
+        : plan?.state === "succeeded"
+          ? (plan.result as { derivedRequest?: { store?: { appliedAt?: string } } }).derivedRequest
+              ?.store?.appliedAt
+          : undefined;
     return {
       consumes: [
         {
@@ -140,13 +144,8 @@ export function ductsExecutors(
           probe: { target: ctx.admission.target, process },
           expected: true as const,
         },
-        {
-          kind: "document-mark" as const,
-          probe: { ref: target, takenAt: new Date().toISOString() },
-          expected: true as const,
-        },
       ],
-      effects: previewOnly ? [] : [{ kind: "document" as const, ref: target }],
+      effects: phase === "apply" ? [{ kind: "document" as const, ref: target }] : [],
       prepare: async () => {
         const ductsScope = doc.writeIntent.edit?.value;
         const fanScope = fans.writeIntent.edit?.value;
@@ -261,27 +260,27 @@ export function ductsExecutors(
       },
     };
   };
-  const run = async (ctx: CommandContext, execution: ActionExecution, kind: Kind, preview: boolean) => {
+  const run = async (ctx: CommandContext, execution: ActionExecution, kind: Kind, phase: Phase) => {
     const p = prepared.parse(execution.prepared),
       target = targetOf(ctx);
     const entry = {
       losses: {
         key: "ducts.apply",
-        plan: "ducts.apply.plan",
+        native: "ducts.apply.plan",
         retires: (input: Record<string, unknown>, value: unknown) =>
           appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response),
       },
       heal: {
         key: "ducts.heal",
-        plan: "ducts.heal.preview",
+        native: "ducts.heal.preview",
         retires: (input: Record<string, unknown>, value: unknown) =>
           healedCellPaths(input, value as DuctsHeal.Res.Response),
       },
-      "assign-fan": { key: "ducts.assign-fan", plan: "ducts.assign-fan.preview", retires: () => [] as string[][] },
+      "assign-fan": { key: "ducts.assign-fan", native: "ducts.assign-fan.preview", retires: () => [] as string[][] },
     }[kind];
-    // The preview phase calls the native plan sibling (a Read for losses, a TransactRead rehearsal for the others);
-    // only the apply entry reaches the ModelWrite leaf.
-    const key = preview ? entry.plan : entry.key;
+    // The losses plan reads through the native Read sibling; a rehearsal calls its rolled-back TransactRead;
+    // only apply reaches the ModelWrite leaf. Heal and fan plans never get here: the write boundary seals them.
+    const key = phase === "apply" ? entry.key : entry.native;
     const value = await execution.step(
       "native",
       key,
@@ -290,7 +289,7 @@ export function ductsExecutors(
       { process: p.process as import("@pe/agent-contracts").NativeProcess },
     );
     const handle = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
-    const paths = entry.retires(p.input, value);
+    const paths = phase === "apply" ? entry.retires(p.input, value) : [];
     const fanPaths = paths.filter((path) => tools.fans.work.editable.some((pattern) => pattern[0] === path[0]));
     const ductPaths = paths.filter((path) => !fanPaths.includes(path));
     const retired = ductPaths.length ? await execution.retireWork(handle.key, "ducts", ductPaths) : undefined;
@@ -314,21 +313,29 @@ export function ductsExecutors(
         return { target, refreshed: true };
       },
     }),
+    // The registry wraps these at boot: `commands[key].writeBoundary` (or `workIntent` for a rehearsal) carries
+    // the binding. ducts.plan-heal and ducts.plan-assign-fan have no executor: the registry binds the apply's in
+    // its plan phase, which seals the derived request without a native call.
     ...Object.fromEntries(
-      (["losses", "heal", "assign-fan"] as const).flatMap((kind) =>
-        [true, false].map((preview) => {
-          const key = `ducts.${preview ? "preview" : "apply"}-${kind}` as const;
-          return [
-            key,
-            // The registry wraps this at boot: `commands[key].writeBoundary` carries the binding.
-            command(commands[key], prepared, {
-              seal: (p) => ({ request: p.input, evidence: p.dependencies }),
-              bind: (ctx) => bind(ctx, kind, preview),
-              run: (ctx, execution) => run(ctx, execution, kind, preview),
-            }),
-          ];
-        }),
-      ),
+      (
+        [
+          ["ducts.plan-losses", "losses", "plan"],
+          ["ducts.apply-losses", "losses", "apply"],
+          ["ducts.apply-heal", "heal", "apply"],
+          ["ducts.apply-assign-fan", "assign-fan", "apply"],
+          ["ducts.rehearse-heal", "heal", "rehearse"],
+          ["ducts.rehearse-assign-fan", "assign-fan", "rehearse"],
+        ] as const
+      ).map(([key, kind, phase]) => {
+        return [
+          key,
+          command(commands[key], prepared, {
+            seal: (p) => ({ request: p.input, evidence: p.dependencies }),
+            bind: (ctx) => bind(ctx, kind, phase),
+            run: (ctx, execution) => run(ctx, execution, kind, phase),
+          }),
+        ];
+      }),
     ),
   };
 }

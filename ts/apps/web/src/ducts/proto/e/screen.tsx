@@ -188,8 +188,7 @@ function useNetworkData(ctx: NetworkContext) {
         if (groups.length) return ctx.verbs.scope({ groups: [...groups] }, ctx.workBasis);
         return;
       }
-      case "heal":
-      case "heal-preview": {
+      case "heal": {
         const group = row.group ?? healTarget(snapshot, workDoc, active, selected, null);
         if (active && systemScope(snapshot, active).groups.includes(group))
           return ctx.verbs.scope({ groups: [group] }, ctx.workBasis);
@@ -262,7 +261,7 @@ function useNetworkData(ctx: NetworkContext) {
   };
 }
 const scopeChoice = z.object({
-  kind: z.enum(["price", "heal", "heal-preview", "assign-fan"]),
+  kind: z.enum(["price", "heal", "assign-fan"]),
   group: z.string().optional(),
   unitId: z.number().optional(),
   systemId: z.number().optional(),

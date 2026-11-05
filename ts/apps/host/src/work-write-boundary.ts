@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { documentMarks } from "./document-marks.ts";
+import { documentMarks, type DocumentMarks, type DocumentRef } from "./document-marks.ts";
 import { lifetime } from "./family-actions.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
@@ -12,6 +12,7 @@ import {
   tools,
   type Tool,
   type WorkHandle,
+  type WriteSeal,
   type Consumed,
   type WorkIntentBinding,
   type WriteBoundaryBinding,
@@ -23,17 +24,26 @@ const hash = (value: unknown) =>
 // Dependency and path collections are sets; request arrays retain their semantic order.
 const canonicalSet = <T>(values: readonly T[]): T[] =>
   [...new Set(values.map(canonicalRouteInput))].sort().map((value) => JSON.parse(value));
-export function writeSeal(
-  request: unknown,
-  input: unknown,
-  work: WorkHandle,
-  incarnation: unknown,
-  consumed: readonly Consumed[],
-  evidence: unknown,
-) {
+/** The document mark the plan read, as the seal carries it (ADR 0030 rule 4). */
+export const sealedDocumentMark = (marks: DocumentMarks, ref: DocumentRef): WriteSeal["documentMark"] => ({
+  session: ref.session,
+  openId: ref.openId,
+  observedSince: marks.observedSince ?? null,
+  changedAt: marks.changedAt(ref),
+});
+export interface WriteSealInput {
+  request: unknown;
+  input: unknown;
+  work: WorkHandle;
+  incarnation: unknown;
+  documentMark: WriteSeal["documentMark"];
+  /** Work, file, receipt and incarnation dependencies; the document mark is sealed by name, never as a probe. */
+  consumed: readonly Exclude<Consumed, { kind: "document-mark" }>[];
+  evidence: unknown;
+}
+export function writeSeal({ request, input, work, incarnation, documentMark, consumed, evidence }: WriteSealInput): WriteSeal {
   const dependencies = canonicalSet(
     consumed
-      .filter((item) => item.kind !== "document-mark")
       .map((item) =>
         item.kind === "work"
           ? {
@@ -50,6 +60,7 @@ export function writeSeal(
   return {
     requestHash: hash(request),
     work: { handle: work, consumed: dependencies.filter((item) => item.kind === "work") },
+    documentMark,
     incarnation,
     dependencies: hash({ input, dependencies, evidence }),
   };
@@ -59,7 +70,6 @@ const preparedSchema = z.object({
   value: z.unknown(),
   seal: writeResponseSchema.shape.seal,
   previewOnly: z.boolean(),
-  takenAt: z.string(),
 });
 
 type WorkSpec = NonNullable<Tool["work"]> & { schema: z.ZodType<Record<string, unknown>> };
@@ -142,7 +152,7 @@ export function workIntentBoundary(
   };
 }
 
-// TODO: docs/features/routes/LEDGER.md#s3-native-seal Prove preview/refetch/apply in browser against a controlled Revit session.
+// TODO: docs/features/routes/LEDGER.md#s3-native-seal Prove plan/refetch/apply in browser against a controlled Revit session.
 /** Keep native derivation/recovery in its owner; admit only authored, revisioned Work. */
 export function workWriteBoundary(
   executor: CommandExecutor,
@@ -170,8 +180,7 @@ export function workWriteBoundary(
     boundary: "work",
     prepared: preparedSchema,
     bind: async (ctx) => {
-      documentMarks(bridge);
-      const takenAt = new Date().toISOString();
+      const marks = documentMarks(bridge);
       // The entry is the mode: seal at the plan, recheck at the ModelWrite.
       const previewOnly = hooks.phase === "preview";
       const { work, input, target, observed } = await deriveFromWork(
@@ -198,19 +207,22 @@ export function workWriteBoundary(
       const prepare = async () => {
         const value = executor.prepared.parse(await bound.prepare?.());
         if (!previewOnly && !preview)
-          throw refused("Preview the current Work first", "preview.stale");
+          throw refused("Plan the current Work first", "preview.stale");
+        // The seal names the document mark itself. Family leaves still consume a wall-clock mark probe the
+        // journal checks; it stays out of the hash, which it would move on every prepare.
         const dependencies = [...ctx.consumed, ...(bound.consumes ?? [])].filter(
-          (item) => item.kind !== "document-mark",
+          (item): item is Exclude<Consumed, { kind: "document-mark" }> => item.kind !== "document-mark",
         );
         const projection = project(value);
-        const seal = writeSeal(
-          projection.request,
+        const seal = writeSeal({
+          request: projection.request,
           input,
           work,
-          { target, process: observed.process },
-          dependencies,
-          projection.evidence,
-        );
+          incarnation: { target, process: observed.process },
+          documentMark: sealedDocumentMark(marks, target),
+          consumed: dependencies,
+          evidence: projection.evidence,
+        });
         const previousSeal =
           preview?.state === "succeeded"
             ? (preview.result as { seal?: Record<string, unknown> }).seal
@@ -222,11 +234,11 @@ export function workWriteBoundary(
               canonicalRouteInput(seal[key as keyof typeof seal]),
           );
           throw refused(
-            `Preview changed; preview the current Work and dependencies again (${changed.join(", ")})`,
+            `Plan changed; plan the current Work again (${changed.join(", ")})`,
             "preview.stale",
           );
         }
-        return { input, value, seal, previewOnly, takenAt };
+        return { input, value, seal, previewOnly };
       };
       return {
         ...bound,
@@ -234,24 +246,6 @@ export function workWriteBoundary(
         claims: [
           ...(bound.claims ?? []),
           ...(!previewOnly && preview ? [{ kind: "receipt" as const, id: preview.id }] : []),
-        ],
-        consumes: [
-          ...(bound.consumes ?? []),
-          ...(!previewOnly && preview
-            ? [
-                {
-                  kind: "document-mark" as const,
-                  probe: {
-                    ref: target,
-                    takenAt:
-                      preview.state === "succeeded"
-                        ? (preview.result as { takenAt: string }).takenAt
-                        : "",
-                  },
-                  expected: true as const,
-                },
-              ]
-            : []),
         ],
         // Seal eligibility is read-only; rederive again after consent to catch intervening changes.
         preflight: previewOnly
@@ -270,7 +264,6 @@ export function workWriteBoundary(
           derivedRequest: project(p.value).request,
           authoredIntent: p.input,
           seal: p.seal,
-          takenAt: p.takenAt,
         };
       const result = await executor.run(withInput(ctx, p.input), {
         ...execution,
@@ -287,7 +280,6 @@ export function workWriteBoundary(
         previewOnly: p.previewOnly,
         derivedRequest: project(p.value).request,
         seal: p.seal,
-        takenAt: p.takenAt,
       };
     },
     recover: executor.recover

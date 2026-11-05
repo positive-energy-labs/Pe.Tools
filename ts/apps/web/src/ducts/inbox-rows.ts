@@ -71,7 +71,7 @@ export type RowVerb =
   | {
       kind: "command";
       on:
-        | { verb: "heal" | "heal-preview"; group: string }
+        | { verb: "heal"; group: string }
         | { verb: "fan"; unitId: number; systemId: number };
       label: string;
       says: string;
@@ -164,14 +164,8 @@ function healRow(
     status: "review repairs",
     ...(blocks ? { tone: "alarm" as const } : { blocks: false as const }),
     ids: [...new Set(g.items.flatMap((i) => i.ids))],
-    note: `${g.items.map(line).join("; ")}. Review runs each repair and Pe's check in Revit and rolls it back; commit applies the same request.`,
+    note: `${g.items.map(line).join("; ")}. The plan describes each repair; apply uses the sealed request.`,
     verbs: [
-      {
-        kind: "command",
-        on: { verb: "heal-preview", group: g.group },
-        label: "Preview heal",
-        says: `Preview healing ${counts} in this network`,
-      },
       {
         kind: "command",
         on: { verb: "heal", group: g.group },

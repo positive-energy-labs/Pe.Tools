@@ -6,6 +6,10 @@ import {
 } from "@pe/agent-contracts";
 import { z } from "zod";
 import { canonicalEnvironmentInput } from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
+import {
+  presentationSchema,
+  type PresentCell,
+} from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import type { InvocationToken } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
 import { admittedWorkPatches } from "./admitted-cells.ts";
 import { commandResultDecoder, type CommandResultDecode } from "./admitted-command-result.ts";
@@ -40,6 +44,9 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     notify,
     schedule,
     submitNative,
+    entryFor,
+    sourceTimeline,
+    now,
   } = context;
   const work = context.work();
   const { snapshots, beginQuery, workHandles } = context.readings();
@@ -58,7 +65,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       invocation: import("../../../../packages/agent-contracts/src/route-kernel-page.ts").InvocationToken;
       send(): unknown;
       preview: unknown;
-      presentation?: { sentence: string; rows: readonly string[] };
+      presentation?: { sentence: string; rows: readonly string[]; cells?: readonly PresentCell[] };
     }
   >();
   const reviewRefusals = new Map<string, ReviewRefusal>();
@@ -81,9 +88,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     } finally {
       presenting = false;
     }
-    const parsed = z
-      .union([z.string(), z.strictObject({ sentence: z.string(), rows: z.array(z.string()) })])
-      .safeParse(value);
+    const parsed = presentationSchema.safeParse(value);
     if (!parsed.success) {
       const refusal = new ReviewRefusal("present-invalid");
       reviewRefusals.set(id, refusal);
@@ -213,9 +218,22 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       const accepted = read();
       if (modelWrite && basis && basis.workRevision !== accepted.work?.revision)
         throw Error("Stale accepted Work basis; prepare from the current revision");
-      if (modelWrite && (!work.ready() || !accepted.work || !accepted.scope.identity.work))
-        throw Error("Accepted Work unavailable");
-      // ModelWrite has one input authority: B's accepted key and revision, never draft intent.
+      // The command's owner chooses the primary Work; every handle comes from accepted state.
+      const command = Object.hasOwn(commands, declaration.entry)
+        ? commands[declaration.entry as SemanticActionKey]
+        : undefined;
+      const handles = workHandles(declaration.deps.readings);
+      if (accepted.work && accepted.scope.identity.work && work.ready())
+        handles[accepted.scope.identity.work.route] = workHandleSchema.parse({
+          key: accepted.scope.identity.work,
+          revision: accepted.work.revision,
+        });
+      const workRoute = command && "writeBoundary" in command
+        ? command.writeBoundary.route
+        : accepted.scope.identity.work?.route;
+      const primaryWork = workRoute ? handles[workRoute] : undefined;
+      if (modelWrite && !primaryWork) throw Error("Accepted owner Work unavailable");
+      // ModelWrite has one input authority: its accepted owner's handle, never draft intent.
       const declaredIntent = z
         .record(z.string(), z.unknown())
         .parse(bindings.bodies[declaration.intent]!.run(context(), parsed));
@@ -224,7 +242,9 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
         (Object.hasOwn(declaredIntent, "work") || Object.hasOwn(declaredIntent, "readWorks"))
       )
         throw Error("ModelWrite intent cannot supply Work identity");
-      const readWorks = workHandles(declaration.deps.readings);
+      const readWorks = Object.fromEntries(
+        Object.entries(handles).filter(([route]) => route !== workRoute),
+      );
       const intent = freezePage(
         z.record(z.string(), z.unknown()).parse(
           entry.input.parse(
@@ -232,10 +252,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
               ? {
                   ...declaredIntent,
                   ...(Object.keys(readWorks).length ? { readWorks } : {}),
-                  work: workHandleSchema.parse({
-                    key: accepted.scope.identity.work,
-                    revision: accepted.work!.revision,
-                  }),
+                  work: primaryWork,
                 }
               : declaredIntent,
           ),
@@ -244,6 +261,17 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       preview = freezePage({ work: accepted.work, input: intent });
       // ActionJournal owns the existing Reject? consent window after this admission.
       send = () => {
+        // A press is visible before ActionJournal delivers its receipt. Keep identity, not a label.
+        const key = accepted.scope.identity.work;
+        const timelineOwner = key ? entryFor(key) : owner;
+        const starts = sourceTimeline.get(timelineOwner) ?? [];
+        starts.push({
+          kind: "invocation", at: now(), press: invocation.id, verb: id,
+          outcome: { id: invocation.id, state: "running", input: intent },
+        });
+        if (starts.length > 200) starts.shift();
+        sourceTimeline.set(timelineOwner, starts);
+        notify();
         const submission = submitNative({
           id: invocation.id,
           key: declaration.entry,
@@ -273,9 +301,6 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
         return submission;
       };
       if (modelWrite) {
-        const command = Object.hasOwn(commands, declaration.entry)
-          ? commands[declaration.entry as SemanticActionKey]
-          : undefined;
         const previewKey =
           command && "writeBoundary" in command
             ? command.writeBoundary.previewKey
@@ -421,6 +446,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
           preview: stale ? undefined : review.preview,
           sentence: stale ? null : (review.presentation?.sentence ?? null),
           rows: stale ? [] : (review.presentation?.rows ?? reviewChanges(review.preview)),
+          cells: stale ? [] : (review.presentation?.cells ?? []),
           stale,
         };
       },

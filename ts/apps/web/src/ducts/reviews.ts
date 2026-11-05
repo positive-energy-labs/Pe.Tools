@@ -85,9 +85,11 @@ export function presentHeal(result: unknown, scope: ReviewEvidence) {
       };
     }),
   );
-  const rows = response.groups.flatMap((group) =>
+  const author = intentAuthor(scope);
+  const lines = response.groups.flatMap((group) =>
     group.items.map((item) => {
       const target = targets.find((t) => t.key === item.key)!;
+      const planned = plan?.groups.some((g) => g.items.some((i) => i.key === item.key));
       const subjects = [target.end, target.other]
         .filter((end): end is string => !!end)
         .map((end) => {
@@ -103,9 +105,21 @@ export function presentHeal(result: unknown, scope: ReviewEvidence) {
           return `${name(id!) ?? "duct element"} (${size})`;
         })
         .join(" to ");
-      return `${item.kind === "cap" ? "Place a cap on" : `Join by ${item.how ?? target.how}`} ${subjects}: ${item.outcome}${item.reason || item.check ? ` · ${item.reason ?? item.check}` : ""}`;
+      const tail = `${item.outcome}${item.reason || item.check ? ` · ${item.reason ?? item.check}` : ""}`;
+      return {
+        row: `${item.kind === "cap" ? "Place a cap on" : `Join by ${item.how ?? target.how}`} ${subjects}: ${tail}`,
+        // Before is the snapshot's own finding (healPlan read it as open); absent that, unknown.
+        cell: {
+          key: item.key,
+          label: subjects,
+          before: planned ? (item.kind === "cap" ? "open end" : "disconnected") : null,
+          after: `${item.kind === "cap" ? "capped" : `joined by ${item.how ?? target.how}`} · ${tail}`,
+          author,
+        },
+      };
     }),
   );
+  const rows = lines.map((line) => line.row);
   const group = response.groups[0]?.group ?? "";
   const system = snapshot
     ? (healSystems(
@@ -120,7 +134,14 @@ export function presentHeal(result: unknown, scope: ReviewEvidence) {
       ) ?? networkWord(snapshot, group))
     : "Duct network";
   const sentence = `${system}: ${healWords(response)}`;
-  return { sentence, rows };
+  return { sentence, rows, cells: lines.map((line) => line.cell) };
+}
+
+/** Who staged the write scope: the ducts Work writeIntent cell's stamped author. */
+function intentAuthor(scope: ReviewEvidence): "pea" | "human" | "unknown" {
+  const by = (scope.work as { writeIntent?: { edit?: { by?: string } } } | null | undefined)
+    ?.writeIntent?.edit?.by;
+  return by === "pea" || by === "human" ? by : "unknown";
 }
 
 /** DuctApplier names loss methods by token; a review speaks Revit's words. */
@@ -158,11 +179,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
     snapshotOf(scope) ?? (scope.readings.sheetSnapshot?.value as DuctSnapshot | undefined);
   const slots = { ...snapshot?.slots, ...request?.slots };
   const name = snapshot ? subjectNamer(snapshot) : () => null;
-  return {
-    sentence: response.writes.length
-      ? `${response.writes.length} Revit target${response.writes.length === 1 ? "" : "s"}: ${outcomeWords(response)}`
-      : "Nothing to write: no native targets were derived from this Work in the selected scope.",
-    rows: response.writes.map((write) => {
+  const lines = response.writes.map((write) => {
       const proposed =
         write.kind === "component"
           ? request?.components?.find((r) => r.id === write.id)
@@ -208,15 +225,69 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
               ? "Work"
               : "derived Work";
       const tail = `${write.outcome}${write.reason ? ` · ${write.reason}` : ""}`;
+      const before = spoken(write.before) ?? null;
+      const key = `${write.kind}:${write.id ?? write.key ?? ""}`;
       // The store row is Pe's provenance record in Project Information; its "absent"/"revision n" are machine words.
       // A slot entry names the slot the value resolver now reads (after), not only the record's old name.
-      if (write.id == null && write.kind === "slot")
-        return `Pe loss record (Project Information): ${SLOT_WORDS[write.key ?? ""] ?? write.key} slot ${spoken(write.before) ?? "none"} → ${spoken(write.after) ?? "none"} · ${tail}`;
-      if (write.id == null)
-        return `Pe loss record (Project Information): ${write.before === "absent" ? "none yet → created" : `${spoken(write.before) ?? "not available"} → updated`} · ${tail}`;
-      return `${name(write.id) ?? "element"} · ${slot ?? write.kind}: ${spoken(write.before) ?? "not available"} → ${spoken(write.after) ?? next ?? "derived from Work"} · source: ${source} · ${tail}`;
-    }),
+      if (write.id == null && write.kind === "slot") {
+        const label = `Pe loss record (Project Information): ${SLOT_WORDS[write.key ?? ""] ?? write.key} slot`;
+        return {
+          row: `${label} ${before ?? "none"} → ${spoken(write.after) ?? "none"} · ${tail}`,
+          cell: { key, label, before, after: `${spoken(write.after) ?? "none"} · ${tail}`, author: "unknown" as const },
+        };
+      }
+      if (write.id == null) {
+        const label = "Pe loss record (Project Information)";
+        return {
+          row: `${label}: ${write.before === "absent" ? "none yet → created" : `${before ?? "not available"} → updated`} · ${tail}`,
+          cell: {
+            key,
+            label,
+            before: write.before === "absent" ? "none yet" : before,
+            after: `${write.before === "absent" ? "created" : "updated"} · ${tail}`,
+            author: "unknown" as const,
+          },
+        };
+      }
+      const label = `${name(write.id) ?? "element"} · ${slot ?? write.kind}`;
+      const after = spoken(write.after) ?? next ?? "derived from Work";
+      return {
+        row: `${label}: ${before ?? "not available"} → ${after} · source: ${source} · ${tail}`,
+        cell: {
+          key,
+          label,
+          before,
+          after: `${after} · ${source} · ${tail}`,
+          author: fanAuthor(scope, write.kind, write.id),
+        },
+      };
+    });
+  return {
+    sentence: response.writes.length
+      ? `${response.writes.length} Revit target${response.writes.length === 1 ? "" : "s"}: ${outcomeWords(response)}`
+      : "Nothing to write: no native targets were derived from this Work in the selected scope.",
+    rows: lines.map((line) => line.row),
+    cells: lines.map((line) => line.cell),
   };
+}
+
+/** The fan Work segment each native write reads; fittings price from ducts rules, not one cell. */
+const FAN_SEGMENT = {
+  component: "componentDrops",
+  terminal: "terminalDrops",
+  "equipment-flow": "equipmentFlows",
+  "terminal-flow": "flows",
+  equipment: "esp",
+} as const;
+/** The Work cell's stamped author; "unknown" when Work does not hold that value (derived or Revit's). */
+function fanAuthor(scope: ReviewEvidence, kind: string, id: number): "pea" | "human" | "unknown" {
+  const segment = FAN_SEGMENT[kind as keyof typeof FAN_SEGMENT];
+  const work = scope.readings.fansWork?.value as
+    | Readonly<Record<string, Readonly<Record<string, { edit?: { by?: string } }>> | undefined>>
+    | null
+    | undefined;
+  const by = segment ? work?.[segment]?.[String(id)]?.edit?.by : undefined;
+  return by === "pea" || by === "human" ? by : "unknown";
 }
 
 export const fanWords = (response: DuctsAssignFan.Res.Response) =>
@@ -231,5 +302,15 @@ export function presentFan(result: unknown, scope: ReviewEvidence) {
   return {
     sentence: `${system}: ${fanWords(response)}`,
     rows: [`Make ${unit ?? "the unit"} the fan of ${system}: ${response.outcome}`],
+    // The response names no prior fan; before stays unknown rather than guessed from the snapshot.
+    cells: [
+      {
+        key: `fan:${response.systemId}`,
+        label: `${system} fan`,
+        before: null,
+        after: `${unit ?? "the unit"} · ${response.outcome}`,
+        author: intentAuthor(scope),
+      },
+    ],
   };
 }

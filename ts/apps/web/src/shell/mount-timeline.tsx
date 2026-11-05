@@ -1,17 +1,14 @@
 import { useList } from "@pe/kit/lang/collection";
+import { Button } from "@pe/kit/lang/button";
 import { ListView } from "@pe/kit/lang/list-view";
 import { teachText } from "@pe/kit/lang/use-teach";
 import { useEffect, useState } from "react";
-import {
-  invocationOutcome,
-  actionStatusSchema,
-  receiptsForWork,
-  routeAddress,
-} from "@pe/agent-contracts";
+import { actionStatusSchema, receiptsForWork, routeAddress } from "@pe/agent-contracts";
 import { readingList } from "./mount-reading";
 import type { GraphMount } from "./mount-owner";
-import { JournalButtons, entryCaller, lastMove, stepState, useWorkJournal } from "./situation-band";
-import { activityTime } from "./timeline";
+import type { AdmittedMount } from "./admitted-mount";
+import { JournalButtons, entryCaller, stepState, useWorkJournal } from "./situation-band";
+import { activityTime, projectTimeline, type TimelineVerbs } from "./timeline";
 
 /** One History presentation for graph panes: accepted calls and exact Work receipts. */
 export function GraphHistory<P, W>({
@@ -19,180 +16,125 @@ export function GraphHistory<P, W>({
   receipts,
   workOnly = false,
   label = "History",
+  verbs: declaredVerbs,
 }: {
-  owner: GraphMount<P, W>;
+  owner: GraphMount<P, W> | AdmittedMount;
+  verbs?: TimelineVerbs;
   receipts?: string;
   workOnly?: boolean;
   label?: string;
 }) {
-  const [entries, setEntries] = useState(() => owner.timeline.read());
-  useEffect(() => owner.timeline.subscribe(() => setEntries(owner.timeline.read())), [owner]);
+  const admitted = "restoreWork" in owner;
+  const readTimeline = () => (admitted ? owner.timeline() : owner.timeline.read());
+  const [entries, setEntries] = useState(readTimeline);
+  useEffect(
+    () =>
+      admitted
+        ? owner.subscribe(() => setEntries(readTimeline()))
+        : owner.timeline.subscribe(() => setEntries(readTimeline())),
+    [owner],
+  );
   const journal = useWorkJournal(owner);
-  const reading = receipts ? owner.readings.get(receipts) : null;
+  const reading = !admitted && receipts ? owner.readings.get(receipts) : null;
   const receiptRows = reading
     ? readingList(reading, (value) => {
         const parsed = actionStatusSchema.array().safeParse(value);
         return parsed.success ? parsed.data : [];
       })
     : null;
-  const scope = owner.snapshot();
-  const key = scope.work?.handle.key ?? scope.workKey ?? scope.unreadable;
-  // Newest first, as the receipts below: every edit, undo and redo is its own entry.
-  const steps = journal ? [...journal.redo, ...journal.undo] : [];
-  const moves = journal ? [...journal.moves].reverse() : [];
+  const scope = !admitted ? owner.snapshot() : null;
+  const key = scope?.work?.handle.key ?? scope?.workKey ?? scope?.unreadable;
   const saved = !workOnly
     ? key
       ? receiptsForWork(receiptRows?.items ?? [], key)
       : (receiptRows?.items ?? [])
     : [];
-  const recorded = new Set(saved.map((receipt) => receipt.id));
-  const shown = entries.filter(
-    (entry) =>
-      (!workOnly || owner.verbs[entry.verb ?? ""]?.kind === "work") &&
-      !(
-        entry.kind === "invocation" &&
-        owner.verbs[entry.verb ?? ""]?.kind === "work" &&
-        moves.some((move) => move.press === entry.press)
-      ) &&
-      !(
-        entry.kind === "invocation" &&
-        entries.some(
-          (receipt) =>
-            receipt.kind === "receipt" &&
-            receipt.outcome &&
-            (receipt.press === entry.press ||
-              receipt.outcome.receiptId === entry.outcome?.receiptId) &&
-            (receipt.press != null || receipt.outcome.receiptId != null),
-        )
-      ),
+  const verbs = declaredVerbs ?? (admitted ? {} : owner.verbs);
+  const projected = projectTimeline(
+    [
+      ...saved.map((receipt) => ({
+        kind: "receipt" as const,
+        at: receipt.startedAt,
+        receiptId: receipt.id,
+        basis: { receipt },
+      })),
+      ...entries,
+    ],
+    verbs,
+    journal,
   );
-  const rows = [
-    ...moves.map((entry) => {
-      const step = steps.find((candidate) => candidate.press === entry.press);
-      return {
-        key: `work:${entry.revision}:${entry.kind}`,
-        label: (
-          <>
-            {entry.kind === "apply" ? "" : entry.kind === "undo" ? "undid " : "redid "}
-            {entry.label} · {entry.by === "pea" ? "Pea" : "you"} ·{" "}
-            {entry.kind === "apply" && step ? stepState(journal!, step) : `r${entry.revision}`} ·{" "}
-            {activityTime(entry.at)}
-            {entry.kind === "apply" && step?.superseded && <> · {step.superseded.message}</>}
-          </>
-        ),
-      };
-    }),
-    ...shown
-      .filter((entry) => {
-        const receipt = (entry.basis as { receipt?: { id: string } } | undefined)?.receipt;
-        return !recorded.has(receipt?.id ?? entry.receiptId ?? "");
-      })
-      .map((entry, index) => ({
-        key: `event:${index}`,
-        label: (
-          <>
-            {(entry.verb && owner.verbs[entry.verb]?.label) ?? entry.kind} ·{" "}
-            {entry.outcome?.state ?? entry.kind} · {entryCaller(entry)} ·{" "}
-            {activityTime(
-              entry.at,
-              entry.kind === "receipt" &&
-                entry.press &&
-                !(entry.basis as { receipt?: unknown } | undefined)?.receipt
-                ? entries.find(
-                    (start) => start.kind === "invocation" && start.press === entry.press,
-                  )?.at
-                : undefined,
+  const rows = [...projected]
+    .reverse()
+    .filter((row) => !workOnly || row.kind === "journal")
+    .map((row) => ({
+      key: row.key,
+      label: row.entry.receiptId ? (
+        <a href={routeAddress("ops").link({ actionId: row.entry.receiptId })}>{row.verb}</a>
+      ) : (
+        row.verb
+      ),
+      sub: [
+        row.move
+          ? `${row.move.kind} / ${row.move.by === "pea" ? "Pea" : "you"} / ${row.move.kind === "apply" && row.step ? stepState(journal!, row.step) : `r${row.move.revision}`}`
+          : `${row.outcome?.state ?? row.kind} / ${entryCaller(row.entry)}`,
+        activityTime(row.at, row.startedAt),
+        row.outcome?.reason,
+        row.move?.kind === "apply" ? row.step?.superseded?.message : undefined,
+        row.kind === "feed"
+          ? (row.entry.subject as { message?: string } | null)?.message
+          : undefined,
+        row.kind === "consent"
+          ? `Consent open${row.consentUntil ? ` until ${activityTime(row.consentUntil)}` : "; awaiting approval"}`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(" / "),
+      actions: (
+        <>
+          {row.outcome?.recovery && row.outcome.receiptId && (
+            <a href={routeAddress("ops").link({ actionId: row.outcome.receiptId })}>
+              {row.outcome.recovery}
+            </a>
+          )}
+          {admitted &&
+            row.entry.receiptId &&
+            ["queued", "running", "outcome-unknown"].includes(row.outcome?.state ?? "") && (
+              <Button
+                label="Stop command"
+                onClick={() => void owner.stopCommand(row.entry.receiptId!)}
+              >
+                Stop
+              </Button>
             )}
-            {entry.kind === "feed" &&
-              typeof (entry.subject as { message?: unknown } | null)?.message === "string" && (
-                <> | {String((entry.subject as { message: string }).message)}</>
-              )}
-            {entry.outcome?.reason && <> | {entry.outcome.reason}</>}
-            {entry.outcome?.recovery && entry.outcome.receiptId && (
-              <>
-                {" "}
-                |{" "}
-                <a href={routeAddress("ops").link({ actionId: entry.outcome.receiptId })}>
-                  {entry.outcome.recovery}
-                </a>
-              </>
-            )}
-            {entry.outcome?.consentWindow &&
-              ["queued", "running"].includes(entry.outcome.state) && (
-                <>
-                  {" "}
-                  | Consent open
-                  {entry.outcome.consentWindow.deadline
-                    ? ` until ${activityTime(entry.outcome.consentWindow.deadline)}`
-                    : "; awaiting approval"}
-                </>
-              )}
-          </>
-        ),
-      })),
-    ...[...saved]
-      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
-      .map((receipt) => ({
-        key: receipt.id,
-        label: (
-          <>
-            <a href={routeAddress("ops").link({ actionId: receipt.id })}>
-              {Object.values(owner.verbs).find((verb) => verb.does === receipt.key)?.label ??
-                receipt.key}
-            </a>{" "}
-            · {invocationOutcome(receipt).state} · {receipt.caller.kind === "pea" ? "Pea" : "you"} ·{" "}
-            {activityTime(receipt.startedAt)}
-            {invocationOutcome(receipt).recovery && (
-              <>
-                {" "}
-                |{" "}
-                <a href={routeAddress("ops").link({ actionId: receipt.id })}>
-                  {invocationOutcome(receipt).recovery}
-                </a>
-              </>
-            )}
-            {receipt.consentWindow &&
-              ["queued", "running"].includes(invocationOutcome(receipt).state) && (
-                <>
-                  {" "}
-                  | Consent open
-                  {receipt.consentWindow.deadline
-                    ? ` until ${activityTime(receipt.consentWindow.deadline)}`
-                    : "; awaiting approval"}
-                </>
-              )}
-            {"error" in receipt && receipt.error ? ` · ${String(receipt.error)}` : ""}
-          </>
-        ),
-      })),
-  ];
+        </>
+      ),
+    }));
   const list = useList({
     items: rows,
     status: receiptRows?.status,
     failure: receiptRows?.failure,
     keyOf: (row) => row.key,
-    search: (row) => ({ text: [teachText(row.label)] }),
+    search: (row) => ({ text: [teachText(row.label), row.sub] }),
     select: "none",
   });
   return (
     <section aria-label={label}>
       {journal && (
         <p>
-          Work r{journal.revision ?? "?"}
-          {journal.last && journal.last.kind !== "apply" && (
-            <>
-              {" "}
-              · {lastMove(journal)} {journal.moves.at(-1)?.label}
-            </>
-          )}{" "}
-          <JournalButtons owner={owner} words />
+          Work r{journal.revision ?? "?"} <JournalButtons owner={owner} words />
         </p>
       )}
       <ListView
         list={list}
         aria-label={label}
         maxHeight="min(24rem, 60vh)"
-        row={(row) => ({ label: row.label, title: teachText(row.label), lines: 3 })}
+        row={(row) => ({
+          label: row.label,
+          sub: row.sub,
+          actions: row.actions,
+          title: teachText(row.label),
+          lines: 3,
+        })}
         empty={{ message: "No activity yet", exit: "Run a command or edit Work" }}
       />
     </section>

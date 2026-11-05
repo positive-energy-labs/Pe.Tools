@@ -222,6 +222,7 @@ test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)
         seal: {
           requestHash: "sealed",
           work: { handle },
+          documentMark: { session: "s", openId: "o", observedSince: null, changedAt: null },
           incarnation: {},
           dependencies: "names-hash",
         },
@@ -287,6 +288,12 @@ test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)
           expect(Object.isFrozen(evidence.readings.names.value!.nodes[0]!.facts)).toBe(true);
           expect(mount.review("apply")!.rows[0]).toContain("FC-1");
           expect(mount.review("apply")!.sentence).toContain("1 Revit target");
+          // Rule 6 production cells: before from the plan's own write, after from the seal; no
+          // Work cell holds this value in the evidence, so the author is unknown, never guessed.
+          expect(mount.review("apply")!.cells).toEqual([
+            expect.objectContaining({ before: "880 cfm", author: "unknown" }),
+          ]);
+          expect(mount.review("apply")!.cells[0]!.after).toContain("925 cfm");
           for (const row of mount.review("apply")!.rows) {
             expect(row).not.toMatch(
               /\b100\b|\b900\b|\belement\s+\d+|\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/i,
@@ -297,7 +304,7 @@ test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)
           expect(present.mock.calls[0]![1]).toBe(evidence);
           if (mode === "stale-after") {
             changeNames();
-            expect(mount.review("apply")).toMatchObject({ stale: true, rows: [], sentence: null });
+            expect(mount.review("apply")).toMatchObject({ stale: true, rows: [], cells: [], sentence: null });
             expect(evidence.readings.names.value!.nodes[0]!.facts[0]!.text).toBe("FC-1");
             expect(present).toHaveBeenCalledOnce();
           }

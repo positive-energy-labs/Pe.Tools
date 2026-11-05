@@ -8,17 +8,31 @@ export const writeIntentSchema = z.record(
   draftCellSchema(z.record(z.string(), z.json())),
 );
 
-/** The write boundary owns this envelope for preview and commit alike. */
+/**
+ * What a plan returns and apply rechecks (ADR 0030 rule 4): the derived request, the consumed Work
+ * handles and revisions, the document mark and the dependency hash. The mark is the host's own
+ * change mark for the exact document the plan read: a later Revit change moves `changedAt`, a host
+ * restart moves `observedSince`, and either one is "plan changed". No separate freshness probe.
+ */
+export const writeSealSchema = z.object({
+  requestHash: z.string(),
+  work: z.unknown(),
+  documentMark: z.object({
+    session: z.string(),
+    openId: z.string(),
+    observedSince: z.number().nullable(),
+    changedAt: z.number().nullable(),
+  }),
+  incarnation: z.unknown(),
+  dependencies: z.string(),
+});
+export type WriteSeal = z.infer<typeof writeSealSchema>;
+
+/** The write boundary owns this envelope for plan and apply alike. */
 export const writeResponseSchema = z.object({
   previewOnly: z.boolean(),
   derivedRequest: z.unknown(),
-  seal: z.object({
-    requestHash: z.string(),
-    work: z.unknown(),
-    incarnation: z.unknown(),
-    dependencies: z.string(),
-  }),
-  takenAt: z.string(),
+  seal: writeSealSchema,
 });
 export const writePreviewSchema = writeResponseSchema
   .extend({
@@ -64,7 +78,10 @@ interface WorkIntentOptions {
   derive?: (work: unknown) => unknown;
 }
 
-const workWriteInputSchema = z.strictObject({ work: workHandleSchema, readWorks: z.record(z.string(), workHandleSchema).optional() });
+const workWriteInputSchema = z.strictObject({
+  work: workHandleSchema,
+  readWorks: z.record(z.string(), workHandleSchema).optional(),
+});
 
 /** Named boundaries keep declaration emit out of the local generic entry closure (TS 6.0.3). */
 type IntentEntry<D extends Command> = Omit<D, "input" | "work"> & {
@@ -150,8 +167,8 @@ export function workWriteCommands<
   definition: C,
   options: WorkIntentOptions & {
     preview?: { key: PK; definition: PC } & ([C["input"]] extends [PC["input"]]
-        ? unknown
-        : { previewInputMustEqualApplyInput: never });
+      ? unknown
+      : { previewInputMustEqualApplyInput: never });
   } = {},
 ): { [P in K]: WriteEntry<C, "apply"> } & {
   [P in [PK] extends [never] ? `${K}.preview` : PK]: WriteEntry<PC, "preview">;

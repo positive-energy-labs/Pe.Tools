@@ -8,7 +8,6 @@ import {
 import type {
   FieldControls,
   InvocationToken,
-  MoveResult,
   PagePort,
   SchemaTable,
 } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
@@ -276,12 +275,21 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         // ADR 0030 rule 10: attention projects the agent fields with this admission's codecs; null opts out.
         attention: createAttention(route.data.fields, bindings.codecs),
         /** Pea's only Page door: a pea-origin owner move, fenced to agent "set" keys by the page policy. */
-        peaMove: (patch: Record<string, unknown>): MoveResult => {
+        peaMove: (patch: Record<string, unknown>) => {
           const basis = owner.invocation(owner.capture("pea:attention"), {});
           const lease = basis.ok ? issuer.lease(basis.value) : basis;
-          return lease.ok
-            ? owner.acceptPage(lease.value, patch as Parameters<typeof owner.acceptPage>[1])
-            : { kind: "refused", code: "lease", message: lease.reason };
+          if (!lease.ok) return { kind: "refused" as const, code: "lease", message: lease.reason };
+          const result = owner.acceptPage(lease.value, patch as Parameters<typeof owner.acceptPage>[1]);
+          if (result.kind === "refused") return result;
+          const accepted = read();
+          return {
+            ...result,
+            receipt: {
+              current: () => !closed && owner.read()?.scope === accepted.scope &&
+                owner.read()?.pageRevision === accepted.pageRevision,
+              rendered: (page: object) => canonicalEnvironmentInput(page) === canonicalEnvironmentInput(accepted.page),
+            },
+          };
         },
         subscribe: (listener: () => void) => {
           if (closed) return () => {};

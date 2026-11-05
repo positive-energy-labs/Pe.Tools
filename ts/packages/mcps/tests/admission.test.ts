@@ -395,7 +395,7 @@ test.each(["open", "address", "workspace", "host"] as const)("loss preview reads
     }
     throw Error(`Unexpected ${url.pathname}`);
   });
-  const run = () => runCapability("ducts.preview-losses", {work}, {hostBaseUrl: "http://preflight.test", receipt: true, bridgeSessionId: "A", openDocumentId: "open-A"}, {door: "command", mutates: false, needs: "project-document"});
+  const run = () => runCapability("ducts.plan-losses", {work}, {hostBaseUrl: "http://preflight.test", receipt: true, bridgeSessionId: "A", openDocumentId: "open-A"}, {door: "command", mutates: false, needs: "project-document"});
   if (scoped) {
     expect(await run()).toMatchObject({state: "succeeded"});
     expect(posts).toHaveLength(1);
@@ -413,7 +413,7 @@ test("loss preview refuses a non-ducts Work handle before any read or submission
     throw Error("no request expected");
   });
   const work = { key: {route: "fans", binding: "host", target: null}, revision: 1 };
-  await expect(runCapability("ducts.preview-losses", {work}, {hostBaseUrl: "http://preflight.test", receipt: true}, {door: "command", mutates: false, needs: "project-document"}))
+  await expect(runCapability("ducts.plan-losses", {work}, {hostBaseUrl: "http://preflight.test", receipt: true}, {door: "command", mutates: false, needs: "project-document"}))
     .rejects.toThrow("Preview needs the route:ducts Work handle");
   expect(seen).toEqual([]);
 });

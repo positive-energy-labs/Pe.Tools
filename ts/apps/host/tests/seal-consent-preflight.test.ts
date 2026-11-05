@@ -24,7 +24,7 @@ test("a typed stale-preview refusal reaches the receipt before consent opens", a
     entry.bind = async (ctx) => ({
       ...(await bind(ctx)),
       preflight: async () => {
-        throw refused("Preview the current Work first", "preview.stale");
+        throw refused("Plan the current Work first", "preview.stale");
       },
     });
     await invokeFixtureCommand(

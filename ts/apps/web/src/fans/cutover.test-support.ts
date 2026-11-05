@@ -63,6 +63,7 @@ export async function createWitness(
     }),
   };
   const calls = new Map<string, number>();
+  const inputs = new Map<string, unknown>();
   const native: Record<string, ReadingSource> = {};
   for (const [entry, value] of Object.entries({
     "ducts.roster": snapshot,
@@ -97,6 +98,7 @@ export async function createWitness(
     acquire(request, token) {
       const call = `${request.route.data.key}:${request.key.op}`;
       calls.set(call, (calls.get(call) ?? 0) + 1);
+      inputs.set(call, JSON.parse(request.key.sortedKeyInput));
       return baseServices.reads.acquire(request, token);
     },
   } };
@@ -136,6 +138,7 @@ export async function createWitness(
   return {
     admitted,
     calls,
+    inputs,
     saved,
     ws,
     mount,

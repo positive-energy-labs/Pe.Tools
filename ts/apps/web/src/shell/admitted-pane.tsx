@@ -2,7 +2,8 @@ import { useContext, useRef } from "react";
 import { RouteVisibility, useRouteActivity } from "../route/activity";
 import { createAdmittedPlace, type AdmittedPlace, type PlaceInput } from "./admitted-place";
 import { AdmittedChrome } from "./admitted-chrome";
-import { useRouteLease } from "../route/view-bridge";
+import { useRouteViewBridge } from "../route/view-bridge";
+import { refuse } from "../route/refusal";
 import type { RouteViewRoute } from "@pe/agent-contracts";
 import { useRouter } from "@tanstack/react-router";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -58,11 +59,21 @@ function AdmittedAttention({
   codec: NonNullable<AdmittedMount["attention"]>;
 }) {
   useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
-  useRouteLease(
-    route.data.key as RouteViewRoute,
-    [mount.page.read() as object, (patch) => void mount.peaMove(patch as Record<string, unknown>)],
-    { codec, visible: useContext(RouteVisibility) },
-  );
+  useRouteViewBridge({
+    route: route.data.key as RouteViewRoute,
+    page: mount.page.read() as object,
+    surface: "route",
+    codec,
+    visible: useContext(RouteVisibility),
+    context: {},
+    facts: {},
+    apply: (patch) => {
+      const result = mount.peaMove(patch as Record<string, unknown>);
+      return result.kind === "refused"
+        ? { ok: false, refusal: refuse("not-ready", result.message) }
+        : { ok: true, moved: result.changed, receipt: result.receipt };
+    },
+  });
   return null;
 }
 

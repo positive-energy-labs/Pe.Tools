@@ -1130,7 +1130,7 @@ export const DUCT_CASES: readonly DuctCase[] = [
     whatWeDo: "The review lists every change, old to new.",
     why: "The engineer approves what actually changes.",
     status: "handled",
-    code: "ducts.preview-losses",
+    code: "ducts.plan-losses",
     kinds: [],
     ids: "SA 19: press Write and read the review, every change old to new.",
     examples: [

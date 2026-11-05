@@ -1,5 +1,3 @@
-import { useList } from "@pe/kit/lang/collection";
-import { ListView } from "@pe/kit/lang/list-view";
 import { HostedChrome } from "../route/hosted-chrome";
 import { useMemo, useRef, useState, useEffect, useContext, type ReactNode } from "react";
 import { z } from "zod";
@@ -25,8 +23,15 @@ import {
   useRouteKeysPrimary,
   useHasGlobalNavigation,
 } from "../navigation/route-controls";
-import { SituationBand, TimelineHead, JournalButtons } from "./situation-band";
+import { SituationBand, TimelineHead, consentThread } from "./situation-band";
 import { ReviewSurface } from "./review-surface";
+import { WriteAction, writeWord, type WriteCell, type WriteRun } from "@pe/kit/lang/write-action";
+import { writeResponseSchema } from "@pe/agent-contracts";
+import { harnessClient } from "#/workbench/provider/harness-client";
+import { resolveWorkbenchConfig } from "#/workbench/config";
+import { projectTimeline } from "./timeline";
+import { GraphHistory } from "./mount-timeline";
+import { secondsLeft } from "./countdown";
 import { worksharingOf } from "./verbs";
 import type { TimelineEntry } from "./timeline";
 
@@ -216,6 +221,85 @@ export function admittedLayout(
   };
   return visit(data.layout);
 }
+/** A reviewed command is a write: the one kit button draws it (ADR 0030 rule 6). */
+const drawsWrite = (verb: RouteGraphJson["verbs"][string] | undefined) =>
+  verb?.kind === "command" && verb.review === "shown";
+/** The open Reject? window on this verb's receipt; the ActionJournal receipt is its only source. */
+export function writeReject(
+  entries: readonly TimelineEntry[],
+  ids: readonly string[],
+  reject: (thread: string, requestId: string) => void,
+  boundThread?: string,
+) {
+  const open = projectTimeline(entries, {}).find((row) => {
+    const key = (row.entry.basis as { receipt?: { key?: string } } | undefined)?.receipt?.key;
+    return row.kind === "consent" && ids.includes(key ?? row.entry.verb ?? "");
+  });
+  if (!open) return null;
+  const thread = consentThread(open.entry, boundThread);
+  if (!thread) return null;
+  const requestId = open.outcome!.consentWindow!.requestId;
+  return {
+    until: open.consentUntil ? `${secondsLeft(open.consentUntil)}s` : "awaiting approval",
+    run: () => reject(thread, requestId),
+  };
+}
+/** What a held plan says: armed only from a sealed Read; any consumed change makes it stale. */
+export function writeHeld(
+  label: string,
+  review: {
+    preview?: unknown;
+    sentence: string | null;
+    rows: readonly string[];
+    cells?: readonly WriteCell[];
+    stale: boolean;
+  } | null,
+) {
+  if (!review) return { held: null, stale: null, sealed: false };
+  if (review.stale) return { held: null, stale: "changed since plan", sealed: false };
+  const sealed = writeResponseSchema.safeParse(review.preview).success;
+  return {
+    // ponytail: the plan is a Read today; rehearsed=true waits on a declared ducts.rehearse-* receipt.
+    // Cells replace the rows they describe; rows remain for presenters with no cell source.
+    held: review.cells?.length
+      ? { word: writeWord(label, review.cells.length, false), summary: review.sentence ?? "", cells: review.cells }
+      : { word: writeWord(label, review.rows.length, false), summary: review.sentence ?? "", rows: review.rows },
+    stale: null,
+    sealed,
+  };
+}
+const settled = async (run: () => unknown): WriteRun => {
+  try {
+    await run();
+    return null;
+  } catch (error) {
+    return { message: error instanceof Error ? error.message : String(error) };
+  }
+};
+export function AdmittedWrite({ mount, data, id }: { mount: AdmittedMount; data: RouteGraphJson; id: string }) {
+  const verb = data.verbs[id]!;
+  const { held, stale, sealed } = writeHeld(verb.label, mount.review(id));
+  return (
+    <WriteAction
+      label={`plan ${verb.label}`}
+      says={`Plan ${verb.label} from the current Work`}
+      held={held}
+      stale={stale}
+      plan={() => settled(() => mount.invoke(id, {}))}
+      apply={{
+        label: verb.label,
+        says: `${verb.label} what the plan sealed`,
+        refusal: sealed ? null : "Plan the current Work first",
+        run: () => settled(() => mount.confirm(id)),
+        done: `${verb.label} sent`,
+      }}
+      reject={writeReject(mount.timeline(), [id, "entry" in verb ? verb.entry : id], (thread, requestId) =>
+        void harnessClient(resolveWorkbenchConfig().origin).permission(thread, requestId, "stop_writes"),
+        typeof mount.page.read().thread === "string" ? String(mount.page.read().thread) : undefined,
+      )}
+    />
+  );
+}
 export function AdmittedActions({
   mount,
   data,
@@ -227,7 +311,10 @@ export function AdmittedActions({
 }) {
   return (
     <>
-      {ids.map((id) => (
+      {ids.map((id) =>
+        drawsWrite(data.verbs[id]) ? (
+          <AdmittedWrite key={id} mount={mount} data={data} id={id} />
+        ) : (
         <Button
           key={id}
           label={data.verbs[id]!.label}
@@ -237,57 +324,16 @@ export function AdmittedActions({
         >
           {data.verbs[id]!.label}
         </Button>
-      ))}
+        ),
+      )}
     </>
   );
 }
 function History({ mount, data }: { mount: AdmittedMount; data: RouteGraphJson }) {
-  const journal = mount.journal();
-  const timeline: readonly TimelineEntry[] = mount.timeline();
-  const list = useList({
-    items: [
-      ...(journal?.moves ?? []).map((move) => ({
-        key: `work:${move.revision}:${move.kind}`,
-        label: move.label,
-        sub: `${move.kind} / ${move.by === "pea" ? "Pea" : "you"} / r${move.revision}`,
-        actions: undefined,
-      })),
-      ...mount.activity().map((receipt) => ({
-        key: receipt.id,
-        label:
-          Object.values(data.verbs).find((v) => "entry" in v && v.entry === receipt.key)?.label ??
-          "Command",
-        sub: receipt.state,
-        actions: ["waiting", "running", "unknown"].includes(receipt.state) ? (
-          <Button label="Stop command" onClick={() => void mount.stopCommand(receipt.id)}>
-            Stop
-          </Button>
-        ) : undefined,
-      })),
-    ],
-    keyOf: (row) => row.key,
-    search: (row) => ({ text: [row.label, row.sub] }),
-    select: "none",
-  });
+  // The Timeline projection owns moves, starts, receipts and feed rows; only refused edits stay here.
   return (
     <section aria-label="History">
-      <JournalButtons owner={mount} words />
-      <ListView
-        list={list}
-        aria-label="History"
-        maxHeight="min(24rem, 60vh)"
-        row={(row) => ({ label: row.label, sub: row.sub, actions: row.actions, lines: 2 })}
-        empty={{ message: "No activity yet", exit: "Run a command or edit Work" }}
-      />
-      {timeline
-        .filter((entry) => entry.kind === "feed")
-        .map((entry, index) => (
-          <p key={`feed:${index}`} role="status">
-            {typeof (entry.subject as { message?: unknown } | undefined)?.message === "string"
-              ? (entry.subject as { message: string }).message
-              : "Source update"}
-          </p>
-        ))}
+      <GraphHistory owner={mount} verbs={data.verbs} />
       {mount.refusedEdits().map((edit) => (
         <p key={edit.id} role="status">
           Unaccepted edit: {edit.refusal.error}
@@ -479,7 +525,8 @@ function Chrome({
             )}
           />
         )}
-        {mount.reviewIds().map((id) => {
+        {/* A write's plan draws in its own button's popover; only other reviews take a portal. */}
+        {mount.reviewIds().filter((id) => !drawsWrite(data.verbs[id])).map((id) => {
           const review = mount.review(id)!;
           return (
             <ReviewSurface
