@@ -87,7 +87,7 @@ const host = async (
       return { exitCode: 0, commandExitCode: 0, logPath: join(root, "console.log") };
     },
   });
-  const log = new HostLog(join(root, ".log", randomUUID()));
+  const log = new HostLog(join(root, ".log", randomUUID()), Date.now);
   const threads = await harnessThreads({
     runs: consentService(),
     log,
@@ -252,7 +252,7 @@ test.each(["claude", "codex"] as const)(
           workWriteBoundary(executor, bridge, { sdk: sdkSessions }),
         ]),
     );
-    const journal = new ActionJournal(join(dir, "journal.jsonl"));
+    const journal = new ActionJournal(join(dir, "journal.jsonl"), Date.now);
     journal.bindCommands({
       work: routes.workspace,
       resolve: (name) => entries[name]!,

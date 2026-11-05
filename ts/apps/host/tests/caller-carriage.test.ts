@@ -272,7 +272,7 @@ test("/call attributes a view-image capture to the caller it was carried by", as
   writeFileSync(join(dir, "L1.png"), "png-l1");
   const store = pictureCaptures(join(dir, "store"));
   const server = await serveRoutes(
-    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, {
+    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl"), Date.now), undefined, {
       sdk: sdkSessions,
     }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(Layer.succeed(PictureCaptureStore, store)), Layer.provide(HostDocumentMarks.layer)),
     bridgeA((key) =>
@@ -326,7 +326,7 @@ test("/call attributes a view-image capture to the caller it was carried by", as
 /** `/actions/<control>` and `/families/readings` judge the caller that sent the body. */
 test("action controls and the Families reading judge their real caller", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-host-carriage-controls-"));
-  const seeded = new ActionJournal(join(dir, "attempts.json"));
+  const seeded = new ActionJournal(join(dir, "attempts.json"), Date.now);
   const admitted = await invokeCommand(
     seeded,
     {
@@ -340,7 +340,7 @@ test("action controls and the Families reading judge their real caller", async (
     async () => ({}),
   );
   await seeded.wait(admitted.id);
-  const owner = new ActionJournal(join(dir, "attempts.json"));
+  const owner = new ActionJournal(join(dir, "attempts.json"), Date.now);
   const server = await serveRoutes(
     makeCallRoute(owner, undefined, { sdk: sdkSessions }).pipe(Layer.provide(testHostInputs)),
     bridgeA((key) =>

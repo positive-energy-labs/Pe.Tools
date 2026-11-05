@@ -134,7 +134,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       });
       const deps = { workspace: owner.work, sdk: sdkSessions };
       const executors = takeoffExecutors(owner.captures, bridge, deps);
-      const runtime = (journal = new ActionJournal(join(root, "integration-journal.jsonl")));
+      const runtime = (journal = new ActionJournal(join(root, "integration-journal.jsonl"), Date.now));
       runtime.bindCommands({
         ...commandResources(bridge, deps, async (id) => (await runtime.list(undefined, id))[0]),
         resolve: (key) => {

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { Context, Effect, Layer } from "effect";
+import { Clock, Context, Effect, Layer } from "effect";
 import { ActionJournal } from "./action-journal.ts";
 import { HostLog } from "./host-log.ts";
 import { hostOwnership } from "./host-ownership.ts";
@@ -24,8 +24,10 @@ export class HostReceipts extends Context.Service<
         const admitted = stamp && receiptStampSchema.parse(stamp);
         if (admitted && admitted.component !== "host")
           return yield* Effect.die(Error("The host receipt owner requires a host stamp"));
-        const log = new HostLog(join(dir, "log"));
-        const journal = new ActionJournal(join(dir, "partition-operations.json"), () => admitted);
+        const clock = yield* Clock.clockWith(Effect.succeed);
+        const now = () => clock.currentTimeMillisUnsafe();
+        const log = new HostLog(join(dir, "log"), now);
+        const journal = new ActionJournal(join(dir, "partition-operations.json"), now, () => admitted);
         const stop = journal.subscribe({}, (receipt) => log.append({ kind: "receipt", receipt }));
         yield* Effect.addFinalizer(() =>
           Effect.promise(async () => {

@@ -139,7 +139,7 @@ async function setup(
       resolved: reply.resolved ?? null,
     });
   };
-  const owner = new ActionJournal(join(dir, "actions.json"));
+  const owner = new ActionJournal(join(dir, "actions.json"), Date.now);
   cleanup.push(() => owner.close());
   const peaWork = join(dir, "pea-work");
   const deps = { sdk, peaWork };
@@ -650,7 +650,7 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
     const path = join(f.dir, `crash-${k}.json`);
     expect(crashes.has(k), `missing committed crash boundary ${k}`).toBe(true);
     await writeFile(path, crashes.get(k)!);
-    const restarted = await new ActionJournal(path).list();
+    const restarted = await new ActionJournal(path, Date.now).list();
     const [acquisition] = foldAcquisitions(restarted);
     if (k === done.steps.length) {
       // every effect succeeded but completion never persisted: the receipts still bind it
@@ -669,7 +669,7 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
   expect(f.calls.filter((argv) => argv[1] === "open" || argv[1] === "start")).toHaveLength(2);
   // The lost open is settled from its SDK op receipt by its original request id, never re-sent.
   const lostOpen = join(f.dir, `crash-${done.steps.length - 1}.json`);
-  const journal = new ActionJournal(lostOpen);
+  const journal = new ActionJournal(lostOpen, Date.now);
   const openStep = done.steps.at(-1)!;
   const reads: string[][] = [];
   // The SDK's recorded op response carries the bridge's document itself (acceptance R4d journal).

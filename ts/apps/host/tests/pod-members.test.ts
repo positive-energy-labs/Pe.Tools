@@ -189,7 +189,7 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
     observed.revision,
   );
   if (!authored.ok) throw Error("Expected accepted authored Work");
-  const owner = new ActionJournal(join(root, "journal.json"));
+  const owner = new ActionJournal(join(root, "journal.json"), Date.now);
   const bridge = detachedBridge();
   bindCommandRuntime(
     owner,

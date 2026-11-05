@@ -28,7 +28,7 @@ const installation = JSON.parse(replay("bootstrap-verify", {}, "missing")).resul
 async function fixture() {
   const dir = await mkdtemp(join(tmpdir(), "pe-bootstrap-"));
   folders.push(dir);
-  const owner = new ActionJournal(join(dir, "actions.json"));
+  const owner = new ActionJournal(join(dir, "actions.json"), Date.now);
   const base = async (args: readonly string[]) => {
     if (args[0] === "version")
       return replay(

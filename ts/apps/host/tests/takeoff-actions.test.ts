@@ -86,7 +86,7 @@ test.each(["selected", "unrelated", "none"] as const)(
         0,
       );
       const rendered = (await work.read(key, "rooms"))!;
-      const owner = new ActionJournal(join(directory, "journal.jsonl"));
+      const owner = new ActionJournal(join(directory, "journal.jsonl"), Date.now);
       const deps = { workspace: work, sdk: sdkSessions };
       const write = takeoffExecutors(captureStore(directory), bridge, deps)["rooms.write"];
       const entries: Record<string, ReturnType<typeof workWriteBoundary>> = {

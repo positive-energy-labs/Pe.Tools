@@ -42,7 +42,7 @@ let heads: Record<string, ThreadHead> = {};
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "pe-grant-doors-"));
-  journal = new ActionJournal(join(root, "journal.json"));
+  journal = new ActionJournal(join(root, "journal.json"), Date.now);
   web = HttpRouter.toWebHandler(
     makeCallRoute(
       journal,
@@ -164,7 +164,7 @@ test("door 2: an unpaired external MCP client cannot write your document", async
 
 /** A receipt a human admitted, settled, ready to be controlled by someone else. */
 async function humanReceipt(id: string) {
-  const seeded = new ActionJournal(join(root, "journal.json"));
+  const seeded = new ActionJournal(join(root, "journal.json"), Date.now);
   await invokeCommand(
     seeded,
     {

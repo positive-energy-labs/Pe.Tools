@@ -46,7 +46,7 @@ beforeEach(async () => {
   });
   web = HttpRouter.toWebHandler(
     makeCallRoute(
-      new ActionJournal(join(root, "journal.json")),
+      new ActionJournal(join(root, "journal.json"), Date.now),
       captureStore(join(root, "captures")),
     ).pipe(nativeReadRoot()).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },

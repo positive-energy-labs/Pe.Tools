@@ -23,7 +23,7 @@ test.each(["families", "schedules"])(
     const directory = await mkdtemp(join(tmpdir(), "pe-receipt-contract-"));
     const releases: (() => void)[] = [];
     try {
-      const journal = new ActionJournal(join(directory, "journal.jsonl"));
+      const journal = new ActionJournal(join(directory, "journal.jsonl"), Date.now);
       const work = bindWork(route, null);
       let saved: unknown = null;
       const workspace = new RouteWorkspace({

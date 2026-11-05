@@ -73,7 +73,7 @@ test("the v5 reader preserves original bytes, facts and uncertainty without auth
       ].join("\r\n"),
     );
     await writeFile(path, bytes);
-    const owner = new ActionJournal(path);
+    const owner = new ActionJournal(path, Date.now);
     bindCommandRuntime(
       owner,
       Context.get(services, RevitBridge),
@@ -101,7 +101,7 @@ test("the v5 reader preserves original bytes, facts and uncertainty without auth
     expect(await readFile(provenance.archive)).toEqual(bytes);
     expect(provenance.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
     expect((await readFile(path, "utf8")).split("\n")[0]).toBe('{"version":7}');
-    expect((await new ActionJournal(path).list(undefined, id))[0]).toEqual(row);
+    expect((await new ActionJournal(path, Date.now).list(undefined, id))[0]).toEqual(row);
     await expect(
       owner.resume(id, { caller: row!.caller, basis: row!.basis }),
     ).resolves.toMatchObject({ refusal: { code: "historical-schema" } });
@@ -195,7 +195,7 @@ test.each([4, 6])(
             ].join("\r\n"),
       );
       await writeFile(path, bytes);
-      const owner = new ActionJournal(path);
+      const owner = new ActionJournal(path, Date.now);
       bindCommandRuntime(
         owner,
         Context.get(services, RevitBridge),
@@ -321,7 +321,7 @@ test("v5 actions written without a footprint import with no effects instead of c
       );
     }
     await writeFile(path, `${lines.join("\n")}\n`);
-    const imported = await new ActionJournal(path).list();
+    const imported = await new ActionJournal(path, Date.now).list();
     expect(imported.map((row) => [row.id, row.state, row.effects])).toEqual([
       ["v5-running", "unknown", []],
       ["v5-succeeded", "succeeded", []],

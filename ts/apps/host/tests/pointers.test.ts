@@ -22,7 +22,7 @@ const open = () =>
   harnessThreads({
     runs: consentService(),
     root: join(root, "threads"),
-    log: new HostLog(join(root, "log")),
+    log: new HostLog(join(root, "log"), Date.now),
     worldRoot: tmpdir(),
     mcpServer: () => ({ name: "pea", command: "unused", args: [], env: [] }),
     providers: createProviders({ spawner: testSpawner(), shellPath: async () => "", probeOnStart: false }),

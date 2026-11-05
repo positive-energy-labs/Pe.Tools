@@ -175,7 +175,7 @@ test("HTTP and one Reading retain named unfinished Work after target removal, cl
   } as unknown as HarnessThreadsOptions["providers"];
   const options: Omit<HarnessThreadsOptions, "runs"> = {
     root: join(root, "threads"),
-    log: new HostLog(join(root, "log")),
+    log: new HostLog(join(root, "log"), Date.now),
     worldRoot: root,
     providers,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),

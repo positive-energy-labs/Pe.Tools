@@ -343,7 +343,7 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
                 "host",
                 hostOwnership.serviceName,
                 "partition-operations.json",
-              ),
+              ), Date.now,
             );
             expect((await persisted.list(undefined, "lost"))[0]!.steps[0]).toMatchObject({
               state: "succeeded",

@@ -71,7 +71,7 @@ async function catalogRun(
       [apply]: workWriteBoundary(write, bridge, deps, spec as never),
       [`${apply}.plan`]: workWriteBoundary({ ...write, definition: catalogWorkCommands[`${apply}.plan`] }, bridge, deps, spec as never),
     } as Record<string, ReturnType<typeof workWriteBoundary>>;
-    const journal = new ActionJournal(join(directory, "journal.jsonl"));
+    const journal = new ActionJournal(join(directory, "journal.jsonl"), Date.now);
     journal.bindCommands({
       ...commandResources(bridge, deps, async (id) => (await journal.list(undefined, id))[0]),
       resolve: (k) => entries[k]!,

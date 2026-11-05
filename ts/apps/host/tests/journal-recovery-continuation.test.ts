@@ -48,7 +48,7 @@ test.each([
       target: null,
       work: memberWork(member),
     };
-    const owner = new ActionJournal(path);
+    const owner = new ActionJournal(path, Date.now);
     let restarted: ActionJournal | undefined;
     try {
       await mkdir(join(directory, "design"));
@@ -147,7 +147,7 @@ test.each([
         if (!edited.ok) throw Error(JSON.stringify(edited));
       }
       runs.closeAll();
-      restarted = new ActionJournal(path);
+      restarted = new ActionJournal(path, Date.now);
       bindCommandRuntime(
         restarted,
         bridge,
@@ -198,7 +198,7 @@ test.each([
       expect(originalSnapshot).toMatchObject({ address: key, workRevision: staged.revision });
       expect(settled.snapshots).toEqual([originalSnapshot]);
       expect(settled.outcome?.snapshots).toEqual([originalSnapshot.id]);
-      const durable = new ActionJournal(path);
+      const durable = new ActionJournal(path, Date.now);
       const reopened = (await durable.list(undefined, "once"))[0]!;
       expect(reopened.snapshots).toEqual([originalSnapshot]);
       expect(reopened.outcome?.snapshots).toEqual([originalSnapshot.id]);

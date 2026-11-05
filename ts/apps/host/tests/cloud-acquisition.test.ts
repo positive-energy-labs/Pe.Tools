@@ -131,7 +131,7 @@ test("a changed version or model identity refuses before download and allocation
 });
 test("recorded SDK envelopes: only the downloaded local work file crosses the acquisition open boundary", async () => {
   const dir = await folder();
-  const owner = new ActionJournal(join(dir, "actions.json"));
+  const owner = new ActionJournal(join(dir, "actions.json"), Date.now);
   const base = JSON.parse(replay("session-list"));
   const row = base.result.sessions.find(
     (row: { case: string }) => row.case === "controlled-active",

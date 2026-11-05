@@ -90,7 +90,7 @@ test("public export pins the full durable thread, including tool results, withou
   const log = events.map((event) => JSON.stringify(event)).join("\r\n") + "\r\n";
   writeFileSync(join(dir, "meta.json"), meta);
   writeFileSync(join(dir, "events.jsonl"), log);
-  const durableLog = new HostLog(join(root, ".log"));
+  const durableLog = new HostLog(join(root, ".log"), Date.now);
   for (const event of events) durableLog.append({ kind: "thread", thread: "thread-1", event });
   durableLog.append({ kind: "thread", thread: "unrelated", event: events[0]! });
   const host = await harnessThreads({
@@ -180,7 +180,7 @@ test("export reports host retention gaps and oversize pointers without truncatin
   try {
     mkdirSync(join(root, "thread"));
     writeFileSync(join(root, "thread/meta.json"), JSON.stringify({ id: "thread" }));
-    const log = new HostLog(join(root, ".log"), { segmentBytes: 1, segments: 1, entryBytes: 256 });
+    const log = new HostLog(join(root, ".log"), Date.now, { segmentBytes: 1, segments: 1, entryBytes: 256 });
     const events: HarnessEvent[] = [1, 2].map((seq) => ({
       kind: "prompt",
       seq,

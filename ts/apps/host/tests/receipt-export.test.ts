@@ -60,7 +60,7 @@ test("export command codes match concrete Pe.App command classes and build admis
 });
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), "pe-export-"));
-  const journal = new ActionJournal(join(dir, "journal.json"), () => stamp);
+  const journal = new ActionJournal(join(dir, "journal.json"), Date.now, () => stamp);
   const sent: unknown[] = [];
   const exporter = createReceiptExport({
     journal,
@@ -133,7 +133,7 @@ test("the actual PostHog client wire carries the original receipt timestamp and 
       return new Response("{}", { status: 200 });
     },
   });
-  const journal = new ActionJournal(join(dir, "journal.json"));
+  const journal = new ActionJournal(join(dir, "journal.json"), Date.now);
   const exporter = createReceiptExport({
     journal,
     root: dir,
@@ -499,7 +499,7 @@ test("a send past its deadline is aborted on the wire, one at a time, and frees 
         });
       }),
   );
-  const journal = new ActionJournal(join(dir, "journal.json"));
+  const journal = new ActionJournal(join(dir, "journal.json"), Date.now);
   const exporter = createReceiptExport({
     journal,
     root: dir,
@@ -523,7 +523,7 @@ test("a send past its deadline is aborted on the wire, one at a time, and frees 
 
 test("feedback never reports failed, or offers a second send, while its first send is still in flight", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-feedback-flight-"));
-  const journal = new ActionJournal(join(dir, "journal.json"), () => stamp);
+  const journal = new ActionJournal(join(dir, "journal.json"), Date.now, () => stamp);
   const requests: unknown[] = [];
   let release: (status: number) => void = () => {};
   const client = new PostHog("explicit-test-key", {

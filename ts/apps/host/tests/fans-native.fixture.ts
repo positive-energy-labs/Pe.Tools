@@ -87,7 +87,7 @@ export async function nativeFixture(
     );
     const target = { kind: "document" as const, ref: connection.target };
     const key = bindWork("ducts", address, undefined, target.ref);
-    const journal = new ActionJournal(join(dir, "actions.jsonl"));
+    const journal = new ActionJournal(join(dir, "actions.jsonl"), Date.now);
     const web = HttpRouter.toWebHandler(
       makeCallRoute(
         journal,

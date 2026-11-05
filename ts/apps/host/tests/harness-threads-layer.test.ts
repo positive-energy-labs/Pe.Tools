@@ -48,7 +48,7 @@ const store = Effect.fn("test.store")(function* (
   const options: HarnessThreadsOptions = {
     root,
     runs: consentService(),
-    log: new HostLog(`${root}.log`),
+    log: new HostLog(`${root}.log`, Date.now),
     worldRoot: root,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
     providers: {

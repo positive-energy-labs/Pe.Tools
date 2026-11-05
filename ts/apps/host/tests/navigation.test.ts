@@ -212,7 +212,7 @@ test("Pea navigation reads real persisted harness summaries and preserves thread
   } as unknown as HarnessThreadsOptions["providers"];
   const options: Omit<HarnessThreadsOptions, "runs"> = {
     root: join(directory, "threads"),
-    log: new HostLog(join(directory, "log")),
+    log: new HostLog(join(directory, "log"), Date.now),
     worldRoot: directory,
     providers,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),

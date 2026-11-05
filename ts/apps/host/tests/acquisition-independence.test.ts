@@ -195,7 +195,7 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
     mkdirSync(dirname(work[openId]), { recursive: true });
     writeFileSync(work[openId], "work copy");
     // Each independent historical witness runs before the real host binds its registry.
-    const witness = new ActionJournal(journalPath);
+    const witness = new ActionJournal(journalPath, Date.now);
     const row = await invokeCommand(
       witness,
       {
