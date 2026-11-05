@@ -97,3 +97,43 @@ test("a host Work update disarms the plan without reopening its review", async (
   expect(document.querySelector("[data-write-action=armed]")).toBeNull();
   expect(screen.getByText(/r5 · 3 staged/)).toBeTruthy();
 });
+
+test("parameter links: the held plan shows before and after per touched id with its author, from the plan response", async () => {
+  const links = { binding: "address" as const, target: "c:\models\a.rvt", route: "parameter-links" };
+  const d = (name: string) => ({ sourceCategoryId: -2001040, sourceParameter: { name: "MOCP" }, relationship: "sameElement", targetParameter: { name } });
+  const client: CatalogWorkClient = {
+    watch: (_key, receive) => {
+      receive({ doc: { definitions: { D1: { edit: { value: d("B1-new"), by: "human" } }, D3: { edit: { value: d("B3"), by: "pea" } } }, assignments: {} }, handle: workHandle(links as never, 2) });
+      return () => {};
+    },
+    write: vi.fn(async () => null),
+    submit: vi.fn(async (admission) => ({
+      id: admission.id,
+      state: "succeeded",
+      result: {
+        ...sealed,
+        evidence: {
+          before: { formatVersion: 1, definitions: [{ id: "D1", ...d("B1") }, { id: "D2", ...d("B2") }], assignments: [] },
+          touched: [
+            { path: ["definitions", "D1"], before: { id: "D1", ...d("B1") }, after: { id: "D1", ...d("B1-new") }, by: "human" },
+            { path: ["definitions", "D3"], before: null, after: { id: "D3", ...d("B3") }, by: "pea" },
+          ],
+        },
+      },
+    }) as never),
+  };
+  render(<CatalogWorkReview owner="parameter-links" at={links as never} target={target} client={client} />);
+  await screen.findByText(/r2 · 2 staged/);
+  fireEvent.click(screen.getByRole("button", { name: /plan parameter-links/ }));
+  await waitFor(() => expect(document.querySelector("[data-write-action=armed]")).not.toBeNull());
+  const d1 = document.querySelector('[data-write-cell="definitions/D1"]')!;
+  const d3 = document.querySelector('[data-write-cell="definitions/D3"]')!;
+  expect(d1.querySelector("[data-write-author]")?.getAttribute("data-write-author")).toBe("human");
+  expect(d3.querySelector("[data-write-author]")?.getAttribute("data-write-author")).toBe("pea");
+  // A known absence, never an inferred "unknown"; the stored before is the plan's own read.
+  expect(d3.textContent).toContain("(none)");
+  expect(d3.textContent).not.toContain("unknown");
+  expect(d1.textContent).toContain("B1-new");
+  // D2 is untouched: the review names only what the plan changes.
+  expect(document.querySelector('[data-write-cell="definitions/D2"]')).toBeNull();
+});

@@ -9,16 +9,32 @@ import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { WorkHandle, WorkPath } from "./command.ts";
 import type { ActionReadingKey } from "./reading.ts";
 import { draftCellSchema } from "./draft.ts";
-import { parameterLinksDocumentSchema, stagedParameterProfile } from "./parameter-links.ts";
+import type { Author } from "./draft.ts";
+import {
+  parameterLinkProfileSchema,
+  parameterLinksDocumentSchema,
+  type ParameterLinkProfile,
+  type ParameterLinksDocument,
+} from "./parameter-links.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 import { workWriteCommands } from "./write-intent.ts";
 
-/** Plan derives the one native request from the whole Work. Step 5's DAG linker reads this same entry. */
-export interface CatalogWork<S extends z.ZodType = z.ZodType> {
+/** One staged id the plan changes: the model's value it read (null: absent), the result, and its author. */
+export interface CatalogTouch {
+  path: WorkPath;
+  before: unknown;
+  after: unknown;
+  by: Author;
+}
+/**
+ * Plan derives the one native request from the whole Work laid over `base`, what the model holds now
+ * (read by the owner's host reader at plan and again after consent). Step 5's DAG linker reads this entry.
+ */
+export interface CatalogWork<S extends z.ZodType = z.ZodType, B = unknown> {
   owner: string;
   op: string;
   schema: S;
-  derive(doc: z.infer<S>): unknown;
+  derive(doc: z.infer<S>, base: B): { request: unknown; touched: readonly CatalogTouch[] };
 }
 
 /** A Work the native op cannot apply faithfully. The plan refuses; nothing is sent. */
@@ -73,23 +89,47 @@ function deriveDataTable(doc: DataTablesWork) {
   };
 }
 
+type StagedEdit = { value?: unknown; delete?: true; by?: Author } | null | undefined;
+/**
+ * ADR 0030 rule 8: staged ids lay over the stored profile by id. A set replaces its id, a delete removes only
+ * its id, and every unstaged stored id is kept, because the native reconcile replaces the profile whole.
+ */
+export function mergeParameterProfile(doc: ParameterLinksDocument, stored: ParameterLinkProfile | null) {
+  const touched: CatalogTouch[] = [];
+  const merged = (["definitions", "assignments"] as const).map((kind) => {
+    const byId = new Map<string, { id: string }>((stored?.[kind] ?? []).map((entry) => [entry.id, entry]));
+    for (const [id, cell] of Object.entries(doc[kind])) {
+      const edit = cell.edit as StagedEdit;
+      if (!edit) continue;
+      const before = byId.get(id) ?? null;
+      if (edit.delete && !before) throw new CatalogWorkRefused(`${kind} ${id} is not stored; nothing to delete`);
+      const after = edit.delete ? null : { ...(edit.value as object), id };
+      if (after) byId.set(id, after);
+      else byId.delete(id);
+      touched.push({ path: [kind, id], before, after, by: edit.by ?? "unknown" });
+    }
+    return [kind, [...byId.values()]] as const;
+  });
+  if (!touched.length) throw new CatalogWorkRefused("Stage a parameter-link definition or assignment first");
+  const profile = parameterLinkProfileSchema.safeParse({ formatVersion: stored?.formatVersion ?? 1, ...Object.fromEntries(merged) });
+  if (!profile.success) throw new CatalogWorkRefused(`The merged profile is invalid: ${profile.error.issues[0]?.message}`);
+  return { request: { profile: profile.data, reconcile: true }, touched };
+}
+
 export const catalogWorks = {
   "data-tables": {
     owner: "data-tables",
     op: "data-table.apply",
     schema: dataTablesWorkSchema,
-    derive: deriveDataTable,
-  } satisfies CatalogWork<typeof dataTablesWorkSchema>,
+    // Data tables read no base: cells are never filled from the model (above).
+    derive: (doc) => ({ request: deriveDataTable(doc), touched: [] }),
+  } satisfies CatalogWork<typeof dataTablesWorkSchema, undefined>,
   "parameter-links": {
     owner: "parameter-links",
     op: "revit.apply.parameter-links",
     schema: parameterLinksDocumentSchema,
-    derive: (doc) => {
-      const profile = stagedParameterProfile(doc);
-      if (!profile) throw new CatalogWorkRefused("Stage a parameter-link profile first");
-      return { profile, reconcile: true };
-    },
-  } satisfies CatalogWork<typeof parameterLinksDocumentSchema>,
+    derive: mergeParameterProfile,
+  } satisfies CatalogWork<typeof parameterLinksDocumentSchema, ParameterLinkProfile | null>,
 };
 type Owner = keyof typeof catalogWorks;
 
@@ -119,7 +159,7 @@ export const catalogWorkSpecs = Object.fromEntries(
 ) as { [O in Owner]: RouteStateSpec<(typeof catalogWorks)[O]["schema"]> & { editable: readonly WorkPath[] } };
 
 function catalogWorkCommand<const K extends string>(owner: Owner, key: K, dirties: readonly ActionReadingKey[]) {
-  const work: CatalogWork = catalogWorks[owner];
+  const work: CatalogWork<z.ZodType, never> = catalogWorks[owner];
   const definition = {
     says: native(work.op).description,
     native: [work.op],
@@ -129,8 +169,9 @@ function catalogWorkCommand<const K extends string>(owner: Owner, key: K, dirtie
     input: z.object({}),
   } as const;
   // The plan sends nothing native, so it names no leaf; command-axes gives a catalog Work plan Effect Read.
+  // The boundary only parses the Work; the host executor reads the owner's base and derives (both phases).
   return workWriteCommands(owner, key, definition, {
-    derive: (doc) => work.derive(work.schema.parse(doc)),
+    derive: (doc) => ({ doc: work.schema.parse(doc) }),
     preview: {
       key: `${key}.plan`,
       definition: { ...definition, native: [], says: `Plan, nothing committed: ${definition.says}` },

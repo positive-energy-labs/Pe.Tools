@@ -6,7 +6,6 @@ import type { SdkReceiptReader } from "./native-receipts.ts";
 import { z } from "zod";
 import {
   canonicalRouteInput,
-  CatalogWorkRefused,
   writeResponseSchema,
   workHandleSchema,
   workBinding,
@@ -106,15 +105,7 @@ async function deriveFromWork(
       .map((name) => [name]),
     edits: spec.editable,
   }))) as { writeIntent?: Record<string, { edit?: { value: Record<string, unknown> } }> };
-  let derived: object;
-  try {
-    derived = hooks.derive(doc) as object;
-  } catch (error) {
-    // A catalog Work the native op cannot apply faithfully is the owner's refusal, not a host fault.
-    if (error instanceof CatalogWorkRefused) throw refused(error.message, "catalog.refused");
-    throw error;
-  }
-  const input = { ...derived, work, ...(readWorks ? { readWorks } : {}) };
+  const input = { ...(hooks.derive(doc) as object), work, ...(readWorks ? { readWorks } : {}) };
   return { work, input, target, observed };
 }
 const withInput = (ctx: CommandContext, input: Record<string, unknown>): CommandContext => ({
@@ -294,6 +285,8 @@ export function workWriteBoundary(
         return {
           previewOnly: true,
           derivedRequest: project(p.value).request,
+          // What the plan observed beside the request (a before, touched ids): the review draws from this response.
+          evidence: project(p.value).evidence,
           authoredIntent: p.input,
           seal: p.seal,
         };
