@@ -31,12 +31,13 @@ test.each([false, true])(
     document.body.append(container);
     // Run the exact inline watchdog before React, as on a slow cold module load.
     new Function(startupWatch)();
+    window.dispatchEvent(new ErrorEvent("error", { message: "Failed to fetch families/route.tsx" }));
     if (timeout) vi.advanceTimersByTime(HOST_READ_WAIT_S * 1000);
     expect(container.innerHTML).toBe(server);
     const diagnostic = container.querySelector("[data-startup-diagnostic]")?.shadowRoot;
     if (timeout) {
       expect(diagnostic?.querySelector('[role="alert"]')?.textContent).toContain(
-        "Page startup did not finish",
+        "Failed to fetch families/route.tsx",
       );
       expect(diagnostic?.querySelector("a")?.textContent).toBe("Reload page");
     }
