@@ -40,7 +40,7 @@ Progress 2026-11-05: steps 0–5 landed on main at the Driver's exact GREEN SHA 
 5. Catalog export and the DAG linker, then Pea projection (ADR 0028); subject, selection and directory; Pod registration so Pod routes mount like builtins; one reading engine; the value resolver.
 6. Purge and fold (2026-11-02 list, where not yet done): the two reading engines, `prototypes/` behind manifest-declared variants, the hand rows and `z.custom` decodes in `capabilities.ts`, the hand dispatch in `capability-tools.ts`.
 7. Recording (ADR 0031 step order): services first, then the recording source behind a Lane union, then epochs and the History rail, then keyed diff, then recompute, then cloud.
-8. The Manual D Load Driver proves each route in the browser on its controlled Chadds copy. Driver green, with no objection from kaitpw, gates a fast-forward merge to main. A driveable step starts the next step while that merge waits; from step 6 the Driver includes chaos runs.
+8. The Manual D Load Driver proves each route in the browser on its controlled Chadds copy. Driver green, with no objection from kaitpw, gates a fast-forward merge to main. Test-, support- or ledger-only fast-forwards skip the Driver gate if they touch no production file and carry a deterministic stamp at their SHA. A driveable step starts the next step while that merge waits; from step 6 the Driver includes chaos runs.
 
 Kit has one owner thread per wave; route threads add red `kernel gap:` tests, never local kit patches. Merge main daily.
 
