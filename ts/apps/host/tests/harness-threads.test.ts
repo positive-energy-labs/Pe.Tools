@@ -1,5 +1,5 @@
 import { fansDocumentSchema } from "@pe/agent-contracts";
-import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle } from "./effect-test.ts";
+import { captureStore, detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle } from "./effect-test.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
@@ -43,8 +43,7 @@ import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { ductsExecutors } from "../src/ducts-actions.ts";
-import { workWriteBoundary } from "../src/work-write-boundary.ts";
+import { commandRegistry } from "../src/command-registry.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
@@ -232,6 +231,15 @@ test.each(["claude", "codex"] as const)(
           let value: unknown;
           if (op.startsWith("ducts.snapshot.")) value = snapshot;
           else if (op === "ducts.tables") value = { tables: {}, missing: [], unsupported: [] };
+          // The plan is a native Read (V1): it previews the one staged flow and writes nothing.
+          else if (op === "ducts.apply.plan")
+            value = {
+              previewOnly: true,
+              counts: { written: 0, planned: 1, refused: 0, unchanged: 0 },
+              writes: [{ kind: "equipment-flow", id: 14577391, outcome: "planned" }],
+              storeRevision: 0,
+              systemsAfter: [],
+            };
           else if (op === "ducts.apply") {
             await journal.markDispatched(requestId!);
             writes.push(input);
@@ -246,19 +254,14 @@ test.each(["claude", "codex"] as const)(
           return { value, target: { session: "A", document: address, documentRef: target } };
         }),
     });
-    const executors = ductsExecutors(bridge, { sdk: sdkSessions });
-    const entries = Object.fromEntries(
-      Object.entries(executors)
-        .filter(([name]) => name !== "ducts.refresh")
-        .map(([name, executor]) => [
-          name,
-          workWriteBoundary(executor, bridge, { sdk: sdkSessions }),
-        ]),
-    );
+    // Production composition decides which commands carry a write boundary; plans are Reads.
+    const resolve = commandRegistry(bridge, captureStore("harness-threads"), { sdk: sdkSessions }, async () => {
+      throw Error("No local command in this journey");
+    });
     const journal = new ActionJournal(join(dir, "journal.jsonl"));
     journal.bindCommands({
       work: routes.workspace,
-      resolve: (name) => entries[name]!,
+      resolve,
       probe: async () => true,
     });
     let base = "";
@@ -361,7 +364,7 @@ test.each(["claude", "codex"] as const)(
             await journal.invoke(
               {
                 id: phase,
-                key: `ducts.${phase}-losses`,
+                key: phase === "preview" ? "ducts.plan-losses" : "ducts.apply-losses",
                 target: { kind: "document", ref: target },
                 input: { work },
               },
