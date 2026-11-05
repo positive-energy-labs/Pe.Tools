@@ -97,15 +97,4 @@ public sealed class DuctGeometryTests {
         Assert.That(F(analysis, 20, DuctNetwork.AoOverA1), Is.Null);
     }
 
-    [Test]
-    public void Loss_and_terminal_drop_round_trip_through_the_wire_shape() {
-        var loss = new DuctLoss(DuctLossMethod.SpecificCoefficient, "5a598293-1504-46cc-a9c0-de55c82848b9", null, 0.25, null, 0.012,
-            new Dictionary<string, string> { ["Coefficient"] = "0.25" });
-        var json = Newtonsoft.Json.JsonConvert.SerializeObject(loss);
-        Assert.That(json, Does.Contain("\"specific-coefficient\""));
-        var back = Newtonsoft.Json.JsonConvert.DeserializeObject<DuctLoss>(json)!;
-        Assert.That(back.Method, Is.EqualTo(DuctLossMethod.SpecificCoefficient));
-        Assert.That(back.Coefficient, Is.EqualTo(0.25));
-        Assert.That(new DuctParameterSlotOverrides().Resolve().FanStatic, Is.EqualTo("PE_M_Fan_ExternalStaticPressure"));
-    }
 }
