@@ -6,6 +6,8 @@ import { isValidElement } from "react";
 import { afterEach,expect,test,vi } from "vite-plus/test";
 import { createWitness } from "../fans/cutover.test-support";
 import type { AdmittedMount } from "../shell/admitted-mount";
+import { admittedSubjectDoor } from "../shell/admitted-chrome";
+import { SubjectDoor } from "../shell/subject";
 import { makeAtomRegistry } from "../shell/owner";
 import { cellFocusOf,cellFocusSubject } from "./cell-focus";
 import { ductsLink,localId,localSubject } from "./neutral";
@@ -49,6 +51,23 @@ function registry() {
   return value;
 }
 
+test("F16 the sidebar navigates the document roster before pricing and keeps atomic all/clear", async () => {
+  const f = await createWitness(closes, new Map(), { "ducts.tables": { kind: "use", open() {} } });
+  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
+  expect(f.owner.readingStatus("pricing").snapshot.value).toBeFalsy();
+  render(<RegistryContext value={registry()}>
+    <SubjectDoor value={admittedSubjectDoor(f.owner, f.admitted.owner.data)}>
+      {nodeFor(f.owner, "e-systems")}
+    </SubjectDoor>
+  </RegistryContext>);
+  expect(screen.getByRole("listbox", { name: "systems" }).textContent).toContain("SA");
+  expect(screen.getByRole("combobox", { name: "Search systems" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "All systems" }));
+  expect(f.owner.page.read().system).toEqual({ kind: "all" });
+  fireEvent.click(screen.getByRole("button", { name: "Clear systems" }));
+  expect(f.owner.page.read().system).toEqual({ kind: "ids", ids: [] });
+});
+
 test("Q2a keeps kind and colour editors on ducts and fan settings on fans", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
@@ -58,7 +77,12 @@ test("Q2a keeps kind and colour editors on ducts and fan settings on fans", asyn
   const view = render(<RegistryContext value={registry()}>
     {nodeFor(f.owner, "e-systems")}{nodeFor(f.owner, "e-rules-all")}
   </RegistryContext>);
-  expect(screen.getAllByRole("region", { name: "System colours" })).toHaveLength(1);
+  expect(screen.queryByRole("region", { name: "System colours" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "Fan inputs" })).toBeNull();
+  expect(screen.getByRole("combobox", { name: "Search systems" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Duct settings" }));
+  expect(await screen.findByRole("region", { name: "System colours" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Fan inputs" }).getAttribute("href")).toMatch(/^\/fans\?/);
   expect(screen.getAllByRole("region", { name: "Unit kinds" })).toHaveLength(1);
   expect(screen.queryByRole("region", { name: "Fan settings" })).toBeNull();
   view.unmount();
@@ -98,7 +122,7 @@ test("a pending sheet does not blank its roster sibling", async () => {
     </RegistryContext>,
   );
   expect(screen.getByRole("listbox", { name: "fans" }).textContent).toContain("MUAS-1");
-  expect(screen.getByRole("status").textContent).toContain("computing");
+  expect(screen.getAllByRole("status").some((node) => node.textContent === "computing")).toBe(true);
 });
 
 test("the fan roster restores its Page query after its body is hidden and shown", async () => {

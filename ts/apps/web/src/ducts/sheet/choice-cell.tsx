@@ -36,9 +36,9 @@ export function ChoiceCell({
   pick: (key: string) => void;
   act?: CellAct;
 }) {
-  const shown = cell?.edit
-    ? show(cell.edit.value)
-    : (options.find((o) => o.key === current)?.label ?? current ?? "—");
+  const shown =
+    options.find((o) => o.key === current)?.label ??
+    (cell?.edit ? show(cell.edit.value) : (current ?? "—"));
   // A stale edit: the standing option is now disabled. It stays the shown value, with its reason
   // as the cell's warning; the row's clear verb is the way out.
   const stale = options.find((o) => o.key === current)?.disabled ?? null;

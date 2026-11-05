@@ -1,21 +1,17 @@
-import type {
-DuctsDesign,
-DuctsSheetEdits,
-Resolved,
-} from "@pe/agent-contracts";
+import type { DuctsDesign, DuctsSheetEdits, Resolved } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { SubjectText } from "@pe/kit/lang/subject-text";
-import { Redo2,Undo2 } from "lucide-react";
-import { useState,type JSX,type ReactNode } from "react";
-import { airflowOptions,type AirflowOption } from "../airflow";
-import { ChoiceCell,type CellAct } from "./choice-cell";
+import { Redo2, Undo2 } from "lucide-react";
+import { useState, type JSX, type ReactNode } from "react";
+import { airflowOptions, type AirflowOption } from "../airflow";
+import { ChoiceCell, type CellAct } from "./choice-cell";
 import { criterionLabel } from "./criterion-words.neutral";
-import { fittingGroups,memberSubject,type FittingGroup } from "./fitting-groups";
+import { fittingGroups, memberSubject, type FittingGroup } from "./fitting-groups";
 import type { EditMeta } from "./input-history.neutral";
-import { inputRows,SECTION_WORDS,type InputRow,type InputSection } from "./input-rows";
-import type { SheetFitting,SheetInputs } from "./model";
-import { SheetCell,type WorkCell } from "./sheet-cell";
+import { inputRows, SECTION_WORDS, type InputRow, type InputSection } from "./input-rows";
+import type { SheetFitting, SheetInputs } from "./model";
+import { SheetCell, type WorkCell } from "./sheet-cell";
 
 export interface InputContext {
   snapshot: DuctSnapshot;
@@ -282,35 +278,16 @@ function FittingGroupRows({
   apply: (edits: DuctsSheetEdits, meta: EditMeta) => void | Promise<unknown>;
   history: InputsHistory;
 }) {
-  const [open, setOpen] = useState(group.unpriced > 0 || group.members.length <= 3);
+  const [open, setOpen] = useState(false);
   return (
-    <div className="contents" data-fitting-group={group.key} data-fitting-source={group.source}>
-      <span className="col-span-4 mt-1 min-w-0 border-t border-line pt-1">
-        <span className="block font-semibold break-words">{group.title}</span>
-        <span className="block t-small text-ink-2 break-words">
-          {group.tableMeaning ?? (group.unpriced ? "no table prices these" : "")}
-          {" · "}
-          {group.reach}
-        </span>
+    <div
+      className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,7.5rem)_auto] items-center gap-x-2 gap-y-1 hairline-t pt-1"
+      data-fitting-group={group.key}
+      data-fitting-source={group.source}
+    >
+      <span className="min-w-0 truncate" title={group.title}>
+        {group.title}
       </span>
-      {group.members.length > 0 ? (
-        <span className="flex min-w-0 items-baseline gap-2 t-small text-ink-2">
-          <Button
-            label={
-              open
-                ? `Hide the ${group.members.length} fittings`
-                : `Show the ${group.members.length} fittings`
-            }
-            onPress={() => setOpen(!open)}
-          >
-            {open ? "▾" : "▸"} {group.members.length} on this fan
-          </Button>
-          <span className="face-mono">{group.lossInWg == null ? "" : inWg(group.lossInWg)}</span>
-          {group.unpriced > 0 && <span data-tone="alarm">{group.unpriced} not priced</span>}
-        </span>
-      ) : (
-        <span className="t-small text-ink-2">none on this fan</span>
-      )}
       <ChoiceCell
         label={`${group.title} table`}
         options={group.choices.map((choice) => ({
@@ -329,10 +306,6 @@ function FittingGroupRows({
             void apply(choice.edits, { label: `${group.title} → ${key}`, rowKey: group.key });
         }}
       />
-      <span className="t-small min-w-0 truncate text-ink-2" data-input-source={group.source}>
-        {group.source}
-        {FROM_DUCTS}
-      </span>
       <RowVerb
         rowKey={group.key}
         clear={group.clear}
@@ -342,6 +315,23 @@ function FittingGroupRows({
         label={group.title}
         was={`${group.title} ${group.table ?? "unpriced"} (${group.source})`}
       />
+      <span
+        className="col-span-3 min-w-0 truncate t-small text-ink-2"
+        title={`${group.tableMeaning ?? ""} / ${group.reach}`}
+      >
+        {group.source}
+        {FROM_DUCTS} / {group.tableMeaning ?? group.reach}
+      </span>
+      <span className="col-span-3 flex min-w-0 items-center gap-2 t-small">
+        <Button
+          label={`${open ? "Hide" : "Show"} the ${group.members.length} fittings`}
+          onPress={() => setOpen(!open)}
+        >
+          {open ? "Hide" : "Show"} {group.members.length} on this fan
+        </Button>
+        <span className="face-mono">{inWg(group.lossInWg)} in-wg</span>
+        {group.unpriced > 0 && <span data-tone="alarm">{group.unpriced} not priced</span>}
+      </span>
       {open &&
         group.members.map((m) => (
           <div key={m.key} className="contents" data-fitting={m.key}>
@@ -349,7 +339,7 @@ function FittingGroupRows({
               <SubjectText text={m.subject} revit={m.ids} owner={`fitting:${m.key}`} />
             </span>
             <span className="face-mono text-right">{inWg(m.lossInWg)}</span>
-            <span className="col-span-2 t-small min-w-0 whitespace-normal text-ink-2">
+            <span className="t-small min-w-0 truncate text-ink-2" title={m.note ?? undefined}>
               {m.note ?? ""}
             </span>
           </div>
@@ -570,7 +560,9 @@ export function InputsSurface({
                   onValue={(value) =>
                     apply(row.edit(value), {
                       label:
-                        value == null ? `Revert ${row.label}` : `${row.label} → ${value} ${row.unit}`,
+                        value == null
+                          ? `Revert ${row.label}`
+                          : `${row.label} → ${value} ${row.unit}`,
                       rowKey: row.key,
                       ...(value == null ? { clear: true } : {}),
                     })
@@ -645,7 +637,7 @@ export function InputsSurface({
           Priced by rule. A table chosen on a rule applies to every fitting that rule matches in the
           document; a family no rule matches is priced as the rule you assign it.
         </p>
-        <div className={ROWS}>
+        <div className="grid min-w-0 gap-1">
           {groups.map((group) => (
             <FittingGroupRows
               key={group.key}
@@ -656,7 +648,7 @@ export function InputsSurface({
             />
           ))}
           {groups.length === 0 && (
-            <p className="col-span-4 text-ink-2">
+            <p className="text-ink-2">
               {ctx.inputs ? "No fittings on this sheet" : criteriaRefusal}
             </p>
           )}

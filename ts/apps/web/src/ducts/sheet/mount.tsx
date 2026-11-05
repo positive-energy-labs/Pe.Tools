@@ -1,3 +1,4 @@
+import { EspParameter } from "./esp-parameter";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { StateCell, cellFromDraft } from "@pe/kit/lang/cell";
 import { reviewTransitions } from "#/components/work/band";
@@ -113,7 +114,10 @@ function WriteScope({
   ctx: PaneContext<typeof fansData, typeof schemas, typeof entries, "sheet-inputs">;
   snapshot: DuctSnapshot;
   fan: { unitId: number; portIndex: number; mark: string } | null;
-  write: (patches: RouteStatePatch[], history?: EditMeta) => Promise<{ code: string; message: string } | null>;
+  write: (
+    patches: RouteStatePatch[],
+    history?: EditMeta,
+  ) => Promise<{ code: string; message: string } | null>;
 }) {
   const intent = ctx.work?.writeIntent ?? {};
   const standing = intent.edit?.value;
@@ -129,7 +133,8 @@ function WriteScope({
         ...(cells.length ? { cells } : {}),
       })
     : null;
-  const mine = !!fan && standing?.walk?.unitId === fan.unitId && standing.walk.portIndex === fan.portIndex;
+  const mine =
+    !!fan && standing?.walk?.unitId === fan.unitId && standing.walk.portIndex === fan.portIndex;
   const current = mine ? "fan" : standing ? "other" : "none";
   const label = (value: unknown) => {
     const v = value as typeof standing;
@@ -137,29 +142,52 @@ function WriteScope({
     return `${v.walk.unitId === fan?.unitId && v.walk.portIndex === fan?.portIndex ? fan.mark : `unit ${v.walk.unitId}`} · ${v.cells?.length ?? 0} staged`;
   };
   return (
-    <span data-sheet-cell="Write scope" className="flex items-baseline gap-2">
+    <span data-sheet-cell="Write scope" className="contents">
       <span>Write scope</span>
       <ChoiceCell
         label="Write scope"
         options={[
           ...(offered?.success
-            ? [{ key: "fan", label: label(offered.data), description: "Write this fan's walk and its staged cells" }]
+            ? [
+                {
+                  key: "fan",
+                  label: label(offered.data),
+                  description: "Write this fan's walk and its staged cells",
+                },
+              ]
             : []),
-          ...(current === "other" ? [{ key: "other", label: label(standing), description: "Another fan's scope, still standing" }] : []),
+          ...(current === "other"
+            ? [
+                {
+                  key: "other",
+                  label: label(standing),
+                  description: "Another fan's scope, still standing",
+                },
+              ]
+            : []),
           { key: "none", label: "None", description: "Clear the write scope" },
         ]}
         current={current}
         cell={intent}
         path={null}
         show={label}
-        refusal={!ctx.workBasis ? "Read Work before editing" : !offered?.success ? "Open a fan first" : null}
+        refusal={
+          !ctx.workBasis
+            ? "Read Work before editing"
+            : !offered?.success
+              ? "Open a fan first"
+              : null
+        }
         pick={(key) => {
           if (key === "fan" && offered?.success && ctx.workBasis)
             void settleWork(ctx.verbs.scope(offered.data, ctx.workBasis));
           if (key === "none" && intent.edit)
-            void write(cellPatches([], "writeIntent", intent, { kind: "clear" }), { label: "Clear write scope" });
+            void write(cellPatches([], "writeIntent", intent, { kind: "clear" }), {
+              label: "Clear write scope",
+            });
         }}
       />
+      <span />
     </span>
   );
 }
@@ -281,45 +309,50 @@ function InputsContent({
   };
   const fanReading = fans.value;
   const friction = ctx.work?.designFriction ?? {};
+  const parameterTarget = ctx.workBasis?.token.scope.identity.target;
   const ownPane = (
     <>
-      <section aria-label="Fan settings" className="flex flex-col gap-2 p-1">
+      <section
+        aria-label="Fan settings"
+        className="grid grid-cols-[minmax(0,1fr)_minmax(0,10rem)_auto] items-center gap-x-2 gap-y-1 p-1"
+      >
         <WriteScope ctx={ctx} snapshot={snapshot} fan={sheet?.overview.fan ?? null} write={write} />
-        <span
-          data-sheet-cell="Design friction"
-          aria-label="Design friction"
-          className="flex items-baseline gap-2"
-        >
+        <span data-sheet-cell="Design friction" aria-label="Design friction" className="contents">
           <span>Design friction</span>
-          <StateCell
-            {...cellFromDraft(friction, {
-              value: String(friction.edit?.value ?? DEFAULT_DESIGN_FRICTION_RATE),
-              cap: ctx.workBasis ? "editable" : "locked",
-              capReason: "Read Work before editing",
-            })}
-            scale="row"
-            numeric={{ min: 0, digits: 3 }}
-            unit={{ label: "in-wg/100 ft" }}
-            onCommit={(text: string) =>
-              write(
-                cellPatches([], "designFriction", friction, {
-                  kind: "set",
-                  rung: { value: Number(text) },
-                }),
-                { label: "Design friction" },
-              ).then((result) => result?.message)
-            }
-            transitions={reviewTransitions(
-              {
-                segment: null,
-                revision: ctx.workBasis?.workRevision ?? null,
-                write: (patches) => write(patches, { label: "Design friction" }),
-              },
-              "designFriction",
-              friction,
-            )}
-          />
-          <span data-input-source={friction.edit ? "Work" : "default"}>
+          <span className="block min-w-0 h-(--item-h)">
+            <StateCell
+              {...cellFromDraft(friction, {
+                value: String(friction.edit?.value ?? DEFAULT_DESIGN_FRICTION_RATE),
+                cap: ctx.workBasis ? "editable" : "locked",
+                capReason: "Read Work before editing",
+              })}
+              scale="row"
+              numeric={{ min: 0, digits: 3 }}
+              unit={{ label: "in-wg/100 ft" }}
+              onCommit={(text: string) =>
+                write(
+                  cellPatches([], "designFriction", friction, {
+                    kind: "set",
+                    rung: { value: Number(text) },
+                  }),
+                  { label: "Design friction" },
+                ).then((result) => result?.message)
+              }
+              transitions={reviewTransitions(
+                {
+                  segment: null,
+                  revision: ctx.workBasis?.workRevision ?? null,
+                  write: (patches) => write(patches, { label: "Design friction" }),
+                },
+                "designFriction",
+                friction,
+              )}
+            />
+          </span>
+          <span
+            className="t-small text-ink-2"
+            data-input-source={friction.edit ? "Work" : "default"}
+          >
             {friction.edit ? "Work" : "default"}
           </span>
         </span>
@@ -332,31 +365,42 @@ function InputsContent({
           ] as const
         ).map(([key, label]) => {
           const cell = ctx.work?.parameters[key] ?? {};
+          const commit = (value: string) => write(
+            cellPatches(["parameters"], key, cell, { kind: "set", rung: { value } }), { label },
+          ).then((result) => result?.message);
+          const transitions = reviewTransitions({
+            segment: "parameters", revision: ctx.workBasis?.workRevision ?? null,
+            write: (patches) => write(patches, { label }),
+          }, key, cell);
           return (
-            <label key={key} className="flex items-baseline gap-2">
-              <span>{label}</span>
-              <StateCell
-                {...cellFromDraft(cell, {
-                  value: cell.edit ? String(cell.edit.value) : snapshot.slots[key],
-                  modelValue: snapshot.slots[key],
-                  cap: "editable",
-                })}
-                scale="row"
-                onCommit={(value: string) =>
-                  write(cellPatches(["parameters"], key, cell, { kind: "set", rung: { value } }), {
-                    label,
-                  }).then((result) => result?.message)
-                }
-                transitions={reviewTransitions(
-                  {
-                    segment: "parameters",
-                    revision: ctx.workBasis?.workRevision ?? null,
-                    write: (patches) => write(patches, { label }),
-                  },
-                  key,
-                  cell,
+            <label key={key} className="contents">
+              <span className="min-w-0 truncate">{label}</span>
+              <span className="block min-w-0 h-(--item-h)">
+                {key === "fanStatic" ? (
+                  <EspParameter
+                    target={parameterTarget?.kind === "document" ? parameterTarget.ref : null}
+                    units={snapshot.nodes
+                      .filter((node) => node.kind === "equipment")
+                      .flatMap((node) => (node.uniqueId ? [node.uniqueId] : []))}
+                    cell={cell}
+                    model={snapshot.slots[key]}
+                    commit={commit}
+                    transitions={transitions}
+                  />
+                ) : (
+                  <StateCell
+                    {...cellFromDraft(cell, {
+                      value: cell.edit ? String(cell.edit.value) : snapshot.slots[key],
+                      modelValue: snapshot.slots[key],
+                      cap: "editable",
+                    })}
+                    scale="row"
+                    onCommit={commit}
+                    transitions={transitions}
+                  />
                 )}
-              />
+              </span>
+              <span />
             </label>
           );
         })}
@@ -367,13 +411,13 @@ function InputsContent({
             const cell = ctx.work?.roles[key] ?? {};
             const label = `Unit role ${nameOf(node.id)}`;
             return (
-              <label key={key} className="flex items-baseline gap-2">
-                <span>{label}</span>
+              <label key={key} className="contents">
+                <span className="min-w-0 truncate">{label}</span>
                 <ChoiceCell
                   label={label}
                   cell={cell}
                   path={["roles", key]}
-                  show={JSON.stringify}
+                  show={(value) => String((value as { role: string }).role)}
                   current={
                     cell.edit?.value.role ??
                     sheet?.inputs?.inputs.units[key]?.role.value ??
@@ -394,15 +438,17 @@ function InputsContent({
                     write(cellPatches(["roles"], key, cell, { kind }), { label })
                   }
                 />
-                {cell.edit && (
+                {cell.edit ? (
                   <Button
                     label="Clear unit role"
                     onClick={() =>
                       void write(cellPatches(["roles"], key, cell, { kind: "clear" }), { label })
                     }
                   >
-                    Clear unit role
+                    Clear
                   </Button>
+                ) : (
+                  <span />
                 )}
               </label>
             );
