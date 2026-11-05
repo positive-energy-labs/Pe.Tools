@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { build, type Plugin } from "vite-plus";
 import { createHash } from "node:crypto";
 import { dirname, isAbsolute } from "node:path";
@@ -145,29 +145,25 @@ export async function buildRouteArtifact(options: {
 }
 
 const exec = promisify(execFile);
-async function runtimeRoutes(mode: "dev" | "build" | "test") {
+async function runtimeRoutes() {
   const producer = fileURLToPath(new URL("./scripts/route-graphs.ts", import.meta.url));
-  if (mode === "build")
-    await exec(process.execPath, [producer, "--builtin-closure-only", "--check"]);
-  // Dev repairs committed pins before publishing a coordinated generation. Build only checks.
-  const { stdout } = await exec(
-    process.execPath,
-    [producer, "--runtime", ...(mode === "dev" ? ["--write-builtin-closures"] : [])],
-    { maxBuffer: 16 * 1024 * 1024 },
-  );
+  const { stdout } = await exec(process.execPath, [producer, "--runtime"], {
+    maxBuffer: 16 * 1024 * 1024,
+  });
   return JSON.parse(stdout) as Record<string, string>;
 }
 
-/** Dev regenerates pins before startup/HMR; production refuses a stale build pin. */
+/** Every bundle (web, host pack, tests) serves the producer's projections from memory, never disk:
+ * builtin closures are untracked build output, so a clean checkout needs no generation step. */
 export function routeModuleHash(
-  generate?: (mode: "dev" | "build" | "test") => Promise<Record<string, string> | void>,
+  generate: () => Promise<Record<string, string> | void> = runtimeRoutes,
 ): Plugin {
-  let mode: "dev" | "build" | "test" = "dev";
+  let test = false;
   let projections: Record<string, string> = {};
   let pending: Promise<void> = Promise.resolve();
   let started = false;
   const update = async () => {
-    projections = (await (generate ? generate(mode) : runtimeRoutes(mode))) ?? {};
+    projections = (await generate()) ?? {};
   };
   const refresh = () => {
     started = true;
@@ -190,20 +186,26 @@ export function routeModuleHash(
   return {
     name: "route-module-hash",
     enforce: "pre",
+    // Rolldown (host pack) never calls this; it projects at buildStart like a Vite build.
     configResolved(config) {
-      mode = config.command === "build" ? "build" : config.mode === "test" ? "test" : "dev";
+      test = config.command !== "build" && config.mode === "test";
+    },
+    resolveId(source, importer) {
+      // A closure import resolves whether or not a disk copy exists; load serves the projection.
+      if (importer && source.endsWith("/source-closure.generated.json"))
+        return fileURLToPath(new URL(source, pathToFileURL(importer.split("?")[0]!)));
     },
     async buildStart() {
-      // Pure tests need no route closures. Admission imports trigger the same read-only projection.
-      if (mode === "test") return;
+      // Pure tests need no route closures. Admission imports trigger the same projection.
+      if (test) return;
       await refresh();
-      // Watch current resolved inputs, even when the committed inventory is stale or missing.
+      // Watch every resolved closure input so a source edit re-projects.
       for (const file of watchFiles()) this.addWatchFile(file);
     },
     async load(id) {
       const filename = id.split("?")[0]!;
       if (
-        mode === "test" &&
+        test &&
         !started &&
         (/[/\\]source-closure\.generated\.json$/.test(filename) ||
           /[/\\]generated[/\\](?:route-directory\.ts|[^/\\]+-graph\.json)$/.test(filename))

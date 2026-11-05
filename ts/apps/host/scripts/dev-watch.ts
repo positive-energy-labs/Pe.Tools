@@ -61,7 +61,8 @@ process.once("SIGTERM", interrupt);
 try {
   do {
     restart = false;
-    // Host imports committed pins before the frontend plugin can run.
+    // jiti reads builtin closures from disk: write the untracked build output before each start.
+    // An unchanged closure is not rewritten, and web/src is outside the watch roots.
     await promisify(execFile)(process.execPath, [
       fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)),
       "--builtin-closure-only",

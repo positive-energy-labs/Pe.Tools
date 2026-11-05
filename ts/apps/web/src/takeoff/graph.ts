@@ -11,7 +11,6 @@ import {
   takeoffsRouteState,
   type RouteGraph,
   type TakeoffsRouteDocument,
-  type TakeoffObservation,
 } from "@pe/agent-contracts";
 import {
   field,
@@ -21,7 +20,6 @@ import {
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 import { takeoffsAddress } from "../../../../packages/agent-contracts/src/routes/takeoffs";
 import { takeoffPageSchema } from "./actions";
-import { withEditBases } from "./projections";
 import { takeoffVerbs } from "./graph-actions";
 
 export const takeoffGraphPageSchema = takeoffPageSchema
@@ -144,15 +142,6 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
       groupOf: (key) => [takeoffEditAddress(key).roomId],
       nouns: ["room"],
       noun: "room edits",
-      stage: (doc, key, readings) => {
-        const observation = readings.snapshot?.value as TakeoffObservation | undefined;
-        if (!readings.snapshot?.current || observation?.kind !== "ready")
-          throw Error("Read the current document before staging a room edit");
-        const patches = withEditBases(doc, observation.capture.snapshot.world, [
-          { path: ["edits", key, "edit"], value: {} },
-        ]);
-        return patches.filter((patch) => patch.path[0] === "bases");
-      },
     },
     { segment: "adopt", groupOf: (key) => [key.slice(0, key.lastIndexOf(":"))], noun: "adoption" },
     {

@@ -3,6 +3,50 @@ import { z } from "zod";
 import { bindWork, draftCellSchema, type RouteStateSpec } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 
+test("recovery reads retire suggestions without setting readable Work aside or changing saved bytes", async () => {
+  const schema = z.object({ cells: z.record(z.string(), draftCellSchema(z.string())).default({}) });
+  const spec = {
+    route: "lane",
+    title: "Lane",
+    description: "Lane",
+    schema,
+    salvage: (doc: unknown) => schema.parse(doc),
+  };
+  const rows = new Map<string, unknown>();
+  const rowKey = ({ targetKey, route }: { targetKey: string; route: string }) =>
+    `${targetKey}\0${route}`;
+  const store = {
+    getState: async (key: { targetKey: string; route: string }) =>
+      structuredClone(rows.get(rowKey(key))),
+    setState: async (key: { targetKey: string; route: string; value: unknown }) => {
+      rows.set(rowKey(key), structuredClone(key.value));
+    },
+  };
+  const key = bindWork("lane", null);
+  const workspace = new RouteWorkspace({ registrations: [{ spec }], store });
+  expect(
+    await workspace.write(key, "lane", "pea", {
+      kind: "apply",
+      expectedRevision: 0,
+      press: "p0",
+      patches: [{ path: ["cells", "a", "edit"], value: { value: "kept" } }],
+    }),
+  ).toMatchObject({ ok: true });
+  const [address, saved] = [...rows.entries()][0]!;
+  const original = JSON.parse(JSON.stringify(saved).replaceAll('"edit"', '"suggestion"'));
+  rows.set(address, original);
+  expect(await workspace.startFresh(key, "lane", "human")).toMatchObject({ ok: false });
+  expect(rows.get(address)).toEqual(original);
+  expect(rows.size).toBe(1);
+  expect(await workspace.salvage(key, "lane")).toBeNull();
+  rows.set(`${address}:aside:1`, original);
+  expect(await workspace.salvage(key, "lane")).toMatchObject({
+    from: "aside:1",
+    value: { cells: { a: { edit: { value: "kept" } } } },
+  });
+  expect(rows.get(`${address}:aside:1`)).toEqual(original);
+});
+
 /** Real stored bytes from the retired two-lane shape, then the same rows read by today's schema. */
 test("retired suggestion lane: promote, edit wins, drop logged, old undo restores a valid value", async () => {
   const rung = z.looseObject({ value: z.string() }).nullish();
@@ -67,7 +111,10 @@ test("retired suggestion lane: promote, edit wins, drop logged, old undo restore
   expect(JSON.stringify([...rows.values()])).toContain('"suggestion"');
 
   // Undo of the pre-retirement person edit restores Pea's promoted value, valid under today's schema.
-  expect(await current.step(key, "lane", "human", "undo", 3)).toMatchObject({ ok: true, revision: 4 });
+  expect(await current.step(key, "lane", "human", "undo", 3)).toMatchObject({
+    ok: true,
+    revision: 4,
+  });
   const undone = await current.read(key, "lane");
   expect(newSchema.parse(undone?.doc)).toEqual(undone?.doc);
   expect(undone?.doc).toEqual({

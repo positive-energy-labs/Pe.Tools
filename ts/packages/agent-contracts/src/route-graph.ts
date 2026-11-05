@@ -196,15 +196,6 @@ export type CellVerbKind = (typeof CELL_VERB_KINDS)[number];
 
 /** One family of authored cells in a route's Work, as the Situation and the Chat head read it. */
 export interface CellsDecl<W = unknown> {
-  /**
-   * Companion patches written with every staged `set` on this family, by either author, in the same
-   * CAS write and inverse journal step (takeoffs records the observed base the value was staged on).
-   */
-  stage?: (
-    doc: W,
-    key: string,
-    readings: Readonly<Record<string, { value?: unknown; current: boolean }>>,
-  ) => readonly RouteStatePatch[];
   /** The Work segment holding the keyed cells; null = one root cell at `key` (`scope`, `launch`). */
   segment: string | null;
   key?: string;
@@ -340,7 +331,7 @@ export interface RouteGraph<P = Record<string, unknown>, W = unknown> {
     /** The current reading states, so an ID-only carry-over can resolve names from the exact catalog. */
     scope: { readings: Readonly<Record<string, { readonly current: unknown }>> },
   ) => readonly RouteStatePatch[];
-  /** Authored segments of the Work; the kernel owns take, reject, reopen and delete for them. */
+  /** Authored segments of Work; the kernel owns clear and delete for them. */
   cells?: readonly CellsDecl<W>[];
   /**
    * A person's name for each other top-level Work field, declared once; History and Inputs never

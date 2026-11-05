@@ -12,7 +12,7 @@
     "dev": "vp exec node scripts/dev-watch.ts --take-over-host",
     "dev:no-revit": "vp exec node scripts/dev-watch.ts --take-over-host --no-revit",
     "attach": "vp exec node --import jiti/register src/dev.ts",
-    "build": "node ../web/scripts/route-graphs.ts --builtin-closure-only --check && vp pack",
+    "build": "vp pack",
     "build:payload": "pnpm run build && pnpm --filter @pe/kit build && pnpm --filter @pe/web build && node scripts/stage-web.mjs && node scripts/stage-source.mjs && node scripts/stage-tray.mjs",
     "test": "pnpm --filter @pe/kit build && vp test",
     "test:browser": "vp test run --mode browser --maxWorkers=1",

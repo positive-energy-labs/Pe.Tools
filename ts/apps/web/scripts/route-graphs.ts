@@ -17,7 +17,7 @@ import {
   writeBuiltinClosurePin,
 } from "../route-source-hash.ts";
 import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 const jiti = createJiti(import.meta.url, {
   fsCache: false,
   jsx: { runtime: "automatic" },
@@ -39,25 +39,19 @@ const { projectRouteGraph } =
 const { canonicalRouteJson, projectKernelDirectory } =
   await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
 const check = process.argv.includes("--check");
-// Emit/check every admitted builtin without rewriting directory/Pea projections.
+// Write every builtin closure (untracked build output) without rewriting tracked projections.
 const closureOnly = process.argv.includes("--builtin-closure-only");
-const closureDestination = process.argv
-  .find((arg) => arg.startsWith("--closure-output="))
-  ?.slice("--closure-output=".length);
-if (closureDestination && !/^(?:[A-Za-z]:[\\/]|\/)/.test(closureDestination))
-  throw Error("--closure-output requires an absolute path");
 const runtime = process.argv.includes("--runtime");
-const writePins = process.argv.includes("--write-builtin-closures");
-if (check && (writePins || runtime))
-  throw Error("--check is read-only and cannot use runtime projection flags");
+if (check && runtime) throw Error("--check is read-only and cannot use runtime projection flags");
 const projections: Record<string, string> = {};
 const stale: string[] = [];
 async function emit(destination: URL, text: string) {
+  const closure = destination.pathname.endsWith("/source-closure.generated.json");
   if (runtime) {
     projections[fileURLToPath(destination)] = text;
-    if (writePins && destination.pathname.endsWith("/source-closure.generated.json"))
-      writeBuiltinClosurePin(fileURLToPath(destination), text);
   } else if (check) {
+    // Closures are build output, never tracked: nothing on disk to compare.
+    if (closure) return;
     let current: string | undefined;
     try {
       current = await readFile(destination, "utf8");
@@ -67,8 +61,7 @@ async function emit(destination: URL, text: string) {
     if (current?.replaceAll("\r\n", "\n") !== text) stale.push(fileURLToPath(destination));
   } else {
     await mkdir(new URL(".", destination), { recursive: true });
-    if (destination.pathname.endsWith("/source-closure.generated.json"))
-      writeBuiltinClosurePin(fileURLToPath(destination), text);
+    if (closure) writeBuiltinClosurePin(fileURLToPath(destination), text);
     else await writeFile(destination, text);
   }
 }
@@ -91,18 +84,13 @@ for (const key of admittedBuiltinKeys) {
       entry,
     })),
     config: { resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] } },
-
   });
 }
 const closures = await buildBuiltinClosures(builtinOptions);
-if (closureDestination && closures.size !== 1)
-  throw Error("--closure-output requires exactly one builtin");
 const directory = [];
 for (const [key, closure] of closures) {
   await emit(
-    closureDestination
-      ? pathToFileURL(closureDestination)
-      : new URL(`../src/${key}/source-closure.generated.json`, import.meta.url),
+    new URL(`../src/${key}/source-closure.generated.json`, import.meta.url),
     canonicalRouteJson(closure) + "\n",
   );
   if (closureOnly) continue;
@@ -150,6 +138,4 @@ if (!closureOnly)
 console.log(runtime ? JSON.stringify(projections) : `Projected ${directory.length} route graphs`);
 
 if (stale.length)
-  throw Error(
-    `Generated route artifacts drifted; run from ts/apps/web: node scripts/route-graphs.ts --builtin-closure-only (closures), or codegen:routes (all projections):\n${stale.join("\n")}`,
-  );
+  throw Error(`Generated route artifacts drifted; run codegen:routes:\n${stale.join("\n")}`);
