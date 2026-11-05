@@ -41,8 +41,7 @@ const ack = (
 });
 const snapshot = (revision = 0, amount = revision) => ({
   kind: "snapshot" as const,
-  key,
-  revision,
+  handle: { key, revision },
   value: { amount, note: "" },
   hash: canonicalRouteInput({ amount, note: "" }),
 });
@@ -303,6 +302,14 @@ test("stale snapshots and old acknowledgements cannot regress Work", () => {
   expect(f.owner.acceptWork(invocation, { kind: "ack", write: ack(2) }).kind).toBe("duplicate");
   expect(f.owner.read()?.work?.revision).toBe(5);
   expect(f.journal().read().receipts[0]).toEqual(ack(2));
+});
+test("accepted Work carries the host's handle, and a contiguous ack advances that one handle", () => {
+  const f = fixture();
+  f.owner.acceptWork(f.read, snapshot(1));
+  expect(f.owner.read()?.work?.handle).toEqual({ key, revision: 1 });
+  expect(f.owner.acceptWork(f.invocation(), { kind: "ack", write: ack(2) }).kind).toBe("published");
+  expect(f.owner.read()?.work?.handle).toEqual({ key, revision: 2 });
+  expect(f.owner.read()?.work?.revision).toBe(2);
 });
 test("snapshot before ack preserves history without republishing", () => {
   const f = fixture();

@@ -26,4 +26,14 @@ test("a Page-less catalog owner carries Save As Work over and returns its one ca
   expect(read?.handle).toEqual(workHandle(bindWork("parameter-links", address("c:\\jobs\\a.rvt")), 1));
   expect(read?.handle.key).not.toHaveProperty("from");
   expect((await module.readRaw(read!.handle.key, "parameter-links"))?.handle).toEqual(read?.handle);
+
+  const fed: unknown[] = [];
+  const acks: unknown[] = [];
+  const stop = module.observeFeed(saved, (value) => fed.push(value), (ack) => acks.push(ack.key), () => {});
+  await module.apply(saved, "parameter-links", "pea", [
+    { path: ["assignments", "a2"], value: { edit: { value: { definitionId: "d1" } } } },
+  ], 1);
+  stop();
+  expect(fed).toMatchObject([{ revision: 1, handle: read?.handle }]);
+  expect(acks).toEqual([read?.handle.key]);
 });

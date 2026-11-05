@@ -574,7 +574,7 @@ export class RouteWorkspace {
       }
 
       const write: WorkWriteAck = {
-        key: scope,
+        key: workHandle(scope, 0).key,
         kind,
         by,
         press,
@@ -739,7 +739,7 @@ export class RouteWorkspace {
       fresh.revision = (prior.success ? prior.data.revision : 0) + 1;
       // Recovery is the explicit exception to schema-valid restore: only these host-held bytes return.
       const write: WorkWriteAck = {
-        key: scope,
+        key: workHandle(scope, 0).key,
         kind: "start-fresh",
         by,
         press: null,
@@ -914,6 +914,7 @@ export class RouteWorkspace {
       snapshot({
         doc: structuredClone(envelope.doc),
         revision: envelope.revision,
+        handle: workHandle(scope, envelope.revision),
         history: {
           from: records[0]?.write.revision ?? envelope.revision + 1,
           acks: structuredClone(records.map(({ write }) => write)),
@@ -1067,7 +1068,7 @@ export class RouteWorkspace {
         ...record,
         write: {
           ...write,
-          key: scope,
+          key: workHandle(scope, 0).key,
           ...(write.meta !== undefined &&
             !schema?.safeParse(write.meta).success && { detail: "unavailable" as const }),
         },

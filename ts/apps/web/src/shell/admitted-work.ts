@@ -93,8 +93,7 @@ export function createAdmittedWork(
         if (state.kind === "ready") {
           const result = owner.acceptWork(token, {
             kind: "snapshot",
-            key: capturedScope.key,
-            revision: state.snapshot.revision,
+            handle: state.snapshot.handle,
             value: state.snapshot.value,
             hash: canonicalEnvironmentInput(state.snapshot.value),
           });

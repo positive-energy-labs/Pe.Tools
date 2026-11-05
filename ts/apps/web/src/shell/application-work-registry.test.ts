@@ -22,7 +22,7 @@ const ack = (revision: number, path: string, by: "human" | "pea" = "human"): Wor
 });
 const state = {
   kind: "ready" as const,
-  snapshot: { key, revision: 2, value: { a: 1, b: 2 } },
+  snapshot: { handle: { key, revision: 2 }, revision: 2, value: { a: 1, b: 2 } },
   history: { from: 1, acks: [ack(1, "a"), ack(2, "b")] },
 };
 const receipt = (state: "succeeded" | "cancelled") =>
@@ -91,7 +91,7 @@ test("ready receipts restore native undo barriers after reload, irrespective of 
   for (const order of ["receipts-first", "history-first"]) {
     const history = {
       ...state,
-      snapshot: { ...state.snapshot, revision: 1, value: { a: 1, b: 0 } },
+      snapshot: { handle: { key, revision: 1 }, revision: 1, value: { a: 1, b: 0 } },
       history: { from: 1, acks: [ack(1, "a")] },
     };
     const f = fixture(history);
