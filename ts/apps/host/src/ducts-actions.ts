@@ -35,6 +35,12 @@ type Kind = "losses" | "heal" | "assign-fan";
 /** plan seals (Read), rehearse rolls back (TransactRead, never seal authority), apply commits. */
 type Phase = "plan" | "rehearse" | "apply";
 
+// Temporary integrity refusal: the native parameter owner may be a shared type, beyond the instance Work scope.
+const requireLossFootprint = (kind: Kind, phase: Phase) => {
+  if (kind === "losses" && phase === "apply")
+    throw refused("Loss apply is paused until the plan accounts for every instance affected by shared type parameters", "ducts.parameter-scope-unproven");
+};
+
 /** Resolve group seeds through metadata, then read only their systems' complete geometry. */
 export async function healSnapshot(
   groups: readonly string[],
@@ -116,6 +122,7 @@ export function ductsExecutors(
   deps: { sdk?: SdkReceiptReader } = {},
 ) {
   const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
+    requireLossFootprint(kind, phase);
     const target = targetOf(ctx);
     const raw = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
     const { process } = await lifetime(bridge, target, "project", deps);
@@ -282,6 +289,7 @@ export function ductsExecutors(
     };
   };
   const run = async (ctx: CommandContext, execution: ActionExecution, kind: Kind, phase: Phase) => {
+    requireLossFootprint(kind, phase);
     const p = prepared.parse(execution.prepared),
       target = targetOf(ctx);
     const entry = {
