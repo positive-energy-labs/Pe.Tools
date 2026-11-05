@@ -71,7 +71,8 @@ export function openSourceReading<T>(
     if (snapshot.value !== undefined) value = snapshot.value;
     deliver(snapshot);
   };
-  let [closed, release] = [false, undefined as (() => void) | undefined];
+  let closed = false;
+  let release: (() => void) | undefined;
   openSource(
     source,
     context,
