@@ -14,7 +14,7 @@ import { HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-r
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { canonicalJson } from "../../../packages/host-internal/src/read-admission.ts";
 import { admitNativeCaller } from "./native-read-policy.ts";
-import { refusalSchema } from "@pe/agent-contracts";
+import { refusalSchema, type InputLane } from "@pe/agent-contracts";
 import { Refused } from "./control.ts";
 import { InvalidRead, ReadBusy, ReadRetiring } from "./native-reads.ts";
 import { readSchemas } from "./request-services.ts";
@@ -334,15 +334,15 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
   } satisfies RecordingWriter;
 });
 
-/** Where native reads come from (host-native only; not yet the canonical whole-product lane). */
-export type InputLane =
-  | { readonly kind: "live"; readonly capture?: RecordingWriter }
-  | {
-      readonly kind: "recording";
-      readonly store: RecordingReader;
-      /** Input identity to taking id; a binding picks among takings but never crosses the scope fence. */
+/** The canonical lane with this host's opened stores: live captures through a writer, a recording
+ * replays through a reader, and a fixture has no native source. */
+export type HostInputLane =
+  | Extract<InputLane<RecordingWriter>, { kind: "live" }>
+  | Extract<InputLane<never>, { kind: "fixture" }>
+  | (Extract<InputLane<RecordingReader>, { kind: "recording" }> & {
+      /** `at` resolved to taking ids until Timeline epochs bind them; never crosses the scope fence. */
       readonly bindings?: ReadonlyMap<string, string>;
-    };
+    });
 
 /** One native input's identity: its key and the canonical JSON of the request input. */
 export const nativeInputIdentity = (request: NativeReadInput) =>
@@ -568,11 +568,19 @@ const replaying = (store: RecordingReader, bindings: ReadonlyMap<string, string>
 
 /** The composition's one choice of native input; the live layer is only built on the live lane. */
 export const hostNativeReadFor = <R>(
-  lane: InputLane,
+  lane: HostInputLane,
   live: Layer.Layer<HostNativeRead, never, R>,
 ): Layer.Layer<HostNativeRead, never, R> =>
   lane.kind === "recording"
-    ? replaying(lane.store, lane.bindings)
-    : lane.capture
-      ? capturing(lane.capture).pipe(Layer.provide(live))
-      : live;
+    ? replaying(lane.recordingStore, lane.bindings)
+    : lane.kind === "fixture"
+      ? sourceless(lane.name)
+      : lane.captureStore
+        ? capturing(lane.captureStore).pipe(Layer.provide(live))
+        : live;
+
+/** A host fixture with no input adapter: every read refuses, and live is never built. */
+const sourceless = (name: string) => {
+  const refusal = Effect.fail(refuse("fixture", `Host fixture '${name}' has no native input source`));
+  return Layer.succeed(HostNativeRead, { resolve: () => refusal, read: () => refusal });
+};

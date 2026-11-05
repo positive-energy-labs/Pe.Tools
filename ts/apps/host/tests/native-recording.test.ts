@@ -19,7 +19,7 @@ import {
   nativeInputIdentity,
   openRecordingReader,
   openRecordingWriter,
-  type InputLane,
+  type HostInputLane,
 } from "../src/native-recording.ts";
 import { InvalidRead, NativeReads } from "../src/native-reads.ts";
 import { Refused } from "../src/control.ts";
@@ -119,7 +119,7 @@ const failures: Record<string, () => Refused | BridgeError | NoRevitSession> = {
 };
 
 const run =
-  (lane: InputLane, source = live(), caller: Caller = pea) =>
+  (lane: HostInputLane, source = live(), caller: Caller = pea) =>
   <A, E>(effect: Effect.Effect<A, E, IdentityKey | HostNativeRead>) =>
     effect.pipe(
       Effect.provideService(RequestIdentity, admittedRequestIdentity(caller, {})),
@@ -147,7 +147,7 @@ effectTest(
       const dir = yield* bundle;
       const capture = {
         kind: "live",
-        capture: yield* openRecordingWriter(dir, identity, bounds),
+        captureStore: yield* openRecordingWriter(dir, identity, bounds),
       } as const;
       const recorded = live();
       const answered = yield* run(capture, recorded)(read("host.ops.catalog"));
@@ -161,7 +161,7 @@ effectTest(
       const replayed = live();
       const lane = {
         kind: "recording",
-        store: yield* openRecordingReader(dir, identity, bounds),
+        at: null, recordingStore: yield* openRecordingReader(dir, identity, bounds),
       } as const;
       const again = yield* run(lane, replayed)(read("host.ops.catalog"));
       expect(again).toEqual({ ...answered, value: catalogAnswer });
@@ -191,20 +191,20 @@ effectTest(
       const dir = yield* bundle;
       const store = yield* openRecordingWriter(dir, identity, bounds);
       const recorded = live();
-      yield* run({ kind: "live", capture: store }, recorded)(read("host.ops.catalog"));
-      yield* run({ kind: "live", capture: store }, recorded)(read("host.ops.catalog"));
+      yield* run({ kind: "live", captureStore: store }, recorded)(read("host.ops.catalog"));
+      yield* run({ kind: "live", captureStore: store }, recorded)(read("host.ops.catalog"));
       const key = yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope: {} });
       const takings = store.candidates(key);
       expect(takings).toHaveLength(2);
       expect(yield* Effect.promise(() => readdir(join(dir, "observations")))).toHaveLength(1);
       expect(
-        yield* outcome(run({ kind: "recording", store })(read("host.ops.catalog"))),
+        yield* outcome(run({ kind: "recording", recordingStore: store, at: null })(read("host.ops.catalog"))),
       ).toMatchObject({
         problem: "recording.ambiguous",
       });
       const bound = yield* run({
         kind: "recording",
-        store,
+        recordingStore: store, at: null,
         bindings: new Map([[key, takings[1]!.id]]),
       })(read("host.ops.catalog"));
       expect(bound.nativeRequestId).toBe("native-2");
@@ -215,10 +215,10 @@ effectTest("a miss, another build, a tampered observation and a full bundle each
   Effect.gen(function* () {
     const dir = yield* bundle;
     const store = yield* openRecordingWriter(dir, identity, bounds);
-    const taken = yield* run({ kind: "live", capture: store })(read("host.ops.catalog"));
+    const taken = yield* run({ kind: "live", captureStore: store })(read("host.ops.catalog"));
     expect(taken.value).toEqual(catalogAnswer);
     expect(
-      yield* outcome(run({ kind: "recording", store })(read("host.ops.catalog", { other: 1 }))),
+      yield* outcome(run({ kind: "recording", recordingStore: store, at: null })(read("host.ops.catalog", { other: 1 }))),
     ).toMatchObject({
       problem: "recording.miss",
     });
@@ -235,7 +235,7 @@ effectTest("a miss, another build, a tampered observation and a full bundle each
       ),
     );
     expect(
-      yield* outcome(run({ kind: "recording", store })(read("host.ops.catalog"))),
+      yield* outcome(run({ kind: "recording", recordingStore: store, at: null })(read("host.ops.catalog"))),
     ).toMatchObject({
       problem: "recording.tamper",
     });
@@ -243,10 +243,10 @@ effectTest("a miss, another build, a tampered observation and a full bundle each
       maxBytes: 1_000_000,
       maxTakings: 1,
     });
-    yield* run({ kind: "live", capture: full })(read("host.ops.catalog"));
+    yield* run({ kind: "live", captureStore: full })(read("host.ops.catalog"));
     // Full after the live read completed: a typed refusal that still says the read was dispatched.
     expect(
-      yield* outcome(run({ kind: "live", capture: full })(read("host.ops.catalog"))),
+      yield* outcome(run({ kind: "live", captureStore: full })(read("host.ops.catalog"))),
     ).toMatchObject({
       status: 507,
       problem: "recording.full",
@@ -266,10 +266,10 @@ effectTest(
   () =>
     Effect.gen(function* () {
       const store = yield* openRecordingWriter(yield* bundle, identity, bounds);
-      yield* run({ kind: "live", capture: store })(
+      yield* run({ kind: "live", captureStore: store })(
         read("ducts.snapshot.walk", {}, { openDocumentId: "doc-A" }),
       ).pipe(Effect.ignore);
-      const lane = { kind: "recording", store } as const;
+      const lane = { kind: "recording", recordingStore: store, at: null } as const;
       expect(
         yield* outcome(
           run(lane, live(), { kind: "anonymous" })(
@@ -292,7 +292,7 @@ effectTest(
       });
       const key = yield* nativeInputIdentity({ key: "ducts.snapshot.walk", input: {}, scope: {} });
       const [taking] = store.candidates(key);
-      const bound = { kind: "recording", store, bindings: new Map([[key, taking!.id]]) } as const;
+      const bound = { kind: "recording", recordingStore: store, at: null, bindings: new Map([[key, taking!.id]]) } as const;
       expect(
         yield* outcome(run(bound)(read("ducts.snapshot.walk", {}, { openDocumentId: "doc-B" }))),
       ).toMatchObject({
@@ -309,7 +309,7 @@ effectTest(
       const broken = yield* openRecordingWriter(dir, identity, bounds);
       yield* Effect.promise(() => rm(join(dir, "observations"), { recursive: true, force: true }));
       expect(
-        yield* outcome(run({ kind: "live", capture: broken })(read("host.ops.catalog"))),
+        yield* outcome(run({ kind: "live", captureStore: broken })(read("host.ops.catalog"))),
       ).toMatchObject({
         problem: "recording.io",
       });
@@ -321,7 +321,7 @@ effectTest(
       const store = yield* openRecordingWriter(fresh, identity, bounds);
       const source = live();
       yield* Effect.all(
-        [1, 2].map(() => run({ kind: "live", capture: store }, source)(read("host.ops.catalog"))),
+        [1, 2].map(() => run({ kind: "live", captureStore: store }, source)(read("host.ops.catalog"))),
         {
           concurrency: "unbounded",
         },
@@ -332,7 +332,7 @@ effectTest(
       expect(takings).toHaveLength(2);
       const bound = {
         kind: "recording",
-        store: reopened,
+        at: null, recordingStore: reopened,
         bindings: new Map([[key, takings[0]!.id]]),
       } as const;
       expect((yield* run(bound)(read("host.ops.catalog"))).value).toEqual(catalogAnswer);
@@ -345,7 +345,7 @@ effectTest(
     Effect.gen(function* () {
       const dir = yield* bundle;
       const store = yield* openRecordingWriter(dir, identity, bounds);
-      yield* run({ kind: "live", capture: store })(read("host.ops.catalog"));
+      yield* run({ kind: "live", captureStore: store })(read("host.ops.catalog"));
       const path = join(dir, "takings.jsonl");
       const line = (yield* Effect.promise(() => readFile(path, "utf8"))).trim();
       const sha = (JSON.parse(line) as { outcome: { observation: string } }).outcome.observation;
@@ -368,7 +368,7 @@ effectTest(
     Effect.gen(function* () {
       const dir = yield* bundle;
       const store = yield* openRecordingWriter(dir, identity, bounds);
-      const served = (lane: InputLane) => {
+      const served = (lane: HostInputLane) => {
         const web = HttpRouter.toWebHandler(
           HttpRouter.add("GET", "/read/*", (req) =>
             Effect.flatMap(Effect.service(HostNativeRead), (reads) =>
@@ -396,10 +396,10 @@ effectTest(
             return seen;
           });
       };
-      const lane = { kind: "recording", store } as const;
+      const lane = { kind: "recording", recordingStore: store, at: null } as const;
       // A failure replay cannot rebuild exactly is refused at capture; no taking claims to hold it.
       expect(
-        yield* outcome(run({ kind: "live", capture: store })(read("revit.context.journal"))),
+        yield* outcome(run({ kind: "live", captureStore: store })(read("revit.context.journal"))),
       ).toMatchObject({
         status: 501,
         problem: "recording.unsupported",
@@ -410,7 +410,7 @@ effectTest(
         ),
       ).toEqual([]);
       for (const key of Object.keys(failures).filter((key) => key !== "revit.context.journal")) {
-        const live = yield* served({ kind: "live", capture: store })(key);
+        const live = yield* served({ kind: "live", captureStore: store })(key);
         expect(yield* served(lane)(key)).toEqual(live);
       }
       const replayed = yield* Effect.flip(
@@ -457,7 +457,7 @@ effectTest(
         problem: "recording.missing",
       });
       expect(yield* Effect.promise(() => readdir(root))).toEqual([]);
-      yield* run({ kind: "live", capture: yield* openRecordingWriter(absent, identity, bounds) })(
+      yield* run({ kind: "live", captureStore: yield* openRecordingWriter(absent, identity, bounds) })(
         read("host.ops.catalog"),
       );
       const before = yield* Effect.promise(() => readFile(join(absent, "takings.jsonl"), "utf8"));
@@ -469,10 +469,10 @@ effectTest(
         "taking",
       ]);
       expect(
-        (yield* run({ kind: "recording", store: reader })(read("host.ops.catalog"))).value,
+        (yield* run({ kind: "recording", at: null, recordingStore: reader })(read("host.ops.catalog"))).value,
       ).toEqual(catalogAnswer);
       yield* outcome(
-        run({ kind: "recording", store: reader })(read("host.ops.catalog", { other: 1 })),
+        run({ kind: "recording", at: null, recordingStore: reader })(read("host.ops.catalog", { other: 1 })),
       );
       expect(yield* Effect.promise(() => readFile(join(absent, "takings.jsonl"), "utf8"))).toBe(
         before,
