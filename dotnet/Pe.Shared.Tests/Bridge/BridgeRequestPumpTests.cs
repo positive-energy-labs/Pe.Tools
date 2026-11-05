@@ -88,18 +88,21 @@ public sealed class BridgeRequestPumpTests {
         using var pair = await WebSocketPair.ConnectAsync();
         var started = new TaskCompletionSource();
         var checkpoint = new TaskCompletionSource<bool>(); // true: ThrowIfCancelled fired
+        var queueSettled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Task? script = null;
 
         using var shutdown = new CancellationTokenSource();
         var pump = new BridgeRequestPump(pair.Client, async (_, requestToken) => {
             using (var perRun = CancellationTokenSource.CreateLinkedTokenSource(requestToken))
                 script = FakeScriptAsync(handsRequestToken ? requestToken : perRun.Token, started, checkpoint);
+            queueSettled.TrySetResult(); // Cancellation must follow disposal, not merely script startup.
             await script;
         });
         var loop = pump.RunAsync(shutdown.Token);
 
         await pair.Server.WriteAsync(RequestFrame("script"), CancellationToken.None);
         await started.Task.WaitAsync(Patience);
+        await queueSettled.Task.WaitAsync(Patience);
         var cancelled = await pump.CancelAsync(new OpCancelRequest("script"), CancellationToken.None);
 
         var fired = await Task.WhenAny(checkpoint.Task, Task.Delay(TimeSpan.FromMilliseconds(500))) == checkpoint.Task;
