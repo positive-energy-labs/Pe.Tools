@@ -464,6 +464,7 @@ effectTest(
       const reader = yield* openRecordingReader(absent, identity, bounds);
       expect(Object.keys(reader).sort()).toEqual([
         "candidates",
+        "coverage",
         "identity",
         "observation",
         "taking",
