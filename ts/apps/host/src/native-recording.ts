@@ -13,7 +13,9 @@ import { HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-r
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { canonicalJson } from "../../../packages/host-internal/src/read-admission.ts";
 import { admitNativeCaller } from "./native-read-policy.ts";
-import { InvalidRead } from "./native-reads.ts";
+import { refusalSchema } from "@pe/agent-contracts";
+import { Refused } from "./control.ts";
+import { InvalidRead, ReadBusy, ReadRetiring } from "./native-reads.ts";
 import { readSchemas } from "./request-services.ts";
 
 export interface RecordingIdentity {
@@ -42,21 +44,25 @@ const actualTarget = Schema.Struct({
     Schema.Struct({ kind: Schema.Literal("session-only") }),
   ]),
 });
-/** A recorded failure keeps what the live failure said, and leaves absent what it did not say. */
-const failure = Schema.Struct({
-  tag: Schema.String,
-  message: Schema.String,
-  status: Schema.optionalKey(Schema.Number),
-  problem: Schema.optionalKey(Schema.String),
-  nativeOutcome: Schema.optionalKey(nativeOutcome),
-  evidence: Schema.optionalKey(
-    Schema.Struct({
-      nativeRequestId: Schema.optionalKey(Schema.String),
-      receiptId: Schema.optionalKey(Schema.String),
-      actualTarget: Schema.optionalKey(actualTarget),
-    }),
-  ),
-});
+/**
+ * A recorded failure is one of the classes replay can rebuild exactly, by that class's own
+ * constructor. Any other failure is refused at capture, before a taking exists.
+ */
+const plainFailure = { message: Schema.String, status: Schema.Number, problem: Schema.String };
+const failure = Schema.Union([
+  Schema.Struct({
+    tag: Schema.Literals(["InvalidRequest", "ReadBusy", "ReadRetiring"]),
+    ...plainFailure,
+  }),
+  Schema.Struct({ tag: Schema.Literal("Refused"), refusal: Schema.Json }),
+  Schema.Struct({
+    tag: Schema.Literal("BridgeError"),
+    ...plainFailure,
+    nativeOutcome: Schema.optionalKey(nativeOutcome),
+    // The whole serializable dispatch evidence: BridgeError.outcome reads notDispatched/dispatched/issues.
+    evidence: Schema.Json,
+  }),
+]);
 // Decoded before any path is built: a taking cannot name a file outside its observations.
 const sha256Name = Schema.String.check(
   Schema.makeFilter((name) => /^[0-9a-f]{64}$/.test(name) || "Observation name is not a SHA-256"),
@@ -301,65 +307,55 @@ const versionOf = (key: string) =>
     Effect.orElseSucceed(() => "no-contract"),
   );
 
-/** What a live failure said, field by field; nothing is filled in that it did not say. */
-const failureOf = (error: DoorFailure): typeof failure.Type => {
-  const fields = error as Partial<
-    Record<"status" | "problem" | "nativeOutcome" | "evidence", unknown>
-  >;
-  const evidence = Schema.decodeUnknownOption(failure.fields.evidence.schema)(fields.evidence);
-  const outcome = Schema.decodeUnknownOption(nativeOutcome)(fields.nativeOutcome);
-  return {
-    tag: error._tag,
-    message: error.message,
-    ...(typeof fields.status === "number" ? { status: fields.status } : {}),
-    ...(typeof fields.problem === "string" ? { problem: fields.problem } : {}),
-    ...(Option.isSome(outcome) ? { nativeOutcome: outcome.value } : {}),
-    ...(Option.isSome(evidence) && Object.keys(evidence.value).length
-      ? { evidence: evidence.value }
-      : {}),
-  };
-};
-// Domain refusals, or a native failure that says nothing reached Revit; anything else is unknown.
-const refusedTags = new Set([
-  "InvalidRequest",
-  "Refused",
-  "NoRevitSession",
-  "ReadBusy",
-  "ReadRetiring",
-  "CommandRejected",
-]);
-const outcomeOf = (error: DoorFailure): Outcome => {
-  const recorded = failureOf(error);
-  return {
-    kind:
-      refusedTags.has(error._tag) || recorded.nativeOutcome === "never-dispatched"
-        ? "refused"
-        : "unknown",
-    failure: recorded,
-  };
-};
-/** A recorded failure replays as itself where its class can carry every recorded field. */
-const replayFailure = (recorded: typeof failure.Type): DoorFailure =>
-  recorded.tag === "InvalidRequest" &&
-  recorded.status !== undefined &&
-  recorded.problem !== undefined &&
-  !recorded.nativeOutcome &&
-  !recorded.evidence
-    ? new InvalidRead({
-        message: recorded.message,
-        status: recorded.status,
-        problem: recorded.problem,
-      })
-    : new BridgeError({
-        message:
-          recorded.tag === "BridgeError"
-            ? recorded.message
-            : `${recorded.tag}: ${recorded.message}`,
-        status: recorded.status ?? 503,
-        problem: recorded.problem ?? `recorded.${recorded.tag}`,
-        ...(recorded.nativeOutcome ? { nativeOutcome: recorded.nativeOutcome } : {}),
-        ...(recorded.evidence ? { evidence: recorded.evidence } : {}),
+const plainClasses = { InvalidRequest: InvalidRead, ReadBusy, ReadRetiring } as const;
+/** The live failure as its class records it, or None when replay could not rebuild it exactly. */
+const failureOf = (error: DoorFailure): Option.Option<typeof failure.Type> => {
+  if (error instanceof Refused)
+    return Option.map(Schema.decodeUnknownOption(Schema.Json)(error.refusal), (refusal) => ({
+      tag: "Refused" as const,
+      refusal,
+    }));
+  if (error instanceof BridgeError)
+    return Option.map(Schema.decodeUnknownOption(Schema.Json)(error.evidence), (evidence) => ({
+      tag: "BridgeError" as const,
+      message: error.message,
+      status: error.status,
+      problem: error.problem,
+      ...(error.nativeOutcome ? { nativeOutcome: error.nativeOutcome } : {}),
+      evidence,
+    }));
+  for (const [tag, Class] of Object.entries(plainClasses))
+    if (error instanceof Class)
+      return Option.some({
+        tag: tag as keyof typeof plainClasses,
+        message: error.message,
+        status: error.status,
+        problem: error.problem,
       });
+  return Option.none();
+};
+// Domain refusals, or a native failure whose own evidence says nothing reached Revit.
+const outcomeOf = (error: DoorFailure, recorded: typeof failure.Type): Outcome => ({
+  kind: error instanceof BridgeError && error.outcome !== "refused" ? "unknown" : "refused",
+  failure: recorded,
+});
+const replayFailure = Effect.fn("Recording.failure")(function* (recorded: typeof failure.Type) {
+  if (recorded.tag === "Refused") {
+    const refusal = refusalSchema.safeParse(recorded.refusal);
+    if (!refusal.success) return yield* refuse("tamper", "Recorded refusal is damaged");
+    return new Refused(refusal.data);
+  }
+  if (recorded.tag === "BridgeError")
+    return new BridgeError({
+      message: recorded.message,
+      status: recorded.status,
+      problem: recorded.problem,
+      ...(recorded.nativeOutcome ? { nativeOutcome: recorded.nativeOutcome } : {}),
+      evidence: recorded.evidence as never,
+    });
+  const { tag, ...fields } = recorded;
+  return new plainClasses[tag](fields);
+});
 
 /**
  * Live reads, captured into `store` when the lane asks. A taking that cannot be kept (full or
@@ -399,7 +395,19 @@ const capturing = (store: RecordingStore) =>
                     nativeOutcome: exit.value.outcome,
                   },
                 }
-              : outcomeOf(Option.getOrThrow(error));
+              : yield* Option.match(failureOf(Option.getOrThrow(error)), {
+                  onSome: (recorded) =>
+                    Effect.succeed(outcomeOf(Option.getOrThrow(error), recorded)),
+                  // Replay could not rebuild this failure exactly, so no taking claims to hold it.
+                  onNone: () =>
+                    Effect.fail(
+                      refuse(
+                        "unsupported",
+                        `A ${Option.getOrThrow(error)._tag} failure cannot be recorded faithfully`,
+                        501,
+                      ),
+                    ),
+                });
             const dispatch =
               outcome.kind === "answered"
                 ? {
@@ -409,12 +417,14 @@ const capturing = (store: RecordingStore) =>
                       actualTarget: outcome.answer.actualTarget,
                     },
                   }
-                : {
-                    ...(outcome.failure.nativeOutcome
-                      ? { nativeOutcome: outcome.failure.nativeOutcome }
-                      : {}),
-                    ...(outcome.failure.evidence ? { evidence: outcome.failure.evidence } : {}),
-                  };
+                : outcome.failure.tag === "BridgeError"
+                  ? {
+                      ...(outcome.failure.nativeOutcome
+                        ? { nativeOutcome: outcome.failure.nativeOutcome }
+                        : {}),
+                      evidence: outcome.failure.evidence as never,
+                    }
+                  : {};
             yield* store.append(taking, outcome).pipe(
               Effect.mapError(
                 (kept) =>
@@ -467,7 +477,7 @@ const replaying = (store: RecordingStore, bindings: ReadonlyMap<string, string> 
         `${request.key} changed its output contract since this recording`,
       );
     if (taking.outcome.kind !== "answered")
-      return yield* Effect.fail(replayFailure(taking.outcome.failure));
+      return yield* Effect.fail(yield* replayFailure(taking.outcome.failure));
     return { taking, answer: taking.outcome, args };
   });
   return Layer.succeed(HostNativeRead, {

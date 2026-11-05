@@ -5,10 +5,10 @@
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { expect } from "vite-plus/test";
 import type { Caller } from "@pe/agent-contracts";
-import { BridgeError } from "@pe/host-internal/dispatch";
+import { BridgeError, NoRevitSession } from "@pe/host-internal/dispatch";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import type { RequestIdentity as IdentityKey } from "@pe/host-internal/request-contracts";
 import { effectTest } from "./effect-test.ts";
@@ -21,6 +21,9 @@ import {
   type InputLane,
 } from "../src/native-recording.ts";
 import { InvalidRead, NativeReads } from "../src/native-reads.ts";
+import { Refused } from "../src/control.ts";
+import { httpProblems } from "../src/http-problems.ts";
+import { HttpRouter, HttpServerResponse } from "effect/http";
 import {
   admittedRequestIdentity,
   ReadFreshness,
@@ -58,39 +61,43 @@ function live() {
         ),
         Layer.succeed(NativeReads, {
           join: (read) =>
-            Effect.suspend((): Effect.Effect<never, BridgeError | InvalidRead> => {
-              counts.joins++;
-              return read.descriptor.operationKey === "host.ops.catalog"
-                ? Effect.succeed({
-                    value: catalogAnswer,
-                    nativeRequestId: `native-${counts.joins}`,
-                    actualTarget: {
-                      processIncarnation: { pid: 7, startedAt: 1_000 },
-                      openDocumentLifetime: { kind: "session-only" },
-                    },
-                    freshness: { freshnessGeneration: "g1" },
-                    cost: { elapsed: 3 },
-                    outcome: "committed",
-                  } as never)
-                : read.descriptor.operationKey === "ducts.snapshot.walk"
-                  ? // A refusal after dispatch: native answered, the generated contract refused it.
-                    Effect.fail(
-                      new InvalidRead({
-                        message: "Native response violates its operation Schema",
-                        status: 502,
-                        problem: "read.response",
-                      }),
-                    )
-                  : Effect.fail(
-                      new BridgeError({
-                        message: "socket closed mid-read",
-                        status: 502,
-                        problem: "bridge.lost",
-                        nativeOutcome: "unknown-until-reconciled",
-                        evidence: { nativeRequestId: "native-lost" },
-                      }),
-                    );
-            }),
+            Effect.suspend(
+              (): Effect.Effect<never, BridgeError | InvalidRead | Refused | NoRevitSession> => {
+                counts.joins++;
+                return read.descriptor.operationKey === "host.ops.catalog"
+                  ? Effect.succeed({
+                      value: catalogAnswer,
+                      nativeRequestId: `native-${counts.joins}`,
+                      actualTarget: {
+                        processIncarnation: { pid: 7, startedAt: 1_000 },
+                        openDocumentLifetime: { kind: "session-only" },
+                      },
+                      freshness: { freshnessGeneration: "g1" },
+                      cost: { elapsed: 3 },
+                      outcome: "committed",
+                    } as never)
+                  : read.descriptor.operationKey in failures
+                    ? Effect.fail(failures[read.descriptor.operationKey]!())
+                    : read.descriptor.operationKey === "ducts.snapshot.walk"
+                      ? // A refusal after dispatch: native answered, the generated contract refused it.
+                        Effect.fail(
+                          new InvalidRead({
+                            message: "Native response violates its operation Schema",
+                            status: 502,
+                            problem: "read.response",
+                          }),
+                        )
+                      : Effect.fail(
+                          new BridgeError({
+                            message: "socket closed mid-read",
+                            status: 502,
+                            problem: "bridge.lost",
+                            nativeOutcome: "unknown-until-reconciled",
+                            evidence: { nativeRequestId: "native-lost" },
+                          }),
+                        );
+              },
+            ),
           retained: Effect.succeed({ entries: 0, joiners: 0 }),
         }),
       ),
@@ -98,6 +105,17 @@ function live() {
   );
   return { counts, layer };
 }
+
+/** Real failure classes the HTTP problem mapper distinguishes; BridgeError.outcome reads its evidence. */
+const failures: Record<string, () => Refused | BridgeError | NoRevitSession> = {
+  "revit.context.journal": () => new NoRevitSession(),
+  "revit.catalog.concept-evidence": () =>
+    new Refused({ code: "human.only", door: "/call", reason: "Ask the user to read this." }),
+  "revit.apply.parameter-links.preview": () =>
+    new BridgeError("session closed before dispatch", 409, { notDispatched: true }),
+  "revit.catalog.parameter-bindings": () =>
+    new BridgeError("native threw", 500, { dispatched: true, issues: [] } as never),
+};
 
 const run =
   (lane: InputLane, source = live(), caller: Caller = pea) =>
@@ -340,5 +358,74 @@ effectTest(
       ).toMatchObject({
         problem: "recording.full",
       });
+    }),
+);
+
+effectTest(
+  "recorded Refused and evidence-classified BridgeErrors replay unchanged through the HTTP problem mapper",
+  () =>
+    Effect.gen(function* () {
+      const store = yield* openRecordingStore(yield* bundle, identity, bounds);
+      const served = (lane: InputLane) => {
+        const web = HttpRouter.toWebHandler(
+          HttpRouter.add("GET", "/read/*", (req) =>
+            Effect.flatMap(Effect.service(HostNativeRead), (reads) =>
+              reads.read({ key: req.url.split("/read/")[1]!, input: {}, scope: {} }),
+            ).pipe(
+              Effect.map(() => HttpServerResponse.text("answered")),
+              Effect.provideService(RequestIdentity, admittedRequestIdentity(pea, {})),
+              Effect.provide(hostNativeReadFor(lane, live().layer)),
+            ),
+          ).pipe(Layer.provide(httpProblems)),
+          { disableLogger: true },
+        );
+        return (key: string) =>
+          Effect.promise(async () => {
+            const response = await web.handler(
+              new Request(`http://host/read/${key}`),
+              Context.empty() as never,
+            );
+            const seen = {
+              status: response.status,
+              refusal: response.headers.get("x-pe-refusal"),
+              body: await response.json(),
+            };
+            await web.dispose();
+            return seen;
+          });
+      };
+      const lane = { kind: "recording", store } as const;
+      // A failure replay cannot rebuild exactly is refused at capture; no taking claims to hold it.
+      expect(
+        yield* outcome(run({ kind: "live", capture: store })(read("revit.context.journal"))),
+      ).toMatchObject({
+        status: 501,
+        problem: "recording.unsupported",
+      });
+      expect(
+        store.candidates(
+          yield* nativeInputIdentity({ key: "revit.context.journal", input: {}, scope: {} }),
+        ),
+      ).toEqual([]);
+      for (const key of Object.keys(failures).filter((key) => key !== "revit.context.journal")) {
+        const live = yield* served({ kind: "live", capture: store })(key);
+        expect(yield* served(lane)(key)).toEqual(live);
+      }
+      const replayed = yield* Effect.flip(
+        run(lane)(
+          Effect.flatMap(Effect.service(HostNativeRead), (reads) =>
+            reads.read({ key: "revit.apply.parameter-links.preview", input: {}, scope: {} }),
+          ),
+        ),
+      );
+      expect((replayed as BridgeError).outcome).toBe("refused");
+      const failed = yield* Effect.flip(
+        run(lane)(
+          Effect.flatMap(Effect.service(HostNativeRead), (reads) =>
+            reads.read({ key: "revit.catalog.parameter-bindings", input: {}, scope: {} }),
+          ),
+        ),
+      );
+      expect((failed as BridgeError).outcome).toBe("failed");
     }),
 );
