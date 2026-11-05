@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-05, retire the Fans test-name parity census in favor of real Chrome witnesses. Picker/reconnect P03 remains deferred until a witness fails; recovery row expansion W14 is dropped as presentation-only, while shared confirmation and canonical salvage remain.
+
 - 2026-11-04, kaitpw: the Pea-first kernel rulings are [ADR 0030](../../adr/0030-pea-first-goal-core-plan-statecell.md): the route core is a Goal that leads with what is unresolved; a write is plan, optional Revit rehearsal, apply, with the seal on the plan; every Pea-touchable value is a StateCell, Pea stages and last writer wins; Pointers are a shell list and Pea moves the view only on request; a typed write reaches Pea with no route through an authored Work schema; a rehearsal that would borrow is refused; scripts owe no before-values; the Pod floor is `index.html` plus scripts.
 - 2026-11-04, kaitpw: recording and History are [ADR 0031](../../adr/0031-recording-at-host-input-services-history-in-the-shell.md): recording at the host's input services, takings with an outcome kind, epochs, a History rail in the shell, automatic local bounded capture, read-only recordings for users, plan runs while rehearse and apply refuse, keyed diff never on element ids, a cloud contract with a stub.
 - 2026-11-04, counsel (OPINION, re-openable): the Work of a route-free write is owned by the write's stable owner key and a later Page attaches without an ownership transfer; Subject stays a route field; a portable file is a home of Work, not an Artifact noun.
