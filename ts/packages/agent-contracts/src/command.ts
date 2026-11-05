@@ -42,7 +42,19 @@ export const consumedSchema = z.discriminatedUnion("kind", [
   observed("file", { path: z.string() }, sha.nullable()).extend({
     bytesBase64: z.string().optional(),
   }),
-  observed("document-mark", { ref: documentRefSchema, takenAt: z.string() }, z.literal(true)),
+  // A read names when it was taken; a sealed write names the mark its plan sealed (ADR 0030 rule 4),
+  // so the journal's dispatch probe and the seal share one authority, never a second wall clock.
+  z.strictObject({
+    kind: z.literal("document-mark"),
+    probe: z.union([
+      z.strictObject({ ref: documentRefSchema, takenAt: z.string() }),
+      z.strictObject({
+        ref: documentRefSchema,
+        sealed: z.strictObject({ observedSince: z.number().nullable(), changedAt: z.number().nullable() }),
+      }),
+    ]),
+    expected: z.literal(true),
+  }),
   observed(
     "incarnation",
     { target: executionTargetSchema, process: nativeProcessSchema },

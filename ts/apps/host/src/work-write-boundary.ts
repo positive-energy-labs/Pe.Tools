@@ -208,12 +208,13 @@ export function workWriteBoundary(
         const value = executor.prepared.parse(await bound.prepare?.());
         if (!previewOnly && !preview)
           throw refused("Plan the current Work first", "preview.stale");
-        // The seal names the document mark itself. Family leaves still consume a wall-clock mark probe the
-        // journal checks; it stays out of the hash, which it would move on every prepare.
+        // The seal names the document mark itself; mark probes (the plan's sealed mark below, a family
+        // read's takenAt) are the journal's dispatch guard and stay out of the hash.
         const dependencies = [...ctx.consumed, ...(bound.consumes ?? [])].filter(
           (item): item is Exclude<Consumed, { kind: "document-mark" }> => item.kind !== "document-mark",
         );
         const projection = project(value);
+        await marks.settled?.();
         const seal = writeSeal({
           request: projection.request,
           input,
@@ -240,8 +241,29 @@ export function workWriteBoundary(
         }
         return { input, value, seal, previewOnly };
       };
+      // The journal re-probes consumes at every gate, including `validateDispatch` just before the
+      // native step leaves the bridge queue: the plan's sealed mark guards that window too.
+      const plannedMark =
+        !previewOnly && preview?.state === "succeeded"
+          ? (preview.result as { seal?: WriteSeal }).seal?.documentMark
+          : undefined;
       return {
         ...bound,
+        consumes: [
+          ...(bound.consumes ?? []),
+          ...(plannedMark
+            ? [
+                {
+                  kind: "document-mark" as const,
+                  probe: {
+                    ref: target,
+                    sealed: { observedSince: plannedMark.observedSince, changedAt: plannedMark.changedAt },
+                  },
+                  expected: true as const,
+                },
+              ]
+            : []),
+        ],
         effects: previewOnly ? [] : bound.effects,
         claims: [
           ...(bound.claims ?? []),

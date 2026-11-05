@@ -7,7 +7,7 @@ import { detachedBridge, sessionView, effectTest } from "./effect-test.ts";
 import { z } from "zod";
 import { commands, tools, writePreviewSchema, type Command, type ActionReceipt } from "@pe/agent-contracts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
-import { documentMarks } from "../src/document-marks.ts";
+import { assertSealed, documentMarks } from "../src/document-marks.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -390,4 +390,22 @@ test("a rehearsal receipt cannot arm apply: only the declared plan key seals", a
   await expect(apply.preflight!()).rejects.toMatchObject({ refusal: { code: "preview.stale" } });
   await expect(apply.prepare!()).rejects.toThrow("Plan the current Work first");
   expect(f.run).not.toHaveBeenCalled();
+});
+
+test("a change the host received but has not applied yet still refuses the sealed mark", async () => {
+  let listener!: (event: never) => void;
+  const bridge = detachedBridge({
+    subscribe: (next: (event: never) => void) => ((listener = next), () => {}),
+    list: Effect.promise(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20)); // the tail awaits bridge.list
+      return [sessionView({ sessionId: "A", connected: true, lane: hostOwnership.lane, sourceRoot: hostOwnership.sourceRoot,
+        serviceName: hostOwnership.serviceName, processId: 42, processStartUtcUnixMs: 1000, state: { openDocuments: [{ openId: "open-A" }] } })];
+    }),
+  } as never);
+  const marks = documentMarks(bridge);
+  const ref = { session: "A", openId: "open-A" };
+  const sealed = { observedSince: marks.observedSince ?? null, changedAt: marks.changedAt(ref) };
+  listener({ kind: "event", sessionId: "A", eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: ["open-A"] }) } as never);
+  expect(marks.changedAt(ref), "the cache has not caught up").toBeNull();
+  await expect(assertSealed(marks, ref, sealed)).rejects.toThrow("Plan changed (documentMark)");
 });
