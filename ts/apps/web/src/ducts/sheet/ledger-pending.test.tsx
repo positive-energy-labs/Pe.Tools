@@ -17,6 +17,7 @@ test("a Work ESP is labelled by its resolved source, never as a Revit write", ()
     worstLegs: [],
     worksheet: null,
   });
+  if (!sheet.overview.fan) throw Error("The MUAS fixture must contain its fan");
   const inputs = sheet.inputs!.inputs;
   inputs.units[String(sheet.overview.fan.unitId)] = {
     kind: { value: "muas", source: "default", units: null, version: null, status: "valid" },
