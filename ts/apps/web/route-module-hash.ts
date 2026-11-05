@@ -147,18 +147,16 @@ export async function buildRouteArtifact(options: {
 const exec = promisify(execFile);
 async function runtimeRoutes(mode: "dev" | "build" | "test") {
   const producer = fileURLToPath(new URL("./scripts/route-graphs.ts", import.meta.url));
-  if (mode === "build")
+  if (mode !== "test")
     await exec(process.execPath, [producer, "--builtin-closure-only", "--check"]);
   // Runtime projections stay in memory; only the explicit generator changes committed pins.
-  const { stdout } = await exec(
-    process.execPath,
-    [producer, "--runtime"],
-    { maxBuffer: 16 * 1024 * 1024 },
-  );
+  const { stdout } = await exec(process.execPath, [producer, "--runtime"], {
+    maxBuffer: 16 * 1024 * 1024,
+  });
   return JSON.parse(stdout) as Record<string, string>;
 }
 
-/** Dev projects in memory for startup/HMR; production refuses a stale committed pin. */
+/** Dev and production refuse stale committed pins; runtime projections stay in memory. */
 export function routeModuleHash(
   generate?: (mode: "dev" | "build" | "test") => Promise<Record<string, string> | void>,
 ): Plugin {
