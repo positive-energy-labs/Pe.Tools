@@ -2,13 +2,14 @@ import { defineConfig } from "vite-plus";
 import { browserGuardianPlugin } from "@pe/browser/build";
 import { join } from "node:path";
 import { receiptBuildDefines } from "./src/build-stamp.ts";
-import { routeModuleHash } from "../web/route-module-hash.ts";
+import { prepareSourceClosures } from "./src/source-closures.ts";
+
+await prepareSourceClosures();
 
 const browserTestFiles = ["tests/**/*.browser.test.{ts,tsx}"];
 
-// Builtin closures are untracked: tests and pack import the producer's projection, as web does.
+// Pack and tests consume the same ignored producer output as source startup.
 export default defineConfig(({ mode }) => ({
-  plugins: [routeModuleHash()],
   pack: {
     entry: ["src/index.ts"],
     outDir: "dist-installed/bundle",
@@ -16,7 +17,6 @@ export default defineConfig(({ mode }) => ({
     shims: true,
     define: receiptBuildDefines("release"),
     plugins: [
-      routeModuleHash(),
       browserGuardianPlugin(join(import.meta.dirname, "dist-installed")),
       {
         name: "preserve-node-socket-context",
