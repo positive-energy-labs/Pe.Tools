@@ -277,7 +277,7 @@ export function AdmittedWrite({ mount, data, id }: { mount: AdmittedMount; data:
       says={`Plan ${verb.label} from the current Work`}
       held={held}
       stale={stale}
-      plan={() => settled(() => mount.invoke(id, undefined))}
+      plan={() => settled(() => mount.invoke(id, {}))}
       apply={{
         label: verb.label,
         says: `${verb.label} what the plan sealed`,
