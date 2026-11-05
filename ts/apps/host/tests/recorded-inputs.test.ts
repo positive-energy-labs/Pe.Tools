@@ -6,7 +6,8 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import { expect } from "vite-plus/test";
 import type { Caller } from "@pe/agent-contracts";
 import { effectTest } from "./effect-test.ts";
@@ -15,9 +16,13 @@ import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { FIRM_SEED } from "../src/ducts-inputs.ts";
 import { InvalidRead } from "../src/native-reads.ts";
 import {
+  inputBindingKey,
+  inputIdentity,
   nativeCatalogIdentity,
   openRecordingReader,
   openRecordingWriter,
+  replayInput,
+  type Taking,
 } from "../src/native-recording.ts";
 import { admittedRequestIdentity, RequestIdentity } from "../src/request-services.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
@@ -51,13 +56,16 @@ const liveFiles = Layer.succeed(HostFiles, {
   ductCatalogs: Effect.succeed(catalogs),
 });
 
-effectTest("a format 1 bundle refuses explicitly and is never migrated", () =>
+effectTest("format 1 and 2 bundles refuse explicitly and are never migrated", () =>
   Effect.gen(function* () {
     const dir = yield* bundle;
     const v1 = { version: 1, ...identity, coverage: { kind: "partial", inputs: ["native-read"] } };
     yield* Effect.promise(() => writeFile(join(dir, "manifest.json"), JSON.stringify(v1)));
     expect(yield* problem(reader(dir))).toBe("recording.mismatch");
     expect(yield* problem(openRecordingWriter(dir, identity, bounds))).toBe("recording.mismatch");
+    const v2 = { version: 2, ...identity };
+    yield* Effect.promise(() => writeFile(join(dir, "manifest.json"), JSON.stringify(v2)));
+    expect(yield* problem(reader(dir))).toBe("recording.mismatch");
   }),
 );
 
@@ -183,4 +191,123 @@ effectTest("an unrebuildable failure or a full bundle keeps no taking and adds n
     expect(writer.coverage()).toEqual(["files"]);
     expect((yield* reader(dir)).coverage()).toEqual(["files"]);
   }),
+);
+
+const FIRM = { kind: "files", file: "firm" } as const;
+
+effectTest(
+  "equal takings stay distinct: unbound refuses, an exact binding serves, a foreign binding refuses",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bundle;
+      const writer = yield* openRecordingWriter(dir, identity, bounds);
+      const seen: Taking[] = [];
+      const files = yield* service(
+        HostFiles,
+        HostFiles.capturing(writer, (taking) => Effect.sync(() => void seen.push(taking))).pipe(
+          Layer.provide(liveFiles),
+        ),
+      );
+      yield* files.firm;
+      yield* files.firm;
+      yield* files.ductCatalogs;
+      const [first, second, catalog] = seen;
+      expect(first!.id).not.toBe(second!.id);
+      expect(seen.map((taking) => writer.taking(taking.id))).toEqual(seen);
+      const open = yield* reader(dir);
+      const recorded = (bindings: ReadonlyMap<string, string>) =>
+        service(HostFiles, HostFiles.recorded(open, bindings));
+      expect(yield* problem((yield* recorded(new Map())).firm)).toBe("recording.ambiguous");
+      const key = inputBindingKey(FIRM, "{}");
+      expect(yield* (yield* recorded(new Map([[key, second!.id]]))).firm).toEqual(firm);
+      // Another input's taking, another scope, another version: each refuses, none falls back.
+      expect(yield* problem((yield* recorded(new Map([[key, catalog!.id]]))).firm)).toBe(
+        "recording.mismatch",
+      );
+      expect(
+        yield* problem(replayInput(open, FIRM, '{"other":1}', Schema.Unknown, first!.id)),
+      ).toBe("recording.scope");
+      const foreign = yield* writer.append(
+        { input: FIRM, scope: "{}", outputVersion: "other" },
+        { kind: "observed", value: firm },
+      );
+      expect(
+        yield* problem(replayInput(yield* reader(dir), FIRM, "{}", Schema.Unknown, foreign.id)),
+      ).toBe("recording.mismatch");
+    }),
+);
+
+effectTest(
+  "the observer sees exactly the durable taking, nothing on a full append, and its failure refuses",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bundle;
+      const writer = yield* openRecordingWriter(dir, identity, {
+        maxBytes: 1_000_000,
+        maxTakings: 1,
+      });
+      const seen: string[] = [];
+      const files = yield* service(
+        HostFiles,
+        HostFiles.capturing(writer, (taking) => Effect.sync(() => void seen.push(taking.id))).pipe(
+          Layer.provide(liveFiles),
+        ),
+      );
+      yield* files.firm;
+      expect(yield* problem(files.firm)).toBe("recording.full");
+      expect(seen).toEqual([(yield* reader(dir)).candidates(inputIdentity(FIRM))[0]!.id]);
+      const broken = new InvalidRead({
+        message: "read set closed",
+        status: 409,
+        problem: "read-set.closed",
+      });
+      const other = yield* openRecordingWriter(yield* bundle, identity, bounds);
+      const refusing = yield* service(
+        HostFiles,
+        HostFiles.capturing(other, () => Effect.fail(broken)).pipe(Layer.provide(liveFiles)),
+      );
+      expect(yield* problem(refusing.firm)).toBe("read-set.closed");
+    }),
+);
+
+effectTest(
+  "a frame keeps its own comparison time: served at 200, changed at 300, still changed at replay 10000",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bundle;
+      const writer = yield* openRecordingWriter(dir, identity, bounds);
+      const live = hostMarks({
+        observedSince: 100,
+        changedAt: () => 300,
+        subscribe: () => () => {},
+      });
+      const marks = yield* service(
+        HostDocumentMarks,
+        HostDocumentMarks.capturing(writer).pipe(
+          Layer.provide(Layer.succeed(HostDocumentMarks, live)),
+        ),
+      );
+      const A = { session: "bridge-1", openId: "A" };
+      yield* TestClock.setTime(200);
+      expect(yield* marks.readFrame(A, "fans:frame-1")).toEqual({
+        marks: { observedSince: 100, changedAt: 300 },
+        servedAt: 200,
+      });
+      yield* marks.readFrame(A, "fans:frame-2", 150);
+      yield* TestClock.setTime(10_000);
+      const recorded = yield* service(
+        HostDocumentMarks,
+        HostDocumentMarks.recorded(yield* reader(dir)),
+      );
+      const frame = yield* recorded.readFrame(A, "fans:frame-1");
+      expect(frame).toEqual({ marks: { observedSince: 100, changedAt: 300 }, servedAt: 200 });
+      expect(frame.marks.changedAt! > frame.servedAt).toBe(true);
+      expect((yield* recorded.readFrame(A, "fans:frame-2", 150)).servedAt).toBe(150);
+      expect(yield* problem(recorded.readFrame(A, "fans:frame-2", 10_000))).toBe(
+        "recording.mismatch",
+      );
+      // A frame never answers a bare snapshot or another frame.
+      expect(yield* problem(recorded.snapshot(A))).toBe("recording.miss");
+      expect(yield* problem(recorded.readFrame(A, "fans:frame-3"))).toBe("recording.miss");
+    }),
 );

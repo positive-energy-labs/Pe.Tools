@@ -13,9 +13,11 @@ import { readDuctCatalogs, productCatalogsRootPath, type CatalogReading } from "
 import { firmFilePath, readFirm, type FirmReading } from "./ducts-inputs.ts";
 import {
   captureInput,
+  inputBindingKey,
   replayInput,
   type RecordingReader,
   type RecordingWriter,
+  type TakingObserver,
 } from "./native-recording.ts";
 
 // The readings' own contracts: a recorded firm or catalog decodes only if it is still that reading.
@@ -56,19 +58,35 @@ export class HostFiles extends Context.Service<
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
     });
   /** The live files, each read kept as a taking: absence, fallback and findings included. */
-  static readonly capturing = (writer: RecordingWriter) =>
+  static readonly capturing = (writer: RecordingWriter, observed?: TakingObserver) =>
     Layer.effect(
       HostFiles,
       Effect.map(Effect.service(HostFiles), (live) => ({
-        firm: captureInput(writer, FIRM, SCOPE, firmCodec, live.firm),
-        ductCatalogs: captureInput(writer, CATALOGS, SCOPE, catalogsCodec, live.ductCatalogs),
+        firm: captureInput(writer, FIRM, SCOPE, firmCodec, live.firm, observed),
+        ductCatalogs: captureInput(
+          writer,
+          CATALOGS,
+          SCOPE,
+          catalogsCodec,
+          live.ductCatalogs,
+          observed,
+        ),
       })),
     );
   /** Recorded files only: a miss refuses, and neither the disk nor the firm seed is read. */
-  static readonly recorded = (reader: RecordingReader) =>
+  static readonly recorded = (
+    reader: RecordingReader,
+    bindings: ReadonlyMap<string, string> = new Map(),
+  ) =>
     Layer.succeed(HostFiles, {
-      firm: replayInput(reader, FIRM, SCOPE, firmCodec),
-      ductCatalogs: replayInput(reader, CATALOGS, SCOPE, catalogsCodec),
+      firm: replayInput(reader, FIRM, SCOPE, firmCodec, bindings.get(inputBindingKey(FIRM, SCOPE))),
+      ductCatalogs: replayInput(
+        reader,
+        CATALOGS,
+        SCOPE,
+        catalogsCodec,
+        bindings.get(inputBindingKey(CATALOGS, SCOPE)),
+      ),
     });
 }
 
