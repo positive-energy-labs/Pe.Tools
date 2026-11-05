@@ -187,6 +187,7 @@ export namespace DuctsApply {
       terminalFlows: DuctFlowWrite[];
       equipmentFlows: DuctFlowWrite[];
       store: DuctLossStore;
+      storeDeletes?: null | DuctStoreDeletes;
     }
     /**
      * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
@@ -323,6 +324,20 @@ export namespace DuctsApply {
     export interface DuctRoleRecord {
       role: string;
       ruledAt: string;
+    }
+    /**
+     * Store keys this write removes. The store is overlaid per key: a key the request omits keeps its stored entry,
+     * so only a key named here is removed (K3: omission is never deletion).
+     *
+     */
+    export interface DuctStoreDeletes {
+      rules?: string[];
+      instances?: number[];
+      terminals?: number[];
+      terminalFlows?: number[];
+      equipmentFlows?: number[];
+      verdicts?: string[];
+      roles?: number[];
     }
   }
   export namespace Res {
@@ -430,6 +445,7 @@ export namespace DuctsApplyPlan {
       terminalFlows: DuctFlowWrite[];
       equipmentFlows: DuctFlowWrite[];
       store: DuctLossStore;
+      storeDeletes?: null | DuctStoreDeletes;
     }
     /**
      * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
@@ -566,6 +582,20 @@ export namespace DuctsApplyPlan {
     export interface DuctRoleRecord {
       role: string;
       ruledAt: string;
+    }
+    /**
+     * Store keys this write removes. The store is overlaid per key: a key the request omits keeps its stored entry,
+     * so only a key named here is removed (K3: omission is never deletion).
+     *
+     */
+    export interface DuctStoreDeletes {
+      rules?: string[];
+      instances?: number[];
+      terminals?: number[];
+      terminalFlows?: number[];
+      equipmentFlows?: number[];
+      verdicts?: string[];
+      roles?: number[];
     }
   }
   export namespace Res {
