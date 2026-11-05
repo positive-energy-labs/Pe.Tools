@@ -8,8 +8,9 @@ import {
   type DuctsReadingEnvelope,
 } from "@pe/agent-contracts";
 import { BridgeError, type HostBridgeEvent, type RevitBridge } from "./bridge.ts";
+import { InvalidRead } from "./native-reads.ts";
 
-type NativeResult = {
+export type NativeResult = {
   value: unknown;
   target: {
     session: string;
@@ -17,11 +18,18 @@ type NativeResult = {
     documentRef?: { session: string; openId: string };
   };
 };
-type DuctsBody = {
+export type DuctsBody = {
   json: string;
   version: string;
   nativeRequestId: string;
   target: NativeResult["target"];
+  nativeTakingId?: string;
+};
+export type DuctsReadOptions = {
+  version?: string;
+  refresh?: string;
+  /** Decoded host source evidence, never an HTTP version header. */
+  source?: { readonly revision?: string; readonly beforeReady?: (body: DuctsBody) => Promise<void> };
 };
 type Entry = {
   request: DuctsReadingRequest;
@@ -39,6 +47,12 @@ const identity = (request: DuctsReadingRequest) =>
     ? { target: request.target, session: request.target.session }
     : { target: null, session: request.session };
 
+export const ductsSubject = (raw: DuctsReadingRequest): DuctsReadingRequest => {
+  const parsed = ductsReadingSchema.parse(raw);
+  return parsed.kind === "ducts-snapshot" && parsed.slots && !Object.keys(parsed.slots).length
+    ? { ...parsed, slots: undefined } : parsed;
+};
+
 /** Only Ducts acquisition is retained. Immutable JSON is bounded by both subjects and UTF-8 bytes. */
 export class DuctsReadings {
   private readonly entries = new Map<string, Entry>();
@@ -52,11 +66,7 @@ export class DuctsReadings {
   ) {}
 
   private entry(raw: DuctsReadingRequest): Entry {
-    const parsed = ductsReadingSchema.parse(raw);
-    const request =
-      parsed.kind === "ducts-snapshot" && parsed.slots && !Object.keys(parsed.slots).length
-        ? { ...parsed, slots: undefined }
-        : parsed;
+    const request = ductsSubject(raw);
     const key = readingKey(request);
     const existing = this.entries.get(key);
     if (existing) {
@@ -167,10 +177,19 @@ export class DuctsReadings {
   }
   async read(
     request: DuctsReadingRequest,
-    acquire: () => Promise<NativeResult & { nativeRequestId: string }>,
-    options: { version?: string; refresh?: string } = {},
+    acquire: () => Promise<NativeResult & { nativeRequestId: string; nativeTakingId?: string }>,
+    options: DuctsReadOptions = {},
   ): Promise<DuctsBody> {
     const entry = this.entry(request);
+    const original = options.source?.revision;
+    if (original !== undefined) {
+      if (options.refresh !== undefined)
+        throw new InvalidRead({ message: "A recorded Ducts body cannot refresh live inputs", status: 409, problem: "recording.historical" });
+      if (!original || (entry.envelope.revision !== original &&
+          (entry.body || entry.flight || entry.envelope.state !== "idle")))
+        throw new InvalidRead({ message: "Recorded Ducts version conflicts with the retained acquisition", status: 409, problem: "recording.mismatch" });
+      entry.envelope = { ...entry.envelope, revision: original };
+    }
     if (options.refresh === entry.envelope.revision) this.invalidate(entry);
     if (options.version) {
       if (entry.body?.version !== options.version)
@@ -188,7 +207,7 @@ export class DuctsReadings {
         return await entry.flight;
       } catch (error) {
         if (revision === entry.envelope.revision) throw error;
-        return this.read(request, acquire);
+        return this.read(request, acquire, options);
       }
     }
     const revision = entry.envelope.revision;
@@ -222,15 +241,21 @@ export class DuctsReadings {
           throw refused(
             "Ducts snapshot exceeds the shared reading byte budget; graph was not clipped",
           );
-        while (this.bytes + bytes > this.limits.bytes)
-          if (!this.evict(entry))
-            throw refused("Shared Ducts reading byte budget is occupied; graph was not clipped");
-        entry.body = {
+        const body: DuctsBody = {
           json,
           version: revision,
           nativeRequestId: result.nativeRequestId,
           target: result.target,
+          ...(result.nativeTakingId ? { nativeTakingId: result.nativeTakingId } : {}),
         };
+        await options.source?.beforeReady?.(body);
+        // Metadata capture can await disk; a change/deadline still retires this acquisition.
+        if (entry.envelope.revision !== revision)
+          throw refused("Ducts acquisition was invalidated while retaining its basis");
+        while (this.bytes + bytes > this.limits.bytes)
+          if (!this.evict(entry))
+            throw refused("Shared Ducts reading byte budget is occupied; graph was not clipped");
+        entry.body = body;
         entry.bytes = bytes;
         this.bytes += bytes;
         entry.envelope = { ...entry.envelope, state: "ready", version: revision };
