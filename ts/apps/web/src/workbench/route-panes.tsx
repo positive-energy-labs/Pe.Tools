@@ -64,7 +64,7 @@ export function RouteDock({
         tools: { ...prior.tools, folded: !tabs.route },
         pea: { ...prior.pea, folded: pictureLink },
       })),
-    [tabs.route, tabs.active?.id, pictureLink],
+    [tabs.route, tabs.placeId, pictureLink],
   );
   const failure = tabs.failure ?? planRefusal?.message ?? null;
   // A Work pressed on a closed document: its tool says what was kept and how to reconnect, while

@@ -892,6 +892,29 @@ test("an explicit picture link opens tools ahead of remembered conversation layo
   expect(bodyCurrent?.()).toBe(true);
 });
 
+test("subject availability does not fold an expanded Pea pane in the same Place", async () => {
+  const { observeSubject } = await import("#/shell/subject");
+  await mount("/fans?picture=%22model%22&fixture=layout");
+  await settle();
+  fireEvent.click(screen.getByRole("button", { name: "Expand pea" }));
+  expect(screen.queryByRole("button", { name: "Expand pea" })).toBeNull();
+  let withdraw = () => {};
+  try {
+    act(() => {
+      withdraw = observeSubject("fans", {
+        current: () => true,
+        read: () => ({ ready: false, refusal: "Subject is rereading", label: "", link: null }),
+        subscribe: () => () => {},
+      });
+    });
+    await settle();
+    expect(screen.queryByRole("button", { name: "Expand pea" })).toBeNull();
+  } finally {
+    act(() => withdraw());
+  }
+  expect(screen.queryByRole("button", { name: "Expand pea" })).toBeNull();
+});
+
 test("a delivered route-view-open for a trusted Pod creates its Place at the registered /tool address", async () => {
   const { readFile } = await import("node:fs/promises");
   const { resolve } = await import("node:path");

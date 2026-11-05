@@ -485,6 +485,10 @@ export function useRouteTabs() {
     thread,
     route,
     tabs,
+    // Addressed identity survives subject-reading gaps; active also requires a usable Page.
+    placeId: tagged?.route === route && tabs.some((tab) => tab.id === tagged.id)
+      ? tagged.id
+      : active?.id ?? null,
     active: active?.id ? { thread, id: active.id, route: active.route, link: active.link } : null,
     ready: true,
     target: carry.target,
