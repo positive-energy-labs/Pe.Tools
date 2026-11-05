@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-05, counsel (Step 6 parity default): retire the DEV-only `/design-system/control-surface` exploration and its implicit glob-selected variants. Its source remains in git history. `/design-system/table-controls` remains the swatch's real Table API specimen, owned under `design-system/specimens/table-controls`; it has explicitly authored fixture datasets. No production prototype selector or unused variant registry is introduced.
+
 - 2026-11-05, counsel (ADR 0030 rule 2): a catalog Work owner without a Page keeps its receipt link in chat. `actionRoute` uses the command's declared Work owner when that owner has a registered Page; the command does not require a Page to exist.
 
 - 2026-11-05, kaitpw's K3 ruling: every catalog write carries a keyed patch, reads stored state for per-key before and after, and preserves unstaged keys, including the `ducts.apply` loss store; a native whole replacement declares that contract and shows the full before. One deterministic omission-preservation falsifier covers every catalog write. Data-table apply refuses and the Driver holds apply until it passes (ADR 0030 rule 8).
@@ -141,6 +143,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - Omission check pending: `takeoffs.adopt` must preserve unnamed regions and disclose any whole-provenance replacement for named regions.
 - Omission check pending: `schedule.grid.push` must demonstrate that cells absent from the request stay unchanged.
 - Omission check pending: `schedule.apply` must classify definition replacement and preserve or disclose omitted fields.
+
+- Wave 2 engine cutover: legacy `shell/mount-readings-owner.ts` still constructs `createReadingGraph`, while admitted routes use `createAdmittedReadings`. Source opening is shared at 27510ae6; dependency ownership and the hook context's empty Page are not. Migrate or retire the remaining legacy route declarations with their Page and Work doors in Step 8, then delete the legacy scheduler; do not nest two engines or claim this as completed by sharing acquisition.
 
 - After root integrates testing-world, retire the campaign checkouts and schedule-worktree residue named in the [delivery report](C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/deterministic-20261104-testing-world-implementation/pillar/REPORT.md). Worker processes are stopped; Git removed the schedule registration but left files, and automatic approval review blocked residue deletion.
 

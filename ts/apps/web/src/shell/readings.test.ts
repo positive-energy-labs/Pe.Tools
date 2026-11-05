@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import type { ActionReceipt, ExecutionTarget, ReadingDecl } from "@pe/agent-contracts";
 import {
   createReadingGraph,
+  openSource,
   ReadingGraphRefusal,
   type ReadingContext,
   type ReadingDelivery,
@@ -11,7 +12,7 @@ import {
   type UseSource,
 } from "./readings";
 import { workerSource, type ReadingWorkerPort, type ReadingWorkerRequest } from "./readings-worker";
-import { subscriptionSource } from "./readings-use";
+import { demandContext, openSourceReading, subscriptionSource } from "./readings-use";
 import type { Readings } from "../readings";
 import { DEFAULT_WAIT_S } from "#/route/waits";
 
@@ -451,20 +452,16 @@ describe("reading graph", () => {
 
   it("receipt-dirtied mounted workers acquire a new generation and reject the old job's delivery", () => {
     const jobs: { context: ReadingContext; deliver: ReadingDelivery<number> }[] = [];
+    const stop = vi.fn();
+    const connect = vi.fn(() => ({
+      update: (context: ReadingContext, deliver: ReadingDelivery<number>) => {
+        jobs.push({ context, deliver });
+      },
+      stop,
+    }));
     const { graph } = fixture(
       { price: decl("price", { kind: "worker" }) },
-      {
-        price: {
-          kind: "worker",
-          algorithmVersion: "v1",
-          connect: () => ({
-            update: (context, deliver) => {
-              jobs.push({ context, deliver });
-            },
-            stop: vi.fn(),
-          }),
-        },
-      },
+      { price: { kind: "worker", algorithmVersion: "v1", connect } },
     );
     const release = graph.mount(["price"]);
     const before = jobs[0];
@@ -475,8 +472,36 @@ describe("reading graph", () => {
     expect(graph.get("price").current).toBe(false);
     done(jobs[1].deliver, 2);
     expect(graph.get("price")).toMatchObject({ value: 2, current: true });
+    // The graph leases one worker across attempts; only the graph stops it.
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(stop).not.toHaveBeenCalled();
     release();
     graph.dispose();
+  });
+
+  it("openSource: a port's release precedes its answer, a rejected open fails, a late release runs once", async () => {
+    const context = demandContext(target(), 0, null, new AbortController().signal);
+    const seen: string[] = [];
+    const deliver = (frame: { kind: string }) => seen.push(frame.kind);
+    openSource({ kind: "port", open: () => ({ value: 1, close: () => seen.push("close") }) }, context, deliver, (r) => {
+      seen.push("keep");
+      r?.();
+    });
+    expect(seen).toEqual(["keep", "close", "complete"]);
+    seen.length = 0;
+    openSource({ kind: "port", open: () => Promise.reject(Error("no")) }, context, deliver, () => seen.push("keep"));
+    openSource({ kind: "use", open: () => Promise.reject(Error("no")) }, context, deliver, () => seen.push("keep"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(seen).toEqual(["failure", "failure"]);
+    let opened!: (release: () => void) => void;
+    const closeSource = vi.fn();
+    const close = openSourceReading({ kind: "use", open: () => new Promise((resolve) => (opened = resolve)) }, context, () => {});
+    close();
+    close();
+    opened(closeSource);
+    await Promise.resolve();
+    expect(closeSource).toHaveBeenCalledTimes(1);
   });
 
   it("marks document changes stale and cannot admit a pre-change completion", () => {

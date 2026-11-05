@@ -5,6 +5,7 @@ import type { Immutable } from "../../../../packages/agent-contracts/src/route-k
 import { z } from "zod";
 import {
   contentHash,
+  openSource,
   type DeriveSource,
   type ReadingContext,
   type ReadingPublication,
@@ -65,26 +66,17 @@ export function openSourceReading<T>(
       );
     }, live.waitS * 1000);
   };
-  const open: UseSource<T>["open"] = (context, deliver) => {
-    if (source.kind === "worker") {
-      const worker = source.connect();
-      worker.update(context, deliver);
-      return () => worker.stop();
-    }
-    if (source.kind === "port")
-      return Promise.resolve(source.open(context)).then((port) => {
-        if (!context.signal.aborted) deliver({ kind: "complete", value: port.value, revision: 0 });
-        return () => port.close();
-      });
-    return source.open(context, deliver);
-  };
   const emit = (snapshot: ReadingSnapshot<T>) => {
     if (context.signal.aborted) return;
     if (snapshot.value !== undefined) value = snapshot.value;
     deliver(snapshot);
   };
-  const release = Promise.resolve(
-    open(context, (frame) => {
+  let closed = false;
+  let release: (() => void) | undefined;
+  openSource(
+    source,
+    context,
+    (frame) => {
       if (context.signal.aborted) return;
       if (live && frame.kind !== "log") {
         // A live subject's failure is said until its next answer; silence re-arms the deadline.
@@ -117,17 +109,18 @@ export function openSourceReading<T>(
         case "log":
           options.observe?.(frame.value);
       }
-    }),
+    },
+    // A release arriving after close runs at once: each source closes exactly once.
+    (next) => (next && closed ? next() : (release = next || release)),
   );
   // A transport may replay a current cached answer inside open(); its complete frame already
   // disarmed the deadline. Pending/stale frames arm their own timer above.
   if (value === undefined && !failed) arm();
-  let closed = false;
   return () => {
     if (closed) return;
     closed = true;
     disarm();
-    void release.then((close) => close?.());
+    release?.();
   };
 }
 
