@@ -2367,6 +2367,8 @@ test("a completed receipt never resurrects its local start when a later snapshot
   const { projectTimeline } = await import("./timeline");
   const f = await landingFixture();
   const id = f.submission.handle.id;
+  const first = 1 as import("../../../../packages/agent-contracts/src/work-journal-door").ReceiptCursor;
+  const next = 2 as typeof first;
   const rows = () => projectTimeline(f.mount.timeline(), f.route.data.verbs);
   expect(rows().find((row) => row.entry.press === id)?.outcome?.state).toBe("running");
   const receipt = actionReceiptSchema.parse({
@@ -2375,11 +2377,11 @@ test("a completed receipt never resurrects its local start when a later snapshot
     basis: null, prepared: { state: "unprepared" }, steps: [], recovery: [], consumes: [],
     startedAt: "2026-11-05T08:53:19Z",
   });
-  f.receiptFeed({ kind: "ready", receipts: { rows: [receipt], from: 1, through: 1 } });
+  f.receiptFeed({ kind: "ready", receipts: { rows: [receipt], from: first, through: first } });
   expect(rows().filter((row) => row.outcome?.id === id)).toMatchObject([
     { kind: "receipt", outcome: { state: "succeeded" } },
   ]);
-  f.receiptFeed({ kind: "ready", receipts: { rows: [], from: 2, through: 2 } });
+  f.receiptFeed({ kind: "ready", receipts: { rows: [], from: next, through: next } });
   expect(rows().some((row) => row.entry.press === id && row.outcome?.state === "running")).toBe(false);
 });
 
