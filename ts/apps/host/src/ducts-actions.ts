@@ -35,11 +35,11 @@ type Kind = "losses" | "heal" | "assign-fan";
 /** plan seals (Read), rehearse rolls back (TransactRead, never seal authority), apply commits. */
 type Phase = "plan" | "rehearse" | "apply";
 
-// Temporary integrity refusal: the native parameter owner may be a shared type, beyond the instance Work scope.
-const requireLossFootprint = (kind: Kind, phase: Phase) => {
-  if (kind === "losses" && phase === "apply")
-    throw refused("Loss apply is paused until the plan accounts for every instance affected by shared type parameters", "ducts.parameter-scope-unproven");
-};
+/** A loss plan that plans nothing and refuses something arms nothing: its native reasons, else null. */
+export const lossPlanRefusal = (writes: DuctsApply.Res.Response["writes"]) =>
+  !writes.some((w) => w.outcome === "planned") && writes.some((w) => w.outcome === "refused")
+    ? [...new Set(writes.filter((w) => w.outcome === "refused").map((w) => w.reason))].join("; ")
+    : null;
 
 /** Resolve group seeds through metadata, then read only their systems' complete geometry. */
 export async function healSnapshot(
@@ -122,7 +122,6 @@ export function ductsExecutors(
   deps: { sdk?: SdkReceiptReader } = {},
 ) {
   const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
-    requireLossFootprint(kind, phase);
     const target = targetOf(ctx);
     const raw = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
     const { process } = await lifetime(bridge, target, "project", deps);
@@ -289,7 +288,6 @@ export function ductsExecutors(
     };
   };
   const run = async (ctx: CommandContext, execution: ActionExecution, kind: Kind, phase: Phase) => {
-    requireLossFootprint(kind, phase);
     const p = prepared.parse(execution.prepared),
       target = targetOf(ctx);
     const entry = {
@@ -317,6 +315,12 @@ export function ductsExecutors(
       (id) => invokeBridge(bridge, target, key, p.input, id),
       { process: p.process as import("@pe/agent-contracts").NativeProcess },
     );
+    // A plan the native owner refuses outright (a shared type write it cannot scope, a refused store) seals
+    // nothing, so it can never arm an apply; its reasons are the plan's refusal and every staged cell stays.
+    if (kind === "losses" && phase !== "apply") {
+      const refusal = lossPlanRefusal((value as DuctsApply.Res.Response).writes);
+      if (refusal) throw refused(refusal, "ducts.plan-refused");
+    }
     const handle = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
     const paths = phase === "apply" ? entry.retires(p.input, value) : [];
     const fanPaths = paths.filter((path) => tools.fans.work.editable.some((pattern) => pattern[0] === path[0]));
