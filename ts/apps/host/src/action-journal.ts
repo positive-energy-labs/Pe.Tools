@@ -2065,7 +2065,7 @@ export class ActionJournal implements ReceiptReader {
           },
         ];
       });
-      return { ...row, snapshots };
+      return actionReceiptSchema.parse({ ...row, snapshots });
     });
     const at = new Date().toISOString();
     const receipts = rows.flatMap((row) => {
