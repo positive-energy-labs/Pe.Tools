@@ -93,8 +93,7 @@ export function createAdmittedWork(
         if (state.kind === "ready") {
           const result = owner.acceptWork(token, {
             kind: "snapshot",
-            key: capturedScope.key,
-            revision: state.snapshot.revision,
+            handle: state.snapshot.handle,
             value: state.snapshot.value,
             hash: canonicalEnvironmentInput(state.snapshot.value),
           });
@@ -194,7 +193,13 @@ export function createAdmittedWork(
           if (outcome.kind === "pending") return;
           if (outcome.kind === "accepted") {
             owner.acceptWork(invocation, { kind: "ack", write: outcome.ack });
-            resolve({ ok: true, revision: outcome.ack.revision, write: outcome.ack });
+            resolve({
+              ok: true,
+              revision: outcome.ack.revision,
+              // The ack carries the host's canonical key, so its key and revision are the handle.
+              handle: { key: outcome.ack.key, revision: outcome.ack.revision },
+              write: outcome.ack,
+            });
           } else {
             problem = outcome.refusal.error;
             resolve({

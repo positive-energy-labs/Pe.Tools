@@ -1,4 +1,4 @@
-import { type RouteStateSpec } from "@pe/agent-contracts";
+import { workHandle, type RouteStateSpec, type WorkHandle } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import type { z } from "zod";
 import type {
@@ -60,7 +60,7 @@ export function createFixtureWorkDoor(
             deliver({
               kind: "ready",
               history: { from: 1, acks: [] },
-              snapshot: { key: scope.key, revision: 0, value: schema.parse({}) },
+              snapshot: { handle: workHandle(scope.key, 0), revision: 0, value: schema.parse({}) },
             });
           } catch (error) {
             deliver({
@@ -77,12 +77,13 @@ export function createFixtureWorkDoor(
             const snapshot = value as {
               doc: unknown;
               revision: number;
+              handle: WorkHandle;
               history: { from: number; acks: import("@pe/agent-contracts").WorkWriteAck[] };
             };
             deliver({
               kind: "ready",
               history: snapshot.history,
-              snapshot: { key: scope.key, revision: snapshot.revision, value: snapshot.doc },
+              snapshot: { handle: snapshot.handle, revision: snapshot.revision, value: snapshot.doc },
             });
           },
           (ack) => deliver({ kind: "ack", ack }),

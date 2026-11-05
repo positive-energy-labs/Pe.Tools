@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { catalogWorkCommands, catalogWorks, CatalogWorkRefused } from "./catalog-work.ts";
+import { catalogWorkCommands, catalogWorks, catalogWorkSpecs, CatalogWorkRefused } from "./catalog-work.ts";
 import { commandCatalogAxes } from "./command-axes.ts";
 import { workHandle } from "./command.ts";
 import { bindWork, canonicalWorkKey, workKey } from "./route-state.ts";
@@ -98,5 +98,27 @@ describe("generated catalog Work commands", () => {
     expect(commandCatalogAxes["data-table.apply.preview"].effect).toBe("Read");
     expect(commandCatalogAxes["parameter-links.apply"]).toMatchObject({ effect: "ModelWrite", touches: ["Topology"] });
     expect(catalogWorkCommands["data-table.apply"].work.route).toBe("data-tables");
+  });
+});
+
+describe("catalog Work editable census", () => {
+  // Every StateCell (an object holding `edit`) in a real staged Work sits on a declared editable path.
+  const cells = (value: unknown, path: string[] = []): string[][] =>
+    value && typeof value === "object"
+      ? "edit" in value
+        ? [path]
+        : Object.entries(value).flatMap(([k, v]) => cells(v, [...path, k]))
+      : [];
+  const covered = (path: string[], patterns: readonly (readonly (string | number)[])[]) =>
+    patterns.some((p) => p.length === path.length && p.every((s, i) => s === "*" || s === path[i]));
+
+  it.each([
+    ["data-tables", { name: cell("T"), columns: { "text:0": cell("A") }, rows: { r1: { "text:0": cell("a") } } }, 3],
+    ["parameter-links", { definitions: { d1: { edit: { delete: true } } }, assignments: { a1: cell({ definitionId: "d1" }) } }, 2],
+  ] as const)("%s stages only declared cells", (owner, doc, count) => {
+    const spec = catalogWorkSpecs[owner];
+    const staged = cells(spec.schema.parse(doc));
+    expect(staged).toHaveLength(count);
+    for (const path of staged) expect(covered(path, spec.editable!)).toBe(true);
   });
 });

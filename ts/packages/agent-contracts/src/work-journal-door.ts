@@ -36,8 +36,10 @@ export interface Observation<A> {
   subscribe(onValue: (value: A) => void, onEnd: () => void): Unsubscribe;
 }
 
+/** The host's stored Work as read: its one handle (ADR 0030 rule 9) and value. */
 export interface WorkSnapshot {
-  readonly key: WorkKey;
+  readonly handle: import("./command.ts").WorkHandle;
+  // Mirrors handle.revision for the existing revision readers; the handle is the identity.
   readonly revision: WorkWriteAck["revision"];
   readonly value: unknown;
 }

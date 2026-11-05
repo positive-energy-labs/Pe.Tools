@@ -219,9 +219,8 @@ export type RouteStateWriteResult =
   | {
       ok: true;
       revision: number;
-      // ADR 0030 rule 9 says every write returns its handle; RouteWorkspace always sets it. Optional here
-      // only so web fixtures that build results by hand still compile until their owner passes it.
-      handle?: import("./command.ts").WorkHandle;
+      /** The written Work's one handle (ADR 0030 rule 9). */
+      handle: import("./command.ts").WorkHandle;
       doc?: unknown;
       result?: unknown;
       write: WorkWriteAck;

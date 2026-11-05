@@ -280,8 +280,7 @@ export function criticRefusals(
   const forgedAttempt: AcceptanceToken = { scope, channel: "read", attempt: 99 };
   const copiedDelivery = {
     kind: "snapshot" as const,
-    key: { binding: "host" as const, route: "tiny", target: null },
-    revision: 1,
+    handle: { key: { binding: "host" as const, route: "tiny", target: null }, revision: 1 },
     value: { amount: 1, note: "" },
     hash: "x",
   };

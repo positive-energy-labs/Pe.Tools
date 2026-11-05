@@ -316,8 +316,8 @@ type ImmutableWorkAck = Immutable<Omit<WorkWriteAck, "meta">> &
 export type WorkDelivery<W> =
   | {
       readonly kind: "snapshot";
-      readonly key: Immutable<WorkKey>;
-      readonly revision: number;
+      /** The handle the host read returned; never rebuilt from the scope. */
+      readonly handle: Immutable<import("./command.ts").WorkHandle>;
       readonly value: Immutable<W>;
       readonly hash: string;
     }
@@ -346,7 +346,12 @@ export interface AcceptanceSnapshot<G extends RouteGraphJson, S extends SchemaTa
   readonly pageEpoch: PageEpoch;
   readonly pageRevision: number;
   readonly page: PageOf<G, S>;
-  readonly work: { readonly revision: number; readonly value: W } | null;
+  /** `handle` is the accepted Work's one identity; `revision` mirrors handle.revision for its readers. */
+  readonly work: {
+    readonly handle: Immutable<import("./command.ts").WorkHandle>;
+    readonly revision: number;
+    readonly value: W;
+  } | null;
 }
 /** B implements this one owner below React. C's Page transactions use this owner, not a second store.
  * TODO: B proves A -> B -> A, remount, both ack/stream orders, contradiction, gap and late receipt schedules.

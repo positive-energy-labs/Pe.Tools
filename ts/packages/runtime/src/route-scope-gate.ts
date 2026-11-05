@@ -227,14 +227,15 @@ export function createRouteScopeGate<
     )
       return { kind: "refused", reason: "foreign-token" };
     const attempt = token instanceof InvocationToken ? token.token : token;
-    const key = delivery.kind === "snapshot" ? delivery.key : delivery.write.key;
+    const key = delivery.kind === "snapshot" ? delivery.handle.key : delivery.write.key;
     if (!attempt.scope.identity.work || workKey(key) !== workKey(attempt.scope.identity.work))
       return { kind: "refused", reason: "wrong-work" };
     const live = active(attempt);
     if (!live && delivery.kind !== "ack")
       return { kind: "refused", reason: closed ? "closed" : "retired" };
     const journal = work.journal(key);
-    const revision = delivery.kind === "snapshot" ? delivery.revision : delivery.write.revision;
+    const revision =
+      delivery.kind === "snapshot" ? delivery.handle.revision : delivery.write.revision;
     const current = live ? (state?.work ?? null) : null;
     const recover = (reason: "gap" | "contradiction"): WorkReduction => ({
       kind: "recover",
@@ -317,7 +318,12 @@ export function createRouteScopeGate<
     known.set(revision, hash);
     journal.observe({ revision, doc: value });
     continueInvocation();
-    publish({ ...scopeState, work: Object.freeze({ revision, value: immutableCopy(value) }) });
+    // An ack's key is the host's canonical Work key, so its key and revision are the handle.
+    const handle = delivery.kind === "snapshot" ? delivery.handle : { key, revision };
+    publish({
+      ...scopeState,
+      work: Object.freeze({ handle: immutableCopy(handle), revision, value: immutableCopy(value) }),
+    });
     return { kind: "published", revision, receipt: receipt === "none" ? "none" : "recorded" };
   }
   return {

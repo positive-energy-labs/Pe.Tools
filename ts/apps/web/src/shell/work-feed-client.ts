@@ -6,6 +6,7 @@ import {
 import { z } from "zod";
 import {
   actionReceiptSchema,
+  workHandleSchema,
   workKey,
   workWriteAckSchema,
   type WorkWriteAck,
@@ -40,6 +41,7 @@ const receiptFeedSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("gap"), from: cursorSchema, to: cursorSchema }),
 ]);
 const snapshotSchema = z.object({
+  handle: workHandleSchema,
   revision: z.number().int().nonnegative(),
   doc: z.unknown(),
   history: z.object({ acks: z.array(workWriteAckSchema), from: z.number().int().nonnegative() }),
@@ -297,7 +299,7 @@ export function createWorkFeedClient(
                   acquiring = false;
                   emit({
                     kind: "ready",
-                    snapshot: { key: scope.key, revision, value: parsed.data.doc },
+                    snapshot: { handle: parsed.data.handle, revision, value: parsed.data.doc },
                     history: parsed.data.history,
                   });
                   drain();
@@ -330,7 +332,7 @@ export function createWorkFeedClient(
               acquiring = false;
               emit({
                 kind: "ready",
-                snapshot: { key: scope.key, revision, value: parsed.data.doc },
+                snapshot: { handle: parsed.data.handle, revision, value: parsed.data.doc },
                 history: parsed.data.history,
               });
               drain();

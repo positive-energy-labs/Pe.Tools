@@ -66,8 +66,7 @@ export function createWorkScopeAcceptance(
       const attempt = owner.capture("snapshot");
       owner.acceptWork(attempt, {
         kind: "snapshot",
-        key: work.handle.key,
-        revision: work.handle.revision,
+        handle: work.handle,
         value: work.doc,
         hash: canonicalRouteInput(work.doc),
       });
