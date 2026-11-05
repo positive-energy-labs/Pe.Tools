@@ -3,7 +3,7 @@ import { contractSha256 } from "../../../packages/host-contracts/src/vendor/gene
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { isPeRevitEnvelope, parsePeRevitEnvelope } from "@pe/host-contracts/pe-revit-cli";
+import { decodePeRevitPayload, isPeRevitEnvelope, parsePeRevitEnvelope } from "@pe/host-contracts/pe-revit-cli";
 import { replay } from "./sdk-replay.ts";
 
 test("runtime wire projection belongs to the pinned generated contract", () => {
@@ -57,8 +57,7 @@ test("production refuses malformed nested wire fields and unknown discriminator 
     expect(() => parsePeRevitEnvelope(stdout, ["doc", "open"], launch)).toThrow();
 });
 
-// These captured bytes predate the pin. This corpus must expose incompatible evidence rather than
-// silently upgrading recordings or claiming a native run happened during a deterministic test.
+// Preserve the captured frames; replay is deterministic transport evidence, never a native run.
 test("recorded transport corpus remains independently inspectable", () => {
   const folder = join(import.meta.dirname, "sdk-envelopes");
   const rejected = readdirSync(folder).filter(
@@ -80,3 +79,41 @@ test("anonymous SDK help and service payloads survive generated frame decoding",
     );
   }
 });
+
+// Mutate captured bytes independently of both the projection and replay's merge helper.
+test("selected session contract decodes the recording and refuses nested hostile payloads", () => {
+  const recording = readFileSync(join(import.meta.dirname, "sdk-envelopes/session-list.ok.json"), "utf8");
+  const value = JSON.parse(recording);
+  expect(decodePeRevitPayload("SessionListResult", value.result)).toEqual(value.result);
+  for (const mutate of [
+    (v: typeof value) => { v.result.sessions[0].case = "invented"; },
+    (v: typeof value) => { v.result.sessions[0].process.pid = "71464"; },
+    (v: typeof value) => { v.result.sessions[0].process.extraIdentity = "invented"; },
+    (v: typeof value) => { v.result.sessions[0].process.processStartUtc = null; },
+    (v: typeof value) => { v.result.sessions[0].receipt.payload = "foreign"; },
+    (v: typeof value) => { v.result.sessions[0].bridge.documents[0].isModified = "false"; },
+    (v: typeof value) => { delete v.result.sessions[0].shape.quarantine; },
+    (v: typeof value) => { v.result.sessions[0].bridge.queue.depth = {}; },
+    (v: typeof value) => { v.result.processReadErrors = [{ candidatePid: "42", detail: "unreadable", observedAtUtc: "now" }]; },
+    (v: typeof value) => { v.result.sessions = null; },
+    (v: typeof value) => { v.result.phase = "ready"; },
+  ]) {
+    const malformed = JSON.parse(recording);
+    mutate(malformed);
+    // A valid frame never pretends to validate its unknown result.
+    expect(isPeRevitEnvelope(malformed)).toBe(true);
+    expect(() => decodePeRevitPayload("SessionListResult", malformed.result)).toThrow(/SessionListResult/);
+  }
+});
+
+// The decoder's return type comes from the generated named map, never a consumer's assertion.
+function selectedPayloadType(value: unknown) {
+  const decoded = decodePeRevitPayload("SessionListResult", value);
+  const sessions: import("@pe/host-contracts/pe-revit-contract").SessionListResult = decoded;
+  // @ts-expect-error A consumer cannot ask this boundary to assert an arbitrary result type.
+  decodePeRevitPayload<{ trusted: true }>("SessionListResult", value);
+  // @ts-expect-error Unprojected DTOs have no runtime decoder.
+  decodePeRevitPayload("OpReceiptResult", value);
+  return sessions;
+}
+void selectedPayloadType;

@@ -1,7 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import { bindActionDispatch } from "../src/action-dispatch.ts";
 import { StepFailure } from "../src/command-executor.ts";
-import { dispatchSdk, SDK_REQUEST_ID } from "../src/sdk-dispatch.ts";
+import { dispatchSdk, namedSdkSession, SDK_REQUEST_ID } from "../src/sdk-dispatch.ts";
 import { replay } from "./sdk-replay.ts";
 
 test.each([
@@ -132,3 +132,16 @@ test.each([
     }
   },
 );
+
+test("named SDK selection decodes payload after diagnostic refusal", async () => {
+  const valid = JSON.parse(replay("session-list"));
+  expect(await namedSdkSession("acc-r1", async () => JSON.stringify(valid)))
+    .toMatchObject({ case: "controlled-active", id: "acc-r1" });
+  valid.result.sessions[0].process.pid = "71464";
+  await expect(namedSdkSession("acc-r1", async () => JSON.stringify(valid)))
+    .rejects.toThrow(/invalid SessionListResult payload/);
+  valid.result = null;
+  valid.diagnostics = [{ code: "session.failed", detail: "read failed", fix: null }];
+  await expect(namedSdkSession("acc-r1", async () => JSON.stringify(valid)))
+    .rejects.toThrow("The SDK does not name one session 'acc-r1'");
+});

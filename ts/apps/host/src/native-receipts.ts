@@ -1,3 +1,4 @@
+import { decodePeRevitPayload } from "@pe/host-contracts/pe-revit-cli";
 import {
   nativeProcessSchema,
   nativeReceiptSchema as receiptSchema,
@@ -12,7 +13,6 @@ import {
   type OpReceiptResponseResult,
   type OpReceiptResult,
   type OpStateResult,
-  type SessionListResult,
 } from "@pe/host-contracts/pe-revit-contract";
 import type { ActionStep } from "@pe/agent-contracts";
 import { readSdk } from "./sdk-session.ts";
@@ -29,9 +29,10 @@ export async function readOriginalProcess(
   startMs: number,
   read: SdkReceiptReader = readSdk,
 ): Promise<NativeProcess> {
-  const envelope = await sdkResult<SessionListResult>(sessionListArgv({ all: true }), read);
+  const envelope = await sdkResult<unknown>(sessionListArgv({ all: true }), read);
   if (envelope.diagnostics.length) throw Error("SDK process identity read reported diagnostics");
-  const candidates = (envelope.result as SessionListResult).sessions.flatMap((row) =>
+  const result = decodePeRevitPayload("SessionListResult", envelope.result);
+  const candidates = result.sessions.flatMap((row) =>
     "process" in row ? [row.process] : [],
   );
   const matches = candidates.filter(

@@ -1,7 +1,7 @@
 // SDK client. Runtime decoding projects the generated SDK contract through scripts/sdk-wire.ts.
 // Process success is not a verdict; validation rejects empty, non-JSON, and non-envelope output.
 
-import { wire } from "./generated/pe-revit-wire.ts";
+import { wire, type SelectedSdkTypes } from "./generated/pe-revit-wire.ts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -124,7 +124,7 @@ function matchesWire(value: unknown, shape: WireShape): boolean {
     if (shape === "unknown") return true;
     if (shape === "null") return value === null;
     if (Object.hasOwn(definitions, shape)) return matchesWire(value, definitions[shape]!);
-    return typeof value === shape && (shape !== "number" || Number.isFinite(value));
+    return typeof value === shape;
   }
   if ("literal" in shape) return value === shape.literal;
   if ("union" in shape) return shape.union.some(branch => matchesWire(value, branch));
@@ -143,6 +143,18 @@ export function isPeRevitEnvelope(value: unknown): value is PeRevitEnvelope {
   if (!matchesWire(value, "Envelope")) return false;
   const envelope = value as PeRevitEnvelope;
   return Number.isInteger(envelope.exitCode) && envelope.exitCode >= 0 && envelope.exitCode <= 4;
+}
+
+/** Decode only a caller-selected, generated named contract. The frame deliberately leaves result
+ * unknown: anonymous SDK help/service answers are valid, and the SDK supplies no verb/result map.
+ * Callers classify SDK diagnostics before selecting a payload, since errors may carry null results.
+ */
+export function decodePeRevitPayload<K extends keyof SelectedSdkTypes>(
+  name: K,
+  value: unknown,
+): SelectedSdkTypes[K] {
+  if (!matchesWire(value, name)) throw Error(`pe-revit produced an invalid ${name} payload`);
+  return value as SelectedSdkTypes[K];
 }
 
 /** Parse stdout into a typed envelope (throws on any of the validate failures above). */

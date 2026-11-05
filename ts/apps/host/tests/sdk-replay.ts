@@ -49,23 +49,22 @@ const exemplars = (rows: Json[]) => {
   return byCase;
 };
 
-const merge = (base: Json, patch: unknown, path: string): Json => {
+const merge = (base: Json, patch: unknown): Json => {
   if (patch === undefined) return base;
   if (kind(base) === "object" && kind(patch) === "object") {
     const out = { ...(base as Shape) };
     for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
-      if (!(key in out)) throw new Error(`${path}.${key}: the SDK never sends it`);
-      out[key] = merge(out[key]!, value, `${path}.${key}`);
+      out[key] = merge(out[key]!, value);
     }
     return out;
   }
   if (Array.isArray(patch)) {
     const shapes = Array.isArray(base) ? exemplars(base) : new Map<string, Shape>();
-    return patch.map((row, i) => {
+    return patch.map((row) => {
       if (kind(row) !== "object") return row as Json;
       const tag = String((row as Shape).case ?? (row as Shape).kind ?? "");
       const shape = shapes.get(tag) ?? (shapes.size === 1 ? [...shapes.values()][0] : undefined);
-      return shape ? merge(shape, row, `${path}[${i}]`) : (row as Json);
+      return shape ? merge(shape, row) : (row as Json);
     });
   }
   return patch as Json;
@@ -75,11 +74,11 @@ const merge = (base: Json, patch: unknown, path: string): Json => {
 export function replay(verb: string, patch: Record<string, unknown> = {}, state = "ok"): string {
   const base = recorded.get(`${verb}.${state}`);
   if (!base) throw new Error(`no recorded envelope '${verb}.${state}'`);
-  return JSON.stringify(merge(base, patch, verb));
+  return JSON.stringify(merge(base, patch));
 }
 
 /** A fake's answer to `args`: the recording of its verb and state with `fields` laid over it, or the
- * recorded frame around `fields` when that state was never recorded (then held to the contract). */
+ * recorded frame around `fields` when that state was never recorded (production decodes it). */
 export function replayAnswer(args: readonly string[], fields: Record<string, unknown>): string {
   const verb = verbOf(args);
   const state = String((fields.result as Record<string, unknown> | null)?.state ?? "none");

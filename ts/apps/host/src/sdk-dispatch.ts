@@ -1,3 +1,4 @@
+import { decodePeRevitPayload } from "@pe/host-contracts/pe-revit-cli";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import type { ActionStep } from "@pe/agent-contracts";
@@ -7,7 +8,6 @@ import {
   sessionListArgv,
   type Diagnostic,
   type SessionObservation,
-  type SessionListResult,
   type OpReceiptResponseResult,
   type OpReceiptResult,
   type OpStateResult,
@@ -50,11 +50,17 @@ const NOT_DISPATCHED = new Set([
 
 export async function namedSdkSession(id: string, read: SdkReceiptReader) {
   const args = sessionListArgv({ all: true });
-  const envelope = await sdkEnvelope<SessionListResult>(args, read);
-  const rows = envelope.result.sessions.filter((row) => "id" in row && row.id === id);
-  if (envelope.diagnostics.length || rows.length > 1)
+  const envelope = await sdkEnvelope(args, read);
+  if (envelope.diagnostics.length)
     throw refused(`The SDK does not name one session '${id}'`);
-  return (rows[0] as Exclude<SessionObservation, { case: "observed-active" }> | undefined) ?? null;
+  const result = decodePeRevitPayload("SessionListResult", envelope.result);
+  const rows = result.sessions.filter(
+    (row): row is Exclude<SessionObservation, { case: "observed-active" }> =>
+      "id" in row && row.id === id,
+  );
+  if (rows.length > 1)
+    throw refused(`The SDK does not name one session '${id}'`);
+  return rows[0] ?? null;
 }
 
 /** Only parsed SDK outcomes attest dispatch. CLI entry alone proves no native effect. */

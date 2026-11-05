@@ -1,5 +1,6 @@
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { expect, test } from "vite-plus/test";
 import type { ActionStep } from "@pe/agent-contracts";
@@ -177,4 +178,29 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+// Keep the original process pair intact: malformed unrelated nested evidence must refuse the
+// entire selected payload before the reader trusts that otherwise matching incarnation.
+test("original identity reader refuses hostile recorded session payloads before trusting process", async () => {
+  const recording = readFileSync(join(import.meta.dirname, "sdk-envelopes/session-list.ok.json"), "utf8");
+  const valid = JSON.parse(recording);
+  const process = valid.result.sessions[0].process;
+  const startMs = Date.parse(process.processStartUtc);
+  expect(await readOriginalProcess(process.pid, startMs, async () => recording)).toEqual(process);
+  for (const mutate of [
+    (v: typeof valid) => { v.result.sessions[0].bridge.documents[0].isActive = "true"; },
+    (v: typeof valid) => { delete v.result.sessions[0].receipt.generationRoot; },
+    (v: typeof valid) => { v.result.sessions[1].case = "invented"; },
+    (v: typeof valid) => { v.result.sessions[0].execution.allowed = 1; },
+  ]) {
+    const malformed = JSON.parse(recording);
+    mutate(malformed);
+    await expect(readOriginalProcess(process.pid, startMs, async () => JSON.stringify(malformed)))
+      .rejects.toThrow(/invalid SessionListResult payload/);
+  }
+  valid.result = null;
+  valid.diagnostics = [{ code: "session.failed", detail: "read failed", fix: null }];
+  await expect(readOriginalProcess(process.pid, startMs, async () => JSON.stringify(valid)))
+    .rejects.toThrow("SDK process identity read reported diagnostics");
 });
