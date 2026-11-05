@@ -40,6 +40,7 @@ export interface FirmReading {
   error?: string;
 }
 
+/** The `HostFiles` layer body; callers read the firm through `HostFiles`, never this. */
 export async function readFirm(path = firmFilePath()): Promise<FirmReading> {
   let text: string;
   try {
@@ -49,7 +50,14 @@ export async function readFirm(path = firmFilePath()): Promise<FirmReading> {
       return { firm: FIRM_SEED, path, present: false };
     return { firm: FIRM_SEED, path, present: false, error: String(error) };
   }
-  const parsed = ductsFirmSchema.safeParse(JSON.parse(text));
+  // Malformed JSON is the same visible refusal as a schema miss, never a thrown defect.
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch (error) {
+    return { firm: FIRM_SEED, path, present: false, error: String(error) };
+  }
+  const parsed = ductsFirmSchema.safeParse(json);
   if (!parsed.success)
     return { firm: FIRM_SEED, path, present: false, error: parsed.error.message };
   return { firm: parsed.data, path, present: true };

@@ -1,16 +1,15 @@
 import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { join, resolve, relative, isAbsolute } from "node:path";
-import { HttpEffect, HttpRouter } from "effect/http";
 import { catalogSchema, type Catalogs, type CatalogTable } from "@pe/ducts-domain/catalog";
 import { productUserContentRootPath } from "./product-paths.ts";
 
-const productCatalogsRootPath = () => join(productUserContentRootPath(), "Catalogs");
+export const productCatalogsRootPath = () => join(productUserContentRootPath(), "Catalogs");
 export interface CatalogReading {
   tables: Catalogs;
   findings: string[];
 }
 
-/** Read-only portable units, no registration and no product-home creation on a missing root. */
+/** The `HostFiles` layer body. Read-only portable units, no registration and no product-home creation on a missing root. */
 export async function readDuctCatalogs(root = productCatalogsRootPath()): Promise<CatalogReading> {
   const tables: Record<string, CatalogTable> = Object.create(null);
   const findings: string[] = [];
@@ -47,10 +46,3 @@ export async function readDuctCatalogs(root = productCatalogsRootPath()): Promis
   }
   return { tables, findings };
 }
-
-/** Under /pe so the dev proxy carries it; a bare /ducts/* belongs to the web route (404 in Vite). */
-export const ductCatalogsRoute = HttpRouter.add(
-  "GET",
-  "/pe/ducts/catalogs",
-  HttpEffect.fromWebHandler(async () => Response.json(await readDuctCatalogs())),
-);
