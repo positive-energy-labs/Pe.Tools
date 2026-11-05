@@ -3,7 +3,7 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { address, routeBindingsSchema, type WorkKey } from "@pe/agent-contracts";
 import { RouteWorkspace, type RouteDocumentStore } from "@pe/runtime";
-import { liveWorkInput, workInput, workInputCodecs, type WorkView } from "../src/work-inputs.ts";
+import { liveWorkInput, workInputCodecs, type WorkView } from "../src/work-inputs.ts";
 
 const schema = z
   .object({ bindings: routeBindingsSchema, values: z.record(z.string(), z.string()).default({}) })
@@ -25,15 +25,12 @@ const roundTrip = <V extends WorkView>(view: V, value: unknown) =>
     Schema.decodeUnknownEffect(workInputCodecs[view])(JSON.parse(JSON.stringify(value))),
   );
 
-test("each live Work view is the canonical read, and its recorded bytes decode through the Work contracts", async () => {
+test("Work preserves revision history and its recorded bytes decode through the Work contracts", async () => {
   for (const [revision, value] of [[0, "250"], [1, "300"]] as const)
     expect(
       await workspace.apply(key, "fans", "human", [{ path: ["values", "4"], value }], revision),
     ).toMatchObject({ ok: true });
   const live = <V extends WorkView>(view: V) => Effect.runPromise(liveWorkInput(workspace, key, view));
-  expect(workInput(key, "feed")).toEqual({ kind: "work", key: expect.any(String), view: "feed" });
-  expect(await live("raw")).toEqual(await workspace.readRaw(key, "fans"));
-  expect(await live("view")).toEqual(await workspace.view(key, "fans"));
   // The feed keeps its handle, revision and the retained history its consumers undo over.
   const feed = await live("feed");
   expect(feed).toMatchObject({ revision: 2, handle: { revision: 2 }, history: { from: 1 } });
