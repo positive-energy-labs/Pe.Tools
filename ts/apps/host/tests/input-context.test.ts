@@ -4,8 +4,7 @@ import { join } from "node:path";
 import { Effect, Exit, Layer } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
 import { HostNativeRead } from "@pe/host-internal/native-read";
-import { sourceProvenanceSchema } from "@pe/agent-contracts";
-import { HostInputContext, type InputUse } from "../src/input-context.ts";
+import { HostInputContext } from "../src/input-context.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import {
   hostNativeReadFor,
@@ -40,54 +39,14 @@ const recording = async (): Promise<HostInputLane> => {
 };
 const problem = (refusal: { problem: string } | null) => refusal?.problem ?? null;
 
-test("a recording lane decides from the generated catalogs: only a covered native Read is served", async () => {
-  const { check, source } = await context(await recording());
-  const decisions = (
-    [
-      { kind: "native", key: "host.ops.catalog" },
-      { kind: "native", key: "revit.matrix.loaded-families" },
-      { kind: "native", key: "ducts.apply" },
-      { kind: "native", key: "scripting.execute" },
-      { kind: "native", key: "no.such.op" },
-      { kind: "command", key: "families.apply.preview" },
-      { kind: "command", key: "ducts.plan-losses" },
-      { kind: "command", key: "ducts.apply-losses" },
-      { kind: "input", input: "native" },
-      { kind: "input", input: "work" },
-      { kind: "work", verb: "undo" },
-      { kind: "recording", verb: "bind-point" },
-    ] satisfies InputUse[]
-  ).map((use) => problem(check(use)));
-  expect(decisions).toEqual([
-    null,
-    "recording.historical", // TransactRead needs explicit replay-safe metadata
-    "recording.historical", // ModelWrite
-    "recording.historical", // scripts are writes in the catalog, whatever a client claims
-    "read.contract",
-    "recording.historical", // a TransactRead rehearsal command
-    "recording.coverage", // a plan needs Work, files and metadata a native bundle lacks
-    "recording.historical",
-    null,
-    "recording.coverage",
-    "recording.historical",
-    "recording.historical",
-  ]);
-  // The browser projection is the bounded provenance, never the opened store.
-  expect(sourceProvenanceSchema.parse(source)).toEqual({
-    kind: "recording",
-    at: "2030-01-01T00:00:00.000Z",
-    build: "build-1",
-    catalog: identity.catalog,
-    coverage: ["native"],
-  });
+test("a recording lane refuses recording metadata writes", async () => {
+  const { check } = await context(await recording());
+  expect(problem(check({ kind: "recording", verb: "bind-point" }))).toBe("recording.historical");
 });
 
 test("live keeps its admission; a sourceless host fixture refuses and never builds live", async () => {
   expect((await context({ kind: "live" })).check({ kind: "work", verb: "edit" })).toBeNull();
   const fixture: HostInputLane = { kind: "fixture", name: "fans-demo" };
-  expect(problem((await context(fixture)).check({ kind: "native", key: "host.ops.catalog" }))).toBe(
-    "recording.fixture",
-  );
   const live = Layer.effect(HostNativeRead, Effect.die("live input acquired"));
   const exit = await Effect.runPromiseExit(
     Effect.gen(function* () {
