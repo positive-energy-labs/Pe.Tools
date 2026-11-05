@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
-import { address, catalogWorkCommands, catalogWorkSpecs, type RouteStatePatch } from "@pe/agent-contracts";
+import { address, catalogWorkCommands, catalogWorks, catalogWorkSpecs, type RouteStatePatch } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { markDispatched } from "../src/action-dispatch.ts";
 import { commandResources } from "../src/command-reads.ts";
@@ -102,7 +102,7 @@ async function catalogRun(
       plan,
       planCalls,
       receipt,
-      applied: calls.filter((c) => c.key !== "revit.detail.parameter-links"),
+      applied: calls,
       doc: (await work.read(key, owner))!.doc,
     };
   } finally {
@@ -112,51 +112,63 @@ async function catalogRun(
   }
 }
 
-test("data tables refuse without a stored base and keep staged cells without native dispatch", async () => {
-  const r = await catalogRun("data-tables", [
-    { path: ["name"], value: staged("T") },
-    { path: ["columns"], value: { "text:0": staged("A"), "text:1": staged("B") } },
-    { path: ["rows"], value: { r1: { "text:0": staged("a1"), "text:1": staged("x") } } },
-  ], () => ({ written: 1 }));
-  expect(r.plan).toMatchObject({ state: "failed", notDispatched: true, refusal: { code: "catalog.table-base-required" } });
-  expect(r.planCalls).toEqual([]);
-  expect(r.receipt).toMatchObject({ state: "failed", notDispatched: true });
-  expect(r.applied).toEqual([]);
-  // Catalog Work is the authored source: the receipt keeps its cells.
-  expect(r.doc).toMatchObject({ rows: { r1: { "text:1": staged("x") } } });
-});
-
 const def = (name: string) => ({ sourceCategoryId: -2001040, sourceParameter: { name: "MOCP" }, relationship: "sameElement" as const, targetParameter: { name } });
 const stored = (d2 = "B2") => ({ formatVersion: 1, definitions: [{ id: "D1", ...def("B1") }, { id: "D2", ...def(d2) }], assignments: [] });
 const detail = (profile: unknown) => ({ profile, status: { hasStoredProfile: true, updaterRegistered: true, activeDefinitionCount: 2, activeAssignmentCount: 0 }, profileChanged: false, appliedWriteCount: 0 });
+const table = (b = "B") => ({ tables: [{ name: "T", columns: [{ heading: "A", kind: "Text", slot: 0 }, { heading: b, kind: "Text", slot: 1 }, { heading: "N", kind: "Number", slot: 0 }], rows: [{ key: "r1", values: ["a1", "b1", "1"] }] }], issues: [] });
 
-test("parameter links: stored D1 and D2 survive a staged D3; the plan only reads and shows the before it read", async () => {
-  const r = await catalogRun("parameter-links", [{ path: ["definitions"], value: { D3: staged(def("B3")) } }], (op) =>
-    op === "revit.detail.parameter-links" ? detail(stored()) : { written: 1 },
-  );
-  expect(r.plan.state, JSON.stringify(r.plan)).toBe("succeeded");
-  expect(r.planCalls).toEqual(["revit.detail.parameter-links"]);
-  expect((r.plan as { result?: { evidence?: unknown } }).result?.evidence).toMatchObject({
-    before: stored(),
-    touched: [{ path: ["definitions", "D3"], before: null, after: { id: "D3", ...def("B3") } }],
-  });
-  expect(r.receipt.state, JSON.stringify(r.receipt)).toBe("succeeded");
-  // The native apply gets the whole merged profile, read again after consent, never staged ids alone.
-  expect(r.applied).toMatchObject([
-    { key: "revit.apply.parameter-links", input: { reconcile: true, profile: { ...stored(), definitions: [...stored().definitions, { id: "D3", ...def("B3") }] } } },
-  ]);
+/** Per owner, discovered from catalogWorks: a stored base the staging strictly subsets, and what apply must send. */
+const owners: { [O in keyof typeof catalogWorks]: {
+  patches: RouteStatePatch[];
+  read: (moved: boolean) => unknown;
+  sent: unknown;
+} } = {
+  "data-tables": {
+    patches: [{ path: ["name"], value: staged("T") }, { path: ["columns"], value: { "text:0": staged("A2") } }],
+    read: (moved) => table(moved ? "B-renamed-in-revit" : "B"),
+    // Every stored column at its slot: B and N keep their parameters and values; no row is rewritten.
+    sent: { table: { name: "T", columns: [{ heading: "A2", kind: "Text" }, { heading: "B", kind: "Text" }, { heading: "N", kind: "Number" }], rows: [] } },
+  },
+  "parameter-links": {
+    patches: [{ path: ["definitions"], value: { D3: staged(def("B3")) } }],
+    read: (moved) => detail(stored(moved ? "B2-changed-in-revit" : "B2")),
+    sent: { reconcile: true, profile: { ...stored(), definitions: [...stored().definitions, { id: "D3", ...def("B3") }] } },
+  },
+};
+
+// Data tables stay refused until root accepts the K3 falsifier (governor); their keyed derive is proven in contracts.
+const applying = (Object.keys(catalogWorks) as (keyof typeof catalogWorks)[]).filter((o) => o !== "data-tables");
+
+test("data tables stay refused at plan: nothing is read or sent", async () => {
+  const r = await catalogRun("data-tables", owners["data-tables"].patches, () => ({ written: 1 }));
+  expect(r.plan).toMatchObject({ state: "failed", refusal: { code: "catalog.table-base-required" } });
+  expect(r.planCalls).toEqual([]);
 });
 
-test("parameter links: a stored profile that moved after the plan refuses the apply and keeps the cells", async () => {
-  let d2 = "B2";
-  const r = await catalogRun(
-    "parameter-links",
-    [{ path: ["definitions"], value: { D3: staged(def("B3")) } }],
-    (op) => (op === "revit.detail.parameter-links" ? detail(stored(d2)) : { written: 1 }),
-    () => void (d2 = "B2-changed-in-revit"),
-  );
-  expect(r.plan.state).toBe("succeeded");
-  expect(r.receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { code: "preview.stale" } });
-  expect(r.applied).toEqual([]);
-  expect(r.doc).toMatchObject({ definitions: { D3: staged(def("B3")) } });
-});
+test.each(applying)(
+  "%s: the plan only reads the stored base, and apply sends every stored key with the staged ones",
+  async (owner) => {
+    const fixture = owners[owner];
+    const base = catalogWorks[owner].base.op;
+    const r = await catalogRun(owner, fixture.patches, (op) => (op === base ? fixture.read(false) : { written: 1 }));
+    expect(r.plan.state, JSON.stringify(r.plan)).toBe("succeeded");
+    expect(r.planCalls).toEqual([base]);
+    expect((r.plan as { result?: { evidence?: { before?: unknown } } }).result?.evidence?.before).not.toBeNull();
+    expect(r.receipt.state, JSON.stringify(r.receipt)).toBe("succeeded");
+    expect(r.applied.filter((c) => c.key !== base)).toMatchObject([{ key: catalogWorks[owner].op, input: fixture.sent }]);
+  },
+);
+
+test.each(applying)(
+  "%s: a stored base that moved after the plan refuses the apply before dispatch and keeps the cells",
+  async (owner) => {
+    const fixture = owners[owner];
+    let moved = false;
+    const base = catalogWorks[owner].base.op;
+    const r = await catalogRun(owner, fixture.patches, (op) => (op === base ? fixture.read(moved) : { written: 1 }), () => void (moved = true));
+    expect(r.plan.state).toBe("succeeded");
+    expect(r.receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { code: "preview.stale" } });
+    expect(r.applied.filter((c) => c.key !== base)).toEqual([]);
+    expect(r.doc).toMatchObject(Object.fromEntries(fixture.patches.map((p) => [p.path[0], p.value])));
+  },
+);

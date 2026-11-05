@@ -3,8 +3,8 @@
  * the one write button over the generated plan/apply pair. A person on /ducts sees the same Work, handle and
  * sealed plan Pea plans through; no per-op component and no Page. A held plan draws its cells from the plan
  * response itself (`evidence.touched`: the model's before it read, the after, the author), so an absent
- * before says "(none)". Only an owner whose plan reads no base (data tables) falls back to its staged cells,
- * whose before is genuinely unread and says "unknown".
+ * before says "(none)". Every owner reads its stored base at plan (K3), so a plan that discloses no touched
+ * cell arms nothing.
  */
 import { useEffect, useState, type ComponentProps } from "react";
 import {
@@ -148,7 +148,9 @@ export function CatalogWorkReview({
     const parsed = writeResponseSchema.safeParse((row as { result?: unknown }).result);
     if (!parsed.success) return { message: "Plan returned no seal" };
     const evidence = (row as { result?: { evidence?: unknown } }).result?.evidence;
-    setPlan({ revision: work!.handle.revision, cells: touchedCells(evidence) ?? cells, seal: parsed.data.seal });
+    const touched = touchedCells(evidence);
+    if (!touched) return { message: "The plan disclosed no touched cells" };
+    setPlan({ revision: work!.handle.revision, cells: touched, seal: parsed.data.seal });
     return null;
   };
   const runApply = async (): WriteRun => {

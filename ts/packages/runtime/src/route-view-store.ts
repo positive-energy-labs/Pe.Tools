@@ -1,5 +1,7 @@
 import {
   agentFields,
+  leasesView,
+  legacyViewRoute,
   routeAddress,
   type AdmittedFields,
   type RouteView,
@@ -22,13 +24,17 @@ const MAX_AGE_MS = 15_000;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
- * Mounted Page state of every route that leases a view (`routeViewRoutes`), never Work. A command succeeds
+ * Mounted Page state of every route that leases a view (`leasesView`), never Work. A command succeeds
  * only after the view acknowledges its render.
  */
 export class RouteViewStore {
   /** Admitted routes fence keys by agent policy; the browser's Page owner holds their codecs and decodes. */
   constructor(private readonly admitted: (route: string) => AdmittedFields | null = () => null) {}
   private leases = new Map<string, Lease>();
+  /** The host's one membership check: builtin `agent` address, or registered opt-in admission. */
+  leasesView(route: string) {
+    return leasesView(route, this.admitted(route));
+  }
   private listeners = new Set<(intent: Intent | RouteViewOpenIntent) => void>();
   private pending = new Map<
     string,
@@ -81,7 +87,10 @@ export class RouteViewStore {
 
   /** Commands are live delivery only. A later subscriber cannot open an old tool accidentally. */
   open(route: RouteView["route"], input: RouteViewOpen) {
-    const canonical = routeAddress(route).tab(input.link);
+    // ponytail: an admitted route's open needs its registered address and owner decode; refused until then.
+    const legacy = legacyViewRoute(route);
+    if (!legacy) return { ok: false as const, error: `${route} opens only from its own tab` };
+    const canonical = routeAddress(legacy).tab(input.link);
     if (!canonical.ok) return { ok: false as const, error: canonical.error };
     const commandId = crypto.randomUUID();
     for (const listener of this.listeners)
@@ -112,12 +121,13 @@ export class RouteViewStore {
     const lease = this.leases.get(instance)!;
     const fields = this.admitted(lease.view.route);
     const settable = fields && new Set(agentFields(fields, "set").map(([key]) => key));
-    const agent = routeAddress(lease.view.route).agent;
+    // A Pod has no builtin address: only the legacy branch reads one.
+    const agent = settable ? null : routeAddress(legacyViewRoute(lease.view.route)!).agent;
     if (
       !Object.keys(patch).length ||
       (settable
         ? Object.entries(patch).some(([key, text]) => !settable.has(key) || typeof text !== "string")
-        : !agent.patch.safeParse(patch).success) ||
+        : !agent!.patch.safeParse(patch).success) ||
       Object.keys(patch).some((key) => !(key in lease.view.page))
     )
       return { ok: false, error: `patch names keys Pea may not set on ${route}` };
@@ -126,7 +136,7 @@ export class RouteViewStore {
     if ([...this.pending.values()].some((entry) => entry.lease.view.instance === instance))
       return { ok: false, error: "view command already pending" };
     // An admitted route's owner settles the move itself (pea-origin acceptPage); the host never decodes.
-    const settled = settable ? { ok: true as const, patch } : agent.settle(lease.view.page, patch);
+    const settled = settable ? { ok: true as const, patch } : agent!.settle(lease.view.page, patch);
     if (!settled.ok) return settled;
     if (Object.keys(settled.patch).some((key) => !(key in lease.view.page)))
       return { ok: false, error: `patch names keys Pea may not set on ${route}` };

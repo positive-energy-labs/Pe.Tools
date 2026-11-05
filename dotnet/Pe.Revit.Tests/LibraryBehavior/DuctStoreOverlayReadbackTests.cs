@@ -39,21 +39,24 @@ public sealed class DuctStoreOverlayReadbackTests {
             // Sparse: one new role, one explicit verdict delete, nothing else named.
             var request = new DuctApplyRequest(null, [], [], [], [], [], [],
                 new DuctLossStore { Version = DuctLossStore.CurrentVersion, WorkRevision = 3, Roles = new() { [106] = new DuctRoleRecord("passive", now) } },
-                new DuctStoreDeletes { Verdicts = ["drop:2"] });
+                new DuctStoreDeletes { Verdicts = ["drop:2"], Instances = [101] });
             var plan = DuctApplier.Apply(document, request, true);
             var applied = DuctApplier.Apply(document, request, false);
             foreach (var result in new[] { plan, applied })
                 Assert.Multiple(() => {
-                    Assert.That(result.Writes.Where(w => w.Kind is "verdict" or "role" or "slot").Select(w => (w.Kind, w.Key ?? w.Id.ToString(), w.Before, w.After)),
-                        Is.EquivalentTo(new[] { ("verdict", "drop:2", "ignore", "none"), ("role", "106", "none", "passive") }),
-                        "only the touched keys, with the stored before; no phantom removals of omitted rulings");
+                    Assert.That(result.Writes.Where(w => w.Kind is "verdict" or "role" or "slot" || w.Kind.StartsWith("store-")).Select(w => (w.Kind, w.Key ?? w.Id.ToString(), w.Before, w.After)),
+                        Is.EquivalentTo(new[] {
+                            ("verdict", "drop:2", "ignore", "none"), ("role", "106", "none", "passive"),
+                            ("store-instance", "101", "SR5-1 c=0.5", "none")
+                        }),
+                        "every changed store key in every map, with its concrete stored before; no phantom removals");
                     Assert.That(result.Writes.Single(w => w.Kind == "store").After, Is.EqualTo("revision 4"));
                 });
 
             var next = DuctApplier.ReadStore(document).Store!;
             Assert.Multiple(() => {
                 Assert.That(next.Rules.Keys, Is.EquivalentTo(new[] { "rule-s" }));
-                Assert.That(next.Instances.Keys, Is.EquivalentTo(new[] { 101L }));
+                Assert.That(next.Instances, Is.Empty, "the explicit provenance delete landed");
                 Assert.That(next.Terminals.Keys, Is.EquivalentTo(new[] { 102L }));
                 Assert.That(next.TerminalFlows.Keys, Is.EquivalentTo(new[] { 103L }));
                 Assert.That(next.EquipmentFlows.Keys, Is.EquivalentTo(new[] { 104L }));
