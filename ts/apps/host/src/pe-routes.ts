@@ -1,3 +1,4 @@
+import { HostInputContext } from "./input-context.ts";
 import { createScheduledTasks } from "./scheduled-tasks.ts";
 import { createRouteSettings } from "./route-settings.ts";
 import { productRouteSettingsPath } from "./product-paths.ts";
@@ -172,6 +173,7 @@ export interface HostWork {
 }
 
 export interface PeRoutesOptions {
+  inputs?: HostInputContext["Service"];
   routeSettings?: ReturnType<typeof createRouteSettings>;
   workspace?: RouteWorkspace;
   registrations: readonly RouteWorkspaceRegistration[];
@@ -449,7 +451,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
         );
       }
     }
-    if (declared.id === "features.get") return json(hostDescriptor(resolveHostVersion()));
+    if (declared.id === "features.get") return Response.json(hostDescriptor(resolveHostVersion()), {
+      headers: options.inputs ? { "x-pe-source": JSON.stringify(options.inputs.source) } : undefined,
+    });
     if (declared.id === "machine.bootstrap") {
       const receipt = await alignBootstrap(await request.json(), caller, telemetryOf(options).journal);
       return json(receipt);
@@ -1122,6 +1126,7 @@ function* hostPeRoutes(
   const marks = yield* HostDocumentMarks;
   const pictures = yield* PictureCaptureStore;
   const files = yield* HostFiles;
+  const inputContext = yield* Effect.serviceOption(HostInputContext);
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
   let invalidateCatalog = () => {};
@@ -1290,6 +1295,7 @@ function* hostPeRoutes(
   );
   const routes = createPeRoutes({
     routeSettings,
+    inputs: inputContext._tag === "Some" ? inputContext.value : undefined,
     workspace: hostWork?.workspace,
     registrations,
     ductsSheets: { call: sheetNativeRead(hostBaseUrl), firm: () => runPods({}, files.firm), catalogs: () => runPods({}, files.ductCatalogs) },

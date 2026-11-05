@@ -60,7 +60,7 @@ test("a recording lane decides from the generated catalogs: only a covered nativ
   ).map((use) => problem(check(use)));
   expect(decisions).toEqual([
     null,
-    null, // a native Read whose rolled-back transaction answer was recorded
+    "recording.historical", // TransactRead needs explicit replay-safe metadata
     "recording.historical", // ModelWrite
     "recording.historical", // scripts are writes in the catalog, whatever a client claims
     "read.contract",

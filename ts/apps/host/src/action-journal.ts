@@ -1,3 +1,4 @@
+import type { HostInputContext } from "./input-context.ts";
 import type {
   CommandContext,
   CommandEnvironment,
@@ -475,6 +476,11 @@ export class ActionJournal implements ReceiptReader {
   // Page authority is a host-minted object capability, never reconstructed from persisted data.
   private readonly activeCallers = new Map<string, Caller>();
   private environment?: CommandEnvironment;
+  private inputContext?: HostInputContext["Service"];
+  bindInputContext(inputs: HostInputContext["Service"]): void {
+    if (this.inputContext) throw Error("Journal input context is already bound");
+    this.inputContext = inputs;
+  }
   private readonly cancelWaits = new Map<string, () => void>();
   private readonly listeners = new Set<() => void>();
   private readonly reads = new OwnerReads();
@@ -658,6 +664,8 @@ export class ActionJournal implements ReceiptReader {
     const action = this.stepAction.get(requestId);
     const row = action ? this.rows.get(action) : undefined;
     if (!row) return null;
+    const inputRefusal = this.inputContext?.check({ kind: "command", key: row.key });
+    if (inputRefusal) return { kind: "refused", message: inputRefusal.message };
     if (row.cancellationRequested)
       return { kind: "cancelled", message: "Action cancelled before dispatch" };
     if (row.state === "unknown")
@@ -970,6 +978,8 @@ export class ActionJournal implements ReceiptReader {
     moment: "admit" | "authorize" | "consented" | "turn" | "prepared" | "step" | "dispatch",
     postcondition = false,
   ): Promise<void> {
+    const inputRefusal = this.inputContext?.check({ kind: "command", key: row.key });
+    if (inputRefusal) throw inputRefusal;
     if (row.cancellationRequested)
       throw new StepFailure("Command cancelled before dispatch", 499, "refused");
     if (row.effects.length) {
@@ -1108,6 +1118,8 @@ export class ActionJournal implements ReceiptReader {
     resume = false,
     retirementOnly = false,
   ): Promise<ActionReceipt> {
+    const inputRefusal = this.inputContext?.check({ kind: "command", key: raw.key });
+    if (inputRefusal) throw inputRefusal;
     const admission = actionAdmissionSchema.parse(structuredClone(raw));
     const portable = commands[admission.key as keyof typeof commands];
     if (portable)

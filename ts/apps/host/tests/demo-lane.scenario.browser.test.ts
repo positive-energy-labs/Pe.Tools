@@ -1,3 +1,4 @@
+import { testInputContext } from "./effect-test.ts";
 import { HostReceipts } from "../src/gateway-owner.ts";
 /** Real isolated-host browser proof: draft retention and durable-thread recovery. */
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
@@ -49,6 +50,7 @@ beforeAll(async () => {
       yield* Effect.raceFirst(
         Layer.launch(
           makeHttpLive({
+          inputs: testInputContext(),
             capabilities: { revit: false },
             lifecycle: { handle, latch },
             nodeServer,

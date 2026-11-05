@@ -1,3 +1,10 @@
+import { createHash } from "node:crypto";
+import { productPathNames } from "@pe/host-contracts/contracts";
+import type { ReceiptStamp } from "@pe/agent-contracts";
+import { HostInputContext } from "./input-context.ts";
+import { nativeCatalogIdentity, openRecordingReader, openRecordingWriter } from "./native-recording.ts";
+import { InvalidRead } from "./native-reads.ts";
+
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { execFile, spawn } from "node:child_process";
 import { dirname, join } from "node:path";
@@ -14,6 +21,26 @@ import { makeInstalledUpdateReader } from "./update-route.ts";
 import { HostReceipts } from "./gateway-owner.ts";
 import { installedForeignAddins } from "./foreign-addins.ts";
 
+export type HostInputSelection =
+  | { readonly kind: "live"; readonly capture: "automatic" | "off" }
+  | { readonly kind: "recording"; readonly directory: string; readonly at: string | null; readonly bindings?: ReadonlyMap<string, string> };
+
+/** Identity comes from the already admitted artifact stamp, never current HEAD or a path. */
+export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelection) => Effect.gen(function* () {
+  if (selection.kind === "live" && selection.capture === "off")
+    return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live" })));
+  if (!stamp) return yield* new InvalidRead({ message: "Recording requires an admitted host build", status: 409, problem: "recording.identity" });
+  const identity = { build: JSON.stringify({ version: stamp.version, build: stamp.build, commit: stamp.commit }), catalog: nativeCatalogIdentity() };
+  const bounds = { maxBytes: 256 * 1024 * 1024, maxTakings: 10_000 };
+  if (selection.kind === "recording") {
+    if (selection.at !== null) return yield* new InvalidRead({ message: "Timeline recording points are not available yet", status: 409, problem: "recording.point" });
+    const reader = yield* openRecordingReader(selection.directory, identity, bounds);
+    return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null, bindings: selection.bindings && new Map(selection.bindings) })));
+  }
+  const directory = join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "recordings", createHash("sha256").update(identity.build).digest("hex"), identity.catalog, stamp.processSessionId);
+  const writer = yield* openRecordingWriter(directory, identity, bounds);
+  return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", captureStore: writer })));
+});
 /** The shared host lifecycle used by both installed startup and source web development. */
 export const hostProgram = (
   web?: (
@@ -21,16 +48,19 @@ export const hostProgram = (
     ready: Deferred.Deferred<string>,
   ) => Effect.Effect<never, Error, Scope.Scope>,
   onShutdown?: () => void,
+  inputSelection: HostInputSelection = { kind: "live", capture: "automatic" },
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
       linkedCatalog();
       // One exporter for the launch: its scope unbinds the native producers and drains pending sends.
       const stamps = admittedReceiptStamps();
+      const inputs = yield* hostInputs(stamps.host, inputSelection);
       const receipts = Context.get(
         yield* Layer.build(HostReceipts.layer(stamps.host)),
         HostReceipts,
       );
+      receipts.journal.bindInputContext(inputs);
       const telemetry = Context.get(
         yield* Layer.build(
           ReceiptExport.layer(stamps).pipe(Layer.provide(Layer.succeed(HostReceipts, receipts))),
@@ -41,7 +71,7 @@ export const hostProgram = (
         telemetry.record({
           kind: "usage",
           event: "app_boot",
-          counters: hostOwnership.lane === "installed" ? installedForeignAddins() : {},
+          counters: inputs.lane.kind === "live" && hostOwnership.lane === "installed" ? installedForeignAddins() : {},
         }),
       );
       const open = process.argv.includes("--open");
@@ -63,7 +93,11 @@ export const hostProgram = (
             },
           );
       };
-      const binding = yield* Effect.promise(() => prepareHostBinding(open, resolveHostVersion()));
+      // A historical launch never reuses or retires an incumbent with an unknown input graph.
+      // It requests its own ephemeral listener; the existing service claim still refuses another owner.
+      const binding = inputs.lane.kind === "live"
+        ? yield* Effect.promise(() => prepareHostBinding(open, resolveHostVersion()))
+        : 0;
       if (typeof binding !== "number") {
         yield* Effect.promise(() => reuse(binding));
         return;
@@ -72,14 +106,14 @@ export const hostProgram = (
 
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
-      const webUrl = web ? yield* Deferred.make<string>() : undefined;
+      const webUrl = web && inputs.lane.kind === "live" ? yield* Deferred.make<string>() : undefined;
       // The update reader's handoff is a Promise-world callback: it only settles this signal, and
       // the fiber below sleeps and settles the latch, so the exit is owned by the launch scope.
       const handoff = yield* Deferred.make<void>();
-      const updateReader = makeInstalledUpdateReader(
+      const updateReader = inputs.lane.kind === "live" ? makeInstalledUpdateReader(
         (fact) => recordUpdateFact(telemetry, fact),
         () => void Deferred.doneUnsafe(handoff, Effect.void),
-      );
+      ) : undefined;
       yield* Effect.forkScoped(
         Deferred.await(handoff).pipe(
           // Let the POST/receipt frame flush before the launch scope tears the server down.
@@ -88,6 +122,7 @@ export const hostProgram = (
         ),
       );
       const HttpLive = makeHttpLive({
+        inputs,
         port,
         webUrl,
         capabilities: hostCapabilities,
@@ -95,7 +130,7 @@ export const hostProgram = (
           latch,
           handle,
           startTray:
-            hostOwnership.lane === "installed"
+            inputs.lane.kind === "live" && hostOwnership.lane === "installed"
               ? (handle) => startInstalledTray(handle, showTray)
               : undefined,
         },
@@ -129,6 +164,7 @@ export const hostProgram = (
             Effect.catchTag("ServeError", (error) => {
               const cause = error.cause;
               if (
+                inputs.lane.kind !== "live" ||
                 hostOwnership.lane !== "installed" ||
                 typeof cause !== "object" ||
                 cause === null ||

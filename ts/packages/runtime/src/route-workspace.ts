@@ -82,6 +82,8 @@ export const DEFAULT_WORK_HISTORY_LIMITS = { maxCount: 256, maxBytes: 512 * 1024
 export interface RouteWorkspaceOptions {
   registrations: readonly RouteWorkspaceRegistration[];
   store: RouteDocumentStore;
+  /** Root-fixed source policy, checked before reads or writes at a mutation boundary. */
+  authorizeMutation?: (verb: "edit" | "undo" | "redo" | "start-fresh" | "salvage" | "publish" | "retire") => void;
   workHistoryLimits?: { readonly maxCount: number; readonly maxBytes: number };
 }
 
@@ -451,6 +453,7 @@ export class RouteWorkspace {
 
   /** The untrusted write envelope has no authorship field. `by` is the host caller's principal. */
   write(scope: WorkKey, route: string, by: WorkAuthor, input: WorkWrite) {
+    this.options.authorizeMutation?.("edit");
     if (by === "human" && input.kind === "apply" && !input.press)
       return Promise.resolve(
         refuse("refused", "a human edit needs a press", "Mint a press before dispatch."),
@@ -472,6 +475,7 @@ export class RouteWorkspace {
       kind: "apply",
     },
   ): Promise<RouteStateWriteResult> {
+    this.options.authorizeMutation?.("edit");
     if (scope.route !== route)
       return refuse(
         "refused",
@@ -678,6 +682,7 @@ export class RouteWorkspace {
     direction: "undo" | "redo",
     expectedRevision: number,
   ): Promise<RouteStateWriteResult> {
+    this.options.authorizeMutation?.(direction);
     const snapshot = await this.view(scope, route);
     if (!snapshot || snapshot.revision !== expectedRevision)
       return refuse("refused", "Work changed before restoring", "Re-read Work.", "stale_revision");
@@ -703,6 +708,7 @@ export class RouteWorkspace {
     expectedRevision: number,
     receiptId?: string,
   ) {
+    this.options.authorizeMutation?.("publish");
     return this.apply(scope, route, "human", patches, expectedRevision, true, {
       kind: "apply",
       press: null,
@@ -715,6 +721,7 @@ export class RouteWorkspace {
    * `<route>:aside:<n>`, and starts an empty Work at the same address. Readable Work is refused.
    */
   async startFresh(scope: WorkKey, route: string, by: WorkAuthor): Promise<RouteStateWriteResult> {
+    this.options.authorizeMutation?.("start-fresh");
     if (scope.route !== route)
       return refuse(
         "refused",
@@ -802,6 +809,7 @@ export class RouteWorkspace {
     scope: WorkKey,
     route: string,
   ): Promise<{ from: string; value: unknown } | RouteRefusal | null> {
+    this.options.authorizeMutation?.("salvage");
     const spec = this.#registry.get(route)?.spec;
     if (!spec?.salvage) return null;
     const targetKey = workKey(scope);

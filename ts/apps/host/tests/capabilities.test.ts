@@ -1,3 +1,4 @@
+import { testInputContext } from "./effect-test.ts";
 import { HostReceipts } from "../src/gateway-owner.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -63,6 +64,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
       yield* Effect.raceFirst(
         Layer.launch(
           makeHttpLive({
+          inputs: testInputContext(),
             capabilities: { revit: false },
             lifecycle: { handle, latch },
             nodeServer,

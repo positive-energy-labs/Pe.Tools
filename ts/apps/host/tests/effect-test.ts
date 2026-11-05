@@ -1,3 +1,4 @@
+import { HostInputContext } from "../src/input-context.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { HostFiles } from "../src/host-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
@@ -292,3 +293,5 @@ export const acknowledgedReadBridge = (bridge: RevitBridge["Service"]): RevitBri
     return { answer, terminal: Effect.as(answer, "native-acknowledged" as const).pipe(Effect.orDie) };
   }),
 });
+
+export const testInputContext = () => Context.get(testScoped(HostInputContext.layer({ kind: "live" })), HostInputContext);

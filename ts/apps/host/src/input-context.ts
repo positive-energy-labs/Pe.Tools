@@ -43,10 +43,10 @@ function check(lane: HostInputLane, use: InputUse): InvalidRead | null {
     case "native": {
       const operation = hostOpCatalog.find((entry) => entry.key === use.key);
       if (!operation) return refused("read.contract", `${use.key} has no generated contract`);
-      // A declared Read replays its recorded answer (its rolled-back TransactRead included, as live
-      // admission allows); a write or a script never does. Rehearsal commands refuse below.
+      // No replay-safe metadata distinguishes transaction-backed inspection from rehearsal yet.
+      // Historical invocation therefore admits only ordinary Read/Read.
       return operation.intent === "Read" &&
-        (operation.effect === "Read" || operation.effect === "TransactRead")
+        operation.effect === "Read"
         ? uncovered(NATIVE_BUNDLE, ["native"], use.key)
         : historical(`${use.key} (${operation.effect})`);
     }

@@ -1,3 +1,4 @@
+import { HostInputContext } from "./input-context.ts";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -62,7 +63,7 @@ import { HostDocumentMarks } from "./document-marks.ts";
 import { HostFiles } from "./host-files.ts";
 import { randomUUID } from "node:crypto";
 import { recordHostFact } from "./receipt-export.ts";
-import { HttpRouter, HttpServerResponse as Response } from "effect/http";
+import { HttpRouter, type HttpServerRequest, HttpServerResponse as Response } from "effect/http";
 import { RevitBridge, BridgeError, NoRevitSession } from "./bridge.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
 import {
@@ -209,45 +210,6 @@ export function makeCallRoute(
     const active = session?.state?.openDocuments.filter((document) => document.isActive) ?? [];
     return active.length === 1 ? active[0]!.openId : undefined;
   };
-  const resolveRead = HttpRouter.add(
-    nativeReadResolveEndpoint.method,
-    nativeReadResolveEndpoint.path,
-    (req) =>
-      Effect.gen(function* () {
-        const identity = yield* RequestIdentity;
-        const input = yield* req.json.pipe(
-          Effect.flatMap(Schema.decodeUnknownEffect(nativeReadResolveEndpoint.body)),
-          Effect.mapError(
-            () =>
-              new InvalidRead({
-                message: "Invalid native read resolution request",
-                status: 400,
-                problem: "read.input",
-              }),
-          ),
-        );
-        const descriptor = yield* (yield* HostNativeRead).resolve({
-          key: input.operationKey,
-          input: input.input,
-          scope: identity.scope,
-        });
-        return Response.jsonUnsafe(descriptor);
-      }).pipe(
-        Effect.catch((error) => {
-          if (isDoorFailure(error)) return Effect.fail(error);
-          const problem = toProblem(error);
-          return Effect.succeed(
-            Response.jsonUnsafe(
-              {
-                kind: "refused",
-                failure: { code: "ReadResolutionRefused", message: problem.message },
-              },
-              { status: problem.status },
-            ),
-          );
-        }),
-      ),
-  );
   const callDoor = peRoutes["operation.call"];
   const post = HttpRouter.add(callDoor.method, callDoor.path, (req) => {
     let captureId: string | undefined;
@@ -281,15 +243,13 @@ export function makeCallRoute(
               : caller.kind === "external-mcp"
                 ? "external"
                 : "system";
-      const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
-      if (!isRecord(body) || typeof body.key !== "string")
-        return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
-      // The /call envelope is exactly { key, request? }. Reject any other top-level key so
-      // silently-ignored fields can't mis-target: a `bridgeSessionId` in the body once routed a
-      // call to the user's live Revit — session targeting travels ONLY in the header.
-      const unknownKey = Object.keys(body).find((k) => k !== "key" && k !== "request");
-      if (unknownKey) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknownKey)));
+      const body = yield* nativeCallBody(req);
       const key = body.key;
+      const inputs = yield* Effect.serviceOption(HostInputContext);
+      if (inputs._tag === "Some") {
+        const refusal = inputs.value.check({ kind: "native", key });
+        if (refusal) return yield* refusal;
+      }
       if (key.startsWith("pod.") && !isAnyOperationKey(key))
         return yield* Effect.fail(
           new Refused({
@@ -562,11 +522,7 @@ export function makeCallRoute(
                     status: 409,
                     problem: "read.target",
                   });
-                const answer = yield* (yield* HostNativeRead).read({
-                  key,
-                  input: request ?? {},
-                  scope: { ...scope, bridgeSessionId, openDocumentId: openDocumentId ?? undefined },
-                });
+                const answer = yield* readNativeCall(key, request ?? {}, { ...scope, bridgeSessionId, openDocumentId: openDocumentId ?? undefined });
                 if (answer.actualTarget.processIncarnation.pid !== resolvedSession.processId ||
                     answer.actualTarget.processIncarnation.startedAt !== resolvedSession.processStartUtcUnixMs)
                   return yield* new InvalidRead({ message: "Native read incarnation changed during admission", status: 409, problem: "read.target" });
@@ -1087,7 +1043,7 @@ export function makeCallRoute(
       ),
     ),
     post.pipe(Layer.provide(httpProblems)),
-    resolveRead.pipe(Layer.provide(httpProblems)),
+    nativeReadResolveRoute.pipe(Layer.provide(httpProblems)),
     familiesReadings,
     captured,
     actions,
@@ -1528,3 +1484,77 @@ function executeGatewayLocal(
     ).pipe(Effect.provide(NodeServices.layer)),
   );
 }
+
+export const nativeReadResolveRoute = HttpRouter.add(
+    nativeReadResolveEndpoint.method,
+    nativeReadResolveEndpoint.path,
+    (req) =>
+      Effect.gen(function* () {
+        const identity = yield* RequestIdentity;
+        const input = yield* req.json.pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(nativeReadResolveEndpoint.body)),
+          Effect.mapError(
+            () =>
+              new InvalidRead({
+                message: "Invalid native read resolution request",
+                status: 400,
+                problem: "read.input",
+              }),
+          ),
+        );
+        const descriptor = yield* (yield* HostNativeRead).resolve({
+          key: input.operationKey,
+          input: input.input,
+          scope: identity.scope,
+        });
+        return Response.jsonUnsafe(descriptor);
+      }).pipe(
+        Effect.catch((error) => {
+          if (isDoorFailure(error)) return Effect.fail(error);
+          const problem = toProblem(error);
+          return Effect.succeed(
+            Response.jsonUnsafe(
+              {
+                kind: "refused",
+                failure: { code: "ReadResolutionRefused", message: problem.message },
+              },
+              { status: problem.status },
+            ),
+          );
+        }),
+      ),
+  );
+
+/** One native read operation path; callers keep their existing RequestIdentity. */
+const readNativeCall = (key: string, input: unknown, scope: HostSessionScope) =>
+  HostNativeRead.use((reads) => reads.read({ key, input, scope }));
+
+/** The same native door without live target/cache acquisition. Unsupported sources refuse first. */
+export const nativeCallRoute = HttpRouter.add("POST", peRoutes["operation.call"].path, (req) =>
+  Effect.gen(function* () {
+    const identity = yield* RequestIdentity;
+    const body = yield* nativeCallBody(req);
+    const inputs = yield* HostInputContext;
+    const refusal = inputs.check({ kind: "native", key: body.key });
+    if (refusal) return yield* refusal;
+    // Retained Ducts HTTP bodies also need source metadata and version ownership, not just a native taking.
+    if (linkedCatalog().entries.get(body.key)?.call?.reading) {
+      const missing = inputs.check({ kind: "input", input: "document" });
+      if (missing) return yield* missing;
+    }
+    const answer = yield* readNativeCall(body.key, body.request ?? {}, identity.scope);
+    return Response.jsonUnsafe(answer.value, { headers: { "x-pe-native-request-id": answer.nativeRequestId } });
+  }).pipe(Effect.catch((error) => {
+    if (isDoorFailure(error)) return Effect.fail(error);
+    const problem = toProblem(error);
+    return Effect.succeed(Response.jsonUnsafe(problem, { status: problem.status, headers: { "content-type": "application/problem+json" } }));
+  })),
+);
+
+const nativeCallBody = (req: HttpServerRequest.HttpServerRequest) => Effect.gen(function* () {
+  const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
+  if (!isRecord(body) || typeof body.key !== "string") return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
+  const unknown = Object.keys(body).find((key) => key !== "key" && key !== "request");
+  if (unknown) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknown)));
+  return { key: body.key, request: body.request };
+});

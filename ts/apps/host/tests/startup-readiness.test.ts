@@ -1,3 +1,4 @@
+import { testInputContext } from "./effect-test.ts";
 import { HostReceipts } from "../src/gateway-owner.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
@@ -53,6 +54,7 @@ test("HTTP requests answer during claim acquisition and discovery only publishes
   const fiber = Effect.runFork(
     Layer.launch(
       makeHttpLive({
+          inputs: testInputContext(),
         capabilities: { revit: false },
         lifecycle: { handle, latch },
         nodeServer,
@@ -104,6 +106,7 @@ test("HTTP response lifetime is reader-owned while request upload limits stay bo
   const handle = await settle(Deferred.make<ServiceHostHandle>());
   const latch = await settle(Deferred.make<void>());
   makeHttpLive({
+          inputs: testInputContext(),
     capabilities: { revit: false },
     lifecycle: { handle, latch },
     nodeServer,

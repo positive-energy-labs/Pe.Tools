@@ -1,3 +1,9 @@
+import { HostInputContext } from "./input-context.ts";
+import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
+import { hostNativeReadFor } from "./native-recording.ts";
+import { httpProblems } from "./http-problems.ts";
+import { InvalidRead } from "./native-reads.ts";
+import { nativeCallRoute, nativeReadResolveRoute } from "./call-route.ts";
 import { Spawner } from "./harness/spawner.ts";
 import { currentMachine } from "./machine.ts";
 import { SdkSession, SdkDriverLive } from "./sdk-session.ts";
@@ -8,7 +14,7 @@ import { HostNativeReadLive } from "./native-read.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
 import { createDevices, type Devices } from "./remote-device.ts";
 import { deviceRoutes } from "./device-routes.ts";
-import { bindControl } from "./control.ts";
+import { bindControl, Refused } from "./control.ts";
 import { readRemoteIngress, remoteListener } from "./remote-ingress.ts";
 import {
   createShare,
@@ -18,7 +24,7 @@ import {
   type ShareOwner,
 } from "./share.ts";
 import { mcpRoute } from "./mcp-route.ts";
-import { Deferred, Effect, Layer, Option } from "effect";
+import { Context, Deferred, Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 import { NodeHttpClient, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { readFileSync } from "node:fs";
@@ -171,19 +177,102 @@ function makeRevitComposition(
 }
 
 /** Build once outside sibling routes, then expose that exact context to each request. */
-export const nativeReadRoot = (driver = SdkDriverLive) => <A, E, R>(routes: Layer.Layer<A, E, R>) =>
+const guardedNativeRead = Layer.effect(HostNativeRead, Effect.gen(function* () {
+  const reads = yield* HostNativeRead;
+  const inputs = yield* HostInputContext;
+  return {
+    read: (request: Parameters<typeof reads.read>[0]) => {
+      const refusal = inputs.check({ kind: "native", key: request.key });
+      return refusal ? Effect.fail(refusal) : reads.read(request);
+    },
+    resolve: (request: Parameters<typeof reads.resolve>[0]) => {
+      const refusal = inputs.check({ kind: "native", key: request.key });
+      return refusal ? Effect.fail(refusal) : reads.resolve(request);
+    },
+  };
+}));
+
+export const nativeReadRoot = (driver = SdkDriverLive, inputs?: HostInputContext["Service"]) => <A, E, R>(routes: Layer.Layer<A, E, R>) =>
   Layer.unwrap(Effect.gen(function* () {
-    const reads = yield* Layer.build(HostNativeReadLive.pipe(
-      Layer.provideMerge(Layer.mergeAll(
-        SdkSession.layer.pipe(Layer.provide(driver)), ReadFreshness.layer, NativeReads.layer,
-      )),
+    const source = inputs ?? (yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live" }))));
+    if (source.lane.kind !== "live") return yield* Effect.die(Error("Live native root requires a live input graph"));
+    const base = yield* Layer.build(Layer.mergeAll(
+      SdkSession.layer.pipe(Layer.provide(driver)), ReadFreshness.layer, NativeReads.layer,
     ));
-    const provided = Layer.succeedContext(reads);
+    const backend = HostNativeReadLive.pipe(Layer.provide(Layer.succeedContext(base)));
+    const reads = yield* Layer.build(guardedNativeRead.pipe(
+      Layer.provide(hostNativeReadFor(source.lane, backend)),
+      Layer.provideMerge(Layer.succeed(HostInputContext, source)),
+    ));
+    const provided = Layer.succeedContext(Context.merge(base, reads));
     return routes.pipe(HttpRouter.provideRequest(provided), Layer.provide(provided));
   }));
 
+/** Recording has no live service requirements; this recipe is never acquired on replay. */
+const liveNativeRecipe = HostNativeReadLive.pipe(
+  Layer.provide(Layer.mergeAll(SdkSession.layer.pipe(Layer.provide(SdkDriverLive)), ReadFreshness.layer, NativeReads.layer)),
+  Layer.provide(RevitBridgeLive),
+);
+
+export const historicalRoutes = (inputs: HostInputContext["Service"]) => Layer.unwrap(Effect.gen(function* () {
+  const context = yield* Layer.build(guardedNativeRead.pipe(
+    Layer.provide(hostNativeReadFor(inputs.lane, liveNativeRecipe)),
+    Layer.provideMerge(Layer.succeed(HostInputContext, inputs)),
+  ));
+  const provided = Layer.succeedContext(context);
+  return Layer.mergeAll(
+  nativeCallRoute, nativeReadResolveRoute,
+  HttpRouter.add("GET", "/pe/features", Response.jsonUnsafe(hostDescriptor(resolveHostVersion()), {
+    headers: { "x-pe-source": JSON.stringify(inputs.source) },
+  })),
+  HttpRouter.add("GET", hostProcessIdentity.healthPath, () => Response.json({ source: inputs.source })),
+  HttpRouter.add("*", "/*", (req) => Effect.gen(function* () {
+    const path = new URL(req.url, "http://host").pathname;
+    if (path === "/actions" && req.method === "POST") {
+      const body = yield* req.json.pipe(Effect.catch(() => Effect.succeed(null)));
+      if (body && typeof body === "object" && "key" in body && typeof body.key === "string") {
+        const denied = inputs.check({ kind: "command", key: body.key });
+        if (denied) return yield* denied;
+      }
+    }
+    const denied = req.method === "GET" || path.includes("/ducts/")
+      ? inputs.check({ kind: "input", input: "document" })
+      : inputs.check({ kind: "work", verb: "edit" });
+    return yield* (denied ?? new InvalidRead({ message: "Historical source input is unavailable", status: 409, problem: "recording.coverage" }));
+  })),
+).pipe(
+  Layer.provide(httpProblems),
+  HttpRouter.provideRequest(provided), Layer.provide(provided),
+);
+}));
+
+/** Root-fixed selection: the live factory is not even called on a historical/fixture lane. */
+export const hostInputGraph = <A, E, R, B, F, S>(inputs: HostInputContext["Service"], live: () => Layer.Layer<A, E, R>, recording: () => Layer.Layer<B, F, S>): Layer.Layer<A & B, E | F, R | S> =>
+  inputs.lane.kind === "live" ? live() : recording();
+
+/** Both source graphs retire browser sockets after the platform listener closes. */
+const hostServerLayer = (server: Server, port: number) => NodeHttpServer.layer(() => server, {
+  host: "127.0.0.1", port, disablePreemptiveShutdown: true,
+}).pipe(Layer.provide(Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(() => {
+  server.closeIdleConnections(); server.closeAllConnections();
+})))));
+
+function historicalHttpLive(options: HttpLiveOptions) {
+  const server = options.nodeServer ?? createServer();
+  const port = () => { const address = server.address(); return address && typeof address !== "string" ? address.port : options.port; };
+  const identity = requestIdentityLayer({
+    port, frontendOrigin: Effect.succeed(undefined),
+    share: { read: async () => { throw new Refused({ code: "context.missing", door: "historical host", reason: "Historical host admits local transport only" }); }, observe: () => {} },
+  });
+  return ServiceFileLive.pipe(Layer.provideMerge(HttpRouter.serve(historicalRoutes(options.inputs).pipe(
+    Layer.provide(identity),
+  )).pipe(Layer.provideMerge(hostServerLayer(server, options.port)))),
+    Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)), Layer.provide(NodeServices.layer));
+}
+
 export interface HttpLiveOptions {
   /** Preferred listen port (0 = ephemeral, used by the boundary test). */
+  readonly inputs: HostInputContext["Service"];
   readonly port: number;
   readonly capabilities: PeaRuntimeCapabilities;
   /** Injected listener for socket lifecycle tests. */
@@ -217,6 +306,10 @@ export interface HttpLiveOptions {
  * (via `NodeHttpServer.layer`) and shared by the router and the service-file writer.
  */
 export function makeHttpLive(options: HttpLiveOptions) {
+  return hostInputGraph(options.inputs, () => liveHttpLive(options), () => historicalHttpLive(options));
+}
+
+function liveHttpLive(options: HttpLiveOptions) {
   const ReceiptsLive = options.receipts
     ? Layer.succeed(ReceiptExport, options.receipts)
     : ReceiptExport.layer({ host: null, web: null });
@@ -241,26 +334,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
           ),
         )
       : Layer.empty;
-  // Socket retirement. The platform layer detaches its request handler and calls `server.close`
-  // on release, but a keep-alive socket a browser still holds survives that close with nothing
-  // listening behind it; a reload against a successor on the same port then reuses the dead
-  // socket and waits forever (a dev-host takeover has the same shape). This finalizer is a
-  // dependency of the server layer, so it runs AFTER the platform release and closes every
-  // remaining connection: a retired host holds no socket a client can reuse.
-  const RetireSocketsLive = Layer.effectDiscard(
-    Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        nodeServer.closeIdleConnections();
-        nodeServer.closeAllConnections();
-      }),
-    ),
-  );
-  const ServerLive = NodeHttpServer.layer(() => nodeServer, {
-    host: "127.0.0.1",
-    port: options.port,
-    // Reading streams never finish naturally; interrupt them before awaiting server.close.
-    disablePreemptiveShutdown: true,
-  }).pipe(Layer.provide(RetireSocketsLive));
+  const ServerLive = hostServerLayer(nodeServer, options.port);
 
   const port = () => {
     const address = nodeServer.address();
@@ -276,10 +350,11 @@ export function makeHttpLive(options: HttpLiveOptions) {
   const work: HostWork = {
     // Pea's catalog lists every Work route (ADR 0030 rule 1).
     registrations,
-    pointers: threadPointerPort(),
+    pointers: threadPointerPort(options.inputs),
     workspace: new RouteWorkspace({
       registrations: constructorWorkRegistrations(registrations),
       store: fileRouteDocumentStore(productRouteWorkPath()),
+      authorizeMutation: (verb) => { const denied = options.inputs.check({ kind: "work", verb }); if (denied) throw denied; },
     }),
   };
   const share =
@@ -366,7 +441,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provideMerge(
       HttpRouter.serve(
         Layer.mergeAll(composition.routes, CommonAppLive).pipe(
-          Layer.provide(identity), nativeReadRoot(),
+          Layer.provide(identity), nativeReadRoot(SdkDriverLive, options.inputs),
         ),
       ).pipe(Layer.provideMerge(ServerLive)),
     ),

@@ -1,3 +1,4 @@
+import { testInputContext } from "./effect-test.ts";
 import { HostReceipts } from "../src/gateway-owner.ts";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -55,6 +56,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
       Effect.raceFirst(
         Layer.launch(
           makeHttpLive({
+          inputs: testInputContext(),
             capabilities: { revit: true },
             lifecycle: { handle, latch },
             port: 0,

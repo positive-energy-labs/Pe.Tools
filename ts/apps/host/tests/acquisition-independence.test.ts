@@ -1,3 +1,4 @@
+import { testInputContext } from "./effect-test.ts";
 import { invokeCommand } from "./command-fixture.ts";
 import { replay, sdkBinary, sdkCommand } from "./sdk-replay.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -231,6 +232,7 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
         journal = (yield* HostReceipts).journal;
         const handle = yield* Deferred.make<ServiceHostHandle>();
         const HttpLive = makeHttpLive({
+          inputs: testInputContext(),
           capabilities: { revit: true },
           port: 0,
           lifecycle: { latch, handle },

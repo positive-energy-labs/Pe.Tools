@@ -1,3 +1,4 @@
+import { testInputContext } from "./effect-test.ts";
 import { HostReceipts } from "../src/gateway-owner.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { Deferred, Effect, Exit, Layer } from "effect";
@@ -25,6 +26,7 @@ test("a host whose service claim is refused leaves the claim holder's terminal c
       Effect.scoped(
         Layer.launch(
           makeHttpLive({
+          inputs: testInputContext(),
             capabilities: { revit: true },
             port: 0,
             lifecycle: {

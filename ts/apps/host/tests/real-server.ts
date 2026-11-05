@@ -1,3 +1,4 @@
+import { testInputContext } from "./effect-test.ts";
 import { HostReceipts } from "../src/gateway-owner.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -96,6 +97,7 @@ export async function bootHost() {
       Effect.gen(function* () {
         const handle = yield* Deferred.make<ServiceHostHandle>();
         const HttpLive = makeHttpLive({
+          inputs: testInputContext(),
           capabilities: { revit: true },
           port: 0,
           lifecycle: { latch, handle },
