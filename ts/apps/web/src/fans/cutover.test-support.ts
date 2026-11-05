@@ -17,6 +17,7 @@ export async function createWitness(
   closes: (() => void)[],
   saved = new Map<string, unknown>(),
   overrides: Readonly<Record<string, ReadingSource>> = {},
+  work?: import("../shell/admitted-place").PlaceInput["work"],
 ) {
   const admitted = await admit();
   const ws = new RouteWorkspace({
@@ -127,7 +128,8 @@ export async function createWitness(
         },
       };
       input = placeInput(address, {
-        target: { kind: "document", ref: { session: "fixture", openId: "fans" } },
+        target: { kind: "document", ref: work?.open ?? { session: "fixture", openId: "fans" } },
+        ...(work ? { work } : {}),
       });
       places.set(place, input);
     }
