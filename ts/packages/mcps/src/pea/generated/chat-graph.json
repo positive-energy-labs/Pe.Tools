@@ -142,7 +142,7 @@
     "size": 300,
     "sized": "start"
   },
-  "moduleHash": "ec93f470c7e245a4938f648928d7418bfdc81c458a5e8da9f909238d0b174c40",
+  "moduleHash": "1addfe624ba4dd08a71915c2362a4a9a7c268842cbbc4949beedae8775d8c696",
   "name": "Pea",
   "panes": {
     "chat": {
@@ -205,6 +205,11 @@
       "kind": "use",
       "retire": "page",
       "source": "receipts"
+    },
+    "threadWork": {
+      "kind": "use",
+      "retire": "never",
+      "source": "threadWork"
     },
     "threads": {
       "kind": "use",
