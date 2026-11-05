@@ -4,7 +4,7 @@ import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { InvalidRead } from "./native-reads.ts";
 import { ReadFreshness, RequestIdentity } from "./request-services.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
-import { ductsSnapshotReadingSchema, nativePrincipals } from "@pe/agent-contracts";
+import { canonicalRouteInput, ductsSnapshotReadingSchema, nativePrincipals } from "@pe/agent-contracts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { peRoutes, linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
@@ -424,25 +424,29 @@ export function makeCallRoute(
           subject.kind === "ducts-snapshot"
             ? subject.target
             : { session: subject.session, openId: undefined };
+        const nativeRead = yield* HostNativeRead;
+        const readScope = { ...scope, bridgeSessionId: target.session, openDocumentId: target.openId };
+        const admitted = yield* nativeRead.resolve({ key, input: request ?? {}, scope: readScope });
+        const services = yield* Effect.context<import("@pe/host-internal/request-contracts").RequestIdentity>();
         const owner = ductsReadings(bridge);
+        let acquired = false;
         const shared = yield* Effect.tryPromise({
-          try: () =>
-            owner.read(
-              subject,
-              async () => ({
-                // effect-edge: island, phase 5
-                ...(await Effect.runPromise(
-                  bridge.invoke(key, request ?? {}, target.session, target.openId, requestId),
-                )),
-                nativeRequestId: requestId,
-              }),
-              {
-                version: req.headers[DUCTS_BODY_VERSION_HEADER],
-                refresh: req.headers[DUCTS_REFRESH_HEADER],
-              },
-            ),
-          catch: (error) =>
-            error instanceof BridgeError ? error : new BridgeError(String(error), 409),
+          try: () => owner.read(subject, async () => {
+            acquired = true;
+            // effect-edge: island, phase 5; the existing cache-miss edge keeps this request's identity.
+            const answer = await Effect.runPromiseWith(services)(nativeRead.read({ key, input: request ?? {}, scope: readScope }));
+            if (canonicalRouteInput(answer.actualTarget) !== canonicalRouteInput({
+              processIncarnation: admitted.processIncarnation, openDocumentLifetime: admitted.openDocumentLifetime,
+            })) throw new InvalidRead({ message: "Ducts native response changed its admitted target", status: 409, problem: "read.target" });
+            const actual = answer.actualTarget.openDocumentLifetime;
+            const openId = "openId" in actual ? actual.openId : undefined;
+            return { value: answer.value, nativeRequestId: answer.nativeRequestId, target: {
+              session: target.session,
+              document: resolvedSession?.state?.openDocuments.find((doc) => doc.openId === openId)?.address ?? null,
+              ...(openId ? { documentRef: { session: target.session, openId } } : {}),
+            } };
+          }, { version: req.headers[DUCTS_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] }),
+          catch: (error) => isDoorFailure(error) ? error : error instanceof BridgeError ? error : new BridgeError(String(error), 409),
         });
         yield* Effect.try({
           try: () => owner.assertCurrent(subject, shared.version),
@@ -455,7 +459,7 @@ export function makeCallRoute(
             ...resolvedTargetHeaders(shared.target),
             "x-pe-native-request-id": shared.nativeRequestId,
             [DUCTS_BODY_VERSION_HEADER]: shared.version,
-            "x-pe-ducts-reused": String(shared.nativeRequestId !== requestId),
+            "x-pe-ducts-reused": String(!acquired),
           },
         });
       }
@@ -1054,6 +1058,7 @@ export function makeCallRoute(
               ((key, input) =>
                 executeGatewayLocal(key, input, bridge, observations(), actionDeps.pictures!, actionDeps.launchShell)),
             composition?.origin,
+            yield* HostNativeRead,
           );
         }),
       ),

@@ -1,3 +1,6 @@
+import type { HostNativeRead } from "@pe/host-internal/native-read";
+import { RequestIdentity, admittedRequestIdentity } from "./request-services.ts";
+import { runPods } from "./family-actions.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import { commandResources } from "./command-reads.ts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
@@ -31,6 +34,7 @@ export function commandRegistry(
   deps: FamilyActionDependencies & InstancesActionDependencies,
   local: (key: string, input: unknown) => Promise<unknown>,
   origin?: () => string,
+  nativeRead?: HostNativeRead["Service"],
 ): CommandRegistry {
   const implementations: Record<string, CommandExecutor> = {
     "machine.bootstrap": bootstrapExecutor(deps.sdk),
@@ -50,7 +54,15 @@ export function commandRegistry(
     scheduleExecutors(captures, bridge, deps),
     instancesExecutors(deps),
     takeoffExecutors(captures, bridge, deps),
-    ductsExecutors(bridge, deps),
+    ductsExecutors(bridge, deps, nativeRead && ((ctx, key, input) => {
+      if (ctx.admission.target.kind !== "document") throw Error("Ducts read preparation requires an exact command document");
+      const scope = { bridgeSessionId: ctx.admission.target.ref.session, openDocumentId: ctx.admission.target.ref.openId };
+      const identity = admittedRequestIdentity(ctx.caller, scope);
+      const child = { ...identity, ownership: { ...identity.ownership, causalParent: ctx.admission.id } };
+      return runPods(deps, nativeRead.read({ key, input, scope }).pipe(
+        Effect.provideService(RequestIdentity, child), Effect.map((answer) => answer.value),
+      ));
+    })),
     catalogWorkExecutors(bridge, deps),
   ]) {
     for (const [key, factory] of Object.entries(group)) {
@@ -147,9 +159,10 @@ export function bindCommandRuntime(
   deps: FamilyActionDependencies & InstancesActionDependencies,
   local: (key: string, input: unknown) => Promise<unknown>,
   origin?: () => string,
+  nativeRead?: HostNativeRead["Service"],
 ): void {
   owner.bindCommands({
     ...commandResources(bridge, deps, async (id) => (await owner.list(undefined, id))[0]),
-    resolve: commandRegistry(bridge, captures, deps, local, origin),
+    resolve: commandRegistry(bridge, captures, deps, local, origin, nativeRead),
   });
 }
