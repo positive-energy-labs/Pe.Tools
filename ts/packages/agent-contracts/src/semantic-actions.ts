@@ -187,7 +187,6 @@ import { workCommand, type Tool } from "./command.ts";
 import { settingsRouteState } from "./settings.ts";
 import { familyDraftRouteState } from "./family.ts";
 import { familiesRouteState } from "./families.ts";
-import { parameterLinksRouteState } from "./parameter-links.ts";
 import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
@@ -206,19 +205,6 @@ export const dataTablesWorkSchema = z.object({
   draft: dataTableDraftSchema.nullable().default(null),
 });
 export const tools = {
-  "data-tables": {
-    name: "data-tables",
-    says: "Draft synthetic table columns and keyed rows in the selected document, then apply with pruning.",
-    work: {
-      route: "data-tables",
-      title: "Data Tables",
-      description: "One document's editable synthetic table draft.",
-      schema: dataTablesWorkSchema,
-      editable: [["writeIntent", "*"]],
-    },
-    // The archived /data-tables route left this Work an address contract with no command owner.
-    commands: {},
-  },
   pods: {
     name: "pods",
     says: settingsRouteState.description,
@@ -261,13 +247,6 @@ export const tools = {
       ...workWriteCommands("families", "families.apply", familyActions["families.apply"]),
       "families.save-draft": workCommand("families", familyActions["families.save-draft"]),
     },
-  },
-  "parameter-links": {
-    name: "parameter-links",
-    says: parameterLinksRouteState.description,
-    work: { ...parameterLinksRouteState, editable: [["writeIntent", "*"], ["profile"]] },
-    // The archived /parameter-links route left this Work an address contract; parameter-links.read stays a family read.
-    commands: {},
   },
   schedules: {
     name: "schedules",
