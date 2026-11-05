@@ -15,6 +15,7 @@ import {
   openRecordingWriter,
   type Taking,
 } from "../src/native-recording.ts";
+import { InvalidRead } from "../src/native-reads.ts";
 import {
   capturedWorkReads,
   recordedWorkSource,
@@ -240,23 +241,41 @@ test("a recorded read is bound to its exact taking; an unbound repeat is ambiguo
   await live.view(key, "fans");
   const [raw0, , view] = takings;
   const binding = inputBindingKey(workInput(key, "raw"), workInputScope(key));
-  const replay = (bindings?: Map<string, string>) =>
-    new RouteWorkspace({ registrations: [], recorded: recordedWorkSource(reader_, run, bindings) }).readRaw(key, "fans");
   const reader_ = await reader(dir);
+  const replay = async (bindings?: Map<string, string>) => {
+    const recorded = new RouteWorkspace({ registrations: [], recorded: recordedWorkSource(reader_, run, bindings) });
+    await admit(recorded); // an unadmitted route reads null before any source (the preserved red)
+    return recorded.readRaw(key, "fans");
+  };
   await expect(replay()).rejects.toMatchObject({ problem: "recording.ambiguous" });
   expect(await replay(new Map([[binding, raw0!.id]]))).toEqual(first);
   await expect(replay(new Map([[binding, view!.id]]))).rejects.toMatchObject({ problem: "recording.mismatch" });
 });
 
-test("an undefined or contract-breaking delivered Work refuses typed and makes no taking", async () => {
+test("Work that cannot be recorded truncates capture; the live Work still answers and replay stays strict", async () => {
   const { dir, writer } = await bundle();
   const capture = capturedWorkReads(writer, run);
-  const live = new RouteWorkspace({ registrations: [], store: memory() });
+  const live = new RouteWorkspace({ registrations: [], store: memory(), capture });
   await admit(live);
   const { title: _title, ...missingTitle } = (await live.view(key, "fans"))!;
-  await expect(capture.read(key, "raw", undefined)).rejects.toMatchObject({ problem: "recording.input" });
-  await expect(capture.read(key, "view", missingTitle)).rejects.toMatchObject({ problem: "recording.input" });
+  await capture.read(key, "raw", undefined); // an undefined root is not a recorded null
+  expect(writer.truncation).toEqual({ at: 2, reason: "encoding" });
+  await capture.read(key, "view", missingTitle);
+  // Capture stopped at the first loss; later live reads answer and keep no taking.
+  expect(await live.view(key, "fans")).toMatchObject({ revision: 0 });
   const recorded = recordedWorkSource(await reader(dir), run);
-  for (const view of ["raw", "view"] as const)
-    await expect(recorded.read(key, view)).rejects.toMatchObject({ problem: "recording.miss" });
+  await expect(recorded.read(key, "raw")).rejects.toMatchObject({ problem: "recording.miss" });
+  expect((await reader(dir)).truncation).toEqual({ at: 2, reason: "encoding" });
+});
+
+test("a failing taking observer truncates capture without failing the live read", async () => {
+  const { writer } = await bundle();
+  const live = new RouteWorkspace({
+    registrations: [],
+    store: memory(),
+    capture: capturedWorkReads(writer, run, () => Effect.fail(new InvalidRead({ message: "observer down", status: 500, problem: "provenance.down" }))),
+  });
+  await admit(live);
+  expect(await live.view(key, "fans")).toMatchObject({ revision: 0 });
+  expect(writer.truncation).toMatchObject({ reason: "observer" });
 });

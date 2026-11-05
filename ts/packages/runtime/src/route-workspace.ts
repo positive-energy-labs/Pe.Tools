@@ -87,7 +87,8 @@ export interface WorkReadSource {
   read(key: WorkKey, view: WorkReadView): Promise<unknown>;
   feed(key: WorkKey, admission: WorkAdmission, shape: WorkFeedShape): Promise<unknown>;
 }
-/** Live capture: records the value about to be delivered; a rejection fails that read. */
+/** Live capture of the value about to be delivered. The host adapter truncates on its own capture loss
+ * (K4); a rejection here is a port fault: it fails that read and ends an admitted feed. */
 export interface WorkReadCapture {
   read(key: WorkKey, view: WorkReadView, value: unknown): Promise<void>;
   feed(key: WorkKey, admission: WorkAdmission, shape: WorkFeedShape, value: unknown): Promise<void>;

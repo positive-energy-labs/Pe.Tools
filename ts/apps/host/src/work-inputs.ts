@@ -30,7 +30,6 @@ import {
   type RecordingWriter,
   type TakingObserver,
 } from "./native-recording.ts";
-import { InvalidRead } from "./native-reads.ts";
 
 /** The exact feed admission, from the public Reading contract that carries it. */
 type WorkAdmission = NonNullable<Extract<ReadingRequest, { kind: "work" }>["admission"]>;
@@ -114,9 +113,11 @@ export const recordedWorkSource = (
   };
 };
 
-const unrecordable = (message: string) =>
-  new InvalidRead({ message, status: 409, problem: "recording.input" });
-/** Live capture of the value a Work read is about to deliver, through the one taking store. */
+/**
+ * Live capture of the value a Work read is about to deliver, through the one taking store. Capture
+ * is ancillary (K4): a value that cannot be serialized or fails its codec, like a full store, I/O or
+ * observer failure, stops the writer's capture as truncated and never fails the live Work.
+ */
 export const capturedWorkReads = (
   writer: RecordingWriter,
   run: WorkInputRunner,
@@ -125,17 +126,19 @@ export const capturedWorkReads = (
   const keep = (input: WorkInput, scope: string, codec: Schema.Codec<unknown, Schema.Json>, value: unknown) =>
     run(
       Effect.gen(function* () {
-        // The recorded observation is the delivered value's JSON, checked by its codec before any taking.
-        if (value === undefined) return yield* unrecordable(`Work ${input.view} delivered no value to record`);
-        const serialized = yield* Effect.try({
-          try: () => JSON.parse(JSON.stringify(value)) as unknown,
-          catch: (error) => unrecordable(`Work ${input.view} is not JSON: ${String(error)}`),
+        // The recorded observation is the delivered value's JSON; an undefined root is not a null.
+        const serialized = yield* Effect.try(() => {
+          if (value === undefined) throw Error("no value");
+          return JSON.parse(JSON.stringify(value)) as unknown;
         });
-        const decoded = yield* Schema.decodeUnknownEffect(codec)(serialized).pipe(
-          Effect.mapError(() => unrecordable(`Delivered Work ${input.view} violates its contract`)),
-        );
+        const decoded = yield* Schema.decodeUnknownEffect(codec)(serialized);
         yield* captureInput(writer, input, scope, codec, Effect.succeed(decoded), observed);
-      }),
+      }).pipe(
+        Effect.catchTag(["UnknownError", "SchemaError"], () => {
+          const at = writer.capture.begin();
+          return at === null ? Effect.void : writer.capture.stop(at, "encoding");
+        }),
+      ),
     );
   return {
     read: (key, view, value) =>
