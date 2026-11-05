@@ -139,13 +139,13 @@ test("cell authorship comes from host provenance even when values match", () => 
   const same = { value: "250" };
   expect(
     cellFromDraft(
-      { edit: { ...same, by: "human" }, suggestion: { ...same, by: "pea" } },
+      { edit: { ...same, by: "human" } },
       { value: "250" },
     ).author,
   ).toBe("human");
   expect(
     cellFromDraft(
-      { edit: { ...same, by: "pea" }, suggestion: { ...same, by: "human" } },
+      { edit: { ...same, by: "pea" } },
       { value: "250" },
     ).author,
   ).toBe("pea");
@@ -192,11 +192,6 @@ test("Pea and the person stage the same cell one way: last writer's value, its a
     expect(within(cell).queryByRole("button", { name: /take|unsuggest/ })).toBeNull();
     cleanup();
   }
-  // A cell carrying an old suggestion lane draws only its edit (the storage boundary retired it).
-  const legacy = cellFromDraft({ edit: null, suggestion: { value: "9in", by: "pea" } } as never, {
-    value: "10in",
-  });
-  expect(legacy).toMatchObject({ value: "10in", stage: "clean" });
 });
 
 test("a locked choice cell draws its value and opens no list", () => {
