@@ -189,6 +189,15 @@ function FansProbe() {
   );
   return <AdmittedPane route={route} shell={shell} address={address} />;
 }
+let podRoute: AdmittedRoute | null = null;
+/** The normal `/tool/<key>` mount: the registered Pod's own owner and codecs, as `tool.$key` mounts it. */
+function PodProbe() {
+  const router = useRouter();
+  const route = podRoute!;
+  const address = useMemo(() => admittedRouterAddress(router.history), [router]);
+  const shell = useMemo(() => createRouteShell(sourceRouteServices(admittedSources(route))), [route]);
+  return <AdmittedPane route={route} shell={shell} address={address} />;
+}
 function Restore() {
   useRestoreTabPage();
   return null;
@@ -211,6 +220,7 @@ async function mount(entry = "/pea?thread=T", strict = false, restore = false) {
     createRoute({ getParentRoute: () => root, path: "/ducts", component: DuctsProbe }),
     createRoute({ getParentRoute: () => root, path: "/families", component: FamiliesProbe }),
     createRoute({ getParentRoute: () => root, path: "/fans", component: FansProbe }),
+    createRoute({ getParentRoute: () => root, path: "/tool/$key", component: PodProbe }),
   ];
   const router = createRouter({
     routeTree: root.addChildren(routes),
@@ -878,3 +888,49 @@ test("an explicit picture link opens tools ahead of remembered conversation layo
   expect(screen.getByRole("button", { name: "Expand pea" })).toBeTruthy();
   expect(bodyCurrent?.()).toBe(true);
 });
+
+test("a delivered route-view-open for a trusted Pod creates its Place at the registered /tool address", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { resolve } = await import("node:path");
+  const { podRouteDescriptorSchema } = await import("@pe/agent-contracts");
+  const { admitPodArtifact } = await import("#/route/pod-artifact");
+  const { registerRoute } = await import("#/route/builtin-routes");
+  const pods = resolve(process.cwd(), "../../../examples/pods/snowdon-circuits");
+  const member = JSON.parse(await readFile(resolve(pods, "pod.json"), "utf8")).routes[0];
+  const row = podRouteDescriptorSchema.parse({
+    ...member,
+    key: `route:@snowdon-circuits/${member.artifact}`,
+    packageId: "snowdon-circuits",
+    workRoute: "pod.snowdon-circuits.voltage-drop",
+    trusted: true,
+  });
+  const artifact = JSON.parse(await readFile(resolve(pods, row.artifact), "utf8"));
+  podRoute = await admitPodArtifact(row, { fingerprint: row.fingerprint, artifact }, (bytes) =>
+    import(/* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`),
+  );
+  const withdraw = registerRoute(podRoute);
+  try {
+    expect(podRoute.data.address.startsWith("/tool/")).toBe(true);
+    const router = await mount("/pea?thread=T");
+    await settle();
+    const commandId = "22222222-2222-4222-8222-222222222222";
+    act(() =>
+      hostEvents.emit({
+        type: "route-view-open",
+        route: podRoute!.data.key,
+        thread: "T",
+        link: podRoute!.data.address,
+        commandId,
+      }),
+    );
+    await waitFor(() => expect(router.state.location.pathname).toBe(podRoute!.data.address));
+    expect(
+      (router.state.location.state as { __peViewOpenCommandId?: string }).__peViewOpenCommandId,
+    ).toBe(commandId);
+    expect(hostCalls("thread.place")).toHaveLength(1);
+    expect(hostCalls("thread.place")[0]![1]).toMatchObject({ body: { route: podRoute.data.key } });
+  } finally {
+    withdraw();
+    podRoute = null;
+  }
+}, 30_000);
