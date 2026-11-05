@@ -1,4 +1,7 @@
 import { nativeReadRoot } from "../src/app.ts";
+import { HostNativeRead } from "@pe/host-internal/native-read";
+import { NativeReads } from "../src/native-reads.ts";
+import type { RequestIdentityData } from "@pe/host-internal/request-contracts";
 import { testHostInputs } from "./effect-test.ts";
 import { testHostFiles } from "./effect-test.ts";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -78,7 +81,17 @@ export async function nativeFixture(
       autoApprove: () => true,
     });
     bindControl({ runs });
-    const bridge = Context.get(context, RevitBridge);
+    const actualBridge = Context.get(context, RevitBridge);
+    const nativeCallers: RequestIdentityData[] = [];
+    const bridge: RevitBridge["Service"] = {
+      ...actualBridge,
+      invokeHandle: (...args) => Effect.gen(function* () {
+        const identity = yield* Effect.serviceOption(RequestIdentity);
+        if (identity._tag === "None") throw Error("Native dispatch lost its actual caller identity");
+        nativeCallers.push(identity.value);
+        return yield* actualBridge.invokeHandle(...args);
+      }),
+    };
     const connection = await settle(
       connectTestBridge().pipe(
         Effect.provideService(RevitBridge, bridge),
@@ -88,14 +101,19 @@ export async function nativeFixture(
     const target = { kind: "document" as const, ref: connection.target };
     const key = bindWork("ducts", address, undefined, target.ref);
     const journal = new ActionJournal(join(dir, "actions.jsonl"), Date.now);
+    const rootReads: { native?: HostNativeRead["Service"]; shared?: NativeReads["Service"] } = {};
+    const sdkInput = { read: sdkSessions };
     const web = HttpRouter.toWebHandler(
-      makeCallRoute(
+      Layer.mergeAll(makeCallRoute(
         journal,
         Context.get(context, CaptureStore),
         { sdk: sdkSessions, workspace: saved },
         {
         },
-      ).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args))))).pipe(Layer.provide(testHostInputs)).pipe(
+      ), Layer.effectDiscard(Effect.gen(function* () {
+        rootReads.native = yield* HostNativeRead;
+        rootReads.shared = yield* NativeReads;
+      }))).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkInput.read(args))))).pipe(Layer.provide(testHostInputs)).pipe(
         Layer.provideMerge(
           Layer.mergeAll(
             Layer.succeed(RevitBridge, bridge),
@@ -133,7 +151,8 @@ export async function nativeFixture(
     let storeRevision = 0;
     /** Set to make the next ducts.apply.plan Read refuse every write, as a shared type it cannot scope does. */
     const planRefusal = { reason: null as string | null };
-    const dispatched: { key: string; input: Record<string, unknown> }[] = [];
+    const dispatched: { key: string; input: Record<string, unknown>; requestId: string }[] = [];
+    const readPause = { key: "", wait: Effect.void };
     await settle(
       Effect.forkIn(
         Effect.gen(function* () {
@@ -142,7 +161,8 @@ export async function nativeFixture(
             if (frame.kind !== "Request") continue;
             const req = frame.request!;
             const input = JSON.parse(req.payloadJson);
-            dispatched.push({ key: req.operationKey, input });
+            dispatched.push({ key: req.operationKey, input, requestId: req.requestId });
+            if (req.operationKey === readPause.key) yield* readPause.wait;
             let value: unknown;
             if (req.operationKey.startsWith("ducts.snapshot.")) {
               const captured = snapshotFor(req.operationKey, input);
@@ -342,6 +362,10 @@ export async function nativeFixture(
       events,
       native,
       dispatched,
+      rootReads,
+      nativeCallers,
+      sdkInput,
+      readPause,
       planRefusal,
       readDucts,
       observeHostResource,

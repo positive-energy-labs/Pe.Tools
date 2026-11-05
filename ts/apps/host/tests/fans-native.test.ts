@@ -1,5 +1,11 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { address, type Caller } from "@pe/agent-contracts";
+import { address, canonicalRouteInput, type Caller } from "@pe/agent-contracts";
+import { Deferred, Effect } from "effect";
+import { settle } from "./effect-test.ts";
+import { human, pea } from "./callers.ts";
+import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
+import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
+import { sdkSessions } from "./native-receipt-fixture.ts";
 import { nativeFixture } from "./fans-native.fixture.ts";
 import { presentLosses } from "../../web/src/ducts/reviews.ts";
 import { snapshot } from "../../web/src/ducts/test-fixture.ts";
@@ -157,13 +163,53 @@ test("fixture HTTP roster uses the real sheet service and strict open-document i
   release();
 });
 
-test("D03/C07: admitted losses preview is read-only, names sealed rows and commits only its scope", async () => {
+test.each(["human", "pea"] as const)("D03/C07: %s plan shares admitted inputs, preserves Work and commits only its scope", async (actor) => {
   const f = await fixture();
   const work = await stage(f);
+  const caller = actor === "human" ? human : pea("plan-inputs");
+  const fans = (await f.saved.view({ ...f.key, route: "fans" }, "fans"))!;
+  const held = await settle(Deferred.make<void>());
+  closes.push(() => settle(Deferred.succeed(held, undefined).pipe(Effect.asVoid)));
+  f.readPause.key = "ducts.snapshot.walk";
+  f.readPause.wait = Deferred.await(held);
   const before = [...f.native];
-  await command(f, "preview", "ducts.plan-losses", work);
+  await command(f, "preview", "ducts.plan-losses", work, caller);
+  await vi.waitFor(() => expect(f.dispatched.filter((row) => row.key === "ducts.snapshot.walk")).toHaveLength(1));
+  const pending = f.dispatched.find((row) => row.key === "ducts.snapshot.walk")!;
+  const scope = { bridgeSessionId: f.target.ref.session, openDocumentId: f.target.ref.openId };
+  const descriptor = await settle(f.rootReads.native!.resolve({ key: pending.key, input: pending.input, scope }).pipe(
+    Effect.provideService(RequestIdentity, admittedRequestIdentity(caller, scope)),
+  ));
+  expect(descriptor).toMatchObject({
+    operationKey: pending.key,
+    normalizedInput: canonicalRouteInput(pending.input),
+    processIncarnation: { pid: 42, startedAt: 1000 },
+    openDocumentLifetime: { openId: f.target.ref.openId },
+  });
+  const sibling = f.request(new Request("http://fixture/call", {
+    method: "POST",
+    headers: { "content-type": "application/json", [HOST_RPC_BRIDGE_SESSION_HEADER]: scope.bridgeSessionId, [HOST_RPC_DOCUMENT_HEADER]: scope.openDocumentId },
+    body: JSON.stringify({ key: pending.key, request: pending.input }),
+  }), human);
+  await vi.waitFor(async () => expect(await settle(f.rootReads.shared!.retained)).toMatchObject({ entries: 1, joiners: 2 }));
+  await settle(Deferred.succeed(held, undefined));
+  const shared = await sibling;
+  expect(shared.status, await shared.clone().text()).toBe(200);
+  expect(shared.headers.get("x-pe-native-request-id")).toBe(pending.requestId);
+  expect(f.dispatched.filter((row) => row.key === pending.key)).toHaveLength(1);
   const preview = await f.journal.wait("preview");
   if (preview.state !== "succeeded") throw Error(JSON.stringify(preview));
+  expect(preview.caller).toEqual(caller);
+  expect(f.nativeCallers.length).toBeGreaterThanOrEqual(3);
+  for (const identity of f.nativeCallers) {
+    expect(identity.caller).toEqual(caller);
+    expect(identity.scope).toEqual(scope);
+    expect(identity.ownership.causalParent).toBe("preview");
+    expect(identity.ownership.owner).toBe(identity.requestId);
+  }
+  expect(new Set(f.nativeCallers.map((identity) => identity.requestId)).size).toBe(f.nativeCallers.length);
+  expect((await f.saved.view(f.key, "ducts"))?.handle).toEqual(work);
+  expect((await f.saved.view({ ...f.key, route: "fans" }, "fans"))?.handle).toEqual(fans.handle);
   expect([...f.native]).toEqual(before);
   const words = presentLosses(preview.result, { readings: { ducts: { value: snapshot } } });
   expect(words.rows.join(" ")).toContain("250 cfm");
@@ -175,6 +221,25 @@ test("D03/C07: admitted losses preview is read-only, names sealed rows and commi
   expect(f.native.get(4)).toBe(250);
   expect(f.native.get(999)).toBe(777);
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toHaveLength(1);
+});
+
+test("a changed SDK incarnation between plan input reads refuses without applying or retiring Work", async () => {
+  const f = await fixture();
+  const work = await stage(f);
+  const held = await settle(Deferred.make<void>());
+  closes.push(() => settle(Deferred.succeed(held, undefined).pipe(Effect.asVoid)));
+  f.readPause.key = "ducts.snapshot.walk";
+  f.readPause.wait = Deferred.await(held);
+  await command(f, "scope-changed", "ducts.plan-losses", work);
+  await vi.waitFor(() => expect(f.dispatched.filter((row) => row.key === "ducts.snapshot.walk")).toHaveLength(1));
+  f.sdkInput.read = async (args = []) => (await sdkSessions(args)).replaceAll("1970-01-01T00:00:01.0000000Z", "1970-01-01T00:00:02.0000000Z");
+  await settle(Deferred.succeed(held, undefined));
+  const result = await f.journal.wait("scope-changed");
+  expect(result, JSON.stringify(result)).toMatchObject({ state: "failed", notDispatched: true });
+  expect(JSON.stringify(result)).toMatch(/incarnation|process|attachment/i);
+  expect(f.dispatched.filter((row) => row.key === "ducts.tables" || row.key === "ducts.apply")).toEqual([]);
+  expect((await f.saved.view(f.key, "ducts"))?.handle).toEqual(work);
+  expect(f.native.get(4)).toBe(200);
 });
 
 test.each(["reject", "deadline"] as const)(

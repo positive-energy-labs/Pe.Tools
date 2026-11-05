@@ -1,7 +1,13 @@
 import { fansDocumentSchema } from "@pe/agent-contracts";
-import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle } from "./effect-test.ts";
+import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle, testHostInputs } from "./effect-test.ts";
+import { nativeReadRoot } from "../src/app.ts";
+import { HostNativeRead } from "@pe/host-internal/native-read";
+import { RevitBridge } from "../src/bridge.ts";
+import { SdkDriver } from "../src/sdk-session.ts";
+import { HostFiles } from "../src/host-files.ts";
+import { HostDocumentMarks } from "../src/document-marks.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
-import { afterAll, afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
+import { afterAll, afterEach, beforeAll, expect, onTestFinished, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
 import { createServer, type Server } from "node:http";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -9,7 +15,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { Effect, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Schema, Scope } from "effect";
 import { HarnessEventLine } from "../src/harness/thread-store.ts";
 import type {
   Caller,
@@ -213,6 +219,25 @@ test.each(["claude", "codex"] as const)(
       ),
     );
     const writes: unknown[] = [];
+    const invokeFixture = (op: string, input: unknown, _session?: string, _doc?: string | null, requestId?: string) =>
+        Effect.promise(async () => {
+          let value: unknown;
+          if (op.startsWith("ducts.snapshot.")) value = snapshot;
+          else if (op === "ducts.tables") value = { folder: "fixture", tables: {}, missing: [], unsupported: {} };
+          else if (op === "ducts.apply" || op === "ducts.apply.plan") {
+            const preview = op === "ducts.apply.plan";
+            await journal.markDispatched(requestId!);
+            if (!preview) writes.push(input);
+            value = {
+              previewOnly: preview,
+              counts: { written: preview ? 0 : 1, planned: preview ? 1 : 0, refused: 0, unchanged: 0 },
+              writes: [{ kind: "equipment-flow", id: 14577391, outcome: preview ? "planned" : "written" }],
+              storeRevision: 1,
+              systemsAfter: [],
+            };
+          } else throw Error(`Unexpected bridge op ${op}`);
+          return { value, target: { session: "A", document: address, documentRef: target } };
+        });
     const bridge = detachedBridge({
       list: Effect.succeed([
         sessionView({
@@ -224,32 +249,36 @@ test.each(["claude", "codex"] as const)(
           state: { openDocuments: [{ ...target, address, isFamilyDocument: false }] },
         }),
       ]),
-      invoke: (op: string, input: unknown, _session?: string, _doc?: string | null, requestId?: string) =>
-        Effect.promise(async () => {
-          let value: unknown;
-          if (op.startsWith("ducts.snapshot.")) value = snapshot;
-          else if (op === "ducts.tables") value = { tables: {}, missing: [], unsupported: [] };
-          else if (op === "ducts.apply") {
-            await journal.markDispatched(requestId!);
-            writes.push(input);
-            value = {
-              previewOnly: false,
-              counts: { written: 1, planned: 0, refused: 0, unchanged: 0 },
-              writes: [{ kind: "equipment-flow", id: 14577391, outcome: "written" }],
-              storeRevision: 1,
-              systemsAfter: [],
-            };
-          } else throw Error(`Unexpected bridge op ${op}`);
-          return { value, target: { session: "A", document: address, documentRef: target } };
-        }),
+      invoke: invokeFixture,
+      invokeHandle: (key, input, session, openId, requestId) => Effect.gen(function* () {
+        const answer = yield* Effect.cached(invokeFixture(key, input, session, openId, requestId).pipe(
+          Effect.map(({ value }) => ({
+            value,
+            nativeRequestId: requestId!,
+            actualTarget: { processIncarnation: { pid: 42, startedAt: 1000 }, openDocumentLifetime: openId ? { openId } : { kind: "session-only" as const } },
+            freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const },
+            cost: {}, outcome: "native-acknowledged" as const,
+          })),
+        ));
+        return { answer, terminal: Effect.as(answer, "native-acknowledged" as const) };
+      }),
     });
-    const executors = ductsExecutors(bridge, { sdk: sdkSessions });
+    const readScope = Scope.makeUnsafe();
+    onTestFinished(() => settle(Scope.close(readScope, Exit.void)));
+    const readContext = await settle(Layer.buildWithScope(
+      Layer.mergeAll(Layer.effect(HostNativeRead, HostNativeRead), testHostInputs).pipe(
+        nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
+        Layer.provide(Layer.succeed(RevitBridge, bridge)),
+      ), readScope,
+    ));
+    const deps = { sdk: sdkSessions, nativeRead: Context.get(readContext, HostNativeRead), files: Context.get(readContext, HostFiles), marks: Context.get(readContext, HostDocumentMarks) };
+    const executors = ductsExecutors(bridge, deps);
     const entries = Object.fromEntries(
       Object.entries(executors)
         .filter(([name]) => name !== "ducts.refresh")
         .map(([name, executor]) => [
           name,
-          workWriteBoundary(executor, bridge, { sdk: sdkSessions }),
+          workWriteBoundary(executor, bridge, deps),
         ]),
     );
     const journal = new ActionJournal(join(dir, "journal.jsonl"), Date.now);
@@ -358,7 +387,7 @@ test.each(["claude", "codex"] as const)(
             await journal.invoke(
               {
                 id: phase,
-                key: `ducts.${phase}-losses`,
+                key: `ducts.${phase === "preview" ? "plan" : "apply"}-losses`,
                 target: { kind: "document", ref: target },
                 input: { work },
               },
