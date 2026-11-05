@@ -18,8 +18,10 @@ import {
   memberWork,
   editedEntries,
   parameterLinksRouteState,
-  parameterLinksBasis,
-  stagedParameterProfile,
+  mergeParameterProfile,
+  CatalogWorkRefused,
+  parameterLinksDataSchema,
+  type ParameterLinkProfile,
   parameterLinksReadingSchema,
   settingsCandidate,
   settingsRouteState,
@@ -1663,7 +1665,58 @@ export async function readFamily(
     return readLiveFamily(key, input, raw.scope, raw.target, bridge, deps);
   const scope = workKeySchema.parse(raw.scope);
   const target = documentRefSchema.parse(raw.target);
-  // Parameter Links reads a project document, not a family document.
+  const reader = await parameterLinksReader(bridge, target, deps);
+  if (!deps.workspace) throw refused("Route Work is unavailable");
+  const view = await deps.workspace.read(scope, "parameter-links");
+  if (!view) throw refused("Author this route's Work before reading it");
+  const document = parameterLinksRouteState.schema.parse(view.doc);
+  const { evaluate } = familyReads["parameter-links.read"].input.parse(input);
+  const stored = await reader.read("revit.detail.parameter-links", { includeEvaluation: false });
+  // Evaluate the profile apply would send: staged ids laid over the stored profile, never staged ids alone.
+  const profile = evaluate
+    ? (() => {
+        try {
+          return mergeParameterProfile(document, storedProfile(stored)).request.profile;
+        } catch (error) {
+          throw error instanceof CatalogWorkRefused ? refused(error.message) : error;
+        }
+      })()
+    : null;
+  const data = profile
+    ? await reader.read("revit.apply.parameter-links.preview", { profile, reconcile: false })
+    : stored;
+  const reading: FamilyCapture["reading"] = {
+    kind: "parameter-links",
+    value: parameterLinksReadingSchema.parse({
+      ...(data as object),
+      basis: canonicalRouteInput(profile ?? storedProfile(stored)),
+      workRevision: view.revision,
+      evaluated: evaluate,
+      // What Revit holds arrives as `profile` on the detail read; `stored` names it for what it is.
+      stored: storedProfile(stored),
+      // A stored-profile read observes Revit, never the staged profile: it carries no
+      // evaluation, so it can never arm an apply of a profile it did not evaluate.
+      evaluation: evaluate ? (data as { evaluation?: unknown }).evaluation : null,
+    }),
+  };
+  await reader.fence();
+  const provenance: FamilyCapture["provenance"] = { kind: "live", target, process: reader.process };
+  return captures.saveFamily({ key: scope, capturedAt: reader.capturedAt, provenance, reading }, reader.fence);
+}
+
+const storedProfile = (detail: unknown): ParameterLinkProfile | null =>
+  parameterLinksDataSchema.shape.profile.parse((detail as { profile?: unknown }).profile) ?? null;
+
+/**
+ * The one Parameter Links Read owner: a project document's lifetime, fenced on the process and the
+ * document mark, around each native read. The reading above captures through it; the catalog plan reads
+ * the stored profile through it and captures nothing.
+ */
+export async function parameterLinksReader(
+  bridge: RevitBridge["Service"],
+  target: DocumentRef,
+  deps: FamilyActionDependencies = {},
+) {
   const { session: original, process } = await lifetime(bridge, target, "project", deps);
   const marks = documentMarks(bridge);
   const capturedAt = new Date().toISOString();
@@ -1676,38 +1729,23 @@ export async function readFamily(
       throw refused("Reading process changed");
     assertFresh(marks, target, capturedAt);
   };
-  const native = async (key: string, input: unknown) => {
+  const read = async (key: string, input: unknown) => {
     await fence();
     const result = await invoke(bridge, target, key, input);
     await fence();
     return result;
   };
-  if (!deps.workspace) throw refused("Route Work is unavailable");
-  const view = await deps.workspace.read(scope, "parameter-links");
-  if (!view) throw refused("Author this route's Work before reading it");
-  const document = parameterLinksRouteState.schema.parse(view.doc);
-  const { evaluate } = familyReads["parameter-links.read"].input.parse(input);
-  // Only the staged profile is evaluated, whoever staged it.
-  const profile = stagedParameterProfile(document);
-  if (evaluate && !profile) throw refused("Stage a profile before evaluating it");
-  const data = evaluate
-    ? await native("revit.apply.parameter-links.preview", { profile, reconcile: false })
-    : await native("revit.detail.parameter-links", { includeEvaluation: false });
-  const reading: FamilyCapture["reading"] = {
-    kind: "parameter-links",
-    value: parameterLinksReadingSchema.parse({
-      ...(data as object),
-      basis: parameterLinksBasis(document),
-      workRevision: view.revision,
-      evaluated: evaluate,
-      // What Revit holds arrives as `profile`; `stored` names it for what it is.
-      stored: (data as { profile?: unknown }).profile ?? null,
-      // A stored-profile read observes Revit, never the staged profile: it carries no
-      // evaluation, so it can never arm an apply of a profile it did not evaluate.
-      evaluation: evaluate ? (data as { evaluation?: unknown }).evaluation : null,
-    }),
-  };
-  await fence();
-  const provenance: FamilyCapture["provenance"] = { kind: "live", target, process };
-  return captures.saveFamily({ key: scope, capturedAt, provenance, reading }, fence);
+  return { process, capturedAt, fence, read };
 }
+
+/** The catalog base for `parameter-links`: what Revit stores now, through the one Read owner. */
+export const storedParameterLinks = async (
+  bridge: RevitBridge["Service"],
+  target: DocumentRef,
+  deps: FamilyActionDependencies = {},
+) =>
+  storedProfile(
+    await (await parameterLinksReader(bridge, target, deps)).read("revit.detail.parameter-links", {
+      includeEvaluation: false,
+    }),
+  );
