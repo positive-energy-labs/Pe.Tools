@@ -23,7 +23,7 @@ export type JournalCommandId = JournalCommandHandle["id"] & {
 export interface WorkScope {
   readonly route: AdmittedRoute["data"]["key"];
   readonly fingerprint: RouteFingerprint;
-  /** Read-only edge declared by this admitted route. Never used by submitWork. */
+  /** Work edge declared by this admitted route. submitWork writes by `key.route`; the owner fences. */
   readonly reading?: string;
   readonly key: WorkKey;
   readonly target: ScopeIdentity["target"];

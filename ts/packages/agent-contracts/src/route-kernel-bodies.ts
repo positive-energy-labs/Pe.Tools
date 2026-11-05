@@ -149,6 +149,15 @@ export type WorkPatches<G extends RouteGraphJson, S extends SchemaTable> = reado
   WorkSchema<G, S>
 >[];
 
+/** A targeted Work verb patches its target reading's owner Work (ADR 0030 rule 9). */
+type TargetPatches<G extends RouteGraphJson, S extends SchemaTable, V> = V extends {
+  target: infer T extends keyof G["readings"];
+}
+  ? G["readings"][T] extends { output: infer O extends keyof S }
+    ? readonly WorkPatch<S[O]>[]
+    : never
+  : WorkPatches<G, S>;
+
 type PageVerbPatch<G extends RouteGraphJson, S extends SchemaTable, V> = V extends {
   fields: readonly (infer K)[];
 }
@@ -268,7 +277,12 @@ export type PaneContext<
   readonly verbs: {
     readonly [V in Extract<Allowed<G["panes"][P]["verbs"]>, keyof G["verbs"]>]: (
       input: VerbInput<G, S, V>,
-      ...basis: G["verbs"][V] extends { kind: "work" } ? [basis: InvocationToken] : []
+      // A targeted verb is fenced by its owner's handle revision, not this route's basis.
+      ...basis: G["verbs"][V] extends { kind: "work"; target: string }
+        ? []
+        : G["verbs"][V] extends { kind: "work" }
+          ? [basis: InvocationToken]
+          : []
     ) => VerbOutcome<G["verbs"][V]>;
   };
 };
@@ -333,7 +347,7 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         (
           ctx: InvocationContext<G, S, E, G["verbs"][K]>,
           input: VerbInput<G, S, K>,
-        ) => WorkPatches<G, S>
+        ) => TargetPatches<G, S, G["verbs"][K]>
       >
     | Slot<
         At<G["verbs"][K], "describe">,

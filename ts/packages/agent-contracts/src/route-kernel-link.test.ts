@@ -832,3 +832,14 @@ it("the closure pin alone admits builtin identity and refuses a stale pin or rep
     }).ok,
   ).toBe(false);
 });
+it("admits a Work verb target only as a declared work reading dependency", () => {
+  const [id, verb] = Object.entries(builtinData.verbs).find(([, v]) => v.kind === "work")!;
+  const errors = linkRouteBodies(
+    { ...builtinData, verbs: { ...builtinData.verbs, [id]: { ...verb, target: "undeclared" } } },
+    routeBindingSchema.parse(builtinModule),
+    baseCatalog,
+  );
+  expect(errors).toContainEqual(
+    expect.objectContaining({ path: `verbs.${id}.target`, reference: "undeclared" }),
+  );
+});
