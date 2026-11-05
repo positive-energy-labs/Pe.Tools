@@ -8,8 +8,17 @@
  * about a model we are not attached to, so every Reading taken before that moment is changed until
  * it is read again.
  */
-import { Clock, Context, Effect, Layer } from "effect";
+import { Clock, Context, Effect, Layer, Schema } from "effect";
+import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { BridgeError, RevitBridge } from "./bridge.ts";
+import { canonicalJson } from "@pe/host-internal/native-read";
+import { InvalidRead } from "./native-reads.ts";
+import {
+  captureInput,
+  replayInput,
+  type RecordingReader,
+  type RecordingWriter,
+} from "./native-recording.ts";
 
 export interface DocumentRef {
   readonly session: string;
@@ -26,6 +35,31 @@ export interface DocumentMarks {
   /** Resolves once every event the host has received so far is reflected in the marks; a fake has none pending. */
   readonly settled?: () => Promise<void>;
 }
+
+/** The marks one reading consumed for one document, exactly as the holder answered them. */
+export interface MarkSnapshot {
+  readonly observedSince?: number;
+  readonly changedAt: number | null;
+}
+const markSnapshot = Schema.Struct({
+  observedSince: Schema.optionalKey(Schema.Number),
+  changedAt: Schema.NullOr(Schema.Number),
+});
+
+/** The host's marks: the synchronous holder plus the one explicit boundary a recording can keep. */
+export interface HostMarks extends DocumentMarks {
+  /** The holder's current marks for `ref`; the capture and replay boundary for a reading's freshness. */
+  readonly snapshot: (ref: DocumentRef) => Effect.Effect<MarkSnapshot, DoorFailure>;
+}
+/** A synchronous holder with its snapshot read straight from it, at the moment of the call. */
+export const hostMarks = (marks: DocumentMarks): HostMarks => ({
+  ...marks,
+  snapshot: (ref: DocumentRef) =>
+    Effect.sync(() => ({
+      ...(marks.observedSince === undefined ? {} : { observedSince: marks.observedSince }),
+      changedAt: marks.changedAt(ref),
+    })),
+});
 
 /** The one refusal an apply over a newer change mark gets. */
 export const STALE_READ = "This read is no longer verified against Revit; read again, then apply.";
@@ -65,7 +99,7 @@ export async function assertSealed(
  * id and the pe-revit session id the payload reported. Time is the layer's `Clock`; closing the
  * layer's scope unsubscribes from the bridge.
  */
-export class HostDocumentMarks extends Context.Service<HostDocumentMarks, DocumentMarks>()(
+export class HostDocumentMarks extends Context.Service<HostDocumentMarks, HostMarks>()(
   "pe/DocumentMarks",
 ) {
   static readonly layer = Layer.effect(
@@ -113,7 +147,7 @@ export class HostDocumentMarks extends Context.Service<HostDocumentMarks, Docume
           });
       });
       yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
-      return {
+      return hostMarks({
         observedSince: clock.currentTimeMillisUnsafe(),
         changedAt: (ref) =>
           Math.max(
@@ -127,12 +161,58 @@ export class HostDocumentMarks extends Context.Service<HostDocumentMarks, Docume
           };
         },
         settled: () => tail,
-      } satisfies DocumentMarks;
+      });
     }),
   );
+  /**
+   * The live holder, each snapshot kept as a taking of exactly the values it answered, for exactly
+   * that ref, at the moment the reading asked. The synchronous accessors stay the live holder's.
+   */
+  static readonly capturing = (writer: RecordingWriter) =>
+    Layer.effect(
+      HostDocumentMarks,
+      Effect.map(Effect.service(HostDocumentMarks), (live) =>
+        Object.assign(Object.create(live) as HostMarks, {
+          snapshot: (ref: DocumentRef) =>
+            captureInput(
+              writer,
+              marksInput(ref),
+              canonicalJson(marksInput(ref).ref),
+              markSnapshot,
+              live.snapshot(ref),
+            ),
+        }),
+      ),
+    );
+  /**
+   * Recorded marks only: `snapshot` replays the exact recorded values for that ref. No clock, no
+   * bridge, nothing moves. The synchronous accessors have no recorded answer, so they refuse rather
+   * than invent one; a historical reading reads its freshness through `snapshot`.
+   */
+  static readonly recorded = (reader: RecordingReader) => {
+    const unrecorded = () => {
+      throw new InvalidRead({
+        message: "A recording answers document marks only through snapshot(ref)",
+        status: 409,
+        problem: "recording.miss",
+      });
+    };
+    return Layer.succeed(HostDocumentMarks, {
+      get observedSince(): number {
+        return unrecorded();
+      },
+      changedAt: unrecorded,
+      subscribe: () => () => {},
+      snapshot: (ref) =>
+        replayInput(reader, marksInput(ref), canonicalJson(marksInput(ref).ref), markSnapshot),
+    });
+  };
   /** Tests only: a host that observes no Revit, so nothing ever changes. Never a production fallback. */
-  static readonly none = Layer.succeed(HostDocumentMarks, {
-    changedAt: () => null,
-    subscribe: () => () => {},
-  });
+  static readonly none = Layer.succeed(
+    HostDocumentMarks,
+    hostMarks({ changedAt: () => null, subscribe: () => () => {} }),
+  );
 }
+
+const marksInput = (ref: DocumentRef) =>
+  ({ kind: "marks", ref: { session: ref.session, openId: ref.openId } }) as const;

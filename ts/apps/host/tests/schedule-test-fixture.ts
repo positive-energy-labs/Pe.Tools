@@ -1,6 +1,6 @@
 import { testDocumentMarks } from "./effect-test.ts";
 import { HostFiles } from "../src/host-files.ts";
-import { HostDocumentMarks } from "../src/document-marks.ts";
+import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { detachedBridge, sessionView, captureStore } from "./effect-test.ts";
 import { createPeClient, httpRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
@@ -218,7 +218,7 @@ export async function setup() {
   );
   const mount = () =>
     serveRoutes(
-      Layer.mergeAll(pe, makeCallRoute(owner, captures, { workspace: work, sdk }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, marks)))),
+      Layer.mergeAll(pe, makeCallRoute(owner, captures, { workspace: work, sdk }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks))))),
       bridge,
     );
   let server = await mount();

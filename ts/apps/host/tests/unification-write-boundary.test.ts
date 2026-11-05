@@ -2,7 +2,7 @@ import { testHostFiles, settle } from "./effect-test.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostFiles } from "../src/host-files.ts";
-import { HostDocumentMarks } from "../src/document-marks.ts";
+import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 /** Port of main .artifacts/runs/review-20261030-ducts/contracts/contracts-review/
  * write-repro.cjs and repro.cjs (2026-10-30). Real journal, executor, workspace and
@@ -103,7 +103,7 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
       makeCallRoute(owner, captureStore(join(dir, "captures")), {
         sdk,
         workspace: work,
-      }).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdk(args))))).pipe(Layer.provide(HostFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, marks))).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+      }).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdk(args))))).pipe(Layer.provide(HostFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks)))).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       { disableLogger: true },
     );
     const post = (body: unknown) =>

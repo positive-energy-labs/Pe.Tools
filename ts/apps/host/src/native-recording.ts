@@ -1,7 +1,8 @@
 /**
- * Native-input recording (ADR 0031 rules 1, 2 and 5; Step 7.2 first slice). A recording answers
- * `HostNativeRead` from a local bundle of takings; a miss refuses and never reaches a live input.
- * Coverage is native reads only: a bundle never claims a whole document or the other input services.
+ * Host input recording (ADR 0031 rules 1, 2 and 5). One bundle of takings answers the host's input
+ * services: native reads through `HostNativeRead`, and every other owner (files, marks, inventory,
+ * Work) through `captureInput`/`replayInput` with that owner's codec. A miss refuses and never
+ * reaches a live input. Coverage is only the kinds a bundle durably holds, never a whole document.
  */
 import { randomUUID, createHash } from "node:crypto";
 import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -13,7 +14,7 @@ import { BridgeError } from "@pe/host-internal/dispatch";
 import { HostNativeRead, canonicalJson, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { admitNativeCaller } from "./native-read-policy.ts";
-import { refusalSchema, type InputLane } from "@pe/agent-contracts";
+import { refusalSchema, type InputKind, type InputLane } from "@pe/agent-contracts";
 import { Refused } from "./control.ts";
 import { InvalidRead, ReadBusy, ReadRetiring } from "./native-reads.ts";
 import { readSchemas } from "./request-services.ts";
@@ -83,19 +84,33 @@ const failure = Schema.Union([
 const sha256Name = Schema.String.check(
   Schema.makeFilter((name) => /^[0-9a-f]{64}$/.test(name) || "Observation name is not a SHA-256"),
 );
+/** What one taking recorded: a native read, or one input owner's exact read shape. */
+const recordedInput = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("native"), key: Schema.String, args: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("document"), scope: Schema.String }),
+  Schema.Struct({
+    kind: Schema.Literal("files"),
+    file: Schema.Literals(["firm", "duct-catalogs"]),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("marks"),
+    ref: Schema.Struct({ session: Schema.String, openId: Schema.String }),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("work"),
+    key: Schema.String,
+    view: Schema.Literals(["read", "raw", "view", "feed"]),
+  }),
+]);
+export type RecordedInput = typeof recordedInput.Type;
 const takingSchema = Schema.Struct({
-  version: Schema.Literal(1),
+  version: Schema.Literal(2),
   id: Schema.String,
   at: Schema.Number,
-  input: Schema.Struct({
-    kind: Schema.Literal("native-read"),
-    key: Schema.String,
-    args: Schema.String,
-  }),
-  /** Canonical JSON of the request's explicit scope; replay serves only that scope. */
+  input: recordedInput,
+  /** Canonical JSON of the read's explicit scope; replay serves only that scope. */
   scope: Schema.String,
   outputVersion: Schema.String,
-  coverage: Schema.Literal("native-only"),
   outcome: Schema.Union([
     Schema.Struct({
       kind: Schema.Literal("answered"),
@@ -111,6 +126,8 @@ const takingSchema = Schema.Struct({
       }),
       nativeOutcome,
     }),
+    /** A non-native owner's value, encoded by that owner's codec. */
+    Schema.Struct({ kind: Schema.Literal("observed"), observation: sha256Name }),
     Schema.Struct({ kind: Schema.Literal("refused"), failure }),
     Schema.Struct({ kind: Schema.Literal("unknown"), failure }),
   ]),
@@ -124,25 +141,30 @@ type Outcome =
       readonly value: Schema.Json;
       readonly answer: Omit<Answered, "kind" | "observation">;
     }
-  | Exclude<Taking["outcome"], { kind: "answered" }>;
+  | { readonly kind: "observed"; readonly value: Schema.Json }
+  | Exclude<Taking["outcome"], { kind: "answered" | "observed" }>;
+const FORMAT = 2;
 const manifestSchema = Schema.Struct({
-  version: Schema.Literal(1),
+  version: Schema.Literal(FORMAT),
   build: Schema.String,
   catalog: Schema.String,
-  coverage: Schema.Struct({
-    kind: Schema.Literal("partial"),
-    inputs: Schema.Tuple([Schema.Literal("native-read")]),
-  }),
 });
+/** Non-native codecs belong to the build, and the manifest already fixes the build. */
+const BUILD_VERSION = "build";
 
 const refuse = (problem: string, message: string, status = 409) =>
   new InvalidRead({ message, status, problem: `recording.${problem}` });
 const io = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: (error) => refuse("io", String(error), 500) });
 const missing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
-const observationSha = (outputVersion: string, bytes: string) =>
-  createHash("sha256").update(`native-read\n${outputVersion}\n${bytes}`).digest("hex");
-const identityOf = (key: string, args: string) => canonicalJson(["native-read", key, args]);
+const observationSha = (kind: string, outputVersion: string, bytes: string) =>
+  createHash("sha256").update(`${kind}\n${outputVersion}\n${bytes}`).digest("hex");
+/** One input's identity across takings: its whole canonical discriminant. */
+export const inputIdentity = (input: RecordedInput) => canonicalJson(input);
+const observationOf = (taking: Taking) =>
+  taking.outcome.kind === "answered" || taking.outcome.kind === "observed"
+    ? taking.outcome.observation
+    : null;
 
 /** A historical bundle, read only: replay can select and read takings but never add one. */
 export interface RecordingReader {
@@ -151,6 +173,8 @@ export interface RecordingReader {
   readonly candidates: (identity: string) => readonly Taking[];
   readonly taking: (id: string) => Taking | undefined;
   readonly observation: (taking: Taking) => Effect.Effect<Schema.Json, InvalidRead>;
+  /** The kinds with at least one durable taking: coarse, never proof that a read set is served. */
+  readonly coverage: () => readonly InputKind[];
 }
 /** The one capture writer of a bundle in this process (no cross-process lock is claimed). */
 export interface RecordingWriter extends RecordingReader {
@@ -171,11 +195,7 @@ const loadBundle = Effect.fn("Recording.load")(function* (
   const manifestPath = join(dir, "manifest.json");
   const takingsPath = join(dir, "takings.jsonl");
   const observations = join(dir, "observations");
-  const manifest = {
-    version: 1,
-    ...identity,
-    coverage: { kind: "partial", inputs: ["native-read"] },
-  } as const;
+  const manifest = { version: FORMAT, ...identity } as const;
   // Every file's size is checked against the bound before it is loaded.
   const bounded = (path: string, fallback: string | null) =>
     io(() =>
@@ -198,6 +218,15 @@ const loadBundle = Effect.fn("Recording.load")(function* (
     yield* io(() => mkdir(observations, { recursive: true }));
     yield* io(() => writeFile(manifestPath, JSON.stringify(manifest)));
   } else {
+    const format = yield* Schema.decodeUnknownEffect(
+      Schema.fromJsonString(Schema.Struct({ version: Schema.Json })),
+    )(existing).pipe(Effect.mapError(() => refuse("tamper", "Recording manifest is damaged")));
+    // No migration: a bundle of another format is refused, never read through a shim.
+    if (format.version !== FORMAT)
+      return yield* refuse(
+        "mismatch",
+        `Recording format ${JSON.stringify(format.version)} is not format ${FORMAT}; record it again`,
+      );
     const found = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(manifestSchema))(
       existing,
     ).pipe(Effect.mapError(() => refuse("tamper", "Recording manifest is damaged")));
@@ -217,30 +246,31 @@ const loadBundle = Effect.fn("Recording.load")(function* (
     );
   const stored = new Set<string>();
   let used = Buffer.byteLength(text) + Buffer.byteLength(JSON.stringify(manifest));
-  for (const taking of takings)
-    if (taking.outcome.kind === "answered" && !stored.has(taking.outcome.observation)) {
-      const sha = taking.outcome.observation;
+  for (const taking of takings) {
+    const sha = observationOf(taking);
+    if (sha !== null && !stored.has(sha)) {
       stored.add(sha);
       used += (yield* io(() => stat(join(observations, `${sha}.json`)))).size;
     }
+  }
   if (used > bounds.maxBytes || takings.length > bounds.maxTakings)
     return yield* refuse("full", "Recording exceeds its bounds", 507);
   const reader: RecordingReader = {
     identity,
     candidates: (wanted: string) =>
-      takings.filter((taking) => identityOf(taking.input.key, taking.input.args) === wanted),
+      takings.filter((taking) => inputIdentity(taking.input) === wanted),
     taking: (id: string) => takings.find((taking) => taking.id === id),
     observation: Effect.fn("Recording.observation")(function* (taking: Taking) {
-      if (taking.outcome.kind !== "answered")
-        return yield* refuse("miss", "This taking holds no observation");
-      const sha = taking.outcome.observation;
+      const sha = observationOf(taking);
+      if (sha === null) return yield* refuse("miss", "This taking holds no observation");
       const bytes = (yield* bounded(join(observations, `${sha}.json`), null)) ?? "";
-      if (observationSha(taking.outputVersion, bytes) !== sha)
+      if (observationSha(taking.input.kind, taking.outputVersion, bytes) !== sha)
         return yield* refuse("tamper", `Observation ${sha} does not hash to its name`);
       return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(bytes).pipe(
         Effect.mapError(() => refuse("tamper", `Observation ${sha} is not JSON`)),
       );
     }),
+    coverage: () => [...new Set(takings.map((taking) => taking.input.kind))],
   };
   return { reader, takings, stored, used, takingsPath, observations };
 });
@@ -288,21 +318,23 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
   return {
     ...reader,
     append: Effect.fn("Recording.append")(function* (input: TakingInput, outcome: Outcome) {
-      const bytes = outcome.kind === "answered" ? canonicalJson(outcome.value) : "";
-      const sha = outcome.kind === "answered" ? observationSha(input.outputVersion, bytes) : "";
+      const holds = outcome.kind === "answered" || outcome.kind === "observed";
+      const bytes = holds ? canonicalJson(outcome.value) : "";
+      const sha = holds ? observationSha(input.input.kind, input.outputVersion, bytes) : "";
       const taking: Taking = {
-        version: 1,
+        version: FORMAT,
         id: randomUUID(),
         at: clock.currentTimeMillisUnsafe(),
         ...input,
-        coverage: "native-only",
         outcome:
           outcome.kind === "answered"
             ? { kind: "answered", observation: sha, ...outcome.answer }
-            : outcome,
+            : outcome.kind === "observed"
+              ? { kind: "observed", observation: sha }
+              : outcome,
       };
       const line = `${JSON.stringify(taking)}\n`;
-      const shared = outcome.kind !== "answered" || stored.has(sha) || writing.has(sha);
+      const shared = !holds || stored.has(sha) || writing.has(sha);
       const blob = shared ? 0 : Buffer.byteLength(bytes);
       const need = Buffer.byteLength(line) + blob;
       // The reservation is taken before any await, so concurrent takings cannot pass the bound together.
@@ -316,8 +348,7 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
       reserved++;
       const durable = yield* Effect.exit(
         io(async () => {
-          if (outcome.kind === "answered" && !stored.has(sha))
-            await (writing.get(sha) ?? writeObservation(sha, bytes));
+          if (holds && !stored.has(sha)) await (writing.get(sha) ?? writeObservation(sha, bytes));
           await appendFile(takingsPath, line);
         }),
       );
@@ -345,7 +376,9 @@ export type HostInputLane =
 
 /** One native input's identity: its key and the canonical JSON of the request input. */
 export const nativeInputIdentity = (request: NativeReadInput) =>
-  argsOf(request).pipe(Effect.map((args) => identityOf(request.key, args)));
+  argsOf(request).pipe(
+    Effect.map((args) => inputIdentity({ kind: "native", key: request.key, args })),
+  );
 const json = (value: unknown, what: string) =>
   Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
     Effect.map(canonicalJson),
@@ -391,6 +424,45 @@ const outcomeOf = (error: DoorFailure, recorded: typeof failure.Type): Outcome =
   kind: error instanceof BridgeError && error.outcome !== "refused" ? "unknown" : "refused",
   failure: recorded,
 });
+/** A live failure as a recorded outcome, or a capture refusal when replay could not rebuild it. */
+const recordedFailure = (error: DoorFailure) =>
+  Option.match(failureOf(error), {
+    onSome: (recorded) => Effect.succeed(outcomeOf(error, recorded)),
+    onNone: () =>
+      Effect.fail(
+        refuse("unsupported", `A ${error._tag} failure cannot be recorded faithfully`, 501),
+      ),
+  });
+/**
+ * The one taking that answers an input in a scope: an exact binding when the root supplied one,
+ * otherwise the only taking recorded for that scope.
+ */
+const chooseTaking = Effect.fn("Recording.choose")(function* (
+  store: RecordingReader,
+  identity: string,
+  scope: string,
+  what: string,
+  bound?: string,
+) {
+  const candidates = store.candidates(identity);
+  const chosen =
+    bound === undefined
+      ? candidates.filter((taking) => taking.scope === scope)
+      : candidates.filter((taking) => taking.id === bound);
+  if (bound !== undefined && chosen.length === 0)
+    return yield* refuse("mismatch", "The bound taking does not record this input");
+  if (candidates.length === 0)
+    return yield* refuse("miss", `The recording holds no taking of ${what} for this input`);
+  // Until epochs bind documents, a recording serves only the exact scope it recorded.
+  if (chosen.length === 0 || chosen.some((taking) => taking.scope !== scope))
+    return yield* refuse("scope", `The recording of ${what} was taken for another scope`);
+  if (chosen.length > 1)
+    return yield* refuse(
+      "ambiguous",
+      `The recording holds ${chosen.length} takings of ${what} for this input; bind one`,
+    );
+  return chosen[0]!;
+});
 const replayFailure = Effect.fn("Recording.failure")(function* (recorded: typeof failure.Type) {
   if (recorded.tag === "Refused") {
     const refusal = refusalSchema.safeParse(recorded.refusal);
@@ -423,11 +495,7 @@ const capturing = (store: RecordingWriter) =>
         read: (request) =>
           Effect.gen(function* () {
             const taking = {
-              input: {
-                kind: "native-read" as const,
-                key: request.key,
-                args: yield* argsOf(request),
-              },
+              input: { kind: "native" as const, key: request.key, args: yield* argsOf(request) },
               scope: yield* scopeOf(request),
               outputVersion: yield* versionOf(request.key),
             };
@@ -447,36 +515,27 @@ const capturing = (store: RecordingWriter) =>
                     nativeOutcome: exit.value.outcome,
                   },
                 }
-              : yield* Option.match(failureOf(Option.getOrThrow(error)), {
-                  onSome: (recorded) =>
-                    Effect.succeed(outcomeOf(Option.getOrThrow(error), recorded)),
-                  // Replay could not rebuild this failure exactly, so no taking claims to hold it.
-                  onNone: () =>
-                    Effect.fail(
-                      refuse(
-                        "unsupported",
-                        `A ${Option.getOrThrow(error)._tag} failure cannot be recorded faithfully`,
-                        501,
-                      ),
-                    ),
-                });
+              : // Replay could not rebuild an unsupported failure, so no taking claims to hold it.
+                yield* recordedFailure(Option.getOrThrow(error));
             const dispatch =
-              outcome.kind === "answered"
-                ? {
-                    nativeOutcome: outcome.answer.nativeOutcome,
-                    evidence: {
-                      nativeRequestId: outcome.answer.nativeRequestId,
-                      actualTarget: outcome.answer.actualTarget,
-                    },
-                  }
-                : outcome.failure.tag === "BridgeError"
+              outcome.kind === "observed"
+                ? {}
+                : outcome.kind === "answered"
                   ? {
-                      ...(outcome.failure.nativeOutcome
-                        ? { nativeOutcome: outcome.failure.nativeOutcome }
-                        : {}),
-                      evidence: outcome.failure.evidence,
+                      nativeOutcome: outcome.answer.nativeOutcome,
+                      evidence: {
+                        nativeRequestId: outcome.answer.nativeRequestId,
+                        actualTarget: outcome.answer.actualTarget,
+                      },
                     }
-                  : {};
+                  : outcome.failure.tag === "BridgeError"
+                    ? {
+                        ...(outcome.failure.nativeOutcome
+                          ? { nativeOutcome: outcome.failure.nativeOutcome }
+                          : {}),
+                        evidence: outcome.failure.evidence,
+                      }
+                    : {};
             yield* store.append(taking, outcome).pipe(
               Effect.mapError(
                 (kept) =>
@@ -499,35 +558,21 @@ const replaying = (store: RecordingReader, bindings: ReadonlyMap<string, string>
   const select = Effect.fn("Recording.select")(function* (request: NativeReadInput) {
     yield* admitNativeCaller(request.key);
     const args = yield* argsOf(request);
-    const scope = yield* scopeOf(request);
-    const identity = identityOf(request.key, args);
-    const candidates = store.candidates(identity);
-    const bound = bindings.get(identity);
-    const chosen =
-      bound === undefined
-        ? candidates.filter((taking) => taking.scope === scope)
-        : candidates.filter((taking) => taking.id === bound);
-    if (bound !== undefined && chosen.length === 0)
-      return yield* refuse("mismatch", "The bound taking does not record this input");
-    if (candidates.length === 0)
-      return yield* refuse(
-        "miss",
-        `The recording holds no taking of ${request.key} for this input`,
-      );
-    // Until epochs bind documents, a recording serves only the exact scope it recorded.
-    if (chosen.length === 0 || chosen.some((taking) => taking.scope !== scope))
-      return yield* refuse("scope", `The recording of ${request.key} was taken for another scope`);
-    if (chosen.length > 1)
-      return yield* refuse(
-        "ambiguous",
-        `The recording holds ${chosen.length} takings of ${request.key} for this input; bind one`,
-      );
-    const taking = chosen[0]!;
+    const identity = inputIdentity({ kind: "native", key: request.key, args });
+    const taking = yield* chooseTaking(
+      store,
+      identity,
+      yield* scopeOf(request),
+      request.key,
+      bindings.get(identity),
+    );
     if (taking.outputVersion !== (yield* versionOf(request.key)))
       return yield* refuse(
         "mismatch",
         `${request.key} changed its output contract since this recording`,
       );
+    if (taking.outcome.kind === "observed")
+      return yield* refuse("tamper", `The taking of ${request.key} holds no native answer`);
     if (taking.outcome.kind !== "answered")
       return yield* Effect.fail(yield* replayFailure(taking.outcome.failure));
     return { taking, answer: taking.outcome, args };
@@ -580,6 +625,59 @@ export const hostNativeReadFor = <R>(
 
 /** A host fixture with no input adapter: every read refuses, and live is never built. */
 const sourceless = (name: string) => {
-  const refusal = Effect.fail(refuse("fixture", `Host fixture '${name}' has no native input source`));
+  const refusal = Effect.fail(
+    refuse("fixture", `Host fixture '${name}' has no native input source`),
+  );
   return Layer.succeed(HostNativeRead, { resolve: () => refusal, read: () => refusal });
 };
+
+/** The owner's value as the canonical JSON its codec encodes; anything else cannot be kept. */
+const encoded = <A, I>(codec: Schema.Codec<A, I>, value: A) =>
+  Schema.encodeUnknownEffect(codec)(value).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
+    Effect.mapError(() => refuse("unsupported", "This input value is not recordable JSON", 501)),
+  );
+
+/**
+ * One owner's live read, kept as a taking before its answer is returned. A value or a
+ * class-faithful failure is recorded; a taking that cannot be kept fails the read with that refusal.
+ */
+export const captureInput = <A, I>(
+  writer: RecordingWriter,
+  input: RecordedInput,
+  scope: string,
+  codec: Schema.Codec<A, I>,
+  live: Effect.Effect<A, DoorFailure>,
+): Effect.Effect<A, DoorFailure> =>
+  Effect.gen(function* () {
+    const exit = yield* Effect.exit(live);
+    const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
+    // An interrupted caller has no outcome to record; its read is not a taking.
+    if (Exit.isFailure(exit) && Option.isNone(error)) return yield* exit;
+    const outcome: Outcome = Exit.isSuccess(exit)
+      ? { kind: "observed", value: yield* encoded(codec, exit.value) }
+      : yield* recordedFailure(Option.getOrThrow(error));
+    yield* writer.append({ input, scope, outputVersion: BUILD_VERSION }, outcome);
+    return yield* exit;
+  });
+
+/** The one recorded answer to an owner's read in this scope, decoded by that owner's codec. */
+export const replayInput = <A, I>(
+  reader: RecordingReader,
+  input: RecordedInput,
+  scope: string,
+  codec: Schema.Codec<A, I>,
+): Effect.Effect<A, DoorFailure> =>
+  Effect.gen(function* () {
+    const taking = yield* chooseTaking(reader, inputIdentity(input), scope, input.kind);
+    if (taking.outputVersion !== BUILD_VERSION || taking.outcome.kind === "answered")
+      return yield* refuse("mismatch", `The taking of ${input.kind} is not an owner observation`);
+    if (taking.outcome.kind !== "observed")
+      return yield* Effect.fail(yield* replayFailure(taking.outcome.failure));
+    const raw = yield* reader.observation(taking);
+    return yield* Schema.decodeUnknownEffect(codec)(raw).pipe(
+      Effect.mapError(() =>
+        refuse("mismatch", `Recorded ${input.kind} no longer satisfies its owner's contract`),
+      ),
+    );
+  });

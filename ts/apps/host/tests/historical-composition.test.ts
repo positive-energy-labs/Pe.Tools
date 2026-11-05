@@ -29,7 +29,7 @@ const bundle = async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-historical-composition-")); dirs.push(dir);
   const writer = await Effect.runPromise(openRecordingWriter(dir, identity, bounds));
   const schemas = await Effect.runPromise(readSchemas(key));
-  const input = { input: { kind: "native-read" as const, key, args: "{}" }, scope: JSON.stringify(scope), outputVersion: schemas.version };
+  const input = { input: { kind: "native" as const, key, args: "{}" }, scope: JSON.stringify(scope), outputVersion: schemas.version };
   const outcome = { kind: "answered" as const, value: { operations: [], constants: {} }, answer: {
     nativeRequestId: "recorded-native", actualTarget: { processIncarnation: { pid: 7, startedAt: 1000 }, openDocumentLifetime: { kind: "session-only" as const } },
     freshness: { freshnessGeneration: "recorded:g1" }, cost: {}, nativeOutcome: "committed" as const,
