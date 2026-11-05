@@ -4,12 +4,12 @@ Live frontier for wave 2 (ADR 0027, [ADR 0028](../../adr/0028-seven-nouns-two-cl
 
 ## Route census (bb447ddf)
 
-`ts/packages/agent-contracts/src/generated/route-directory.ts` holds 25 route keys. `ts/packages/agent-contracts/src/admitted-builtin-keys.ts` names the 5 on the new kernel.
+`ts/packages/agent-contracts/src/generated/route-directory.ts` held 25 route keys; the 2026-11-04 archive deleted 7 of them. `ts/packages/agent-contracts/src/admitted-builtin-keys.ts` names the 5 on the new kernel.
 
 | Shell | Count | Routes |
 |---|---|---|
 | admitted (new kernel, `shell/admitted-*`) | 5 | captures, schedules, families, ducts, fans |
-| legacy mount (`shell/mount-*`), ruled for archive ([ledger 2026-11-03](LEDGER.md#decided)) | 10 | takeoffs, space, parameter-links, data-tables, grilles, rhvac-sync, zone-audit, instances, pod-admin, session-admin |
+| legacy mount (`shell/mount-*`), ruled for archive and kept for an import boundary ([ledger 2026-11-04](LEDGER.md#decided)) | 3 | takeoffs, instances, session-admin |
 | legacy mount, still to migrate | 10 | chat, design-system, duct-loss, family, index, ops, bind, pods, rooms, settings |
 
 `takeoff` and `schedule-specs` are named in the archive ruling but are not directory keys. Witnesses with real use (ledger 2026-11-03): /ducts with /fans, /families, /schedules; /family and /rooms are candidates. The behavior of every other legacy route is not a spec; a migration may drop it and log the loss.
