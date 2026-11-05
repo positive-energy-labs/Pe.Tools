@@ -8,15 +8,17 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
-import { THREAD_TABS_MAX, routeAddress, type RouteKey, type ThreadTab } from "@pe/agent-contracts";
+import { THREAD_TABS_MAX, routeOf, routeAddress, type ThreadTab } from "@pe/agent-contracts";
 import { RouteActivity, RouteVisibility, type RouteActivityScope } from "#/route/activity";
+import { useSyncExternalStore } from "react";
+import { publicRoutes } from "#/route/route-discovery";
 import { currentLocation } from "#/route/url";
 import { PaneErrorBoundary, PaneLoading } from "@pe/kit/lang/pane";
 
 interface RetainedRoute {
   key: string;
   id: string | null;
-  route: RouteKey;
+  route: string;
   source: string;
   visible: boolean;
   Component: ComponentType;
@@ -58,7 +60,9 @@ const RetainedPane = memo(function RetainedPane({
             data-route-tab={id ?? "enrolling"}
           >
             <PaneErrorBoundary>
-              <Suspense fallback={<PaneLoading what="route" />}>{renderRoute(<Component />)}</Suspense>
+              <Suspense fallback={<PaneLoading what="route" />}>
+                {renderRoute(<Component />)}
+              </Suspense>
             </PaneErrorBoundary>
           </div>
         </Activity>
@@ -75,13 +79,14 @@ export function RouteRetention({
   ready,
   renderRoute,
 }: {
-  route: RouteKey | null;
+  route: string | null;
   active: { id: string } | null;
   tabs: readonly ThreadTab[];
   ready: boolean;
   renderRoute: (body: ReactNode) => ReactNode;
 }) {
   const router = useRouter();
+  useSyncExternalStore(publicRoutes.subscribe, publicRoutes.revision, publicRoutes.revision);
   const location = useRouterState({ select: (state) => state.location });
   const tagged = (location.state as { __peRouteTab?: { id: string; route: string } } | undefined)
     ?.__peRouteTab;
@@ -90,13 +95,15 @@ export function RouteRetention({
   const selectedId = active?.id ?? (tagged?.route === route ? tagged.id : null);
   const retained = useRef<RetainedRoute[]>([]);
   for (const entry of retained.current) entry.visible = false;
-  retained.current = retained.current.filter((entry) =>
-    entry.id
-      ? !ready || entry.id === selectedId || tabs.some((tab) => tab.id === entry.id)
-      : entry.route === route,
+  retained.current = retained.current.filter(
+    (entry) =>
+      (routeOf(entry.route) || publicRoutes.admitted(entry.route)) &&
+      (entry.id
+        ? !ready || entry.id === selectedId || tabs.some((tab) => tab.id === entry.id)
+        : entry.route === route),
   );
   if (route) {
-    const pathname = routeAddress(route).path;
+    const pathname = publicRoutes.admitted(route)?.data.address ?? routeAddress(routeOf(route)!).path;
     const search = location.search as Record<string, unknown>;
     const source = JSON.stringify(search.fixture ?? null);
     let entry = retained.current.find(
@@ -110,7 +117,12 @@ export function RouteRetention({
     }
     if (!entry) {
       const Component = Object.values(router.routesById).find(
-        (entry) => !entry.isRoot && entry.fullPath === pathname,
+        (entry) =>
+          !entry.isRoot &&
+          (entry.fullPath === pathname ||
+            router.matchRoutes(location).some(
+              (match) => match.routeId === entry.id,
+            )),
       )?.options.component;
       if (!Component) throw Error(`No route component registered for ${pathname}`);
       const owners = new Set<{ dispose(): void }>();

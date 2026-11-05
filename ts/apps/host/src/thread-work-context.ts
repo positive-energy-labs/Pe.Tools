@@ -6,13 +6,14 @@ import {
   documentRefSchema,
   documentRequestSchema,
   routeAddress,
+  routeOf,
+  placeCarry,
   sameAddress,
   workKey,
   workKeySchema,
   type Address,
   type DocumentRef,
   type DocumentRequest,
-  type RouteKey,
 } from "@pe/agent-contracts";
 
 interface DocumentObservation {
@@ -99,16 +100,20 @@ export function rememberTarget(
 /** A visited Place links existing Work; closing the tab never deletes that relationship. */
 export function rememberPlace(
   context: ThreadWorkContext,
-  route: RouteKey,
+  route: string,
   link: string,
   observe?: ObserveDocument,
 ): ThreadWorkContext {
-  const at = routeAddress(route).read(
-    Object.fromEntries(new URL(link, "http://place.invalid").searchParams),
-  );
+  const carry = placeCarry(route, link);
+  const builtin = routeOf(route);
+  const page = builtin
+    ? routeAddress(builtin).read(
+        Object.fromEntries(new URL(link, "http://place.invalid").searchParams),
+      ).page
+    : {};
   let document: ThreadWorkContext["documents"][number] | null = null;
-  if (at.carry.target) {
-    const namedAddress = addressSchema.safeParse(at.carry.target);
+  if (carry.target) {
+    const namedAddress = addressSchema.safeParse(carry.target);
     if (namedAddress.success) {
       ({ context, document } = rememberDocument(context, {
         address: namedAddress.data,
@@ -116,20 +121,19 @@ export function rememberPlace(
       }));
     } else {
       try {
-        const request = documentRequestSchema.safeParse(JSON.parse(at.carry.target));
+        const request = documentRequestSchema.safeParse(JSON.parse(carry.target));
         if (request.success)
           ({ context, document } = rememberTarget(context, request.data, undefined, observe));
-      } catch (error) { console.warn("ts/apps/host/src/thread-work-context.ts: fallback after failure", error);
+      } catch (error) {
+        console.warn("ts/apps/host/src/thread-work-context.ts: fallback after failure", error);
         // A legacy session shorthand is not enough to invent a document relationship.
       }
     }
   }
   const workspace =
-    at.carry.work ||
-    ("workspaceId" in at.page && typeof at.page.workspaceId === "string"
-      ? at.page.workspaceId
-      : undefined);
-  if (at.carry.target && !document) return context;
+    carry.work ||
+    ("workspaceId" in page && typeof page.workspaceId === "string" ? page.workspaceId : undefined);
+  if (carry.target && !document) return context;
   const key = bindWork(
     route,
     document?.address ?? null,

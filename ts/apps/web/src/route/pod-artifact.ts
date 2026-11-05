@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import type { PodRouteDescriptor } from "@pe/agent-contracts";
-import { loadRouteArtifact, type RouteArtifactBytes } from "./route-artifact";
-import { podRoutePath } from "./pod-address";
+import { loadRouteArtifact, type RouteArtifactBytes } from "./route-artifact.ts";
+import { podRoutePath } from "./pod-address.ts";
 
 const octets = z.array(z.number().int().min(0).max(255));
 const envelope = z.object({
@@ -36,6 +36,9 @@ export async function admitPodArtifact(
 ) {
   if (!row.trusted) throw Error("Trust this Pod fingerprint before loading.");
   const wire = envelope.parse(value);
+  const identity = z.object({ key: z.string(), address: z.string() }).parse(wire.artifact.artifact.data);
+  if (identity.key !== row.workRoute || identity.address !== podRoutePath(row.key))
+    throw Error("Pod route identity differs from inventory");
   if (
     wire.fingerprint !== row.fingerprint ||
     `pod-bytes:${wire.artifact.fingerprint}` !== row.fingerprint
@@ -57,12 +60,6 @@ export async function admitPodArtifact(
   // loadRouteArtifact owns createRouteAdmission -> admitUnknown. Never mint a second handle.
   const result = await loadRouteArtifact(input, [...linkedCatalog().entries.values()], evaluate);
   if (!result.ok) throw Error(result.diagnostics.map((d) => `${d.path}: ${d.message}`).join("; "));
-  if (
-    result.route.data.key !== row.workRoute ||
-    decodeURIComponent(result.route.data.address.replace(/^\//, "")) !==
-      decodeURIComponent(podRoutePath(row.key).slice(1))
-  )
-    throw Error("Pod route identity differs from inventory");
   return result.route;
 }
 

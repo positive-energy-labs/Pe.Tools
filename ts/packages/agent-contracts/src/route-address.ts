@@ -434,16 +434,32 @@ export function routeAddress<R extends RouteKey>(route: R): RouteAddress<R> {
 }
 
 /** An admitted Page's owner decodes its values; Places and thread context retain its encoded link. */
-export function canonicalPlace(route: RouteKey, link: string) {
-  if (!admittedBuiltinKeys.includes(route)) return routeAddress(route).tab(link);
+export function canonicalPlace(route: string, link: string, registered?: string) {
+  const builtin = routeOf(route);
+  if (builtin && !admittedBuiltinKeys.includes(builtin)) return routeAddress(builtin).tab(link);
+  // A Pod's path is its live registration's authenticated address; an unknown name has none.
+  const path = builtin ? routeAddress(builtin).path : registered;
+  if (!path) return { ok: false as const, error: `${route} is not a registered route` };
   const url = new URL(link, "http://tab.invalid");
-  const path = routeAddress(route).path;
   if (url.origin !== "http://tab.invalid" || url.hash || url.pathname !== path)
     return { ok: false as const, error: `a ${route} tab links ${path}, not ${link}` };
   if (url.searchParams.has("thread"))
     return { ok: false as const, error: `a ${route} tab link carries no 'thread'` };
   url.searchParams.delete("shell");
   return { ok: true as const, link: `${url.pathname}${url.search}` };
+}
+
+/**
+ * A Place's `?target` and `?work`. A builtin reads them through its address; a registered route's
+ * link is its owner's bytes, so they are read raw and never re-encoded.
+ */
+export function placeCarry(route: string, link: string): Carry {
+  const search = new URL(link, "http://place.invalid").searchParams;
+  const builtin = routeOf(route);
+  if (builtin) return routeAddress(builtin).read(Object.fromEntries(search)).carry;
+  const target = search.get("target") ?? undefined;
+  const work = search.get("work") ?? undefined;
+  return { ...(target ? { target } : {}), ...(work ? { work } : {}) };
 }
 
 /* ── The registry ────────────────────────────────────────────────────────────── */

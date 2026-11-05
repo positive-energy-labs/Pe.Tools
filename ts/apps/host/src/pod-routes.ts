@@ -92,7 +92,8 @@ export function createPodRoutes(
         const bytes = pod.members.find((member) => member.path === route.artifact)!.bytes;
         const value: unknown = JSON.parse(Buffer.from(bytes).toString("utf8"));
         const admitted = await admitPodArtifact(value, route.fingerprint);
-        if (admitted.data.key !== route.workRoute || admitted.data.work?.route !== route.workRoute)
+        if (admitted.data.key !== route.workRoute || admitted.data.work?.route !== route.workRoute ||
+          admitted.data.address !== `/tool/${encodeURIComponent(route.key)}`)
           throw Error("Admitted route identity differs from its package declaration");
         if (closed) return [];
         if (!current(route.key, route.fingerprint)) continue;

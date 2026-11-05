@@ -197,6 +197,7 @@ type Append = HarnessEvent extends infer E
   : never;
 
 export type HarnessThreadsOptions = {
+  admittedRoutes?: () => readonly { key: string; address: string }[];
   /** Current exact observations enrich remembered names; they never rebind a target. */
   observeDocument?: ObserveDocument;
   /** State directory holding one directory per thread. */
@@ -2025,7 +2026,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         if (caller.kind === "pea" && caller.thread !== t.meta.id)
           return json({ error: "A Pea context may only link Work to its own conversation" }, 403);
         const change = await input(threadPlaceRequestSchema);
-        const canonical = canonicalPlace(change.route, change.link);
+        const canonical = canonicalPlace(change.route, change.link, options.admittedRoutes?.().find((route) => route.key === change.route)?.address);
         if (!canonical.ok) return json({ error: canonical.error }, 400);
         const context = readWorkContext(t.meta.workContext);
         if (!context)

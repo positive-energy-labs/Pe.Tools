@@ -64,7 +64,7 @@ export const data = {
   version: 1,
   capabilities: ["work"],
   key: "pod.snowdon-circuits.voltage-drop",
-  address: "/tool/route:@snowdon-circuits/routes/voltage-drop/route.artifact",
+  address: `/tool/${encodeURIComponent("route:@snowdon-circuits/routes/voltage-drop/route.artifact")}`,
   name: "Circuit voltage drop",
   directory: {
     group: "Calculate loads & airflow",

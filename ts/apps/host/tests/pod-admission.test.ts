@@ -16,11 +16,11 @@ import { linkedCatalog, peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { admitPodArtifact } from "../src/pod-artifact.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 
-async function fixture(root: string, fail = false, salt = "first", native?: { key: string; cost: "Cheap" | "Bounded" }) {
+async function fixture(root: string, fail = false, salt = "first", native?: { key: string; cost: "Cheap" | "Bounded" }, address = `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}`) {
   const data = {
     ...builtinData,
     key: "pod.fixture.tool",
-    address: "/pod/fixture/tool",
+    address,
     work: { schema: "work", route: "pod.fixture.tool", version: 2, migrations: { "1": "upgrade" } },
   };
   const entry = join(root, "entry.ts");
@@ -65,6 +65,30 @@ upgrade: {kind:'migration', slot:'work.migrations.1', source:{module:'route.js',
   );
   return { wire, fingerprint: workFingerprintSchema.parse(fingerprint) };
 }
+
+test("host and browser refuse a fingerprinted raw-slash Pod address alias", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-pod-address-"));
+  try {
+    const artifact = await fixture(root, false, "address", undefined, "/tool/route:@fixture/routes/tool/route.artifact");
+    const lifecycle = createPackageLifecycle({ packages: () => listPackages(join(root, "Pods")), decisionsPath: join(root, "enabled.json") });
+    const workspace = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(join(root, "Work")) });
+    const routes = createPodRoutes(lifecycle, { workspace, trustPath: join(root, "trust.json") });
+    try {
+      const [row] = await routes.list();
+      await expect(routes.trust(row!.key, artifact.fingerprint, true)).rejects.toThrow("identity");
+      expect(workspace.admittedRoutes()).toEqual([]);
+      const { admitPodArtifact: browserAdmit } = await import("../../web/src/route/pod-artifact.ts");
+      await expect(browserAdmit({ ...row!, trusted: true }, { fingerprint: artifact.fingerprint, artifact: artifact.wire },
+        (bytes) => import(`data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`),
+      )).rejects.toThrow("identity");
+    } finally {
+      routes.close();
+      await lifecycle.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 30_000);
 
 test("Pod loader preserves native dependency cost through the linked catalog", async () => {
   const leaf = [...linkedCatalog().entries.values()].find(
@@ -411,7 +435,7 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
     const opening = pe(`route:${route}.set-view`, { system: "owner-text" });
     await vi.waitFor(() => expect(intents.some((each) => each.type === "route-view-open")).toBe(true));
     const open = intents.find((each) => each.type === "route-view-open")!;
-    expect(open).toMatchObject({ route, thread, link: "/pod/fixture/tool" });
+    expect(open).toMatchObject({ route, thread, link: `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}` });
     const page = { system: "", viewport: "" };
     expect((await mounted(page, open.commandId as string)).status).toBe(200);
     await vi.waitFor(() => expect(intents.some((each) => each.type === "route-view-intent")).toBe(true));

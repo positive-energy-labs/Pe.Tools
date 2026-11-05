@@ -189,6 +189,18 @@ function FansProbe() {
   );
   return <AdmittedPane route={route} shell={shell} address={address} />;
 }
+let podRoute: AdmittedRoute | null = null;
+/** The normal `/tool/<key>` mount: the registered Pod's own owner and codecs, as `tool.$key` mounts it. */
+function PodProbe() {
+  const router = useRouter();
+  const route = podRoute!;
+  const address = useMemo(() => admittedRouterAddress(router.history), [router]);
+  const shell = useMemo(
+    () => createRouteShell(sourceRouteServices(admittedSources(route))),
+    [route],
+  );
+  return <AdmittedPane route={route} shell={shell} address={address} />;
+}
 function Restore() {
   useRestoreTabPage();
   return null;
@@ -211,6 +223,7 @@ async function mount(entry = "/pea?thread=T", strict = false, restore = false) {
     createRoute({ getParentRoute: () => root, path: "/ducts", component: DuctsProbe }),
     createRoute({ getParentRoute: () => root, path: "/families", component: FamiliesProbe }),
     createRoute({ getParentRoute: () => root, path: "/fans", component: FansProbe }),
+    createRoute({ getParentRoute: () => root, path: "/tool/$key", component: PodProbe }),
   ];
   const router = createRouter({
     routeTree: root.addChildren(routes),
@@ -878,3 +891,136 @@ test("an explicit picture link opens tools ahead of remembered conversation layo
   expect(screen.getByRole("button", { name: "Expand pea" })).toBeTruthy();
   expect(bodyCurrent?.()).toBe(true);
 });
+
+test("a delivered route-view-open for a trusted Pod creates its Place at the registered /tool address", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { resolve } = await import("node:path");
+  const { podRouteDescriptorSchema } = await import("@pe/agent-contracts");
+  const { admitPodArtifact } = await import("#/route/pod-artifact");
+  const { registerRoute } = await import("#/route/builtin-routes");
+  const pods = resolve(process.cwd(), "../../../examples/pods/snowdon-circuits");
+  const member = JSON.parse(await readFile(resolve(pods, "pod.json"), "utf8")).routes[0];
+  const row = podRouteDescriptorSchema.parse({
+    ...member,
+    key: `route:@snowdon-circuits/${member.artifact}`,
+    packageId: "snowdon-circuits",
+    workRoute: "pod.snowdon-circuits.voltage-drop",
+    trusted: true,
+  });
+  const artifact = JSON.parse(await readFile(resolve(pods, row.artifact), "utf8"));
+  podRoute = await admitPodArtifact(
+    row,
+    { fingerprint: row.fingerprint, artifact },
+    (bytes) =>
+      import(
+        /* @vite-ignore */ `data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`
+      ),
+  );
+  const withdraw = registerRoute(podRoute);
+  try {
+    expect(podRoute.data.address.startsWith("/tool/")).toBe(true);
+    const router = await mount("/fans?thread=T&fixture=layout");
+    await settle();
+    const commandId = "22222222-2222-4222-8222-222222222222";
+    const worksheet = JSON.stringify(["snowdon-circuits", "voltage-drop"]);
+    const query = new URLSearchParams({
+      worksheet,
+      selected: "[]",
+      target: 'C:/Jobs/100%25 "glass".rvt',
+      work: "worksheet%25",
+    });
+    const link = `${podRoute.data.address}?${query}`;
+    const deliver = (route = podRoute!.data.key, url = link) =>
+      act(() =>
+        hostEvents.emit({
+          type: "route-view-open",
+          route,
+          thread: "T",
+          link: url,
+          commandId,
+        }),
+      );
+    deliver("unknown.pod", "/tool/unknown");
+    expect(router.state.location.pathname).toBe("/fans");
+    deliver();
+    await waitFor(() => expect(router.state.location.pathname).toBe(podRoute!.data.address));
+    expect(
+      (router.state.location.state as { __peViewOpenCommandId?: string }).__peViewOpenCommandId,
+    ).toBe(commandId);
+    expect(hostCalls("thread.place")).toHaveLength(1);
+    expect(hostCalls("thread.place")[0]![1]).toMatchObject({ body: { route: podRoute.data.key } });
+    await waitFor(() =>
+      expect(hostCalls("view.publish")).toContainEqual([
+        "view.publish",
+        expect.objectContaining({
+          body: expect.objectContaining({ openCommandId: commandId, page: { worksheet } }),
+        }),
+      ]),
+    );
+    const saved = places().find((tab) => tab.route === podRoute!.data.key)!;
+    expect(saved.link).toBe(link);
+    expect(screen.getByRole("button", { name: /^Circuit voltage drop/ })).toBeTruthy();
+    expect(
+      new URL(router.history.location.href, "http://place.invalid").searchParams.get("target"),
+    ).toBe(query.get("target"));
+    const priorHref = router.history.location.href;
+    const published = hostCalls("view.publish").filter(([, input]) =>
+      (input as { body: { route: string } }).body.route === podRoute!.data.key,
+    ).at(-1)![1] as { body: { instance: string } };
+    act(() =>
+      hostEvents.emit({
+        type: "route-view-intent",
+        route: podRoute!.data.key,
+        thread: "T",
+        instance: published.body.instance,
+        revision: 1,
+        commandId: "33333333-3333-4333-8333-333333333333",
+        patch: { worksheet: "" },
+      }),
+    );
+    await waitFor(() =>
+      expect(hostCalls("view.ack")).toContainEqual([
+        "view.ack",
+        expect.objectContaining({
+          body: expect.objectContaining({ outcome: "rendered", page: { worksheet: "" } }),
+        }),
+      ]),
+    );
+    await act(() => router.history.back());
+    await waitFor(() =>
+      expect(
+        new URL(router.history.location.href, "http://place.invalid").searchParams.get("worksheet"),
+      ).toBe(worksheet),
+    );
+    expect(router.history.location.href).toBe(priorHref);
+    await act(() => router.navigate({ to: "/fans", search: { thread: "T", fixture: "layout" } } as never));
+    const priorFans = router.history.location.href;
+    deliver();
+    await settle();
+    expect(
+      places()
+        .filter((tab) => tab.route === podRoute!.data.key)
+        .map((tab) => tab.id),
+    ).toEqual([saved.id]);
+    await act(() => router.history.back());
+    await waitFor(() => expect(router.history.location.href).toBe(priorFans));
+    await settle();
+    deliver();
+    await waitFor(() => expect(router.state.location.pathname).toBe(podRoute!.data.address));
+    fireEvent.click(await screen.findByRole("button", { name: "Open another Place on this route" }));
+    await waitFor(() => expect(places().filter((tab) => tab.route === podRoute!.data.key)).toHaveLength(2));
+    expect(places().filter((tab) => tab.route === podRoute!.data.key).map((tab) => tab.link)).toEqual([link, link]);
+    await act(() => router.history.back());
+    await settle();
+    const before = places();
+    await act(async () => withdraw());
+    const calls = call.mock.calls.length;
+    deliver();
+    await settle();
+    expect(call.mock.calls).toHaveLength(calls);
+    expect(places()).toEqual(before);
+  } finally {
+    withdraw();
+    podRoute = null;
+  }
+}, 30_000);

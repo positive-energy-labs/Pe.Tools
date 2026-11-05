@@ -1,17 +1,18 @@
 import { subjectState, useSubjects } from "../shell/subject";
+import { useSyncExternalStore } from "react";
 import { Plus, X } from "lucide-react";
-import { appRouteByKey, routeAddress, type ThreadTab } from "@pe/agent-contracts";
+import { appRouteByKey, type ThreadTab } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import "./route-tabs.css";
+import { publicRoutes } from "#/route/route-discovery";
 
 export function tabTitle(tab: ThreadTab) {
-  const at = routeAddress(tab.route);
   const subject = subjectState(
     tab.route,
     Object.fromEntries(new URL(tab.link, "http://tab.invalid").searchParams),
   ).label;
-  return `${appRouteByKey(tab.route)?.title ?? at.title}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
+  return `${publicRoutes.admitted(tab.route)?.data.name ?? appRouteByKey(tab.route)?.title ?? tab.route}${typeof subject === "string" && subject ? ` · ${subject}` : ""}`;
 }
 
 const TAB_CH = 24;
@@ -31,6 +32,7 @@ export function RouteTabs({
   onClose: (tab: ThreadTab) => void;
 }) {
   useSubjects();
+  useSyncExternalStore(publicRoutes.subscribe, publicRoutes.revision, publicRoutes.revision);
   return (
     <span
       role="group"
