@@ -176,15 +176,22 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
           return { kind: "refused", reason: "describe-threw" } as const;
         }
       }
+      const target = declaration.target;
+      const reading = target === undefined ? undefined : route.data.readings[target];
+      const handle = target === undefined ? undefined : Object.values(workHandles([target]))[0];
+      if (target !== undefined && (reading?.kind !== "work" || !handle))
+        throw Error("Owner Work unavailable");
       const patches = admittedWorkPatches(
         route.data,
         bindings.schemas,
         bindings.bodies[declaration.patches]!.run(context(), parsed),
-        route.resolvedWork!.schema,
+        reading?.kind === "work" ? bindings.schemas[reading.output] : route.resolvedWork!.schema,
       );
       preview = patches;
       send = () => {
-        const observation = work.write(() => patches, invocation, invocation.id, detail, basis);
+        const observation = handle
+          ? work.writeTo(handle, target!, patches, invocation, detail)
+          : work.write(() => patches, invocation, invocation.id, detail, basis);
         observation.subscribe(
           () => {
             if (owner.read()?.scope === invocation.token.scope) notify();

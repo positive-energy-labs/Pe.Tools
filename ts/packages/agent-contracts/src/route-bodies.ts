@@ -499,7 +499,19 @@ export function linkRouteBodies(
     }
     switch (verb.kind) {
       case "work":
-        if (!data.work) fail(path, key, "Work", "Work verb requires Work");
+        // ADR 0030 rule 9: a targeted verb edits the named reading's owner Work, not its own.
+        if (verb.target === undefined && !data.work)
+          fail(path, key, "Work", "Work verb requires Work");
+        if (
+          verb.target !== undefined &&
+          (data.readings[verb.target]?.kind !== "work" || !verb.deps.readings.includes(verb.target))
+        )
+          fail(
+            `${path}.target`,
+            verb.target,
+            "declared work reading",
+            "Target must be a work dependency",
+          );
         body(verb.patches, `${path}.patches`, "work");
         body(verb.describe, `${path}.describe`, "describe");
         break;

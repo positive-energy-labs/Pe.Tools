@@ -65,10 +65,18 @@ function useSheetData(
     edits: DuctsSheetEdits,
     history: EditMeta = { label: editLabel(edits, nameOf) },
   ) => {
+    // Join rulings are /ducts cells: they land in ducts Work through its owner handle (ADR 0030 rule 9).
+    const { joins, ...own } = edits;
+    const basis = sheet?.overview.basis ?? null;
+    if (joins?.length) {
+      const result = await settleWork(ctx.verbs.ductsEdit({ edits: { joins }, history, basis }));
+      if (result.kind === "refused") return { code: "refused", message: result.refusal.error };
+    }
+    if (!Object.keys(own).length) return undefined;
     if (!ctx.workBasis)
       return { code: "unavailable", message: "Read this document's Work before editing" };
     const result = await settleWork(
-      ctx.verbs.sheetEdit({ edits, history, basis: sheet?.overview.basis ?? null }, ctx.workBasis),
+      ctx.verbs.sheetEdit({ edits: own, history, basis }, ctx.workBasis),
     );
     return result.kind === "refused"
       ? { code: "refused", message: result.refusal.error }
@@ -373,11 +381,17 @@ function LedgerContent({ ctx, snapshot }: {
       fittingOf: (key) => sheet?.inputs?.fittings.find((f) => f.key === key) ?? null,
       tableTitles: sheet?.inputs?.tableTitles ?? {},
     });
-    const owned = (action: Closer["action"]) => action?.kind === "drop" || action?.kind === "cfm" || action?.kind === "unitCfm";
+    // ponytail: joins are the one /ducts cell staged from here; ends, rules and tables still route to /ducts.
+    const staged = (action: Closer["action"]) =>
+      action?.kind === "drop" ||
+      action?.kind === "cfm" ||
+      action?.kind === "unitCfm" ||
+      action?.kind === "rule";
     return {
       ...closer,
-      action: owned(closer.action) ? closer.action : null,
-      refusal: owned(closer.action) ? closer.refusal : "Edit duct rules on /ducts",
+      verb: closer.action?.kind === "rule" ? `${closer.verb} · from /ducts` : closer.verb,
+      action: staged(closer.action) ? closer.action : null,
+      refusal: staged(closer.action) ? closer.refusal : "Edit duct rules on /ducts",
       secondary: null,
       crossing: null,
       choices: null,
@@ -411,7 +425,12 @@ function LedgerContent({ ctx, snapshot }: {
             ...edits,
             equipmentFlows: { ...edits.equipmentFlows, [action.unitId]: { cfm: action.value } },
           };
-        case "rule": case "cap": case "price": case "table": case "pathDrop":
+        case "rule":
+          return {
+            ...edits,
+            joins: [...(edits.joins ?? []), { pair: [...action.pair], verdict: "accept" }],
+          };
+        case "cap": case "price": case "table": case "pathDrop":
           return edits;
       }
     }, {});
