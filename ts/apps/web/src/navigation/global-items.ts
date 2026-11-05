@@ -1,6 +1,6 @@
 import { ROUTE_DIRECTORY } from "@pe/agent-contracts";
 import type { NavigationSnapshot } from "./navigation-client";
-import { podRoutePath } from "#/route/pod-address";
+import { podPath } from "./model";
 import type { PodRouteDescriptor } from "@pe/agent-contracts";
 
 export type ResultKind = "All" | "Tools" | "Works" | "Pea threads";
@@ -28,7 +28,7 @@ export function globalItems(
           context: route.packageId,
           aliases: `${route.description} ${route.artifact}`,
           state: route.trusted ? "Trusted Pod route" : "Trust required",
-          url: podRoutePath(route.key),
+          url: podPath(route),
           reason: null,
         }))
       : []),

@@ -4,7 +4,6 @@ import { createAdmittedPlace, type AdmittedPlace, type PlaceInput } from "./admi
 import { AdmittedChrome } from "./admitted-chrome";
 import { useRouteViewBridge } from "../route/view-bridge";
 import { refuse } from "../route/refusal";
-import type { RouteViewRoute } from "@pe/agent-contracts";
 import { useRouter } from "@tanstack/react-router";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
@@ -60,7 +59,7 @@ function AdmittedAttention({
 }) {
   useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
   useRouteViewBridge({
-    route: route.data.key as RouteViewRoute,
+    route: route.data.key,
     page: mount.page.read() as object,
     surface: "route",
     codec,

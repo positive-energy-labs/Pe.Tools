@@ -7,7 +7,7 @@ import { Scroll } from "@pe/kit/lang/scroll";
 import { TOOLS } from "./catalogue";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import type { PodRouteDescriptor } from "@pe/agent-contracts";
-import { TASKS, routeKey, friendlyObservation, resumeRefusal } from "./model";
+import { TASKS, routeKey, friendlyObservation, podPath, resumeRefusal } from "./model";
 import { useDestination, useNavigation } from "./state";
 import { Information } from "./popover";
 import type { NavigationWork } from "./navigation-client";
@@ -18,7 +18,6 @@ import { usePublishRouteOptions } from "#/settings/options";
 import type { PageOption } from "#/settings/option-state";
 import type { DirectorySearch } from "./directory-search";
 import { usePodRoutes } from "#/route/pod-routes";
-import { podRoutePath } from "#/route/pod-address";
 
 type DirectoryPage = DirectorySearch;
 const directoryOptions: readonly PageOption<DirectoryPage>[] = [
@@ -183,7 +182,7 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
         item.kind === "tool"
           ? item.tool.to
           : item.kind === "pod"
-            ? podRoutePath(item.pod.key)
+            ? podPath(item.pod)
             : item.work.url;
       if (url) go(url);
     },
