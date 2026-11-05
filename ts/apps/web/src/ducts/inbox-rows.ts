@@ -70,9 +70,7 @@ export type RowVerb =
   | { kind: "role"; id: number; role: "fan" | "passive"; label: string; says: string }
   | {
       kind: "command";
-      on:
-        | { verb: "heal"; group: string }
-        | { verb: "fan"; unitId: number; systemId: number };
+      on: { verb: "heal"; group: string } | { verb: "fan"; unitId: number; systemId: number };
       label: string;
       says: string;
     }
@@ -83,7 +81,7 @@ export type RowVerb =
       kind: "stage";
       segment: string;
       key: string;
-      move: "take" | "unsuggest";
+      move: "clear";
       label: string;
       says: string;
     }
@@ -741,11 +739,11 @@ function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] 
       verbs: [{ kind: "claim", claim }, select(claim.at)],
     }));
   const awaiting = (
-    cells: Record<string, { suggestion?: { value?: unknown }; edit?: unknown }> | undefined,
-  ) => Object.entries(cells ?? {}).filter(([, cell]) => cell.suggestion && !cell.edit);
+    cells: Record<string, { edit?: { value?: unknown; by?: string } | null }> | undefined,
+  ) => Object.entries(cells ?? {}).filter(([, cell]) => cell.edit?.by === "pea");
   const segments = doc as unknown as Record<
     string,
-    Record<string, { suggestion?: { value?: unknown }; edit?: unknown }> | undefined
+    Record<string, { edit?: { value?: unknown; by?: string } | null }> | undefined
   > | null;
   const suggestion = (segment: string, key: string, title: string, value: unknown, ids: number[]) =>
     items.push({
@@ -753,7 +751,7 @@ function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] 
       group: "check",
       kind: "suggestion",
       title,
-      status: `Pea proposes ${valueWord(segment, value)}`,
+      status: `Pea staged ${valueWord(segment, value)}`,
       tone: "pea",
       ids,
       note: null,
@@ -762,17 +760,9 @@ function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] 
           kind: "stage",
           segment,
           key,
-          move: "take",
-          label: "accept",
-          says: "Stage Pea's suggestion",
-        },
-        {
-          kind: "stage",
-          segment,
-          key,
-          move: "unsuggest",
-          label: "reject",
-          says: "Clear Pea's suggestion",
+          move: "clear",
+          label: "clear",
+          says: "Clear the staged value",
         },
         ...(FOCUSABLE.has(segment) && ids[0] != null
           ? [
@@ -791,9 +781,7 @@ function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] 
     for (const [key, cell] of awaiting(segments?.[segment])) {
       const id = Number(key);
       if (scope && !scope.members.has(id)) continue;
-      suggestion(segment, key, `${ELEMENT_WORD[segment]} · ${name(id)}`, cell.suggestion!.value, [
-        id,
-      ]);
+      suggestion(segment, key, `${ELEMENT_WORD[segment]} · ${name(id)}`, cell.edit!.value, [id]);
     }
   for (const [key, cell] of awaiting(segments?.rules)) {
     const rule = ruleByKey(key);
@@ -801,17 +789,17 @@ function checks(input: TriageInput & { claims: readonly Claim[] }): InboxItem[] 
       "rules",
       key,
       rule ? `Rule · ${rule.family} : ${rule.type}` : `Rule · ${key}`,
-      cell.suggestion!.value,
+      cell.edit!.value,
       [],
     );
   }
   for (const [key, cell] of awaiting(segments?.catalogs))
-    suggestion("catalogs", key, `Catalog link · ${key}`, cell.suggestion!.value, []);
+    suggestion("catalogs", key, `Catalog link · ${key}`, cell.edit!.value, []);
   const shown = new Set(findings.map((f) => f.id));
   for (const [key, cell] of awaiting(segments?.assumptions)) {
     if (!shown.has(key)) continue;
     const f = findings.find((x) => x.id === key)!;
-    suggestion("assumptions", key, `Ruling · ${f.note.slice(0, 60)}`, cell.suggestion!.value, [
+    suggestion("assumptions", key, `Ruling · ${f.note.slice(0, 60)}`, cell.edit!.value, [
       ...f.elementIds,
     ]);
   }

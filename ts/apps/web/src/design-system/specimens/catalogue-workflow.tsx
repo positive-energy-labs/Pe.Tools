@@ -48,7 +48,7 @@ export function CatalogueWorkflow() {
             }
           >
             <div className="flex flex-col gap-2 px-3 py-3">
-              <StateCell value="2 hr" stage="proposed" note="matches the UL listing" />
+              <StateCell value="2 hr" stage="edit" author="pea" note="matches the UL listing" />
               <StateCell value="36 in" stage="edit" author="human" />
             </div>
           </ArtifactFrame>

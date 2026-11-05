@@ -2,7 +2,7 @@ import { roomSelection } from "./selection";
 import { useContext, useMemo } from "react";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 import {
-  transitionPatches,
+  cellPatches,
   type Mark,
   type RoomsNote,
   type RoomsRouteDocument,
@@ -172,7 +172,7 @@ function PlanBody({
     };
     const id = `m${crypto.randomUUID()}`;
     const refusal = await wire.write(
-      transitionPatches(["marks"], id, {}, { kind: "set", rung: { value: mark } }),
+      cellPatches(["marks"], id, {}, { kind: "set", rung: { value: mark } }),
     );
     if (!refusal) setPinned(id);
     return refusal?.message ?? null;

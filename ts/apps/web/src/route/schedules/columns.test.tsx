@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import {
-  availableTransitions,
   scheduleGridSnapshotSchema,
-  transitionPatches,
+  cellPatches,
   type RouteStatePatch,
   type ScheduleGridDocument,
 } from "@pe/agent-contracts";
@@ -215,8 +214,8 @@ const snapshot = scheduleGridSnapshotSchema.parse({
   ],
 });
 const cells: ScheduleGridDocument["cells"] = {
-  "1::1": { suggestion: { value: "180 VA" } },
-  "1::2": { suggestion: { value: "190 VA" } },
+  "1::1": { edit: { value: "180 VA" } },
+  "1::2": { edit: { value: "190 VA" } },
 };
 
 test("a grid cell draws the contract's transitions and accept writes at the rendered revision", async () => {
@@ -250,21 +249,13 @@ test("a grid cell draws the contract's transitions and accept writes at the rend
       .map((button) => button.getAttribute("aria-label"));
 
   // Stage is typing: the cell's input, not a button.
-  expect(verbs(cellAt("180 VA"))).toEqual(
-    availableTransitions(cells["1::1"]!, { lock: null }).filter(
-      (k) => k !== "set" && k !== "suggest",
-    ),
-  );
+  expect(verbs(cellAt("180 VA"))).toEqual(["clear"]);
   expect(cellAt("180 VA").querySelector("input")).not.toBeNull();
-  // Pinned: a lock leaves only deny, which clears a stray suggestion.
-  expect(verbs(cellAt("190 VA"))).toEqual(["unsuggest"]);
-
+  expect(within(cellAt("190 VA")).queryByRole("button", { name: "clear" })).toBeNull();
   await act(async () =>
-    fireEvent.click(within(cellAt("180 VA")).getByRole("button", { name: "take" })),
+    fireEvent.click(within(cellAt("180 VA")).getByRole("button", { name: "clear" })),
   );
-  expect(calls).toEqual([
-    [transitionPatches(["cells"], "1::1", cells["1::1"]!, { kind: "take" }), 7],
-  ]);
+  expect(calls).toEqual([[cellPatches(["cells"], "1::1", cells["1::1"]!, { kind: "clear" }), 7]]);
   calls.length = 0;
   const editor = cellAt("180 VA").querySelector("input")!;
   editor.focus();

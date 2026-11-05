@@ -1,4 +1,4 @@
-import { transitionPatches, type CellLike } from "@pe/agent-contracts";
+import { cellPatches, type CellLike } from "@pe/agent-contracts";
 import { z } from "zod";
 import { bare } from "../../../../packages/agent-contracts/src/route-field.ts";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
@@ -116,10 +116,10 @@ export function createAdmittedCells(
       return bodies[cell.focus]!.run(parsed);
     },
     transition(
-      kind: "take" | "unsuggest" | "clear",
+      kind: "clear",
       id: string,
       key: unknown,
-      context: unknown,
+      _context: unknown,
       work: Readonly<Record<string, unknown>>,
     ) {
       const parsed = keyFor(id, key),
@@ -128,7 +128,7 @@ export function createAdmittedCells(
       const value =
         (segment as Readonly<Record<string, CellLike>> | undefined)?.[String(parsed)] ?? {};
       const transition = () => {
-        const patches = transitionPatches(
+        const patches = cellPatches(
           cell.segment === null ? [] : [cell.segment],
           String(parsed),
           value,
@@ -147,8 +147,7 @@ export function createAdmittedCells(
             ]
           : patches;
       };
-      const patches =
-        kind === "take" && cell.take ? bodies[cell.take]!.run(context, parsed) : transition();
+      const patches = transition();
       return admittedWorkPatches(data, schemas, patches, ownerSchema);
     },
   };
@@ -162,7 +161,7 @@ export function createAdmittedCellActions<W extends Record<string, unknown>>(
   const work = context.work(),
     snapshots = context.readings().snapshots;
 
-  const transitionCell = (kind: "take" | "unsuggest" | "clear", id: string, key: unknown) => {
+  const transitionCell = (kind: "clear", id: string, key: unknown) => {
     action();
     resolve();
     const declaration = route.data.cells[id];
@@ -189,14 +188,12 @@ export function createAdmittedCellActions<W extends Record<string, unknown>>(
       issued.value,
       issued.value.id,
       {
-        label: `${kind === "take" ? "Take" : kind === "unsuggest" ? "Unsuggest" : "Clear"} ${id}`,
+        label: `Clear ${id}`,
       },
     );
   };
   return {
     public: {
-      takeCell: (id: string, key: unknown) => transitionCell("take", id, key),
-      unsuggestCell: (id: string, key: unknown) => transitionCell("unsuggest", id, key),
       clearCell: (id: string, key: unknown) => transitionCell("clear", id, key),
       focusCell(id: string, key: unknown) {
         action();

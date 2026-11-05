@@ -42,7 +42,7 @@ const HOW = {
 
 /** A cell the native patch writes: drawn in place, read-only; accept and deny sit on the patch's review row. */
 function ProjectedCell({ cell, current }: { cell: OverlayCell; current: string }) {
-  const shown = (cell.edit ?? cell.suggestion)!;
+  const shown = cell.edit!;
   const rung = cell.edit ? "edit" : "proposed";
   return (
     <StateCell

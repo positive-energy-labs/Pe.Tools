@@ -978,9 +978,15 @@ test("mount native review submits accepted Work through the command door", async
     work: { revision: 0 },
   });
   mount.confirm("native");
-  expect(mount.timeline()).toEqual(expect.arrayContaining([
-    expect.objectContaining({ kind: "invocation", verb: "native", outcome: expect.objectContaining({ state: "running" }) }),
-  ]));
+  expect(mount.timeline()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        kind: "invocation",
+        verb: "native",
+        outcome: expect.objectContaining({ state: "running" }),
+      }),
+    ]),
+  );
   expect(submit).toHaveBeenCalledWith(
     expect.objectContaining({ key: "native.write", input: { amount: 6 } }),
   );
@@ -1085,7 +1091,13 @@ import { workHandleSchema, writePreviewSchema, type WorkHandle } from "@pe/agent
 const sealedPreview = (handle: WorkHandle) => ({
   previewOnly: true,
   derivedRequest: { amount: 7 },
-  seal: { requestHash: "sealed", work: { handle }, documentMark: { session: "", openId: "", observedSince: null, changedAt: null }, incarnation: {}, dependencies: "deps" },
+  seal: {
+    requestHash: "sealed",
+    work: { handle },
+    documentMark: { session: "", openId: "", observedSince: null, changedAt: null },
+    incarnation: {},
+    dependencies: "deps",
+  },
   takenAt: "2026-11-03T00:00:00Z",
   response: { changes: [{ kind: "Parameter", key: "amount", before: 6, after: 7 }] },
 });
@@ -2178,11 +2190,11 @@ test("cell displays, focus, take and salvage use real shared Page/Work owners", 
   expect(mount.cells().amount).toEqual([
     { key: "amount", group: ["amount"], labels: ["AMOUNT"], text: "6" },
   ]);
-  expect(() => mount.takeCell("amount", "amount")).toThrow("Reading unavailable");
+  expect(() => mount.clearCell("amount", "amount")).toThrow("Reading unavailable");
   expect(mount.focusCell("amount", "amount").kind).toBe("accepted");
   expect(mount.page.read().query).toBe("amount");
   t.frames.at(-1)!(ready("notes"));
-  await settle(mount.takeCell("amount", "amount"));
+  await settle(mount.clearCell("amount", "amount"));
   expect(mount.work()?.value).toEqual({ amount: 7 });
   expect(mount.cells().amount![0]!.text).toBe("7");
   const saved = vi
@@ -3103,11 +3115,11 @@ test("resource release never withdraws the Place's write authority", async () =>
   );
 });
 
-test.each(["take", "unsuggest", "clear"] as const)(
+test.each(["clear"] as const)(
   "cell %s captures its channel and label and refuses stale readings or lost custody",
   async (kind) => {
     const t = transports();
-    const initial = { amount: { edit: { value: 3 }, suggestion: { value: 7 } } };
+    const initial = { amount: { edit: { value: 3, by: "pea" } } };
     const store = createFixtureWorkDoor(
       {
         route: "note",
@@ -3142,16 +3154,11 @@ test.each(["take", "unsuggest", "clear"] as const)(
     expect(submit).not.toHaveBeenCalled();
     custody = "current";
     expect((await settle(run())).kind).toBe("accepted");
-    const label = `${kind === "take" ? "Take" : kind === "unsuggest" ? "Unsuggest" : "Clear"} amount`;
+    const label = "Clear amount";
     expect(submit.mock.calls[0]?.[1]).toMatchObject({ label });
     expect(submit.mock.calls[0]?.[2]).toMatchObject({ token: { channel: `cell-${kind}:amount` } });
     expect(mount.work()?.value).toEqual({
-      amount:
-        kind === "take"
-          ? { edit: { value: 7, by: "human", base: 0, at: expect.any(String) }, suggestion: null }
-          : kind === "unsuggest"
-            ? { edit: { value: 3 }, suggestion: null }
-            : { edit: null, suggestion: { value: 7 } },
+      amount: { edit: null },
     });
   },
 );

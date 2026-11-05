@@ -13,11 +13,11 @@ import { reviewTransitions, UnstageAll } from "./band";
 afterEach(cleanup);
 
 test.each(["edits", null])(
-  "composer revert deletes keys under %s and preserves proposals",
+  "batch clear under %s clears either author and preserves locks",
   async (segment) => {
     const cells: Record<string, CellLike> = {
-      edit: { edit: { value: 1 } },
-      contested: { edit: { value: 2 }, suggestion: { value: 3 } },
+      edit: { edit: { value: 1, by: "pea" } },
+      contested: { edit: { value: 2 } },
       locked: { edit: { value: 4 } },
     };
     const cellMap = z.record(z.string(), draftCellSchema(z.number()));
@@ -60,21 +60,25 @@ test.each(["edits", null])(
     await waitFor(() => expect(done).toHaveBeenCalledOnce());
     expect(write).toHaveBeenCalledWith(
       [
-        { path: [...(segment === null ? [] : [segment]), "edit"] },
-        { path: [...(segment === null ? [] : [segment]), "contested", "edit"] },
+        { path: [...(segment === null ? [] : [segment]), "edit", "edit"], value: null },
+        { path: [...(segment === null ? [] : [segment]), "contested", "edit"], value: null },
       ],
       8,
     );
-    const remaining = { contested: { suggestion: { value: 3 } }, locked: { edit: { value: 4 } } };
+    const remaining = {
+      edit: { edit: null },
+      contested: { edit: null },
+      locked: { edit: { value: 4 } },
+    };
     expect(envelope.doc).toEqual(segment === null ? remaining : { [segment]: remaining });
   },
 );
 
-test("a single-cell clear deletes the cell instead of leaving an edit marker", async () => {
+test("inline clear writes the same staged path as batch clear", async () => {
   const write = vi.fn(async () => null);
   const clear = reviewTransitions({ segment: "cells", revision: 4, write }, "one", {
     edit: { value: 1 },
   }).find((transition) => transition.kind === "clear")!;
   await clear.run();
-  expect(write).toHaveBeenCalledWith([{ path: ["cells", "one"] }], 4);
+  expect(write).toHaveBeenCalledWith([{ path: ["cells", "one", "edit"], value: null }], 4);
 });

@@ -17,7 +17,7 @@ const ORDER_SPECIMENS: readonly StateCellProps[] = [
   { value: "36 in", stage: "edit" },
   { value: "24 in" },
   { value: "1.75 in", agree: "drift", modelValue: "1.375 in" },
-  { value: "2 hr", stage: "proposed" },
+  { value: "2 hr", stage: "edit", author: "pea" },
   { value: "5.5 in", fresh: "stale" },
 ];
 
@@ -37,7 +37,7 @@ export function StructureLaws({ owner }: { owner: (name: string) => string }) {
         <div className="w-full max-w-sm">
           <ArtifactFrame head={<Tag>framed · carries state</Tag>}>
             <div className="px-3 py-3">
-              <StateCell value="2 hr" stage="proposed" />
+              <StateCell value="2 hr" stage="edit" author="pea" />
             </div>
           </ArtifactFrame>
           <div className="pt-2">

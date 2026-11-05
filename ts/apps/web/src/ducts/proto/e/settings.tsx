@@ -5,7 +5,7 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { coloursOf } from "../../colours";
 const LINES = "t-small grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1";
 import type { LossesWork } from "../../work";
-import { transitionPatches } from "@pe/agent-contracts";
+import { cellPatches } from "@pe/agent-contracts";
 const AIR_WORDS: Record<DuctAirType, string> = {
   supply: "Supply air",
   return: "Return air",
@@ -22,7 +22,7 @@ export function SystemColours({ work }: { work: LossesWork }) {
   const change = async (type: DuctAirType, ink: string) => {
     try {
       const result = await work.write(
-        transitionPatches([], "systemColours", cell, {
+        cellPatches([], "systemColours", cell, {
           kind: "set",
           rung: { value: { ...colours, [type]: ink } },
         }),

@@ -236,34 +236,25 @@ export interface FamilyProposal {
   source: ProtoProposal;
 }
 
-/**
- * THE TRICHOTOMY AT ONE COORDINATE (ruled 2026-08-31, suggestion-state demiurge). Pea's still-
- * standing suggestion, and what the draft has edit there — the two rungs, and there are no others.
- *
- * There is no `denied` and no `superseded`: denying CLEARS the suggestion and typing your own value
- * clears it too, and a cleared suggestion is simply absent, so the cell shows the real value again.
- * There is no `accepted` either — accepting stages pea's value, and the reader derives `pea` for
- * the square from `edit.value === suggestion.value`. Every one of those was a fact this page used
- * to remember; all of them are now read off the two rungs.
- */
+/** The existing Work cell projected into the family editor. */
 export function proposalCell(
   proposals: ProtoProposal[],
   stagedValue: string | null,
-): { suggestion: FamilyProposal | null; edit: { value: string } | null } {
-  // A cell may be argued about twice; the FIRST standing suggestion owns the cell's one slot and
-  // the rail says how many there are. Ranking them is a decision nothing on this page can make.
+): { edit: FamilyProposal | { value: string; by: "human" } | null } {
   const first = proposals[0];
   return {
-    suggestion: first
-      ? {
-          value: first.proposed,
-          by: "pea",
-          note: first.note,
-          ...(first.confidence ? { confidence: first.confidence } : {}),
-          source: first,
-        }
-      : null,
-    edit: stagedValue === null ? null : { value: stagedValue },
+    edit:
+      stagedValue !== null
+        ? { value: stagedValue, by: "human" }
+        : first
+          ? {
+              value: first.proposed,
+              by: "pea",
+              note: first.note,
+              ...(first.confidence ? { confidence: first.confidence } : {}),
+              source: first,
+            }
+          : null,
   };
 }
 

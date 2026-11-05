@@ -438,8 +438,8 @@ export function routeSearch(search: Record<string, unknown>): {
   };
 }
 
-/** Staged and proposed cell counts: what a Work revision changed, when the route has cells. */
-type CellTally = { edit: number; proposed: number };
+/** Staged cell counts: what a Work revision changed, when the route has cells. */
+type CellTally = { edit: number; byPea: number };
 
 const cells = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -447,12 +447,8 @@ const cells = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 function workWords(was: CellTally | null, now: CellTally | null, revision: number) {
   if (!was || !now) return `loaded Work r${revision}`;
   const edit = now.edit - was.edit;
-  const proposed = now.proposed - was.proposed;
-  if (edit > 0 && proposed < 0) return `accepted ${cells(edit, "suggestion")}`;
   if (edit > 0) return `edit ${cells(edit, "cell")}`;
   if (edit < 0) return `unstaged ${cells(-edit, "cell")}`;
-  if (proposed > 0) return `Pea proposed ${cells(proposed, "cell")}`;
-  if (proposed < 0) return `cleared ${cells(-proposed, "suggestion")}`;
   return `changed Work r${revision}`;
 }
 
@@ -480,8 +476,7 @@ export function usePageLogNotes(
       )
     : null;
   const edit = cells?.filter((cell) => cell.edit != null).length ?? null;
-  const proposed =
-    cells?.filter((cell) => cell.suggestion != null && cell.edit == null).length ?? null;
+  const byPea = cells?.filter((cell) => cell.edit?.by === "pea").length ?? null;
   const lostKey = lost ? `${lost.ref.session}/${lost.ref.openId}` : null;
   const seen = useRef({
     target,
@@ -491,7 +486,7 @@ export function usePageLogNotes(
     lost: null as string | null,
   });
   useEffect(() => {
-    const tally = edit === null || proposed === null ? null : { edit, proposed };
+    const tally = edit === null || byPea === null ? null : { edit, byPea };
     if (seen.current.target !== target) {
       seen.current.target = target;
       const bound = JSON.parse(target) as { session: string; openId: string } | null;
@@ -517,5 +512,5 @@ export function usePageLogNotes(
         owner.note("work", workWords(seen.current.tally, tally, revision), `r${revision}`);
       seen.current.tally = tally;
     }
-  }, [owner, target, stage, revision, edit, proposed, lostKey, lost]);
+  }, [owner, target, stage, revision, edit, byPea, lostKey, lost]);
 }

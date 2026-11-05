@@ -55,8 +55,8 @@ test("review separates every group level and acts only on the chosen type", asyn
         work({
           route: "Families",
           cells: {
-            small: { suggestion: { value: "small model" } },
-            large: { suggestion: { value: "large model" } },
+            small: { edit: { value: "small model" } },
+            large: { edit: { value: "large model" } },
           },
           groupOf: (key) => [family, key === "small" ? "Small" : "Large"],
           wire: { segment: "edits", revision: 7, write },
@@ -68,15 +68,9 @@ test("review separates every group level and acts only on the chosen type", asyn
   fireEvent.click(screen.getByRole("button", { name: /^review/ }));
   expect(screen.getByText(`${family} · Small`)).toBeTruthy();
   expect(screen.getByText(`${family} · Large`)).toBeTruthy();
-  fireEvent.click(screen.getAllByRole("button", { name: "accept 1" })[0]!);
+  fireEvent.click(screen.getAllByRole("button", { name: "Revert 1 edit" })[0]!);
   await waitFor(() => expect(write).toHaveBeenCalledOnce());
-  expect(write).toHaveBeenCalledWith(
-    [
-      { path: ["edits", "large", "edit"], value: { value: "large model" } },
-      { path: ["edits", "large", "suggestion"], value: null },
-    ],
-    7,
-  );
+  expect(write).toHaveBeenCalledWith([{ path: ["edits", "large", "edit"], value: null }], 7);
   fireEvent.click(screen.getByRole("button", { name: `review ${family} · Small in Families` }));
   expect(open).toHaveBeenCalledWith("small");
 });

@@ -1,10 +1,4 @@
-/**
- * PEA'S TAKEOFF PROPOSALS, in the band grammar (the takeoffs cutover). Every family — room edits,
- * adoption choices, flag verdicts, review flags — is a record of trichotomy cells; a suggestion is
- * drawn through the kit (`ReviewRow` / `StateCell`, verbs from `availableTransitions`), so accept
- * stages it and deny clears it exactly as on every other route. No second grammar.
- */
-import { sameValue, takeoffEditKey, type RoomEditField, type CellLike } from "@pe/agent-contracts";
+import { takeoffEditKey, type RoomEditField, type CellLike } from "@pe/agent-contracts";
 import type { ReactNode } from "react";
 
 import { ReviewRow, reviewTransitions, type CellWire } from "#/components/work/band";
@@ -15,13 +9,7 @@ import type { TakeoffMount } from "./store";
 import type { CellTransition } from "@pe/kit/lang/cell";
 
 const transitions = (owner: TakeoffMount, segment: string | null, key: string): CellTransition[] =>
-  (
-    [
-      ["take", "take"],
-      ["unsuggest", "reject"],
-      ["clear", "reopen"],
-    ] as const
-  ).map(([kind, verb]) => {
+  ([["clear", "clear"]] as const).map(([kind, verb]) => {
     const control = owner.control(`cell:${segment}.${verb}`, { segment, key });
     return {
       kind,
@@ -49,9 +37,7 @@ export const showAdopt = (value: unknown) => {
 export const flagShape = (key: string) => (JSON.parse(key) as [string, string])[1];
 export const flagZone = (key: string) => (JSON.parse(key) as [string, string])[0];
 
-/** A cell Pea is arguing for: a suggestion that is not what is edit. */
-const proposing = (cell: CellLike | undefined) =>
-  cell?.suggestion != null && !sameValue(cell.suggestion, cell.edit);
+const proposing = (cell: CellLike | undefined) => cell?.edit != null;
 
 /** One review row per proposing cell whose key passes `keep`; nothing when none. */
 export function TakeoffProposalRows({
@@ -75,14 +61,10 @@ export function TakeoffProposalRows({
     <div data-slot="takeoff-proposals" className="flex flex-col">
       {rows.map(([key, cell]) =>
         owner ? (
-          <div key={key} role="group" aria-label={`Proposal ${key}`}>
-            <span className="t-small face-mono text-ink-2">pea proposes · {label(key)}</span>
+          <div key={key} role="group" aria-label={`Staged ${key}`}>
+            <span className="t-small face-mono text-ink-2">staged · {label(key)}</span>
             <StateCell
-              {...cellFromDraft(
-                cell,
-                { value: show((cell.edit ?? cell.suggestion)?.value), scale: "row" },
-                show,
-              )}
+              {...cellFromDraft(cell, { value: show(cell.edit?.value), scale: "row" }, show)}
               transitions={transitions(owner, wire.segment, key)}
             />
           </div>
@@ -91,11 +73,9 @@ export function TakeoffProposalRows({
             key={key}
             wire={wire}
             address={key}
-            label={
-              <span className="t-small face-mono text-ink-2">pea proposes · {label(key)}</span>
-            }
+            label={<span className="t-small face-mono text-ink-2">staged · {label(key)}</span>}
             cell={cell}
-            facts={{ value: show((cell.edit ?? cell.suggestion)?.value), scale: "row" }}
+            facts={{ value: show(cell.edit?.value), scale: "row" }}
             show={show}
           />
         ),
@@ -104,10 +84,6 @@ export function TakeoffProposalRows({
   );
 }
 
-/**
- * One room field as a trichotomy cell: the edit world's value, or Pea's proposed value with its
- * fold while only proposed; its verbs are the contract's; typing stages (through `onPatch`).
- */
 export function TakeoffEditCell({
   roomId,
   field,
@@ -131,12 +107,11 @@ export function TakeoffEditCell({
   const move = useCellNavigation();
   const key = takeoffEditKey(roomId, field);
   const show = (raw: unknown) => fmtNum(Number(raw), digits);
-  const shown =
-    cell?.edit == null && cell?.suggestion != null ? Number(cell.suggestion.value) : value;
+  const shown = cell?.edit != null ? Number(cell.edit.value) : value;
   return (
     <StateCell
       {...cellFromDraft(
-        cell ?? { suggestion: null, edit: null },
+        cell ?? { edit: null },
         {
           value: show(shown),
           currentValue: show(value),

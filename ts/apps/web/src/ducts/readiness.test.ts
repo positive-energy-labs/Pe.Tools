@@ -4,7 +4,7 @@ import { expect, it } from "vite-plus/test";
 import {
   applyPatches,
   ductsRouteState,
-  transitionPatches,
+  cellPatches,
   type DuctsRouteDocument,
 } from "@pe/agent-contracts";
 
@@ -82,7 +82,7 @@ const snapshot = {
 
 it("a group climbs from blocked to walkable to budgetable as a person stages assumptions", () => {
   const stage = (doc: DuctsRouteDocument, key: string, value: unknown) => {
-    const patches = transitionPatches(["assumptions"], key, {}, { kind: "set", rung: { value } });
+    const patches = cellPatches(["assumptions"], key, {}, { kind: "set", rung: { value } });
     const landed = applyPatches(
       ductsRouteState,
       { version: 1, revision: 0, doc },
@@ -101,17 +101,21 @@ it("a group climbs from blocked to walkable to budgetable as a person stages ass
   });
   doc = stage(doc, "open-end:2:1", { kind: "verdict", verdict: "capped" });
   expect(readiness(snapshot, designOf(doc)).g1?.level).toBe("walkable");
-  // A suggestion is not an assumption until a person stages it.
+  // Pea stages the same assumption immediately.
   const proposed = designOf({
     ...doc,
     assumptions: {
       ...doc.assumptions,
-      "component-drop:Damper": { suggestion: { value: { kind: "component-drop", inWg: 0.05 } } },
+      "component-drop:Damper": { edit: { value: { kind: "component-drop", inWg: 0.05 } } },
     },
   });
-  expect(readiness(snapshot, proposed).g1?.level).toBe("walkable");
+  expect(readiness(snapshot, proposed).g1?.level).toBe("budgetable");
   doc = stage(doc, "component-drop:Damper", { kind: "component-drop", inWg: 0.05 });
-  expect(readiness(snapshot, designOf(doc)).g1).toEqual({ level: "budgetable", walk: [], budget: [] });
+  expect(readiness(snapshot, designOf(doc)).g1).toEqual({
+    level: "budgetable",
+    walk: [],
+    budget: [],
+  });
 });
 
 it("every issue kind the C# enum can emit has one taxonomy entry, and no entry is orphaned", () => {

@@ -393,7 +393,7 @@ test("taking back a family assignment clears only its edit rung", async () => {
   const suggestion = { value: { rule: "elbow-mitered-vaned" }, note: "check the vanes" };
   const doc = designOf({
     ruleAssignments: {
-      [family]: { suggestion, edit: { value: { rule: "elbow-mitered" } } },
+      [family]: { edit: suggestion },
     },
   });
   const view = mount({
@@ -410,7 +410,7 @@ test("taking back a family assignment clears only its edit rung", async () => {
   expect(view.write).toHaveBeenCalledWith([
     { path: ["ruleAssignments", family, "edit"], value: null },
   ]);
-  expect(doc.ruleAssignments[family]?.suggestion).toEqual(suggestion);
+  expect(doc.ruleAssignments[family]?.edit).toEqual(suggestion);
 });
 
 test("blocking input rows carry damage while diagnostic rows stay calm", () => {

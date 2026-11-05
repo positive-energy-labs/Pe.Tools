@@ -1,15 +1,11 @@
 import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Undo2 } from "lucide-react";
 import {
-  availableTransitions,
-  fanOut,
+  clearAll,
   summarize,
-  transitionPatches,
+  cellPatches,
   type CellGroup,
-  type FanOutKind,
   type RouteStatePatch,
-  type SkipReason,
-  type TransitionKind,
   type CellLike,
 } from "@pe/agent-contracts";
 
@@ -17,7 +13,6 @@ import {
   cellFromDraft,
   StateCell,
   type CellTransition,
-  type CellTransitionKind,
   type StateCellProps,
 } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
@@ -82,12 +77,10 @@ export function WorkStanding({
   );
 }
 
-/** Proposed, edit and contested cells over a set of groups. */
-export const tally = (groups: readonly Pick<CellGroup, "proposed" | "staged" | "contested">[]) => {
-  const sum = (field: "proposed" | "staged" | "contested") =>
-    groups.reduce((total, group) => total + group[field], 0);
-  return { proposed: sum("proposed"), edit: sum("staged"), contested: sum("contested") };
-};
+export const tally = (groups: readonly Pick<CellGroup, "staged" | "byPea">[]) => ({
+  staged: groups.reduce((n, group) => n + group.staged, 0),
+  byPea: groups.reduce((n, group) => n + group.byPea, 0),
+});
 
 /** A Work's cells at head scale: the tally, the contract's groups, and how many at each named depth. */
 export interface WorkSummary extends ReturnType<typeof tally> {
@@ -96,7 +89,6 @@ export interface WorkSummary extends ReturnType<typeof tally> {
   spans: { noun: string; count: number }[];
 }
 
-/** The one summary the Situation's Work slot and Chat's suggestion head read (ruling 14). */
 export function workSummary(
   cells: Record<string, CellLike>,
   ctx: Pick<CellWire, "baselineOf" | "lockOf"> & { groupOf: (key: string) => string[] },
@@ -117,11 +109,6 @@ export function workSummary(
   };
 }
 
-/**
- * How a consumer's cells are written: its route-document segment, its write, and the Work
- * revision the cells were rendered at. Bound kinds (accept, deny) carry that revision, so a
- * foreign write in between refuses instead of landing on a value the person never saw.
- */
 export interface CellWire {
   /** The Work segment holding the cells; null = the cells sit at the Work's root (`launch`). */
   segment: string | null;
@@ -140,104 +127,54 @@ export interface CellWire {
 /** Where a wire's cells sit in its Work: under its segment, or at the root. */
 const cellsPath = (wire: CellWire) => (wire.segment === null ? [] : [wire.segment]);
 
-/** Revert removes the edit; a cell with no standing proposal has no reason to remain in Work. */
-const clearPatch = (wire: CellWire, key: string, cell: CellLike): RouteStatePatch => ({
-  path: [...cellsPath(wire), key, ...(cell.suggestion != null ? ["edit"] : [])],
-});
-
-const DRAWN = new Set<string>(["take", "unsuggest", "clear"] satisfies CellTransitionKind[]);
-
-/** Every cell command carries the Work revision the person saw. */
-const writeKind = (wire: CellWire, _kind: TransitionKind, patches: RouteStatePatch[]) =>
+/** Every clear carries the Work revision the person saw. */
+const writeKind = (wire: CellWire, patches: RouteStatePatch[]) =>
   wire.revision === null
-    ? Promise.resolve({
-        code: "not-ready",
-        message: "Work has not been read yet; nothing on screen to act on",
-      })
+    ? Promise.resolve({ code: "not-ready", message: "Work has not been read yet" })
     : wire.write(patches, wire.revision);
 
-/** The cell's verbs: exactly what the contract makes available to a person on it. */
 export function reviewTransitions(wire: CellWire, key: string, cell: CellLike): CellTransition[] {
-  // Wording only: the reader says whether Pea is arguing against a edit value.
-  const counter = cellFromDraft(cell, { value: null }).counterValue != null;
-  const reason: Record<CellTransitionKind, string> = {
-    take: counter
-      ? "Use the suggestion in place of the current edit"
-      : "Use this suggestion as the edit",
-    unsuggest: counter ? "Clear the suggestion; the current edit stays" : "Clear this suggestion",
-    clear: "Clear the edit value; restore the standing suggestion or baseline",
-  };
-  return availableTransitions(cell, { lock: wire.lockOf?.(key) ?? null })
-    .filter((kind): kind is CellTransitionKind => DRAWN.has(kind))
-    .map((kind) => ({
-      kind,
-      reason: reason[kind],
-      run: () =>
-        writeKind(
-          wire,
-          kind,
-          kind === "clear"
-            ? [clearPatch(wire, key, cell)]
-            : transitionPatches(cellsPath(wire), key, cell, { kind }),
-        ),
-    }));
+  return cell.edit == null || wire.lockOf?.(key)
+    ? []
+    : [
+        {
+          kind: "clear",
+          reason: "Clear the staged value; restore the model value",
+          run: () => writeKind(wire, cellPatches(cellsPath(wire), key, cell, { kind: "clear" })),
+        },
+      ];
 }
 
-export interface FanOutOutcome {
-  kind: FanOutKind;
+export interface ClearOutcome {
+  kind: "clear";
   covered: string[];
-  skipped: { key: string; reason: SkipReason }[];
+  skipped: { key: string; reason: "locked" | "no-edit" }[];
   refusal: { code: string; message: string } | null;
 }
 
-/**
- * Every aggregate (the band's discard, a column's accept-all, a Chat count) is this: one kind over
- * many keys as ONE write through the contract's `fanOut`. It owns no path, state or wording.
- */
-export async function runFanOut(
+export async function runClear(
   wire: CellWire,
   cells: Record<string, CellLike>,
   keys: readonly string[],
-  kind: FanOutKind,
-): Promise<FanOutOutcome> {
-  const { patches, covered, skipped } = fanOut(cells, keys, kind, {
+  kind: "clear",
+): Promise<ClearOutcome> {
+  const { patches, covered, skipped } = clearAll(cells, keys, {
     cellsPath: cellsPath(wire),
 
     lockOf: wire.lockOf,
   });
-  const refusal = covered.length
-    ? await writeKind(
-        wire,
-        kind,
-        kind === "clear" ? covered.map((key) => clearPatch(wire, key, cells[key]!)) : patches,
-      )
-    : null;
+  const refusal = covered.length ? await writeKind(wire, patches) : null;
   return { kind, covered, skipped, refusal };
 }
 
-const PAST: Record<FanOutKind, string> = {
-  take: "accepted",
-  unsuggest: "denied",
-  clear: "unstaged",
-};
-
-/**
- * An aggregate's outcome in words, from counts only: `accepted 11 · skipped 7 (contested: 1,
- * no-suggestion: 6)`. A refused write wrote nothing and says the write's own refusal verbatim.
- */
-export function fanOutWord({ kind, covered, skipped, refusal }: FanOutOutcome): string {
+export function clearWord({ covered, skipped, refusal }: ClearOutcome): string {
   if (refusal) return refusal.message;
-  const by = new Map<SkipReason, number>();
+  const by = new Map<"locked" | "no-edit", number>();
   for (const skip of skipped) by.set(skip.reason, (by.get(skip.reason) ?? 0) + 1);
   const reasons = [...by].map(([reason, n]) => `${reason}: ${n}`).join(", ");
-  return `${PAST[kind]} ${covered.length}${skipped.length ? ` · skipped ${skipped.length} (${reasons})` : ""}`;
+  return `cleared ${covered.length}${skipped.length ? ` · skipped ${skipped.length} (${reasons})` : ""}`;
 }
 
-/**
- * One changed address on ONE line, browsable as a list: what · its value at row scale (the
- * table's own grammar: wash, fold, counter, clipped) · state and origin in one word · the verbs,
- * always drawn. Facts that do not fit (drift, lock reason, notes) ride the cell's title.
- */
 export function ReviewRow({
   wire,
   address,
@@ -254,7 +191,7 @@ export function ReviewRow({
   label: ReactNode;
   cell: CellLike;
   facts: StateCellProps;
-  /** The caller's word for a counter-proposed value. */
+
   show?: (value: unknown) => string;
   /** The consumer's own verbs for this address, when the contract's defaults don't say it. */
   transitions?: readonly CellTransition[];
@@ -263,15 +200,12 @@ export function ReviewRow({
    * edit value is refined where it is reviewed. Its verbs are its own.
    */
   editor?: ReactNode;
-  /**
-   * The trailing `proposed · pea` word. A narrow sidebar card turns it off (ruled 2026-10-06,
-   * kaitpw): the cell's own proposed state is the indicator and its title carries the author.
-   */
+
   mark?: boolean;
 }) {
   const props = cellFromDraft(cell, facts, show);
   const verbs = transitions ?? reviewTransitions(wire, address, cell);
-  const by = props.stage === "edit" ? props.author : "pea";
+  const by = props.author;
   return (
     <div
       className={`dl-review my-px grid h-(--item-h) items-center gap-2 ${
@@ -288,23 +222,16 @@ export function ReviewRow({
           className="truncate t-small face-mono text-ink-2"
           data-tone={by === "pea" ? "pea" : undefined}
         >
-          {props.counterValue != null ? "contested" : props.stage} · {by === "pea" ? "pea" : "you"}
+          {props.stage} · {by === "pea" ? "pea" : "you"}
         </span>
       ) : null}
     </div>
   );
 }
 
-/** The addresses a reviewer draws: every cell carrying a suggestion or a edit value. */
 export const reviewAddresses = <C extends CellLike>(cells: Record<string, C>) =>
-  Object.entries(cells).filter(([, cell]) => cell.suggestion != null || cell.edit != null);
+  Object.entries(cells).filter(([, cell]) => cell.edit != null);
 
-/**
- * BULK REVERT: one `clear` fanOut over the edit cells among `keys`, as ONE journal step: one
- * press writes, and Mod+Z (or the Timeline's undo) restores it (ADR 0027 rule 12), so it no
- * longer asks first. Pea's proposals on those cells stay. A refused write wrote nothing and says
- * why; pressing again retries against the Work now on screen.
- */
 export function UnstageAll({
   wire,
   cells,
@@ -315,12 +242,12 @@ export function UnstageAll({
   wire: CellWire;
   cells: Record<string, CellLike>;
   keys: readonly string[];
-  done: (outcome: FanOutOutcome) => void;
+  done: (outcome: ClearOutcome) => void;
   /** A framed revert button with its count, for a one-line row; the words move to the title. */
   compact?: boolean;
 }) {
   const covered = useMemo(
-    () => fanOut(cells, keys, "clear", { cellsPath: cellsPath(wire), lockOf: wire.lockOf }),
+    () => clearAll(cells, keys, { cellsPath: cellsPath(wire), lockOf: wire.lockOf }),
     [cells, keys, wire],
   );
   const [failure, setFailure] = useState<string | null>(null);
@@ -328,12 +255,12 @@ export function UnstageAll({
   const count = covered.covered.length;
   if (!count) return null;
   const edits = plural(count, "edit");
-  const title = `Revert your ${edits} in one write; undo restores them. Pea's proposals stay.`;
+  const title = `Clear ${edits} in one write; undo restores them.`;
   const press = async () => {
     if (sending.current) return;
     sending.current = true;
     try {
-      const outcome = await runFanOut(wire, cells, keys, "clear");
+      const outcome = await runClear(wire, cells, keys, "clear");
       setFailure(outcome.refusal?.message ?? null);
       if (!outcome.refusal) done(outcome);
     } catch (cause) {
@@ -423,11 +350,6 @@ function StartFresh({ run, aside }: { run: () => void; aside?: ReactNode }) {
 export const plural = (n: number, noun: string) =>
   `${n} ${n === 1 ? noun : noun.endsWith("y") ? `${noun.slice(0, -1)}ies` : `${noun}s`}`;
 
-/**
- * The Work slot's default render (ruling 14): shared edit and suggestion counts, followed by
- * the groups the route names. Counts do not infer authors. Accept and deny all are one
- * `runFanOut` over every cell; clear all is the discard. Nothing pending draws nothing.
- */
 export function WorkSentence({
   summary,
   cells,
@@ -440,44 +362,18 @@ export function WorkSentence({
   /** The consumer's commit verb, drawn while something is edit. */
   commit?: ReactNode;
 }) {
-  const [outcome, setOutcome] = useState<FanOutOutcome | null>(null);
-  const { edit, proposed, contested, spans } = summary;
-  if (!edit && !proposed) return null;
-  const keys = Object.keys(cells);
-  const all = (kind: "take" | "unsuggest") =>
-    void runFanOut(wire, cells, keys, kind).then(setOutcome);
+  const [outcome, setOutcome] = useState<ClearOutcome | null>(null);
+  const { staged, byPea, spans } = summary;
+  if (!staged) return null;
   return (
-    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 t-prose">
-      <span className="text-ink-2">
-        {edit ? <b className="font-semibold text-ink">{plural(edit, "edited cell")}</b> : null}
-        {edit && proposed ? ", " : null}
-        {proposed ? <span>{plural(proposed, "suggestion")}</span> : null}
-        {contested ? <span data-tone="caution"> · {contested} contested</span> : null}
+    <div className="flex flex-wrap items-baseline gap-2 t-prose">
+      <span>
+        {plural(staged, "staged cell")} · {byPea} by Pea
         {spans.map((span) => ` · ${plural(span.count, span.noun)}`)}
       </span>
-      {outcome ? (
-        <span className="t-small text-ink-2" data-tone={outcome.refusal ? "caution" : undefined}>
-          {fanOutWord(outcome)}
-        </span>
-      ) : null}
-      <span className="ml-auto flex items-baseline gap-1">
-        {proposed ? (
-          <>
-            <TooltipHint content="Accept every open suggestion in one write; cells you edit are skipped. Nothing reaches Revit until apply.">
-              <Verdict kind="take" onClick={() => all("take")}>
-                accept all
-              </Verdict>
-            </TooltipHint>
-            <TooltipHint content="Clear every open suggestion in one write. Staged values stay.">
-              <Verdict kind="unsuggest" onClick={() => all("unsuggest")}>
-                deny all
-              </Verdict>
-            </TooltipHint>
-          </>
-        ) : null}
-        <UnstageAll wire={wire} cells={cells} keys={keys} done={setOutcome} />
-        {edit ? commit : null}
-      </span>
+      {outcome ? <span role="status">{clearWord(outcome)}</span> : null}
+      <UnstageAll wire={wire} cells={cells} keys={Object.keys(cells)} done={setOutcome} />
+      {commit}
     </div>
   );
 }

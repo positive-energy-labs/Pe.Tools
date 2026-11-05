@@ -82,7 +82,7 @@ export const podsVerbs = {
           path: ["fields", ""],
           ...(input.content !==
             (scope.snapshot.work?.doc as SettingsRouteDocument)?.basis?.rawContent && {
-            value: { suggestion: null, edit: { value: input.content } },
+            value: { edit: { value: input.content } },
           }),
         },
       ],
