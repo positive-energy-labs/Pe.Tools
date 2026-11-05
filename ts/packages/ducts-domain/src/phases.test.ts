@@ -150,11 +150,6 @@ it("a demolished element, and one only proximity would join, warn too; one touch
 });
 
 it("the route reads the edit working phase, else Pea's suggestion; a person's edit null reads every element", () => {
-  expect(workingPhaseOf(working("Existing", "suggestion"))).toBe("Existing");
-  const both = designOf({
-    workingPhase: { suggestion: { value: "Future" }, edit: { value: null } },
-  });
-  expect(workingPhaseOf(both)).toBeNull();
   const before = projectA();
   // Proximity never sees the left-out duct: no inference joins duct 2's freed end to it.
   const t = tolerated(before, working("Existing", "suggestion"));

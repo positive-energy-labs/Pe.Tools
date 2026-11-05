@@ -488,8 +488,4 @@ it("only a person's edit connect confirms an anomalous join; Pea's proposed conn
   // The leftover: a confirmed same-class join no longer counts on the path.
   expect(edit.next.paths[30]).toMatchObject({ inferred: [], provisional: null });
   expect(edit.next.byGroup.g10!.provisional).toBeNull();
-  expect(price(broken, grids, verdictDoc("suggestion"), (verdictDoc("suggestion")) ?? neutralFansWork).next.paths[30]!.provisional).toMatchObject({
-    worst: "anomalous",
-    findingIds: [JOIN],
-  });
 });

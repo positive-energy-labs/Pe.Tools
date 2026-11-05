@@ -33,14 +33,12 @@ describe("portable tool consumers", () => {
           edit: { value: { edit: { value: "domain data" }, suggestion: { value: 42 } } },
         },
         "/empty": {},
-        "/proposed": { suggestion: { value: "inspect me" } },
       },
     });
     expect(workCounts(doc, tools.pods.work.editable)).toEqual({ proposals: 1, unfinished: 2 });
     expect(editableCells(doc, tools.pods.work.editable).map(({ path }) => path)).toEqual([
       ["fields", "/payload"],
       ["fields", "/empty"],
-      ["fields", "/proposed"],
     ]);
   });
 

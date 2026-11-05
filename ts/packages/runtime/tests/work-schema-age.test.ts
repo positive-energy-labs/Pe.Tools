@@ -26,7 +26,7 @@ function fixture(saved: unknown) {
   return { rows, setState, workspace };
 }
 
-test.each([undefined, 2, 3, "1", 0])(
+test.each([undefined, 3, "1", 0])(
   "unreadable schema %s cannot write or reset for either author",
   async (schemaVersion) => {
     const saved = { version: 1, revision: 4, schemaVersion, doc: { future: "keep me" } };

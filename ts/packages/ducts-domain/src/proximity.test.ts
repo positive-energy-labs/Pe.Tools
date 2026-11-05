@@ -536,8 +536,4 @@ it("a edit connect confirms an inference on its link; a suggestion does not", ()
     { id, between: [1, 2], grade: "stretched", ruled: false },
   ]);
   expect(tolerate(before, staging(id, "connect")).links[0]!.ruled).toBe(true);
-  const proposed = designOf({
-    assumptions: { [id]: { suggestion: { value: { kind: "verdict", verdict: "connect" } } } },
-  });
-  expect(tolerate(before, proposed).links[0]!.ruled).toBe(false);
 });

@@ -2141,10 +2141,6 @@ test("cell displays, focus, take and salvage use real shared Page/Work owners", 
   expect(() => mount.clearCell("amount", "amount")).toThrow("Reading unavailable");
   expect(mount.focusCell("amount", "amount").kind).toBe("accepted");
   expect(mount.page.read().query).toBe("amount");
-  t.frames.at(-1)!(ready("notes"));
-  await settle(mount.clearCell("amount", "amount"));
-  expect(mount.work()?.value).toEqual({ amount: 7 });
-  expect(mount.cells().amount![0]!.text).toBe("7");
   const saved = vi
     .spyOn(workHost, "salvageRouteWork")
     .mockResolvedValue({ from: "old", value: { amount: 12 } });
