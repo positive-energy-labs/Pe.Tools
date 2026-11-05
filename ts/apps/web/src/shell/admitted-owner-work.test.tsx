@@ -42,6 +42,7 @@ test("a targeted Work verb lands in the owner's journal through the declared rea
     handle: { revision: number };
   };
   const ownRevision = f.fans.work()?.revision;
+  const sheetReads = f.calls.get("fans:ducts.sheet") ?? 0;
   const acks: { by: string; label?: string; route: string }[] = [];
   closes.push(
     f.ws.subscribe((event) => {
@@ -76,6 +77,11 @@ test("a targeted Work verb lands in the owner's journal through the declared rea
       handle: { revision: before.handle.revision + 1 },
     }),
   );
+  // The mounted sheet declares ductsWork: the owner's ack re-reads it, no refresh or reopen.
+  await vi.waitFor(() => {
+    expect(f.calls.get("fans:ducts.sheet")).toBeGreaterThan(sheetReads);
+    expect(f.fans.readingStatus("sheet").snapshot.current).toBe(true);
+  });
   expect(f.fans.work()?.revision).toBe(ownRevision);
   expect(acks.filter((ack) => ack.route === "ducts")).toEqual([
     expect.objectContaining({ by: "human", label: "accept join → 30x30 · from /ducts" }),

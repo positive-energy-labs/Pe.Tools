@@ -175,10 +175,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
   const paneDemand = new Map<string, boolean>();
   const evidence = context.sourceEvidence;
   const invalidate = (id: string) => {
-    generations.set(id, (generations.get(id) ?? 0) + 1);
-    retire(id);
-    retained.delete(id);
-    geometry().invalidate(id);
     const stale = new Set([id]);
     for (let changed = true; changed; ) {
       changed = false;
@@ -187,6 +183,14 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
           stale.add(key);
           changed = true;
         }
+    }
+    // A declared reading dependency is part of each dependent's freshness, even when its args
+    // omit the value (ducts.sheet reads ducts Work host-side): re-key the whole closure.
+    for (const key of stale) {
+      generations.set(key, (generations.get(key) ?? 0) + 1);
+      retire(key);
+      retained.delete(key);
+      geometry().invalidate(key);
     }
     readings = Object.freeze({
       ...readings,
