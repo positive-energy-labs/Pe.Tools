@@ -4,7 +4,13 @@ import type { GraphJsonValue as JsonValue } from "./route-graph.ts";
  * belong to ActionJournal; observations and readback use trusted host publication contracts.
  */
 import { z } from "zod";
-import { addressSchema, documentRefSchema, type Address, type DocumentRef } from "./target.ts";
+import {
+  addressSchema,
+  documentRefSchema,
+  sameAddress,
+  type Address,
+  type DocumentRef,
+} from "./target.ts";
 
 export interface RouteStateSpec<TSchema extends z.ZodType> {
   /** Route name, e.g. `parameter-links` — the URL segment transport adapters key on. */
@@ -71,11 +77,7 @@ export function workBinding(key: WorkKey) {
         case "open":
           return key.open.session === target.session && key.open.openId === target.openId;
         case "address":
-          return (
-            !!address &&
-            key.target.replaceAll("/", "\\").toLowerCase() ===
-              address.replaceAll("/", "\\").toLowerCase()
-          );
+          return !!address && sameAddress(key.target, address as Address);
         case "workspace":
           return workspace;
         case "host":
@@ -99,25 +101,28 @@ export function bindWork(
   return { binding: "host", route, target: null };
 }
 
-/** The one encoder for the persisted identity. */
 /**
- * ADR 0030 rule 9, step 4 scaffold: the one stored identity however a caller spelled it (address case and
- * slashes folded, Save As `from` dropped). Every Work read returns `{ key: canonicalWorkKey(scope), revision }`.
+ * ADR 0030 rule 9: the one stored identity however a caller spelled it. GUID and Windows path case and
+ * separators fold, as `sameAddress` compares them. Save As `from` is transport, not identity: it rides
+ * until the first read carries the open-document Work onto the Address (RouteWorkspace #carryOver).
  */
-export function canonicalWorkKey(_key: WorkKey): WorkKey {
-  throw new Error("step4 scaffold: canonicalWorkKey is owed");
+export function canonicalWorkKey(key: WorkKey): WorkKey {
+  if (key.binding !== "address") return key;
+  return { ...key, target: key.target.replaceAll("/", "\\").toLowerCase() as Address };
 }
 
+/** The one encoder for the persisted identity; `from` never enters it. */
 export function workKey(key: WorkKey): string {
-  switch (key.binding) {
+  const canonical = canonicalWorkKey(key);
+  switch (canonical.binding) {
     case "workspace":
-      return `${key.route}/workspace:${key.work}`;
+      return `${canonical.route}/workspace:${canonical.work}`;
     case "open":
-      return `${key.route}/open:${key.open.session}/${key.open.openId}`;
+      return `${canonical.route}/open:${canonical.open.session}/${canonical.open.openId}`;
     case "address":
-      return `${key.route}/target:${key.target.replaceAll("/", "\\").toLowerCase()}`;
+      return `${canonical.route}/target:${canonical.target}`;
     case "host":
-      return `${key.route}/target:`;
+      return `${canonical.route}/target:`;
   }
 }
 
