@@ -92,6 +92,8 @@ export interface ListViewProps<T, Sort extends string = string> {
   /** What a row says on the scrollbar beyond its damage, selection, hits and heads. */
   projection?: (item: T) => Pick<Mark, "weight" | "tone">;
   columns?: { label: ReactNode; meta?: ReactNode };
+  search?: "always";
+  header?: ReactNode;
   /** Open state is the same data-owned `open` used for tree expansion. */
   detail?: (item: T) => ReactNode;
   sectionProps?: (
@@ -119,7 +121,9 @@ export function PlainList<T, Sort extends string = string>(props: ListViewProps<
 
 function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { plain?: boolean }) {
   const { list, row, empty, maxHeight, detail } = props;
-  const searching = !props.plain && (list.total > 7 || list.filtering || !!list.state.sort);
+  const searching =
+    !props.plain &&
+    (props.search === "always" || list.total > 7 || list.filtering || !!list.state.sort);
   const [headroom, setHeadroom] = useState(0);
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const owned = useScroller();
@@ -166,7 +170,7 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
       scroller.style.scrollPaddingTop = padding;
       scroller.style.setProperty("--list-headroom", reservation);
     };
-  }, [root, scroller, list.sections, searching, list.collection.reading]);
+  }, [root, scroller, list.sections, searching, list.collection.reading, props.header]);
   // N1: only a key move or named reveal moves the view, never refresh, hover or resize.
   const request = `${list.collection.steer}:${list.revealRequest?.serial ?? 0}`;
   const served = useRef("0:0");
@@ -213,7 +217,14 @@ function ListRenderer<T, Sort extends string>(props: ListViewProps<T, Sort> & { 
           { pointer: "hover", label: "move the cursor" },
         ]}
       />
-      {searching ? <ListBar list={list} label={label} /> : null}
+      {props.header ? (
+        <div data-list-bar="" data-surface="artifact">
+          {props.header}
+          {searching ? <ListBar list={list} label={label} /> : null}
+        </div>
+      ) : searching ? (
+        <ListBar list={list} label={label} />
+      ) : null}
       {props.columns ? (
         <div className="dl-row-colhead" role="presentation" data-tree-columns="">
           <span className="dl-row-colhead-label">{props.columns.label}</span>

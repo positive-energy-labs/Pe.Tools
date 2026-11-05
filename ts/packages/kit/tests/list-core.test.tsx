@@ -277,7 +277,7 @@ function TestList({
   reveal,
   row = (item) => ({ label: item.name }),
   ...props
-}: Pick<ListViewProps<Item>, "maxHeight" | "sectionProps"> & {
+}: Pick<ListViewProps<Item>, "maxHeight" | "sectionProps" | "search" | "header"> & {
   name: string;
   config?: Partial<ListOptions<Item, "loss" | "name">>;
   plain?: boolean;
@@ -299,6 +299,24 @@ function TestList({
     </>
   );
 }
+
+test("always search keeps a search door on a small sidebar", () => {
+  render(<TestList name="small" search="always" config={{ items: items.slice(0, 2) }} />);
+  const input = screen.getByRole("combobox", { name: "Search small" });
+  fireEvent.change(input, { target: { value: "System 1" } });
+  fireEvent.blur(input);
+  expect(screen.queryByRole("option", { name: "System 0" })).toBeNull();
+  expect(screen.getByRole("option", { name: "System 1" })).toBeTruthy();
+});
+
+test("header shares the sticky measured frame with search without becoming a list row", () => {
+  render(<TestList name="headed" header={<button>Settings</button>} />);
+  const list = screen.getByRole("listbox", { name: "headed" });
+  const frame = list.querySelector(":scope > [data-list-bar]")!;
+  expect(frame.contains(screen.getByRole("button", { name: "Settings" }))).toBe(true);
+  expect(frame.contains(screen.getByRole("combobox", { name: "Search headed" }))).toBe(true);
+  expect(screen.getAllByRole("option")).toHaveLength(8);
+});
 
 test("literal words AND across fields, IDs are exact, and pills narrow before separate sorting", () => {
   const model = listModel(options, {

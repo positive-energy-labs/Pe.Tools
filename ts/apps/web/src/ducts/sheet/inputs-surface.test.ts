@@ -192,6 +192,27 @@ it("protocol: the fan-flow slot is a picker beside the terminal one, its candida
 });
 
 afterEach(cleanup);
+it("F8 groups fittings into one table choice with an explicit expandable member census", () => {
+  const ctx = context();
+  ctx.sheet = { overview: { fan: null }, inputs: null };
+  ctx.fittings = Array.from({ length: 50 }, (_, i) => ({
+    key: String(i + 1), elementId: i + 1, family: "Rectangular elbow",
+    rule: null, table: null, ruleSource: "none", tableSource: null,
+    options: [], candidates: [], lossInWg: null, unpriced: "Choose a rule", typed: null,
+  }));
+  const view = render(createElement(InputsSurface, {
+    ctx, busy: false, elementName: null, onSlot: vi.fn(), apply: vi.fn(), nameOf: String,
+    history: { undoLabel: null, redoLabel: null, last: null, cleared: null,
+      undo: vi.fn(), redo: vi.fn(), restore: vi.fn() },
+  }));
+  expect(view.container.querySelectorAll("[data-fitting-group]")).toHaveLength(1);
+  expect(view.container.querySelectorAll("[data-fitting]")).toHaveLength(0);
+  expect(view.getByText("50 not priced")).toBeTruthy();
+  fireEvent.click(view.getByRole("button", { name: "Show the 50 fittings" }));
+  expect(view.container.querySelectorAll("[data-fitting]")).toHaveLength(50);
+  fireEvent.click(view.getByRole("button", { name: "Hide the 50 fittings" }));
+  expect(view.container.querySelectorAll("[data-fitting]")).toHaveLength(0);
+});
 it.each(["terminal:7:cfm", "join:1:0|2:0"])(
   "cleared %s keeps Restore under typed-only until the next edit",
   (rowKey) => {
