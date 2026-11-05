@@ -4,6 +4,7 @@ export * from "./route-module.ts";
 export type { RouteBindings } from "./route-bodies.ts";
 export { admittedBuiltinKeys } from "./admitted-builtin-keys.ts";
 export * from "./write-intent.ts";
+export * from "./catalog-work.ts";
 
 export * from "./work-value.ts";
 
