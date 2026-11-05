@@ -7,6 +7,9 @@ import { dirname, join } from "node:path";
 import { createProviders } from "../src/harness/providers.ts";
 import { productProvidersPath } from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
+// Process journeys spawn real harness children, so machine load moves their time. Budget is 3x the
+// slowest solo run (10.8 s, 2026-11-04); the 15 s default stays for unit files (vite.config.ts:59).
+vi.setConfig({ testTimeout: 30_000 });
 
 let root: string;
 let previous: string | undefined;
