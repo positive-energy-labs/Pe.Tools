@@ -536,10 +536,9 @@ export const ductsApplyInputSchema = z.strictObject({
   /** Staged unit design flow, written to the FanFlow slot (instance first, then type). */
   equipmentFlows: z.array(writeFlow),
   /**
-   * The whole provenance store after this apply (`DuctLossStore` v2): the model's store, its
-   * unknown keys passed through, with this apply's rules, instances and drops over it, since the
-   * native op writes it as sent. `workRevision` is the model store's revision as read; an older
-   * one refuses as stale.
+   * This apply's store entries (`DuctLossStore` v2). The native op overlays them per key on the
+   * model's store (K3): a key omitted here keeps its stored entry; provenance records only writes
+   * that land. `workRevision` is the model store's revision as read; an older one refuses as stale.
    */
   store: z.looseObject({
     /** 2; the native op reads v1 and v2 and writes v2. */
@@ -598,6 +597,18 @@ export const ductsApplyInputSchema = z.strictObject({
     workRevision: z.number().int().nonnegative().optional(),
     appliedAt: optionalText,
   }),
+  /** Stored keys this apply removes; omission never deletes (native `DuctStoreDeletes`). */
+  storeDeletes: z
+    .strictObject({
+      rules: z.array(z.string()).optional(),
+      instances: z.array(z.number().int()).optional(),
+      terminals: z.array(z.number().int()).optional(),
+      terminalFlows: z.array(z.number().int()).optional(),
+      equipmentFlows: z.array(z.number().int()).optional(),
+      verdicts: z.array(z.string()).optional(),
+      roles: z.array(z.number().int()).optional(),
+    })
+    .optional(),
 });
 export type DuctsApplyInput = z.infer<typeof ductsApplyInputSchema>;
 
