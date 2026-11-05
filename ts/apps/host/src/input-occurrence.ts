@@ -100,9 +100,9 @@ const lifetime = (parentOpen: () => boolean) => {
   return {
     open: () => life === "open" && parentOpen(),
     end: (to: Exclude<Life, "open">) => {
-      const was = life;
-      if (life === "open") life = to;
-      return was === "open";
+      if (life === "closed" || life === to) return false;
+      life = to;
+      return true;
     },
   };
 };
