@@ -30,6 +30,28 @@ export function openSourceReading<T>(
   options: { observe?(log: unknown): void; live?: LiveReadingPolicy } = {},
 ): () => void {
   let value: Immutable<T> | undefined;
+  const live = options.live;
+  let failed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const disarm = () => {
+    clearTimeout(timer);
+    timer = undefined;
+  };
+  const arm = () => {
+    if (!live || timer !== undefined) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      if (value !== undefined)
+        return emit({ status: "unavailable", current: false, value, reason: "Reading is stale" });
+      failed = true;
+      live.onTimeout?.();
+      emit({
+        status: "failed",
+        current: false,
+        reason: `Source sent no answer after ${live.waitS}s; explicitly refresh to retry`,
+      });
+    }, live.waitS * 1000);
+  };
   const open: UseSource<T>["open"] = (context, deliver) => {
     if (source.kind === "worker") {
       const worker = source.connect();
@@ -51,6 +73,13 @@ export function openSourceReading<T>(
   const release = Promise.resolve(
     open(context, (frame) => {
       if (context.signal.aborted) return;
+      if (live && frame.kind !== "log") {
+        // A live subject's failure is said until its next answer; silence re-arms the deadline.
+        if (failed && (frame.kind === "pending" || frame.kind === "stale")) return;
+        failed = frame.kind === "failure";
+        if (failed || (frame.kind === "complete" && frame.fresh !== false)) disarm();
+        else arm();
+      }
       switch (frame.kind) {
         case "part":
           return emit({
@@ -90,10 +119,12 @@ export function openSourceReading<T>(
       }
     }),
   );
+  arm();
   let closed = false;
   return () => {
     if (closed) return;
     closed = true;
+    disarm();
     void release.then((close) => close?.());
   };
 }
