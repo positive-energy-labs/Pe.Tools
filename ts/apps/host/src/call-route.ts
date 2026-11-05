@@ -10,14 +10,13 @@ import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/re
 import { ductBodySubject, type DuctsBodyBasisSource } from "./ducts-body-basis.ts";
 import type { DuctsReadings } from "./ducts-readings.ts";
 import type { HostSessionInventory } from "./session-inventory.ts";
-import { canonicalRouteInput, ductsSnapshotReadingSchema, nativePrincipals } from "@pe/agent-contracts";
+import { canonicalRouteInput, nativePrincipals } from "@pe/agent-contracts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { peRoutes, linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
 import {
   DUCTS_BODY_VERSION_HEADER,
   DUCTS_REFRESH_HEADER,
-  type DuctsReadingRequest,
 } from "@pe/agent-contracts";
 import { sdkSession, SdkSession } from "./sdk-session.ts";
 import { readSchedule } from "./schedule-actions.ts";
@@ -1490,14 +1489,18 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
   }, { ...options, ...(basis ? { source: {
     revision: basis.recorded?.version,
     beforeReady: (body) => run(basis.consume(body, target)),
-  } } : {}) }), catch: (error) => isDoorFailure(error) || error instanceof BridgeError ? error :
-    new BridgeError(String(error), 409) });
+  } } : {}) }), catch: retainedReadFailure });
   // Joiners/hits consume the retained dependency; they never invent another native acquisition.
   if (basis && !acquired) yield* basis.consume(shared, target);
-  yield* Effect.try({ try: () => owner.assertCurrent(subject, shared.version), catch: (error) => error });
+  yield* Effect.try({ try: () => owner.assertCurrent(subject, shared.version), catch: retainedReadFailure });
   return Response.text(shared.json, { headers: { "content-type": "application/json",
     ...resolvedTargetHeaders(shared.target), "x-pe-native-request-id": shared.nativeRequestId,
     [DUCTS_BODY_VERSION_HEADER]: shared.version, "x-pe-ducts-reused": String(!acquired) } });
+});
+
+// The legacy retained owner uses statusCode; the typed HTTP mapper consumes status.
+const retainedReadFailure = (error: unknown) => isDoorFailure(error) ? error : new InvalidRead({
+  message: said(error), status: error instanceof BridgeError ? error.statusCode : 409, problem: "read.retained",
 });
 
 /** The same native door without live target/cache acquisition. Unsupported sources refuse first. */

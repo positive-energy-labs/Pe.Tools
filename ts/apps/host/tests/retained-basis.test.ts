@@ -1,0 +1,224 @@
+import { mkdtemp, rm, rename, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Context, Effect, Layer, Schema } from "effect";
+import { HttpRouter } from "effect/http";
+import { afterEach, expect, test } from "vite-plus/test";
+import { addressSchema, DUCTS_BODY_VERSION_HEADER, DUCTS_REFRESH_HEADER } from "@pe/agent-contracts";
+import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
+import { admittedRequestIdentity, RequestIdentity } from "../src/request-services.ts";
+import { admitNativeCaller } from "../src/native-read-policy.ts";
+import { hostNativeReadFor, inputBindingKey, nativeInputIdentity, nativeCatalogIdentity,
+  openRecordingWriter, openRecordingReader, type HostInputLane, type Taking } from "../src/native-recording.ts";
+import { createDuctsBodyBasis, ductBodySubject } from "../src/ducts-body-basis.ts";
+import { DuctsReadings } from "../src/ducts-readings.ts";
+import { retainedDuctsRead } from "../src/call-route.ts";
+import { HostSessionInventory } from "../src/session-inventory.ts";
+import { httpProblems } from "../src/http-problems.ts";
+import { snapshot } from "../../web/src/ducts/test-fixture.ts";
+
+const run = Effect.runPromise;
+const dirs: string[] = [];
+afterEach(async () => { for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true }); });
+const identity = { build: "retained-basis-test", catalog: nativeCatalogIdentity() };
+const bounds = { maxBytes: 20_000_000, maxTakings: 100 };
+const scope = { bridgeSessionId: "bridge-a", openDocumentId: "open-a" };
+const ref = { session: scope.bridgeSessionId, openId: scope.openDocumentId };
+const input: NativeReadInput = { key: "ducts.snapshot.roster", input: { selector: { kind: "roster" } }, scope };
+const actualTarget = { processIncarnation: { pid: 42, startedAt: 1000 }, openDocumentLifetime: { openId: ref.openId } };
+const row = { ...ref, address: addressSchema.parse("C:/HVAC.rvt") };
+const value = Schema.decodeUnknownSync(Schema.Json)(snapshot);
+const temp = async () => { const dir = await mkdtemp(join(tmpdir(), "pe-retained-basis-")); dirs.push(dir); return dir; };
+const producer = (counts: { reads: number }) => Layer.succeed(HostNativeRead, {
+  resolve: (request) => admitNativeCaller(request.key).pipe(Effect.as({ operationKey: request.key, ...actualTarget,
+    normalizedInput: canonicalJson(JSON.parse(JSON.stringify(request.input))), freshnessGeneration: "g1", representation: "overview" as const })),
+  read: (request) => admitNativeCaller(request.key).pipe(Effect.map(() => ({ value, nativeRequestId: `native-${++counts.reads}`,
+    actualTarget, freshness: { freshnessGeneration: "g1" }, cost: {}, outcome: "committed" as const }))),
+});
+const inventory = Layer.succeed(HostSessionInventory, {
+  attachment: () => Effect.succeed({ sessionId: ref.session }), session: () => Effect.succeed({ sessionId: ref.session }),
+  document: () => Effect.succeed(row),
+});
+function router(lane: HostInputLane, owner: DuctsReadings, counts: { reads: number },
+  observed: (taking: Taking) => Effect.Effect<void> = () => Effect.void) {
+  const basis = createDuctsBodyBasis(lane, observed)!;
+  const live = lane.kind === "recording" ? Layer.effect(HostNativeRead, Effect.die("Live native factory constructed")) : producer(counts);
+  const docs = lane.kind === "recording" ? HostSessionInventory.recorded(lane.recordingStore, lane.bindings) :
+    lane.kind === "live" && lane.captureStore ? HostSessionInventory.capturing(lane.captureStore, observed).pipe(Layer.provide(inventory)) : inventory;
+  const web = HttpRouter.toWebHandler(HttpRouter.add("POST", "/call", (req) => Effect.gen(function* () {
+    const documents = yield* HostSessionInventory;
+    return yield* retainedDuctsRead(owner, input,
+      { version: req.headers[DUCTS_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] },
+      { document: documents.document, basis });
+  })).pipe(Layer.provide(httpProblems), HttpRouter.provideRequest(Layer.mergeAll(
+    hostNativeReadFor(lane, live, basis.observed), docs))), { disableLogger: true });
+  return { close: web.dispose, post: (headers: Record<string, string> = {}, anonymous = false) => web.handler(
+    new Request("http://host/call", { method: "POST", headers }), Context.make(RequestIdentity,
+      admittedRequestIdentity(anonymous ? { kind: "anonymous" } : { kind: "human", via: "local" }, scope))) };
+}
+async function captured(maxTakings = 100, observer?: (taking: Taking) => Effect.Effect<void>) {
+  const dir = await temp(); const writer = await run(openRecordingWriter(dir, identity, { ...bounds, maxTakings }));
+  const takes: Taking[] = []; const counts = { reads: 0 }; const owner = new DuctsReadings();
+  const web = router({ kind: "live", captureStore: writer }, owner, counts, (taking) =>
+    Effect.sync(() => { takes.push(taking); }).pipe(Effect.andThen(observer?.(taking) ?? Effect.void)));
+  return { dir, writer, takes, counts, owner, web };
+}
+const bindings = async (takes: Taking[]) => {
+  const map = new Map<string, string>();
+  for (const taking of takes) {
+    const key = taking.input.kind === "native" ? await run(nativeInputIdentity(input)) : inputBindingKey(taking.input, taking.scope);
+    if (map.has(key)) throw Error("Witness read set needs an explicit occurrence");
+    map.set(key, taking.id);
+  }
+  return map;
+};
+
+test("same retained handler captures miss/hit and replays original version, native taking, target and reuse without live construction", async () => {
+  const c = await captured();
+  const first = await c.web.post(); expect(first.status, await first.clone().text()).toBe(200);
+  const firstSet = [...c.takes]; const firstBindings = await bindings(firstSet);
+  const version = first.headers.get(DUCTS_BODY_VERSION_HEADER)!;
+  const hit = await c.web.post({ [DUCTS_BODY_VERSION_HEADER]: version });
+  expect(hit.status).toBe(200); expect(hit.headers.get("x-pe-ducts-reused")).toBe("true");
+  expect(c.counts.reads).toBe(1);
+  const hitSet = c.takes.slice(firstSet.length);
+  expect(hitSet).toHaveLength(1); // basis only: the original native/document acquisition is retained
+  const secondBindings = new Map(firstBindings); for (const [key, id] of await bindings(hitSet)) secondBindings.set(key, id);
+  const basisTakes = c.takes.filter((taking) => taking.input.kind === "document" && taking.input.scope.includes("ducts-body-basis"));
+  expect(basisTakes).toHaveLength(2);
+  const originals = await Promise.all(basisTakes.map((taking) => run(c.writer.observation(taking))));
+  expect(originals[0]).toEqual(originals[1]); expect(JSON.stringify(originals)).not.toContain('"nodes"');
+  expect(originals[0]).toMatchObject({ version, nativeRequestId: "native-1",
+    nativeTakingId: firstSet.find((taking) => taking.input.kind === "native")!.id, target: { documentRef: ref } });
+  await c.web.close();
+  const reader = await run(openRecordingReader(c.dir, identity, bounds)); const owner = new DuctsReadings(); const counts = { reads: 0 };
+  for (const [index, selected] of [firstBindings, secondBindings].entries()) {
+    const web = router({ kind: "recording", recordingStore: reader, at: null, bindings: selected }, owner, counts);
+    try {
+      const answer = await web.post(); expect(answer.status, await answer.clone().text()).toBe(200);
+      expect(answer.headers.get(DUCTS_BODY_VERSION_HEADER)).toBe(version);
+      expect(answer.headers.get("x-pe-native-request-id")).toBe("native-1");
+      expect(answer.headers.get("x-pe-resolved-session")).toBe(ref.session);
+      expect(answer.headers.get("x-pe-ducts-reused")).toBe(String(index > 0));
+      expect(await answer.json()).toEqual(await first.clone().json());
+      expect((await web.post({ [DUCTS_REFRESH_HEADER]: version })).status).toBe(409);
+      expect((await web.post({}, true)).status).toBe(403);
+    } finally { await web.close(); }
+  }
+  expect(counts.reads).toBe(0);
+  const unbound = new Map(firstBindings); unbound.delete(inputBindingKey(basisTakes[0]!.input, basisTakes[0]!.scope));
+  const web = router({ kind: "recording", recordingStore: reader, at: null, bindings: unbound }, new DuctsReadings(), counts);
+  try { expect(await (await web.post()).text()).toContain("recording.ambiguous"); } finally { await web.close(); }
+});
+
+test("full native or basis capture stops recording but preserves the live miss and later retained hit", async () => {
+  for (const max of [0, 2]) {
+    const c = await captured(max);
+    try {
+      const answer = await c.web.post(); expect(answer.status, await answer.clone().text()).toBe(200);
+      expect(c.writer.capture.truncated()?.reason).toBe("full");
+      const count = c.takes.length;
+      const hit = await c.web.post(); expect(hit.status).toBe(200); expect(hit.headers.get("x-pe-ducts-reused")).toBe("true");
+      expect(c.counts.reads).toBe(1); expect(c.takes).toHaveLength(count);
+    } finally { await c.web.close(); }
+  }
+});
+
+test("document invalidation during durable basis observation never publishes ready", async () => {
+  const gate = Promise.withResolvers<void>(); let pending = false;
+  const c = await captured(100, (taking) => taking.input.kind === "document" && taking.input.scope.includes("ducts-body-basis")
+    ? Effect.promise(() => { pending = true; return gate.promise; }) : Effect.void);
+  const frames: string[] = []; const stop = c.owner.observe(ductBodySubject(input), (frame) => frames.push(frame.state));
+  try {
+    const answer = c.web.post(); await expect.poll(() => pending).toBe(true);
+    expect(frames, JSON.stringify(c.writer.capture.truncated())).not.toContain("ready");
+    c.owner.changed({ kind: "event", sessionId: ref.session, eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
+    expect(frames.at(-1), JSON.stringify(frames)).toBe("stale");
+    gate.resolve();
+    expect((await answer).status).toBe(409); expect(frames).not.toContain("ready");
+  } finally { gate.resolve(); stop(); await c.web.close(); }
+});
+
+test("foreign native binding, corrupt basis target/version and missing basis refuse without acquisition", async () => {
+  const c = await captured();
+  try {
+    expect((await c.web.post()).status).toBe(200);
+    const selected = await bindings(c.takes);
+    const basisTaking = c.takes.find((taking) => taking.input.kind === "document" && taking.input.scope.includes("ducts-body-basis"))!;
+    const original = await run(c.writer.observation(basisTaking));
+    const nativeKey = await run(nativeInputIdentity(input));
+    for (const corrupt of [
+      (v: any) => { v.nativeTakingId = basisTaking.id; },
+      (v: any) => { v.target.documentRef.openId = "foreign"; },
+      (v: any) => { v.version = ""; },
+      (v: any) => { v.native.scope = "{}"; },
+    ]) {
+      const changed = structuredClone(original); corrupt(changed);
+      const taking = await run(c.writer.append({ input: basisTaking.input, scope: basisTaking.scope, outputVersion: basisTaking.outputVersion },
+        { kind: "observed", value: changed }));
+      const bound = new Map(selected); bound.set(inputBindingKey(taking.input, taking.scope), taking.id);
+      const reader = await run(openRecordingReader(c.dir, identity, bounds));
+      const web = router({ kind: "recording", recordingStore: reader, at: null, bindings: bound }, new DuctsReadings(), { reads: 0 });
+      try { const response = await web.post(); expect(response.status).toBe(409); expect(await response.text()).toContain("recording.mismatch"); }
+      finally { await web.close(); }
+    }
+    const reader = await run(openRecordingReader(c.dir, identity, bounds));
+    const foreign = new Map(selected); foreign.set(nativeKey, basisTaking.id);
+    const web = router({ kind: "recording", recordingStore: reader, at: null, bindings: foreign }, new DuctsReadings(), { reads: 0 });
+    try { expect((await web.post()).status).toBe(409); } finally { await web.close(); }
+    const empty = await temp(); const writer = await run(openRecordingWriter(empty, identity, bounds));
+    const native = c.takes.find((taking) => taking.input.kind === "native")!;
+    if (native.outcome.kind !== "answered") throw Error("Missing answered fixture dependency");
+    const { observation: _, kind: __, ...answer } = native.outcome;
+    const copied = await run(writer.append({ input: native.input, scope: native.scope, outputVersion: native.outputVersion },
+      { kind: "answered", value: await run(c.writer.observation(native)), answer }));
+    const missing = router({ kind: "recording", recordingStore: await run(openRecordingReader(empty, identity, bounds)), at: null,
+      bindings: new Map([[nativeKey, copied.id]]) }, new DuctsReadings(), { reads: 0 });
+    try { expect(await (await missing.post()).text()).toContain("recording.miss"); } finally { await missing.close(); }
+    const conflictOwner = new DuctsReadings();
+    const seeded = router({ kind: "recording", recordingStore: reader, at: null, bindings: selected }, conflictOwner, { reads: 0 });
+    try {
+      const good = await seeded.post(); expect(good.status).toBe(200);
+      expect((await seeded.post({ [DUCTS_BODY_VERSION_HEADER]: "foreign-version" })).status).toBe(409);
+      await expect(conflictOwner.read(ductBodySubject(input), async () => { throw Error("must not acquire"); },
+        { source: { revision: "conflicting-original" } })).rejects.toMatchObject({ problem: "recording.mismatch" });
+    } finally { await seeded.close(); }
+  } finally { await c.web.close(); }
+});
+
+test("I/O loss after native capture marks incomplete and still serves the live body", async () => {
+  let dir = "";
+  const c = await captured(100, (taking) => taking.input.kind === "native"
+    ? Effect.promise(async () => { await rename(join(dir, "observations"), join(dir, "saved-observations")); await writeFile(join(dir, "observations"), "blocked"); }) : Effect.void);
+  dir = c.dir;
+  try {
+    const answer = await c.web.post(); expect(answer.status, await answer.clone().text()).toBe(200);
+    expect(c.writer.capture.truncated()?.reason).toBe("io");
+    expect((await c.web.post()).status).toBe(200); expect(c.counts.reads).toBe(1);
+  } finally { await c.web.close(); }
+});
+
+test("overlapping consumers share one acquisition and retain separate basis occurrences", async () => {
+  const c = await captured();
+  try {
+    const answers = await Promise.all([c.web.post(), c.web.post()]);
+    expect(answers.map((answer) => answer.status)).toEqual([200, 200]);
+    expect(answers[0]!.headers.get(DUCTS_BODY_VERSION_HEADER)).toBe(answers[1]!.headers.get(DUCTS_BODY_VERSION_HEADER));
+    expect(answers.map((answer) => answer.headers.get("x-pe-ducts-reused")).sort()).toEqual(["false", "true"]);
+    expect(c.counts.reads).toBe(1);
+    expect(c.takes.filter((taking) => taking.input.kind === "native")).toHaveLength(1);
+    expect(c.takes.filter((taking) => taking.input.kind === "document" && taking.input.scope.includes("ducts-body-basis"))).toHaveLength(2);
+  } finally { await c.web.close(); }
+});
+
+test("deadline during deferred basis capture retires the flight before ready publication", async () => {
+  const owner = new DuctsReadings({ entries: 2, bytes: 1_000_000, idleMs: 1000, waitMs: 10 });
+  const gate = Promise.withResolvers<void>(); const frames: string[] = [];
+  const subject = ductBodySubject(input); const stop = owner.observe(subject, (frame) => frames.push(frame.state));
+  const result = owner.read(subject, async () => ({ value, nativeRequestId: "deadline-native", target: {
+    session: ref.session, document: row.address, documentRef: ref,
+  } }), { source: { beforeReady: () => gate.promise } });
+  const refused = expect(result).rejects.toMatchObject({ statusCode: 409 });
+  try { await expect.poll(() => frames.includes("failed")).toBe(true); gate.resolve(); await refused; expect(frames).not.toContain("ready"); }
+  finally { gate.resolve(); stop(); }
+});

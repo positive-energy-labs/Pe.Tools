@@ -4,7 +4,6 @@ import { z } from "zod";
 import { ductsReadingSchema, readingKey, type DuctsReadingRequest } from "@pe/agent-contracts";
 import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
-import { BridgeError } from "@pe/host-internal/dispatch";
 import { InvalidRead } from "./native-reads.ts";
 import { ductsSubject, type DuctsBody } from "./ducts-readings.ts";
 import { captureInput, replayInput, inputBindingKey, nativeInputIdentity,
@@ -38,7 +37,7 @@ export function ductBodySubject(input: NativeReadInput): DuctsReadingRequest {
 
 export interface DuctsBasisRead {
   readonly recorded?: DuctsBodyBasis;
-  readonly link: (answer: Answer) => Effect.Effect<string, DoorFailure>;
+  readonly link: (answer: Answer) => Effect.Effect<string | undefined, DoorFailure>;
   readonly consume: (body: DuctsBody, admittedTarget: Answer["actualTarget"]) => Effect.Effect<void, DoorFailure>;
 }
 export interface DuctsBodyBasisSource {
@@ -61,6 +60,12 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
   return { observed: observer, prepare: (input, subject) => Effect.gen(function* () {
     if (lane.kind === "fixture") return yield* refused("Fixture has no recorded Ducts basis", "recording.fixture");
     const store = lane.kind === "live" ? lane.captureStore! : lane.recordingStore;
+    const stopCapture = (error: DoorFailure) => {
+      if (lane.kind !== "live") return Effect.fail(error);
+      const at = lane.captureStore!.capture.begin();
+      return at === null ? Effect.void : lane.captureStore!.capture.stop(at,
+        error.problem === "recording.full" ? "full" : error.problem === "recording.io" ? "io" : "observer");
+    };
     const scope = canonicalJson(JSON.parse(JSON.stringify(input.scope)));
     const selector = canonicalJson(["ducts-body-basis", JSON.parse(JSON.stringify(subject))]);
     const basisInput = { kind: "document", scope: selector } as const;
@@ -97,6 +102,7 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
     return {
       recorded,
       link: (answer: Answer) => Effect.gen(function* () {
+        if (lane.kind === "live" && lane.captureStore!.capture.truncated()) return undefined;
         const candidates = recorded ? [recorded.nativeTakingId] :
           (native.get(answer.nativeRequestId) ?? []).filter(matches).map((taking) => taking.id);
         if (candidates.length !== 1) return yield* refused("Native taking observer has no unique acquisition for this body",
@@ -108,8 +114,9 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
         const value = yield* store.observation(taking);
         if (!sameTarget(value, answer.value)) return yield* refused("Native value disagrees with its exact taking");
         return taking.id;
-      }),
+      }).pipe(Effect.catch((error) => stopCapture(error).pipe(Effect.as(undefined)))),
       consume: (body: DuctsBody, admittedTarget: Answer["actualTarget"]) => Effect.gen(function* () {
+        if (lane.kind === "live" && lane.captureStore!.capture.truncated()) return;
         const taking = checked(body.nativeTakingId);
         if (!taking || taking.input.kind !== "native" || taking.outcome.kind !== "answered")
           return yield* refused("Retained body has no exact native taking", "recording.miss");
@@ -121,13 +128,8 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
         if (!validate(basis) || (recorded && !sameTarget(recorded, basis)))
           return yield* refused("Retained owner evidence disagrees with the original basis");
         if (lane.kind === "live") yield* captureInput(lane.captureStore!, basisInput, scope, codec,
-          Effect.succeed(basis), observed).pipe(Effect.mapError((error) => new BridgeError({
-            message: error.message, status: error.status, problem: error.problem,
-            nativeOutcome: taking.outcome.kind === "answered" ? taking.outcome.nativeOutcome : undefined,
-            evidence: { nativeRequestId: body.nativeRequestId,
-              actualTarget: taking.outcome.kind === "answered" ? taking.outcome.actualTarget : undefined },
-          })));
-      }),
+          Effect.succeed(basis), observed);
+      }).pipe(Effect.catch(stopCapture)),
     } satisfies DuctsBasisRead;
   }) };
 }
