@@ -710,7 +710,7 @@ export namespace DuctsAssignFan {
   }
 }
 
-/** Run the ducts.assign-fan write and its read back inside one transaction group and roll both back. Same request and result as ducts.assign-fan; nothing is committed. */
+/** Run the ducts.assign-fan write and its read back inside one transaction group and roll both back. Refuses a workshared model before any transaction, naming the elements it could borrow. Same request and result as ducts.assign-fan; nothing is committed. */
 export namespace DuctsAssignFanPreview {
   export namespace Req {
     /**
@@ -898,7 +898,7 @@ export namespace DuctsHeal {
   }
 }
 
-/** Run every ducts.heal group inside one transaction group and roll all of it back. Same request and result as ducts.heal; nothing is committed. */
+/** Run every ducts.heal group inside one transaction group and roll all of it back. Refuses a workshared model before any transaction, naming the elements it could borrow. Same request and result as ducts.heal; nothing is committed. */
 export namespace DuctsHealPreview {
   export namespace Req {
     export type DuctHealKind = "cap" | "join";

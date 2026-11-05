@@ -315,7 +315,7 @@ export const hostOpCatalog: readonly CatalogEntry[] = [
     "costTier": "Mutation",
     "visibility": "EscalationVisible",
     "needs": "project-document",
-    "description": "Run the ducts.assign-fan write and its read back inside one transaction group and roll both back. Same request and result as ducts.assign-fan; nothing is committed.",
+    "description": "Run the ducts.assign-fan write and its read back inside one transaction group and roll both back. Refuses a workshared model before any transaction, naming the elements it could borrow. Same request and result as ducts.assign-fan; nothing is committed.",
     "searchTerms": [
       "ducts",
       "fan",
@@ -417,7 +417,7 @@ export const hostOpCatalog: readonly CatalogEntry[] = [
     "costTier": "Mutation",
     "visibility": "EscalationVisible",
     "needs": "project-document",
-    "description": "Run every ducts.heal group inside one transaction group and roll all of it back. Same request and result as ducts.heal; nothing is committed.",
+    "description": "Run every ducts.heal group inside one transaction group and roll all of it back. Refuses a workshared model before any transaction, naming the elements it could borrow. Same request and result as ducts.heal; nothing is committed.",
     "searchTerms": [
       "ducts",
       "heal",

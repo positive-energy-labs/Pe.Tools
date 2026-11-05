@@ -2,6 +2,7 @@
   "version": 1,
   "capabilities": [
     "work",
+    "native-write",
     "geometry"
   ],
   "key": "fans",
@@ -400,6 +401,22 @@
       },
       "refresh": "dependencies"
     },
+    "lossPlan": {
+      "kind": "use",
+      "entry": "ducts.plan-losses",
+      "args": "lossPlanArgs",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "demand": "explicit",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "explicit"
+    },
     "sheetView": {
       "kind": "derive",
       "output": "sheetView",
@@ -536,6 +553,42 @@
       "patches": "ductsEdit",
       "describe": "describeDucts",
       "target": "ductsWork"
+    },
+    "losses": {
+      "kind": "command",
+      "input": "none",
+      "label": "Write to Revit",
+      "review": "shown",
+      "deps": {
+        "page": [
+          "fan"
+        ],
+        "work": [
+          "writeIntent",
+          "calculation",
+          "terminalDrops",
+          "componentDrops",
+          "esp",
+          "equipmentFlows",
+          "roles",
+          "flows",
+          "parameters",
+          "designFriction"
+        ],
+        "readings": [
+          "sheetSnapshot",
+          "sheet",
+          "ductsWork"
+        ]
+      },
+      "captures": [
+        "sheetSnapshot",
+        "sheet"
+      ],
+      "ready": "lossReady",
+      "present": "presentLosses",
+      "entry": "ducts.apply-losses",
+      "intent": "losses"
     }
   },
   "panes": {
@@ -679,7 +732,9 @@
         "sheet-picture",
         "sheet-ledger"
       ],
-      "verbs": []
+      "verbs": [
+        "losses"
+      ]
     }
   },
   "stageOrder": [

@@ -99,7 +99,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
       "path": "/ducts",
       "title": "Ducts",
       "category": "Calculate loads & airflow",
-      "blurb": "Review duct systems, stage inputs and rulings, and preview writes in Revit"
+      "blurb": "Review duct systems, stage inputs and rulings, and plan writes to Revit"
     }
   },
   {

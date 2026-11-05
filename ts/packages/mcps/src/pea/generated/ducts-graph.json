@@ -10,7 +10,7 @@
   "name": "Ducts",
   "directory": {
     "group": "Calculate loads & airflow",
-    "summary": "Review duct systems, stage inputs and rulings, and preview writes in Revit",
+    "summary": "Review duct systems, stage inputs and rulings, and plan writes to Revit",
     "label": "Pressure drop",
     "icon": "Wind",
     "exposure": "Main",
@@ -553,9 +553,9 @@
       },
       "refresh": "dependencies"
     },
-    "lossPreview": {
+    "lossPlan": {
       "kind": "use",
-      "entry": "ducts.preview-losses",
+      "entry": "ducts.plan-losses",
       "args": "lossArgs",
       "deps": {
         "page": [],
@@ -569,9 +569,9 @@
       },
       "refresh": "explicit"
     },
-    "healPreview": {
+    "healPlan": {
       "kind": "use",
-      "entry": "ducts.preview-heal",
+      "entry": "ducts.plan-heal",
       "args": "healArgs",
       "deps": {
         "page": [],
@@ -585,9 +585,9 @@
       },
       "refresh": "explicit"
     },
-    "fanPreview": {
+    "fanPlan": {
       "kind": "use",
-      "entry": "ducts.preview-assign-fan",
+      "entry": "ducts.plan-assign-fan",
       "args": "fanArgs",
       "deps": {
         "page": [],
