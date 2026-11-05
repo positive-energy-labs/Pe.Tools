@@ -15,7 +15,6 @@ import { FamilyWorkspaceDocPane } from "./workspace-doc-pane";
 import { FamilyWorkspaceAnatomy } from "./workspace-anatomy";
 import { familyLockOf, type FamilyMount } from "./store";
 
-vi.mock("@pe/kit/lib/token", () => ({ token: () => "currentColor", dash: () => "none" }));
 const releases: (() => void)[] = [];
 afterEach(() => {
   cleanup();

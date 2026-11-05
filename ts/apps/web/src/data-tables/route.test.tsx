@@ -4,6 +4,7 @@ import { peReadings } from "#/readings";
 import type { GraphMount } from "#/shell/mount";
 import * as workScope from "#/shell/use-work-scope";
 import * as workHost from "#/route/host";
+import { appAtomRegistry } from "#/shell/owner";
 import { readingKey, workKey, type WorkKey, type WorkWrite } from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
@@ -56,6 +57,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  appAtomRegistry.reset();
   for (const release of releases.splice(0).reverse()) release();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -162,9 +164,9 @@ async function mounted() {
     key,
     persisted: () => structuredClone([...stored]),
     selectDocument: async (openId: string) => {
-      await router.navigate({ to: "/data-tables", search: {
-        target: JSON.stringify({ kind: "open", ref: { session, openId } }),
-      } });
+      router.history.push(`/data-tables?target=${encodeURIComponent(
+        JSON.stringify({ kind: "open", ref: { session, openId } }),
+      )}`);
       await waitFor(() => expect(ports().getSnapshot().work?.handle.key).toEqual({
         ...key, open: { session, openId },
       }));
@@ -184,7 +186,9 @@ test("the real graph mount copies native values into Work once and a refresh pre
   const f = await mounted();
   fireEvent.click(f.view.getByRole("button", { name: "Open table" }));
   await waitFor(() => expect(f.scope().work?.doc.draft).toMatchObject({
-    name: "Loads", isNew: false, rows: table.rows, columns: table.columns,
+    name: "Loads", isNew: false,
+    rows: [{ key: "a", values: ["1"] }, { key: "b", values: ["2"] }],
+    columns: [{ heading: "Load", kind: "Number" }],
   }));
   expect(f.view.getByText(/M101/)).toBeTruthy();
   expect(f.fetch).toHaveBeenCalledWith("/call", expect.objectContaining({
@@ -199,7 +203,9 @@ test("the real graph mount copies native values into Work once and a refresh pre
   await waitFor(() => expect(f.scope().work?.doc.draft?.name).toBe("Edited"));
   await act(async () => f.refresh([{ ...table, rows: [] }]));
   await waitFor(() => expect(f.owner().readings.get("tables").value).toEqual([{ ...table, rows: [] }]));
-  expect(f.scope().work?.doc.draft?.rows).toEqual(table.rows);
+  expect(f.scope().work?.doc.draft?.rows).toEqual([
+    { key: "a", values: ["1"] }, { key: "b", values: ["2"] },
+  ]);
   expect(f.scope().work?.doc.draft?.name).toBe("Edited");
   expect(f.owner().journal(f.scope().work!.handle.key).read().undo).toHaveLength(2);
 });
