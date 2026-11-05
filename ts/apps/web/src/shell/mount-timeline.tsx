@@ -7,7 +7,7 @@ import { actionStatusSchema, receiptsForWork, routeAddress } from "@pe/agent-con
 import { readingList } from "./mount-reading";
 import type { GraphMount } from "./mount-owner";
 import type { AdmittedMount } from "./admitted-mount";
-import { JournalButtons, entryCaller, stepState, useWorkJournal } from "./situation-band";
+import { entryCaller, stepState, useWorkJournal } from "./situation-band";
 import { activityTime, projectTimeline, type TimelineVerbs } from "./timeline";
 
 /** One History presentation for graph panes: accepted calls and exact Work receipts. */
@@ -119,11 +119,6 @@ export function GraphHistory<P, W>({
   });
   return (
     <section aria-label={label}>
-      {journal && (
-        <p>
-          Work r{journal.revision ?? "?"} <JournalButtons owner={owner} words />
-        </p>
-      )}
       <ListView
         list={list}
         aria-label={label}

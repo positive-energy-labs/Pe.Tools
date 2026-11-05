@@ -229,10 +229,12 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       let transport: ReturnType<typeof createAdmittedAddress> | undefined;
       let unsubscribeOwner = () => {};
       let stopSubject = () => {};
+      let stopCustody = () => {};
       const close = () => {
         if (closed) return;
         closed = true;
         stopSubject();
+        stopCustody();
         owner.close();
         unsubscribeOwner();
         transport?.close();
@@ -433,6 +435,13 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         read: createAdmittedBody(context),
         close,
       };
+      // A retained tab can subscribe before the router publishes its current tag. The later
+      // address notification must retry acquisition even when Page itself did not change.
+      stopCustody = address.subscribe(() => {
+        if (resources !== "released" || !listeners.size || !input.custody.current()) return;
+        resources = "held";
+        schedule();
+      });
       stopSubject = observeSubject(route.data.key, {
         current: () => input.custody.current(),
         read: mounted.subjectState,

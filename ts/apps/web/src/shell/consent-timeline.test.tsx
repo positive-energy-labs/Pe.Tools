@@ -52,3 +52,17 @@ test("History records a write receipt and caller once rather than echoing its in
   expect(ui.getByRole("option").textContent).not.toContain("Consent open");
   cleanup();
 });
+
+test("opening Timeline leaves undo and redo only in the top bar", async () => {
+  const { GraphHistory } = await import("./mount-timeline");
+  const owner = {
+    timeline: () => [], journal: () => ({ revision: 0, undo: [], redo: [], moves: [] }),
+    subscribe: () => () => {}, revision: () => 0, journalRefusal: () => null,
+    restoreWork: vi.fn(),
+  } as never;
+  const ui = render(<TimelineHead owner={owner} history={<GraphHistory owner={owner} />} />);
+  fireEvent.click(ui.getByRole("button", { name: "Open the Timeline" }));
+  expect(ui.getAllByRole("button", { name: "Undo" })).toHaveLength(1);
+  expect(ui.getAllByRole("button", { name: "Redo" })).toHaveLength(1);
+  cleanup();
+});

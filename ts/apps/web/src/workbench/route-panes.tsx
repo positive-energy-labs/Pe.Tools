@@ -18,7 +18,7 @@ import { RouteTabActions, RouteTabs } from "./route-tabs";
 import { RouteRetention } from "./route-retention";
 
 /** Under these a side folds to its rail: Pea reads thin, a tool needs room for its table. */
-const DOCK_FLOOR = { pea: 280, tools: 420 };
+const DOCK_FLOOR = { pea: 140, tools: 420 };
 
 /** Pea starts, connected tools end. Retained route bodies stay mounted behind the tools rail. */
 export function RouteDock({
@@ -32,9 +32,6 @@ export function RouteDock({
   const tabs = useRouteTabs();
   const pea = useRouterState({
     select: (state) => state.location.pathname === routeAddress("pea").path,
-  });
-  const pictureLink = useRouterState({
-    select: (state) => new URLSearchParams(state.location.searchStr).get("picture") === "model",
   });
   const plan = useAtomValue(store.atoms.planIntent);
   const planRefusal = useAtomValue(store.atoms.planRefusal);
@@ -52,19 +49,17 @@ export function RouteDock({
   useEffect(() => {
     if (plan && plan.route !== tabs.route) store.actions.cancelPlan();
   }, [plan, tabs.route, store]);
-  // A picture link is explicit view intent. Reserve its space before responsive folding can
-  // choose tools as the side to hide; bare routes keep the usual conversation + tool layout.
+  // Route view state never controls the conversation pane.
   const [layout, setLayout] = useState<GraphLayoutState>({
-    tools: { folded: !tabs.route }, pea: { folded: pictureLink },
+    tools: { folded: !tabs.route }, pea: { folded: false },
   });
   useLayoutEffect(
     () =>
       setLayout((prior) => ({
         ...prior,
         tools: { ...prior.tools, folded: !tabs.route },
-        pea: { ...prior.pea, folded: pictureLink },
       })),
-    [tabs.route, tabs.placeId, pictureLink],
+    [tabs.route],
   );
   const failure = tabs.failure ?? planRefusal?.message ?? null;
   // A Work pressed on a closed document: its tool says what was kept and how to reconnect, while
@@ -103,6 +98,10 @@ export function RouteDock({
             minSize: DOCK_FLOOR.tools,
             minOtherSize: DOCK_FLOOR.pea,
             persist: "pe.toolsWidth",
+            rails: {
+              start: { title: "pea", collapseBelow: DOCK_FLOOR.pea },
+              end: { title: "tools", collapseBelow: DOCK_FLOOR.tools },
+            },
           },
           pane("pea"),
           pane("tools"),
