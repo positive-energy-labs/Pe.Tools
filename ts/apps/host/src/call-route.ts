@@ -1077,7 +1077,7 @@ export function makeCallRoute(
             operations,
             bridge,
             observations(),
-            { ...actionDeps, families: composition?.families },
+            { ...actionDeps, families: composition?.families, nativeRead: yield* HostNativeRead },
             composition?.local ??
               ((key, input) =>
                 executeGatewayLocal(key, input, bridge, observations(), actionDeps.pictures!, actionDeps.launchShell)),

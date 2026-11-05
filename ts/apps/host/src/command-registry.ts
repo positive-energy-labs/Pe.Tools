@@ -1,4 +1,5 @@
 import type { ActionJournal } from "./action-journal.ts";
+import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { commandResources } from "./command-reads.ts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { workIntentBoundary, workWriteBoundary } from "./work-write-boundary.ts";
@@ -28,7 +29,7 @@ import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 export function commandRegistry(
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
-  deps: FamilyActionDependencies & InstancesActionDependencies,
+  deps: FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] },
   local: (key: string, input: unknown) => Promise<unknown>,
   origin?: () => string,
 ): CommandRegistry {
@@ -144,7 +145,7 @@ export function bindCommandRuntime(
   owner: ActionJournal,
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
-  deps: FamilyActionDependencies & InstancesActionDependencies,
+  deps: FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] },
   local: (key: string, input: unknown) => Promise<unknown>,
   origin?: () => string,
 ): void {

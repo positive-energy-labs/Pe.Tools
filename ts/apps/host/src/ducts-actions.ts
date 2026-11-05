@@ -5,6 +5,11 @@ import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { ductsDesign, stagedDucts, workHandleSchema } from "@pe/agent-contracts";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import type { HostNativeRead } from "@pe/host-internal/native-read";
+import { Effect } from "effect";
+import { admittedCommandReadIdentity } from "./command-read-identity.ts";
+import { RequestIdentity } from "./request-services.ts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
 import { invokeBridge, type RevitBridge } from "./bridge.ts";
@@ -119,7 +124,7 @@ export function healedCellPaths(
 /** Work is the only authored input. Plan, rehearsal and apply share the same derivation and journal. */
 export function ductsExecutors(
   bridge: RevitBridge["Service"],
-  deps: import("./family-actions.ts").FamilyActionDependencies = {},
+  deps: import("./family-actions.ts").FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"] } = {},
 ) {
   const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
     const target = targetOf(ctx);
@@ -177,11 +182,17 @@ export function ductsExecutors(
         const intent = { ...ductsScope, walk: fanScope?.walk, cells };
         const { firm } = await runPods(deps, deps.files!.firm);
         const criteria = resolveCriteria(workLayer(design), null, firm);
-        const read = (selector: Record<string, unknown>) =>
-          invokeBridge<DuctSnapshot>(
-            bridge,
-            target,
-            selector.kind === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk",
+        const nativeRead = deps.nativeRead;
+        if (!nativeRead) throw refused("Ducts preparation requires the root native Read capability", "read.unavailable");
+        const readNative = <K extends "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables">(key: K, input: unknown) =>
+          runPods(deps, admittedCommandReadIdentity(ctx).pipe(
+            Effect.flatMap((identity) => nativeRead.read({ key, input, scope: identity.scope }).pipe(
+              Effect.provideService(RequestIdentity, identity),
+            )),
+            Effect.map((answer) => nativeResponseSchema(key).parse(answer.value)),
+          ));
+        const read = (selector: Record<string, unknown>): Promise<DuctSnapshot> =>
+          readNative(selector.kind === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk",
             {
               selector: selector.kind === "from" ? {
                 ...selector,
@@ -201,8 +212,8 @@ export function ductsExecutors(
         }[kind]();
         const { input, dependencies } = await {
           losses: async () => {
-            const tables = await invokeBridge(bridge, target, "ducts.tables", { ids: TABLE_IDS });
-            const grids = toGrids(tables as Parameters<typeof toGrids>[0]);
+            const tables = await readNative("ducts.tables", { ids: TABLE_IDS });
+            const grids = toGrids(tables);
             const catalogs = await runPods(deps, deps.files!.ductCatalogs);
             const layers = () => ({
               snapshot,
