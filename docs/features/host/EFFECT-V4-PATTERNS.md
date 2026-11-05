@@ -1,699 +1,372 @@
-# Effect v4 Patterns — grounding doc for the backend rework
+# Effect v4 patterns for the host, MCP server and web doors
 
-Purpose: **you have Effect v3 internalized from training. Writing v4 by reflex produces wrong code.**
-This doc is the antidote. Read it before writing any Effect in this repo.
+Read 2026-11-04 at `main` f734953f. Pin: `effect` 4.0.2 exact, with `@effect/platform-node` 4.0.2 and `@effect/atom-react` 4.0.2.
 
-Sources of truth (verify against these, never from memory):
-- **Our condoned style:** `ts/apps/host/src/` — `index.ts`, `bridge.ts`, `call-route.ts`,
-  `host-ownership.ts`, `local-ops.ts`, `local-error.ts`, `product-paths.ts`, and `@pe/host-contracts`.
-  Host runs `effect@4.0.0-beta.92`.
-- **The library:** `.explore\effect-smol` (Effect working repo, currently
-  `4.0.0-beta.94`). `git pull` it first. Signatures live in `packages/effect/src/...`. Migration guides
-  live in `MIGRATION.md` + `migration/*.md` (they are excellent — read the one for whatever you touch).
+Your training is mostly Effect v3, and v4 written from those reflexes compiles wrong or does not compile. This doc lists what changed and the shapes this repo uses. [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) is the law: Effect is the standard library, and each request runs on one fiber. When this doc and the ADR disagree, the ADR wins, so fix this doc.
 
-## Version discipline (READ FIRST)
+## 0. References, in order of trust
 
-> Superseded 2026-11-02 by [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) Consequences: the host pins effect 4.0.2 exactly, not beta.92. The method below (grep the installed package, then effect-smol) still holds; read `4.0.2` where the text says `beta.92`.
+1. **The installed package.** It is the only version that compiles here, and the published package ships its sources:
+   - `ts/node_modules/.pnpm/effect@4.0.2/node_modules/effect/src/` holds the modules. Read the doc comment and the `@stability` tag.
+   - `ts/node_modules/.pnpm/effect@4.0.2/node_modules/effect/ai-docs/src/` holds worked examples by area: `01_effect`, `03_stream`, `06_schedule`, `07_datetime`, `08_observability`, `09_testing`, `50_http-client`, `51_http-server`, `60_child-process`, `70_cli`, `71_ai`.
+   - Look up the platform backends and React hooks under `ts/node_modules/.pnpm/@effect+platform-node@4.0.2_*/node_modules/@effect/platform-node/src/` and `ts/node_modules/.pnpm/@effect+atom-react@4.0.2_*/node_modules/@effect/atom-react/src/`.
+2. **swell's `effect` skill** (`~/source/repos/swell/.claude/skills/effect/SKILL.md`). ADR 0029 names it as the reference dogma. It gives seven rules (the edge is a Schema, failures are values, dependencies are services, nothing ambient, name the steps, a driver not an owner, the source is the spec) and a seven-step loop: find the pin, get the source at that tag, ask which module owns the concept, read three things, compile what you doubt, probe what matters, record the verdict. It also lists smells and the places where Effect falls short. swell pins 4.0.2 too.
+3. **ADR 0029 and the host ledger** (`docs/features/host/LEDGER.md`). They hold the rules, the API corrections made against 4.0.2, and what is still owed.
+4. **Clones under `.explore/`.** They are useful for the `migration/*.md` guides, `MIGRATION.md`, `LLMS.md` and `packages/effect/test`. None of them is at the pin:
+   - `.explore/effect` follows the canonical `Effect-TS/effect` repo, which now hosts v4. Its working copy reads `4.0.0-rc.111`, which is older than 4.0.2, and it has no release tags. Pull it before you use it. Where it differs from the installed package, the installed package wins.
+   - `.explore/effect-smol` is archived at `4.0.0-beta.98`, and its README says v4 moved to `Effect-TS/effect`. Do not cite it.
+   - `.explore/effect-atom` is the pre-merge v3-era atom library. Use it only for rename history.
+5. **Testimony.** The Effect audit of 2026-11-04 is `.artifacts/review/effect-audit-2026-11-04/SYNTHESIS.md`, and its fix rules are items 11 to 24 and 31 of `.artifacts/runs/evolution-20261103/briefs/COMMON.md`. Section 2 below folds them in. They are disposable artifacts, so cite the source lines, never the artifact.
+6. **Upstream on the web:** https://github.com/Effect-TS/effect (branch `main` is v4) and https://effect.website/docs. Both may run ahead of 4.0.2.
 
-Host is on **beta.92**; effect-smol HEAD is **beta.94+**. The beta moves fast and renames APIs between
-releases. **Never trust a signature from memory or from this doc alone when it matters.** Two ways to confirm:
+Doubt every name in this doc. Before you build on a signature, grep it in reference 1 and compile a ten-line sketch.
 
-1. Installed package (matches what actually compiles here):
-   `ts/node_modules/.pnpm/effect@4.0.0-beta.92/node_modules/effect/src/<Module>.ts`
-   (the published package ships `src/` — grep it directly.)
-2. effect-smol at HEAD: `packages/effect/src/<area>/<Module>.ts`. If a signature differs from what the
-   installed version exposes, the installed version wins for compiling; note the drift.
+### Stability
 
-When you bump the host's effect version, re-grep both. If a recipe below fails to typecheck, the API moved —
-grep, don't guess.
+Some modules carry `@stability unstable` and can break in a minor release: `effect/http`, `effect/http-api`, `effect/process`, `effect/rpc`, `effect/reactivity`, and others. That is why the pin is exact, and why ADR 0029 makes any bump a wave of its own. When you bump, re-grep every recipe below.
 
 ---
 
-## 1. The v3→v4 gotcha table
+## 1. What changed from v3
 
-Everything here is verified against effect-smol source or our host code. If it's not in a table, don't assume it.
+Every name below was grepped as an export of the 4.0.2 sources. A name that is not in these tables may still exist, but grep it before you use it.
 
-### 1a. Module locations moved (the `@effect/platform` / `@effect/rpc` packages are GONE)
+### 1a. Module paths
 
-Almost everything merged into the single `effect` package under `effect/unstable/*`. All ecosystem packages
-share **one version number** now (`effect@4.0.0-beta.N` ⇒ `@effect/platform-node@4.0.0-beta.N`).
+v4 has one `effect` package with subpath exports, and there is no `effect/unstable/*` path. The betas used `effect/unstable/http` and similar paths. If you meet `unstable/` in an old note, the note is stale.
 
-| v3 import | v4 import |
+| v3 | v4 (4.0.2) |
 | --- | --- |
-| `@effect/platform/HttpRouter` | `effect/unstable/http` → `import { HttpRouter } from "effect/unstable/http"` |
-| `@effect/platform/HttpServerResponse` | `effect/unstable/http` → `import { HttpServerResponse } from "effect/unstable/http"` |
-| `@effect/platform/HttpServerRequest` | `effect/unstable/http` (`HttpServerRequest`) |
-| `@effect/platform/HttpApp` | `effect/unstable/http/HttpEffect` |
-| `@effect/platform/HttpApi*` | `effect/unstable/httpapi/*` (barrel `effect/unstable/httpapi`) |
-| `@effect/platform/Command` | `effect/unstable/process/ChildProcess` |
-| `@effect/platform/CommandExecutor` | `effect/unstable/process/ChildProcessSpawner` |
-| `@effect/platform/Socket` | `effect/unstable/socket/Socket` |
-| `@effect/rpc/Rpc\|RpcGroup\|RpcServer\|RpcClient\|RpcSerialization` | `effect/unstable/rpc/*` (barrel `effect/unstable/rpc`) |
-| `@effect/schema/Schema` | **`effect/Schema`** (top-level barrel `effect`) — this is NOT `@effect/schema` anymore |
-| `@effect/platform/KeyValueStore` | `effect/unstable/persistence/KeyValueStore` |
-| `@effect/experimental/Sse` | `effect/unstable/encoding/Sse` |
-| `@effect/ai/*` | `effect/unstable/ai/*` |
-| `effect/JSONSchema` | `effect/JsonSchema` (renamed casing) |
-| `effect/Either` | **`effect/Result`** — `Either` is gone; it's `Result` now |
-| `effect/FiberRef` | `effect/References` (see 1e) |
-| `effect/FastCheck`, `effect/TestClock` | `effect/testing/FastCheck`, `effect/testing/TestClock` |
+| `@effect/platform/HttpRouter`, `HttpServerRequest`, `HttpServerResponse`, `HttpMiddleware`, `HttpClient` | `effect/http` (`import { HttpRouter, HttpServerResponse } from "effect/http"`) |
+| `@effect/platform/HttpApp` | `effect/http` → `HttpEffect` |
+| `@effect/platform/HttpApi*` | `effect/http-api` |
+| `@effect/platform/Command`, `CommandExecutor` | `effect/process` → `ChildProcess`, `ChildProcessSpawner` |
+| `@effect/platform/Socket` | `effect/socket` |
+| `@effect/rpc/*` | `effect/rpc` |
+| `@effect/platform/KeyValueStore` | `effect/persistence` |
+| `@effect/experimental/Sse`, encodings | `effect/encoding` (`Sse`, `Ndjson`, `Base64`, …) |
+| `@effect/ai/*` | `effect/ai` |
+| `@effect/schema/Schema` | `Schema` from `"effect"`. It is not `@effect/schema`. |
+| `effect/Either` | `effect/Result` |
+| `effect/FiberRef` | Gone. `effect/References` holds the built-ins (see 1e). |
+| `effect/TestClock`, `effect/FastCheck` | `effect/testing` → `TestClock`, `TestConsole`, `TestSchema` |
+| `@effect-atom/atom-react` | Atoms come from `effect/reactivity/Atom`, `AsyncResult`, `AtomRegistry` and `Reactivity`. The hooks come from `@effect/atom-react`. |
 
-`effect/unstable/*` modules may take breaking changes in **minor** releases (they graduate to top-level as
-they stabilize). Import from the direct module path or the area barrel; both work — our host uses the barrel
-(`import { HttpRouter, HttpServerResponse } from "effect/unstable/http"`).
+`@effect/platform-node` supplies `NodeRuntime`, `NodeServices`, `NodeHttpServer`, `NodeHttpClient` (the host uses `layerUndici`), `NodeChildProcessSpawner`, `NodeSocket`, `NodeFileSystem` and `NodePath`.
 
-Platform-node lives in `@effect/platform-node`: `NodeHttpServer`, `NodeHttpClient`, `NodeRuntime`,
-`NodeServices`, `NodeSocket`, `NodeChildProcessSpawner`, etc.
+### 1b. Services and layers
 
-### 1b. Services & layers (the biggest reflex trap)
+| v3 | 4.0.2 |
+| --- | --- |
+| `Context.Tag("X")<X, S>()` | `class X extends Context.Service<X, S>()("X") {}` |
+| `Context.GenericTag<S>("X")` | `const X = Context.Service<Id, S>("X")` (the function form; see `RequestIdentity` in `request-services.ts:14`) |
+| `Effect.Service<X>()("X", { effect, dependencies })` with an automatic `.Default` | Gone. Give the class a `static readonly layer = Layer.effect(X, make)` and wire the dependencies with `Layer.provide`. |
+| static accessors `X.method()` | Gone. Use `const x = yield* X`, then call `x.method()`. |
+| the service's shape type | `X["Service"]`, or `Context.Service.Shape<typeof X>` for a function-form service |
+| `Context.Reference<X>()("X", opts)` | `Context.Reference<T>("X", { defaultValue })` |
+| `Layer.scoped` / `Layer.scopedDiscard` | `Layer.effect` / `Layer.effectDiscard`. Both are scoped. |
+| `Layer.tapErrorCause` | `Layer.tapCause` |
+| `X.Live` / `X.Default` | `X.layer`, plus variants such as `X.live` when the backend is provided |
+| `Effect.Effect.Context<T>` | `Effect.Services<T>`. `Effect.Success<T>` gives the success type. |
 
-| v3 habit | v4 reality | correct v4 |
-| --- | --- | --- |
-| `Context.Tag("X")<X, S>()` | `Context.Service` — **type params first, id via returned ctor** | `class X extends Context.Service<X, S>()("X") {}` |
-| `Context.GenericTag<S>("X")` | `Context.Service<S>("X")` (function form) | `const X = Context.Service<S>("X")` |
-| `Effect.Tag("X")<X,S>()` + static accessors (`X.method(...)`) | accessors **removed** (generics were lost) | `X.use((s) => s.method(...))`, or prefer `yield* X` then `x.method(...)` |
-| `Effect.Service<X>()("X", { effect, dependencies })` + auto `.Default` | `Context.Service<X>()("X", { make })` stores the ctor but **does NOT auto-make a layer**; no `dependencies` | define layer yourself (below) |
-| access the service's shape type | `X["Service"]` | `(bridge: RevitBridge["Service"]) => ...` |
-| `Context.Reference<X>()("X", opts)` | `Context.Reference<T>("X", opts)` (function form) | `const L = Context.Reference<"info"\|"warn">("L", { defaultValue: () => "info" })` |
-| `Layer.scoped(Tag, eff)` | **`Layer.effect`** | `Layer.effect(Tag, Effect.gen(...))` |
-| `Layer.scopedDiscard(eff)` | **`Layer.effectDiscard`** | `Layer.effectDiscard(Effect.gen(...))` |
-| `Layer.tapErrorCause` | `Layer.tapCause` | — |
-| naming: `X.Default` / `X.Live` | convention is now **`X.layer`** (+ `layerTest`, `layerConfig`, …) | `static readonly layer = Layer.effect(this, this.make)` |
+### 1c. Effect combinators
 
-`Layer.effect` accepts both `Layer.effect(Tag, effect)` (host style) and curried `Layer.effect(Tag)(effect)`
-(test-fixture style). Both are real.
+| v3 | 4.0.2 |
+| --- | --- |
+| `Effect.async` | `Effect.callback` |
+| `Effect.either` | `Effect.result`. It returns a `Result`. |
+| `Effect.zipRight` / `zipLeft` | `Effect.andThen` / `Effect.tap` |
+| `Effect.catchAll` / `catchAllCause` / `catchAllDefect` | `Effect.catch` / `catchCause` / `catchDefect` |
+| `Effect.catchSome` / `catchSomeCause` | `Effect.catchFilter` / `catchCauseIf`, `catchCauseFilter` |
+| `Effect.tapErrorCause` | `Effect.tapCause` |
+| `Effect.ignoreLogged` | `Effect.ignore({ log: true })` |
+| `Effect.fork` / `forkDaemon` | `Effect.forkChild` / `Effect.forkDetach`. In the host, use neither (see 2f). |
+| `Effect.forkScoped`, `Effect.forkIn` | unchanged |
+| `Effect.forkAll`, `forkWithErrorHandler` | removed |
+| `Effect.makeLatch` / `makeSemaphore` | `Latch.make` / `Semaphore.make`. In 4.0.2, `Semaphore` is not FIFO (see 2j). |
+| `Effect.timeoutTo` style | `Effect.timeoutOrElse({ duration, orElse })` |
+| `Effect.catchTag`, `catchTags`, `catchIf` | unchanged. `catchReason` / `catchReasons` are new. |
 
-`Effect.Service`-with-`make` no longer wires deps. Do it by hand:
-```ts
-class Logger extends Context.Service<Logger>()("Logger", {
-  make: Effect.gen(function* () { /* ... */ })
-}) {
-  static readonly layer = Layer.effect(this, this.make).pipe(Layer.provide(Config.layer))
-}
-```
+### 1d. `Ref`, `Deferred` and `Fiber` are not yieldable
 
-### 1c. Effect combinator renames
-
-| v3 | v4 | note |
-| --- | --- | --- |
-| `Effect.async` | `Effect.callback` | |
-| `Effect.either` | `Effect.result` | returns `Result`; the value has `_tag: "Success"\|"Failure"` with `.success`/`.failure` |
-| `Effect.zipRight` | `Effect.andThen` | |
-| `Effect.zipLeft` | `Effect.tap` | |
-| `Effect.catchAll` | `Effect.catch` | |
-| `Effect.catchAllCause` | `Effect.catchCause` | |
-| `Effect.catchAllDefect` | `Effect.catchDefect` | |
-| `Effect.catchSome` | `Effect.catchFilter` (takes a `Filter`, not `Option`) | |
-| `Effect.catchSomeCause` | `Effect.catchCauseIf` / `Effect.catchCauseFilter` | |
-| `Effect.tapErrorCause` | `Effect.tapCause` | |
-| `Effect.ignoreLogged` | `Effect.ignore` (`Effect.ignore({ log: true })` to log) | host uses this |
-| `Effect.fork` | `Effect.forkChild` | |
-| `Effect.forkDaemon` | `Effect.forkDetach` | |
-| `Effect.forkScoped` / `Effect.forkIn` | **unchanged** | host uses `Effect.forkScoped` |
-| `Effect.forkAll`, `Effect.forkWithErrorHandler` | **removed** | fork individually; observe via `Fiber.join`/`Fiber.await` |
-| `Effect.makeLatch` / `Effect.makeSemaphore` | `Latch.make` / `Semaphore.make` | |
-| `Effect.catchTag`, `Effect.catchTags`, `Effect.catchIf` | **unchanged** | |
-
-`catchTag`/`catchTags` still work — our tagged errors (`class BridgeError { readonly _tag = "BridgeError" }`)
-are matched by `_tag`. New: `Effect.catchReason`/`catchReasons` for nested `reason`-tagged errors.
-
-Fork options: `forkChild`/`forkDetach`/`forkScoped`/`forkIn` all take `{ startImmediately?, uninterruptible? }`.
-
-### 1d. Yieldable — `Ref`/`Deferred`/`Fiber` are NOT Effects anymore
-
-v3 let you `yield* ref`, `yield* deferred`, `yield* fiber`. **v4 does not.** They implement `Yieldable`
-only if they're `Effect`, `Option`, `Result`, `Config`, or a `Context.Service`. Everything else needs its
-module function:
-
-| v3 | v4 |
+| v3 | 4.0.2 |
 | --- | --- |
 | `yield* ref` | `yield* Ref.get(ref)` |
 | `yield* deferred` | `yield* Deferred.await(deferred)` |
 | `yield* fiber` | `yield* Fiber.join(fiber)` |
-| `Effect.map(Option.some(x), f)` | `Effect.map(Option.some(x).asEffect(), f)` — or just `yield*` it in a gen |
 
-`yield* SomeService` and `yield* Option.some(x)` still work (they're Yieldable). Passing a non-Effect
-Yieldable to a combinator like `Effect.map`/`Effect.all` needs `.asEffect()`.
+An `Effect`, an `Option`, a `Result`, a `Config` and a `Context.Service` are yieldable. Pass a non-Effect yieldable to a combinator with `.asEffect()`.
 
-### 1e. FiberRef → `Context.Reference` / `References`
+### 1e. FiberRef
 
-`FiberRef`, `FiberRefs`, `Differ` are removed. Built-ins moved to the `References` module and are read by
-`yield*`-ing them; set them with `Effect.provideService`.
+4.0.2 has no `FiberRef` module. The only fiber modules are `Fiber`, `FiberHandle`, `FiberMap` and `FiberSet`. Ambient per-fiber state is a `Context.Reference` or a required `Context.Service`, set with `Effect.provideService`. The built-in references live in `References`, for example `References.CurrentLogLevel`, `MinimumLogLevel`, `CurrentLogAnnotations` and `TracerEnabled`. Request identity is a required service that admission provides once (ADR 0029 rule 2). `References` has no `CurrentConcurrency`.
 
-| v3 | v4 |
-| --- | --- |
-| `yield* FiberRef.get(FiberRef.currentLogLevel)` | `yield* References.CurrentLogLevel` |
-| `Effect.locally(eff, FiberRef.currentLogLevel, x)` | `Effect.provideService(eff, References.CurrentLogLevel, x)` |
-| `FiberRef.currentConcurrency` | `References.CurrentConcurrency` |
+### 1f. Cause is flat
 
-### 1f. Cause is flat now
+A `Cause` has `reasons: ReadonlyArray<Fail | Die | Interrupt>`. Iterate the reasons; do not recurse a tree.
 
-`Cause<E>` is `{ reasons: ReadonlyArray<Fail | Die | Interrupt> }`. `Empty`/`Sequential`/`Parallel` are gone.
-Iterate `cause.reasons`; don't recurse a tree.
-
-| v3 | v4 |
+| v3 | 4.0.2 |
 | --- | --- |
 | `Cause.isFailure` / `isDie` / `isInterrupted` | `Cause.hasFails` / `hasDies` / `hasInterrupts` |
-| `Cause.failureOption` | `Cause.findErrorOption` |
-| `Cause.failures(cause)` | `cause.reasons.filter(Cause.isFailReason)` |
-| `Cause.sequential`/`parallel(l, r)` | `Cause.combine(l, r)` |
-| `Cause.NoSuchElementException` (+ all `*Exception`) | `Cause.NoSuchElementError` (all `*Error`) |
+| `Cause.failureOption` | `Cause.findErrorOption`. On an `Exit`, use `Exit.findErrorOption`. |
+| `Cause.failures(c)` | `c.reasons.filter(Cause.isFailReason)` |
+| `Cause.sequential` / `parallel` | `Cause.combine` |
+| `*Exception` | `*Error` (`Cause.NoSuchElementError`) |
 
-### 1g. Stream renames
+`Cause.pretty` exists. ADR 0029 rule 5 makes it a finding inside an error message, because a message must not carry a classified failure.
 
-| v3 | v4 |
+### 1g. Stream
+
+| v3 | 4.0.2 |
 | --- | --- |
-| `Stream.fromChunk` / `fromChunks` | `Stream.fromArray` / `fromArrays` |
-| `Stream.mapChunks` | `Stream.mapArray` |
-| `Stream.async` (+ `asyncEffect`/`asyncPush`/`asyncScoped`) | `Stream.callback` |
+| `Stream.fromChunk(s)` / `mapChunks` | `Stream.fromArray(s)` / `mapArray` |
+| `Stream.async*` | `Stream.callback((queue) => …)`, emitting with `Queue.offerUnsafe(queue, v)` |
 | `Stream.repeatEffect` | `Stream.fromEffectRepeat` |
-| `Stream.either` | `Stream.result` |
-| `Stream.catchAll` / `catchAllCause` | `Stream.catch` / `Stream.catchCause` |
-| `Stream.Context` | `Stream.Services` |
-| `Mailbox` / `Mailbox.make` | `Queue.Queue` / `Queue.make` |
+| `Stream.either` / `catchAll` | `Stream.result` / `Stream.catch` |
+| `Mailbox` | `Queue` |
 
-Unchanged and used by our host: `Stream.fromPubSub`, `Stream.map`, `Stream.filter`, `Stream.runForEach`.
+`Stream.fromPubSub`, `map`, `filter`, `runForEach` and `fromReadableStream` are unchanged.
 
-### 1h. Schema — this is `effect/Schema`, and it is NOT v3 `@effect/schema`
+### 1h. Schema
 
-Import `import { Schema } from "effect"`. Constructors that were variadic are now **array-taking**, and the
-decode/encode function family gained explicit `Effect`/`Exit`/`Sync` suffixes. Full guide:
-`effect-smol/migration/schema.md`. High-frequency ones:
+Import it as `import { Schema } from "effect"`. The full guide is `migration/schema.md` in `.explore/effect`. The usual traps:
 
-| v3 | v4 |
+| v3 | 4.0.2 |
 | --- | --- |
-| `Schema.Union(A, B)` | `Schema.Union([A, B])` |
-| `Schema.Tuple(A, B)` | `Schema.Tuple([A, B])` |
-| `Schema.Literal("a", "b")` | `Schema.Literals(["a", "b"])` (single: `Schema.Literal("a")` still ok; `Schema.Literal(null)` → `Schema.Null`) |
+| `Schema.Union(A, B)`, `Tuple(A, B)` | `Schema.Union([A, B])`, `Schema.Tuple([A, B])` |
+| `Schema.Literal("a", "b")` | `Schema.Literals(["a", "b"])`. A single `Schema.Literal("a")` is still fine. |
 | `Schema.Record({ key, value })` | `Schema.Record(key, value)` |
-| `Schema.decodeUnknown(s)` | `Schema.decodeUnknownEffect(s)` |
-| `Schema.decode(s)` | `Schema.decodeEffect(s)` |
-| `Schema.decodeUnknownEither(s)` | `Schema.decodeUnknownExit(s)` |
-| `Schema.decodeUnknownSync` / `decodeSync` | **unchanged** |
-| `Schema.filter(pred)` | `Schema.check(Schema.makeFilter(pred))` |
-| `Schema.filter(refinement)` | `Schema.refine(refinement)` |
-| `Schema.transform(from, to, {decode,encode})` | `from.pipe(Schema.decodeTo(to, SchemaTransformation.transform({decode,encode})))` |
-| `Schema.transformOrFail(...)` | `from.pipe(Schema.decodeTo(to, { decode: SchemaGetter.transformOrFail(...), encode }))` |
-| `Schema.optionalWith(s, {exact:true})` | `Schema.optionalKey(s)` |
-| `Schema.optionalWith(s, {default})` | `s.pipe(Schema.withDecodingDefaultType(Effect.succeed(x)))` |
-| `Schema.pick("a")` / `omit("b")` | `.mapFields(Struct.pick(["a"]))` / `.mapFields(Struct.omit(["b"]))` |
-| `Schema.extend(structB)` | `.pipe(Schema.fieldsAssign(fieldsB))` or `.mapFields(Struct.assign(fieldsB))` |
-| `s.annotations(a)` | `s.annotate(a)` |
-| filters `greaterThan`/`minLength`/`int` | `isGreaterThan`/`isMinLength`/`isInt`, applied via `.check(...)` |
-| `Schema.TaggedError` | `Schema.ErrorClass` (see RPC recipe) |
-| `ParseResult.ArrayFormatter.formatError` | parse now fails with `Schema.SchemaError` whose `.issue` is a `SchemaIssue`; format via `SchemaIssue.makeFormatterStandardSchemaV1()(err.issue).issues` |
+| `decodeUnknown` / `decode` / `decodeUnknownEither` | `decodeUnknownEffect` / `decodeEffect` / `decodeUnknownExit`. The `*Sync` forms are unchanged. |
+| `Schema.filter(pred)` | `.check(Schema.makeFilter(pred))`. A refinement uses `Schema.refine`. |
+| `Schema.transform` / `transformOrFail` | `from.pipe(Schema.decodeTo(to, …))` with `SchemaTransformation` / `SchemaGetter` |
+| `optionalWith(s, { exact: true })` / `{ default }` | `Schema.optionalKey(s)` / `s.pipe(Schema.withDecodingDefault…)` |
+| `.annotations(a)` | `.annotate(a)` |
+| `Schema.TaggedError` (v3) | `Schema.TaggedError<Self>()("Tag", fields)`. It is the stable 4.0.2 name. The betas called it `Schema.ErrorClass`, which no longer exists. The untagged form is `Schema.Error`. |
+| `ParseResult` formatters | A failed parse raises `Schema.SchemaError` with `.issue`. Format it through `SchemaIssue`. |
 
-`Schema.String`, `Schema.Number`, `Schema.Boolean`, `Schema.Struct`, `Schema.Array`, `Schema.NullOr`,
-`Schema.optional`, `Schema.Option` are unchanged in spelling. Type extraction is `Schema.Schema.Type<typeof s>`;
-the runtime codec type is `Schema.Codec<A>`. (Both used throughout `@pe/host-contracts` and `call-route.ts`.)
+Type extraction is `typeof S.Type` or `Schema.Schema.Type<typeof S>`. Use `Schema.Json` for arbitrary JSON, and `Schema.fromJsonString` / `UnknownFromJsonString` to parse JSON text.
 
-### 1i. Misc
+**Standard Schema.** MCP SDK v2 (`@modelcontextprotocol/server`) types `registerTool` on Standard Schema plus `~standard.jsonSchema`. Compose `Schema.toStandardJSONSchemaV1(Schema.toStandardSchemaV1(S))` (ADR 0029 rule 8, PROVEN by compile 2026-11-02). In the other direction, `fromStandardSchema` (`host-contracts/src/contracts/standard-schema.ts:26`) decodes zod contracts through Effect. It is transitional: its import count only shrinks, phase 8 deletes it, and a new edge uses native Effect Schema.
 
-- `Runtime<R>` **removed**. Use `Context<R>`. Run with deps via `Effect.runForkWith(services)` after
-  `yield* Effect.context<R>()`. `Runtime` module now only has `Teardown`/`makeRunMain`.
-  > Superseded 2026-11-02 by [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) rules 2 and 12: a `run*With` call is legal only on an `// effect-edge:` line, and a fiber is forked into a service scope with `Effect.forkScoped`/`Effect.forkIn`, never a detached `runForkWith`. The rename fact above still holds.
-- `Scope.extend` → `Scope.provide`.
-- `Effect.provideService` / `Effect.provideContext` — unchanged names.
+### 1i. Runtime
+
+`Runtime<R>` is gone; the `Runtime` module keeps only `Teardown` and `makeRunMain`. `NodeRuntime.runMain` is the process entry. `Scope.extend` became `Scope.provide`. `ManagedRuntime` exists, but no house shape uses it.
 
 ---
 
-## 2. Condoned in-house patterns (from `apps/host`)
+## 2. House rules, as code (ADR 0029)
 
-These excerpts are the house style. Copy their shape.
+The host still carries islands, so a file you open may contradict this section. Treat the island as the finding, not the precedent. At f734953f: 124 `effect-edge: island, phase 5` markers, 91 `Effect.fnUntraced` against 48 `Effect.fn`, 38 `Effect.promise`, `AsyncLocalStorage` in 5 host files, and module singletons in `gateway-owner.ts`. Copy from the four places where Effect is real: `ts/packages/host-internal/src/dispatch.ts` (the serial worker), `ts/apps/host/src/native-reads.ts`, `ts/apps/host/src/run-consent.ts` (settlement) and `ts/apps/host/src/harness/spawner.ts`.
 
-### Service definition + Layer (`bridge.ts`)
+### 2a. The run family runs only at a marked edge (rule 2)
+
+Every `Effect.run*`, `runMain` and `*With` form, including aliases and destructured forms, needs a `// effect-edge: <reason>` comment on its own line. The reason comes from a closed vocabulary: `process-main`, `cli-main`, `test-runner`, `als-crossing` (retires in phase 5), or `island, phase 5`. The `pe/effect-edge` lint (`ts/scripts/oxlint-effect-edge.js`) refuses any other site. The per-file island counts in `ts/tests/repo-guards/src/effect-islands.baseline.json` only shrink, and the guard compares them to the merge base. After phase 5 the island count is zero.
+
 ```ts
-export class RevitBridge extends Context.Service<
-  RevitBridge,
-  {
-    readonly invoke: (key: string, payload: unknown, sid?: string) =>
-      Effect.Effect<unknown, BridgeError | NoRevitSession>
-    readonly events: PubSub.PubSub<HostBridgeEvent>
-    // ...
-  }
->()("RevitBridge") {}
-
-export const RevitBridgeLive = Layer.effect(
-  RevitBridge,
-  Effect.gen(function* () {
-    const sessions = yield* Ref.make(new Map<string, Session>())
-    const events = yield* PubSub.unbounded<HostBridgeEvent>()
-    // ... build the closure ...
-    return { invoke, snapshot, list, handleConnection, events }
-  }),
-)
+// host-main.ts: the one product process edge
+// effect-edge: process-main
+NodeRuntime.runMain(hostProgram());
 ```
-Consume it as `const bridge = yield* RevitBridge`, then `bridge.invoke(...)`. When you need the shape type in
-a signature, use `RevitBridge["Service"]` (see `call-route.ts` `dispatchTsOnlyOperation`).
 
-### Tagged errors — plain classes, not `Data.TaggedError`
-> Superseded 2026-11-02 by [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) rule 5: new errors are `Schema.TaggedError`; plain `_tag` classes survive only until their file is converted. The v4 mechanics below still hold.
+Never write a helper that captures `Effect.context()` and calls `runPromiseWith(services)`: it ends the fiber (COMMON 13). Write the caller as an Effect instead.
+
+### 2b. Dependencies are services, provided once
 
 ```ts
-export class BridgeError {
-  readonly _tag = "BridgeError"
-  constructor(readonly message: string, readonly statusCode: number) {}
-}
-export class NoRevitSession {
-  readonly _tag = "NoRevitSession"
-  readonly message = "No Revit session is connected to the bridge."
+export class Spawner extends Context.Service<Spawner, Effect.Success<typeof make>>()("pe/Spawner") {
+  static readonly layer = Layer.effect(Spawner, make); // scoped: closing the layer closes every child
+  static readonly live = Spawner.layer.pipe(Layer.provide(NodeServices.layer));
 }
 ```
-`Effect.catch`/`catchTag` discriminate on `_tag`. Map to HTTP via a `toProblem(error)` switch on `_tag`
-(see `call-route.ts`) → problem+json with a real status.
 
-### Effectful functions — `Effect.fnUntraced`
-> Superseded 2026-11-02 by [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) rule 6: the house idiom is `Effect.fn("name")`, so every step is a span. `fnUntraced` is for hot inner loops only.
+- Anything with a lifetime is a service, built in `make` with `Effect.gen` and provided once in `app.ts` `makeHttpLive`. The scoped services today are `RevitBridge`, `NativeReads`, `RunConsents`, `HarnessThreads`, `FamiliesReader`, `MachineOwner`, `CaptureStore`, `ReceiptExport`, `Spawner`, `HostLifecycle`, `UpdateReader` and `AdmittedBuiltins`. `ActionJournal` and `HostLog` are still module state in `gateway-owner.ts`, which is a finding (COMMON 20).
+- Configured bounds are a `Context.Reference` with a default, so a test can swap them. For example, `NativeReadLimits` in `native-reads.ts:15` and `DispatchLimits` in `dispatch.ts:113`.
+- Hold the shape in a closure inside `make`. A module `let`, a WeakMap registry or a lazy singleton beside a service is a second owner.
+- A test swaps a layer, never a module.
 
-The house idiom for a generator-bodied helper (curried-arg friendly, no manual `Effect.gen` wrap):
+### 2c. Failures are values; one mapper turns them into HTTP (rule 5)
+
 ```ts
-const decodeFrame = Effect.fnUntraced(function* (raw: string) {
-  const value = yield* Effect.try({ try: () => JSON.parse(raw) as unknown, catch: (e) => e })
-  return yield* Schema.decodeUnknownEffect(bridgeFrameSchema)(value)
-})
+const fields = { message: Schema.String, status: Schema.Number, problem: Schema.String };
+export class ReadBusy extends Schema.TaggedError<ReadBusy>()("ReadBusy", fields) {}
+// in a generator: return yield* new ReadBusy({ message, status: 429, problem: "read.capacity" });
 ```
 
-### Adding HTTP routes (`index.ts`) — each route is a Layer
+- Expected failures are `Schema.TaggedError` classes, and they belong to the closed `DoorFailure` union (`@pe/host-internal/request-contracts`). `http-problems.ts` maps that union once, as `HttpRouter.middleware<{ handles: DoorFailure }>()((h) => h.pipe(Effect.catchTags(handlers))).layer`, and the `satisfies DoorFailureMapper` makes a new failure need a mapper entry.
+- A handler returns the typed failure. It never builds a problem response, picks a status, or classifies an error by its message or shape (COMMON 16).
+- A `throw` inside an Effect, or a regex on a message, is a finding. Plain `readonly _tag = "X"` classes survive only until their file converts. Three remain at f734953f: `local-error.ts`, `call-route.ts:1228` and `takeoff-captures.ts:191`.
+- Wrap a Promise that can reject in `Effect.tryPromise({ try, catch: (e) => new Tagged(...) })`. Use `Effect.promise` only for a Promise that provably cannot reject, because a rejection inside it becomes a defect that bypasses `catchTags` and every finalizer (COMMON 12).
+
+### 2d. Name the steps (rule 6)
+
+A reusable effectful function is `Effect.fn("Owner.step")(function* (...) { ... })`, so every step is a span and a stack frame. Reserve `Effect.fnUntraced` for hot inner loops. Use `Effect.gen` inline, and never write a function whose only body is an `Effect.gen` wrapper. Never put Effect around a pure value: a `gen` with one yield, or `Effect.succeed` around a projection, only adds a fiber (COMMON 21).
+
+### 2e. Nothing ambient (rule 4)
+
+- **Time** comes from `Clock` (`Clock.currentTimeMillis`) and `DateTime`, and waits use `Effect.sleep`. Persisted `at:` stamps come from `Clock` through `DateTime`. Tests drive time with `TestClock.adjust` from `effect/testing` (`tests/consent-window.test.ts`).
+- **Children** come from the `Spawner` service over `effect/process`, never from `node:child_process` (2i).
+- **Files** that need a scope come from `FileSystem`. A one-line `appendFileSync` is not a finding by itself.
+- **Config** comes from Effect `Config`, and an env value the host does not author is decoded by a Schema (rules 1 and 7). The host does not do this yet: it has one `Config.` site.
+- **Recorded exceptions where Effect falls short:** `node:os` supplies `homedir` and `hostname`. Worktree identity uses native realpath, because `FileSystem.stat` has no `ino` above 2^53 and `realPath` keeps 8.3 short names.
+
+### 2f. Supervision: fork into a scope (rule 12)
+
+Fork every fiber (a consent window, a poll, a probe, a dispatch worker) into a service's scope with `Effect.forkScoped`, or with `Effect.forkIn(scope)` after `const scope = yield* Effect.scope`. A detached `runFork` is a finding. The host has one `Effect.forkDetach`, in `host-lifecycle.ts:415`: it trips the shutdown latch after the response flushes. Do not copy it.
+
+Durable work captures causal identity and journal ownership explicitly when it is forked. It never inherits the request's cancellation lifetime (rule 2, rule 14).
+
+### 2g. Settle inside the Exit (COMMON 11)
+
+The obligatory step must be guaranteed, and the persist must be typed. Never write "persist, then settle the waiter" as two statements, because a persist failure skips the settle. Transition state first, run the persist, and settle in `Effect.onExit`, so that every exit, interruption included, reaches the waiter:
+
 ```ts
-import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http"
-
-const hostStatusRoute = HttpRouter.add("GET", "/host/status", () =>
-  Effect.gen(function* () {
-    const bridge = yield* RevitBridge
-    const snapshot = yield* bridge.snapshot(undefined)
-    return yield* Response.json(yield* getHostStatus(snapshot))
-  }),
-)
-// path params:
-const r = HttpRouter.add("GET", "/schemas/:key", Effect.gen(function* () {
-  const params = yield* HttpRouter.params   // { key?: string }
-  // ...
-}))
-```
-Responses: `Response.json(x)` (effectful), `Response.jsonUnsafe(x, { status })` (sync), `Response.text(...)`,
-`Response.empty()`, `Response.stream(byteStream, { contentType, headers })`.
-
-### SSE / streaming from a PubSub (`index.ts`)
-```ts
-const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
-  Effect.gen(function* () {
-    const bridge = yield* RevitBridge
-    const encoder = new TextEncoder()
-    const body = Stream.fromPubSub(bridge.events).pipe(
-      Stream.map((e) => encoder.encode(`data: ${JSON.stringify(e)}\n\n`)),
-    )
-    return Response.stream(body, {
-      contentType: "text/event-stream",
-      headers: { "cache-control": "no-cache", connection: "keep-alive" },
-    })
-  }),
-)
-```
-
-### WebSocket upgrade (`bridge.ts`)
-```ts
-const socket = yield* Effect.orDie(req.upgrade)      // req: HttpServerRequest
-const write = yield* socket.writer
-yield* socket.runString(onFrame).pipe(               // onFrame: (raw: string) => Effect<void>
-  Effect.ensuring(Effect.suspend(() => session ? cleanupSession(session) : Effect.void)),
-  Effect.ignore({ log: true }),
-)
-return Response.empty()
-```
-
-### Background work tied to scope (`index.ts`)
-```ts
-const InstallGcLive = Layer.effectDiscard(
-  Effect.gen(function* () {
-    yield* Effect.forkScoped(runInstallGc)
-    const bridge = yield* RevitBridge
-    yield* Effect.forkScoped(
-      Stream.fromPubSub(bridge.events).pipe(
-        Stream.filter((e) => e.kind === "disconnected"),
-        Stream.runForEach(() => runInstallGc),
-      ),
-    )
-  }),
-)
-```
-
-### Config / env
-> Superseded 2026-11-02 by [ADR 0029](../../adr/0029-effect-is-the-standard-library-one-fiber-per-request.md) rules 1 and 7: config comes from Effect `Config`, and an env value the host does not author is decoded by a Schema. "Keep this style; don't introduce `Config`" no longer holds. `Effect.acquireRelease` for lifecycle still holds.
-
-No `Config` module in the host — env is read directly (`process.env.X`) and validated in plain functions
-(`host-ownership.ts`, `product-paths.ts`). Effectful side reads (fetch, fs) go through `Effect.tryPromise`
-+ `Effect.catch(() => Effect.succeed(fallback))`. `Effect.acquireRelease(acquire, release)` for lifecycle
-(identity file written on start, removed on exit — `prepareHostOwnership`). Keep this style; don't introduce
-`Config` unless a task asks.
-
-### Child processes (`index.ts`)
-```ts
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-const out = yield* spawner.string(ChildProcess.make("cmd", ["/c", shim, "install", "gc", "--json"]))
-```
-
-### App assembly + launch (`index.ts`) — this is our `runMain`
-```ts
-const AppLive = Layer.mergeAll(bridgeWsRoute, bridgeEventsRoute, hostStatusRoute, callRoute, /* ... */)
-
-const HttpLive = HttpRouter.serve(AppLive).pipe(
-  Layer.provide(NodeHttpServer.layer(createServer, { port: HOST_PORT })),
-  Layer.provide(NodeHttpClient.layerUndici),
-  Layer.provide(RevitBridgeLive),
-  Layer.provide(NodeServices.layer),
-)
-
-NodeRuntime.runMain(
-  Effect.scoped(Effect.gen(function* () {
-    yield* prepareHostOwnership()
-    yield* Layer.launch(HttpLive)
-  })),
-)
-```
-`NodeRuntime.runMain` is the v4 entrypoint (from `@effect/platform-node`). `Layer.launch` runs a
-never-ending layer (the server). Routes are Layers merged into `AppLive`; `HttpRouter.serve(AppLive)`
-turns the accumulated router into the served app.
-
-### Schema contracts (`@pe/host-contracts`)
-Hand-authored, array-form constructors, `Type` aliases beside each schema:
-```ts
-import { Schema } from "effect"
-const nullableString = Schema.optional(Schema.NullOr(Schema.String))
-export const bridgeFrameSchema = Schema.Struct({
-  kind: Schema.Literals(["Registration", "Response", "Event", /* ... */]),
-  event: Schema.optional(Schema.NullOr(bridgeEventSchema)),
-  // ...
-})
-export type BridgeFrame = Schema.Schema.Type<typeof bridgeFrameSchema>
-```
-
----
-
-## 3. RPC recipe (Phase 4: typed Pe surfaces, streaming over HTTP ndjson)
-
-This is what replaces the untyped `POST /call` + `/pe-host` proxy for Pe-owned surfaces. All signatures below
-are from effect-smol beta.94 (`packages/effect/src/unstable/rpc/*` and `packages/platform-node/test/`).
-`import { Rpc, RpcGroup, RpcServer, RpcClient, RpcSerialization } from "effect/unstable/rpc"`.
-
-### 3a. Define the group (shared package — imported by host AND browser)
-```ts
-import { Schema } from "effect"
-import { Rpc, RpcGroup } from "effect/unstable/rpc"
-
-export class RevitDoc extends Schema.Class<RevitDoc>("RevitDoc")({
-  id: Schema.String,
-  title: Schema.String,
-}) {}
-
-// Errors: Schema.ErrorClass (NOT v3 Schema.TaggedError)
-export class NoSession extends Schema.ErrorClass<NoSession>("NoSession")({
-  _tag: Schema.tag("NoSession"),
-  message: Schema.String,
-}) {}
-
-export const PeRpcs = RpcGroup.make(
-  // unary
-  Rpc.make("GetDoc", {
-    payload: { id: Schema.String },     // becomes Schema.Struct
-    success: RevitDoc,
-    error: NoSession,
-  }),
-  // STREAMING: stream:true wraps success in RpcSchema.Stream; the wire is ndjson chunks
-  Rpc.make("WatchDocs", {
-    payload: { since: Schema.Number },
-    success: RevitDoc,                  // element type of the stream
-    stream: true,
-  }),
-)
-```
-`Rpc.make(tag, opts)` signature (verified `Rpc.ts:902`):
-```ts
-Rpc.make<Tag, Payload, Success, Error, Stream extends boolean>(tag, {
-  payload?, success?, error?, defect?, stream?, primaryKey?
-})
-// stream:true  ⇒  success schema becomes RpcSchema.Stream<Success, Error>, error becomes Schema.Never
-```
-
-### 3b. Implement handlers — `group.toLayer` (verified `RpcGroup.ts:95`, fixture `rpc-schemas.ts`)
-A streaming handler returns a `Stream` **or** a `Queue`/mailbox that the framework drains as the stream.
-```ts
-import { Effect, Queue, Stream, Layer } from "effect"
-
-export const PeRpcsLive = PeRpcs.toLayer(
-  Effect.gen(function* () {
-    const bridge = yield* RevitBridge          // depend on our existing services
-    return PeRpcs.of({
-      GetDoc: (req) =>
-        Effect.gen(function* () {
-          const doc = yield* bridge.invoke("doc.get", { id: req.id })
-          return new RevitDoc(doc as any)
-        }),
-      // stream handler: return a Stream (or a Queue you fill from a forkScoped fiber)
-      WatchDocs: (req) =>
-        Effect.succeed(
-          Stream.fromPubSub(bridge.events).pipe(
-            Stream.map(() => new RevitDoc({ id: "1", title: "x" })),
-          ),
-        ),
-    })
-  }),
-)
-// PeRpcsLive : Layer<Rpc.ToHandler<...>, never, RevitBridge | ...>
-```
-
-### 3c. Serve over HTTP ndjson, mounted in our existing host router
-`RpcServer.layerHttp` registers a route into the current `HttpRouter` (verified `RpcServer.ts:791`). It
-requires `RpcSerialization` + `HttpRouter` + the handler layer:
-```ts
-import { RpcServer, RpcSerialization } from "effect/unstable/rpc"
-
-const RpcRoute = RpcServer.layerHttp({
-  group: PeRpcs,
-  path: "/rpc",
-  protocol: "http",          // "http" = request/stream over HTTP; default is "websocket"
-})
-
-// fold into the host's HttpLive assembly:
-const HttpLive = HttpRouter.serve(Layer.mergeAll(AppLive, RpcRoute)).pipe(
-  Layer.provide(PeRpcsLive),               // handlers
-  Layer.provide(RpcSerialization.layerNdjson),   // ndjson framing
-  Layer.provide(NodeHttpServer.layer(createServer, { port: HOST_PORT })),
-  Layer.provide(RevitBridgeLive),
-  Layer.provide(NodeServices.layer),
-)
-```
-> Verify the exact merge point when you wire it — `layerHttp` needs `HttpRouter.HttpRouter` in context; our
-> host builds the router by merging `HttpRouter.add` layers into `AppLive`. If typecheck complains about a
-> missing `HttpRouter` service, provide `HttpRouter.layer` alongside (as the effect-smol tests do:
-> `RpcServer.layerProtocolHttp({path}).pipe(Layer.provide(HttpRouter.layer))`). Prefer `layerHttp` for the
-> all-in-one; drop to `layer` + `layerProtocolHttp` only if you need to split them.
-
-Serialization options (all `RpcSerialization.*`): `layerNdjson` (use this — line-delimited JSON, streaming
-friendly), `layerJson`, `layerNdJsonRpc()`, `layerMsgPack`.
-
-### 3d. Derived typed client for the browser (verified `rpc-e2e.ts`, `RpcClient.ts:627/985`)
-```ts
-import { Context, Layer } from "effect"
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc"
-import { FetchHttpClient } from "effect/unstable/http"
-
-export class PeClient extends Context.Service<
-  PeClient,
-  RpcClient.RpcClient<RpcGroup.Rpcs<typeof PeRpcs>, RpcClientError>
->()("PeClient") {
-  static readonly layer = Layer.effect(PeClient)(RpcClient.make(PeRpcs)).pipe(
-    Layer.provide(RpcClient.layerProtocolHttp({ url: "/rpc" })),
-    Layer.provide(RpcSerialization.layerNdjson),
-    Layer.provide(FetchHttpClient.layer),   // browser fetch transport — verify export name
-  )
-}
-
-// usage — fully typed, streaming call returns a Stream:
-const program = Effect.gen(function* () {
-  const client = yield* PeClient
-  const doc = yield* client.GetDoc({ id: "1" })        // Effect<RevitDoc, NoSession>
-  yield* client.WatchDocs({ since: 0 }).pipe(          // Stream<RevitDoc>
-    Stream.take(5),
-    Stream.runForEach((d) => Effect.log(d.title)),
-  )
-})
-```
-`RpcClient.make(group)` returns `Effect<RpcClient<...>, never, Protocol | Scope>`; unary rpcs become
-`client.Tag(payload): Effect<Success, Error>`, `stream:true` rpcs become `client.Tag(payload): Stream<...>`.
-Nested tags like `"nested.test"` are indexed: `client["nested.test"]()`.
-
----
-
-## 4. HttpApi recipe (simpler request/response Pe surfaces)
-
-For plain typed REST endpoints (no streaming semantics needed), `HttpApi` is lighter than RPC and gives a
-derived client the same way. `import { HttpApi, HttpApiGroup, HttpApiEndpoint, HttpApiBuilder, HttpApiClient } from "effect/unstable/httpapi"`.
-
-### Define (verified `HttpApiBuilder.test.ts`, `HttpApiEndpoint.ts:1128`)
-```ts
-const Api = HttpApi.make("PeApi").add(
-  HttpApiGroup.make("host").add(
-    HttpApiEndpoint.get("status", "/host/status", {
-      success: HostStatus,                 // a Schema
-    }),
-  ).add(
-    HttpApiEndpoint.post("update", "/host/update", {
-      payload: UpdateRequest,
-      success: UpdateResult,
+// run-consent.ts: the one settlement
+body.pipe(
+  Effect.onExit((exit) =>
+    Effect.sync(() => {
+      const outcome = Exit.isSuccess(exit)
+        ? Effect.succeed(exit.value)
+        : Effect.fail(Option.getOrElse(Exit.findErrorOption(exit), () => stopped));
+      for (const waiter of waiters) Deferred.doneUnsafe(waiter.answer, outcome);
     }),
   ),
-)
+);
 ```
-`HttpApiEndpoint.get/post(name, path, { params?, query?, headers?, payload?, success?, error? })`.
 
-### Implement + serve
+Inside a marked Promise island, use the island's own idiom: `try { persist() } finally { settle() }`. Do not thread Effect combinators into Promise code; convert the island whole or not at all (COMMON 24).
+
+### 2h. Route lifetimes, shared reads and the serial slot (rules 10, 11, 15)
+
+- Every route declares one of three lifetimes:
+  - **Request-owned read:** the work lives on the request fiber.
+  - **Durable command:** the journal owns the work from submission.
+  - **Subscription:** the route observes, and losing the observer never stops the work.
+- A native read is a `NativeReads.join(prepared, session)`. It shares one dispatch per canonical descriptor and refcounts its joiners. When the last joiner is interrupted it sends one `op.cancel`, and it forgets the entry only on terminal settlement. The join runs under `Effect.uninterruptibleMask((restore) => …)`, so a join never leaks a refcount.
+- The serial slot is one worker per Revit process incarnation. It is fed by a bounded FIFO `Queue` and forked into the bridge scope (`dispatch.ts`). Cancel bypasses the worker. A timer never releases the slot.
+- Every cache, queue and subscriber list names an entry bound, a byte bound, and the result it returns on overflow (rule 15).
+
+### 2i. Child processes
+
 ```ts
-const HostGroupLive = HttpApiBuilder.group(Api, "host", (handlers) =>
-  handlers
-    .handle("status", () => Effect.succeed(/* HostStatus */))
-    .handle("update", (req) => Effect.succeed(/* UpdateResult, req.payload typed */)),
-)
-// mount via HttpApiBuilder.layer(Api) (registers routes into HttpRouter), provide HostGroupLive.
-// Verify exact wiring vs beta.92 — grep packages/effect/src/unstable/httpapi/HttpApiBuilder.ts.
+const handle = yield* spawner.spawn({ command, args, cwd, env }); // env is the whole environment
 ```
 
-### Derived client (browser) — `HttpApiClient.make` (verified `HttpApiClient.ts:459`)
-```ts
-const client = yield* HttpApiClient.make(Api, { baseUrl: "" })  // needs HttpClient in context
-const status = yield* client.host.status()                     // fully typed
-```
-`HttpApiClient.make(api, { baseUrl?, transformClient?, transformResponse? })` returns
-`Effect<Client<Groups>, never, HttpClient>`; provide `FetchHttpClient.layer` in the browser.
+`Spawner.spawn` (`harness/spawner.ts`) ties each child to both the caller's scope and the Spawner's. Closing either one kills the process tree while the leader is still alive. On win32 the backend runs `taskkill /pid <leader> /T /F`, and the walk needs a live leader, which is why the kill finalizer runs before the backend's release. A leader that exits on its own still orphans its tree, because Node exposes no Job Object. `ChildProcess.make(cmd, args, { cwd, env, extendEnv: false })` is the descriptor; `windowsHide` exists on its options. Ten-odd child sites outside the Spawner remain, listed in the audit's P4. Each is a finding.
 
-**RPC vs HttpApi — settled verdict (Phase 4 index, supersedes earlier leaning):** use **HttpApi** for the
-static Pe surfaces (status, install, update, shutdown, `/call` envelope, `/events`). Reasons: consumers
-include curl + the C# addin/CLI, and RPC's HTTP transport is POST-only with a framed body envelope plain
-HTTP clients can't speak; HttpApi gives ordinary GET/POST + derived typed client + free OpenAPI
-(`HttpApiBuilder.layer(api, { openapiPath })`, `HttpApiScalar` docs UI). Typed SSE exists:
-`HttpApiSchema.StreamSse({ data: EventSchema })` — handler returns a `Stream`, client receives a decoded
-`Stream`; stream failures travel as a reserved `effect/httpapi/stream/failure` event carrying the `Cause`.
-HttpApi errors carry status via `{ httpApiStatus: 400 }` on `Schema.ErrorClass` options; built-ins in
-`HttpApiError` (BadRequest 400 … InternalServerError 500). Streaming is success-only (stream schema in the
-error channel throws at construction).
+### 2j. Effect 4.0.2 behaviour that bit us (probe, do not assume)
 
-**The dynamic op catalog cannot be typed contracts** — `RpcGroup.make`/`HttpApi.make` are compile-time
-values; ops self-register from Revit at runtime. `POST /call` stays a generic envelope
-(`{key, request} → Unknown`) with runtime JSON-schema validation; typegen stays the type source.
+- `Semaphore` is not FIFO: a newcomer can take a freed permit before the waiters wake. Order-sensitive work uses a `Queue` and one worker fiber.
+- `Queue.clear` after `Queue.interrupt` on an empty queue fails. This once kept a retired Revit session alive forever; see `dispatch.ts`.
+- The platform child release walks the process tree only after a non-zero exit. That is why `Spawner` kills the tree first.
 
-Keep RPC in the quiver for per-procedure streaming / WS multiplexing, with two source-verified traps:
-`RpcServer.layerHttp` **defaults to `protocol: "websocket"`** (pass `"http"`), and
-`RpcSerialization.layerJson` **buffers** stream responses — only framed serializations (`layerNdjson`,
-`layerMsgPack`) stream over plain HTTP (`makeProtocolWithHttpEffect` checks `includesFraming`). Also:
-`RpcSerialization.ts` top-level-imports `msgpackr` — if RPC enters the browser bundle, measure whether
-tree-shaking drops it. Both derive typed clients; don't hand-roll `fetch` wrappers for Pe surfaces.
+### 2k. Edge decoding (rules 1 and 7)
+
+Decode everything the host does not author, never cast it: the thread store, harness child output, CLI discovery, SSE frames and tab memory, MCP blobs. Decode once with `Schema.decodeUnknownEffect(S)(raw)` and use the value it returns. Parsing and then returning `raw as T` is a cast with extra steps (COMMON 18). Persisted records carry a version. Mint sequence ids from the last decoded record, never from `length + 1` (COMMON 19, 28).
+
+### 2l. Tests (rule 13)
+
+Unit tests are not something to preserve. A deterministic test stays only when it guards an invariant that the pe-browser lane cannot falsify. Tests run Effects only through `ts/apps/host/tests/effect-test.ts`: use `effectTest` for fiber laws under `TestClock`, and `settle()` for Promise-shaped calls. A test never calls the run family itself (COMMON 31). `@effect/vitest` waits for vite-plus to run vitest 5 (host ledger, Owed).
+
+### 2m. Where Effect does not fit (rule 9)
+
+- `ducts-domain` is pure values in and values out, so leave it plain.
+- React render code stays React plus atoms; `Effect.gen` in a component is a finding.
+- `eventlog`, `workflow`, `cluster`, `KeyValueStore` and `TxRef` are rejected, because each would be a second owner of state beside the journal.
+- `Schedule` owns in-process backoff only (`machine.ts:649`, `Effect.repeat(Schedule.spaced(...))`). The journal owns retry across restarts.
+- Use `Path` where a scope is needed, not for every `join`.
 
 ---
 
-## 4b. HTTP serving primitives (verified in the Phase-4 index, beta.92 ≡ beta.94)
+## 3. HTTP in the host (`effect/http`)
 
-All byte-identical between installed beta.92 and effect-smol HEAD beta.94 — the bump needs no HTTP changes.
+The host is one `HttpRouter` app. ADR 0029 corrected the HTTP migration target: the router is already adopted, and phase 5 deletes the Web-handler island inside it rather than adding another router.
 
-### Mount a foreign fetch handler (Hono/Mastra) — `HttpEffect.fromWebHandler`
-`effect/unstable/http/HttpEffect` has a first-class bridge — do NOT hand-roll conversions:
+### Routes are layers
+
 ```ts
-import { fromWebHandler } from "effect/unstable/http/HttpEffect"
-const h = fromWebHandler((req: Request) => honoApp.fetch(req))
-// register: HttpRouter.add("*", "/api/agent-controller/*", h)
-```
-Streaming survives both directions: request bodies go in as `Stream.toReadableStreamWith` +
-`duplex:"half"`; `HttpServerResponse.fromWeb` wraps `Response.body` with `Stream.fromReadableStream`
-(lazy/chunked — SSE passes through unbuffered; verified in source, not assumed).
-Prefix semantics: `router.prefixed("/x").add("*", "/*", h)` **strips** `/x` from the URL the child sees;
-a bare `add("*", "/x/*", h)` does NOT strip. Raw Node escape hatch:
-`NodeHttpServerRequest.toIncomingMessage/toServerResponse` (`HttpServerRequest.source` is the raw req).
+import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 
-### Static SPA — `HttpStaticServer.layer`
+export const hostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthPath, () =>
+  Effect.gen(function* () {
+    const bridge = yield* RevitBridge;
+    return yield* Response.json(/* ... */);
+  }),
+);
+```
+
+- Path params: `yield* HttpRouter.params`.
+- Responses: `Response.json(x)` is effectful, `Response.jsonUnsafe(x, { status, headers })` is sync, and `Response.text`, `Response.empty()`, `Response.stream(bytes, { contentType, headers })`, `Response.file(path)` and `Response.fromWeb` cover the rest.
+- Response-modifying middleware is `HttpRouter.middleware`. `serve({ middleware })` wraps only the sending of the response.
+
+### Assembly (`app.ts` `makeHttpLive`, launched by `host-program.ts`)
+
 ```ts
-HttpStaticServer.layer({ root: dir, spa: true, index: "index.html" })  // merge LAST; API routes win
+HttpRouter.serve(Layer.mergeAll(routes, CommonAppLive).pipe(Layer.provide(identity)))
+  .pipe(Layer.provideMerge(ServerLive))          // NodeHttpServer.layer(() => nodeServer, { ... })
+  .pipe(Layer.provide(NodeHttpClient.layerUndici), Layer.provide(RunConsents.layer),
+        Layer.provide(Spawner.live), Layer.provide(NodeServices.layer) /* ... */);
+// host-program.ts
+yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));
 ```
-SPA fallback, MIME, etag/304, byte ranges built in. Its deps (FileSystem/Path/HttpPlatform/Etag) are
-**already bundled by `NodeHttpServer.layer`** — zero extra wiring. Single files:
-`HttpServerResponse.file(path)` (needs `HttpPlatform`, same story).
 
-### Actual bound address — the `HttpServer` service
+- `HttpRouter.serve` installs `HttpMiddleware.logger` and logs the bound address by itself. Pass `disableLogger` or `disableListenLog` to turn them off.
+- Graceful self-shutdown races `Layer.launch` against a latch. Closing the launch scope runs `NodeHttpServer`'s `server.close()` finalizer, then the other releases in reverse order. `process.exit` skips every finalizer, so it is only a delayed fallback.
+- The actual bound address after listen is `(yield* HttpServer.HttpServer).address`.
+
+### Static SPA
+
+`HttpStaticServer.layer({ root, spa: true, index: "index.html" })`, merged last so API routes win (`static-spa.ts`). `NodeHttpServer.layer` already supplies its FileSystem, Path, HttpPlatform and Etag.
+
+### WebSocket upgrade (`bridge.ts`)
+
 ```ts
-const { address } = yield* HttpServer.HttpServer   // { _tag: "TcpAddress", hostname, port } after listen
+const socket = yield* Effect.orDie(req.upgrade);
+const write = yield* socket.writer;
+// socket.runString(onFrame) drives the read side; cleanup goes in Effect.ensuring.
 ```
-Filled from Node `server.address()` post-listen, so `{ port: 0 }` fallback works. Helpers:
-`HttpServer.formatAddress`, `addressFormattedWith`, `withLogAddress`.
 
-### Graceful self-shutdown — latch raced against `Layer.launch`
-`process.exit(0)` skips every finalizer (stale locks/service files). The native pattern:
-```ts
-const latch = yield* Deferred.make<void>()
-// handler: respond first, then trip the latch
-Effect.as(Effect.forkDetach(Deferred.succeed(latch, void 0)), Response.jsonUnsafe({ shuttingDown: true }))
-yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch))
-```
-Closing the launch scope runs `NodeHttpServer`'s graceful `server.close()` finalizer
-(`gracefulShutdownTimeout` default 20s; `disablePreemptiveShutdown` exists), then remaining releases in
-reverse acquisition order. A hard `process.exit` fallback timer after the latch is acceptable insurance.
+### Foreign fetch handlers
 
-### Middleware notes
-`HttpRouter.serve` **auto-installs `HttpMiddleware.logger`** (`disableLogger: true`) and auto-logs the
-bound address (`disableListenLog: true`). `HttpMiddleware.cors({...})` exists (also `HttpRouter.cors`).
-`serve({ middleware })` wraps response *sending* and cannot modify the final response — use
-`HttpRouter.middleware`/`addGlobalMiddleware` for response-modifying middleware.
+`HttpEffect.fromWebHandler((req: Request) => door.fetch(req))` bridges a Web handler, such as the MCP SDK door, and streaming survives in both directions. The honest uses are a true third-party entry (MCP SDK, ACP). It is also the island ADR 0029 rule 5 deletes for Pe-owned routes: `pe-routes.ts` `servePeRoute`, `demo-owner.ts`, `pages-route.ts`, `share.ts`, `device-routes.ts` and `duct-catalogs.ts` still use it at f734953f. Prefix semantics: `router.prefixed("/x").add("*", "/*", h)` strips `/x`, and a bare `add("*", "/x/*", h)` does not.
+
+### Not adopted: RPC and HttpApi
+
+`POST /call` replaced Effect RPC and NDJSON on 2026-07-08 (host ledger), and its operation-key dispatch stays a table generated from operation metadata (ADR 0029 rule 5). The dynamic operation catalog registers from Revit at runtime, so a compile-time `RpcGroup` or `HttpApi` cannot type it. `effect/rpc` and `effect/http-api` exist at 4.0.2, but nothing in the host imports them. If a typed static surface ever needs them, start from the module sources and `ai-docs/src/51_http-server`, not from memory. Two notes for that day: at 4.0.2 `RpcSerialization` has `layerNdjson`, `layerJson`, `layerJsonRpc`, `layerNdJsonRpc` and `layerSchemaBinary`, and no MsgPack layer; HttpApi errors carry their status as an `httpApiStatus` annotation on `Schema.Error` / `Schema.TaggedError` (see `HttpApiError.ts`).
 
 ---
 
-## 4c. Effect.Atom (React state layer — adopted for route workspaces)
+## 4c. Atom (web state)
 
-Atom moved INTO the effect monorepo in v4. If you knew `@effect-atom/atom-react@0.5`
-(effect v3), everything renamed:
+The section number stays 4c, because ADR 0001 links to it.
 
-| v3 (@effect-atom 0.5) | v4 (verified beta.92 ≡ beta.98) |
+| v3 (`@effect-atom/atom-react` 0.5) | 4.0.2 |
 | --- | --- |
-| package `@effect-atom/atom-react` (re-exports Atom + Result) | **`@effect/atom-react`** — HOOKS ONLY (`useAtom`, `useAtomValue`, `useAtomSet`, `useAtomRefresh`, `useAtomSuspense`, `RegistryProvider`, …); version-locked to effect (`4.0.0-beta.N` peers `effect ^4.0.0-beta.N`) |
-| `import { Atom, Result } from "@effect-atom/atom-react"` | `import * as Atom from "effect/unstable/reactivity/Atom"` + `import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"` |
-| `Result` module (Initial/Waiting/Success/Failure) | **`AsyncResult`** — same shape (`isSuccess`/`isFailure`/`isWaiting`/`isInitial`, `.value`, `.cause`, `value()`, `getOrElse`); renamed because `effect/Result` now means Either |
-| `Stream.asyncPush((emit) => acquireRelease(...))`, `emit.single(v)` | `Stream.callback((queue) => acquireRelease(...))`, `Queue.offerUnsafe(queue, v)` |
-| `Cause.failureOption(cause)` | `Cause.findErrorOption(cause)` |
-| `Atom.make` / `Atom.readable` / `Atom.writable` / `Atom.fn` / `Atom.family`, `RegistryProvider` | unchanged names. `Atom.make(stream)` → `Atom<AsyncResult<A, E \| NoSuchElementError>>`; `Atom.fn` → `AtomResultFn` |
+| package `@effect-atom/atom-react` | Hooks only, in `@effect/atom-react`: `useAtomValue`, `useAtom`, `useAtomSet`, `useAtomRefresh`, `useAtomSuspense`, `useAtomMount`, `RegistryContext`, … |
+| `import { Atom, Result }` | `import * as Atom from "effect/reactivity/Atom"` and `import * as AsyncResult from "effect/reactivity/AsyncResult"` |
+| `Result` (Initial, Waiting, Success, Failure) | `AsyncResult`, with the same shape. The rename exists because `effect/Result` now means Either. |
+| `Stream.asyncPush(emit)`, `emit.single(v)` | `Stream.callback((queue) => …)`, `Queue.offerUnsafe(queue, v)` |
+| `Atom.make`, `readable`, `writable`, `fn`, `family` | unchanged names |
 
-Also in `effect/unstable/reactivity`: `AtomRef`, `AtomRegistry`, `AtomHttpApi`, `AtomRpc`
-(atom-native HttpApi/Rpc clients — consider when a typed Pe surface meets a React view).
+House shapes (`apps/web/src/shell/work-document.ts`, `shell/readings-hooks.ts`, `workbench/provider/thread-stream.ts`, `attention.tsx`):
 
-House patterns (proven in `apps/web/src/workbench/route-state.tsx` and the
-scratch reference `packages/scratch-state-bakeoff/src/3-effect-atom.tsx`):
-- **Push-authoritative doc**: `Atom.make(Stream.concat(hydrateEffect, Stream.callback(subscribe)))`
-  — server is the single writer; the scoped finalizer in `Stream.callback` unsubscribes
-  when the atom is disposed. `Atom.family(spec => ...)` shares ONE subscription across
-  every component reading the same spec.
-- **Dirty-safe local draft**: writable `Atom<Option<T>>` override (None = follow remote,
-  Some = hold edit) + derived `Option.getOrElse(override, () => remote)` value + derived
-  `Option.isSome` dirty. Clobber-safety is structural — no lastSynced ref, no effect.
-- **Command with pending/error**: `Atom.fn(input => Effect...)`; read
-  `AsyncResult.isWaiting` / `isFailure` + `Cause.findErrorOption` in the component —
-  replaces paired useStates.
-- A default registry exists on React context; `RegistryProvider` is only needed to seed
-  values or scope lifetimes.
+- **One subscription per key.** `Atom.family((key) => Atom.make(...))` shares one subscription across every reader of the same key. A structured key implements `Equal.symbol` and `Hash.symbol` so that equal keys hit the same atom (`work-document.ts`).
+- **Push-authoritative documents.** `Atom.make(Stream.concat(hydrate, Stream.callback(subscribe)))`. The server is the single writer, and the scoped finalizer in `Stream.callback` unsubscribes when the atom is disposed.
+- **Dirty-safe local drafts.** A writable `Atom<Option<T>>` override, with derived `Option.getOrElse(override, () => remote)` for the value and `Option.isSome` for dirty.
+- **Commands with pending and error.** `Atom.fn(input => Effect…)`, read with `AsyncResult.isWaiting` / `isFailure` plus `Cause.findErrorOption`.
+- **Lifetimes.** A lifetime in web code has one owner, the scope. No `AbortController`, release `Set` or `live` flag sits beside a scoped atom or layer (COMMON 14). Observation is not completion: return the terminal in the result channel, and make subscription an `acquireRelease` (COMMON 15). Unbounded tails are a finding (COMMON 17, `thread-stream.ts`).
 
 ---
 
-## 5. AI note (we do not adopt it)
+## 5. AI modules (not adopted)
 
-Effect ships `effect/unstable/ai/*` (`LanguageModel`, `Tool`, `Toolkit`, `Chat`, `McpServer`, provider
-packages `@effect/ai-*`). **We are NOT adopting it** — the lab harness is the agent (ADR 0015). Mentioned only so you recognize it and don't accidentally wire it in. If a task ever needs
-an Effect-native MCP server surface, `effect/unstable/ai/McpServer` exists — but that's out of scope for the
-rework.
+`effect/ai` (`LanguageModel`, `Tool`, `Toolkit`, `Chat`, `McpServer`) exists. It is not adopted, because the lab harness is the agent (ADR 0015) and the MCP server runs on `@modelcontextprotocol/server` v2. It is named here only so nobody wires it in by accident.
 
 ---
 
-## Quick self-check before you commit Effect code
+## Self-check before you commit Effect code
 
-- Did I write `Context.Tag`, `Effect.Service`, `Layer.scoped`, `Effect.catchAll`, `Effect.either`,
-  `Effect.fork`, `yield* someRef`, `Schema.Union(a,b)`, `@effect/platform/...`, or `@effect/rpc/...`?
-  → all v3. Fix per the tables above.
-- Is the API in `effect/unstable/*`? Then it can break on a minor bump — pin your expectation to the grep,
-  not to this doc.
-- When unsure: grep `node_modules/.pnpm/effect@<version>/.../src/<Module>.ts` (compiles-here truth) or
-  effect-smol `packages/effect/src/...` (HEAD). Never write a signature from memory.
-</content>
-</invoke>
+- Did you write `Context.Tag`, `Effect.Service`, `Layer.scoped`, `Effect.catchAll`, `Effect.either`, `Effect.fork`, `yield* ref`, `Schema.Union(a, b)`, `Schema.ErrorClass`, `FiberRef`, `effect/unstable/*`, `@effect/platform/*` or `@effect/rpc`? Each one is v3 or a beta name. Fix it from section 1.
+- Does a new `Effect.run*` lack an `effect-edge:` reason from the vocabulary? Has the island baseline grown? Either one blocks the merge.
+- Do you see `throw`, a message regex, `Cause.pretty` in a message, `Effect.promise` on rejectable work, persist-then-settle, a module `let` beside a service, `Date.now()`, `setTimeout`, `node:child_process`, or `as` on decoded data? Each one has an owner in section 2.
+- Is the signature in the installed 4.0.2 sources? If you doubt it, compile a sketch. If the behaviour matters (kill semantics, Windows paths, queue order), probe it.
+- Record what you adopted, what you rejected and where Effect fell short, in the host ledger or a comment at the site.
