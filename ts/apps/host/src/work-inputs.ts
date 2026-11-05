@@ -42,14 +42,23 @@ type Reads = {
 export type WorkValue<V extends WorkView> = Reads[V];
 
 const revision = z.number().int().nonnegative();
-const raw = z.object({ doc: z.unknown(), revision, handle: workHandleSchema });
+const raw = z.object({ doc: z.unknown(), revision, handle: workHandleSchema })
+  .refine((value) => value.revision === value.handle.revision);
 // `view`/`read` also carry route, title, schema and schemaVersion; they pass through as recorded.
-const shaped = raw.extend({ route: z.string() }).passthrough();
+const shaped = raw.safeExtend({
+  route: z.string(), title: z.string(), description: z.string(),
+  schemaVersion: z.number().int().positive().nullable(), schema: z.record(z.string(), z.unknown()),
+}).refine((value) => value.route === value.handle.key.route).passthrough();
 const contracts: { readonly [V in WorkView]: z.ZodType } = {
   raw: raw.nullable(),
   read: shaped.nullable(),
   view: shaped.nullable(),
-  feed: raw.extend({ history: z.object({ from: revision, acks: z.array(workWriteAckSchema) }) }),
+  feed: raw.safeExtend({ history: z.object({ from: revision, acks: z.array(workWriteAckSchema) }) })
+    .refine(({ handle, revision, history }) => history.acks.length
+      ? history.acks.every((ack, index) => ack.revision === history.from + index &&
+          workKey(ack.key) === workKey(handle.key)) &&
+        history.acks.at(-1)!.revision === revision
+      : history.from === revision + 1),
 };
 /** Recorded Work bytes must satisfy the existing Work handle and ack contracts; nothing is coerced. */
 const codec = <V extends WorkView>(view: V) =>

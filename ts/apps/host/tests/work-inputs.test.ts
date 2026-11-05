@@ -50,7 +50,11 @@ test("recorded Work that breaks its handle or ack contract refuses instead of be
     { ...feed, handle: { revision: feed.revision } },
     { ...feed, history: { from: feed.history.from, acks: [{ revision: 1 }] } },
     { ...feed, revision: -1 },
+    { ...feed, handle: { ...feed.handle, revision: feed.revision + 1 } },
+    { ...feed, history: { from: feed.revision + 2, acks: [] } },
   ];
   for (const value of forged) expect(Exit.isFailure(await roundTrip("feed", value))).toBe(true);
   expect(Exit.isSuccess(await roundTrip("raw", null))).toBe(true);
+  const { title: _title, ...missingTitle } = (await workspace.view(key, "fans"))!;
+  expect(Exit.isFailure(await roundTrip("view", missingTitle))).toBe(true);
 });
