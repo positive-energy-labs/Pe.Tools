@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vite-plus/test";
 
 import { updateVerb } from "../src/update-route.ts";
+import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 vi.mock("../src/pe-revit-launch.ts", async (original) => ({
   ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
@@ -15,8 +16,8 @@ test("a detached run resolves on its envelope while the pipe stays open", async 
     result: { state: "running", legs: [{ name: "handoff", status: "ok" }] },
     resolved: null,
     diagnostics: [],
-    binary: { origin: "test" },
-    command: { cwd: "x" },
+    binary: sdkBinary,
+    command: sdkCommand,
     nextSteps: [],
     guide: "",
     related: [],
