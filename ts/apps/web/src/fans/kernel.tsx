@@ -53,9 +53,9 @@ const seed = <const K extends string>(name: K, snapshot: DuctSnapshot) => ({
 });
 export const bodies = {
   ...fansNeutralBodies,
-  // The fan's losses read their snapshot from the sheet; the ducts document is not fans Work.
+  // The fan's losses read their snapshot from the sheet; this route's Work is the fans document.
   presentLosses: { slot: "verbs.losses.present", kind: "present", source,
-    run: (result, ctx) => presentLosses(result, { page: { stage: "sheet" }, readings: { sheetSnapshot: ctx.readings.sheetSnapshot } }) },
+    run: (result, ctx) => presentLosses(result, { page: { stage: "sheet" }, readings: { sheetSnapshot: ctx.readings.sheetSnapshot, fansWork: { value: ctx.work } } }) },
   seedScene: seed("scene", LAYOUT_FIXTURE.snapshot),
   seedLayout: seed("layout", LAYOUT_FIXTURE.snapshot),
   seedColours: seed("colours", COLOURS_FIXTURE.snapshot),

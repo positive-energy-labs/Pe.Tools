@@ -49,3 +49,14 @@ test("Reject? answers the thread that ran the receipt, not this page", () => {
   expect(reject).not.toHaveBeenCalled();
   expect(writeReject([entry({ kind: "pea", thread: "t" }, "assign")], ["heal"], reject)).toBeNull();
 });
+
+test("production cells replace rows in the held plan and set its count", () => {
+  const cells = [{ key: "a", label: "FC-1 · fan flow", before: null, after: "925 cfm", author: "human" as const }];
+  const held = writeHeld("Write to Revit", {
+    ...review({ previewOnly: true, derivedRequest: {}, seal }),
+    cells,
+  }).held!;
+  expect(held.cells).toBe(cells);
+  expect(held.rows).toBeUndefined();
+  expect(held.word).toBe("Write to Revit · planned 1");
+});

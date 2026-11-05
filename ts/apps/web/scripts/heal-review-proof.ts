@@ -74,7 +74,7 @@ try {
         ).healProof.actions.map((a) => a.key),
       );
       assert(
-        actions.every((key) => key === "ducts.preview-heal"),
+        actions.every((key) => key === "ducts.plan-heal"),
         "Cancel dispatched a commit",
       );
       results.push({ width, cancel, hit, actions, errors });

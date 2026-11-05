@@ -6,6 +6,10 @@ import {
 } from "@pe/agent-contracts";
 import { z } from "zod";
 import { canonicalEnvironmentInput } from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
+import {
+  presentationSchema,
+  type PresentCell,
+} from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import type { InvocationToken } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
 import { admittedWorkPatches } from "./admitted-cells.ts";
 import { commandResultDecoder, type CommandResultDecode } from "./admitted-command-result.ts";
@@ -61,7 +65,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       invocation: import("../../../../packages/agent-contracts/src/route-kernel-page.ts").InvocationToken;
       send(): unknown;
       preview: unknown;
-      presentation?: { sentence: string; rows: readonly string[] };
+      presentation?: { sentence: string; rows: readonly string[]; cells?: readonly PresentCell[] };
     }
   >();
   const reviewRefusals = new Map<string, ReviewRefusal>();
@@ -84,9 +88,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     } finally {
       presenting = false;
     }
-    const parsed = z
-      .union([z.string(), z.strictObject({ sentence: z.string(), rows: z.array(z.string()) })])
-      .safeParse(value);
+    const parsed = presentationSchema.safeParse(value);
     if (!parsed.success) {
       const refusal = new ReviewRefusal("present-invalid");
       reviewRefusals.set(id, refusal);
@@ -444,6 +446,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
           preview: stale ? undefined : review.preview,
           sentence: stale ? null : (review.presentation?.sentence ?? null),
           rows: stale ? [] : (review.presentation?.rows ?? reviewChanges(review.preview)),
+          cells: stale ? [] : (review.presentation?.cells ?? []),
           stale,
         };
       },
