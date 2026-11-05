@@ -55,8 +55,8 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
     );
   }
   await mkdir(artifactDir, { recursive: true });
-  const scope = bindWork("ducts", address(OFFICE_ADDRESS));
-  const unsavedScope = bindWork("ducts", null, undefined, UNSAVED_REF);
+  const scope = bindWork("fans", address(OFFICE_ADDRESS));
+  const unsavedScope = bindWork("fans", null, undefined, UNSAVED_REF);
   const workspace = new RouteWorkspace({
     registrations: createRouteRegistrations(),
     store: fileRouteDocumentStore(paths.productRouteWorkPath()),
@@ -102,7 +102,7 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
             for (const key of [scope, unsavedScope]) {
               const result = await workspace.apply(
                 key,
-                "ducts",
+                "fans",
                 actor,
                 patches.map((patch) => ({ ...patch, path: [...patch.path] })),
                 revision,
@@ -120,12 +120,12 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
     ),
   );
   const at = "2026-10-24T00:00:00.000Z";
-  const workUrl = `/ducts?target=${encodeURIComponent(OFFICE_ADDRESS)}`;
+  const workUrl = `/fans?target=${encodeURIComponent(OFFICE_ADDRESS)}`;
   const retainedPage = "Office retained page";
   const placeId = "cac00000-0000-4000-8000-000000000011";
   // Real older Places carry only an exact open ref; the Work producer carries no `from`.
-  const placeUrl = `/ducts?target=${encodeURIComponent(JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }))}&system=${encodeURIComponent(retainedPage)}`;
-  const unsavedUrl = `/ducts?target=${encodeURIComponent(JSON.stringify({ kind: "open", ref: UNSAVED_REF }))}`;
+  const placeUrl = `/fans?target=${encodeURIComponent(JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }))}&system=${encodeURIComponent(retainedPage)}`;
+  const unsavedUrl = `/fans?target=${encodeURIComponent(JSON.stringify({ kind: "open", ref: UNSAVED_REF }))}`;
   for (const [kind, id] of Object.entries(CONVERSATION_THREADS)) {
     const office = kind === "office";
     const unsaved = kind === "unsaved";
@@ -157,7 +157,7 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
           lifecycle: emptyThreadLifecycle(),
           tabs: office
             ? [
-                { id: placeId, route: "ducts", link: placeUrl, at },
+                { id: placeId, route: "fans", link: placeUrl, at },
                 {
                   id: "cac00000-0000-4000-8000-000000000012",
                   route: "takeoffs",
@@ -169,7 +169,7 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
               ? [
                   {
                     id: "cac00000-0000-4000-8000-000000000013",
-                    route: "ducts",
+                    route: "fans",
                     link: unsavedUrl,
                     at,
                   },

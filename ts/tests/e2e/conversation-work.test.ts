@@ -232,7 +232,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     const openWork = async (thread: string) => {
       if (await p.has("Expand pea")) await p.click("Expand pea");
       if (await p.has("Expand threads")) await p.click("Expand threads");
-      await p.click("Open Ducts", `[data-thread-sidebar] [data-key="${thread}"]`);
+      await p.click("Open Fans", `[data-thread-sidebar] [data-key="${thread}"]`);
     };
     const toolsCollapsed = async () =>
       new URL(await p.url()).pathname === "/pea" &&
@@ -346,7 +346,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       );
       browserPlaceId = await p.read<string>("history.state.__peRouteTab.id");
       expect(
-        await p.count('[aria-label="Places"] button[aria-pressed][aria-label^="Ducts"]'),
+        await p.count('[aria-label="Places"] button[aria-pressed][aria-label^="Fans"]'),
         "one pasted URL enrolls exactly one Place",
       ).toBe(1);
       expect(new URL(await p.url()).searchParams.has("thread")).toBe(false);
@@ -416,7 +416,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     await step("Work from another row preserves the selected conversation", async () => {
       await openWork(CONVERSATION_THREADS.office);
       await p.until(
-        async () => new URL(await p.url()).pathname === "/ducts",
+        async () => new URL(await p.url()).pathname === "/fans",
         "Work tool opens in current conversation",
       );
       expect(new URL(await p.url()).searchParams.get("thread")).toBe(CONVERSATION_THREADS.empty);
@@ -426,7 +426,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       await pickThreadKeepingTool(CONVERSATION_THREADS.empty);
     });
     await step("thread press preserves the open tool, target, Page and Work", async () => {
-      // The row label selects a conversation; only its separate Open Ducts button resumes Work.
+      // The row label selects a conversation; only its separate Open Fans button resumes Work.
       await pickThreadKeepingTool(CONVERSATION_THREADS.office);
       await headTargets(CONVERSATION_THREADS.office);
     });
@@ -461,7 +461,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       };
     });
     const message = "Unsent office draft retained across tools and history";
-    await step("Work opens closed saved Ducts and draft survives Places collapse", async () => {
+    await step("Work opens closed saved Fans and draft survives Places collapse", async () => {
       await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
       await p.type(message);
       expect(await draft(), "trusted typing authored the draft before opening Work").toBe(message);
@@ -473,7 +473,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       };
       await openWork(CONVERSATION_THREADS.office);
       await p.until(
-        async () => new URL(await p.url()).pathname === "/ducts",
+        async () => new URL(await p.url()).pathname === "/fans",
         "saved Work URL opens",
       );
       const historyState = await p.read<{ __peRouteTab?: { id?: string } }>("history.state");
@@ -516,16 +516,13 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         "second persisted Place",
       );
       expect(await draft()).toBe(message);
-      await choosePlace(/^Ducts/);
-      await p.until(
-        async () => new URL(await p.url()).pathname === "/ducts",
-        "Ducts Place restored",
-      );
+      await choosePlace(/^Fans/);
+      await p.until(async () => new URL(await p.url()).pathname === "/fans", "Fans Place restored");
       await openPea("Open Pea explicitly collapses tools");
       expect(await draft()).toBe(message);
-      await choosePlace(/^Ducts/);
+      await choosePlace(/^Fans/);
       await p.until(
-        async () => new URL(await p.url()).pathname === "/ducts",
+        async () => new URL(await p.url()).pathname === "/fans",
         "tools reopened from Place",
       );
       expect(await draft()).toBe(message);
@@ -578,13 +575,13 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     });
     await step("Home and Back preserve the composer", async () => {
       await p.click("Home / tool directory");
-      await p.until(async () => new URL(await p.url()).pathname !== "/ducts", "Home navigation");
+      await p.until(async () => new URL(await p.url()).pathname !== "/fans", "Home navigation");
       const history = await p.send("Page.getNavigationHistory");
       const back = history.entries[history.currentIndex - 1];
       if (!back || new URL(back.url).origin !== base.origin)
         throw Error("PRECONDITION: no journey-owned browser history entry");
       await p.send("Page.navigateToHistoryEntry", { entryId: back.id });
-      await p.until(async () => new URL(await p.url()).pathname === "/ducts", "Back restores Work");
+      await p.until(async () => new URL(await p.url()).pathname === "/fans", "Back restores Work");
       expect(await draft()).toBe(message);
       expect(await composerIdentity()).toBe(officeComposer);
     });
@@ -597,21 +594,21 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         await p.waitText("Find a tool");
         await p.click("Show All exposure");
         await p.clickAt('input[aria-label="Search tools and saved Works"]');
-        await p.type("Ducts");
+        await p.type("Fans");
         await p.until(
           () =>
             p.read<boolean>(`(() => {
             const rows = [...document.querySelectorAll('[data-list-view][aria-label="tools and saved Works"] [role="treeitem"][data-key]')].filter(${visible});
-            return rows.length > 0 && rows.every(row => row.getAttribute('data-key') === '/ducts' || row.getAttribute('data-key').startsWith('work:ducts/'));
+            return rows.length > 0 && rows.every(row => row.getAttribute('data-key') === '/fans' || row.getAttribute('data-key').startsWith('work:fans/'));
           })()`),
-          "the directory filter has rendered only Ducts and its saved Works",
+          "the directory filter has rendered only Fans and its saved Works",
         );
         await p.clickAt(
-          '[data-list-view][aria-label="tools and saved Works"] [data-key="/ducts"] .dl-row-label',
+          '[data-list-view][aria-label="tools and saved Works"] [data-key="/fans"] .dl-row-label',
         );
         await p.until(
-          async () => new URL(await p.url()).pathname === "/ducts",
-          "directory opens Ducts",
+          async () => new URL(await p.url()).pathname === "/fans",
+          "directory opens Fans",
         );
         expect(new URL(await p.url()).searchParams.get("thread")).toBe(CONVERSATION_THREADS.office);
         expect(
@@ -821,7 +818,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         const opened = Date.now();
         await openWork(CONVERSATION_THREADS.unsaved);
         const request = await p.until(async () => {
-          if (new URL(await p.url()).pathname !== "/ducts") return null;
+          if (new URL(await p.url()).pathname !== "/fans") return null;
           const target = new URL(await p.url()).searchParams.get("target");
           try {
             // TanStack JSON-quotes a carry string that itself contains a JSON DocumentRequest.
@@ -842,7 +839,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         expect(request).toEqual({ kind: "open", ref: UNSAVED_REF });
         const expectedKey = readingKey({
           kind: "work",
-          ...bindWork("ducts", null, undefined, UNSAVED_REF),
+          ...bindWork("fans", null, undefined, UNSAVED_REF),
         });
         await p.until(
           async () =>
@@ -895,7 +892,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         async () => new URL(await p.url()).searchParams.get("thread"),
         "first Send publishes a real conversation",
       );
-      expect(new URL(await p.url()).pathname).toBe("/ducts");
+      expect(new URL(await p.url()).pathname).toBe("/fans");
       await p.waitText("PID=");
       expect(
         network
@@ -913,7 +910,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       receipt.coverage.firstSend = {
         thread,
         created: 1,
-        retainedPath: "/ducts",
+        retainedPath: "/fans",
         inference: "substituted-acp-adapter",
       };
       await p.clickAt('textarea[aria-label="Message"],input[aria-label="Message"]');
@@ -928,7 +925,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       const pageHistory = await p.send("Page.getNavigationHistory");
       const returnEntry = pageHistory.entries[pageHistory.currentIndex];
       const origin = await p.evaluate(() => performance.timeOrigin);
-      const ductsPlace = await currentPlaceId();
+      const fansPlace = await currentPlaceId();
       const pages = ["chadds-duct-readiness", "chadds-duct-detail", "chadds-duct-readiness"];
       const pageIds: string[] = [];
       for (const slug of pages) {
@@ -982,9 +979,9 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       await p.send("Page.navigateToHistoryEntry", { entryId: returnEntry.id });
       await p.until(
         async () => (await p.url()) === beforePages,
-        "Back returns to the original Ducts Page",
+        "Back returns to the original Fans Page",
       );
-      expect(await currentPlaceId()).toBe(ductsPlace);
+      expect(await currentPlaceId()).toBe(fansPlace);
       expect(await draft()).toBe(pageDraft);
       expect(await workEvidence(seed.productHome)).toEqual(initial);
       receipt.coverage.pageLinks = {
@@ -1169,7 +1166,7 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
   const target = "C:/Models/Office.rvt";
   const other = "C:/Models/Annex.rvt";
   const route = (target: string, operation = "") =>
-    `/pe/route-state/ducts${operation ? `/${operation}` : ""}?target=${encodeURIComponent(target)}`;
+    `/pe/route-state/fans${operation ? `/${operation}` : ""}?target=${encodeURIComponent(target)}`;
   const request = (target: string, operation = "", body?: unknown) =>
     page.evaluate(
       async ({ url, bodyJson, moduleUrl }) => {
@@ -1205,10 +1202,10 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
       const { createWorkFeedClient } = await import('/src/shell/work-feed-client.ts');
       const { publicRoutes, publicRoutesReady } = await import('/src/route/builtin-routes.tsx');
       await publicRoutesReady;
-      const admission = publicRoutes.get('ducts').work.admission;
+      const admission = publicRoutes.get('fans').work.admission;
       globalThis.__workJourney?.close();
       const state = globalThis.__workJourney = { frames: [], close: () => {} };
-      state.close = createWorkFeedClient().open({route:'ducts',fingerprint:admission.fingerprint,key:{binding:'address',route:'ducts',target:${JSON.stringify(target)}},target:null,subject:null}).subscribe(frame => state.frames.push(frame), () => {});
+      state.close = createWorkFeedClient().open({route:'fans',fingerprint:admission.fingerprint,key:{binding:'address',route:'fans',target:${JSON.stringify(target)}},target:null,subject:null}).subscribe(frame => state.frames.push(frame), () => {});
     })()`);
   };
   try {
@@ -1267,8 +1264,8 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
     const savedEdit = await workEvidence(home);
     expect(savedEdit).not.toEqual(before);
     expect(
-      savedEdit.find((row) => row.record.targetKey === "ducts/target:c:\\models\\office.rvt")
-        ?.record.value,
+      savedEdit.find((row) => row.record.targetKey === "fans/target:c:\\models\\office.rvt")?.record
+        .value,
     ).toMatchObject({ revision: 3, doc: { flows: { "1001": { edit: { value: { cfm: 175 } } } } } });
     checkpoints.push({ step: "persisted-edit", applied, persisted: savedEdit });
     const stale = await request(target, "apply", {
@@ -1316,7 +1313,7 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
       .toBe(true);
     const restored = await workEvidence(home);
     expect(
-      restored.find((row) => row.record.targetKey === "ducts/target:c:\\models\\office.rvt")?.record
+      restored.find((row) => row.record.targetKey === "fans/target:c:\\models\\office.rvt")?.record
         .value,
     ).toMatchObject({ revision: 4, doc: initial.body.doc });
     expect(await request(other)).toEqual(otherBefore);
