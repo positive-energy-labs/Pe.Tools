@@ -16,6 +16,19 @@ import { sdkSessions } from "./native-receipt-fixture.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 
+test("parameter links apply refuses before dispatch until the plan preserves stored ids", async () => {
+  const executor = catalogWorkExecutors(detachedBridge())["parameter-links.apply"]!;
+  await expect(executor.bind({
+    admission: { id: "blocked-profile", key: "parameter-links.apply", target: { kind: "document", ref: { session: "s", openId: "o" } }, input: {} },
+    caller: { kind: "human", via: "local" },
+    basis: { kind: "human" },
+    work: new RouteWorkspace({ registrations: [] }),
+    consumed: [],
+    selectWork: async () => { throw Error("No Work should be read by the refused executor"); },
+    read: { receipts: () => [] },
+  })).rejects.toMatchObject({ refusal: { kind: "domain", code: "catalog.stored-profile-required" } });
+});
+
 test("catalog Work plans with no native call and applies the derived request once through the boundary", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pe-catalog-work-"));
   const target = { session: "s", openId: "o" };

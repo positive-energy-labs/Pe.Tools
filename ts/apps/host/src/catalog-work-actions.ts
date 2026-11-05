@@ -29,6 +29,9 @@ export function catalogWorkExecutors(
         const executor = command(definition, prepared, {
           seal: (p) => ({ request: p.request }),
           bind: async (ctx) => {
+            // TODO: K2, ADR 0030 rule 8: merge stored ids at plan and show their before values before enabling apply.
+            if (op === "revit.apply.parameter-links" && ctx.admission.key === key)
+              throw refused("Parameter links apply is unavailable until its plan preserves the stored profile", "catalog.stored-profile-required");
             if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
             const target = ctx.admission.target.ref;
             // The boundary already replaced the input with the derived request beside its Work handle.
@@ -39,6 +42,8 @@ export function catalogWorkExecutors(
             };
           },
           run: async (_ctx, execution) => {
+            if (op === "revit.apply.parameter-links")
+              throw refused("Parameter links apply is unavailable until its plan preserves the stored profile", "catalog.stored-profile-required");
             const { target, request } = execution.prepared;
             return execution.step("native", op, request, (id) => invoke(bridge, target, op, request, id));
           },
