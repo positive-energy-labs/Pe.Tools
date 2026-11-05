@@ -443,26 +443,9 @@ export function createReadingGraph<P, W>(
     try {
       const source = node.source;
       node.effects = source.effects?.(context) ?? targetEffects(context.target);
-      if (source.kind === "derive") {
+      if (source.kind === "derive")
         emit({ kind: "complete", value: source.derive(context), revision: 0 });
-      } else if (source.kind === "worker") {
-        node.worker ??= source.connect();
-        node.worker.update(context, emit);
-      } else if (source.kind === "port") {
-        const opened = source.open(context);
-        const accept = (session: PortSession) => {
-          keep(() => session.close());
-          emit({ kind: "complete", value: session.value, revision: 0 });
-        };
-        if (opened instanceof Promise)
-          void opened.then(accept, (error: unknown) => emit({ kind: "failure", error }));
-        else accept(opened);
-      } else {
-        const opened = source.open(context, emit);
-        if (opened instanceof Promise)
-          void opened.then(keep, (error: unknown) => emit({ kind: "failure", error }));
-        else keep(opened);
-      }
+      else openSource(source, context, emit, keep, source.kind === "worker" ? (node.worker ??= source.connect()) : undefined);
     } catch (error) {
       emit({ kind: "failure", error });
     }
@@ -789,6 +772,33 @@ export function createReadingGraph<P, W>(
 }
 
 export type ReadingGraph<P, W> = ReturnType<typeof createReadingGraph<P, W>>;
+
+/** One source-open: release before a port's answer; rejection fails; a leased (graph) worker is never stopped here. */
+export function openSource<T>(
+  source: Exclude<ReadingSource<T>, DeriveSource<T>>,
+  context: ReadingContext,
+  deliver: ReadingDelivery<T>,
+  keep: (release: void | Release) => void,
+  worker?: WorkerChannel<T>,
+): void {
+  const fail = (error: unknown) => deliver({ kind: "failure", error });
+  if (source.kind === "worker") {
+    const channel = worker ?? source.connect();
+    if (!worker) keep(() => channel.stop());
+    return channel.update(context, deliver);
+  }
+  if (source.kind === "port") {
+    const accept = (session: PortSession<T>) => {
+      keep(() => session.close());
+      deliver({ kind: "complete", value: session.value, revision: 0 });
+    };
+    const opened = source.open(context);
+    return opened instanceof Promise ? void opened.then(accept, fail) : accept(opened);
+  }
+  const opened = source.open(context, deliver);
+  if (opened instanceof Promise) void opened.then(keep, fail);
+  else keep(opened);
+}
 
 /** ponytail: 53-bit cyrb53 over canonical JSON, sync and cheap; full-body cost on large values
  * that declare no sourceVersion. Swap for SubtleCrypto SHA-256 if snapshots cross a trust line. */

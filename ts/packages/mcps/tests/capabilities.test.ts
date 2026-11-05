@@ -578,6 +578,29 @@ test("an exact-open turn Target reads and writes route Work under its document's
   }
 });
 
+test("a linked catalog route dispatches through its declared transport whatever its presentation kind", async () => {
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const listed = catalog();
+  // Presentation kind is display only: a catalog route labelled as an op still runs as its route (before S1, kind "op" threw in dispatch).
+  listed.capabilities = listed.capabilities.map((row) =>
+    row.key === "route:ducts.roster" ? { ...row, kind: "op" } : row,
+  );
+  const called: string[] = [];
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/pe/capabilities") return Response.json(listed);
+    called.push(`${init?.method ?? "GET"} ${url.pathname}`);
+    return Response.json({ rows: [] });
+  });
+  const done = (await run(peDo, { key: "route:ducts.roster", input: { target: { session: "b1", openId: "A" } }, timeoutSeconds: 30 })) as {
+    ok: boolean;
+    result: unknown;
+  };
+  expect(done).toMatchObject({ ok: true, result: { rows: [] } });
+  expect(called).toHaveLength(1);
+  expect(called[0]).toMatch(/ducts/);
+});
+
 test("ADR 0021: a thread with several targets refuses a call with no override; an override names one", async () => {
   fakeRuntimeHost("http://127.0.0.1:9");
   const dispatched: (string | null)[] = [];

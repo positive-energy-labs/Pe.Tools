@@ -697,6 +697,21 @@ async function dispatch(
   const payload: Record<string, unknown> =
     coerced && typeof coerced === "object" ? (coerced as Record<string, unknown>) : {};
   const scopeTarget = namedTarget(defaultTarget);
+  // Linked catalog, not row.kind, owns execution; `op:` keys returned earlier, so this is a Pe route.
+  if (linkedCatalog().entries.get(row.key)?.discovery?.key === row.key) {
+    const response = await callCatalogRoute(base(), row.key, payload, fetch);
+    const result = await response.json();
+    if (response.ok && result.artifact?.url)
+      result.artifact.url = new URL(result.artifact.url, base()).toString();
+    return {
+      ok: response.ok,
+      target:
+        response.ok && result.target
+          ? { session: result.target.session, document: result.target.openId }
+          : { session: null, document: null },
+      result,
+    };
+  }
   switch (row.kind) {
     case "op":
       throw Error("Operation capabilities use the shared invocation adapter");
@@ -793,23 +808,6 @@ async function dispatch(
     }
     case "route-doc":
     case "route-command": {
-      if (
-        linkedCatalog().entries.get(row.key)?.discovery?.key === row.key && row.key.startsWith("route:")
-      ) {
-        const response = await callCatalogRoute(base(), row.key, payload, fetch);
-        const result = await response.json();
-        if (response.ok && result.artifact?.url)
-          result.artifact.url = new URL(result.artifact.url, base()).toString();
-        return {
-          ok: response.ok,
-          target:
-            response.ok && result.target
-              ? { session: result.target.session, document: result.target.openId }
-              : { session: null, document: null },
-          result,
-        };
-      }
-
       // One executor for every leasing route's projected row (`viewRoutes`). The host's channel
       // rechecks the live registration, so a withdrawn or unregistered route refuses there.
       const view = row.source === "browser Page" ? /^route:(.+)\.(view|set-view)$/.exec(row.key) : null;
