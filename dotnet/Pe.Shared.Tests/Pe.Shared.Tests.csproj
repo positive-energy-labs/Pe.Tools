@@ -26,6 +26,7 @@
     <ItemGroup>
         <!-- The dev bridge supervisor's real appBase derivation, compiled in so a test reads it without Revit. -->
         <Compile Include="..\Pe.App\Host\TsHostLauncher.cs" Link="Product\TsHostLauncher.cs" />
+        <Compile Include="..\..\eng\PrivateFixtures.cs" Link="PrivateFixtures.cs" />
         <!-- Portable receipt producer uses the owning build configuration, without a runtime compiler. -->
         <Compile Include="..\Pe.App\Analytics\ReceiptEventIds.cs" Link="Operations\ReceiptEventIds.cs" />
     </ItemGroup>
@@ -35,6 +36,9 @@
         <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj" />
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj" />
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Partition\Pe.Revit.Partition.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Space\Pe.Revit.Space.csproj" />
+        <ProjectReference Include="..\Pe.Revit.Takeoff\Pe.Revit.Takeoff.csproj" />
         <ProjectReference Include="..\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj" />
         <!-- Pe.Host retired — HostOperationExecutorTests.cs removed with it. -->
         <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj" />
