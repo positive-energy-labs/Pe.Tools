@@ -1,4 +1,6 @@
-/** Builtin closure pins and DOM-free host modules share one manifest. */
+/// <reference path="./source-closure.d.ts" />
+/** Builtin closures and DOM-free host modules share one manifest. Closures are untracked output of
+ * scripts/route-graphs.ts: bundles get them from routeModuleHash, jiti host dev from dev-watch. */
 import { z } from "zod";
 import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
 import type { BuiltinClosure } from "../../../../packages/agent-contracts/src/route-module.ts";
@@ -14,22 +16,24 @@ import ductsGenerated from "../ducts/source-closure.generated.json" with { type:
 import fansGenerated from "../fans/source-closure.generated.json" with { type: "json" };
 
 const member = z.strictObject({ id: z.string(), sha256: z.string() });
-const closureSchema: z.ZodType<{ fingerprint: string; envelope: BuiltinClosure }> =
-  z.strictObject({
-    fingerprint: z.string(),
-    envelope: z.strictObject({
-      source: z.literal("builtin-closure"),
-      version: z.literal(1),
-      data: RouteGraphJson,
-      variants: z.array(z.strictObject({ client: z.enum(["web", "pea"]), entry: z.string() })),
-      modules: z.array(member),
-      inputs: z.array(member),
-      externals: z.array(member),
-    }),
-  });
+const closureSchema: z.ZodType<{ fingerprint: string; envelope: BuiltinClosure }> = z.strictObject({
+  fingerprint: z.string(),
+  envelope: z.strictObject({
+    source: z.literal("builtin-closure"),
+    version: z.literal(1),
+    data: RouteGraphJson,
+    variants: z.array(z.strictObject({ client: z.enum(["web", "pea"]), entry: z.string() })),
+    modules: z.array(member),
+    inputs: z.array(member),
+    externals: z.array(member),
+  }),
+});
 
 const captures = closureSchema.parse(capturesGenerated);
-interface Builtin { closure: z.output<typeof closureSchema>; host: HostRouteModule }
+interface Builtin {
+  closure: z.output<typeof closureSchema>;
+  host: HostRouteModule;
+}
 export const builtins: Record<"captures" | "schedules" | "families" | "ducts" | "fans", Builtin> = {
   captures: { closure: captures, host: { data: captures.envelope.data, schemas: {}, bodies: {} } },
   schedules: { closure: closureSchema.parse(schedulesGenerated), host: schedulesHostModule },

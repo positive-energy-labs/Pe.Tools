@@ -44,11 +44,7 @@ export interface BuiltinClosureOptions {
  * No builtin runtime pinning: dependencies resolve normally and their content is included.
  */
 export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
-  for (const path of [
-    options.root,
-    options.identityRoot,
-    ...options.variants.map((v) => v.entry),
-  ])
+  for (const path of [options.root, options.identityRoot, ...options.variants.map((v) => v.entry)])
     if (!isAbsolute(path)) throw Error(`Closure requires an absolute path: ${path}`);
   if (
     !options.variants.length ||
@@ -160,15 +156,6 @@ export async function buildBuiltinClosure(options: BuiltinClosureOptions) {
   return { envelope, fingerprint: fingerprintRouteSource(envelope) };
 }
 
-/** A check compares only; explicit codegen owns writes. */
-export function checkBuiltinClosure(
-  path: string,
-  closure: Awaited<ReturnType<typeof buildBuiltinClosure>>,
-) {
-  if (readFileSync(path, "utf8").replaceAll("\r\n", "\n") !== canonicalRouteJson(closure) + "\n")
-    throw Error(`Builtin source closure drifted: ${path}`);
-}
-
 /** Each builtin hashes its own declaration and executable closure. */
 export async function buildBuiltinClosures(inventory: readonly BuiltinClosureOptions[]) {
   const closures = new Map<string, Awaited<ReturnType<typeof buildBuiltinClosure>>>();
@@ -180,7 +167,7 @@ export async function buildBuiltinClosures(inventory: readonly BuiltinClosureOpt
   return closures;
 }
 
-/** Dev repair is idempotent so its own filesystem event cannot trigger a restart loop. */
+/** Closures are untracked build output; an unchanged rewrite is skipped so watchers stay quiet. */
 export function writeBuiltinClosurePin(path: string, text: string) {
   if (existsSync(path) && readFileSync(path, "utf8").replaceAll("\r\n", "\n") === text) return;
   writeFileSync(path, text);

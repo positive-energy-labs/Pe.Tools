@@ -7,7 +7,6 @@ import { execFileSync } from "node:child_process";
 import {
   buildBuiltinClosure,
   buildBuiltinClosures,
-  checkBuiltinClosure,
   writeBuiltinClosurePin,
 } from "./route-source-hash.ts";
 import { canonicalRouteJson } from "../../packages/agent-contracts/src/route-graph.ts";
@@ -71,19 +70,6 @@ test("actual resolver closes all module kinds; source, asset and imported JSON m
     writeFileSync(join(f.root, file), source.replaceAll("\n", "\r\n"));
   expect((await f.build()).fingerprint).toBe(first.fingerprint);
 }, 60_000);
-test("drift checks are read-only", async () => {
-  const f = fixture();
-  const first = await f.build();
-  const path = join(f.root, "manifest.json");
-  writeFileSync(path, canonicalRouteJson(first) + "\n");
-  const before = readFileSync(path);
-  checkBuiltinClosure(path, first);
-  writeFileSync(join(f.root, "body.ts"), "export const body = () => 2;");
-  const changed = await f.build();
-  expect(() => checkBuiltinClosure(path, changed)).toThrow("drifted");
-  expect(readFileSync(path)).toEqual(before);
-});
-
 test("shared client entries resolve once and retain both client identities", async () => {
   const f = fixture();
   const before = await f.build();
@@ -160,15 +146,14 @@ test("builtin closures hash independently in declaration order", async () => {
   expect(alone.get("fans")).toEqual(closures.get("fans"));
 });
 
-test("dev repairs stale builtin pins in one step and leaves fresh pins untouched", async () => {
+test("the producer replaces a stale closure in one step and leaves a fresh one untouched", async () => {
   const f = fixture();
   const closure = await f.build();
   const path = join(f.root, "pin.json");
   writeFileSync(path, "stale");
-  expect(() => checkBuiltinClosure(path, closure)).toThrow();
   const text = canonicalRouteJson(closure) + "\n";
   writeBuiltinClosurePin(path, text);
-  checkBuiltinClosure(path, closure);
+  expect(readFileSync(path, "utf8")).toBe(text);
   const before = statSync(path).mtimeMs;
   writeBuiltinClosurePin(path, text);
   expect(statSync(path).mtimeMs).toBe(before);
