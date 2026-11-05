@@ -1,4 +1,3 @@
-import { writeIntentSchema } from "./write-intent.ts";
 import { z } from "zod";
 
 export const parameterIdentitySchema = z.object({
@@ -122,19 +121,36 @@ export const parameterLinksDataSchema = z.object({
 export type ParameterLinksData = z.infer<typeof parameterLinksDataSchema>;
 
 /**
- * The Parameter Links document is one shared authored cell. Either author stages
- * a profile; evaluate/apply consume its current edit. Strict, so the old `{ draft }` shape
- * fails closed rather than lose its value.
+ * Parameter Links Work: one StateCell per authored id (ADR 0030 rules 2 and 8), so a person and Pea
+ * staging different definitions never overwrite each other. The Work holds the whole authored
+ * profile, since apply replaces it whole; a delete rung removes an id. Strict, so the old `{ draft }`
+ * and whole-`profile` shapes fail closed rather than lose their value.
  */
+const idCells = <V extends z.ZodType>(value: V) =>
+  z.record(z.string().min(1), draftCellSchema(value, { deletable: true })).default({});
 export const parameterLinksDocumentSchema = z.strictObject({
-  writeIntent: writeIntentSchema.optional(),
-  profile: draftCellSchema(parameterLinkProfileSchema).default({}),
+  definitions: idCells(parameterLinkDefinitionSchema.omit({ id: true })),
+  assignments: idCells(parameterLinkAssignmentSchema.omit({ id: true })),
 });
 export type ParameterLinksDocument = z.infer<typeof parameterLinksDocumentSchema>;
 
-/** The profile apply would reconcile: the current edit, or none. */
-export const stagedParameterProfile = (work: ParameterLinksDocument): ParameterLinkProfile | null =>
-  work.profile.edit?.value ?? null;
+type IdCells<V> = Record<string, { edit?: { value?: V; delete?: true } | null }>;
+/** Each staged id as an entry; a delete rung drops it. An id with no staged value refuses. */
+function stagedEntries<V extends object>(cells: IdCells<V>, kind: string): (V & { id: string })[] {
+  return Object.entries(cells).flatMap(([id, { edit }]) => {
+    if (!edit) throw new Error(`${kind} ${id} has no staged value; the profile is replaced whole`);
+    return edit.delete ? [] : [{ ...edit.value!, id }];
+  });
+}
+
+/** The profile apply would reconcile, whole: every staged id; null when Work stages nothing. */
+export function stagedParameterProfile(work: ParameterLinksDocument): ParameterLinkProfile | null {
+  if (!Object.keys(work.definitions).length && !Object.keys(work.assignments).length) return null;
+  return parameterLinkProfileSchema.parse({
+    definitions: stagedEntries(work.definitions, "definition"),
+    assignments: stagedEntries(work.assignments, "assignment"),
+  });
+}
 
 /**
  * The exact profile an observation was taken against. Identical on the client and the server.
@@ -160,9 +176,9 @@ export const parameterLinksRouteState = {
   route: "parameter-links",
   title: "Parameter Links",
   description:
-    "Either author stages a model-owned parameter linkage profile, evaluates it, and reconciles it through the host.",
+    "Either author stages definitions and assignments of the model-owned parameter linkage profile by id, evaluates them, and reconciles them through the host.",
   schema: parameterLinksDocumentSchema,
-  // Evaluate and Apply consume the one staged edit, whoever wrote it last.
+  // Evaluate and Apply consume every staged cell, each whoever wrote it last.
   // Reading and applying are host ports, not route commands: an observation of Revit can
   // never be written into authored Work.
 } satisfies RouteStateSpec<typeof parameterLinksDocumentSchema>;

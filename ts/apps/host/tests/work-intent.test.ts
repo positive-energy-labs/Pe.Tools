@@ -37,7 +37,9 @@ test("the seal follows the axis: a ModelWrite is sealed and nothing else carries
     const phase = (commands as Record<string, { writeBoundary?: { phase: string } }>)[key]
       ?.writeBoundary?.phase;
     expect(phase === "apply", key).toBe(axes.effect === "ModelWrite");
-    if (phase === "preview") expect(axes.effect, key).toBe("TransactRead");
+    // ADR 0030 rule 4: a plan is a Read (catalog Work, native Read leaf) or a TransactRead that rolls back.
+    if (phase === "preview")
+      expect(axes.effect === "Read" || (axes.effect === "TransactRead" && axes.rollsBack), key).toBe(true);
   }
 });
 

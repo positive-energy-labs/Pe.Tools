@@ -368,7 +368,7 @@ test("a direct RPC caller recovers its original command before consulting a miss
 
 
 import { runCapability } from "../src/shared/admission.ts";
-import { ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-contracts";
+import { ductsDocumentSchema, fansDocumentSchema, workHandle } from "@pe/agent-contracts";
 test.each(["open", "address", "workspace", "host"] as const)("loss preview reads exact %s ducts and fans Work before submission", async binding => {
  for (const scoped of [false, true]) {
   const posts: unknown[] = [];
@@ -386,8 +386,8 @@ test.each(["open", "address", "workspace", "host"] as const)("loss preview reads
       expect(Object.fromEntries(url.searchParams)).toEqual(expected);
       // The fan walk lives in fans Work at the same document key (the host derive reads it there).
       return Response.json(url.pathname.endsWith("/fans")
-        ? {revision: 5, doc: fansDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {walk: {unitId: 14577391, portIndex: 0}}}}} : {})}
-        : {revision: 3, doc: ductsDocumentSchema.parse({})});
+        ? {revision: 5, handle: workHandle({...key, route: "fans"} as never, 5), doc: fansDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {walk: {unitId: 14577391, portIndex: 0}}}}} : {})}
+        : {revision: 3, handle: workHandle(key as never, 3), doc: ductsDocumentSchema.parse({})});
     }
     if (url.pathname === "/actions" && init?.method === "POST") {
       const body = JSON.parse(String(init.body)); posts.push(body);

@@ -14,7 +14,15 @@ import type {
 import { WorkMigrationFailure } from "./work-migration-failure.ts";
 import { retireSuggestionLane } from "./work-cutover.ts";
 import { createWorkJournal } from "./work-journal.ts";
-import { bindWork, workCounts, workKey, workKeySchema, type WorkKey } from "@pe/agent-contracts";
+import {
+  bindWork,
+  workCounts,
+  workHandle,
+  workKey,
+  workKeySchema,
+  type WorkHandle,
+  type WorkKey,
+} from "@pe/agent-contracts";
 import { z } from "zod";
 import { OwnerReads, type OwnerValue } from "./owner-read.ts";
 import {
@@ -387,14 +395,16 @@ export class RouteWorkspace {
    * that salvages what still parses instead of refusing. Null when no Work exists; `doc` is null
    * when even the envelope is unreadable.
    */
-  async readRaw(scope: WorkKey, route: string): Promise<{ doc: unknown; revision: number } | null> {
+  async readRaw(
+    scope: WorkKey,
+    route: string,
+  ): Promise<{ doc: unknown; revision: number; handle: WorkHandle } | null> {
     if (!this.#registry.has(route)) return null;
     const raw = await this.#serialized(() => this.#carryOver(scope, route));
     if (raw == null) return null;
     const envelope = envelopeSchema.safeParse(raw);
-    return envelope.success
-      ? { doc: envelope.data.doc, revision: envelope.data.revision }
-      : { doc: null, revision: 0 };
+    const revision = envelope.success ? envelope.data.revision : 0;
+    return { doc: envelope.success ? envelope.data.doc : null, revision, handle: workHandle(scope, revision) };
   }
 
   /**
@@ -425,6 +435,7 @@ export class RouteWorkspace {
         description: spec.description,
         doc: structuredClone(envelope.doc),
         revision: envelope.revision,
+        handle: workHandle(scope, envelope.revision),
         schemaVersion: envelope.schemaVersion ?? null,
         schema: toJsonSchema(spec.schema),
       };
@@ -641,6 +652,7 @@ export class RouteWorkspace {
       return {
         ok: true,
         revision: landed.envelope.revision,
+        handle: workHandle(scope, landed.envelope.revision),
         doc: structuredClone(landed.envelope.doc),
         write,
       };
@@ -770,7 +782,7 @@ export class RouteWorkspace {
           ok: true,
         });
       }
-      return { ok: true, revision: fresh.revision, write };
+      return { ok: true, revision: fresh.revision, handle: workHandle(scope, fresh.revision), write };
     });
   }
 
