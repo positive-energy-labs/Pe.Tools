@@ -18,7 +18,14 @@ type Rule = {
   allow: Allow[];
   max?: Record<string, number>;
   asOf?: string;
-  select?: "classes" | "hover-css" | "focus-css" | "state-css" | "reach" | "reading-rows";
+  select?:
+    | "classes"
+    | "hover-css"
+    | "focus-css"
+    | "state-css"
+    | "reach"
+    | "reading-rows"
+    | "subject-fallbacks";
   exclude?: string[];
   cannotSee: string;
 };
@@ -250,7 +257,8 @@ const RULES: Rule[] = [
     allow: [{ glob: K + "components/lang/lang.css", reason: "One shared critical-damage mark owns the pulse and selectors." }],
     cannotSee: "Computed appearance and animation." },
   { id: "subject-fallback-ids", doctrine: "I1", pattern: /(?:element|region) \$\{/g,
-    roots: [W + "**/*.tsx"], allow: [], cannotSee: "Other raw-id spellings and runtime names." },
+    roots: [W + "**/*.tsx"], allow: [], select: "subject-fallbacks",
+    cannotSee: "Fallback helpers, direct names and computed labels; checks literal logical/ternary fallbacks only." },
   { id: "picture-furniture-floater", doctrine: "L2",
     pattern: /^(?![\s\S]*\binset-[xy]-)(?=[\s\S]*\babsolute\b)(?=[\s\S]*(?:^|\s)(?:left|right|top|bottom)-\d)[\s\S]+$/g,
     roots: [W + "**/*.tsx"], select: "classes",
@@ -484,6 +492,42 @@ function unadaptedReadings(source: string): string[] {
   return hits;
 }
 
+/** An authored ID removal label identifies the input; it is not a missing subject name. */
+function subjectFallbacks(source: string): string[] {
+  const file = ts.createSourceFile(
+    "subject.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const operators = new Set<ts.SyntaxKind>([
+    ts.SyntaxKind.QuestionQuestionToken,
+    ts.SyntaxKind.BarBarToken,
+    ts.SyntaxKind.QuestionQuestionEqualsToken,
+    ts.SyntaxKind.BarBarEqualsToken,
+  ]);
+  const values: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isBinaryExpression(node) && operators.has(node.operatorToken.kind))
+      values.push(node.right.getText(file));
+    if (ts.isConditionalExpression(node)) values.push(node.whenFalse.getText(file));
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return values;
+}
+
+it("subject name fallbacks refuse raw IDs while authored-ID removal remains explicit", () => {
+  const rule = RULES.find((rule) => rule.id === "subject-fallback-ids")!;
+  const hits = (source: string) =>
+    subjectFallbacks(source).flatMap((value) => [...value.matchAll(rule.pattern)]);
+  expect(hits("const title = name ?? `element ${id}`;")).toHaveLength(1);
+  expect(hits("const title = name || `region ${id}`;")).toHaveLength(1);
+  expect(hits("const title = name ? name : `element ${id}`;")).toHaveLength(1);
+  expect(hits("<Button label={`Remove host element ${id}`}>{id}</Button>")).toHaveLength(0);
+});
+
 it.each(RULES)("$id ($doctrine)", (rule) => {
   const used = new Set<Allow>();
   const violations: string[] = [];
@@ -506,32 +550,34 @@ it.each(RULES)("$id ($doctrine)", (rule) => {
     if (rule.select === "hover-css" || rule.select === "focus-css" || rule.select === "state-css")
       source = source.replace(/\/\*[\s\S]*?\*\//g, "");
     const values =
-      rule.select === "reading-rows"
-        ? unadaptedReadings(source)
-        : rule.select === "classes"
-          ? [...source.matchAll(/\bclassName=["']([^"']*)["']/g)].map((m) => m[1]!)
-          : rule.select === "hover-css"
-            ? [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-                .filter((m) => /:(?:hover|focus(?:-visible|-within)?)/.test(m[1]!))
-                .map((m) => m[2]!)
-            : rule.select === "state-css"
+      rule.select === "subject-fallbacks"
+        ? subjectFallbacks(source)
+        : rule.select === "reading-rows"
+          ? unadaptedReadings(source)
+          : rule.select === "classes"
+            ? [...source.matchAll(/\bclassName=["']([^"']*)["']/g)].map((m) => m[1]!)
+            : rule.select === "hover-css"
               ? [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-                  .filter(
-                    (m) =>
-                      /\.dl-row|\.dl-cell|\[data-damage\]/.test(m[1]!) &&
-                      !m[1]!.includes(":not(:has(:focus-visible))") &&
-                      !/animation\s*:/.test(m[2]!),
-                  )
+                  .filter((m) => /:(?:hover|focus(?:-visible|-within)?)/.test(m[1]!))
                   .map((m) => m[2]!)
-              : rule.select === "focus-css"
+              : rule.select === "state-css"
                 ? [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-                    .filter((m) =>
-                      /:focus|data-reach="focus"/.test(
-                        m[1]!.replaceAll(":not(:has(:focus-visible))", ""),
-                      ),
+                    .filter(
+                      (m) =>
+                        /\.dl-row|\.dl-cell|\[data-damage\]/.test(m[1]!) &&
+                        !m[1]!.includes(":not(:has(:focus-visible))") &&
+                        !/animation\s*:/.test(m[2]!),
                     )
                     .map((m) => m[2]!)
-                : [source];
+                : rule.select === "focus-css"
+                  ? [...source.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+                      .filter((m) =>
+                        /:focus|data-reach="focus"/.test(
+                          m[1]!.replaceAll(":not(:has(:focus-visible))", ""),
+                        ),
+                      )
+                      .map((m) => m[2]!)
+                  : [source];
     const hits = values.flatMap((value) => [...value.matchAll(rule.pattern)].map(() => value));
     let allowed = 0;
     for (const hit of hits) {
