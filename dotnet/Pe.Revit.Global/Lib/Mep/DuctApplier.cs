@@ -57,6 +57,8 @@ public static class DuctApplier {
         public string? After { get; set; }
         public Func<string>? Write { get; set; }
         public Element? Element { get; init; }
+        /// <summary>Fan parameters: the element that owns the written parameter (the instance, or its shared type).</summary>
+        public ElementId? Owner { get; init; }
         /// <summary>Fittings and accessories: the server to set after the Not Defined commit, and its entity fields.</summary>
         public (Guid Server, Schema Schema, IReadOnlyList<(string Field, string Value)> Fields)? Loss { get; init; }
 
@@ -105,8 +107,8 @@ public static class DuctApplier {
         foreach (var w in request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Plan("equipment", w.Id, () => Equipment(doc, w, slots)));
         foreach (var w in request.TerminalFlows ?? []) items.Add(Duplicate("terminal-flow", w.Id) ?? Plan("terminal-flow", w.Id, () => TerminalFlow(doc, w)));
         foreach (var w in request.EquipmentFlows ?? []) items.Add(Duplicate("equipment-flow", w.Id) ?? Plan("equipment-flow", w.Id, () => EquipmentFlow(doc, w, slots)));
-        SharedTypes(items, "equipment", (request.Equipment ?? []).Select(w => (w.Id, w.ExternalStaticInWg)), "fan statics");
-        SharedTypes(items, "equipment-flow", (request.EquipmentFlows ?? []).Select(w => (w.Id, w.Cfm)), "fan flows");
+        var unscoped = SharedTypes(doc, items, "equipment", (request.Equipment ?? []).Select(w => (w.Id, w.ExternalStaticInWg)), "fan statics")
+            | SharedTypes(doc, items, "equipment-flow", (request.EquipmentFlows ?? []).Select(w => (w.Id, w.Cfm)), "fan flows");
 
         var (stored, storeError) = ReadStore(doc);
         var storeRevision = stored?.WorkRevision ?? 0;
@@ -117,6 +119,11 @@ public static class DuctApplier {
         else if (request.Store.WorkRevision < storeRevision)
             store.Refuse($"stale: the model holds store revision {storeRevision}, the request carries {request.Store.WorkRevision}; re-read ducts.snapshot");
         items.Add(store);
+        // A type write the request cannot scope refuses the whole apply, store included, before any transaction:
+        // nothing lands beside a refusal that would otherwise move units the request does not name.
+        if (unscoped)
+            foreach (var i in items.Where(i => i.Outcome == "planned"))
+                i.Refuse("not written: a shared type parameter in this apply would move units it does not name (see the refused equipment)");
 
         if (preview)
             return Result(true, items, null, storeRevision) with { Worksharing = Borrows(doc, items) };
@@ -388,21 +395,42 @@ public static class DuctApplier {
     }
 
     /// <summary>
-    ///     Units of one type that each fall back to the type's parameter but ask for different values would race: the
-    ///     last write wins and the rest are silently overwritten. Every write in such a set is refused, naming its peers.
+    ///     A parameter owned by a shared type moves every instance of that type. Its write is allowed only when the
+    ///     request names every instance of the type with one value (a cohort the Work expresses); otherwise each
+    ///     requested unit of the type is refused, naming the type and its peers: units the request does not name, or
+    ///     named units asking different values. Membership is read here, on the Revit thread, at plan and at apply.
+    ///     Returns whether any unit was refused for scope.
     /// </summary>
-    private static void SharedTypes(List<Item> items, string kind, IEnumerable<(long Id, double Value)> asked, string what) {
+    private static bool SharedTypes(Document doc, List<Item> items, string kind, IEnumerable<(long Id, double Value)> asked, string what) {
         var value = asked.GroupBy(w => w.Id).ToDictionary(g => g.Key, g => g.First().Value);
-        var conflicts = items
-            .Where(i => i.Kind == kind && i is { Outcome: not "refused", Id: { } } && i.After?.StartsWith("type ") == true)
-            .GroupBy(i => ((FamilyInstance)i.Element!).Symbol.Id.Value())
-            .Where(g => g.Select(i => value[i.Id!.Value]).Distinct().Count() > 1);
-        foreach (var set in conflicts) {
-            var peers = string.Join(", ", set.Select(i => $"{i.Id} asks {value[i.Id!.Value]:0.####}"));
-            foreach (var i in set)
-                i.Refuse($"units of one type ({((FamilyInstance)i.Element!).Symbol.Name}) ask for different {what} ({peers}); a type holds one value, so give the family an instance parameter or stage one value");
+        var refused = false;
+        var shared = items
+            .Where(i => i.Kind == kind && i is { Outcome: not "refused", Id: { } } && i.Owner is { } owner && owner != i.Element!.Id)
+            .GroupBy(i => i.Owner!.Value());
+        foreach (var set in shared) {
+            // An unchanged type writes nothing; any planned write in the set moves every unit of the type.
+            if (set.All(i => i.Outcome != "planned")) continue;
+            var owner = doc.GetElement(set.First().Owner!);
+            string? reason = null;
+            if (owner is not FamilySymbol type)
+                reason = $"'{owner?.Name ?? set.Key.ToString(CultureInfo.InvariantCulture)}' owns the parameter and is not a family type; a write there moves elements this Work does not name";
+            else {
+                var members = new FilteredElementCollector(doc).WherePasses(new FamilyInstanceFilter(doc, type.Id)).ToElements();
+                var unnamed = members.Where(m => !value.ContainsKey(m.Id.Value())).ToList();
+                if (unnamed.Count > 0)
+                    reason = $"type '{type.FamilyName}: {type.Name}' holds this parameter for {members.Count} units; the request names {set.Count()} and would also move {string.Join(", ", unnamed.Select(Unit))}. Stage every unit of the type with one value, or give the family an instance parameter";
+                else if (set.Select(i => value[i.Id!.Value]).Distinct().Count() > 1)
+                    reason = $"units of one type ({type.Name}) ask for different {what} ({string.Join(", ", set.Select(i => $"{i.Id} asks {value[i.Id!.Value]:0.####}"))}); a type holds one value, so give the family an instance parameter or stage one value";
+            }
+            if (reason is null) continue;
+            refused = true;
+            foreach (var i in set) i.Refuse(reason);
         }
+        return refused;
     }
+
+    private static string Unit(Element e) =>
+        e.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() is { Length: > 0 } mark ? $"{mark} ({e.Id.Value()})" : $"{e.Id.Value()}";
 
     private static Item Equipment(Document doc, DuctEquipmentWrite w, DuctParameterSlots slots) =>
         FanParameter(doc, "equipment", w.Id, w.ExternalStaticInWg, slots.FanStatic, nameof(DuctParameterSlots.FanStatic), SpecTypeId.HvacPressure, InWg, "in-wg", "static");
@@ -414,9 +442,10 @@ public static class DuctApplier {
     private static Item FanParameter(Document doc, string kind, long id, double value, string name, string slot, ForgeTypeId spec, ForgeTypeId unit, string unitText, string noun) {
         var e = doc.GetElement(id.ToElementId());
         if (e is null) return new Item(id, kind, null).Refuse($"element {id} is not in the document");
-        var own = e.LookupParameter(name);
-        var (p, where) = own is not null ? (own, "instance") : ((e as FamilyInstance)?.Symbol?.LookupParameter(name), "type");
-        var item = new Item(id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{where} {Shown(p, unit):0.####} {unitText}" : null) { Element = e };
+        var p = e.LookupParameter(name) ?? (e as FamilyInstance)?.Symbol?.LookupParameter(name);
+        // The owner is the parameter's element, never the wrapper it was looked up through.
+        var where = p is null || p.Element.Id == e.Id ? "instance" : "type";
+        var item = new Item(id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{where} {Shown(p, unit):0.####} {unitText}" : null) { Element = e, Owner = p?.Element.Id };
         if (e.Category.ToBuiltInCategory() != BuiltInCategory.OST_MechanicalEquipment) return item.Refuse($"not mechanical equipment ({e.Category?.Name ?? "no category"})");
         if (p is null) return item.Refuse($"neither the instance nor its type has '{name}'");
         if (p.StorageType != StorageType.Double || p.Definition.GetDataType() != spec)
@@ -429,7 +458,7 @@ public static class DuctApplier {
         return item with {
             After = after,
             // Re-resolved: a Regenerate earlier in the stage can invalidate the planned Parameter wrapper.
-            Write = () => (where == "instance" ? e.LookupParameter(name) : (e as FamilyInstance)?.Symbol?.LookupParameter(name))
+            Write = () => doc.GetElement(item.Owner!)?.LookupParameter(name)
                 ?.Set(UnitUtils.ConvertToInternalUnits(value, unit)) == true
                 ? after
                 : throw new InvalidOperationException($"Revit rejected '{name}' ({slot} slot) on the {where}")
