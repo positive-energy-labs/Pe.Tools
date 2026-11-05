@@ -17,7 +17,22 @@ public sealed record DuctApplyRequest(
     IReadOnlyList<DuctEquipmentWrite> Equipment,
     IReadOnlyList<DuctFlowWrite> TerminalFlows,
     IReadOnlyList<DuctFlowWrite> EquipmentFlows,
-    DuctLossStore Store);
+    DuctLossStore Store,
+    DuctStoreDeletes? StoreDeletes = null);
+
+/// <summary>
+///     Store keys this write removes. The store is overlaid per key: a key the request omits keeps its stored entry,
+///     so only a key named here is removed (K3: omission is never deletion).
+/// </summary>
+public sealed record DuctStoreDeletes {
+    public List<string> Rules { get; init; } = [];
+    public List<long> Instances { get; init; } = [];
+    public List<long> Terminals { get; init; } = [];
+    public List<long> TerminalFlows { get; init; } = [];
+    public List<long> EquipmentFlows { get; init; } = [];
+    public List<string> Verdicts { get; init; } = [];
+    public List<long> Roles { get; init; } = [];
+}
 
 /// <summary>Results are the host engine's priced legs, including their velocity-pressure basis. Table and Inputs are provenance only.</summary>
 public sealed record DuctFittingWrite(long Id, DuctFittingMethod Method, double Coefficient, string? Table, string? Inputs, string? RuleKey,
@@ -111,6 +126,20 @@ public sealed record DuctLossStore {
     public IDictionary<string, JToken> Unknown { get; init; } = new Dictionary<string, JToken>();
 
     public string ToJson() => JsonConvert.SerializeObject(this, Formatting.None, Settings());
+
+    /// <summary>
+    ///     The stored map overlaid per key by the request's entries, minus the keys explicitly deleted. A key neither
+    ///     names keeps its stored entry, so a sparse request can never drop what it did not mention.
+    /// </summary>
+    public static Dictionary<TKey, TValue> Overlay<TKey, TValue>(IReadOnlyDictionary<TKey, TValue>? stored,
+        IReadOnlyDictionary<TKey, TValue>? asked, IEnumerable<TKey>? deletes, IEqualityComparer<TKey>? comparer = null)
+        where TKey : notnull {
+        var next = new Dictionary<TKey, TValue>(comparer);
+        foreach (var kv in stored ?? new Dictionary<TKey, TValue>()) next[kv.Key] = kv.Value;
+        foreach (var kv in asked ?? new Dictionary<TKey, TValue>()) next[kv.Key] = kv.Value;
+        foreach (var key in deletes ?? []) next.Remove(key);
+        return next;
+    }
 
     /// <summary>Fail-closed: invalid JSON or any version but 1 or <see cref="CurrentVersion" /> throws.</summary>
     public static DuctLossStore FromJson(string json) {
