@@ -45,7 +45,8 @@ export function createAdmittedBody<W extends Record<string, unknown>>(context: M
             (id: string) => [
               id,
               (input: unknown, editBasis?: InvocationToken) => {
-                if (route.data.verbs[id]?.kind === "work" && !editBasis)
+                const verb = route.data.verbs[id];
+                if (verb?.kind === "work" && verb.target === undefined && !editBasis)
                   throw Error("Work edit requires its rendered accepted basis");
                 return invoke(id, input, editBasis);
               },

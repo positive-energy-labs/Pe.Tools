@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { JOIN_KEY } from "@pe/ducts-domain/sheet/inputs";
+import { isValidElement } from "react";
+import type { LedgerBody } from "../ducts/sheet/mount";
 import type {
   Observation,
   WorkWriteOutcome,
@@ -47,8 +49,11 @@ test("a targeted Work verb lands in the owner's journal through the declared rea
     }),
   );
   const pair = ["10:1", "30:1"] as const;
+  const ledger = f.fans.read("sheet-ledger");
+  if (!isValidElement<Parameters<typeof LedgerBody>[0]>(ledger))
+    throw Error("Fans Ledger did not render");
   const press = () =>
-    f.fans.invoke("ductsEdit", {
+    ledger.props.ctx.verbs.ductsEdit({
       edits: { joins: [{ pair, verdict: "accept" }] },
       history: { label: "accept join → 30x30 · from /ducts" },
       basis,
