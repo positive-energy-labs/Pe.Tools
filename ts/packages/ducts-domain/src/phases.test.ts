@@ -8,6 +8,7 @@ import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
 
 import { phased } from "./phases.ts";
+import { tolerated } from "./survey.ts";
 import type { DuctSnapshot } from "./types.ts";
 import { TEST_SLOTS } from "./sheet/test-inputs.ts";
 
@@ -144,4 +145,9 @@ it("a demolished element, and one only proximity would join, warn too; one touch
       grade: null,
     },
   ]);
+});
+
+// A duct outside the working phase that proximity still joined would price a wrong ESP with no error.
+it("proximity never joins a duct outside the working phase", () => {
+  expect(tolerated(projectA(), working("Existing")).findings.map((f) => f.id)).toEqual(["out-of-phase:3"]);
 });
