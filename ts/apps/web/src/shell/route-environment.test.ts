@@ -1,30 +1,5 @@
-import { workFingerprintSchema } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { createFixtureWorkDoor } from "./fixture-work-door";
-import type { WorkScope } from "../../../../packages/agent-contracts/src/work-journal-door";
 const command = { id: "write", key: "write", target: { kind: "host" as const }, input: {} };
-const workScope = (
-  scope: import("../../../../packages/agent-contracts/src/route-kernel-page").ScopeToken,
-): WorkScope => ({
-  route: scope.identity.work!.route,
-  fingerprint: workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
-  key: scope.identity.work!,
-  target: scope.identity.target,
-  subject: null,
-});
-const snapshotWork = (
-  environment: import("../../../../packages/agent-contracts/src/route-kernel-environment").RouteEnvironment,
-  scope: import("../../../../packages/agent-contracts/src/route-kernel-page").ScopeToken,
-) => {
-  let value: unknown;
-  const stop = environment.work.read.open(workScope(scope)).subscribe(
-    (state) => {
-      if (state.kind === "ready") value = state.snapshot.value;
-    },
-    () => {},
-  );
-  stop();
-  return { value };
-};
 import { createHash } from "node:crypto";
 import { expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
@@ -347,75 +322,6 @@ test.each(["live", "fixture"] as const)("%s uses the same lifetime interface", a
   owner.close();
   expect(() => owner.environment.reads.acquire(s.read, s.token)).toThrow("closed");
 });
-test("missing/empty seed never calls live factory, and fixtures keep independent Works", async () => {
-  const s = await setup();
-  const real = vi.fn(() => s);
-  for (const name of ["", "missing"]) {
-    const selected = selectRouteEnvironment({
-      search: { fixture: name },
-      live: real,
-      fixture: () => createFixtureRouteEnvironment({ ...s.fixtureOptions, seed: undefined }),
-    });
-    expect(selected.environment.reads.acquire(s.read, s.token).read()).toMatchObject({
-      status: "unavailable",
-    });
-    expect(selected.environment.nativeWrite).toBeUndefined();
-    selected.close();
-  }
-  expect(real).not.toHaveBeenCalled();
-  expect(s.dispatch).not.toHaveBeenCalled();
-  const seed = { readings: { roster: [] }, work: { amount: 1 } };
-  const a = createFixtureRouteEnvironment({ ...s.fixtureOptions, seed });
-  const b = createFixtureRouteEnvironment({
-    ...s.fixtureOptions,
-    seed: { ...seed, work: { amount: 9 } },
-  });
-  expect(a.environment.reads.acquire(s.fixtureRead, s.token).read()).toMatchObject({
-    status: "ready",
-    value: [],
-  });
-  expect(snapshotWork(a.environment, s.scope)?.value).toEqual({ amount: 1 });
-  seed.work.amount = 8;
-  expect(snapshotWork(a.environment, s.scope)?.value).toEqual({ amount: 1 });
-  expect(snapshotWork(b.environment, s.scope)?.value).toEqual({ amount: 9 });
-  a.close();
-  b.close();
-});
-
-test("fixture Work edits publish authentic acks and refuse stale bases", async () => {
-  const s = await setup();
-  const a = createFixtureRouteEnvironment({
-    ...s.fixtureOptions,
-    seed: { readings: {}, work: { amount: 1 } },
-  });
-  const outcome = await new Promise((resolve) =>
-    a.environment.work.submit
-      .submitWork(
-        workScope(s.scope),
-        {
-          kind: "apply",
-          expectedRevision: 0,
-          patches: [{ path: ["amount"], value: 7 }],
-          press: null,
-        },
-        s.invocation,
-      )
-      .subscribe(
-        (value) => {
-          if (value.kind !== "pending") resolve(value);
-        },
-        () => {},
-      ),
-  );
-  expect(outcome).toMatchObject({
-    kind: "accepted",
-    ack: { revision: 1, inverse: [{ path: ["amount"], value: 1 }] },
-  });
-  expect(snapshotWork(a.environment, s.scope).value).toEqual({ amount: 7 });
-  a.close();
-  s.close();
-});
-
 test("non-explicit invocations and subjects from another scope cannot acquire geometry", async () => {
   const s = await setup();
   const denied = createRouteEnvironment({

@@ -1236,18 +1236,6 @@ test("shared preview transport renders before-to-after review and commits identi
   }
 });
 
-import {
-  builtinData,
-  schemas as fixtureSchemas,
-  entries as fixtureEntries,
-} from "../../../../packages/agent-contracts/src/route-kernel.fixtures";
-const nativeEntries = {
-  ...fixtureEntries,
-  apply: {
-    ...fixtureEntries.apply,
-    input: z.strictObject({ work: workHandleSchema }),
-  },
-};
 import { testConsents } from "../../../host/tests/effect-test";
 import type { ConsentEvent } from "../../../host/src/run-consent";
 import { createWorkFeedClient } from "./work-feed-client";
@@ -1418,6 +1406,9 @@ async function historyFixture(pea = false) {
       mountOn(createRouteShell({ ...transports().services, work: connect(workspace).door })),
     restart: async () =>
       mountOn(createRouteShell({ ...transports().services, work: connect(await host()).door })),
+    failFeed: () => streams.forEach((deliver) => deliver({
+      kind: "failed", failure: { kind: "failed", code: "stream.failed", message: "readings offline" },
+    })),
     pause: () => {
       paused = true;
     },
@@ -1479,6 +1470,12 @@ test("Revert appends an inverse step and undo restores the reverted value", asyn
   expect(await f.mount.history!.undo()).toMatchObject({ ok: true });
   expect(f.mount.work()?.value).toEqual({ amount: 5 });
   expect(f.mount.journal()!.undo[0]!.at).toBe(originalAt);
+  const submitted = f.submitWork.mock.calls.length;
+  f.failFeed();
+  expect(f.mount.workProblem()).toBe("readings offline");
+  await expect(f.mount.history!.revert()).rejects.toThrow("Work unavailable");
+  expect(f.submitWork.mock.calls).toHaveLength(submitted);
+  expect(f.mount.work()?.value).toEqual({ amount: 5 });
 });
 
 test("undo refuses a changed host inverse after a concurrent write without retrying", async () => {
