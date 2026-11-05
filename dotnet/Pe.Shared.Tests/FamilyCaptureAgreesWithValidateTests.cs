@@ -58,8 +58,7 @@ public sealed class FamilyCaptureAgreesWithValidateTests {
     }
 
     /// <summary>
-    ///     Both rules applied to the captured bytes give exactly the committed fixture, and the fixture
-    ///     validates — so what the fixed capture writes is a member `/family` can plan with no hand edit.
+    ///     Both repairs let the captured member validate without a hand edit.
     /// </summary>
     [Test]
     public void The_two_rules_make_the_captured_member_validate_without_hand_edits() {
