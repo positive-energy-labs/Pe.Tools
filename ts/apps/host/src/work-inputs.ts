@@ -140,10 +140,19 @@ export const capturedWorkReads = (
         }),
       ),
     );
+  // A failed live read, kept through the one store: a supported DoorFailure as its class-faithful
+  // taking, anything else stops capture as `unsupported`. Its exit is the failure itself, which the
+  // workspace already rethrows as the original; only the taking matters here.
+  const lose = (input: WorkInput, scope: string, codec: Schema.Codec<unknown, Schema.Json>, error: unknown) =>
+    run(Effect.asVoid(Effect.exit(captureInput(writer, input, scope, codec, Effect.fail(error as DoorFailure), observed))));
   return {
     read: (key, view, value) =>
       keep(workInput(key, view), workInputScope(key), workInputCodecs[view] as Schema.Codec<unknown, Schema.Json>, value),
     feed: (key, admission, shape, value) =>
       keep(workInput(key, "feed"), workInputScope(key, { admission, shape }), workFeedCodecs[shape], value),
+    readFailed: (key, view, error) =>
+      lose(workInput(key, view), workInputScope(key), workInputCodecs[view] as Schema.Codec<unknown, Schema.Json>, error),
+    feedFailed: (key, admission, shape, error) =>
+      lose(workInput(key, "feed"), workInputScope(key, { admission, shape }), workFeedCodecs[shape], error),
   };
 };
