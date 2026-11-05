@@ -5,7 +5,7 @@ import { NodeCrypto, NodeServices, NodeHttpClient } from "@effect/platform-node"
 import { Context, Effect, Exit, Layer, Queue, Scope } from "effect";
 import { HttpRouter } from "effect/http";
 import { TestClock } from "effect/testing";
-import { bindWork, DUCTS_BODY_VERSION_HEADER, type Caller } from "@pe/agent-contracts";
+import { bindWork, DUCTS_BODY_VERSION_HEADER, type Address, type Caller } from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -36,6 +36,7 @@ import { snapshot } from "../../web/src/ducts/test-fixture.ts";
 export async function nativeFixture(
   clockMode: "real" | "test" = "real",
   snapshotFor: (key: string, input: Record<string, any>) => DuctSnapshot = () => snapshot,
+  address: Address | null = null,
 ) {
   const scope = Scope.makeUnsafe();
   const home = process.env.LOCALAPPDATA ?? tmpdir();
@@ -82,7 +83,7 @@ export async function nativeFixture(
       ),
     );
     const target = { kind: "document" as const, ref: connection.target };
-    const key = bindWork("ducts", null, undefined, target.ref);
+    const key = bindWork("ducts", address, undefined, target.ref);
     const journal = new ActionJournal(join(dir, "actions.jsonl"));
     const web = HttpRouter.toWebHandler(
       makeCallRoute(
@@ -321,7 +322,7 @@ export async function nativeFixture(
       heads: { observe: () => () => {} },
       navigation: {
         threads: async () => [],
-        documents: async () => [{ ...target.ref, address: null }],
+        documents: async () => [{ ...target.ref, address }],
       },
       ductsSheets: { call: readDucts },
       observeHostResource,

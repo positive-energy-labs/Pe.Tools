@@ -1,5 +1,5 @@
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
-import { commands, tools, canonicalRouteInput, type DuctsApplyInput } from "@pe/agent-contracts";
+import { commands, tools, canonicalRouteInput, workKey, type DuctsApplyInput } from "@pe/agent-contracts";
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
@@ -130,13 +130,13 @@ export function ductsExecutors(
       facts: [["workingPhase"]],
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
     }));
-    const fansKey = { ...raw.key, route: "fans" };
-    const fanView = await ctx.work.view(fansKey, "fans");
+    // The persisted identity (workKey) decides "another document"; address case and Save As `from` are transport.
+    const fanView = await ctx.work.view({ ...raw.key, route: "fans" }, "fans");
     if (!fanView) throw refused("Fans Work is unavailable", "work.unavailable");
     const readWorks = z.record(z.string(), workHandleSchema).optional().parse(ctx.admission.input.readWorks);
-    if (readWorks?.fans && canonicalRouteInput(readWorks.fans.key) !== canonicalRouteInput(fansKey))
+    if (readWorks?.fans && workKey(readWorks.fans.key) !== workKey(fanView.handle.key))
       throw refused("Fans Work belongs to another document", "work.target");
-    const fans = await ctx.selectWork(tools.fans.work, readWorks?.fans ?? { key: fansKey, revision: fanView.revision }, (_doc, cells) => ({
+    const fans = await ctx.selectWork(tools.fans.work, readWorks?.fans ?? fanView.handle, (_doc, cells) => ({
       edits: tools.fans.work.editable,
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
     }));

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { type Caller } from "@pe/agent-contracts";
+import { address, type Caller } from "@pe/agent-contracts";
 import { nativeFixture } from "./fans-native.fixture.ts";
 import { presentLosses } from "../../web/src/ducts/reviews.ts";
 import { snapshot } from "../../web/src/ducts/test-fixture.ts";
@@ -245,4 +245,20 @@ test("a stale Fans revision refuses sealed apply before native dispatch", async 
   expect(changedSeal).toMatchObject({ state: "failed", notDispatched: true,
     refusal: { kind: "domain", code: "preview.stale" } });
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
+});
+
+test("H1: a canonical Fans handle beside an Address key carrying case and Save As from is the same document", async () => {
+  const f = await nativeFixture("test", undefined, address("C:/model.rvt"));
+  closes.push(() => f.close());
+  const work = await stage(f);
+  expect(work.key).toMatchObject({ binding: "address", from: expect.anything() });
+  const fans = (await f.saved.view({ ...f.key, route: "fans" }, "fans"))!.handle;
+  const plan = async (id: string, handle: typeof fans) => {
+    await f.post("/actions", { id, key: "ducts.plan-losses", target: f.target, input: { work, readWorks: { fans: handle } } });
+    return f.journal.wait(id);
+  };
+  const same = await plan("same", fans);
+  expect(same, JSON.stringify(same)).toMatchObject({ state: "succeeded" });
+  const foreign = await plan("foreign", { ...fans, key: { binding: "address", route: "fans", target: address("C:/other.rvt") } });
+  expect(JSON.stringify(foreign)).toContain("Fans Work belongs to another document");
 });

@@ -57,6 +57,8 @@ export interface WriteActionProps {
   held: WriteHeld | null;
   /** Why a plan that was held no longer is ("changed since plan"); null when none was. */
   stale?: string | null;
+  /** The caller's refusal of a plan that failed after `plan` settled; shown like a refused run. */
+  failed?: string | null;
   plan: () => WriteRun;
   apply: {
     label: string;
@@ -85,6 +87,7 @@ export function WriteAction({
   busy = false,
   held,
   stale = null,
+  failed = null,
   plan,
   apply,
   reject = null,
@@ -92,13 +95,14 @@ export function WriteAction({
 }: WriteActionProps) {
   const [phase, setPhase] = useState<"planning" | "applying" | null>(null);
   const [open, setOpen] = useState(false);
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [ran, setOutcome] = useState<Outcome | null>(null);
+  const outcome: Outcome | null = ran ?? (failed ? { kind: "refused", text: failed } : null);
   const armed = held !== null;
   const shown = open && (armed || outcome !== null);
   // A disarmed button holds no popover: when the inputs move, the next arming opens fresh.
   useEffect(() => {
-    if (!armed && outcome === null) setOpen(false);
-  }, [armed, outcome]);
+    if (!armed && ran === null) setOpen(false);
+  }, [armed, ran]);
 
   const settle = (kind: Outcome["kind"], text: string) => {
     setOutcome({ kind, text });

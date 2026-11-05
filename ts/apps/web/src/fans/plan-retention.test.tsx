@@ -104,6 +104,16 @@ test.each([false, true])("P1: rendered Fans plan keeps bounded dependencies (ove
   expect(plan).toBeTypeOf("function");
   const input = f.inputs.get("fans:ducts.plan-losses") as { work: unknown; readWorks: unknown };
   expect(input.readWorks).toHaveProperty("fans");
+  // H1: a plan the host refuses after invoke returned shows its reason, arms nothing, and retries clean.
+  const refusedText = "Fans Work belongs to another document";
+  await act(async () => plan({ id: "plan-refused", state: "refused", error: refusedText }));
+  expect(document.querySelector("[data-write-outcome=refused]")?.textContent).toBe(refusedText);
+  expect(screen.queryByRole("button", { name: "Write to Revit" })).toBeNull();
+  const trigger = screen.getByRole("button", { name: "plan Write to Revit" });
+  await act(async () => fireEvent.click(trigger));
+  await act(async () => fireEvent.click(trigger));
+  expect(f.fans.reviewRefusal("losses")).toBeNull();
+  expect(document.body.textContent).not.toContain(refusedText);
   await act(async () =>
     plan({
       id: "plan-retention",

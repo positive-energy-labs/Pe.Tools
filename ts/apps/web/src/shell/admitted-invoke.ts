@@ -21,9 +21,13 @@ import { freezePage } from "./page-port.ts";
 import { reviewChanges } from "./review-value.ts";
 export class ReviewRefusal extends Error {
   readonly kind = "refused";
-  constructor(readonly reason: "review-stale" | "present-threw" | "present-invalid") {
+  constructor(
+    readonly reason: "review-stale" | "present-threw" | "present-invalid" | "plan-failed",
+    detail?: string,
+  ) {
     super(
-      reason === "review-stale" ? "Review is stale; prepare it again" : `Review refused: ${reason}`,
+      detail ??
+        (reason === "review-stale" ? "Review is stale; prepare it again" : `Review refused: ${reason}`),
     );
     this.name = "ReviewRefusal";
   }
@@ -407,6 +411,12 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
           continue;
         }
         const result = snapshots()[pending.reading];
+        // beginQuery retired the prior reading, so a failure here is this invocation's own plan.
+        if (result?.status === "failed") {
+          preparing.delete(id);
+          reviewRefusals.set(id, new ReviewRefusal("plan-failed", result.reason));
+          continue;
+        }
         if (!result?.current) continue;
         preparing.delete(id);
         const sealed = writePreviewSchema.parse(result.value);

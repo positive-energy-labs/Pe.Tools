@@ -328,13 +328,16 @@ const settled = async (run: () => unknown): WriteRun => {
 };
 export function AdmittedWrite({ mount, data, id }: { mount: AdmittedMount; data: RouteGraphJson; id: string }) {
   const verb = data.verbs[id]!;
-  const { held, stale, sealed } = writeHeld(verb.label, mount.review(id));
+  const review = mount.review(id);
+  const { held, stale, sealed } = writeHeld(verb.label, review);
   return (
     <WriteAction
       label={`plan ${verb.label}`}
       says={`Plan ${verb.label} from the current Work`}
       held={held}
       stale={stale}
+      // A plan that refuses after invoke returned lands in the mount's refusal, never a second outcome.
+      failed={review ? null : (mount.reviewRefusal(id)?.message ?? null)}
       plan={() => settled(() => mount.invoke(id, {}))}
       apply={{
         label: verb.label,
