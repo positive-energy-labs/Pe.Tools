@@ -63,20 +63,23 @@ function useSheetData(
     edits: DuctsSheetEdits,
     history: EditMeta = { label: editLabel(edits, nameOf) },
   ) => {
-    // Join rulings are /ducts cells: they land in ducts Work through its owner handle (ADR 0030 rule 9).
-    const { joins, ...own } = edits;
+    // Project from the two verb schemas: the owner declaration also partitions a mixed batch.
+    const own = schemas.sheetEdit.shape.edits.strip().parse(edits);
+    const foreign = schemas.ductsEdit.shape.edits.strip().parse(edits);
     const basis = sheet?.overview.basis ?? null;
-    if (joins?.length) {
-      const result = await settleWork(ctx.verbs.ductsEdit({ edits: { joins }, history, basis }));
-      if (result.kind === "refused") return { code: "refused", message: result.refusal.error };
-    }
-    if (!Object.keys(own).length) return undefined;
-    if (!ctx.workBasis)
+    if (Object.keys(own).length && !ctx.workBasis)
       return { code: "unavailable", message: "Read this document's Work before editing" };
-    const result = await settleWork(
-      ctx.verbs.sheetEdit({ edits: own, history, basis }, ctx.workBasis),
-    );
-    return result.kind === "refused"
+    const writes = [];
+    // Capture both owners before either acknowledgement invalidates the shared sheet reading.
+    if (Object.keys(own).length && ctx.workBasis)
+      writes.push(settleWork(ctx.verbs.sheetEdit({ edits: own, history, basis }, ctx.workBasis)));
+    if (Object.keys(foreign).length) {
+      const label = history.label.endsWith(" · from /ducts")
+        ? history.label : `${history.label} · from /ducts`;
+      writes.push(settleWork(ctx.verbs.ductsEdit({ edits: foreign, history: { ...history, label }, basis })));
+    }
+    const result = (await Promise.all(writes)).find((outcome) => outcome.kind === "refused");
+    return result?.kind === "refused"
       ? { code: "refused", message: result.refusal.error }
       : undefined;
   };
@@ -521,20 +524,15 @@ function LedgerContent({
       fittingOf: (key) => sheet?.inputs?.fittings.find((f) => f.key === key) ?? null,
       tableTitles: sheet?.inputs?.tableTitles ?? {},
     });
-    // ponytail: joins are the one /ducts cell staged from here; ends, rules and tables still route to /ducts.
-    const staged = (action: Closer["action"]) =>
-      action?.kind === "drop" ||
-      action?.kind === "cfm" ||
-      action?.kind === "unitCfm" ||
-      action?.kind === "rule";
+    const labelled = (verb: string, action: Closer["action"]) =>
+      action && !["drop", "cfm", "unitCfm"].includes(action.kind)
+        ? `${verb} · from /ducts` : verb;
     return {
       ...closer,
-      verb: closer.action?.kind === "rule" ? `${closer.verb} · from /ducts` : closer.verb,
-      action: staged(closer.action) ? closer.action : null,
-      refusal: staged(closer.action) ? closer.refusal : "Edit duct rules on /ducts",
-      secondary: null,
-      crossing: null,
-      choices: null,
+      verb: labelled(closer.verb, closer.action),
+      secondary: closer.secondary && { ...closer.secondary, verb: labelled(closer.secondary.verb, closer.secondary.action) },
+      crossing: closer.crossing && { ...closer.crossing, verb: labelled(closer.crossing.verb, closer.crossing.action) },
+      choices: closer.choices?.map((choice) => ({ ...choice, verb: labelled(choice.verb, choice.action) })),
     };
   };
   const editsFor = (closers: readonly Closer[]) =>
@@ -571,10 +569,17 @@ function LedgerContent({
             joins: [...(edits.joins ?? []), { pair: [...action.pair], verdict: "accept" }],
           };
         case "cap":
+          return { ...edits, ends: [...(edits.ends ?? []), { end: action.end, verdict: "capped" }] };
         case "price":
+          return {
+            ...edits,
+            assignments: { ...edits.assignments, [action.family]: { rule: action.rule } },
+            ...(action.table ? { tables: { ...edits.tables, [action.rule]: { table: action.table } } } : {}),
+          };
         case "table":
+          return { ...edits, tables: { ...edits.tables, [action.rule]: { table: action.table } } };
         case "pathDrop":
-          return edits;
+          return { ...edits, fittingDrops: { ...edits.fittingDrops, [action.key]: { inWg: action.value } } };
       }
     }, {});
   const ownPane = (

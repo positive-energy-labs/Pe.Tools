@@ -116,7 +116,7 @@ export const catalogWorkSpecs = Object.fromEntries(
       editable: editable[work.owner as Owner],
     },
   ]),
-) as { [O in Owner]: RouteStateSpec<(typeof catalogWorks)[O]["schema"]> };
+) as { [O in Owner]: RouteStateSpec<(typeof catalogWorks)[O]["schema"]> & { editable: readonly WorkPath[] } };
 
 function catalogWorkCommand<const K extends string>(owner: Owner, key: K, dirties: readonly ActionReadingKey[]) {
   const work: CatalogWork = catalogWorks[owner];
@@ -132,7 +132,7 @@ function catalogWorkCommand<const K extends string>(owner: Owner, key: K, dirtie
   return workWriteCommands(owner, key, definition, {
     derive: (doc) => work.derive(work.schema.parse(doc)),
     preview: {
-      key: `${key}.preview`,
+      key: `${key}.plan`,
       definition: { ...definition, native: [], says: `Plan, nothing committed: ${definition.says}` },
     },
   });

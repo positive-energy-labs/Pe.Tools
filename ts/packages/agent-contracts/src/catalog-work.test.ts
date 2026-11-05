@@ -91,11 +91,11 @@ describe("generated catalog Work commands", () => {
   it("plans as a Read and applies with the native ModelWrite's axes", () => {
     expect(Object.keys(catalogWorkCommands).sort()).toEqual([
       "data-table.apply",
-      "data-table.apply.preview",
+      "data-table.apply.plan",
       "parameter-links.apply",
-      "parameter-links.apply.preview",
+      "parameter-links.apply.plan",
     ]);
-    expect(commandCatalogAxes["data-table.apply.preview"].effect).toBe("Read");
+    expect(commandCatalogAxes["data-table.apply.plan"].effect).toBe("Read");
     expect(commandCatalogAxes["parameter-links.apply"]).toMatchObject({ effect: "ModelWrite", touches: ["Topology"] });
     expect(catalogWorkCommands["data-table.apply"].work.route).toBe("data-tables");
   });

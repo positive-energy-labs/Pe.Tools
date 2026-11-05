@@ -9,7 +9,10 @@ import {
   GraphLayoutView,
   type GraphLayoutState,
 } from "../../../../packages/kit/src/components/lang/graph-layout";
-import type { LayoutNode } from "@pe/agent-contracts";
+import { catalogWorkCommands, catalogWorks, refusalText, workKey, workHandleSchema, type LayoutNode } from "@pe/agent-contracts";
+import { CatalogWorkReview, type CatalogWorkClient } from "../components/work/catalog-work";
+import { peReadings } from "#/readings";
+import { browserWorkPorts } from "./work-feed-client";
 import type {
   RouteGraphJson,
   LayoutJson,
@@ -40,6 +43,52 @@ import { RouteVisibility } from "../route/activity";
 import { SubjectDoor, type AdmittedSubject } from "./subject";
 import { PaneActionSlots, usePaneActionSlot } from "./pane-actions";
 import { openSet, type OpenSet } from "./open-set.neutral";
+
+const catalogSnapshot = z.object({ doc: z.unknown(), handle: workHandleSchema });
+const catalogClient: CatalogWorkClient = {
+  watch: (key, receive, fail) => peReadings.subscribe({ ...key, kind: "work" }, (frame) => {
+    if (frame.kind === "failure") return fail(frame.error);
+    if (frame.kind === "gap" || ("stale" in frame && frame.stale)) return fail("Read the current Work before editing");
+    if (frame.kind !== "snapshot") return;
+    const parsed = catalogSnapshot.safeParse(frame.value);
+    if (parsed.success) receive(parsed.data);
+    else fail(parsed.error.message);
+  }),
+  write: async (handle, patches, label) => {
+    const result = await browserWorkPorts.write(handle.key, {
+      kind: "apply", press: crypto.randomUUID(), expectedRevision: handle.revision,
+      patches, label,
+    });
+    return result.ok ? null : { code: "refused", message: refusalText(result) };
+  },
+  submit: async (admission) => {
+    const result = await browserWorkPorts.submit(admission);
+    if (result.state === "detached") throw Error("Write transport detached; inspect History before retrying");
+    return result;
+  },
+};
+
+function CatalogWorkReviews({ mount }: { mount: AdmittedMount }) {
+  const visible = useContext(RouteVisibility);
+  const key = mount.work()?.handle.key;
+  const target = mount.workBasis()?.token.scope.identity.target;
+  const identity = key ? workKey(key) : null;
+  const owners = useMemo(() => key
+    ? (Object.keys(catalogWorks) as (keyof typeof catalogWorks)[]).map((owner) => ({ owner, at: { ...key, route: owner } }))
+    : [], [identity]);
+  if (!visible || !key || target?.kind !== "document") return null;
+  return <details>
+    <summary>Work</summary>
+    {owners.map(({ owner, at }) => {
+      const apply = Object.entries(catalogWorkCommands).find(([, command]) =>
+        command.work.route === owner && command.writeBoundary.phase === "apply")![0];
+      return <CatalogWorkReview key={owner} owner={owner} at={at} target={target.ref} client={catalogClient}
+        reject={writeReject(mount.timeline(), [apply], (thread, requestId) =>
+          void harnessClient(resolveWorkbenchConfig().origin).permission(thread, requestId, "stop_writes"),
+          typeof mount.page.read().thread === "string" ? String(mount.page.read().thread) : undefined)} />;
+    })}
+  </details>;
+}
 
 /** K4 owns reading state and deduplicated pane closure refresh. */
 const rosterSchema = z.array(z.object({ id: z.unknown(), label: z.string() }));
@@ -455,6 +504,7 @@ function Chrome({
               <>
                 {children}
                 <PointerList route={data.key} />
+                <CatalogWorkReviews mount={mount} />
               </>
             }
             verbs={(stage?.verbs ?? []).map((id) => (

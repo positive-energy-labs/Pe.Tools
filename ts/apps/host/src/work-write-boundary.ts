@@ -78,8 +78,7 @@ const workSpec = (
   route: string,
   registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
 ) =>
-  // ponytail: a catalog spec carries no `editable` yet (edge sent to the contracts line); top-level facts still seal the whole doc.
-  (registeredWork ? { editable: [], ...registeredWork } : (tools[route as keyof typeof tools] as Tool)?.work) as WorkSpec;
+  (registeredWork ?? (tools[route as keyof typeof tools] as Tool)?.work) as WorkSpec;
 
 /** Primitive 1 on the host: admit the Work to its document, read the authored cells, derive the input. */
 async function deriveFromWork(

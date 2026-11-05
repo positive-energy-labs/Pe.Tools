@@ -4,6 +4,8 @@ import {
   ductsSheetEditsSchema,
   fansDocumentSchema,
   ductsDocumentSchema,
+  ductsDesign,
+  neutralFansWork,
   fansRouteState,
   listSearchSchema,
   type FansRouteDocument,
@@ -311,7 +313,7 @@ export const fansData = {
       ready: "sheetReady",
       review: "none",
     },
-    // ADR 0030 rule 9: a join cell /ducts owns lands in ducts Work through the ductsWork handle.
+    // ADR 0030 rule 9: foreign cells land through their current owner's handle.
     ductsEdit: {
       captures: [],
       deps: { page: [], readings: ["sheet", "ductsWork"], work: [] },
@@ -345,21 +347,22 @@ export const fansData = {
   workFields: { writeIntent: { label: "write scope", internal: true } },
 } as const satisfies RouteGraphJson;
 const rosterSort = z.enum(["", "name"]);
+const fanSheetFields = {
+  flows: true,
+  terminalDrops: true,
+  componentDrops: true,
+  esp: true,
+  equipmentFlows: true,
+  roles: true,
+} as const;
 const fanSchemas = {
   none: z.strictObject({}),
   snapshot: sharedSchemas.sheetSnapshot.nullable(),
   ductsWork: ductsDocumentSchema,
   sheetEdit: sharedSchemas.sheetEdit.extend({
-    edits: ductsSheetEditsSchema.pick({
-      flows: true,
-      terminalDrops: true,
-      componentDrops: true,
-      esp: true,
-      equipmentFlows: true,
-      roles: true,
-    }),
+    edits: ductsSheetEditsSchema.pick(fanSheetFields),
   }),
-  ductsEdit: sharedSchemas.sheetEdit.extend({ edits: ductsSheetEditsSchema.pick({ joins: true }) }),
+  ductsEdit: sharedSchemas.sheetEdit.extend({ edits: ductsSheetEditsSchema.omit(fanSheetFields) }),
   work: fansDocumentSchema,
   scope: fansDocumentSchema.shape.writeIntent.unwrap().shape.edit.unwrap().unwrap().shape.value,
   browse: z.strictObject({
@@ -545,7 +548,10 @@ export const fansNeutralBodies: Omit<
     kind: "work",
     source,
     run: (ctx, input) =>
-      authoredPatches(ctx.readings.ductsWork.value!, editPatches(input.edits, null)),
+      authoredPatches(
+        ctx.readings.ductsWork.value!,
+        editPatches(input.edits, ductsDesign(ctx.readings.ductsWork.value!, neutralFansWork)),
+      ),
   },
   ductsReady: {
     slot: "verbs.ductsEdit.ready",

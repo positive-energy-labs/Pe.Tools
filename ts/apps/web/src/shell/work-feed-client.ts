@@ -50,11 +50,12 @@ import { completion, workOutcome, failedWrite } from "./work-door-observation";
 // The shared Reading transport outlives shell/target remounts in this tab. A registration
 // mismatch latches until reload; recreating a client must never retry against other bytes.
 const reloadFailures = new WeakMap<Readings, Map<string, WorkFeedFailure>>();
+export const browserWorkPorts = { write: writeRouteWork, submit: submitAction };
 
 /** Complete Work and native journal client over the existing host doors. */
 export function createWorkFeedClient(
   source: Readings = peReadings,
-  ports = { write: writeRouteWork, submit: submitAction },
+  ports = browserWorkPorts,
   replayLimit = 256,
 ): WorkJournalDoor {
   const replay = new Map<string, AcceptedResult>();

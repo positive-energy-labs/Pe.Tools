@@ -65,7 +65,7 @@ test("catalog Work plans with no native call and applies the derived request onc
     const deps = { workspace: work, sdk: sdkSessions };
     const entries = {
       "data-table.apply": workWriteBoundary(write, bridge, deps, spec as never),
-      "data-table.apply.preview": workWriteBoundary({ ...write, definition: catalogWorkCommands["data-table.apply.preview"] }, bridge, deps, spec as never),
+      "data-table.apply.plan": workWriteBoundary({ ...write, definition: catalogWorkCommands["data-table.apply.plan"] }, bridge, deps, spec as never),
     } as Record<string, ReturnType<typeof workWriteBoundary>>;
     const owner = new ActionJournal(join(directory, "journal.jsonl"));
     owner.bindCommands({
@@ -74,7 +74,7 @@ test("catalog Work plans with no native call and applies the derived request onc
     });
     const handle = { key, revision: rendered.revision };
     await owner.invoke(
-      { id: "plan", key: "data-table.apply.preview", target: { kind: "document", ref: target }, input: { work: handle } },
+      { id: "plan", key: "data-table.apply.plan", target: { kind: "document", ref: target }, input: { work: handle } },
       { caller: { kind: "human", via: "local" }, basis: { kind: "human" } },
     );
     const plan = await owner.wait("plan");

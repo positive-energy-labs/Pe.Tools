@@ -224,10 +224,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
         : undefined;
       const handles = workHandles(declaration.deps.readings);
       if (accepted.work && accepted.scope.identity.work && work.ready())
-        handles[accepted.scope.identity.work.route] = workHandleSchema.parse({
-          key: accepted.scope.identity.work,
-          revision: accepted.work.revision,
-        });
+        handles[accepted.work.handle.key.route] = accepted.work.handle;
       const workRoute = command && "writeBoundary" in command
         ? command.writeBoundary.route
         : accepted.scope.identity.work?.route;

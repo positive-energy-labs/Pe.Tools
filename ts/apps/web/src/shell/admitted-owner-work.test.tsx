@@ -99,3 +99,40 @@ test("a targeted Work verb refuses when the declared owner reading is not curren
     }),
   ).toThrow();
 });
+
+test("Fans stages caps and fitting prices in Ducts Work without editing its own Work", async () => {
+  const f = await createWitness(closes);
+  await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.current).toBe(true));
+  f.fans.refresh("sheet");
+  await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.current).toBe(true));
+  const sheet = f.fans.readingStatus("sheet").snapshot.value as {
+    open: { overview: { basis: string } };
+  };
+  const ownRevision = f.fans.work()?.revision;
+  const result = await settle(
+    f.fans.invoke("ductsEdit", {
+      edits: {
+        ends: [{ end: { elementId: 10, connector: 1 }, verdict: "capped" }],
+        tables: { elbow: { table: "CD3-3" } },
+        assignments: { "Unpriced fitting": { rule: "elbow" } },
+        fittingDrops: { "proposed:10:1|30:1>straight": { inWg: 0.04 } },
+      },
+      history: { label: "Cap and price fittings · from /ducts" },
+      basis: sheet.open.overview.basis,
+    }),
+  );
+  expect(result).toMatchObject({ kind: "accepted" });
+  await vi.waitFor(() =>
+    expect(f.owner.work()?.value).toMatchObject({
+      assumptions: {
+        "open-end:10:1": { edit: { value: { kind: "verdict", verdict: "capped" }, by: "human" } },
+        "component-drop:proposed:10:1|30:1>straight": {
+          edit: { value: { kind: "component-drop", inWg: 0.04 }, by: "human" },
+        },
+      },
+      rules: { elbow: { edit: { value: { table: "CD3-3" }, by: "human" } } },
+      ruleAssignments: { "Unpriced fitting": { edit: { value: { rule: "elbow" }, by: "human" } } },
+    }),
+  );
+  expect(f.fans.work()?.revision).toBe(ownRevision);
+});
