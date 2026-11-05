@@ -1,9 +1,9 @@
 /**
  * Work as a host input (ADR 0031): the exact RouteWorkspace read each body consumes, its recorded
- * identity, and its authoritative codec. Live reads the canonical workspace; capture and replay go
- * through the one taking store (`captureInput`/`replayInput`), never a second Work store.
+ * identity, and its authoritative codec. The canonical RouteWorkspace reads live, captures what it
+ * delivers, or replays through these adapters over the one taking store; never a second Work store.
  */
-import { Effect, Schema } from "effect";
+import { Cause, Effect, Exit, Schema } from "effect";
 import { z } from "zod";
 import {
   workHandleSchema,
@@ -13,9 +13,21 @@ import {
   type WorkKey,
   type WorkWriteAck,
 } from "@pe/agent-contracts";
+import { canonicalJson } from "@pe/host-internal/native-read";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
-import type { RouteWorkspace } from "@pe/runtime";
-import { InvalidRead } from "./native-reads.ts";
+import type {
+  RouteWorkspace,
+  WorkFeedShape,
+  WorkReadCapture,
+  WorkReadSource,
+} from "@pe/runtime";
+import type { WorkAdmission } from "../../../packages/agent-contracts/src/work-journal-door.ts";
+import {
+  captureInput,
+  replayInput,
+  type RecordingReader,
+  type RecordingWriter,
+} from "./native-recording.ts";
 
 export type WorkView = "read" | "raw" | "view" | "feed";
 /** The Work member of RecordedInput: the canonical Work key and the read shape it names. */
@@ -70,32 +82,40 @@ const codec = <V extends WorkView>(view: V) =>
 export const workInputCodecs: { readonly [V in WorkView]: Schema.Codec<WorkValue<V>, Schema.Json> } =
   { read: codec("read"), raw: codec("raw"), view: codec("view"), feed: codec("feed") };
 
-const failed = (view: WorkView, error: unknown) =>
-  new InvalidRead({ message: `Work ${view} failed: ${String(error)}`, status: 503, problem: "work.read" });
-
-/** The connected live port: exactly the canonical read each view names, on the key's own route. */
-export const liveWorkInput = <V extends WorkView>(
-  workspace: RouteWorkspace,
+/** The fence a Work taking is kept under: its canonical key, plus the feed's exact admission and shape. */
+export const workInputScope = (
   key: WorkKey,
-  view: V,
-): Effect.Effect<WorkValue<V>, DoorFailure> => {
-  if (view === "feed")
-    // One acquisition on the workspace's write tail; the live ack listener is released at once.
-    return Effect.callback<WorkValue<V>, DoorFailure>((resume) => {
-      const stop = workspace.observeFeed(
-        key,
-        (snapshot) => {
-          stop();
-          resume(Effect.succeed(snapshot as WorkValue<V>));
-        },
-        () => {},
-        (error) => resume(Effect.fail(failed(view, JSON.stringify(error) ?? error))),
-      );
-      return Effect.sync(stop);
-    });
-  const read = { read: "read", raw: "readRaw", view: "view" } as const;
-  return Effect.tryPromise({
-    try: () => workspace[read[view as Exclude<WorkView, "feed">]](key, key.route),
-    catch: (error) => failed(view, error),
-  }) as Effect.Effect<WorkValue<V>, DoorFailure>;
+  feed?: { readonly admission: WorkAdmission; readonly shape: WorkFeedShape },
+) => canonicalJson(feed ? [workKey(key), feed.shape, feed.admission] : [workKey(key)]);
+
+// effect-edge: island, phase 5. RouteWorkspace's Promise read seam meets the Effect taking store
+// here; a rejection is the store's own DoorFailure instance, so class and status survive.
+const promised = <A>(effect: Effect.Effect<A, DoorFailure>): Promise<A> =>
+  Effect.runPromiseExit(effect).then((exit) =>
+    Exit.isSuccess(exit) ? exit.value : Promise.reject(Cause.squash(exit.cause)),
+  );
+
+/** Historical Work: each canonical read and admitted feed answered only by its recorded taking. */
+export const recordedWorkSource = (reader: RecordingReader): WorkReadSource => ({
+  read: (key, view) =>
+    promised(replayInput(reader, workInput(key, view), workInputScope(key), workInputCodecs[view])),
+  feed: (key, admission, shape) =>
+    promised(
+      replayInput(reader, workInput(key, "feed"), workInputScope(key, { admission, shape }), workInputCodecs.feed),
+    ),
+});
+
+/** Live capture of the value a Work read is about to deliver, through the one taking store. */
+export const capturedWorkReads = (writer: RecordingWriter): WorkReadCapture => {
+  const keep = (input: WorkInput, scope: string, value: unknown) =>
+    promised(
+      captureInput(writer, input, scope, workInputCodecs[input.view], Effect.succeed(json(value) as never)),
+    ).then(() => {});
+  return {
+    read: (key, view, value) => keep(workInput(key, view), workInputScope(key), value),
+    feed: (key, admission, shape, value) =>
+      keep(workInput(key, "feed"), workInputScope(key, { admission, shape }), value),
+  };
 };
+/** Delivered values carry undefined optionals; their recorded form is their JSON. */
+const json = (value: unknown) => (value === undefined ? null : JSON.parse(JSON.stringify(value)));

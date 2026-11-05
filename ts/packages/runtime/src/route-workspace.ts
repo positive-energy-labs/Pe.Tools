@@ -79,13 +79,29 @@ export interface RouteDocumentStore {
 
 /** Host undo-window configuration: both limits bound the retained suffix. */
 export const DEFAULT_WORK_HISTORY_LIMITS = { maxCount: 256, maxBytes: 512 * 1024 } as const;
-export interface RouteWorkspaceOptions {
+export type WorkReadView = "read" | "raw" | "view";
+/** The admitted feed's two shapes: the view with history (`work`), or the snapshot acks follow (`work-acks`). */
+export type WorkFeedShape = "work" | "work-acks";
+/** A recorded Work read source (ADR 0031): each canonical read as recorded, or a typed rejection. */
+export interface WorkReadSource {
+  read(key: WorkKey, view: WorkReadView): Promise<unknown>;
+  feed(key: WorkKey, admission: WorkAdmission, shape: WorkFeedShape): Promise<unknown>;
+}
+/** Live capture: records the value about to be delivered; a rejection fails that read. */
+export interface WorkReadCapture {
+  read(key: WorkKey, view: WorkReadView, value: unknown): Promise<void>;
+  feed(key: WorkKey, admission: WorkAdmission, shape: WorkFeedShape, value: unknown): Promise<void>;
+}
+export type RouteWorkspaceOptions = {
   registrations: readonly RouteWorkspaceRegistration[];
-  store: RouteDocumentStore;
   /** Root-fixed source policy, checked before reads or writes at a mutation boundary. */
   authorizeMutation?: (verb: "edit" | "undo" | "redo" | "start-fresh" | "salvage" | "publish" | "retire") => void;
   workHistoryLimits?: { readonly maxCount: number; readonly maxBytes: number };
-}
+} & (
+  | { store: RouteDocumentStore; capture?: WorkReadCapture; recorded?: never }
+  /** Historical: reads come only from the source; there is no store to migrate, carry over or write. */
+  | { recorded: WorkReadSource; store?: never; capture?: never }
+);
 
 const ENVELOPE_VERSION = 1;
 // Retired close-sweep metadata contains no authored Work. Keep it out of the census.
@@ -117,6 +133,25 @@ export class RouteWorkspace {
     string,
     { write: WorkWriteAck; after: unknown; recovery?: { doc: unknown; schemaVersion: number } }[]
   >();
+
+  #authorize(verb: Parameters<NonNullable<RouteWorkspaceOptions["authorizeMutation"]>>[0]) {
+    if (this.options.recorded) throw Error(`A recorded workspace refuses Work ${verb}`);
+    this.options.authorizeMutation?.(verb);
+  }
+  get #store(): RouteDocumentStore {
+    if (!this.options.store) throw Error("A recorded workspace has no Work store");
+    return this.options.store;
+  }
+  /** A recorded value is served only as the Work it was requested for. */
+  async #recorded(scope: WorkKey, view: WorkReadView) {
+    return this.#requested(scope, await this.options.recorded!.read(scope, view));
+  }
+  #requested<A>(scope: WorkKey, value: A): A {
+    const handle = (value as { handle?: { key?: WorkKey } } | null)?.handle;
+    if (value !== null && (!handle?.key || workKey(handle.key) !== workKey(scope)))
+      throw Error(`Recorded Work belongs to another key than ${workKey(scope)}`);
+    return value;
+  }
 
   constructor(private readonly options: RouteWorkspaceOptions) {
     const limits = options.workHistoryLimits ?? DEFAULT_WORK_HISTORY_LIMITS;
@@ -207,10 +242,11 @@ export class RouteWorkspace {
     // reapplication after host restart. The promise also retains a failed admission's outcome.
     const ready = this.#serialized(async (): Promise<WorkFeedFailure | null> => {
       try {
-        if (Object.keys(migrations).length) {
-          if (!this.options.store.listState)
+        // A recording replays saved bytes; it never migrates or censuses a current store.
+        if (Object.keys(migrations).length && !this.options.recorded) {
+          if (!this.#store.listState)
             throw Error("Migration requires an indexed Work store");
-          const saved = await this.options.store.listState();
+          const saved = await this.#store.listState();
           if (saved.truncated || saved.unreadable || saved.unindexed)
             throw Error("Work census is incomplete; migration admission cannot open feeds");
           // A replacement may arrive while the census awaits disk. Never execute newer
@@ -336,9 +372,9 @@ export class RouteWorkspace {
   /** Persisted instances, not the registration catalogue. Never calls read/view or carry-over. */
   async instances() {
     return this.#serialized(async () => {
-      if (!this.options.store.listState)
+      if (this.options.recorded || !this.#store.listState)
         return { works: [], unindexed: 0, unreadable: 0, truncated: false, available: false };
-      const census = await this.options.store.listState();
+      const census = await this.#store.listState();
       let invalidIdentities = 0;
       const works = census.records.flatMap((record) => {
         if (
@@ -396,7 +432,12 @@ export class RouteWorkspace {
 
   /** The route's Work at the scope; null when the route is unregistered or no Work exists yet. */
   async read(scope: WorkKey, route: string) {
-    return this.#read(scope, route, false);
+    return this.#captured(scope, "read", await this.#read(scope, route, false));
+  }
+  /** Live capture records exactly the value delivered, a null "no Work" included, before it is returned. */
+  async #captured<A>(scope: WorkKey, view: WorkReadView, value: A): Promise<A> {
+    await this.options.capture?.read(scope, view, value);
+    return value;
   }
 
   /**
@@ -409,11 +450,17 @@ export class RouteWorkspace {
     route: string,
   ): Promise<{ doc: unknown; revision: number; handle: WorkHandle } | null> {
     if (!this.#registry.has(route)) return null;
+    if (this.options.recorded)
+      return (await this.#recorded(scope, "raw")) as { doc: unknown; revision: number; handle: WorkHandle } | null;
     const raw = await this.#serialized(() => this.#carryOver(scope, route));
-    if (raw == null) return null;
+    if (raw == null) return this.#captured(scope, "raw", null);
     const envelope = envelopeSchema.safeParse(raw);
     const revision = envelope.success ? envelope.data.revision : 0;
-    return { doc: envelope.success ? envelope.data.doc : null, revision, handle: workHandle(scope, revision) };
+    return this.#captured(scope, "raw", {
+      doc: envelope.success ? envelope.data.doc : null,
+      revision,
+      handle: workHandle(scope, revision),
+    });
   }
 
   /**
@@ -421,14 +468,19 @@ export class RouteWorkspace {
    * starts from. Null only for an unregistered route, so a registered route never reads unknown.
    */
   async view(scope: WorkKey, route: string) {
-    return this.#read(scope, route, true);
+    return this.#captured(scope, "view", await this.#read(scope, route, true));
   }
 
   async #read(scope: WorkKey, route: string, orEmpty: boolean, withHistory = false) {
     const registration = this.#registry.get(route);
     if (!registration) return null;
     const { spec } = registration;
-    return this.#serialized(async () => {
+    if (this.options.recorded) {
+      // A recorded history is the admitted feed's, bound with its admission; never a view plus guesses.
+      if (withHistory) throw Error("A recorded Work feed is served only through observeAdmittedFeed");
+      return (await this.#recorded(scope, orEmpty ? "view" : "read")) as Awaited<ReturnType<typeof live>>;
+    }
+    const live = () => this.#serialized(async () => {
       const envelope = await this.#load(scope, spec, orEmpty);
       if (!envelope) return null;
       const records = this.#retain(this.#inverses.get(workKey(scope)) ?? [], envelope.revision);
@@ -449,11 +501,12 @@ export class RouteWorkspace {
         schema: toJsonSchema(spec.schema),
       };
     });
+    return live();
   }
 
   /** The untrusted write envelope has no authorship field. `by` is the host caller's principal. */
   write(scope: WorkKey, route: string, by: WorkAuthor, input: WorkWrite) {
-    this.options.authorizeMutation?.("edit");
+    this.#authorize("edit");
     if (by === "human" && input.kind === "apply" && !input.press)
       return Promise.resolve(
         refuse("refused", "a human edit needs a press", "Mint a press before dispatch."),
@@ -475,7 +528,7 @@ export class RouteWorkspace {
       kind: "apply",
     },
   ): Promise<RouteStateWriteResult> {
-    this.options.authorizeMutation?.("edit");
+    this.#authorize("edit");
     if (scope.route !== route)
       return refuse(
         "refused",
@@ -682,7 +735,7 @@ export class RouteWorkspace {
     direction: "undo" | "redo",
     expectedRevision: number,
   ): Promise<RouteStateWriteResult> {
-    this.options.authorizeMutation?.(direction);
+    this.#authorize(direction);
     const snapshot = await this.view(scope, route);
     if (!snapshot || snapshot.revision !== expectedRevision)
       return refuse("refused", "Work changed before restoring", "Re-read Work.", "stale_revision");
@@ -708,7 +761,7 @@ export class RouteWorkspace {
     expectedRevision: number,
     receiptId?: string,
   ) {
-    this.options.authorizeMutation?.("publish");
+    this.#authorize("publish");
     return this.apply(scope, route, "human", patches, expectedRevision, true, {
       kind: "apply",
       press: null,
@@ -721,7 +774,7 @@ export class RouteWorkspace {
    * `<route>:aside:<n>`, and starts an empty Work at the same address. Readable Work is refused.
    */
   async startFresh(scope: WorkKey, route: string, by: WorkAuthor): Promise<RouteStateWriteResult> {
-    this.options.authorizeMutation?.("start-fresh");
+    this.#authorize("start-fresh");
     if (scope.route !== route)
       return refuse(
         "refused",
@@ -747,7 +800,7 @@ export class RouteWorkspace {
         );
       let slot = 1;
       while ((await this.#raw(targetKey, aside(route, slot))).original != null) slot++;
-      await this.options.store.setState({ targetKey, route: aside(route, slot), value: raw });
+      await this.#store.setState({ targetKey, route: aside(route, slot), value: raw });
       const fresh = emptyEnvelope(spec);
       const prior = envelopeSchema.safeParse(raw);
       fresh.revision = (prior.success ? prior.data.revision : 0) + 1;
@@ -809,7 +862,7 @@ export class RouteWorkspace {
     scope: WorkKey,
     route: string,
   ): Promise<{ from: string; value: unknown } | RouteRefusal | null> {
-    this.options.authorizeMutation?.("salvage");
+    this.#authorize("salvage");
     const spec = this.#registry.get(route)?.spec;
     if (!spec?.salvage) return null;
     const targetKey = workKey(scope);
@@ -869,6 +922,8 @@ export class RouteWorkspace {
     },
     replay = true,
   ): () => void {
+    // A recording has no accepted writes after its point: no ack is ever invented.
+    if (this.options.recorded) return () => {};
     const key = workKey(scope);
     let disposed = false;
     void this.#serialized(async () => {
@@ -907,6 +962,10 @@ export class RouteWorkspace {
     listener: (ack: WorkWriteAck) => void,
     failed: (error: unknown) => void,
   ): () => void {
+    if (this.options.recorded) {
+      failed(Error("A recorded Work feed is served only through observeAdmittedFeed"));
+      return () => {};
+    }
     const key = workKey(scope);
     let disposed = false;
     void this.#serialized(async () => {
@@ -943,6 +1002,90 @@ export class RouteWorkspace {
       const listeners = this.#acceptedListeners.get(key);
       listeners?.delete(listener);
       if (!listeners?.size) this.#acceptedListeners.delete(key);
+    };
+  }
+
+  /**
+   * The admitted Work feed, for a caller that has already admitted it. Its acquisition is admitted
+   * again after any asynchronous capture or replay, so a replacement or retirement meanwhile refuses.
+   * A recording delivers its bound snapshot once and no acks. Live capture records the delivered
+   * snapshot under its exact admission, holding acks until it is delivered; live alone is unchanged.
+   */
+  observeAdmittedFeed(
+    scope: WorkKey,
+    admission: WorkAdmission,
+    shape: WorkFeedShape,
+    deliver: (value: OwnerValue<unknown>) => void,
+    ack: (ack: WorkWriteAck) => void,
+    failed: (error: unknown) => void,
+  ): () => void {
+    let closed = false;
+    const fenced = async <A>(value: A) => {
+      const failure = await this.admitFeed(scope, admission);
+      if (failure) throw failure;
+      return value;
+    };
+    const settle = (work: Promise<unknown>) =>
+      work.then(
+        (value) => {
+          if (!closed) deliver({ value });
+        },
+        (error) => {
+          if (!closed) failed(error);
+        },
+      );
+    const { recorded, capture } = this.options;
+    if (recorded) {
+      void settle(recorded.feed(scope, admission, shape).then((value) => fenced(this.#requested(scope, value))));
+      return () => {
+        closed = true;
+      };
+    }
+    if (shape === "work") {
+      let chain = Promise.resolve();
+      const stop = this.observe(
+        scope,
+        scope.route,
+        (value) => {
+          if (!capture || "error" in value) return void (closed || deliver(value));
+          // One capture at a time keeps delivery in observation order.
+          chain = chain.then(() =>
+            settle(capture.feed(scope, admission, shape, value.value).then(() => fenced(value.value))),
+          );
+        },
+        true,
+        true,
+      );
+      return () => {
+        closed = true;
+        stop();
+      };
+    }
+    if (!capture) return this.observeFeed(scope, (value) => deliver({ value }), ack, failed);
+    let held: WorkWriteAck[] | null = [];
+    const stop = this.observeFeed(
+      scope,
+      (snapshot) =>
+        void capture
+          .feed(scope, admission, shape, snapshot)
+          .then(() => fenced(snapshot))
+          .then(
+            () => {
+              if (closed) return;
+              deliver({ value: snapshot });
+              for (const write of held ?? []) ack(write);
+              held = null;
+            },
+            (error) => {
+              if (!closed) failed(error);
+            },
+          ),
+      (write) => (held ? held.push(write) : ack(write)),
+      failed,
+    );
+    return () => {
+      closed = true;
+      stop();
     };
   }
 
@@ -1020,7 +1163,7 @@ export class RouteWorkspace {
    * exactly once. Nothing is migrated onto Work the Address already has.
    */
   async #carryOver(scope: WorkKey, route: string): Promise<unknown> {
-    const { store } = this.options;
+    const store = this.#store;
     const targetKey = workKey(scope);
     const { value: raw } = await this.#raw(targetKey, route);
     const openWork =
@@ -1037,7 +1180,7 @@ export class RouteWorkspace {
 
   /** Keep original bytes for recovery and Save As; all consumers see the retired cell shape. */
   async #raw(targetKey: string, route: string) {
-    const original = await this.options.store.getState({ targetKey, route });
+    const original = await this.#store.getState({ targetKey, route });
     return { original, value: this.#retireSuggestions(targetKey, route, original) };
   }
 
@@ -1066,7 +1209,7 @@ export class RouteWorkspace {
     const retained = this.#retain(history, envelope.revision);
     history.splice(0, history.length, ...retained);
     // Closing a native lifetime changes availability, never the user's authored Work.
-    await this.options.store.setState({
+    await this.#store.setState({
       targetKey: workKey(scope),
       route,
       value: { ...envelope, history },

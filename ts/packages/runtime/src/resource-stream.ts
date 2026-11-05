@@ -64,33 +64,24 @@ export function observeResources(
         (failure) => {
           if (closed) return;
           if (failure) return refuse(failure);
-          release =
-            request.kind === "work"
-              ? work.observe(
-                  scope,
-                  scope.route,
-                  (value) => {
-                    if (!closed) accept(value);
-                  },
-                  true,
-                  true,
-                )
-              : work.observeFeed(
-                  scope,
-                  (value) => {
-                    if (!closed) accept({ value });
-                  },
-                  (ack) => publish({ kind: "event", key, value: ack }),
-                  (error) => {
-                    const typed = workFeedFailureSchema.safeParse(error);
-                    if (typed.success) return refuse(typed.data);
-                    publish({
-                      kind: "failure",
-                      key,
-                      error: error instanceof Error ? error.message : String(error),
-                    });
-                  },
-                );
+          release = work.observeAdmittedFeed(
+            scope,
+            admission,
+            request.kind,
+            (value) => {
+              if (!closed) accept(value);
+            },
+            (ack) => publish({ kind: "event", key, value: ack }),
+            (error) => {
+              const typed = workFeedFailureSchema.safeParse(error);
+              if (typed.success) return refuse(typed.data);
+              publish({
+                kind: "failure",
+                key,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            },
+          );
         },
         (error) => {
           refuse({ kind: "failed", code: "WorkAdmissionFailed", message: String(error) });
