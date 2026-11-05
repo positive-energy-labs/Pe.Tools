@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { actionReceiptSchema, memberWork, commands } from "@pe/agent-contracts";
+import {
+  actionReceiptSchema,
+  memberWork,
+  commands,
+  catalogWorkCommands,
+  catalogWorkSpecs,
+} from "@pe/agent-contracts";
 
 import { actionPlace, actionRoute, capturedPlace, proposedRecord } from "./chat-plugins";
 
@@ -75,8 +81,16 @@ describe("chat plugin records", () => {
     expect(actionRoute("settings.observe")).toBe("pods");
     expect(actionRoute("schedule.grid.push")).toBe("schedules");
     expect(actionRoute("instances.open")).toBe("instances");
-    // Every semantic action is some pane's: none falls back to a bare receipt link.
-    expect(Object.keys(commands).filter((key) => !actionRoute(key))).toEqual([]);
+    // Route-free Work owns its commands without a Page (ADR 0030 rule 2).
+    expect(
+      Object.keys(commands).filter(
+        (key) => !actionRoute(key) && !Object.hasOwn(catalogWorkCommands, key),
+      ),
+    ).toEqual([]);
+    for (const [key, command] of Object.entries(catalogWorkCommands)) {
+      expect(Object.values(catalogWorkSpecs).some((spec) => spec.route === command.work.route)).toBe(true);
+      expect(actionRoute(key)).toBeNull();
+    }
     // No pane declares these: the record keeps its receipt link instead of inventing an owner.
     expect(actionRoute("schedule.nonexistent")).toBeNull();
     expect(actionRoute("pod.list")).toBeNull();
@@ -102,49 +116,46 @@ describe("chat plugin records", () => {
     });
   });
 
-  it.each(["edit", "suggestion"])(
-    "records a landed %s without requiring the other rung",
-    (rung) => {
-      const args = {
-        key: "route:schedules.edit",
-        workspaceId: "schedule-42",
-        expectedRevision: 7,
-        input: JSON.stringify({
-          patches: [{ op: "set", path: ["cells", "2::1", rung], value: { value: "Supply" } }],
-        }),
-      };
-      const record = proposedRecord("pe_do", JSON.stringify(args), {
-        structuredContent: {
-          ok: true,
-          target: { session: "original-session", document: "C:/Models/Original.rvt" },
-          result: { revision: 8, doc: { cells: { unrelated: { edit: { value: "Other" } } } } },
+  it("records a landed staged edit", () => {
+    const args = {
+      key: "route:schedules.edit",
+      workspaceId: "schedule-42",
+      expectedRevision: 7,
+      input: JSON.stringify({
+        patches: [{ op: "set", path: ["cells", "2::1", "edit"], value: { value: "Supply" } }],
+      }),
+    };
+    const record = proposedRecord("pe_do", JSON.stringify(args), {
+      structuredContent: {
+        ok: true,
+        target: { session: "original-session", document: "C:/Models/Original.rvt" },
+        result: { revision: 8, doc: { cells: { unrelated: { edit: { value: "Other" } } } } },
+      },
+    });
+    expect(record).toMatchObject({
+      route: "schedules",
+      changes: 1,
+      subject: "C:/Models/Original.rvt",
+      place: {
+        ok: true,
+        page: { workspaceId: "schedule-42" },
+        carry: {
+          work: "schedule-42",
+          target: JSON.stringify({
+            kind: "named",
+            session: "original-session",
+            address: "C:/Models/Original.rvt",
+          }),
         },
-      });
-      expect(record).toMatchObject({
-        route: "schedules",
-        changes: 1,
-        subject: "C:/Models/Original.rvt",
-        place: {
-          ok: true,
-          page: { workspaceId: "schedule-42" },
-          carry: {
-            work: "schedule-42",
-            target: JSON.stringify({
-              kind: "named",
-              session: "original-session",
-              address: "C:/Models/Original.rvt",
-            }),
-          },
-        },
-      });
-      expect(proposedRecord("pe_do", args, { ok: false })).toBeNull();
-      expect(
-        proposedRecord("pe_do", { ...args, key: "route:schedules.propose" }, { ok: true }),
-      ).toBeNull();
-    },
-  );
+      },
+    });
+    expect(proposedRecord("pe_do", args, { ok: false })).toBeNull();
+    expect(
+      proposedRecord("pe_do", { ...args, key: "route:schedules.propose" }, { ok: true }),
+    ).toBeNull();
+  });
 
-  it("counts both rungs of a member field once and opens exact host-only member Work", () => {
+  it("counts repeated edits of a member field once and opens exact host-only member Work", () => {
     const record = proposedRecord(
       "pe_do",
       {
@@ -154,11 +165,10 @@ describe("chat plugin records", () => {
         input: {
           patches: [
             { op: "set", path: ["fields", "/name", "edit"], value: { value: "New name" } },
-            { op: "set", path: ["fields", "/name", "suggestion"], value: { value: "Optional" } },
-            { op: "set", path: ["fields", "/name", "suggestion", "note"], value: "Evidence" },
+            { op: "set", path: ["fields", "/name", "edit", "value"], value: "Final name" },
             {
               op: "set",
-              path: ["fields", "/edit", "suggestion"],
+              path: ["fields", "/edit", "edit"],
               value: { value: "Optional field" },
             },
           ],
@@ -183,8 +193,8 @@ describe("chat plugin records", () => {
           system: "AHU-1",
           patches: [
             { op: "set", path: ["designFriction", "edit"], value: { value: 0.08 } },
-            { op: "set", path: ["designFriction", "suggestion"], value: { value: 0.1 } },
-            { op: "set", path: ["roles", "edit", "suggestion"], value: { value: { role: "fan" } } },
+            { op: "set", path: ["designFriction", "edit", "value"], value: 0.1 },
+            { op: "set", path: ["roles", "edit", "edit"], value: { value: { role: "fan" } } },
           ],
         },
       },

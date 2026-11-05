@@ -47,8 +47,7 @@ const parsed = (value: unknown): unknown => {
 
 export interface ProposedRecord {
   route: ChatPluginRoute;
-  /** Distinct cells (or fields) the call changed, not patches: an edit and a suggestion on one
-   * cell are one change. */
+  /** Distinct staged cells the call changed; multiple patches on one edit count once. */
   changes: number;
   /** The document (or named workspace) the call recorded; null when it recorded none. */
   subject: string | null;
@@ -153,16 +152,11 @@ export function proposedRecord(
   const request = isRecord(decoded) ? decoded : {};
   const input = parsed(request.input);
   const patches = isRecord(input) && Array.isArray(input.patches) ? input.patches : [];
-  // Both authors may edit or suggest. Count a cell once even when this command changes both rungs.
+  // Both authors stage edits. Count a cell once even when this command patches it repeatedly.
   const cells = new Set(
     patches.flatMap((patch) => {
       const path = isRecord(patch) && Array.isArray(patch.path) ? patch.path : [];
-      const rung =
-        path[2] === "edit" || path[2] === "suggestion"
-          ? 2
-          : path[1] === "edit" || path[1] === "suggestion"
-            ? 1
-            : -1;
+      const rung = path[2] === "edit" ? 2 : path[1] === "edit" ? 1 : -1;
       return rung > 0 ? [JSON.stringify(path.slice(0, rung))] : [];
     }),
   );
@@ -234,7 +228,7 @@ export function actionCall(toolName: string, args: unknown, result: unknown): Ac
 }
 
 /**
- * A command opens its portable tool's registered pane. Other operations retain their receipt link.
+ * A command opens its Work owner's registered Page. A Page-less owner keeps its receipt link.
  */
 export const actionRoute = (key: string): ChatPluginRoute | null => publicRoutes.actionRoute(key);
 

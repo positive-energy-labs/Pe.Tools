@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { commandTool, type CellsDecl, type RouteGraph } from "@pe/agent-contracts";
+import {
+  commands,
+  commandTool,
+  type Command,
+  type CellsDecl,
+  type RouteGraph,
+} from "@pe/agent-contracts";
 import type {
   AdmittedRoute,
   RouteFingerprint,
@@ -150,10 +156,10 @@ export function createRouteDiscovery(legacy = legacyRouteDiscovery) {
     keys: () => entries().map(({ manifest }) => manifest.key),
     get: (key: string) => entries().find(({ manifest }) => manifest.key === key),
     actionRoute(key: string) {
-      const tool = commandTool(key);
-      return tool && entries().some(({ manifest }) => manifest.key === tool.name)
-        ? tool.name
-        : null;
+      const command: Command | undefined = commands[key as keyof typeof commands];
+      const owner = command?.work?.route ?? commandTool(key)?.name;
+      // A Work owner need not have a Page (ADR 0030 rule 2); its record keeps the receipt.
+      return owner && entries().some(({ manifest }) => manifest.key === owner) ? owner : null;
     },
   });
 }
