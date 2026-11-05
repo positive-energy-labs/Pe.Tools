@@ -174,7 +174,7 @@ export async function nativeFixture(
                 })),
               };
             } else if (req.operationKey === "ducts.tables")
-              value = { tables: {}, missing: [], unsupported: [] };
+              value = { folder: "fixture", tables: {}, missing: [], unsupported: {} };
             else if (
               req.operationKey === "ducts.apply" ||
               req.operationKey === "ducts.apply.plan"

@@ -5,7 +5,6 @@ import { fanOf } from "@pe/ducts-domain/action-targets";
 import { applyRequest, price, TABLE_IDS } from "@pe/ducts-domain/pricing";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { ductsDesign, stagedDucts, workHandleSchema } from "@pe/agent-contracts";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
 import { invokeBridge, type RevitBridge } from "./bridge.ts";
@@ -121,7 +120,6 @@ export function healedCellPaths(
 export function ductsExecutors(
   bridge: RevitBridge["Service"],
   deps: import("./family-actions.ts").FamilyActionDependencies = {},
-  readPreparation?: (ctx: CommandContext, key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables", input: unknown) => Promise<unknown>,
 ) {
   const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
     const target = targetOf(ctx);
@@ -179,10 +177,11 @@ export function ductsExecutors(
         const intent = { ...ductsScope, walk: fanScope?.walk, cells };
         const { firm } = await runPods(deps, deps.files!.firm);
         const criteria = resolveCriteria(workLayer(design), null, firm);
-        if (!readPreparation) throw refused("Ducts preparation requires the root native Read capability", "read.unavailable");
-        const read = async (selector: Record<string, unknown>): Promise<DuctSnapshot> => {
-          const key = selector.kind === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk";
-          return nativeResponseSchema(key).parse(await readPreparation(ctx, key,
+        const read = (selector: Record<string, unknown>) =>
+          invokeBridge<DuctSnapshot>(
+            bridge,
+            target,
+            selector.kind === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk",
             {
               selector: selector.kind === "from" ? {
                 ...selector,
@@ -190,8 +189,8 @@ export function ductsExecutors(
                 candidateBoxIn: criteria.healBoxIn.value,
               } : selector,
               slots: stagedDucts(doc, fans).parameters,
-            }));
-        };
+            },
+          );
         let snapshot = await {
           "assign-fan": () => {
             if (!intent?.fan) throw refused("Stage writeIntent.fan before assigning a fan");
@@ -202,8 +201,8 @@ export function ductsExecutors(
         }[kind]();
         const { input, dependencies } = await {
           losses: async () => {
-            const tables = await readPreparation(ctx, "ducts.tables", { ids: TABLE_IDS });
-            const grids = toGrids(tables);
+            const tables = await invokeBridge(bridge, target, "ducts.tables", { ids: TABLE_IDS });
+            const grids = toGrids(tables as Parameters<typeof toGrids>[0]);
             const catalogs = await runPods(deps, deps.files!.ductCatalogs);
             const layers = () => ({
               snapshot,
