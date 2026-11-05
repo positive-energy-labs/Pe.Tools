@@ -21,7 +21,7 @@ import { bindGraph } from "../pages-bind/graph";
 import { parameterLinksGraph } from "../parameter-links/graph";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createFixtureMount } from "./fixture";
-import { publishSubjectRoster, registerSubject, subjectState } from "./subject";
+import { legacySubjectState } from "./subject";
 import { leaks } from "./visible-text";
 import { fanLabel } from "../ducts/sheet/model";
 import { SCENE_FIXTURE } from "../ducts/scene.fixture";
@@ -88,18 +88,14 @@ test.each(routes.map((graph) => [graph.address, graph] as const))(
           const options = picker.options(owner.readings.get(picker.reading).value);
           words.push(...options.map((option) => option.label));
           const search = { fixture: name };
-          registerSubject(graph.address, graph);
           for (const option of options.slice(0, 5)) {
             const page = {
               ...search,
               [subject.field]: subject.cardinality === "many" ? [option.id] : option.id,
             };
             // Before the roster lands, then after: neither may fall back to the raw key.
-            words.push(
-              subjectState(graph.address, { ...page, fixture: `${name}:unpublished` }).label,
-            );
-            publishSubjectRoster(graph.address, search, options);
-            words.push(subjectState(graph.address, page).label);
+            words.push(legacySubjectState(graph, page).label);
+            words.push(legacySubjectState(graph, page, owner.readings.get(picker.reading)).label);
           }
         }
       } finally {
@@ -217,7 +213,15 @@ test("admitted ducts and fans render declared subject and pane words without int
   const { admit } = await import("../fans/admission.fixture.ts");
   const { owner, presenter } = await admit();
   for (const route of [owner, presenter]) {
-    const words = [route.data.name, route.data.subject.noun, ...Object.values(route.data.panes).flatMap(pane => [pane.label, pane.purpose]), ...Object.values(route.data.verbs).map(verb => verb.label)];
-    expect(words.flatMap(word => leaks(word)), route.data.key).toEqual([]);
+    const words = [
+      route.data.name,
+      route.data.subject.noun,
+      ...Object.values(route.data.panes).flatMap((pane) => [pane.label, pane.purpose]),
+      ...Object.values(route.data.verbs).map((verb) => verb.label),
+    ];
+    expect(
+      words.flatMap((word) => leaks(word)),
+      route.data.key,
+    ).toEqual([]);
   }
 });

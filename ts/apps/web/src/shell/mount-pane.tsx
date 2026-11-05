@@ -5,7 +5,7 @@ import { ScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph-layout";
 import { reduceLayout } from "../../../../packages/kit/src/components/lang/layout-graph";
 import { useRouteSearchSlice } from "../route/activity";
-import { publishSubjectRoster, registerSubject, subjectState, useSubjects } from "./subject";
+import { legacySubjectState } from "./subject";
 import { PageControl } from "./situation-fields";
 import { mountRefusals, type GraphMount, type MountAdapters } from "./mount-owner";
 import { PaneHead } from "./mount-reading";
@@ -67,7 +67,6 @@ export function admitRoute<P, W>(graph: RouteGraph<P, W>, adapters: RouteAdapter
         message: `Unknown reading '${receipts}'`,
       });
   }
-  if (!refusals.length) registerSubject(graph.key, graph);
   return refusals;
 }
 
@@ -157,13 +156,8 @@ export function MountedPane<P, W>({
   const subject = graph.subjectField?.pane === id ? graph.subjectField : null;
   const subjectField = subject ? graph.fields[subject.field] : null;
   const search = useRouteSearchSlice((search) => search);
-  useSubjects();
-  const subjectStatus = subjectState(graph.key, search);
-  const roster = subject ? owner.readings.get(subject.roster) : null;
-  useEffect(() => {
-    if (subjectField?.picker && roster?.complete)
-      publishSubjectRoster(graph.key, search, subjectField.picker.options(roster.value));
-  }, [graph.key, subjectField, roster?.version, roster?.complete, search]);
+  const roster = subject ? owner.readings.get(subject.roster) : undefined;
+  const subjectStatus = legacySubjectState(graph, search, roster);
   const head = (
     <>
       {subject && subjectStatus.refusal && (

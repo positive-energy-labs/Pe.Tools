@@ -32,7 +32,13 @@ const refused = (message: string): MoveResult => ({ kind: "refused", code: "addr
 
 /** One admitted transport; Page policy owns precedence and the owner owns the single commit. */
 export function createAdmittedAddress<G extends RouteGraphJson, S extends SchemaTable>(options: {
-  readonly route: AdmittedRoute<G, SchemaTable, import("../../../../packages/agent-contracts/src/route-kernel-bodies").EntryTable, unknown, Record<string, unknown>>;
+  readonly route: AdmittedRoute<
+    G,
+    SchemaTable,
+    import("../../../../packages/agent-contracts/src/route-kernel-bodies").EntryTable,
+    unknown,
+    Record<string, unknown>
+  >;
   readonly registry: AdmittedRouteRegistry;
   readonly owner: AcceptanceOwner<G, S>;
   readonly policy: Pick<ReturnType<typeof createPagePolicy<G, S>>, "restoreState">;
@@ -91,17 +97,14 @@ export function createAdmittedAddress<G extends RouteGraphJson, S extends Schema
     }
   };
 
-  const initial = restore();
-  const unsubscribeOwner = owner.subscribe((snapshot, origin) => {
-    const before = previous;
-    previous = snapshot;
-    if (closed || restoring || !before) return;
-    const changed = fields.filter(([key]) => !deepEqual(before.page[key], snapshot.page[key]));
-    if (!changed.length) return;
-    resolve();
-    const search = new URLSearchParams(address.read());
-    // Include defaults: omission would let stale tab memory win on Back/Forward.
+  // Address writes and Place links project the same accepted Page through admitted codecs.
+  const encodePage = (
+    search: URLSearchParams,
+    snapshot: NonNullable<ReturnType<typeof owner.read>>,
+    share = false,
+  ) => {
     for (const [key, field] of fields) {
+      if (share && field.role !== "selection" && !("share" in field && field.share)) continue;
       const text =
         field.role === "selection"
           ? selectionCodec(route.data, field.kinds).encode(snapshot.page[key])
@@ -112,6 +115,18 @@ export function createAdmittedAddress<G extends RouteGraphJson, S extends Schema
       if (!text.ok) throw Error(text.reason);
       search.set(key, text.value);
     }
+  };
+  const initial = restore();
+  const unsubscribeOwner = owner.subscribe((snapshot, origin) => {
+    const before = previous;
+    previous = snapshot;
+    if (closed || restoring || !before) return;
+    const changed = fields.filter(([key]) => !deepEqual(before.page[key], snapshot.page[key]));
+    if (!changed.length) return;
+    resolve();
+    const search = new URLSearchParams(address.read());
+    // Include defaults: omission would let stale tab memory win on Back/Forward.
+    encodePage(search, snapshot);
     const history =
       origin?.kind === "human"
         ? origin.history
@@ -133,6 +148,19 @@ export function createAdmittedAddress<G extends RouteGraphJson, S extends Schema
   return Object.freeze({
     initial,
     restore,
+    link() {
+      if (closed) throw Error("Address transport is closed");
+      resolve();
+      const snapshot = owner.read();
+      if (!snapshot) throw Error("Page is unavailable");
+      const search = new URLSearchParams();
+      encodePage(search, snapshot, true);
+      for (const key of ["target", "work", "fixture"]) {
+        const value = address.read().get(key);
+        if (value !== null) search.set(key, value);
+      }
+      return `${route.data.address}${search.size ? `?${search}` : ""}`;
+    },
     close() {
       if (closed) return;
       closed = true;

@@ -1,30 +1,41 @@
 import { createContext, useContext, useSyncExternalStore } from "react";
 import { canonicalRouteInput, decodePageField, type RouteGraph } from "@pe/agent-contracts";
 
-type Option = { id: string; label: string };
 type Declaration = Pick<RouteGraph<any, any>, "fields" | "subjectField" | "name">;
-// COMMON 20 exception: the legacy register/publish/use API has no shell or provider argument.
-// Moving these registries requires changing mount-pane, app-bar and mount-chrome's shared contract.
-// Admitted mounts do not publish here; keep this legacy registry until that contract is retired.
-const declarations = new Map<string, Declaration>();
-const rosters = new Map<string, readonly Option[]>();
+export type SubjectState = Readonly<{
+  ready: boolean;
+  refusal: string | null;
+  label: string;
+  link?: string | null;
+}>;
+const waiting: SubjectState = Object.freeze({ ready: false, refusal: null, label: "" });
+type SubjectReader = {
+  current(): boolean;
+  read(search: Record<string, unknown>): SubjectState | null;
+  subscribe(notify: () => void): () => void;
+};
+// This index owns no declaration, roster or subject value. A mount supplies a read and withdraws it.
+const readers = new Map<string, Set<SubjectReader>>();
 const listeners = new Set<() => void>();
 let revision = 0;
-const scopeKey = (route: string, search: Record<string, unknown>) =>
-  canonicalRouteInput([route, search.target ?? null, search.work ?? null, search.fixture ?? null]);
-export function registerSubject(route: string, graph: Declaration) {
-  declarations.set(route, graph);
-}
-export function publishSubjectRoster(
-  route: string,
-  search: Record<string, unknown>,
-  options: readonly Option[],
-) {
-  const key = scopeKey(route, search);
-  if (canonicalRouteInput(rosters.get(key)) === canonicalRouteInput(options)) return;
-  rosters.set(key, options);
+export const subjectScopeKey = (search: Record<string, unknown>) =>
+  canonicalRouteInput([search.target ?? null, search.work ?? null, search.fixture ?? null]);
+function changed() {
   revision++;
   for (const notify of listeners) notify();
+}
+export function observeSubject(route: string, reader: SubjectReader) {
+  const entries = readers.get(route) ?? new Set<SubjectReader>();
+  readers.set(route, entries);
+  entries.add(reader);
+  const stop = reader.subscribe(changed);
+  changed();
+  return () => {
+    if (!entries.delete(reader)) return;
+    stop();
+    if (!entries.size && readers.get(route) === entries) readers.delete(route);
+    changed();
+  };
 }
 export function useSubjects() {
   return useSyncExternalStore(
@@ -38,25 +49,38 @@ export function useSubjects() {
     () => revision,
   );
 }
-/** The same subject admission and display projection serves pane heads, Places and window titles. */
-export function subjectState(route: string, search: Record<string, unknown>) {
-  const graph = declarations.get(route);
-  const subject = graph?.subjectField;
-  if (!graph || !subject) return { ready: false, refusal: null, label: "" };
+/** Titles and enrollment consult mounted authority, never a route-only declaration or retained roster. */
+export function subjectState(route: string, search: Record<string, unknown>): SubjectState {
+  for (const reader of [...(readers.get(route) ?? [])].reverse()) {
+    if (!reader.current()) continue;
+    const state = reader.read(search);
+    if (state) return state;
+  }
+  return waiting;
+}
+
+/** Active legacy owners project the same display contract until their production migration. */
+export function legacySubjectState(
+  graph: Declaration,
+  search: Record<string, unknown>,
+  roster?: { current: boolean; value?: unknown; error?: string },
+): SubjectState {
+  const subject = graph.subjectField;
+  if (!subject) return waiting;
   const field = graph.fields[subject.field]!;
-  const raw = search[subject.field];
   const { decoded } = decodePageField(field, search, subject.field);
   if (!decoded.success)
     return {
       ready: false,
-      refusal: `${subject.noun} ${JSON.stringify(raw)} is malformed`,
+      refusal: `${subject.noun} ${JSON.stringify(search[subject.field])} is malformed`,
       label: "",
     };
   const value = decoded.data;
   const ids: string[] = value === "all" ? [] : Array.isArray(value) ? value : value ? [value] : [];
-  const options = rosters.get(scopeKey(route, search));
+  if (field.picker && !roster?.current && (ids.length || value === "all"))
+    return { ready: false, refusal: roster?.error ?? null, label: "" };
+  const options = roster?.current ? field.picker?.options(roster.value) : undefined;
   const unknown = options && ids.find((id) => !options.some((option) => option.id === id));
-  // A UniqueId key (and its port suffix) is never display text: refusals and labels name the noun instead.
   const named = subject.keyKind !== "UniqueId";
   if (unknown)
     return {
@@ -66,16 +90,16 @@ export function subjectState(route: string, search: Record<string, unknown>) {
         : `A ${subject.noun} in this link is not in this model; choose it again from the roster`,
       label: "",
     };
-  const label = (id: string) =>
-    options?.find((option) => option.id === id)?.label ?? (named ? subject.show(id) : null);
-  const labels = ids.map(label);
+  const labels = ids.map(
+    (id) => options?.find((option) => option.id === id)?.label ?? (named ? subject.show(id) : null),
+  );
   return {
-    ready: !field.picker || !!options || (!ids.length && value !== "all"),
+    ready: true,
     refusal: null,
     label:
       value === "all"
         ? `All ${subject.noun}s`
-        : labels.every((l) => l !== null)
+        : labels.every((label) => label !== null)
           ? labels.join(" + ")
           : `${ids.length} ${subject.noun}${ids.length === 1 ? "" : "s"}`,
   };

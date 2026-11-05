@@ -1638,7 +1638,11 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
   await expect(
     admitted(false, false, { bodies: { pick: { ...bodies.pick, kind: "unsupported" } } }),
   ).rejects.toThrow(/Expected picker/);
-  const run = vi.fn((snapshot) => (snapshot.current ? [{ id: null, label: snapshot.value }] : []));
+  const identity = identityCodecs.local.encode({ namespace: "note", subject: "options" });
+  if (!identity.ok) throw Error(identity.reason);
+  const run = vi.fn((snapshot) =>
+    snapshot.current ? [{ id: identity.value, label: snapshot.value }] : [],
+  );
   const route = await admitted(false, false, {
     bodies: { pick: { ...bodies.pick, run } },
   });
@@ -1646,8 +1650,21 @@ test("slot census refuses unsupported bodies at mount admission and invokes pick
   const mount = createRouteShell(t.services).mount(route, placeInput(locationPort().address));
   closes.push(mount.close);
   expect(run).toHaveBeenCalled();
+  expect(mount.subjectState({})).toMatchObject({ ready: true, label: "" });
+  mount.controls.subject(identity.value);
+  expect(mount.subjectState({})).toMatchObject({ ready: false, label: "" });
   t.frames.at(-1)!(ready("options"));
-  expect(mount.picker("note")).toEqual([{ id: null, label: "options" }]);
+  expect(mount.picker("note")).toEqual([{ id: identity.value, label: "options" }]);
+  expect(mount.subjectState({})).toMatchObject({ ready: true, refusal: null, label: "options" });
+  const old = t.frames.at(-1)!;
+  mount.refresh();
+  expect(mount.subjectState({})).toMatchObject({ ready: false, label: "" });
+  old(ready("late old roster"));
+  expect(mount.subjectState({})).toMatchObject({ ready: false, label: "" });
+  t.frames.at(-1)!(ready("new roster"));
+  expect(mount.subjectState({})).toMatchObject({ ready: true });
+  mount.close();
+  expect(mount.subjectState({})).toMatchObject({ ready: false, label: "" });
 });
 
 test("Page verbs also pass through transition and refuse atomically", async () => {

@@ -1,48 +1,75 @@
-import { test, expect } from "vite-plus/test";
-import { systemSubjectGraph as ductsGraph } from "./subject.test-support";
-import { fanSubjectGraph as fansGraph } from "./subject.test-support";
-import { registerSubject, publishSubjectRoster, subjectState } from "./subject";
+// @vitest-environment jsdom
+import { test, expect, afterEach } from "vite-plus/test";
+import { waitFor } from "@testing-library/react";
+import { createMemoryHistory } from "@tanstack/react-router";
+import { z } from "zod";
+import { identityCodecs } from "./page-port";
+import { localId } from "../ducts/neutral";
+import { subjectState } from "./subject";
+import { tabTitle } from "../workbench/route-tabs";
+import { admit } from "../fans/admission.fixture";
+import { createRouteShell } from "./admitted-mount";
+import { admittedRouterAddress } from "./admitted-pane";
+import { placeInput } from "./admitted-place.test-fixture";
+import { admittedSources } from "./admitted-sources";
+import { sourceRouteServices } from "./source-route-services";
+const mounts: { dispose(): void }[] = [];
+afterEach(() => mounts.splice(0).forEach((mount) => mount.dispose()));
 
-test("unknown and malformed subject links refuse by name before Place enrollment", () => {
-  registerSubject("ducts", ductsGraph);
-  publishSubjectRoster("ducts", {}, [{ id: "SA-1", label: "SA-1" }]);
-  expect(subjectState("ducts", { system: "nonexistent-zzz" })).toMatchObject({
-    ready: false,
-    refusal: "system nonexistent-zzz not in this model",
+test("admitted Fans uses its actual picker labels and decoded subject; foreign and retired Places cannot borrow them", async () => {
+  const { presenter } = await admit();
+  const history = createMemoryHistory({ initialEntries: ["/fans?fixture=layout"] });
+  const input = placeInput(admittedRouterAddress(history));
+  const mount = createRouteShell(sourceRouteServices(admittedSources(presenter))).mount(
+    presenter,
+    input,
+  );
+  mounts.push(mount);
+  await waitFor(() => expect(mount.readingStatus("fans").snapshot.current).toBe(true));
+  const options = z
+    .array(z.object({ id: z.unknown(), label: z.string() }))
+    .parse(mount.picker("fan"));
+  expect(options.length).toBeGreaterThan(1);
+  const ids = options.map((option) => {
+    const decoded = identityCodecs.local.decode(z.string().parse(option.id));
+    if (!decoded.ok) throw Error(decoded.reason);
+    return decoded.value;
   });
-  expect(subjectState("ducts", { system: [1, 2] })).toMatchObject({
-    ready: false,
-    refusal: "system [1,2] is malformed",
-  });
-  expect(subjectState("ducts", { system: null })).toMatchObject({ ready: false });
-  expect(subjectState("ducts", { system: "SA-1" })).toMatchObject({
+  const search = () => Object.fromEntries(new URLSearchParams(history.location.search));
+  mount.controls.subject({ kind: "ids", ids: [ids[0]!] });
+  expect(subjectState("fans", search())).toMatchObject({
     ready: true,
     refusal: null,
-    label: "SA-1",
+    label: options[0]!.label,
   });
-});
-test("fan titles use roster display labels including duplicate-mark disambiguators", () => {
-  registerSubject("fans", fansGraph);
-  publishSubjectRoster("fans", {}, [
-    { id: "uid-a@0", label: "FC-23 \u00b7 100" },
-    { id: "uid-b@0", label: "FC-23 \u00b7 200" },
-  ]);
-  expect(subjectState("fans", { fan: "uid-a%400" }).label).toBe("FC-23 \u00b7 100");
-  expect(subjectState("fans", { fan: "uid-b%400" }).label).toBe("FC-23 \u00b7 200");
-  expect(subjectState("fans", { fan: "uid-a%400", target: "other-model" }).ready).toBe(false);
-});
-
-test("Place admission waits for declaration and roster, distinguishing an empty roster", () => {
-  expect(subjectState("not-registered", {}).ready).toBe(false);
-  registerSubject("admission-fans", fansGraph);
-  expect(subjectState("admission-fans", { fan: "uid-a%400" })).toMatchObject({
+  expect(
+    tabTitle({
+      id: "fans-place",
+      route: "fans",
+      link: history.location.href,
+      at: "2026-11-05T00:00:00Z",
+    }),
+  ).toBe(`Fans \u00b7 ${options[0]!.label}`);
+  const saved = subjectState("fans", search()).link!;
+  expect(new URL(saved, "http://place.invalid").searchParams.get("fan")).toBe(
+    history.location.search ? new URLSearchParams(history.location.search).get("fan") : null,
+  );
+  mount.controls.subject({ kind: "ids", ids: [ids[1]!] });
+  expect(mount.subjectState(search())?.label).toBe(options[1]!.label);
+  expect(mount.subjectState({ ...search(), fan: "{broken" })).toMatchObject({
     ready: false,
-    refusal: null,
+    refusal: expect.stringContaining("malformed"),
   });
-  publishSubjectRoster("admission-fans", {}, []);
-  expect(subjectState("admission-fans", { fan: "uid-a%400" })).toMatchObject({
-    ready: false,
-    refusal: expect.stringContaining("not in this model"),
-  });
-  expect(subjectState("admission-fans", { fan: "" })).toMatchObject({ ready: true, refusal: null });
+  expect(
+    mount.subjectState({
+      ...search(),
+      fan: JSON.stringify({ kind: "ids", ids: [localId("ducts-fan", "unknown-unit@0")] }),
+    }),
+  ).toMatchObject({ ready: false, refusal: expect.stringContaining("not in this model") });
+  expect(mount.subjectState({ ...search(), target: "another-model" })).toBeNull();
+  mount.release();
+  expect(mount.subjectState(search())).toMatchObject({ ready: false, label: "" });
+  mount.dispose();
+  expect(mount.subjectState(search())).toMatchObject({ ready: false, label: "" });
+  expect(subjectState("fans", search()).ready).toBe(false);
 });

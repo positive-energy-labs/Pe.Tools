@@ -1,4 +1,4 @@
-import { createElement, useMemo, useSyncExternalStore } from "react";
+import { createElement, useMemo, useRef, useSyncExternalStore } from "react";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { createRouteShell } from "./admitted-mount";
 import {
@@ -41,6 +41,9 @@ function PlaceRouteShell({
     params.get("target"),
   );
   const resolved = selected.resolution.kind === "resolved" ? selected.resolution.target : null;
+  const resolution = JSON.stringify([resolved, selected.workAddress, selected.workOpen]);
+  const currentResolution = useRef(resolution);
+  currentResolution.current = resolution;
   const input = useMemo<PlaceInput>(
     () => ({
       address,
@@ -50,10 +53,11 @@ function PlaceRouteShell({
         address: selected.workAddress,
         open: resolved?.kind === "document" ? resolved.ref : selected.workOpen,
       },
-      custody: place,
+      // The route may keep its raw Address while its resolved document lifetime changes.
+      custody: { current: () => place.current() && currentResolution.current === resolution },
       memory: place.memory,
     }),
-    [place, JSON.stringify([resolved, selected.workAddress, selected.workOpen])],
+    [place, resolution],
   );
   const shell = useMemo(
     () => createRouteShell(sourceRouteServices(admittedSources(route))),

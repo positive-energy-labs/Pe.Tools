@@ -48,14 +48,16 @@ const read = (): ThreadTab[] => {
 const save = (tabs: ThreadTab[]) => {
   try {
     sessionStorage.setItem(PLACES, JSON.stringify(tabs));
-  } catch (error) { console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
     /* This window keeps its mounted Places. */
   }
 };
 const readFocus = () => {
   try {
     return sessionStorage.getItem(FOCUS);
-  } catch (error) { console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
     return null;
   }
 };
@@ -63,7 +65,8 @@ const focus = (id: string | null) => {
   try {
     if (id) sessionStorage.setItem(FOCUS, id);
     else sessionStorage.removeItem(FOCUS);
-  } catch (error) { console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/workbench/tabs.ts: fallback after failure", error);
     /* The URL still owns the Place. */
   }
 };
@@ -170,11 +173,18 @@ export function useRouteTabs() {
   const explicit = new Set(new URLSearchParams(location.searchStr).keys());
   const search =
     restorePageSearch(
-      "__pePageMove" in location.state || "__peRouteTab" in location.state ? undefined : tabPageSearch(location.pathname),
+      "__pePageMove" in location.state || "__peRouteTab" in location.state
+        ? undefined
+        : tabPageSearch(location.pathname),
       Object.fromEntries(Object.entries(location.search).filter(([key]) => explicit.has(key))),
     ) ?? {};
-  const subject = subjectState(route ?? "", search);
-  const link = route ? place(route, search, store.local) : null;
+  // Admitted codecs consume raw history text; router JSON parsing is not their decoder.
+  const subject = subjectState(
+    route ?? "",
+    Object.fromEntries(new URLSearchParams(location.searchStr)),
+  );
+  const link =
+    subject.link === undefined ? (route ? place(route, search, store.local) : null) : subject.link;
   const restoring = Object.keys(search).some((key) => !(key in location.search));
   const [tabs, setTabs] = useState<ThreadTab[]>(read);
   const [failure, setFailure] = useState<string | null>(null);
@@ -224,7 +234,20 @@ export function useRouteTabs() {
 
   // The visible tool is a Place: record its current link and tag history with its id.
   useEffect(() => {
-    if (!active || restoring || !subject.ready || subject.refusal) return;
+    if (!active || restoring) return;
+    // Restoring an existing exact Place is navigation, not a new subject/native admission.
+    const known = read().some(
+      (tab) =>
+        tab.id === active.id &&
+        (tab.link === active.link ||
+          (subject.link === undefined &&
+            place(tab.route, params(tab.link), store.local) === active.link)),
+    );
+    if (
+      subject.refusal ||
+      (!subject.ready && (!known || routeAddress(active.route).read(search).problems.length))
+    )
+      return;
     try {
       // Enrollment is idempotent: a repeat run (StrictMode, or a re-render before the history tag
       // lands) reuses the record the first run stored for this exact link instead of minting another.

@@ -12,6 +12,7 @@ import { graphUrlPage } from "./mount-page";
 import type { RouteAdapters } from "./mount-pane";
 import { settingFields } from "./settings";
 import { useWorkScope, type WorkScopeStatus } from "./use-work-scope";
+import { legacySubjectState, observeSubject, subjectScopeKey } from "./subject";
 import { useLegacyEnvironmentBridge } from "./legacy-environment-bridge";
 
 export interface MountRouteProps {
@@ -89,6 +90,40 @@ export function useGraphRoute<P, W>(
   useSyncExternalStore(owner.subscribe, owner.version, owner.version);
   const visible = useContext(RouteVisibility);
   const current = useRouteCurrent();
+  const search = useRouteSearchSlice((search) => search);
+  const subjectScope = subjectScopeKey(search);
+  const currentRef = useRef(current);
+  currentRef.current = () => !hidden && visible && current();
+  useEffect(
+    () =>
+      observeSubject(graph.key, {
+        current: () => currentRef.current(),
+        read: (requested) =>
+          subjectScopeKey(requested) !== subjectScope
+            ? null
+            : !currentRef.current()
+              ? { ready: false, refusal: "Place is inactive", label: "" }
+              : legacySubjectState(
+                  graph,
+                  requested,
+                  graph.subjectField ? owner.readings.get(graph.subjectField.roster) : undefined,
+                ),
+        subscribe(notify) {
+          const stop = owner.subscribe(notify);
+          const stopView = owner.view.subscribe(notify);
+          const stopReading = graph.subjectField
+            ? owner.readings.watch([graph.subjectField.roster], notify)
+            : () => {};
+          return () => {
+            stopReading();
+            stopView();
+            stop();
+          };
+        },
+      }),
+    [graph, owner, subjectScope],
+  );
+
   const live = useScopeLive();
   // An unresolved or closed document's route still draws and reads; it arms no verb.
   const settings = owner.settings.read();

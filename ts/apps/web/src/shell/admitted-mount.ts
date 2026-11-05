@@ -23,6 +23,10 @@ import type { MountContext } from "./admitted-context.ts";
 import { createAdmittedGeometry } from "./admitted-geometry.ts";
 import { createAdmittedHistory } from "./admitted-history.ts";
 import { createAdmittedInvocation } from "./admitted-invoke.ts";
+import { canonicalEnvironmentInput } from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
+import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
+import { openSet, type OpenSet } from "./open-set.neutral";
+import { z } from "zod";
 import { createAdmittedObservers } from "./admitted-observers.ts";
 import type { PlaceInput } from "./admitted-place.ts";
 import { createAdmittedReadings } from "./admitted-readings.ts";
@@ -80,6 +84,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
     >(admitted: AdmittedRoute<G, S, E, Render, W>, input: PlaceInput) {
       const { address, fixture, target, memory } = input;
       const route = admitted;
+      const subjectScope = subjectScopeKey(Object.fromEntries(address.read()));
       const scope = createAdmittedScope({
         admission: mountAdmittedRoute(route, route.fingerprint),
         route,
@@ -222,9 +227,11 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       const historyOwner = createAdmittedHistory(context);
       let transport: ReturnType<typeof createAdmittedAddress> | undefined;
       let unsubscribeOwner = () => {};
+      let stopSubject = () => {};
       const close = () => {
         if (closed) return;
         closed = true;
+        stopSubject();
         owner.close();
         unsubscribeOwner();
         transport?.close();
@@ -260,7 +267,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         throw error;
       }
       const transitionCell = createAdmittedCellActions(context);
-      return {
+      const mounted = {
         // The exact admission supplies both these schemas and field roles.
         page: ports.page as PagePort<G, S>,
         controls: ports.controls as FieldControls<G, S>,
@@ -286,6 +293,96 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         invoke,
         place,
         picker: readings.picker,
+        subjectState(search: Record<string, unknown>): SubjectState | null {
+          if (subjectScopeKey(search) !== subjectScope) return null;
+          const refuse = (refusal: string | null): SubjectState => ({
+            ready: false,
+            refusal,
+            label: "",
+            link: null,
+          });
+          if (
+            !context.available() ||
+            subjectScopeKey(Object.fromEntries(address.read())) !== subjectScope
+          )
+            return refuse("Place is inactive or retired");
+          // Resolve again: equal revision numbers never authorize a foreign/retired admission.
+          if (!resolveRouteBindings(registry, route)) return refuse("Route admission is retired");
+          const subject = route.data.subject;
+          const field = route.data.fields[subject.field];
+          if (field?.role !== "subject") return refuse("Subject declaration is unavailable");
+          let value = read().page[subject.field];
+          if (search[subject.field] !== undefined) {
+            const raw = search[subject.field];
+            if (typeof raw !== "string") return refuse(`${subject.noun} is malformed`);
+            try {
+              const decoded = z
+                .object({ ok: z.literal(true), value: z.unknown() })
+                .safeParse(bindings.codecs[field.codec]!.decode(raw));
+              if (!decoded.success) return refuse(`${subject.noun} is malformed`);
+              const parsed = bindings.schemas[field.schema]!.safeParse(decoded.data.value);
+              if (!parsed.success) return refuse(`${subject.noun} is malformed`);
+              value = parsed.data;
+            } catch {
+              return refuse(`${subject.noun} codec failed`);
+            }
+          }
+          let selection: OpenSet<unknown> = { kind: "ids", ids: [] };
+          if (field.cardinality === "many") {
+            // Admission validated the field schema; narrow its kernel Many shape without a cast.
+            if (!value || typeof value !== "object" || !("kind" in value))
+              return refuse(`${subject.noun} is malformed`);
+            if (value.kind === "all") selection = { kind: "all" };
+            else if (value.kind === "ids" && "ids" in value && Array.isArray(value.ids))
+              selection = { kind: "ids", ids: value.ids };
+            else return refuse(`${subject.noun} is malformed`);
+          }
+          // Empty is an accepted Page fact, not an assertion that the native roster is empty/available.
+          const empty =
+            field.cardinality === "many"
+              ? selection.kind === "ids" && !selection.ids.length
+              : value == null;
+          const roster = readings.public.readingStatus(field.picker.reading).snapshot;
+          if (!roster.current && !empty) return refuse(roster.reason);
+          const parsedOptions = z
+            .array(z.object({ id: z.unknown(), label: z.string() }))
+            .safeParse(readings.picker(subject.field));
+          if (!parsedOptions.success && !empty) return refuse("Subject roster is malformed");
+          const options = parsedOptions.success ? parsedOptions.data : [];
+          const key = canonicalEnvironmentInput;
+          const set = openSet(
+            key,
+            options.map((option) => option.id),
+          );
+          const ids =
+            field.cardinality === "many" ? set.members(selection) : value == null ? [] : [value];
+          if (ids.some((id) => !options.some((option) => key(option.id) === key(id))))
+            return refuse(
+              `A ${subject.noun} in this link is not in this model; choose it again from the roster`,
+            );
+          if (
+            canonicalEnvironmentInput(value) !==
+            canonicalEnvironmentInput(read().page[subject.field])
+          )
+            return null;
+          let link: string;
+          try {
+            link = transport!.link();
+          } catch {
+            return refuse("Subject Page encoding failed");
+          }
+          return {
+            ready: true,
+            refusal: null,
+            link,
+            label:
+              field.cardinality === "many" && selection.kind === "all"
+                ? `All ${subject.noun}s`
+                : ids
+                    .map((id) => options.find((option) => key(option.id) === key(id))!.label)
+                    .join(" + "),
+          };
+        },
         subjectDisplay: observers.subject,
         subjectText: observers.text,
         cells: cells.rows,
@@ -316,6 +413,12 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         read: createAdmittedBody(context),
         close,
       };
+      stopSubject = observeSubject(route.data.key, {
+        current: () => input.custody.current(),
+        read: mounted.subjectState,
+        subscribe: mounted.subscribe,
+      });
+      return mounted;
     },
   };
 }

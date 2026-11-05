@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { createContext, StrictMode, useState } from "react";
+import { createContext, StrictMode, useMemo, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -9,6 +9,7 @@ import {
   createRouter,
   RouterProvider,
   useRouterState,
+  useRouter,
 } from "@tanstack/react-router";
 import { address, routeAddress, type ThreadTab, type WorkKey } from "@pe/agent-contracts";
 import { RegistryContext } from "@effect/atom-react";
@@ -19,16 +20,13 @@ import { useRouteCurrent } from "#/route/activity";
 import { useRouteLease } from "#/route/view-bridge";
 import { useGraphRoute } from "#/shell/mount";
 import { familyGraph as familiesGraph } from "#/family/graph";
+import { AdmittedPane } from "#/shell/admitted-place.test-fixture";
+import { admittedRouterAddress } from "#/shell/admitted-pane";
+import { createRouteShell } from "#/shell/admitted-mount";
+import { sourceRouteServices } from "#/shell/source-route-services";
+import { admittedSources } from "#/shell/admitted-sources";
+import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { useRouteThread } from "#/shell/binding";
-
-import { registerSubject } from "#/shell/subject";
-import { ductsPageGraph as ductsGraph } from "#/shell/subject.test-support";
-registerSubject("ducts", {
-  ...ductsGraph,
-  fields: Object.fromEntries(
-    Object.entries(ductsGraph.fields).map(([id, value]) => [id, { ...value, picker: undefined }]),
-  ),
-});
 
 const store = createChatPageStore({
   registry: appAtomRegistry,
@@ -40,7 +38,7 @@ const ducts: ThreadTab = {
   link: routeAddress("ducts").link({ system: ["S1"] } as never),
   at: "2026-10-24T00:00:00.000Z",
 };
-const TAB = `${routeAddress("ducts").title} · S1`;
+const TAB = routeAddress("ducts").title;
 // Three Places on the one tool, each on its own document and its own non-default Page.
 const DOC_A = address("C:/Jobs/Level A.rvt"),
   DOC_B = address("C:/Jobs/Level B.rvt");
@@ -135,7 +133,6 @@ const familiesProbeGraph: typeof familiesGraph = {
   stageOrder: ["probe"],
   stages: { probe: { word: "Probe", panes: ["probe"], verbs: [] } },
 };
-registerSubject("families", familiesProbeGraph);
 const familiesProbeAdapters = {
   sources: { probe: { kind: "derive" as const, derive: () => [] } },
   bodies: {},
@@ -179,7 +176,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+let fansRoute: AdmittedRoute | null = null;
+function FansProbe() {
+  const router = useRouter();
+  const route = fansRoute;
+  if (!route) throw Error("Fans must be admitted before the router mounts");
+  const address = useMemo(() => admittedRouterAddress(router.history), [router]);
+  const shell = useMemo(
+    () => createRouteShell(sourceRouteServices(admittedSources(route))),
+    [route],
+  );
+  return <AdmittedPane route={route} shell={shell} address={address} />;
+}
 async function mount(entry = "/pea?thread=T", strict = false) {
+  if (entry.startsWith("/fans")) {
+    const { admit } = await import("../fans/admission.fixture");
+    fansRoute = (await admit()).presenter;
+  }
   const root = createRootRoute({
     component: () => <RouteDock renderRoute={(body) => body}>{null}</RouteDock>,
   });
@@ -187,6 +200,7 @@ async function mount(entry = "/pea?thread=T", strict = false) {
     createRoute({ getParentRoute: () => root, path: "/pea" }),
     createRoute({ getParentRoute: () => root, path: "/ducts", component: DuctsProbe }),
     createRoute({ getParentRoute: () => root, path: "/families", component: FamiliesProbe }),
+    createRoute({ getParentRoute: () => root, path: "/fans", component: FansProbe }),
   ];
   const router = createRouter({
     routeTree: root.addChildren(routes),
@@ -208,9 +222,11 @@ test("a thread opens its conversation with Pea first and the tools collapsed, no
   const router = await mount();
   await act(() => new Promise((done) => setTimeout(done, 50)));
   expect(router.state.location.pathname).toBe("/pea");
-  expect(screen.getByRole("button", { name: TAB, hidden: true }).getAttribute("aria-pressed")).toBe(
-    "false",
-  );
+  expect(
+    screen
+      .getAllByRole("button", { name: TAB, hidden: true })
+      .every((button) => button.getAttribute("aria-pressed") === "false"),
+  ).toBe(true);
   const pea = document.querySelector("[data-chat-probe]")!;
   expect(pea.querySelector('[role="group"][aria-label="Places"]')).toBeNull();
   expect(screen.getByRole("button", { name: "Expand tools" })).toBeTruthy();
@@ -316,8 +332,10 @@ test("no Work-key match opens a new Place; Places are never guessed by route", a
 test("every Place carries its own named close, in the tab order", async () => {
   await mount();
   fireEvent.click(screen.getByRole("button", { name: "Expand tools" }));
-  for (const name of ["Ducts · S1", "Ducts · SA", "Ducts · SB", "Ducts · SO"]) {
-    const close = screen.getByRole("button", { name: `Close ${name}` });
+  // Leaf retention probes are not subject owners; actual admitted Fans tests cover identity labels.
+  const closes = screen.getAllByRole("button", { name: "Close Ducts" });
+  expect(closes).toHaveLength(seeded.length);
+  for (const close of closes) {
     expect(close.tabIndex).not.toBe(-1);
     close.focus();
     expect(document.activeElement).toBe(close);
@@ -412,16 +430,22 @@ const search = (router: Awaited<ReturnType<typeof mount>>) =>
 const hostCalls = (name: string) => call.mock.calls.filter(([door]) => door === name);
 const settle = () => act(() => new Promise((done) => setTimeout(done, 50)));
 
-test("(a) a standalone tool URL with no ?thread mints none and calls no host door", async () => {
+test("an actual admitted standalone Fans Place enrolls without a chat or native host call", async () => {
   sessionStorage.clear();
-  const router = await mount("/ducts?target=C%3A%2FModels%2FOffice.rvt");
-  await settle();
-  expect(router.state.location.pathname).toBe("/ducts");
+  const router = await mount("/fans?fixture=layout", true);
+  const body = document.querySelector<HTMLElement>("[data-route-tab]")!;
+  await waitFor(() => expect(shown(router).tab).not.toBeNull());
+  expect(document.querySelector("[data-route-tab]")).toBe(body);
+  expect(body.dataset.routeTab).toBe(shown(router).tab);
+  expect(router.state.location.pathname).toBe("/fans");
   expect(search(router).thread).toBeUndefined();
   expect(call).not.toHaveBeenCalled();
-  expect(places()).toEqual([expect.objectContaining({ route: "ducts" })]);
-  expect(places()[0]!.link).toContain("target=");
-  // No selected real chat: no route-view-open subscription.
+  expect(places()).toEqual([expect.objectContaining({ route: "fans" })]);
+  expect(places()[0]!.link).toContain("fixture=layout");
+  // New enrollment must preserve the actual admitted object codec, never the old comma list.
+  expect(
+    JSON.parse(new URL(places()[0]!.link, "http://place.invalid").searchParams.get("fan")!),
+  ).toEqual({ kind: "ids", ids: [] });
   expect(hostEvents.listeners.size).toBe(0);
 });
 
@@ -530,7 +554,9 @@ test("route-view-open: same binding keeps the Page and tags the command; another
   ).toBe(commandId);
   expect(hostCalls("thread.place")).toHaveLength(1);
   // An ordinary human move clears it.
-  fireEvent.click(screen.getByRole("button", { name: "Ducts · SB" }));
+  fireEvent.click(
+    screen.getAllByRole("button", { name: TAB })[places().findIndex((tab) => tab.id === tabB.id)]!,
+  );
   await waitFor(() => expect(shown(router).tab).toBe("aaaaaaaa-0000-4000-8000-00000000000b"));
   expect(
     (router.state.location.state as { __peViewOpenCommandId?: string }).__peViewOpenCommandId,
@@ -568,7 +594,9 @@ test("the closed-Work band follows the Place a press opened, with no chat select
   );
   await waitFor(() => expect(document.querySelector("[data-closed-work]")).toBeTruthy());
   expect(search(router).thread).toBeUndefined();
-  fireEvent.click(screen.getByRole("button", { name: "Ducts · SB" }));
+  fireEvent.click(
+    screen.getAllByRole("button", { name: TAB })[places().findIndex((tab) => tab.id === tabB.id)]!,
+  );
   await waitFor(() => expect(shown(router).tab).toBe(tabB.id));
   expect(document.querySelector("[data-closed-work]")).toBeNull();
 });
@@ -602,11 +630,13 @@ test("an explicit open's command id clears when the thread association changes",
   expect(router.state.location.pathname).toBe("/ducts");
 });
 
-test("a pasted legacy open-ref URL enrolls one Place under StrictMode; its id survives /pea and a cross-row Work press", async () => {
+test("a saved legacy open-ref Place keeps its id under StrictMode, /pea and a cross-row Work press", async () => {
   sessionStorage.clear();
   const legacy = `/ducts?target=${encodeURIComponent(
     JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }),
   )}&system=${encodeURIComponent("Office retained page")}`;
+  // New enrollment is exercised above through actual Fans admission. This tests saved-Place rebinding.
+  sessionStorage.setItem("pe.places", JSON.stringify([{ ...ducts, link: legacy }]));
   const router = await mount(legacy, true);
   await waitFor(() => expect(shown(router).tab).not.toBeNull());
   await settle();
@@ -631,17 +661,6 @@ test("a pasted legacy open-ref URL enrolls one Place under StrictMode; its id su
   expect(shown(router)).toMatchObject({ tab: id, system: "Office retained page" });
   expect(search(router).thread).toBe("U");
   expect(places()).toHaveLength(1);
-});
-
-test("enrolling a pasted URL relabels the same visible body with the Place's history id", async () => {
-  sessionStorage.clear();
-  const router = await mount(tabB.link);
-  const body = () => document.querySelector<HTMLElement>("[data-route-tab]")!;
-  const before = body();
-  await waitFor(() => expect(shown(router).tab).not.toBeNull());
-  await settle();
-  expect(body()).toBe(before);
-  expect(body().dataset.routeTab).toBe(shown(router).tab);
 });
 
 test("after a cross-row Work press the retained body is current again under the {id, route} tag", async () => {
