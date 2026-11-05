@@ -9,6 +9,7 @@ import {
   instancesReading,
   workKeySchema,
   workHandleSchema,
+  workKey,
   ductsDocumentSchema,
   fansDocumentSchema,
   type WorkHandle,
@@ -196,11 +197,15 @@ export async function runCapability(
             : key.binding === "workspace" ? { work: key.work } : {},
       });
       if (!response.ok) throw Error(`Read route:${key.route} Work before preview (${response.status})`);
-      return await response.json() as { revision: number; doc: unknown };
+      // The read returns the stored Work's one handle; compare it, never a handle rebuilt from key and revision.
+      const view = await response.json() as { doc: unknown; handle: unknown };
+      return { doc: view.doc, handle: workHandleSchema.parse(view.handle) };
     };
+    // Fans Work at the same document is a sibling key; its handle comes back from the read.
     const [ducts, fans] = await Promise.all([read(handle.key), read(fansHandle?.key ?? { ...handle.key, route: "fans" })]);
-    if (ducts.revision !== handle.revision) throw Error("Ducts Work changed; read its current revision before preview");
-    if (fansHandle && fans.revision !== fansHandle.revision) throw Error("Fans Work changed; read its current revision before preview");
+    const same = (a: WorkHandle, b: WorkHandle) => workKey(a.key) === workKey(b.key) && a.revision === b.revision;
+    if (!same(ducts.handle, handle)) throw Error("Ducts Work changed; read its current revision before preview");
+    if (fansHandle && !same(fans.handle, fansHandle)) throw Error("Fans Work changed; read its current revision before preview");
     const walk = fansDocumentSchema.parse(fans.doc).writeIntent.edit?.value?.walk;
     if (!walk && !ductsDocumentSchema.parse(ducts.doc).writeIntent.edit?.value?.groups?.length)
       throw Error('Preview needs a fan walk. Read route:ducts.roster, then stage writeIntent.edit = {"value":{"walk":{"unitId":<id>,"portIndex":<n>}}} in route:fans Work. Retry with the accepted Work revision. No preview was submitted.');

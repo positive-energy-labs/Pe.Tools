@@ -4,10 +4,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { z } from "zod";
 import { expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
-import { address, draftCellSchema, workWriteCommands } from "@pe/agent-contracts";
+import { address, catalogWorkCommands, catalogWorkSpecs } from "@pe/agent-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { markDispatched } from "../src/action-dispatch.ts";
 import { commandResources } from "../src/command-reads.ts";
@@ -17,44 +16,12 @@ import { sdkSessions } from "./native-receipt-fixture.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 
-// Scaffold against the frozen CatalogWork {owner, op, schema, derive(doc, base)}; the real entries come from
-// the contracts line. Cells key by row then column guid; base fills unstaged cells from the model.
-const schema = z.strictObject({
-  tables: z.record(z.string(), z.strictObject({
-    columns: z.record(z.string(), z.unknown()).default({}),
-    rows: z.record(z.string(), z.record(z.string(), draftCellSchema(z.string().nullable()))),
-  })).default({}),
-});
-const entry = {
-  owner: "data-table",
-  op: "data-table.apply",
-  schema,
-  derive: (doc: z.infer<typeof schema>, base: Record<string, { columns: { key: string; heading: string }[]; rows: Record<string, Record<string, string | null>> }>) =>
-    Object.entries(doc.tables).map(([name, t]) => ({
-      table: {
-        name,
-        columns: base[name]!.columns.map(({ heading }) => ({ heading, kind: "Text" })),
-        rows: Object.keys(t.rows).map((row) => ({
-          key: row,
-          values: base[name]!.columns.map(({ key }) => t.rows[row]![key]?.edit?.value ?? base[name]!.rows[row]?.[key] ?? null),
-        })),
-      },
-    })),
-};
-const definitions = workWriteCommands("data-table", "data-table.apply", {
-  says: "Upsert a data table",
-  dirties: [],
-  needs: "project-document",
-  effect: "command",
-  input: z.object({}),
-});
-
-test("catalog Work plans with reads only and applies the derived request once through the boundary", async () => {
+test("catalog Work plans with no native call and applies the derived request once through the boundary", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pe-catalog-work-"));
   const target = { session: "s", openId: "o" };
   const at = address("C:/Models/Tables.rvt");
-  const key = { binding: "address" as const, target: at, route: "data-table" };
-  const spec = { route: "data-table", title: "t", description: "d", schema, editable: [["tables", "*", "rows", "*", "*"]] };
+  const key = { binding: "address" as const, target: at, route: "data-tables" };
+  const spec = catalogWorkSpecs["data-tables"];
   let state: unknown;
   const work = new RouteWorkspace({
     registrations: [{ spec }],
@@ -83,20 +50,22 @@ test("catalog Work plans with reads only and applies the derived request once th
       Effect.promise(async () => {
         if (id) await markDispatched(id);
         calls.push({ key: op, input });
-        const value = op === "revit.detail.data-tables"
-          ? { tables: [{ name: "T", columns: [{ heading: "A", kind: "Text", sharedParameterGuid: "g1" }, { heading: "B", kind: "Text", sharedParameterGuid: "g2" }], rows: [{ key: "r1", values: ["a1", "b1"] }] }] }
-          : { written: 1 };
-        return { target: { session: _s!, document: null }, value };
+        return { target: { session: _s!, document: null }, value: { written: 1 } };
       }),
   });
-  const write = catalogWorkExecutors(bridge, definitions as never, [entry as never])["data-table.apply"]!;
+  const write = catalogWorkExecutors(bridge)["data-table.apply"]!;
   try {
-    await work.publish(key, "data-table", [{ path: ["tables"], value: { T: { rows: { r1: { g2: { edit: { value: "x" } } } } } } }], 0);
-    const rendered = (await work.read(key, "data-table"))!;
+    const staged = (value: unknown) => ({ edit: { value } });
+    await work.publish(key, "data-tables", [
+      { path: ["name"], value: staged("T") },
+      { path: ["columns"], value: { "text:0": staged("A"), "text:1": staged("B") } },
+      { path: ["rows"], value: { r1: { "text:0": staged("a1"), "text:1": staged("x") } } },
+    ], 0);
+    const rendered = (await work.read(key, "data-tables"))!;
     const deps = { workspace: work, sdk: sdkSessions };
     const entries = {
       "data-table.apply": workWriteBoundary(write, bridge, deps, spec as never),
-      "data-table.apply.preview": workWriteBoundary({ ...write, definition: definitions["data-table.apply.preview"] }, bridge, deps, spec as never),
+      "data-table.apply.preview": workWriteBoundary({ ...write, definition: catalogWorkCommands["data-table.apply.preview"] }, bridge, deps, spec as never),
     } as Record<string, ReturnType<typeof workWriteBoundary>>;
     const owner = new ActionJournal(join(directory, "journal.jsonl"));
     owner.bindCommands({
@@ -110,7 +79,7 @@ test("catalog Work plans with reads only and applies the derived request once th
     );
     const plan = await owner.wait("plan");
     expect(plan.state, JSON.stringify(plan)).toBe("succeeded");
-    expect(calls.map((c) => c.key)).toEqual(["revit.detail.data-tables"]);
+    expect(calls).toEqual([]);
     await owner.invoke(
       { id: "apply", key: "data-table.apply", target: { kind: "document", ref: target }, input: { work: handle } },
       { caller: { kind: "pea", context: "catalog-test", thread: run.thread, run, root: run }, basis: null },
@@ -121,10 +90,11 @@ test("catalog Work plans with reads only and applies the derived request once th
     runs.decide(run.thread, ask.requestId, "allow_now");
     const receipt = await owner.wait("apply");
     expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
-    expect(calls.filter((c) => c.key === "data-table.apply")).toEqual([
+    expect(calls).toEqual([
       { key: "data-table.apply", input: { table: { name: "T", columns: [{ heading: "A", kind: "Text" }, { heading: "B", kind: "Text" }], rows: [{ key: "r1", values: ["a1", "x"] }] } } },
     ]);
-    expect((await work.read(key, "data-table"))!.doc).not.toMatchObject({ tables: { T: { rows: { r1: { g2: { edit: { value: "x" } } } } } } });
+    // Catalog Work is the authored source: the receipt keeps its cells.
+    expect((await work.read(key, "data-tables"))!.doc).toMatchObject({ rows: { r1: { "text:1": staged("x") } } });
   } finally {
     runs.closeAll();
     bindControl({ runs: undefined });

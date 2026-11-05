@@ -11,7 +11,7 @@ import { scheduleExecutors } from "./schedule-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { takeoffExecutors } from "./takeoff-actions.ts";
 import { ductsExecutors } from "./ducts-actions.ts";
-import { catalogWorkExecutors, catalogWorkSpecs } from "./catalog-work-actions.ts";
+import { catalogWorkExecutors } from "./catalog-work-actions.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
 import { bootstrapExecutor } from "./bootstrap.ts";
 import { pagePublicationExecutor } from "./page-publication.ts";
@@ -22,7 +22,7 @@ import { readNativeReceipt } from "./native-receipts.ts";
 import { Effect } from "effect";
 import { CANCEL_OPERATION_KEY } from "./bridge.ts";
 import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
-import { commands, type WriteBoundaryBinding } from "@pe/agent-contracts";
+import { catalogWorkSpecs, commands, type WriteBoundaryBinding } from "@pe/agent-contracts";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
@@ -123,7 +123,7 @@ export function commandRegistry(
               bridge,
               deps,
               // A route-free catalog owner has no tool; its Work spec is the catalog entry's.
-              catalogWorkSpecs[boundary.route],
+              catalogWorkSpecs[boundary.route as keyof typeof catalogWorkSpecs],
               ownExecutors.has(key) && boundary.phase === "preview",
             )
           : entry;

@@ -24,7 +24,7 @@ import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { RouteWorkspace, type PeaRuntimeCapabilities } from "@pe/runtime";
 import { createRouteRegistrations } from "@pe/mcps";
 import { admittedBuiltinsLayer, constructorWorkRegistrations } from "./admitted-builtins.ts";
-import { catalogWorkSpecs } from "./catalog-work-actions.ts";
+import { catalogWorkSpecs } from "@pe/agent-contracts";
 import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { productRouteWorkPath } from "./product-paths.ts";
