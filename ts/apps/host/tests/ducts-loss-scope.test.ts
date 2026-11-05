@@ -2,7 +2,8 @@
 import { neutralFansWork } from "@pe/agent-contracts";
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vite-plus/test";
-import { lossSnapshot } from "../src/ducts-actions.ts";
+import { lossSnapshot, unwrittenCells } from "../src/ducts-actions.ts";
+import { scopeApplyRequest } from "@pe/ducts-domain/staged";
 import { mergeSnapshots } from "../src/ducts-walk.ts";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { writeSeal } from "../src/work-write-boundary.ts";
@@ -135,4 +136,34 @@ test("unscoped losses do not fire a healing read", async () => {
   const read = vi.fn();
   await expect(lossSnapshot(undefined, read)).rejects.toThrow("stage a scope before previewing losses");
   expect(read).not.toHaveBeenCalled();
+});
+
+test("an authored terminal flow inside a fan walk with no network groups reaches the scoped plan", () => {
+  // The real-twin fan walk has no groups and no node groupId, like the Snowdon walk that planned an empty request.
+  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(
+    JSON.parse(readFileSync(new URL("../../../packages/host-contracts/src/fixtures/k2-four-fan-walk.json", import.meta.url), "utf8")),
+  );
+  expect(snapshot.groups).toHaveLength(0);
+  const [authored, other] = snapshot.nodes.filter((n) => n.kind === "terminal");
+  const request = (walk: boolean) => {
+    // As the plan reads it: the staged terminalFlow slot is the observed one on the authored terminal.
+    const nodes = snapshot.nodes.map((n) => (n.id === authored!.id ? { ...n, flowParameter: "Flow" } : n));
+    const s = { ...snapshot, nodes, walk: walk ? { startId: 14577391, hops: 1, elementsReached: snapshot.nodes.length, openEnds: 0, candidates: [], truncated: false, elapsedMs: 1 } : undefined };
+    const work = ductsDesign(null, fansDocumentSchema.parse({
+      flows: { [authored!.id]: { edit: { value: { cfm: 123, source: "controlled sample proof" } } } },
+      parameters: { terminalFlow: { edit: { value: "Flow" } } },
+    }));
+    return scopeApplyRequest(applyRequest(s, price(s, {}, work, work ?? neutralFansWork, EMPTY_CATALOGS), "", []), s.store, [["flows", String(authored!.id)]]);
+  };
+  expect(request(true).terminalFlows).toEqual([expect.objectContaining({ id: authored!.id, cfm: 123 })]);
+  // Derived flows keep their network guard: no group with an air mover, no write.
+  expect(request(true).terminalFlows.some((row) => row.id === other!.id)).toBe(false);
+  // Outside a known fan walk an ungrouped flow still has no air mover to stand on.
+  expect(request(false).terminalFlows).toEqual([]);
+});
+
+test("a requested write cell that derives no write is refused, never planned as an empty request", () => {
+  const empty = { fittings: [], terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [] } as never;
+  expect(unwrittenCells(empty, [["flows", "1380293"], ["rules", "elbow"], ["calculation", "x"]])).toEqual([["flows", "1380293"]]);
+  expect(unwrittenCells({ ...(empty as object), terminalFlows: [{ id: 1380293, cfm: 123 }] } as never, [["flows", "1380293"]])).toEqual([]);
 });
