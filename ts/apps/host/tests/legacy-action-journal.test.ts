@@ -4,15 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect } from "vite-plus/test";
 import { ActionJournal } from "../src/action-journal.ts";
-import { Context, Effect, Exit, Layer, Scope } from "effect";
+import { Context, Exit, Layer, Scope } from "effect";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
-import { captureStore } from "./effect-test.ts";
+import { captureStore, settle } from "./effect-test.ts";
 
 test("the v5 reader preserves original bytes, facts and uncertainty without authorizing new execution", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-v5-import-"));
   const scope = Scope.makeUnsafe();
-  const services = await Effect.runPromise(Layer.buildWithScope(RevitBridgeLive, scope));
+  const services = await settle(Layer.buildWithScope(RevitBridgeLive, scope));
   try {
     const path = join(dir, "journal.jsonl");
     const id = "old-action",
@@ -106,7 +106,7 @@ test("the v5 reader preserves original bytes, facts and uncertainty without auth
       owner.resume(id, { caller: row!.caller, basis: row!.basis }),
     ).resolves.toMatchObject({ refusal: { code: "historical-schema" } });
   } finally {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
+    await settle(Scope.close(scope, Exit.void));
     await rm(dir, { recursive: true, force: true });
   }
 });
@@ -116,7 +116,7 @@ test.each([4, 6])(
   async (version) => {
     const dir = await mkdtemp(join(tmpdir(), `pe-v${version}-import-`));
     const scope = Scope.makeUnsafe();
-    const services = await Effect.runPromise(Layer.buildWithScope(RevitBridgeLive, scope));
+    const services = await settle(Layer.buildWithScope(RevitBridgeLive, scope));
     let sdkReads = 0;
     try {
       const path = join(dir, "journal.jsonl");
@@ -249,7 +249,7 @@ test.each([4, 6])(
       await owner.close();
       expect((await readFile(path, "utf8")).split("\n")[0]).toBe('{"version":7}');
     } finally {
-      await Effect.runPromise(Scope.close(scope, Exit.void));
+      await settle(Scope.close(scope, Exit.void));
       await rm(dir, { recursive: true, force: true });
     }
   },

@@ -1,4 +1,4 @@
-import { testConsents } from "./effect-test.ts";
+import { settle, testConsents } from "./effect-test.ts";
 import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,7 +43,7 @@ async function files() {
     bindCommandRuntime(owner, bridge, captures, { podsRoot }, async (key, input) => {
       if (key !== "pod.member.save") throw Error(`Unexpected local operation ${key}`);
       writes++;
-      const saved = await Effect.runPromise(
+      const saved = await settle(
         saveMember(input as PodMemberSaveRequest, { podsRoot }).pipe(
           Effect.provide(NodeServices.layer),
         ),

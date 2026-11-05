@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Context, Effect, Exit, Layer, Scope } from "effect";
+import { Context, Exit, Layer, Scope } from "effect";
 import { expect, test } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
 import { memberWork, settingsRouteState, type Caller, type WorkKey } from "@pe/agent-contracts";
@@ -12,7 +12,7 @@ import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { bindControl } from "../src/control.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { captureStore, testConsents } from "./effect-test.ts";
+import { captureStore, settle, testConsents } from "./effect-test.ts";
 
 test.each([
   { later: null, pea: false, crash: true },
@@ -25,7 +25,7 @@ test.each([
   async ({ later, pea, crash }) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-member-retirement-"));
     const bridgeScope = Scope.makeUnsafe();
-    const services = await Effect.runPromise(Layer.buildWithScope(RevitBridgeLive, bridgeScope));
+    const services = await settle(Layer.buildWithScope(RevitBridgeLive, bridgeScope));
     const bridge = Context.get(services, RevitBridge);
     const captures = captureStore(join(directory, "captures"));
     const runs = testConsents((run, event) => {
@@ -206,7 +206,7 @@ test.each([
     } finally {
       runs.closeAll();
       if (restarted) await restarted.close();
-      await Effect.runPromise(Scope.close(bridgeScope, Exit.void));
+      await settle(Scope.close(bridgeScope, Exit.void));
       await rm(directory, { recursive: true, force: true });
     }
   },
