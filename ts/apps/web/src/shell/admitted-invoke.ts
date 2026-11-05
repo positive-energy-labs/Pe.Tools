@@ -213,9 +213,22 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       const accepted = read();
       if (modelWrite && basis && basis.workRevision !== accepted.work?.revision)
         throw Error("Stale accepted Work basis; prepare from the current revision");
-      if (modelWrite && (!work.ready() || !accepted.work || !accepted.scope.identity.work))
-        throw Error("Accepted Work unavailable");
-      // ModelWrite has one input authority: B's accepted key and revision, never draft intent.
+      // The command's owner chooses the primary Work; every handle comes from accepted state.
+      const command = Object.hasOwn(commands, declaration.entry)
+        ? commands[declaration.entry as SemanticActionKey]
+        : undefined;
+      const handles = workHandles(declaration.deps.readings);
+      if (accepted.work && accepted.scope.identity.work && work.ready())
+        handles[accepted.scope.identity.work.route] = workHandleSchema.parse({
+          key: accepted.scope.identity.work,
+          revision: accepted.work.revision,
+        });
+      const workRoute = command && "writeBoundary" in command
+        ? command.writeBoundary.route
+        : accepted.scope.identity.work?.route;
+      const primaryWork = workRoute ? handles[workRoute] : undefined;
+      if (modelWrite && !primaryWork) throw Error("Accepted owner Work unavailable");
+      // ModelWrite has one input authority: its accepted owner's handle, never draft intent.
       const declaredIntent = z
         .record(z.string(), z.unknown())
         .parse(bindings.bodies[declaration.intent]!.run(context(), parsed));
@@ -224,7 +237,9 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
         (Object.hasOwn(declaredIntent, "work") || Object.hasOwn(declaredIntent, "readWorks"))
       )
         throw Error("ModelWrite intent cannot supply Work identity");
-      const readWorks = workHandles(declaration.deps.readings);
+      const readWorks = Object.fromEntries(
+        Object.entries(handles).filter(([route]) => route !== workRoute),
+      );
       const intent = freezePage(
         z.record(z.string(), z.unknown()).parse(
           entry.input.parse(
@@ -232,10 +247,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
               ? {
                   ...declaredIntent,
                   ...(Object.keys(readWorks).length ? { readWorks } : {}),
-                  work: workHandleSchema.parse({
-                    key: accepted.scope.identity.work,
-                    revision: accepted.work!.revision,
-                  }),
+                  work: primaryWork,
                 }
               : declaredIntent,
           ),
@@ -273,9 +285,6 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
         return submission;
       };
       if (modelWrite) {
-        const command = Object.hasOwn(commands, declaration.entry)
-          ? commands[declaration.entry as SemanticActionKey]
-          : undefined;
         const previewKey =
           command && "writeBoundary" in command
             ? command.writeBoundary.previewKey
