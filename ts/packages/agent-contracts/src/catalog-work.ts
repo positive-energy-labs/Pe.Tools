@@ -1,111 +1,140 @@
 /**
  * ADR 0030 rules 2 and 9: a route-free catalog Work door. A ModelWrite earns one only from an
- * owner-authored schema whose cells are keyed by authored or model-durable keys; element ids never earn one.
+ * owner-authored schema whose cells are keyed by authored or native-durable keys; element ids never earn one.
  * `owner` is the Work `route` field, so a later Page attaches to the same identity and journal.
- * `workWriteCommands(owner, op, ...)` (write-intent.ts) is the plan/apply door; this file adds no second one.
+ * `workWriteCommands` (write-intent.ts) is the only plan/apply door; this file generates its entries.
  */
 import { z } from "zod";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { WorkHandle, WorkPath } from "./command.ts";
+import type { ActionReadingKey } from "./reading.ts";
 import { draftCellSchema } from "./draft.ts";
-import {
-  parameterLinksDocumentSchema,
-  stagedParameterProfile,
-  type ParameterLinkProfile,
-} from "./parameter-links.ts";
+import { parameterLinksDocumentSchema, stagedParameterProfile } from "./parameter-links.ts";
+import type { RouteStateSpec } from "./route-state.ts";
+import { workWriteCommands } from "./write-intent.ts";
 
-/** A plan derives native requests from Work laid over `base`, the model's current authored state, read at plan. */
-export interface CatalogWork<S extends z.ZodType = z.ZodType, B = unknown> {
+/** Plan derives the one native request from the whole Work. Step 5's DAG linker reads this same entry. */
+export interface CatalogWork<S extends z.ZodType = z.ZodType> {
   owner: string;
   op: string;
   schema: S;
-  derive(doc: z.infer<S>, base: B): readonly unknown[];
+  derive(doc: z.infer<S>): unknown;
 }
 
 /** A Work the native op cannot apply faithfully. The plan refuses; nothing is sent. */
 export class CatalogWorkRefused extends Error {}
 
-const key = z.string().min(1);
-const column = z.strictObject({ heading: z.string().min(1), kind: z.enum(["Text", "Number"]) });
-type Column = z.infer<typeof column>;
 /**
- * One data table. A column's key is durable: an existing column's pool shared-parameter guid, or any
- * authored key for a new one. Order is not authored: the native engine binds a column to its pool
- * parameter by ordinal within kind (DataTableEngine.ReconcileFields), so a same-kind reorder or a
- * delete before the last same-kind column would move values onto another parameter. Both are refused
- * until the engine binds `DataTableColumnSpec` by shared guid.
+ * One data table per document Work. A column's key is its native pool slot, `text:<n>` or `number:<n>`:
+ * DataTableEngine.ReconcileFields binds the n-th column of a kind to the n-th pool parameter of that
+ * kind, so the slot is the column's durable identity and the heading is its value. Reorder is not
+ * authored (Text slots are sent before Number slots), and a slot gap is refused, because the engine
+ * would move later columns onto earlier parameters. Cells are never filled from the model: a staged row
+ * must stage every cell up to its last one, and rows with no staged cell are left untouched.
  */
-const dataTable = z.strictObject({
-  columns: z.record(key, draftCellSchema(column, { deletable: true })).default({}),
-  rows: z.record(key, z.record(key, draftCellSchema(z.string().nullable()))).default({}),
+const slot = z.string().regex(/^(text|number):(0|[1-9]\d{0,2})$/);
+const rowKey = z.string().min(1);
+export const dataTablesWorkSchema = z.strictObject({
+  name: draftCellSchema(z.string().min(1)).default({}),
+  columns: z.record(slot, draftCellSchema(z.string().min(1), { deletable: true })).default({}),
+  rows: z.record(rowKey, z.record(slot, draftCellSchema(z.string().nullable()))).default({}),
 });
-export const dataTableWorkSchema = z.strictObject({ tables: z.record(key, dataTable).default({}) });
-export interface DataTableBase {
-  columns: readonly (Column & { key: string })[];
-  rows: Readonly<Record<string, Readonly<Record<string, string | null>>>>;
-}
+type DataTablesWork = z.infer<typeof dataTablesWorkSchema>;
 
-function deriveTable(name: string, work: z.infer<typeof dataTable>, base: DataTableBase) {
-  const edit = (k: string) => work.columns[k]?.edit;
-  const kept = base.columns.filter(({ key: k }) => !edit(k)?.delete);
-  for (const [i, col] of base.columns.entries()) {
-    const next = edit(col.key)?.value;
-    if (next && next.kind !== col.kind)
-      throw new CatalogWorkRefused(`${name}: column "${col.heading}" cannot change kind`);
-    const later = base.columns
-      .slice(i + 1)
-      .some((other) => other.kind === col.kind && !edit(other.key)?.delete);
-    if (edit(col.key)?.delete && later)
-      throw new CatalogWorkRefused(
-        `${name}: deleting "${col.heading}" would move later ${col.kind} columns onto other parameters; delete the last ${col.kind} column first`,
-      );
-  }
-  const added = Object.entries(work.columns)
-    .filter(([k, cell]) => cell.edit?.value && !base.columns.some((col) => col.key === k))
-    .map(([k, cell]) => ({ ...cell.edit!.value!, key: k }));
-  const columns = [...kept.map((col) => ({ ...col, ...edit(col.key)?.value })), ...added];
-  // A new column may reuse a freed pool parameter that still holds values, so every row is sent then.
-  const rowKeys = new Set([
-    ...Object.keys(work.rows),
-    ...(added.length || kept.length < base.columns.length ? Object.keys(base.rows) : []),
-  ]);
-  const rows = [...rowKeys].map((row) => ({
-    key: row,
-    values: columns.map(({ key: k }) => {
-      const cell = work.rows[row]?.[k]?.edit;
-      return cell ? cell.value : (base.rows[row]?.[k] ?? null);
-    }),
-  }));
+function deriveDataTable(doc: DataTablesWork) {
+  const name = doc.name.edit?.value;
+  if (!name) throw new CatalogWorkRefused("Stage the table name");
+  const staged = Object.entries(doc.columns)
+    .filter(([, cell]) => cell.edit?.value !== undefined)
+    .map(([key, cell]) => ({ key, kind: key.startsWith("text") ? "Text" : "Number", heading: cell.edit!.value! }));
+  if (!staged.length) throw new CatalogWorkRefused("Stage at least one column");
+  const columns = (["Text", "Number"] as const).flatMap((kind) => {
+    const prefix = `${kind.toLowerCase()}:`;
+    const ofKind = staged.filter((column) => column.kind === kind);
+    for (let n = 0; n < ofKind.length; n++)
+      if (!ofKind.some((column) => column.key === `${prefix}${n}`))
+        throw new CatalogWorkRefused(
+          `${prefix}${n} is not staged: the engine binds ${kind} columns by ordinal, so later ${kind} columns would move onto its parameter`,
+        );
+    return [...ofKind].sort((a, b) => Number(a.key.slice(prefix.length)) - Number(b.key.slice(prefix.length)));
+  });
+  const rows = Object.entries(doc.rows).flatMap(([key, cells]) => {
+    const last = columns.findLastIndex((column) => cells[column.key]?.edit);
+    if (last < 0) return [];
+    const values = columns.slice(0, last + 1).map((column) => {
+      const edit = cells[column.key]?.edit;
+      if (!edit) throw new CatalogWorkRefused(`Row ${key}: stage ${column.key} too; a skipped cell would be cleared`);
+      return edit.value;
+    });
+    return [{ key, values }];
+  });
   return {
     table: { name, columns: columns.map(({ heading, kind }) => ({ heading, kind })), rows },
   };
 }
 
-const staged = (table: z.infer<typeof dataTable>) =>
-  Object.values(table.columns).some((cell) => cell.edit) ||
-  Object.values(table.rows).some((row) => Object.values(row).some((cell) => cell.edit));
-
-const empty: DataTableBase = { columns: [], rows: {} };
 export const catalogWorks = {
-  "data-table": {
-    owner: "data-table",
+  "data-tables": {
+    owner: "data-tables",
     op: "data-table.apply",
-    schema: dataTableWorkSchema,
-    derive: (doc, bases) =>
-      Object.entries(doc.tables)
-        .filter(([, table]) => staged(table))
-        .map(([name, table]) => deriveTable(name, table, bases[name] ?? empty)),
-  } satisfies CatalogWork<typeof dataTableWorkSchema, Readonly<Record<string, DataTableBase>>>,
+    schema: dataTablesWorkSchema,
+    derive: deriveDataTable,
+  } satisfies CatalogWork<typeof dataTablesWorkSchema>,
   "parameter-links": {
     owner: "parameter-links",
     op: "revit.apply.parameter-links",
     schema: parameterLinksDocumentSchema,
-    derive: (doc, stored) => {
-      const profile = stagedParameterProfile(doc, stored);
-      return profile ? [{ profile, reconcile: true }] : [];
+    derive: (doc) => {
+      const profile = stagedParameterProfile(doc);
+      if (!profile) throw new CatalogWorkRefused("Stage a parameter-link profile first");
+      return { profile, reconcile: true };
     },
-  } satisfies CatalogWork<typeof parameterLinksDocumentSchema, ParameterLinkProfile | null>,
+  } satisfies CatalogWork<typeof parameterLinksDocumentSchema>,
+};
+type Owner = keyof typeof catalogWorks;
+
+const native = (op: string) => {
+  const entry = hostOpCatalog.find((candidate) => candidate.key === op);
+  if (!entry) throw Error(`catalog Work names unknown native op ${op}`);
+  return entry;
 };
 
+/** The non-UI owner registrations the runtime binds; the Page-less Work a route may later attach to. */
+export const catalogWorkSpecs = Object.fromEntries(
+  Object.values(catalogWorks).map((work) => [
+    work.owner,
+    { route: work.owner, title: native(work.op).displayName, description: native(work.op).description, schema: work.schema },
+  ]),
+) as { [O in Owner]: RouteStateSpec<(typeof catalogWorks)[O]["schema"]> };
+
+function catalogWorkCommand<const K extends string>(owner: Owner, key: K, dirties: readonly ActionReadingKey[]) {
+  const work: CatalogWork = catalogWorks[owner];
+  const definition = {
+    says: native(work.op).description,
+    native: [work.op],
+    needs: "project-document",
+    effect: "command",
+    dirties,
+    input: z.object({}),
+  } as const;
+  // The plan sends nothing native, so it names no leaf; command-axes gives a catalog Work plan Effect Read.
+  return workWriteCommands(owner, key, definition, {
+    derive: (doc) => work.derive(work.schema.parse(doc)),
+    preview: {
+      key: `${key}.preview`,
+      definition: { ...definition, native: [], says: `Plan, nothing committed: ${definition.says}` },
+    },
+  });
+}
+
+/**
+ * Generated plan/apply pairs, one per catalog Work. The host binds one generic executor over them and
+ * finds each one's Work as `catalogWorks[entry.work.route]`.
+ */
+export const catalogWorkCommands = {
+  ...catalogWorkCommand("data-tables", "data-table.apply", ["schedules"]),
+  ...catalogWorkCommand("parameter-links", "parameter-links.apply", ["parameter-links"]),
+};
 /** A cell another route owns: edited here, journaled through the owner's handle, labelled from it. */
 export interface ForeignCell {
   owner: WorkHandle;

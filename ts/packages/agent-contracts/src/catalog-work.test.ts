@@ -1,78 +1,102 @@
 import { describe, expect, it } from "vite-plus/test";
-import { catalogWorks, CatalogWorkRefused, dataTableWorkSchema } from "./catalog-work.ts";
-import { parameterLinksDocumentSchema } from "./parameter-links.ts";
+import { catalogWorkCommands, catalogWorks, CatalogWorkRefused } from "./catalog-work.ts";
+import { commandCatalogAxes } from "./command-axes.ts";
+import { workHandle } from "./command.ts";
 import { bindWork, canonicalWorkKey, workKey } from "./route-state.ts";
 import { address } from "./target.ts";
 
-describe("canonicalWorkKey", () => {
-  it("folds address spelling into one identity and keeps Save As from as transport", () => {
-    const from = { session: "s", openId: "o" };
-    const a = bindWork("ducts", address("C:/Jobs/A.rvt"), undefined, from);
-    const b = bindWork("ducts", address("c:\\jobs\\a.rvt"));
-    expect(workKey(a)).toBe(workKey(b));
-    expect(canonicalWorkKey(a)).toEqual({ ...b, target: "c:\\jobs\\a.rvt", from });
-    expect(workKey(bindWork("ducts", null, undefined, from))).not.toBe(workKey(b));
+describe("Work identity", () => {
+  const from = { session: "s", openId: "o" };
+  const saved = bindWork("ducts", address("C:/Jobs/A.rvt"), undefined, from);
+  const plain = bindWork("ducts", address("c:\\jobs\\a.rvt"));
+
+  it("folds address spelling into one key and keeps Save As from until carry-over", () => {
+    expect(workKey(saved)).toBe(workKey(plain));
+    expect(canonicalWorkKey(saved)).toEqual({ ...plain, target: "c:\\jobs\\a.rvt", from });
+    expect(workKey(bindWork("ducts", null, undefined, from))).not.toBe(workKey(plain));
+  });
+
+  it("returns one handle however the key was spelled", () => {
+    expect(workHandle(saved, 3)).toEqual(workHandle(plain, 3));
+    expect(workHandle(saved, 3).key).not.toHaveProperty("from");
   });
 });
 
-const table = (tables: unknown) => dataTableWorkSchema.parse({ tables });
-const base = {
-  T: {
-    columns: [
-      { key: "g1", heading: "A", kind: "Text" as const },
-      { key: "g2", heading: "B", kind: "Text" as const },
-    ],
-    rows: { r1: { g1: "a1", g2: "b1" } },
-  },
-};
-const derive = (doc: unknown) => catalogWorks["data-table"].derive(table(doc), base);
+const cell = (value: unknown) => ({ edit: { value } });
+const table = (doc: object) =>
+  catalogWorks["data-tables"].derive(catalogWorks["data-tables"].schema.parse({ name: cell("T"), ...doc }));
 
-describe("data-table derive", () => {
-  it("keeps each existing column at its ordinal and fills unstaged cells from the model", () => {
-    const [request] = derive({
-      T: { columns: { g1: { edit: { value: { heading: "A2", kind: "Text" } } } }, rows: { r1: { g2: { edit: { value: "x" } } } } },
-    });
-    expect(request).toEqual({
-      table: { name: "T", columns: [{ heading: "A2", kind: "Text" }, { heading: "B", kind: "Text" }], rows: [{ key: "r1", values: ["a1", "x"] }] },
+describe("data-tables derive", () => {
+  it("sends columns by pool slot, Text before Number, and leaves unstaged rows untouched", () => {
+    expect(
+      table({
+        columns: { "number:0": cell("N"), "text:1": cell("B"), "text:0": cell("A") },
+        rows: { r1: { "text:0": cell("a"), "text:1": cell(null) }, r2: {} },
+      }),
+    ).toEqual({
+      table: {
+        name: "T",
+        columns: [{ heading: "A", kind: "Text" }, { heading: "B", kind: "Text" }, { heading: "N", kind: "Number" }],
+        rows: [{ key: "r1", values: ["a", null] }],
+      },
     });
   });
 
-  it("refuses a delete that would shift a later same-kind column onto another parameter", () => {
-    expect(() => derive({ T: { columns: { g1: { edit: { delete: true } } } } })).toThrow(CatalogWorkRefused);
+  it("refuses a slot gap, which the ordinal engine would fill with the next column", () => {
+    expect(() => table({ columns: { "text:0": { edit: { delete: true } }, "text:1": cell("B") } })).toThrow(
+      CatalogWorkRefused,
+    );
   });
 
-  it("sends every row with the new column cleared when a column is added", () => {
-    const [request] = derive({ T: { columns: { n: { edit: { value: { heading: "C", kind: "Number" } } } } } });
-    expect(request).toMatchObject({ table: { rows: [{ key: "r1", values: ["a1", "b1", null] }] } });
+  it("refuses a skipped cell before a staged one, which the native op would clear", () => {
+    expect(() =>
+      table({ columns: { "text:0": cell("A"), "text:1": cell("B") }, rows: { r1: { "text:1": cell("b") } } }),
+    ).toThrow(CatalogWorkRefused);
   });
 
-  it("refuses an authored column order", () => {
-    expect(() => table({ T: { order: ["g2", "g1"] } })).toThrow();
+  it("has no authored order and no heading-keyed columns", () => {
+    expect(() => table({ order: ["text:1", "text:0"] })).toThrow();
+    expect(() => table({ columns: { Condition: cell("A") } })).toThrow();
   });
 });
 
 describe("parameter-links derive", () => {
+  const schema = catalogWorks["parameter-links"].schema;
   const definition = {
     sourceCategoryId: -2001040,
     sourceParameter: { name: "MOCP" },
-    relationship: "sameElement" as const,
+    relationship: "sameElement",
     targetParameter: { name: "Breaker" },
   };
-  const stored = { formatVersion: 1, definitions: [{ id: "d1", ...definition }], assignments: [] };
 
-  it("lays staged cells over the stored profile by id, and stages nothing when no cell is edited", () => {
-    const doc = parameterLinksDocumentSchema.parse({
-      assignments: { a1: { edit: { value: { definitionId: "d1", sourceElementUniqueIds: ["u-1"] } } } },
+  it("replaces the profile whole from cells keyed by authored id", () => {
+    const doc = schema.parse({
+      definitions: { d1: cell(definition), d2: { edit: { delete: true } } },
+      assignments: { a1: cell({ definitionId: "d1", sourceElementUniqueIds: ["u-1"] }) },
     });
-    const [request] = catalogWorks["parameter-links"].derive(doc, stored);
-    expect(request).toMatchObject({
+    expect(catalogWorks["parameter-links"].derive(doc)).toMatchObject({
       reconcile: true,
-      profile: { definitions: [{ id: "d1" }], assignments: [{ id: "a1", definitionId: "d1", sourceElementUniqueIds: ["u-1"] }] },
+      profile: { definitions: [{ id: "d1" }], assignments: [{ id: "a1", sourceElementUniqueIds: ["u-1"] }] },
     });
-    expect(catalogWorks["parameter-links"].derive(parameterLinksDocumentSchema.parse({}), stored)).toEqual([]);
   });
 
-  it("refuses the old whole-profile shape", () => {
-    expect(() => parameterLinksDocumentSchema.parse({ profile: {} })).toThrow();
+  it("refuses an empty Work, an unstaged id, and the old whole-profile shape", () => {
+    expect(() => catalogWorks["parameter-links"].derive(schema.parse({}))).toThrow(CatalogWorkRefused);
+    expect(() => catalogWorks["parameter-links"].derive(schema.parse({ definitions: { d1: {} } }))).toThrow();
+    expect(() => schema.parse({ profile: {} })).toThrow();
+  });
+});
+
+describe("generated catalog Work commands", () => {
+  it("plans as a Read and applies with the native ModelWrite's axes", () => {
+    expect(Object.keys(catalogWorkCommands).sort()).toEqual([
+      "data-table.apply",
+      "data-table.apply.preview",
+      "parameter-links.apply",
+      "parameter-links.apply.preview",
+    ]);
+    expect(commandCatalogAxes["data-table.apply.preview"].effect).toBe("Read");
+    expect(commandCatalogAxes["parameter-links.apply"]).toMatchObject({ effect: "ModelWrite", touches: ["Topology"] });
+    expect(catalogWorkCommands["data-table.apply"].work.route).toBe("data-tables");
   });
 });

@@ -1,6 +1,6 @@
 import { fansRouteState } from "./fans.ts";
 import { stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
-import { workIntent, workWriteCommands, writeIntentSchema } from "./write-intent.ts";
+import { workIntent, workWriteCommands } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
@@ -209,19 +209,10 @@ import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
 import { ductsRouteState } from "./ducts.ts";
+import { catalogWorkCommands } from "./catalog-work.ts";
 /** Ducts derives its native request from the whole staged Work, not one writeIntent cell. */
 const ductsDerive = (work: unknown) =>
   ductsRouteState.schema.parse(work);
-export const dataTableDraftSchema = z.object({
-  name: z.string(),
-  isNew: z.boolean(),
-  columns: z.array(z.object({ heading: z.string(), kind: z.enum(["Text", "Number"]) })),
-  rows: z.array(z.object({ key: z.string(), values: z.array(z.string().nullable()) })),
-});
-export const dataTablesWorkSchema = z.object({
-  writeIntent: writeIntentSchema.optional(),
-  draft: dataTableDraftSchema.nullable().default(null),
-});
 export const tools = {
   pods: {
     name: "pods",
@@ -409,6 +400,7 @@ export const tools = {
   },
 } satisfies Record<string, Tool>;
 export const commands = {
+  ...catalogWorkCommands,
   ...tools.pods.commands,
   ...tools.family.commands,
   ...tools.families.commands,
