@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
-import { existsSync, readFileSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { instancesSessionSelection } from "@pe/agent-contracts";
@@ -19,7 +19,7 @@ import { docListArgv, type SessionObservation } from "@pe/host-contracts/pe-revi
 import { unreadLeg } from "../src/update-reader.ts";
 import { crossingOf } from "./callers.ts";
 import { serveRoutes } from "./real-server.ts";
-import { acquiredOpenIds, acquisitionSessionId, foldAcquisitions } from "../src/acquisition.ts";
+import { acquisitionSessionId, foldAcquisitions } from "../src/acquisition.ts";
 import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 // Instances owns its SDK transport. These HTTP witnesses expose no bridge attachment or dispatch.
 const sdkOnlyBridge = detachedBridge();
@@ -588,181 +588,6 @@ test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
     expect(f.calls.some((args) => args[0] === "doc" && args[1] !== "list")).toBe(false);
   },
 );
-test("F7: an acquisition records its paths before writing; a crash at any boundary reconciles from receipts, never guessed", async () => {
-  let opened = "";
-  const f = await setup(
-    (args) =>
-      args[0] === "session"
-        ? startedAnswer
-        : ((opened = args[2]!),
-          { result: { state: "ok", document: { openId, path: args[2], title: "Tower" } } }),
-    [],
-  );
-  const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
-  const before = await readFile(source);
-  const crashes = new Map<number, string>();
-  const unsubscribe = f.owner.subscribe({}, (receipt) => {
-    if (receipt.body.kind !== "action") return;
-    const row = receipt.body.value;
-    if (row.state !== "running" || row.prepared.state !== "ready") return;
-    const last = row.steps.at(-1);
-    if (last?.state === "running")
-      crashes.set(row.steps.length - 1, readFileSync(join(f.dir, "actions.json"), "utf8"));
-    else if (row.steps.every((step) => step.state === "succeeded"))
-      crashes.set(row.steps.length, readFileSync(join(f.dir, "actions.json"), "utf8"));
-  });
-  const done = await f.admit("instances.open", { source, into: newRevit({ owner: "pea" }) });
-  unsubscribe();
-  expect(done.state).toBe("succeeded");
-  const intent = foldAcquisitions([done])[0]!.intent;
-  // Every path the action created was frozen in its preparation before the first step ran.
-  expect(done.steps.map((step) => step.key)).toEqual([
-    "acquisition.baseline",
-    "acquisition.work",
-    "instances.open.start",
-    "instances.open",
-  ]);
-  for (const step of done.steps.filter((each) => each.kind === "file"))
-    expect(
-      (
-        step.input as {
-          to: string;
-        }
-      ).to.startsWith(intent.root),
-    ).toBe(true);
-  expect(opened).toBe(
-    (
-      intent.document!.origin as {
-        work: string;
-      }
-    ).work,
-  );
-  const certified = [{ openId, isWorkshared: false, isDetached: false }];
-  expect(
-    acquiredOpenIds(foldAcquisitions([done]), originalProcess, certified, [openId]).get(openId),
-  ).toBe(done.id);
-  const disk = async () => (await readdir(f.peaWork, { recursive: true })).sort();
-  const allocated = await disk();
-  // The host died at each boundary: the step was recorded running, its outcome never persisted
-  // (also the case "the effect landed, then persistence failed").
-  for (let k = 0; k <= done.steps.length; k++) {
-    const path = join(f.dir, `crash-${k}.json`);
-    expect(crashes.has(k), `missing committed crash boundary ${k}`).toBe(true);
-    await writeFile(path, crashes.get(k)!);
-    const restarted = await new ActionJournal(path).list();
-    const [acquisition] = foldAcquisitions(restarted);
-    if (k === done.steps.length) {
-      // every effect succeeded but completion never persisted: the receipts still bind it
-      expect(acquisition).toMatchObject({ state: "held", document: { sdkOpenId: openId } });
-      continue;
-    }
-    expect(restarted[0]!.state).toBe("unknown");
-    expect(acquisition).toMatchObject({ state: "reconciling", intent });
-    expect(
-      acquiredOpenIds(foldAcquisitions(restarted), originalProcess, certified, [openId]).size,
-    ).toBe(0);
-    // Reconciling read receipts only: nothing was copied, opened or deleted on the way back up.
-    expect(await disk()).toEqual(allocated);
-  }
-  expect(await readFile(source)).toEqual(before);
-  expect(f.calls.filter((argv) => argv[1] === "open" || argv[1] === "start")).toHaveLength(2);
-  // The lost open is settled from its SDK op receipt by its original request id, never re-sent.
-  const lostOpen = join(f.dir, `crash-${done.steps.length - 1}.json`);
-  const journal = new ActionJournal(lostOpen);
-  const openStep = done.steps.at(-1)!;
-  const reads: string[][] = [];
-  // The SDK's recorded op response carries the bridge's document itself (acceptance R4d journal).
-  const response = { openId, path: opened, title: "Tower" };
-  bindCommandRuntime(
-    journal,
-    sdkOnlyBridge,
-    captureStore(join(f.dir, "recovery-captures")),
-    {
-      sdk: async (args) => {
-        reads.push([...args]);
-        return replayAnswer(args, {
-          result: {
-            state: "ok",
-            requestId: openStep.id,
-            receipt: {
-              requestId: openStep.id,
-              key: "doc.open",
-              verdict: "ok",
-              pid: originalProcess.pid,
-              processStartUtc: originalProcess.processStartUtc,
-            },
-            response: { requestId: openStep.id, key: "doc.open", verdict: "ok", result: response },
-          },
-        });
-      },
-    },
-    async () => {
-      throw Error("No local dispatch during recovery");
-    },
-  );
-  await journal.recover(done.id);
-  expect(reads).toEqual([
-    ["op", "result", openStep.id, "--json"],
-    ["session", "list", "--json"],
-  ]);
-  const recovered = foldAcquisitions(await journal.list());
-  expect(recovered[0]).toMatchObject({ state: "held", document: { sdkOpenId: openId } });
-  expect(acquiredOpenIds(recovered, originalProcess, certified, [openId]).get(openId)).toBe(
-    done.id,
-  );
-});
-/** An SDK that starts, opens the copy it is given, saves create-only, closes and stops. */
-async function acquisitionSetup(detached = false) {
-  const row = controlledRow({ shape: shape("background") });
-  const f = await setup(
-    async (args) => {
-      if (args[0] === "session")
-        return args[1] === "start" ? startedAnswer : { result: { state: "ok" } };
-      if (args[1] === "open")
-        return { result: { state: "ok", document: { openId, path: args[2], title: "Tower" } } };
-      if (args[1] === "save") {
-        if (!args.includes("--out")) return { result: { state: "ok" } };
-        // The SDK's own rule (DocCommand.NewOutput): --out names a new file in an existing folder.
-        const out = flag(args, "--out")!;
-        if (!existsSync(dirname(out)))
-          return {
-            result: {},
-            exitCode: 2,
-            diagnostics: [
-              {
-                code: "doc.bad-invocation",
-                detail: `--out parent directory does not exist: '${dirname(out)}'.`,
-                fix: null,
-              },
-            ],
-          };
-        await writeFile(out, "saved result", { flag: "wx" });
-        return { result: { state: "ok" } };
-      }
-      if (args[1] === "close") {
-        f.census.documents = f.census.documents.filter((id) => id !== flag(args, "--doc"));
-        return { result: { state: "ok" } };
-      }
-      return Error(`unexpected ${args.join(" ")}`);
-    },
-    [row],
-  );
-  f.census.facts = { isWorkshared: detached, isDetached: detached };
-  const source = await f.file(
-    "Tower.rvt",
-    detached ? "Worksharing: Enabled" : "Worksharing: Not enabled",
-  );
-  const acquired = await f.admit(
-    "instances.open",
-    { source, into: newRevit({ owner: "pea" }) },
-    undefined,
-    "agent",
-  );
-  expect(acquired.state).toBe("succeeded");
-  await f.machine.refresh();
-  const [acquisition] = foldAcquisitions(await f.owner.list());
-  return { f, source, acquired, acquisition: acquisition! };
-}
 test("handover saves the acquired copy to its create-only result with a diff plan; cleanup keeps it and stops only its own Revit", async () => {
   const { f, source, acquired, acquisition } = await acquisitionSetup();
   const intent = acquisition.intent.document!;

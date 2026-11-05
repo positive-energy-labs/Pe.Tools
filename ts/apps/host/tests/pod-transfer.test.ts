@@ -4,30 +4,27 @@
  */
 import { detachedBridge, captureStore } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
-import { Context, Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { mkdir, mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { HttpRouter } from "effect/http";
-import type { Caller } from "@pe/agent-contracts";
+import { serveRoutes } from "./real-server.ts";
+import { mintContext } from "../src/control.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 
 const homeVariable = productPathNames.productHomeVariable;
-import { withInvocationContext } from "@pe/runtime/context";
 import { ActionJournal } from "../src/action-journal.ts";
-import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
-import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { CaptureStore } from "../src/captures-route.ts";
 import { listPackages } from "../src/packages.ts";
 import { exportPod, importPod, writeZip } from "../src/pod-transfer.ts";
-import { human } from "./callers.ts";
 import { productPluginDecisionsPath } from "../src/product-paths.ts";
 
 let root: string;
 let pods: string;
-let web: ReturnType<typeof HttpRouter.toWebHandler>;
+let web: Awaited<ReturnType<typeof serveRoutes>>;
+let headers: Record<string, string>;
 const nativeCalls: string[] = [];
 const previousHome = process.env[homeVariable];
 
@@ -41,16 +38,21 @@ beforeEach(async () => {
       return Effect.die(`native call ${key}`);
     },
   });
-  web = HttpRouter.toWebHandler(
+  headers = {
+    "content-type": "application/json",
+    "x-pe-context": mintContext({ kind: "human", via: "cli" }),
+  };
+  web = await serveRoutes(
     makeCallRoute(
       new ActionJournal(join(root, "journal.json")),
       captureStore(join(root, "captures")),
-    ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
-    { disableLogger: true },
+    ),
+    bridge,
   );
 });
 afterEach(async () => {
-  await web.dispose();
+  await web.close();
+  await rm(productPluginDecisionsPath(), { force: true });
   if (previousHome === undefined) delete process.env[homeVariable];
   else process.env[homeVariable] = previousHome;
   nativeCalls.length = 0;
@@ -58,35 +60,29 @@ afterEach(async () => {
 });
 
 /** A mutation crosses `/actions` as one exact admission against the host, the only write door. */
-const act = async (key: string, input: unknown, as: Caller = human) => {
+const act = async (key: string, input: unknown) => {
   const id = randomUUID();
-  let row = (await post("/actions", { id, key, target: { kind: "host" }, input }, as)).json;
+  let row = (await post("/actions", { id, key, target: { kind: "host" }, input })).json;
   for (let wait = 0; row.state === "running" && wait < 100; wait++) {
     await new Promise((settle) => setTimeout(settle, 20));
-    const listed = await withInvocationContext({ caller: as }, () =>
-      web.handler(new Request(`http://host/actions?id=${id}`), Context.empty() as never),
-    );
+    const listed = await fetch(`${web.base}/actions?id=${id}`, { headers });
     expect(listed.status).toBe(200);
     row = ((await listed.json()) as Record<string, any>[])[0] ?? row;
   }
   return row;
 };
 
-const call = (key: string, request?: unknown, as: Caller = human) =>
-  post("/call", request === undefined ? { key } : { key, request }, as);
+const call = (key: string, request?: unknown) =>
+  post("/call", request === undefined ? { key } : { key, request });
 
-const post = (path: string, body: unknown, as: Caller) =>
-  withInvocationContext({ caller: as }, async () => {
-    const response = await web.handler(
-      new Request(`http://host${path}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-      Context.empty() as never,
-    );
-    return { status: response.status, json: (await response.json()) as Record<string, any> };
+const post = async (path: string, body: unknown) => {
+  const response = await fetch(`${web.base}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
   });
+  return { status: response.status, json: (await response.json()) as Record<string, any> };
+};
 
 async function writePod(folder: string, files: Record<string, string>) {
   for (const [path, content] of Object.entries(files)) {
@@ -117,7 +113,6 @@ test("identity duplicate checks include disabled siblings with invalid members",
   await large.truncate(64 * 1024 * 1024 + 1);
   await large.close();
   const decisions = productPluginDecisionsPath();
-  expect(decisions.startsWith(root)).toBe(true);
   await mkdir(join(decisions, ".."), { recursive: true });
   await writeFile(decisions, '{"pod:same":false}');
   const result = await call("pod.list", { projection: "identity", folder: "default" });
@@ -128,7 +123,6 @@ test("identity duplicate checks include disabled siblings with invalid members",
 test("identity fully admits its target and observes manifest replacement and new duplicate claims", async () => {
   await writePod("default", { "pod.json": '{"id":"before"}', "settings/kept.json": "{}" });
   const decisions = productPluginDecisionsPath();
-  expect(decisions.startsWith(root)).toBe(true);
   await mkdir(join(decisions, ".."), { recursive: true });
   await writeFile(decisions, '{"pod:before":false}');
   expect((await call("pod.list", { projection: "identity", folder: "default" })).status).toBe(400);

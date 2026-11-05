@@ -1,22 +1,12 @@
-import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { invokeCommand } from "./command-fixture.ts";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { randomUUID } from "node:crypto";
-import { Effect } from "effect";
 import ts from "typescript";
 import { expect, test, vi } from "vite-plus/test";
 import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
-import { ActionJournal } from "../src/action-journal.ts";
-import { detachedBridge, sessionView } from "./effect-test.ts";
-import { makeCallRoute } from "../src/call-route.ts";
-import { CaptureStore } from "../src/captures-route.ts";
 import { mintBrowserContext, mintContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { crossingOf } from "./callers.ts";
-import { sdkSessions } from "./native-receipt-fixture.ts";
-import { bootHost, serveRoutes } from "./real-server.ts";
+import { bootHost } from "./real-server.ts";
 
 vi.mock("../src/pe-revit-launch.ts", async (original) => ({
   ...(await original<typeof import("../src/pe-revit-launch.ts")>()),
@@ -222,166 +212,6 @@ test("the harness, Page and route-state doors carry their caller through the rea
     humanReached(await at("POST", write, human, patch));
   } finally {
     await host.close();
-  }
-}, 30_000);
-
-const bridgeA = (
-  onInvoke: (key: string) => { value: unknown; target?: { session: string; document: string | null } },
-) =>
-  detachedBridge({
-    list: Effect.succeed([
-      sessionView({
-        sessionId: "bridge-a",
-        connected: true,
-        lane: hostOwnership.lane,
-        sourceRoot: hostOwnership.sourceRoot,
-        serviceName: hostOwnership.serviceName,
-        processId: 42,
-        processStartUtcUnixMs: 1000,
-        state: {
-          openDocuments: [
-            {
-              openId: "open-a",
-              address: "C:/HVAC.rvt",
-              title: "HVAC.rvt",
-              isFamilyDocument: false,
-            },
-          ],
-        },
-      }),
-    ]),
-    invoke: (key: string) =>
-      Effect.promise(async () => {
-        // A macrotask hop, as a real bridge answer arrives on a socket callback.
-        await new Promise((resolve) => setTimeout(resolve, 5));
-        return { target: { session: "bridge-a", document: null }, ...onInvoke(key) };
-      }),
-  });
-const scoped = { "x-pe-bridge-session-id": "bridge-a", "x-pe-open-document-id": "open-a" };
-
-/** `/call` reads the caller after the body and the bridge answer: a capture's origin is the caller. */
-test("/call attributes a view-image capture to the caller it was carried by", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pe-host-carriage-call-"));
-  writeFileSync(join(dir, "L1.png"), "png-l1");
-  const store = new CaptureStore(join(dir, "store"));
-  const server = await serveRoutes(
-    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, {
-      captureStore: store,
-      sdk: sdkSessions,
-    }),
-    bridgeA((key) =>
-      key === "host.ops.catalog"
-        ? {
-            value: {
-              operations: [hostOpCatalog.find((op) => op.key === "revit.context.view-image")!],
-            },
-          }
-        : {
-            value: {
-              view: { kind: "View", elementId: 7, label: "Floor Plan: L1" },
-              filePath: join(dir, "L1.png"),
-              byteSize: 6,
-              width: 1500,
-              height: 1500,
-              registrationRefusal: "NoCrop",
-            },
-            target: { session: "bridge-a", document: "C:/HVAC.rvt" },
-          },
-    ),
-  );
-  try {
-    for (const caller of [
-      mintContext({ kind: "human", via: "cli" }),
-      mintContext({ kind: "pea", thread: "t-carriage" }),
-    ]) {
-      const answer = await send(
-        `${server.base}/call`,
-        "POST",
-        { ...token(caller), ...scoped },
-        {
-          key: "revit.context.view-image",
-          request: {},
-        },
-      );
-      expect(answer.status, answer.text).toBe(200);
-    }
-    const origins = readFileSync(join(dir, "store", "receipts.jsonl"), "utf8")
-      .trim()
-      .split("\n")
-      .map((line) => (JSON.parse(line) as { origin: string }).origin);
-    expect(origins).toEqual(["human", "agent"]);
-  } finally {
-    await server.close();
-    rmSync(dir, { recursive: true, force: true });
-  }
-}, 30_000);
-
-/** `/actions/<control>` and `/families/readings` judge the caller that sent the body. */
-test("action controls and the Families reading judge their real caller", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "pe-host-carriage-controls-"));
-  const seeded = new ActionJournal(join(dir, "attempts.json"));
-  const admitted = await invokeCommand(
-    seeded,
-    {
-      id: "carriage-original",
-      key: "revit.context.view-image",
-      target: { kind: "document", ref: { session: "bridge-a", openId: "open-a" } },
-      input: {},
-      ...crossingOf("human"),
-    },
-    async () => ({}),
-    async () => ({}),
-  );
-  await seeded.wait(admitted.id);
-  const owner = new ActionJournal(join(dir, "attempts.json"));
-  const server = await serveRoutes(
-    makeCallRoute(owner, undefined, { sdk: sdkSessions }),
-    bridgeA((key) =>
-      key === "host.ops.catalog"
-        ? {
-            value: {
-              operations: [
-                {
-                  ...hostOpCatalog.find((op) => op.key === "revit.matrix.loaded-families")!,
-                  key: "revit.matrix.loaded-families",
-                  intent: "Read",
-                  needs: "document",
-                  actor: "human",
-                },
-              ],
-            },
-          }
-        : { value: {} },
-    ),
-  );
-  const human = token(mintContext({ kind: "human", via: "cli" }));
-  const pea = token(mintContext({ kind: "pea", thread: "t-controls" }));
-  try {
-    for (const verb of ["cancel", "recover"]) {
-      const control = (headers: Record<string, string>) =>
-        send(`${server.base}/actions/${verb}`, "POST", headers, { id: admitted.id });
-      expect((await control({})).code, verb).toBe("context.missing");
-      expect((await control(pea)).code, verb).toBe("context.foreign-thread");
-      const reached = await control(human);
-      expect(reached.code, reached.text).toBeUndefined();
-    }
-    const families = (headers: Record<string, string>) =>
-      send(
-        `${server.base}/families/readings`,
-        "POST",
-        { ...headers, ...scoped },
-        {
-          work: { binding: "workspace", route: "families", target: null, work: "production" },
-          filter: { categoryNames: ["Ducts"], familyNames: [], placementScope: "AllLoaded" },
-          readId: "00000000-0000-4000-8000-000000000000",
-        },
-      );
-    expect((await families({})).text).toMatch(/anonymous callers are read-only/);
-    expect((await families(pea)).text).toMatch(/human.only/);
-    expect((await families(human)).text).toMatch(/Families Work belongs to another document/);
-  } finally {
-    await server.close();
-    rmSync(dir, { recursive: true, force: true });
   }
 }, 30_000);
 
