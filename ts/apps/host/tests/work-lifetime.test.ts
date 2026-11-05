@@ -142,7 +142,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
       revision: 0,
       doc: { workingPhase: {} },
     });
-    const proposed = [{ path: ["workingPhase", "suggestion"], value: { value: "Existing" } }];
+    const proposed = [{ path: ["workingPhase", "edit"], value: { value: "Existing" } }];
     for (const caller of [
       { kind: "page", page: "page:@pages/test" },
       { kind: "external-mcp", context: "device-context", label: "paired test device" },
@@ -167,7 +167,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
     const retained = await (await request("open=session/b")).json();
     expect(retained).toMatchObject({
       revision: 1,
-      doc: { workingPhase: { suggestion: { value: "Existing" } } },
+      doc: { workingPhase: { edit: { value: "Existing" } } },
     });
     documents.push({ ...b, session: "other-session" });
     expect(await (await request(`target=${encodeURIComponent(b.address)}`)).json()).toMatchObject({
@@ -223,10 +223,8 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
     expect(before).toMatchObject({
       revision: 4,
       doc: {
-        workingPhase: {
-          suggestion: { value: "Existing", by: "pea" },
-          edit: { value: "New", by: "human" },
-        },
+        // Last writer wins: Pea's staged value replaces the person's, with Pea as author.
+        workingPhase: { edit: { value: "Existing", by: "pea" } },
       },
     });
     expect(await app.workspace.readRaw(key, "ducts")).toEqual(before);
@@ -241,7 +239,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
           label: expect.any(String),
           state: "ready",
           revision: 4,
-          proposals: 1,
+          staged: 1,
         }),
       ]),
     });
@@ -577,7 +575,7 @@ test("HTTP authored writes enforce short local revision checks", async () => {
   expect(await stringPath.json()).toMatchObject({
     ok: false,
     kind: "error",
-    error: 'invalid body at patches[0].path: must be a segment array, e.g. ["scope","suggestion"]',
+    error: 'invalid body at patches[0].path: must be a segment array, e.g. ["scope","edit"]',
   });
   expect(
     await (await post("/pe/route-state/test-route/apply", { patches: [] }, pea())).json(),
