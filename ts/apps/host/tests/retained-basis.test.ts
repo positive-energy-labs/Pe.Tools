@@ -269,3 +269,56 @@ test("retained calls in their own child contexts link the original native taking
   } finally { await again.close(); }
   expect(replayCounts.reads).toBe(0);
 });
+
+test("a cold hit-only child selects its stored native link for resolve and read; a foreign link refuses", async () => {
+  const dir = await temp(); const writer = await run(openRecordingWriter(dir, identity, bounds));
+  const takes: Taking[] = []; const consumer = { current: undefined as InputConsumption | undefined };
+  const web = router({ kind: "live", captureStore: writer }, new DuctsReadings(), { reads: 0 },
+    (taking) => Effect.sync(() => { takes.push(taking); }), consumer);
+  const sets = Context.get(await run(Effect.scoped(Layer.build(HostInputReadSets.layer({ kind: "live", captureStore: writer })))), HostInputReadSets);
+  const recipe = { key: "ducts.sheet", input: { fan: "F-1" }, scope: canonicalJson(ref) };
+  const retained = (role: string) => ({ key: "ducts.retained", input: { key: input.key, role }, scope: canonicalJson(scope) });
+  const root = await run(sets.open(recipe, null));
+  const child = (consumption: InputConsumption, role: string) => {
+    const made = consumption.child(retained(role)); if (Result.isFailure(made)) throw made.failure; return made.success;
+  };
+  consumer.current = child(root, "acquire");
+  const first = await web.post(); const version = first.headers.get(DUCTS_BODY_VERSION_HEADER)!;
+  consumer.current = child(root, "validate");
+  expect((await web.post({ [DUCTS_BODY_VERSION_HEADER]: version })).headers.get("x-pe-ducts-reused")).toBe("true");
+  await run(root.seal); await web.close();
+  const reader = await run(openRecordingReader(dir, identity, bounds));
+  const lane = { kind: "recording", recordingStore: reader, at: null } as const;
+  const historical = Context.get(await run(Effect.scoped(Layer.build(HostInputReadSets.layer(lane)))), HostInputReadSets);
+  // Only the hit-only child, cold: a fresh owner must acquire, from the original native taking.
+  const replayedRoot = await run(historical.open(recipe, root.id));
+  child(replayedRoot, "acquire");
+  const counts = { reads: 0 }; const replayed = { current: child(replayedRoot, "validate") };
+  const cold = router(lane, new DuctsReadings(), counts, undefined, replayed);
+  try {
+    const answer = await cold.post();
+    expect(answer.status, await answer.clone().text()).toBe(200);
+    expect(answer.headers.get(DUCTS_BODY_VERSION_HEADER)).toBe(version);
+    expect(answer.headers.get("x-pe-native-request-id")).toBe("native-1");
+    expect(await answer.json()).toEqual(await first.clone().json());
+  } finally { await cold.close(); }
+  expect(counts.reads).toBe(0);
+  // A forged child whose native link names a taking of another input refuses; nothing is chosen instead.
+  const stored = await run(reader.readSets.get(root.id));
+  const validate = await run(reader.readSets.get(stored.children[1]!.readSetId));
+  const foreign = takes.find((taking) => taking.input.kind !== "native")!;
+  const forged = { ...validate, id: crypto.randomUUID(), takingLinks: { native: foreign.id } };
+  const again = await run(openRecordingWriter(dir, identity, bounds));
+  await run(again.readSets.keep(forged));
+  const forgedReader = await run(openRecordingReader(dir, identity, bounds));
+  const forgedLane = { kind: "recording", recordingStore: forgedReader, at: null } as const;
+  const forgedSets = Context.get(await run(Effect.scoped(Layer.build(HostInputReadSets.layer(forgedLane)))), HostInputReadSets);
+  const bad = router(forgedLane, new DuctsReadings(), counts, undefined,
+    { current: await run(forgedSets.open(forged.recipe, forged.id as never)) });
+  try {
+    const refused = await bad.post();
+    expect(refused.status).toBe(409);
+    expect(await refused.text()).toContain("recording.mismatch");
+  } finally { await bad.close(); }
+  expect(counts.reads).toBe(0);
+});
