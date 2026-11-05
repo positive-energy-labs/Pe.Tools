@@ -57,21 +57,8 @@ const fixture = () => {
   };
 };
 
-// Red witness for the missing attachment-event refresh edge. Remove .fails when that edge lands.
-test.fails("a settled SDK attachment race automatically reacquires the Fans read", async () => {
-  const f = fixture();
-  try {
-    await settle();
-    expect(f.graph.get("fans").error).toContain(refusal);
-    expect(transport).toHaveBeenCalledTimes(1);
-    // The host can now admit a new read, but no attachment event reaches this composed source.
-    await settle();
-    expect(f.graph.get("fans").status).toBe("ready");
-  } finally {
-    f.close();
-  }
-});
-
+// The SDK owner absorbs one mid-admission attachment frame (host sdk-session.test.ts). A 409 that
+// still reaches the browser is a standing refusal: the read never retries it on its own.
 test("the existing explicit refresh reacquires the read without retrying arbitrary conflicts", async () => {
   const f = fixture();
   try {
