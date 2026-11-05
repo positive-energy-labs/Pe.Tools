@@ -222,9 +222,10 @@ export const historicalRoutes = (inputs: HostInputContext["Service"]) => Layer.u
   const provided = Layer.succeedContext(context);
   return Layer.mergeAll(
   nativeCallRoute, nativeReadResolveRoute,
-  HttpRouter.add("GET", "/pe/features", Response.jsonUnsafe(hostDescriptor(resolveHostVersion()), {
+  // Provenance is read per response: automatic capture may stop after boot.
+  HttpRouter.add("GET", "/pe/features", Effect.sync(() => Response.jsonUnsafe(hostDescriptor(resolveHostVersion()), {
     headers: { "x-pe-source": JSON.stringify(inputs.source) },
-  })),
+  }))),
   HttpRouter.add("GET", hostProcessIdentity.healthPath, () => Response.json({ source: inputs.source })),
   HttpRouter.add("*", "/*", (req) => Effect.gen(function* () {
     const path = new URL(req.url, "http://host").pathname;

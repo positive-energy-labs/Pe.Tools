@@ -3,6 +3,7 @@
  * rules 1, 2 and 5). Capture runs around the real HostNativeReadLive admission.
  */
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { HostInputContext } from "../src/input-context.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
@@ -244,15 +245,11 @@ effectTest("a miss, another build, a tampered observation and a full bundle each
       maxTakings: 1,
     });
     yield* run({ kind: "live", captureStore: full })(read("host.ops.catalog"));
-    // Full after the live read completed: a typed refusal that still says the read was dispatched.
+    // K4: full after the live read completed stops capture; the live answer is returned unchanged.
     expect(
       yield* outcome(run({ kind: "live", captureStore: full })(read("host.ops.catalog"))),
-    ).toMatchObject({
-      status: 507,
-      problem: "recording.full",
-      native: "committed",
-      evidence: { nativeRequestId: "native-1" },
-    });
+    ).toMatchObject({ ok: { value: catalogAnswer, outcome: "committed", nativeRequestId: "native-1" } });
+    expect(full.capture.truncated()).toEqual({ at: 2, reason: "full" });
     expect(
       full.candidates(
         yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope: {} }),
@@ -310,9 +307,8 @@ effectTest(
       yield* Effect.promise(() => rm(join(dir, "observations"), { recursive: true, force: true }));
       expect(
         yield* outcome(run({ kind: "live", captureStore: broken })(read("host.ops.catalog"))),
-      ).toMatchObject({
-        problem: "recording.io",
-      });
+      ).toMatchObject({ ok: { value: catalogAnswer } });
+      expect(broken.capture.truncated()).toEqual({ at: 1, reason: "io" });
       const key = yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope: {} });
       expect(broken.candidates(key)).toEqual([]);
       expect((yield* openRecordingReader(dir, identity, bounds)).candidates(key)).toEqual([]);
@@ -397,15 +393,15 @@ effectTest(
           });
       };
       const lane = { kind: "recording", recordingStore: store, at: null } as const;
-      // A failure replay cannot rebuild exactly is refused at capture; no taking claims to hold it.
+      // A failure replay cannot rebuild exactly stops capture (K4); the live failure is returned
+      // unchanged and no taking claims to hold it.
+      const unsupported = yield* openRecordingWriter(yield* bundle, identity, bounds);
       expect(
-        yield* outcome(run({ kind: "live", captureStore: store })(read("revit.context.journal"))),
-      ).toMatchObject({
-        status: 501,
-        problem: "recording.unsupported",
-      });
+        yield* outcome(run({ kind: "live", captureStore: unsupported })(read("revit.context.journal"))),
+      ).toEqual(yield* outcome(run({ kind: "live" })(read("revit.context.journal"))));
+      expect(unsupported.capture.truncated()).toEqual({ at: 1, reason: "unsupported" });
       expect(
-        store.candidates(
+        unsupported.candidates(
           yield* nativeInputIdentity({ key: "revit.context.journal", input: {}, scope: {} }),
         ),
       ).toEqual([]);
@@ -468,6 +464,7 @@ effectTest(
         "identity",
         "observation",
         "taking",
+        "truncation",
       ]);
       expect(
         (yield* run({ kind: "recording", at: null, recordingStore: reader })(read("host.ops.catalog"))).value,
@@ -479,4 +476,47 @@ effectTest(
         before,
       );
     }),
+);
+
+effectTest("K4: a full capture stops recording at the second read and every live answer stays exact", () =>
+  Effect.gen(function* () {
+    const dir = yield* bundle;
+    const store = yield* openRecordingWriter(dir, identity, { maxBytes: 1_000_000, maxTakings: 1 });
+    const source = live();
+    const lane = { kind: "live", captureStore: store } as const;
+    const inputs = HostInputContext.pipe(Effect.provide(HostInputContext.layer(lane)));
+    const first = yield* outcome(run(lane, source)(read("ducts.snapshot.walk", {}, { openDocumentId: "doc-A" })));
+    expect(first).toMatchObject({ tag: "InvalidRequest", status: 502, problem: "read.response" });
+    expect((yield* inputs).source).toEqual({ kind: "live", capturing: true });
+    // The second read finds the bundle full: it still answers, from its one live call.
+    const second = yield* run(lane, source)(read("host.ops.catalog"));
+    expect(second.value).toEqual(catalogAnswer);
+    expect(source.counts.joins).toBe(2);
+    expect((yield* inputs).source).toEqual({ kind: "live", capturing: false, truncated: { at: 2, reason: "full" } });
+    const third = yield* run(lane, source)(read("host.ops.catalog"));
+    expect(third.value).toEqual(catalogAnswer);
+    expect(source.counts.joins).toBe(3);
+    const reader = yield* openRecordingReader(dir, identity, bounds);
+    expect(reader.coverage()).toEqual(["native"]);
+    expect(reader.candidates(yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope: {} }))).toEqual([]);
+    expect(reader.truncation).toEqual({ at: 2, reason: "full" });
+    // The third read made no capture attempt: the latch still names the second.
+    expect(store.capture.truncated()).toEqual({ at: 2, reason: "full" });
+  }),
+);
+
+effectTest("K4: an I/O capture failure keeps the exact native answer, and a live refusal stays that refusal", () =>
+  Effect.gen(function* () {
+    const dir = yield* bundle;
+    const store = yield* openRecordingWriter(dir, identity, bounds);
+    yield* Effect.promise(() => rm(join(dir, "observations"), { recursive: true, force: true }));
+    const lane = { kind: "live", captureStore: store } as const;
+    const uncaptured = yield* run({ kind: "live" })(read("host.ops.catalog"));
+    const answer = yield* run(lane)(read("host.ops.catalog"));
+    expect(answer).toEqual(uncaptured);
+    expect(answer).toMatchObject({ nativeRequestId: "native-1", outcome: "committed", value: catalogAnswer });
+    expect(store.capture.truncated()).toEqual({ at: 1, reason: "io" });
+    for (const key of Object.keys(failures))
+      expect(yield* outcome(run(lane)(read(key)))).toEqual(yield* outcome(run({ kind: "live" })(read(key))));
+  }),
 );

@@ -161,7 +161,7 @@ effectTest("inventory replays recorded answers and refusal classes without an SD
   }),
 );
 
-effectTest("an unrebuildable failure or a full bundle keeps no taking and adds no coverage", () =>
+effectTest("an unrebuildable failure or a full bundle stops capture, keeps no taking and returns the live result", () =>
   Effect.gen(function* () {
     const dir = yield* bundle;
     const writer = yield* openRecordingWriter(dir, identity, {
@@ -176,11 +176,16 @@ effectTest("an unrebuildable failure or a full bundle keeps no taking and adds n
       HostFiles,
       HostFiles.capturing(writer).pipe(Layer.provide(broken)),
     );
-    expect(yield* problem(files.firm)).toBe("recording.unsupported");
+    // K4: the live failure is returned as it was; capture stops instead of failing the read.
+    expect((yield* Effect.flip(files.firm)) as unknown).toEqual(new Error("disk"));
+    expect(writer.capture.truncated()).toEqual({ at: 1, reason: "unsupported" });
     expect(writer.coverage()).toEqual([]);
-    yield* files.ductCatalogs;
-    expect(yield* problem(files.ductCatalogs)).toBe("recording.full");
-    expect(writer.coverage()).toEqual(["files"]);
-    expect((yield* reader(dir)).coverage()).toEqual(["files"]);
+    const fullDir = yield* bundle;
+    const full = yield* openRecordingWriter(fullDir, identity, { maxBytes: 1_000_000, maxTakings: 1 });
+    const kept = yield* service(HostFiles, HostFiles.capturing(full).pipe(Layer.provide(liveFiles)));
+    yield* kept.ductCatalogs;
+    expect(yield* kept.ductCatalogs).toEqual(catalogs);
+    expect(full.capture.truncated()).toEqual({ at: 2, reason: "full" });
+    expect((yield* reader(fullDir)).coverage()).toEqual(["files"]);
   }),
 );

@@ -14,7 +14,13 @@ import { BridgeError } from "@pe/host-internal/dispatch";
 import { HostNativeRead, canonicalJson, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { admitNativeCaller } from "./native-read-policy.ts";
-import { refusalSchema, type InputKind, type InputLane } from "@pe/agent-contracts";
+import {
+  refusalSchema,
+  truncationSchema,
+  type InputKind,
+  type InputLane,
+  type Truncation,
+} from "@pe/agent-contracts";
 import { Refused } from "./control.ts";
 import { InvalidRead, ReadBusy, ReadRetiring } from "./native-reads.ts";
 import { readSchemas } from "./request-services.ts";
@@ -152,6 +158,7 @@ const manifestSchema = Schema.Struct({
 /** Non-native codecs belong to the build, and the manifest already fixes the build. */
 const BUILD_VERSION = "build";
 
+const TRUNCATION = "truncation.json";
 const refuse = (problem: string, message: string, status = 409) =>
   new InvalidRead({ message, status, problem: `recording.${problem}` });
 const io = <A>(run: () => Promise<A>) =>
@@ -175,11 +182,25 @@ export interface RecordingReader {
   readonly observation: (taking: Taking) => Effect.Effect<Schema.Json, InvalidRead>;
   /** The kinds with at least one durable taking: coarse, never proof that a read set is served. */
   readonly coverage: () => readonly InputKind[];
+  /** Where automatic capture stopped, when its marker was kept; such a bundle is not complete. */
+  readonly truncation: Truncation | null;
+}
+/**
+ * One writer's automatic-capture latch. Capture is ancillary to live input: the first capture that
+ * cannot be kept stops every wrapper sharing this writer, and the live read still answers.
+ */
+export interface CaptureLatch {
+  /** The next attempt's ordinal, or null once capture has stopped. */
+  readonly begin: () => number | null;
+  readonly truncated: () => Truncation | null;
+  /** The first stop wins; its marker is persisted best-effort and never fails a read. */
+  readonly stop: (at: number, reason: Truncation["reason"]) => Effect.Effect<void>;
 }
 /** The one capture writer of a bundle in this process (no cross-process lock is claimed). */
 export interface RecordingWriter extends RecordingReader {
   /** Visible to `candidates` only after its observation and line are durable. */
   readonly append: (input: TakingInput, outcome: Outcome) => Effect.Effect<Taking, InvalidRead>;
+  readonly capture: CaptureLatch;
 }
 
 /**
@@ -255,6 +276,14 @@ const loadBundle = Effect.fn("Recording.load")(function* (
   }
   if (used > bounds.maxBytes || takings.length > bounds.maxTakings)
     return yield* refuse("full", "Recording exceeds its bounds", 507);
+  const marker = yield* bounded(join(dir, TRUNCATION), null);
+  const truncation =
+    marker === null
+      ? null
+      : yield* Effect.try({
+          try: () => truncationSchema.parse(JSON.parse(marker)),
+          catch: () => refuse("tamper", "Recording truncation marker is damaged"),
+        });
   const reader: RecordingReader = {
     identity,
     candidates: (wanted: string) =>
@@ -271,6 +300,7 @@ const loadBundle = Effect.fn("Recording.load")(function* (
       );
     }),
     coverage: () => [...new Set(takings.map((taking) => taking.input.kind))],
+    truncation,
   };
   return { reader, takings, stored, used, takingsPath, observations };
 });
@@ -296,6 +326,8 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
     true,
   );
   let used = loaded.used;
+  let attempts = 0;
+  let truncated = reader.truncation;
   // In-flight observation writes, so two equal observations share one durable write.
   const writing = new Map<string, Promise<void>>();
   let reserved = 0;
@@ -317,6 +349,22 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
   };
   return {
     ...reader,
+    get truncation() {
+      return truncated;
+    },
+    capture: {
+      begin: () => (truncated ? null : ++attempts),
+      truncated: () => truncated,
+      stop: (at, reason) =>
+        Effect.suspend(() => {
+          if (truncated) return Effect.void;
+          truncated = { at, reason };
+          // ponytail: best-effort marker; on an already failed disk only this process knows.
+          return io(() => writeFile(join(dir, TRUNCATION), JSON.stringify(truncated))).pipe(
+            Effect.orElseSucceed(() => undefined),
+          );
+        }),
+    },
     append: Effect.fn("Recording.append")(function* (input: TakingInput, outcome: Outcome) {
       const holds = outcome.kind === "answered" || outcome.kind === "observed";
       const bytes = holds ? canonicalJson(outcome.value) : "";
@@ -367,7 +415,10 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
 /** The canonical lane with this host's opened stores: live captures through a writer, a recording
  * replays through a reader, and a fixture has no native source. */
 export type HostInputLane =
-  | Extract<InputLane<RecordingWriter>, { kind: "live" }>
+  | (Extract<InputLane<RecordingWriter>, { kind: "live" }> & {
+      /** Automatic capture that never opened its store: live input, truncated before any taking. */
+      readonly captureSetup?: Truncation;
+    })
   | Extract<InputLane<never>, { kind: "fixture" }>
   | (Extract<InputLane<RecordingReader>, { kind: "recording" }> & {
       /** `at` resolved to taking ids until Timeline epochs bind them; never crosses the scope fence. */
@@ -481,10 +532,53 @@ const replayFailure = Effect.fn("Recording.failure")(function* (recorded: typeof
   return new plainClasses[tag](fields);
 });
 
+/** The bounded reason a capture could not be kept; never a path or a message. */
+const reasonOf = (cause: Cause.Cause<InvalidRead>): Truncation["reason"] => {
+  const problem = Option.getOrUndefined(Cause.findErrorOption(cause))?.problem;
+  return problem === "recording.full"
+    ? "full"
+    : problem === "recording.unsupported"
+      ? "unsupported"
+      : problem === "recording.input"
+        ? "encoding"
+        : "io";
+};
 /**
- * Live reads, captured into `store` when the lane asks. A taking that cannot be kept (full or
- * failed I/O) fails the read with that refusal, carrying the live read's dispatch evidence.
+ * Automatic capture around one live read. Live runs exactly once and its exit is returned
+ * unchanged; a taking that cannot be described or kept stops the writer's capture at this attempt.
  */
+const captured = <A, E, R>(
+  writer: RecordingWriter,
+  live: Effect.Effect<A, E, R>,
+  record: (
+    exit: Exit.Exit<A, E>,
+  ) => Effect.Effect<
+    { readonly input: TakingInput; readonly outcome: Outcome } | null,
+    InvalidRead
+  >,
+): Effect.Effect<A, E, R> =>
+  Effect.gen(function* () {
+    const at = writer.capture.begin();
+    const exit = yield* Effect.exit(live);
+    if (at === null) return yield* exit;
+    const kept = yield* Effect.exit(
+      Effect.flatMap(record(exit), (taking) =>
+        taking === null || writer.capture.truncated()
+          ? Effect.void
+          : writer.append(taking.input, taking.outcome),
+      ),
+    );
+    if (Exit.isFailure(kept)) yield* writer.capture.stop(at, reasonOf(kept.cause));
+    return yield* exit;
+  });
+/** A live failure as its recorded outcome, or null for an interrupted read, which is no taking. */
+const failedOutcome = <A>(exit: Exit.Exit<A, DoorFailure>) => {
+  if (Exit.isSuccess(exit)) return Effect.succeed(null);
+  const error = Cause.findErrorOption(exit.cause);
+  return Option.isNone(error) ? Effect.succeed(null) : recordedFailure(error.value);
+};
+
+/** Live reads, captured into `store` while its capture has not stopped. */
 const capturing = (store: RecordingWriter) =>
   Layer.effect(
     HostNativeRead,
@@ -493,62 +587,30 @@ const capturing = (store: RecordingWriter) =>
       return {
         resolve: live.resolve,
         read: (request) =>
-          Effect.gen(function* () {
-            const taking = {
-              input: { kind: "native" as const, key: request.key, args: yield* argsOf(request) },
-              scope: yield* scopeOf(request),
-              outputVersion: yield* versionOf(request.key),
-            };
-            const exit = yield* Effect.exit(live.read(request));
-            const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
-            // An interrupted caller has no outcome to record; its read is not a taking.
-            if (Exit.isFailure(exit) && Option.isNone(error)) return yield* exit;
-            const outcome: Outcome = Exit.isSuccess(exit)
-              ? {
-                  kind: "answered",
-                  value: exit.value.value,
-                  answer: {
-                    nativeRequestId: exit.value.nativeRequestId,
-                    actualTarget: exit.value.actualTarget,
-                    freshness: { freshnessGeneration: exit.value.freshness.freshnessGeneration },
-                    cost: exit.value.cost,
-                    nativeOutcome: exit.value.outcome,
-                  },
-                }
-              : // Replay could not rebuild an unsupported failure, so no taking claims to hold it.
-                yield* recordedFailure(Option.getOrThrow(error));
-            const dispatch =
-              outcome.kind === "observed"
-                ? {}
-                : outcome.kind === "answered"
-                  ? {
-                      nativeOutcome: outcome.answer.nativeOutcome,
-                      evidence: {
-                        nativeRequestId: outcome.answer.nativeRequestId,
-                        actualTarget: outcome.answer.actualTarget,
-                      },
-                    }
-                  : outcome.failure.tag === "BridgeError"
-                    ? {
-                        ...(outcome.failure.nativeOutcome
-                          ? { nativeOutcome: outcome.failure.nativeOutcome }
-                          : {}),
-                        evidence: outcome.failure.evidence,
-                      }
-                    : {};
-            yield* store.append(taking, outcome).pipe(
-              Effect.mapError(
-                (kept) =>
-                  new BridgeError({
-                    message: kept.message,
-                    status: kept.status,
-                    problem: kept.problem,
-                    ...dispatch,
-                  }),
-              ),
-            );
-            return yield* exit;
-          }),
+          captured(store, live.read(request), (exit) =>
+            Effect.gen(function* () {
+              const outcome: Outcome | null = Exit.isSuccess(exit)
+                ? {
+                    kind: "answered",
+                    value: exit.value.value,
+                    answer: {
+                      nativeRequestId: exit.value.nativeRequestId,
+                      actualTarget: exit.value.actualTarget,
+                      freshness: { freshnessGeneration: exit.value.freshness.freshnessGeneration },
+                      cost: exit.value.cost,
+                      nativeOutcome: exit.value.outcome,
+                    },
+                  }
+                : yield* failedOutcome(exit);
+              if (outcome === null) return null;
+              const input = {
+                input: { kind: "native" as const, key: request.key, args: yield* argsOf(request) },
+                scope: yield* scopeOf(request),
+                outputVersion: yield* versionOf(request.key),
+              };
+              return { input, outcome };
+            }),
+          ),
       };
     }),
   );
@@ -649,17 +711,14 @@ export const captureInput = <A, I>(
   codec: Schema.Codec<A, I>,
   live: Effect.Effect<A, DoorFailure>,
 ): Effect.Effect<A, DoorFailure> =>
-  Effect.gen(function* () {
-    const exit = yield* Effect.exit(live);
-    const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
-    // An interrupted caller has no outcome to record; its read is not a taking.
-    if (Exit.isFailure(exit) && Option.isNone(error)) return yield* exit;
-    const outcome: Outcome = Exit.isSuccess(exit)
-      ? { kind: "observed", value: yield* encoded(codec, exit.value) }
-      : yield* recordedFailure(Option.getOrThrow(error));
-    yield* writer.append({ input, scope, outputVersion: BUILD_VERSION }, outcome);
-    return yield* exit;
-  });
+  captured(writer, live, (exit) =>
+    Effect.gen(function* () {
+      const outcome: Outcome | null = Exit.isSuccess(exit)
+        ? { kind: "observed", value: yield* encoded(codec, exit.value) }
+        : yield* failedOutcome(exit);
+      return outcome && { input: { input, scope, outputVersion: BUILD_VERSION }, outcome };
+    }),
+  );
 
 /** The one recorded answer to an owner's read in this scope, decoded by that owner's codec. */
 export const replayInput = <A, I>(

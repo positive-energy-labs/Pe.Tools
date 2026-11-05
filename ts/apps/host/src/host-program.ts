@@ -2,7 +2,12 @@ import { createHash } from "node:crypto";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import type { ReceiptStamp } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
-import { nativeCatalogIdentity, openRecordingReader, openRecordingWriter } from "./native-recording.ts";
+import {
+  nativeCatalogIdentity,
+  openRecordingReader,
+  openRecordingWriter,
+  type HostInputLane,
+} from "./native-recording.ts";
 import { InvalidRead } from "./native-reads.ts";
 
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
@@ -38,8 +43,17 @@ export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelec
     return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null, bindings: selection.bindings && new Map(selection.bindings) })));
   }
   const directory = join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "recordings", createHash("sha256").update(identity.build).digest("hex"), identity.catalog, stamp.processSessionId);
-  const writer = yield* openRecordingWriter(directory, identity, bounds);
-  return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", captureStore: writer })));
+  // Automatic capture is ancillary to live input: a store that cannot open (full or I/O) stops
+  // recording before its first taking, not the host. Identity and tamper problems stay strict.
+  const lane = yield* openRecordingWriter(directory, identity, bounds).pipe(
+    Effect.map((writer): HostInputLane => ({ kind: "live", captureStore: writer })),
+    Effect.catch((error) =>
+      error.problem === "recording.full" || error.problem === "recording.io"
+        ? Effect.succeed<HostInputLane>({ kind: "live", captureSetup: { at: 1, reason: "setup" } })
+        : Effect.fail(error),
+    ),
+  );
+  return yield* HostInputContext.pipe(Effect.provide(HostInputContext.layer(lane)));
 });
 /** The shared host lifecycle used by both installed startup and source web development. */
 export const hostProgram = (
