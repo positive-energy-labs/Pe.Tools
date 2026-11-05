@@ -23,6 +23,8 @@ export interface DocumentMarks {
   readonly changedAt: (ref: DocumentRef) => number | null;
   /** Fires whenever any mark moves. */
   readonly subscribe: (listener: () => void) => () => void;
+  /** Resolves once every event the host has received so far is reflected in the marks; a fake has none pending. */
+  readonly settled?: () => Promise<void>;
 }
 
 const NO_MARKS: DocumentMarks = { changedAt: () => null, subscribe: () => () => {} };
@@ -35,6 +37,24 @@ export function assertFresh(marks: DocumentMarks, ref: DocumentRef, takenAt: str
   const at = takenAt === null ? Number.NaN : Date.parse(takenAt);
   if (!Number.isFinite(at) || (marks.observedSince ?? 0) > at || (marks.changedAt(ref) ?? 0) > at)
     throw new BridgeError(STALE_READ, 409, { notDispatched: true });
+}
+
+/** The one refusal a sealed write gets when its document's mark moved after the plan. */
+export const PLAN_CHANGED = "Plan changed (documentMark): Revit changed this document after the plan; plan the current Work again.";
+
+/**
+ * A sealed write rests on the mark its plan sealed. Waits for events already received but still
+ * being applied (the tail awaits `bridge.list`), so a received change cannot hide behind the cache.
+ * Ceiling: a change Revit has not yet reported to the host is invisible here.
+ */
+export async function assertSealed(
+  marks: DocumentMarks,
+  ref: DocumentRef,
+  sealed: { observedSince: number | null; changedAt: number | null },
+): Promise<void> {
+  await marks.settled?.();
+  if ((marks.observedSince ?? null) !== sealed.observedSince || marks.changedAt(ref) !== sealed.changedAt)
+    throw new BridgeError(PLAN_CHANGED, 409, { notDispatched: true });
 }
 
 const held = new WeakMap<RevitBridge["Service"], DocumentMarks>();
@@ -98,6 +118,7 @@ export function documentMarks(bridge?: RevitBridge["Service"]): DocumentMarks {
         listeners.delete(listener);
       };
     },
+    settled: () => tail,
   };
   held.set(bridge, holder);
   return holder;

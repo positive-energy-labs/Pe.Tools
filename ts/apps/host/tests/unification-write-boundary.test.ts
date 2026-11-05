@@ -25,6 +25,7 @@ import {
 import { RouteWorkspace } from "@pe/runtime";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { ActionJournal } from "../src/action-journal.ts";
+import { documentMarks } from "../src/document-marks.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 
@@ -153,7 +154,20 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
         await rm(dir, { recursive: true, force: true });
       }),
     );
-    return yield* body({ owner, outgoing, post, answer, intent, work, workKey, target });
+    /** Revit reports a change to the target document over the real socket; resolves once the host holds it. */
+    const revitChanged = () =>
+      Effect.gen(function* () {
+        const before = documentMarks(bridge).changedAt(target);
+        yield* Queue.offer(
+          incoming,
+          JSON.stringify({
+            kind: "Event",
+            event: { eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [target.openId] }) },
+          }),
+        );
+        while (documentMarks(bridge).changedAt(target) === before) yield* Effect.sleep("1 millis");
+      });
+    return yield* body({ owner, outgoing, post, answer, intent, work, workKey, target, revitChanged });
   }).pipe(Effect.scoped, Effect.provide(RevitBridgeLive), (effect) =>
     // effect-edge: island, phase 5
     Effect.runPromise(effect as Effect.Effect<A>),
@@ -164,6 +178,7 @@ type Harness = {
   work: RouteWorkspace;
   workKey: WorkKey;
   owner: ActionJournal;
+  revitChanged: () => Effect.Effect<void>;
   outgoing: Queue.Queue<import("@pe/host-contracts/contracts").BridgeFrame>;
   post: (body: unknown) => Effect.Effect<Response>;
   answer: (requestId: string, value: unknown, lost?: boolean) => Effect.Effect<boolean>;
@@ -438,5 +453,37 @@ test("host-derived preview and apply send the captured Work flow and retire only
       }
       const view = yield* Effect.promise(() => work.view({ ...workKey, route: "fans" }, "fans"));
       expect((view!.doc as any).flows["4"].edit).toBeNull();
+    }),
+  ));
+
+test("a Revit change after the post-consent prepare refuses at native dispatch; staged cells stay", () =>
+  lane(({ owner, outgoing, post, answer, intent, work, workKey, revitChanged }) =>
+    Effect.gen(function* () {
+      const staged = yield* Effect.promise(() => stage(work, workKey, edit(200), 0));
+      if (!staged.ok) throw Error("Expected accepted staged Work");
+      const payload = { work: { key: workKey, revision: staged.revision } };
+      yield* post(intent("plan", "ducts.plan-losses", undefined, payload));
+      const plan = yield* dispatchOrReceipt(owner, outgoing, "plan", answer);
+      yield* answer(plan.frame.request!.requestId, { ...response, previewOnly: true });
+      expect((yield* Effect.promise(() => owner.wait("plan"))).state).toBe("succeeded");
+      // Exactly the native step's dispatch fence (execution.step -> validateDispatch), after prepare ran.
+      const validate = owner.validateDispatch.bind(owner);
+      const dispatches: string[] = [];
+      owner.validateDispatch = async (requestId) => {
+        dispatches.push(requestId);
+        await Effect.runPromise(revitChanged());
+        return validate(requestId);
+      };
+      yield* post(intent("apply", "ducts.apply-losses", undefined, payload));
+      const next = yield* dispatchOrReceipt(owner, outgoing, "apply", answer);
+      expect(next.kind, "the native write must not leave the bridge").toBe("receipt");
+      expect(dispatches, "the guard ran at the native step, not earlier").toHaveLength(1);
+      expect(next.receipt).toMatchObject({ notDispatched: true });
+      expect(next.receipt.state).not.toBe("succeeded");
+      expect(JSON.stringify(next.receipt)).toContain("Plan changed (documentMark)");
+      const fans = yield* Effect.promise(() => work.view({ ...workKey, route: "fans" }, "fans"));
+      expect((fans!.doc as any).flows["31"].edit, "staged cells are retained").not.toBeNull();
+      const ducts = yield* Effect.promise(() => work.view(workKey, "ducts"));
+      expect((ducts!.doc as any).writeIntent.edit).not.toBeNull();
     }),
   ));
