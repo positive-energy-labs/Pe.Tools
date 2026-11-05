@@ -10,10 +10,7 @@
       "nouns": [
         "room"
       ],
-      "segment": "edits",
-      "stage": {
-        "runtime": true
-      }
+      "segment": "edits"
     },
     {
       "groupOf": {
@@ -441,7 +438,7 @@
     "size": 100,
     "sized": "start"
   },
-  "moduleHash": "1d637ab91e61174d2df58e9011f6c73d1ed8fbd1672b7f706d9de5531c914db5",
+  "moduleHash": "5cd9a5bfadd69c6e2d9c192946222e48dc441cd91df2be4559e82c5fb4734010",
   "name": "View adoption",
   "needs": "project",
   "panes": {
