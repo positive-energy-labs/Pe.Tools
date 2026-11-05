@@ -55,6 +55,14 @@ describe("data-tables derive", () => {
     ).toThrow(CatalogWorkRefused);
   });
 
+  it.each([
+    { "number:0": cell("9") },
+    { "text:0": cell("a"), "number:0": cell("9") },
+  ])("refuses staged row cells outside the authored column set", (cells) => {
+    expect(() => table({ columns: { "text:0": cell("A") }, rows: { r1: cells } }))
+      .toThrow("Row r1: number:0 is not a staged column");
+  });
+
   it("has no authored order and no heading-keyed columns", () => {
     expect(() => table({ order: ["text:1", "text:0"] })).toThrow();
     expect(() => table({ columns: { Condition: cell("A") } })).toThrow();

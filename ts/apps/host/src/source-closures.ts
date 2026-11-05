@@ -3,7 +3,8 @@ import { isSea } from "node:sea";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-/** Builtin closures are untracked build output that the host graph imports from disk under jiti.
+/** ADR 0029 rule 4 exception: this build bootstrap runs before the Effect graph has a process scope; SEA skips it.
+ * Builtin closures are untracked build output that the host graph imports from disk under jiti.
  * Every source host entry awaits this BEFORE dynamically importing the host graph: static imports
  * link before any top-level code runs, so a missing closure would fail first. The SEA bundle
  * inlined closures at pack, and browser-worker/ACP adapter modes never load the host graph. */

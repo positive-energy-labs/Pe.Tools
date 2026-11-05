@@ -75,6 +75,9 @@ function deriveDataTable(doc: DataTablesWork) {
     return [...ofKind].sort((a, b) => Number(a.key.slice(prefix.length)) - Number(b.key.slice(prefix.length)));
   });
   const rows = Object.entries(doc.rows).flatMap(([key, cells]) => {
+    for (const [slot, cell] of Object.entries(cells))
+      if (cell.edit && !columns.some((column) => column.key === slot))
+        throw new CatalogWorkRefused(`Row ${key}: ${slot} is not a staged column`);
     const last = columns.findLastIndex((column) => cells[column.key]?.edit);
     if (last < 0) return [];
     const values = columns.slice(0, last + 1).map((column) => {

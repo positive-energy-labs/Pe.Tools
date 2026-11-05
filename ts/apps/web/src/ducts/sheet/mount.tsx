@@ -78,6 +78,7 @@ function useSheetData(
         ? history.label : `${history.label} · from /ducts`;
       writes.push(settleWork(ctx.verbs.ductsEdit({ edits: foreign, history: { ...history, label }, basis })));
     }
+    // Each owner commits independently; a refusal cannot undo the other owner's acknowledged write.
     const result = (await Promise.all(writes)).find((outcome) => outcome.kind === "refused");
     return result?.kind === "refused"
       ? { code: "refused", message: result.refusal.error }
