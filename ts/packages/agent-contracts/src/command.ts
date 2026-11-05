@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { workKeySchema, workKey, type RouteStateSpec } from "./route-state.ts";
+import {
+  canonicalWorkKey,
+  workKeySchema,
+  workKey,
+  type RouteStateSpec,
+  type WorkKey,
+} from "./route-state.ts";
 import type { ActionReadingKey } from "./reading.ts";
 import { documentRefSchema, executionTargetSchema, type ExecutionTarget } from "./target.ts";
 import { nativeProcessSchema } from "./native-process.ts";
@@ -10,6 +16,14 @@ export const workHandleSchema = z.strictObject({
   revision: z.number().int().nonnegative(),
 });
 export type WorkHandle = z.infer<typeof workHandleSchema>;
+/**
+ * The one handle every stored Work read and write returns (ADR 0030 rule 9): the canonical key and
+ * revision. Call it after the Save As carry-over ran, since the handle no longer carries `from`.
+ */
+export function workHandle(scope: WorkKey, revision: number): WorkHandle {
+  const { from: _from, ...key } = canonicalWorkKey(scope) as WorkKey & { from?: unknown };
+  return { key: key as WorkKey, revision };
+}
 export type WorkPath = readonly (string | number)[];
 export const workPathSchema = z.array(z.union([z.string(), z.number()]));
 const pathsSchema = z.array(workPathSchema);
