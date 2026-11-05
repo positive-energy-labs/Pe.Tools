@@ -1,6 +1,133 @@
 import type { ReadingRequest } from "@pe/agent-contracts";
 import type { Readings } from "../readings";
-import type { ReadingContext, ReadingPublication, UseSource } from "./readings";
+import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { Immutable } from "../../../../packages/agent-contracts/src/route-kernel-data";
+import { z } from "zod";
+import {
+  contentHash,
+  type DeriveSource,
+  type ReadingContext,
+  type ReadingPublication,
+  type ReadingSource,
+  type UseSource,
+} from "./readings";
+
+/** A demand attempt's context: no Page or Work, only its target, attempt generation and args. */
+export const demandContext = (
+  target: ReadingContext["target"],
+  generation: number,
+  args: unknown,
+  signal: AbortSignal,
+): ReadingContext => ({
+  target,
+  workKey: null,
+  workRevision: null,
+  page: {},
+  work: null,
+  attempt: { target, workKey: null, generation },
+  trigger: { kind: "demand" },
+  args,
+  inputs: {},
+  signal,
+});
+
+/**
+ * The one source-attempt lifecycle: admitted route readings and shell hook subjects both open
+ * sources here. It maps frames to `ReadingSnapshot`, keeps the last value through pending, stale
+ * and failure, and closes the source once. The caller owns `context.signal`; aborting it ends delivery.
+ * `live`: silence past `waitS` fails the subject (stale if it holds a value); a failure holds until an answer.
+ */
+export function openSourceReading<T>(
+  source: Exclude<ReadingSource<T>, DeriveSource<T>>,
+  context: ReadingContext,
+  deliver: (snapshot: ReadingSnapshot<T>) => void,
+  options: { observe?(log: unknown): void; live?: { waitS: number; onTimeout?(): void } } = {},
+): () => void {
+  let value: Immutable<T> | undefined;
+  const live = options.live;
+  let failed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const held = (status: "pending" | "unavailable" | "failed", reason: string, kept = value) =>
+    ({ status, current: false, value: kept, reason }) as ReadingSnapshot<T>;
+  const disarm = () => {
+    clearTimeout(timer);
+    timer = undefined;
+  };
+  const arm = () => {
+    if (!live || timer !== undefined) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      if (value !== undefined) return emit(held("unavailable", "Reading is stale"));
+      failed = true;
+      live.onTimeout?.();
+      emit(
+        held("failed", `Source sent no answer after ${live.waitS}s; explicitly refresh to retry`),
+      );
+    }, live.waitS * 1000);
+  };
+  const open: UseSource<T>["open"] = (context, deliver) => {
+    if (source.kind === "worker") {
+      const worker = source.connect();
+      worker.update(context, deliver);
+      return () => worker.stop();
+    }
+    if (source.kind === "port")
+      return Promise.resolve(source.open(context)).then((port) => {
+        if (!context.signal.aborted) deliver({ kind: "complete", value: port.value, revision: 0 });
+        return () => port.close();
+      });
+    return source.open(context, deliver);
+  };
+  const emit = (snapshot: ReadingSnapshot<T>) => {
+    if (context.signal.aborted) return;
+    if (snapshot.value !== undefined) value = snapshot.value;
+    deliver(snapshot);
+  };
+  const release = Promise.resolve(
+    open(context, (frame) => {
+      if (context.signal.aborted) return;
+      if (live && frame.kind !== "log") {
+        // A live subject's failure is said until its next answer; silence re-arms the deadline.
+        if (failed && (frame.kind === "pending" || frame.kind === "stale")) return;
+        failed = frame.kind === "failure";
+        if (failed || (frame.kind === "complete" && frame.fresh !== false)) disarm();
+        else arm();
+      }
+      const sent = (frame as { value?: unknown }).value as Immutable<T>;
+      switch (frame.kind) {
+        case "part":
+          return emit(held("pending", "Reading incomplete", sent));
+        case "complete":
+          return emit(
+            frame.fresh === false
+              ? held("unavailable", "Reading is stale", sent)
+              : {
+                  status: "ready",
+                  current: true,
+                  value: sent,
+                  hash: z.string().parse(contentHash(sent)),
+                },
+          );
+        case "pending":
+          return emit(held("pending", "Reading pending"));
+        case "stale":
+          return emit(held("unavailable", "Reading is stale"));
+        case "failure":
+          return emit(held("failed", String(frame.error)));
+        case "log":
+          options.observe?.(frame.value);
+      }
+    }),
+  );
+  arm();
+  let closed = false;
+  return () => {
+    if (closed) return;
+    closed = true;
+    disarm();
+    void release.then((close) => close?.());
+  };
+}
 
 /** Acquire one fresh result, retiring its lease before a caller can acquire the next batch. */
 export function acquireSource<T>(source: UseSource<T>, context: ReadingContext) {

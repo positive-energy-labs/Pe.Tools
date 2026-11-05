@@ -1,9 +1,8 @@
 import { canonicalRouteInput } from "../../../../packages/agent-contracts/src/route-doc";
 /**
- * Transport subjects as engine readings. Each subscribed `ReadingRequest` is one node of the shell
- * reading engine (`createReadingGraph`): the engine owns its demand, deadline, failure and
- * recovery; `#/readings` is only the wire (SSE frames, fences, wake). The hooks project the
- * engine's state back onto the contract `Reading` so a View reads one vocabulary.
+ * Transport subjects over the one source lifecycle admitted readings use (`openSourceReading`, which
+ * owns deadline, failure and recovery); `#/readings` is only the wire. Hooks project its snapshot
+ * onto the contract `Reading` so a View reads one vocabulary.
  *
  * A reading never feeds the page-wide busy sweep (ADR 0027 rule 9): pane heads say status.
  */
@@ -22,7 +21,9 @@ import type { Custody, Lane } from "@pe/host-contracts/contracts";
 import type { BridgeSessionListEntry, HostOpResponse } from "@pe/host-contracts/operation-types";
 import { reportFault } from "#/host/diagnostics";
 import { peReadings, type Readings } from "#/readings";
-import { createReadingGraph, type ReadingState, type UseSource } from "./readings";
+import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { UseSource } from "./readings";
+import { demandContext, openSourceReading } from "./readings-use";
 
 export type { Lane };
 
@@ -64,19 +65,17 @@ const shallowSame = (a: object, b: object) => {
   );
 };
 
-/** One subject, one engine node: publishes its projected Reading and returns its release. */
+/** One subject: publishes its projected Reading and returns its release. */
 function subject(
   serialized: string,
   source: Readings,
   publish: (reading: Reading<unknown>) => void,
 ): () => void {
   const request = JSON.parse(serialized) as ReadingRequest;
-  const id = request.kind;
   const meta: { changed?: boolean; reason: "gap" | "disconnected" } = { reason: "disconnected" };
   const deadline = Date.now() + SUBJECT_WAIT_S * 1000;
   const live: UseSource = {
     kind: "use",
-    recovers: true,
     open(_context, deliver) {
       let revision = 0;
       return source.subscribe(request, (frame) => {
@@ -96,61 +95,56 @@ function subject(
       });
     },
   };
-  const graph = createReadingGraph(
-    { readings: { [id]: { kind: "use", source: "live", retire: "never" } } },
-    {
-      sources: { live },
-      scope: { target: { kind: "host" }, workKey: null, workRevision: null, page: {}, work: null },
-      waitS: SUBJECT_WAIT_S,
-      log(entry) {
-        if (entry.kind === "failure" && entry.message?.includes("sent no answer"))
-          reportFault(
-            { code: "reading.timeout", elapsedMs: SUBJECT_WAIT_S * 1000, readingKind: id },
-            Error(`reading ${serialized}: the host sent nothing before its deadline`),
-          );
-      },
-    },
-  );
-  let last: Reading<unknown> = absent;
-  const project = (state: ReadingState): Reading<unknown> => {
-    const has = state.value !== undefined;
-    const previous = has ? state.value : state.previous;
-    switch (state.status) {
-      case "absent":
-        return absent;
-      case "ready":
-      case "partial":
-        return {
-          state: "ready",
-          observation: state.value,
-          ...(meta.changed === undefined ? {} : { changed: meta.changed }),
-        };
-      case "failed":
-        return {
-          state: "failed",
-          message: state.error ?? "unknown error",
-          ...(previous !== undefined && { previous }),
-        };
-      default:
-        if (has) return { state: "stale", previous: state.value, reason: meta.reason };
-        if (meta.reason === "gap" && state.status === "stale") return absent;
-        return { state: "loading", requestId: serialized, deadline };
-    }
+  const project = (snapshot: ReadingSnapshot<unknown>): Reading<unknown> => {
+    if (snapshot.status === "ready" && snapshot.current)
+      return {
+        state: "ready",
+        observation: snapshot.value,
+        ...(meta.changed === undefined ? {} : { changed: meta.changed }),
+      };
+    if (snapshot.status === "failed")
+      return {
+        state: "failed",
+        message: snapshot.reason ?? "unknown error",
+        ...(snapshot.value !== undefined && { previous: snapshot.value }),
+      };
+    if (snapshot.value !== undefined)
+      return { state: "stale", previous: snapshot.value, reason: meta.reason };
+    if (meta.reason === "gap" && snapshot.status === "unavailable") return absent;
+    return { state: "loading", requestId: serialized, deadline };
   };
-  const emit = () => {
-    const next = project(graph.get(id));
+  let last: Reading<unknown> = absent;
+  const emit = (snapshot: ReadingSnapshot<unknown>) => {
+    const next = project(snapshot);
     // Identical evidence keeps its identity (the transport already reuses identical frames).
     if (shallowSame(next, last)) return;
     last = next;
     publish(next);
   };
-  const unwatch = graph.subscribe(id, emit);
-  const unmount = graph.mount([id]);
-  emit();
+  emit({ status: "pending", current: false, reason: "Reading pending" });
+  const controller = new AbortController();
+  const close = openSourceReading(
+    live,
+    demandContext({ kind: "host" }, 0, null, controller.signal),
+    emit,
+    {
+      live: {
+        waitS: SUBJECT_WAIT_S,
+        onTimeout: () =>
+          reportFault(
+            {
+              code: "reading.timeout",
+              elapsedMs: SUBJECT_WAIT_S * 1000,
+              readingKind: request.kind,
+            },
+            Error(`reading ${serialized}: the host sent nothing before its deadline`),
+          ),
+      },
+    },
+  );
   return () => {
-    unwatch();
-    unmount();
-    graph.dispose();
+    controller.abort();
+    close();
   };
 }
 
