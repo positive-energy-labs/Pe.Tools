@@ -343,9 +343,7 @@
     "ts/apps/web/src/workbench/tabs.ts#place:PropertyAccessExpression",
     "ts/apps/web/src/workbench/tabs.ts#place:PropertyAccessExpression"
   ],
-  "uncheckedRegistry": [
-    "ts/packages/kit/src/route-registry.ts#createRouteRegistry/register:Identifier"
-  ],
+  "uncheckedRegistry": [],
   "malformedSources": [],
   "dynamicModules": [
     "ts/apps/host/src/package-lifecycle.ts#createPackageLifecycle/synchronize/setup/module:import",

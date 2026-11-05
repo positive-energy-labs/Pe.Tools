@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-05, Step 7 extraction repair: delete kit's unused route registry/export and its duplicate-only tests. No production caller consumed it; browser publicRoutes remains the authenticated registration owner. The kit extraction guard and registry-admission guard tests stay intact; only the obsolete producer's baseline allowance is removed.
+
 - 2026-11-05, Driver: `GREEN for main at 0b63d5d8`. Steps 0–5 fast-forwarded to that exact SHA from 2be21af8; unrelated main working edits were preserved. T1 and the Step 5 presentation REDs remain follow-on work, not merge gates. Step 6 and partial Step 7 services were excluded from this merge.
 
 - 2026-11-05, kaitpw (Governor): T1's missing or stale Timeline row does not gate main when the apply receipt is correct and the seal prevents a second apply; keep its repair line active. The Driver's exact `GREEN for main at <sha>` gates a fast-forward of main to that SHA within the same hour, then the purge partner rebases and follows. Write and data regressions still require a fix or ruling; candidate generation belongs before the green pin, never to a check.
@@ -221,7 +223,7 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
   6. `mount-owner.ts` is one closure over ~25 locals because the Target+Work generation/scopeId epoch gate (ADR 0028 rule 4) has no primitive; it is compared ad hoc in `verbs.ts:723-733,753-760,985-994`.
   7. 12 production branches on fixture mode, including a per-reading override at `readings-api.ts:112,122` inside the guard-exempt file.
   8. The ratchet baseline tolerates ADR 0027 rule 15 zeros: hostCalls 7, reactSelection 9, readWrites 1, arrayFields 0, unscopedGeometry 1.
-  9. Two admission doors: `route-registry.ts:40` refuses a missing moduleHash then registers (`:72-74`); `mount-pane.tsx:55` skips admission without a stamp; `pod.` exemption by string prefix.
+  9. Historical duplicate admission doors were replaced by authenticated browser `publicRoutes`; the unused kit registry and its duplicate-only tests were deleted on 2026-11-05. The old file paths are recoverable in git, not current owners.
 - Typecheck passes only with `--declaration false` (S12, 48a52ed6): the TypeScript declaration emitter crashes serializing a type; find the type and make the full typecheck pass.
 - 16 repo-guard failures pre-date S12 (kit-census 8, design 2, host-door 2, action-authority 1, source-accountability 1, declaration ratchets 2); a guard that is always red enforces nothing.
 - <a id="s10-x1-live-drive"></a> Re-drive live Fans tap provenance and FC-23 flow conflict after the shared reading recovery fix; fixture rendering does not prove the native chain.

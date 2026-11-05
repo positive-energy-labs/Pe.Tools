@@ -9,7 +9,6 @@
     "./base.css": "./src/base.css",
     "./design-lang.css": "./src/design-lang.css",
     "./keys": "./src/keys.tsx",
-    "./route-registry": "./src/route-registry.ts",
     "./lang/artifact-frame": "./src/components/lang/artifact-frame.tsx",
     "./lang/button": "./src/components/lang/button.tsx",
     "./lang/cell": "./src/components/lang/cell.tsx",
