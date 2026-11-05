@@ -15,6 +15,7 @@ import type {
 import type { AcceptanceToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { ReadingSource, UseSource } from "./readings";
+import { openSourceReading } from "./readings-use";
 import { contentHash } from "./readings";
 import { z } from "zod";
 import type { Effect } from "@pe/agent-contracts";
@@ -204,101 +205,33 @@ export function sourceRouteServices(
         }
         if (typeof request.key.freshnessGeneration !== "number")
           throw Error("Ordinary source requires its attempt generation");
-        const open: UseSource["open"] = (context, deliver) => {
-          if (source.kind === "worker") {
-            const worker = source.connect();
-            worker.update(context, deliver);
-            return () => worker.stop();
-          }
-          if (source.kind === "port")
-            return Promise.resolve(source.open(context)).then((port) => {
-              if (!context.signal.aborted)
-                deliver({ kind: "complete", value: port.value, revision: 0 });
-              return () => port.close();
-            });
-          return source.open(context, deliver);
-        };
-        const release = Promise.resolve(
-          open(
-            {
+        const close = openSourceReading(
+          source,
+          {
+            target: state.target,
+            workKey: null,
+            workRevision: null,
+            page: {},
+            work: null,
+            attempt: {
               target: state.target,
               workKey: null,
-              workRevision: null,
-              page: {},
-              work: null,
-              attempt: {
-                target: state.target,
-                workKey: null,
-                generation: request.key.freshnessGeneration,
-              },
-              trigger: { kind: "demand" },
-              args: JSON.parse(request.key.sortedKeyInput),
-              inputs: {},
-              signal: state.controller.signal,
+              generation: request.key.freshnessGeneration,
             },
-            (frame) => {
-              if (state.controller.signal.aborted) return;
-              let snapshot: ReadingSnapshot<T>;
-              const value = state.snapshot.value as
-                | import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>
-                | undefined;
-              switch (frame.kind) {
-                case "part":
-                  snapshot = {
-                    status: "pending",
-                    current: false,
-                    value:
-                      frame.value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
-                    reason: "Reading incomplete",
-                  };
-                  break;
-                case "complete":
-                  snapshot =
-                    frame.fresh === false
-                      ? {
-                          status: "unavailable",
-                          current: false,
-                          value:
-                            frame.value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
-                          reason: "Reading is stale",
-                        }
-                      : {
-                          status: "ready",
-                          current: true,
-                          value:
-                            frame.value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
-                          hash: z.string().parse(contentHash(frame.value)),
-                        };
-                  break;
-                case "pending":
-                case "stale":
-                  snapshot = {
-                    status: frame.kind === "pending" ? "pending" : "unavailable",
-                    current: false,
-                    value,
-                    reason: frame.kind === "pending" ? "Reading pending" : "Reading is stale",
-                  };
-                  break;
-                case "failure":
-                  snapshot = {
-                    status: "failed",
-                    current: false,
-                    value,
-                    reason: String(frame.error),
-                  };
-                  break;
-                case "log":
-                  observers.get(request)?.(frame.value);
-                  return;
-              }
-              state.snapshot = snapshot;
-              deliver(snapshot);
-            },
-          ),
+            trigger: { kind: "demand" },
+            args: JSON.parse(request.key.sortedKeyInput),
+            inputs: {},
+            signal: state.controller.signal,
+          },
+          (snapshot) => {
+            state.snapshot = snapshot as ReadingSnapshot<T>;
+            deliver(snapshot as ReadingSnapshot<T>);
+          },
+          { observe: (value) => observers.get(request)?.(value) },
         );
         return () => {
           state.controller.abort();
-          void release.then((close) => close?.());
+          close();
         };
       },
     },

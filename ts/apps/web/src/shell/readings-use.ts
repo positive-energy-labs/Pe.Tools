@@ -1,6 +1,102 @@
 import type { ReadingRequest } from "@pe/agent-contracts";
 import type { Readings } from "../readings";
-import type { ReadingContext, ReadingPublication, UseSource } from "./readings";
+import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { Immutable } from "../../../../packages/agent-contracts/src/route-kernel-data";
+import { z } from "zod";
+import {
+  contentHash,
+  type DeriveSource,
+  type ReadingContext,
+  type ReadingPublication,
+  type ReadingSource,
+  type UseSource,
+} from "./readings";
+
+/** A live subject: silence past `waitS` fails it (stale if it holds a value); a failure holds until an answer. */
+export interface LiveReadingPolicy {
+  readonly waitS: number;
+  onTimeout?(): void;
+}
+
+/**
+ * The one source-attempt lifecycle: admitted route readings and shell hook subjects both open
+ * sources here. It maps frames to `ReadingSnapshot`, keeps the last value through pending, stale
+ * and failure, and closes the source once. The caller owns `context.signal`; aborting it ends delivery.
+ */
+export function openSourceReading<T>(
+  source: Exclude<ReadingSource<T>, DeriveSource<T>>,
+  context: ReadingContext,
+  deliver: (snapshot: ReadingSnapshot<T>) => void,
+  options: { observe?(log: unknown): void; live?: LiveReadingPolicy } = {},
+): () => void {
+  let value: Immutable<T> | undefined;
+  const open: UseSource<T>["open"] = (context, deliver) => {
+    if (source.kind === "worker") {
+      const worker = source.connect();
+      worker.update(context, deliver);
+      return () => worker.stop();
+    }
+    if (source.kind === "port")
+      return Promise.resolve(source.open(context)).then((port) => {
+        if (!context.signal.aborted) deliver({ kind: "complete", value: port.value, revision: 0 });
+        return () => port.close();
+      });
+    return source.open(context, deliver);
+  };
+  const emit = (snapshot: ReadingSnapshot<T>) => {
+    if (context.signal.aborted) return;
+    if (snapshot.value !== undefined) value = snapshot.value;
+    deliver(snapshot);
+  };
+  const release = Promise.resolve(
+    open(context, (frame) => {
+      if (context.signal.aborted) return;
+      switch (frame.kind) {
+        case "part":
+          return emit({
+            status: "pending",
+            current: false,
+            value: frame.value as Immutable<T>,
+            reason: "Reading incomplete",
+          });
+        case "complete":
+          return emit(
+            frame.fresh === false
+              ? {
+                  status: "unavailable",
+                  current: false,
+                  value: frame.value as Immutable<T>,
+                  reason: "Reading is stale",
+                }
+              : {
+                  status: "ready",
+                  current: true,
+                  value: frame.value as Immutable<T>,
+                  hash: z.string().parse(contentHash(frame.value)),
+                },
+          );
+        case "pending":
+        case "stale":
+          return emit({
+            status: frame.kind === "pending" ? "pending" : "unavailable",
+            current: false,
+            value,
+            reason: frame.kind === "pending" ? "Reading pending" : "Reading is stale",
+          });
+        case "failure":
+          return emit({ status: "failed", current: false, value, reason: String(frame.error) });
+        case "log":
+          options.observe?.(frame.value);
+      }
+    }),
+  );
+  let closed = false;
+  return () => {
+    if (closed) return;
+    closed = true;
+    void release.then((close) => close?.());
+  };
+}
 
 /** Acquire one fresh result, retiring its lease before a caller can acquire the next batch. */
 export function acquireSource<T>(source: UseSource<T>, context: ReadingContext) {
