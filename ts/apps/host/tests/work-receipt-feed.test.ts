@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vite-plus/test";
-import { actionReceiptSchema, type Receipt } from "@pe/agent-contracts";
+import { actionReceiptSchema, actionStatusSchema, type Receipt } from "@pe/agent-contracts";
 import type { ReceiptFeedState } from "../../../packages/agent-contracts/src/work-journal-door.ts";
 import { observeWorkReceipts } from "../src/work-receipt-feed.ts";
 const key = { binding: "host", route: "note", target: null } as const;
@@ -167,7 +167,9 @@ test("byte trimming counts UTF-8, array overhead and replacement sizes exactly",
     if (value.body.kind !== "action") throw Error("expected action");
     return value.body.value;
   };
-  const maxBytes = new TextEncoder().encode(JSON.stringify([body(b), body(c)])).byteLength;
+  // The feed bounds the status projection it emits, not the durable receipt.
+  const status = (value: Receipt) => actionStatusSchema.parse(body(value));
+  const maxBytes = new TextEncoder().encode(JSON.stringify([status(b), status(c)])).byteLength;
   const journal = {
     subscribe: (_query: unknown, listener: (value: Receipt) => void) => {
       deliver = listener;
@@ -223,4 +225,76 @@ test("byte trimming counts UTF-8, array overhead and replacement sizes exactly",
   });
   releaseBelow();
   releases.forEach((release) => release());
+});
+
+test("T1: completed over-budget Plan and Apply stay in a recreated ready as bounded statuses", async () => {
+  // Field shape (H1): a ~415 KB Plan and a ~174 KB Apply, almost all `prepared` and `result`.
+  const consumed = {
+    kind: "work",
+    probe: { handle: { key, revision: 28 }, paths: [["flows"]] },
+    expected: { flows: { 4: 250 } },
+  };
+  const heavy = (id: string, bytes: number, revision = 1) =>
+    ({
+      revision,
+      body: {
+        kind: "action",
+        value: actionReceiptSchema.parse({
+          ...((row(id).body as { value: unknown }).value as object),
+          key: id === "plan" ? "ducts.plan-losses" : "ducts.apply-losses",
+          target: { kind: "session", session: "s" },
+          consumes: [consumed],
+          prepared: { state: "ready", value: { writes: "x".repeat(bytes) } },
+          result: { value: { writes: "y".repeat(bytes / 4) } },
+        }),
+      },
+    }) as Receipt;
+  const foreign = {
+    ...row("foreign"),
+    body: {
+      kind: "action",
+      value: actionReceiptSchema.parse({
+        ...((row("foreign").body as { value: unknown }).value as object),
+        target: { kind: "session", session: "other" },
+      }),
+    },
+  } as Receipt;
+  const maxBytes = 512 * 1024;
+  let deliver!: (row: Receipt) => void;
+  const durable = [heavy("plan", 330_000), heavy("apply", 140_000), foreign];
+  const open = () => {
+    const values: ReceiptFeedState[] = [];
+    const release = observeWorkReceipts(
+      {
+        subscribe: (_query, listener) => ((deliver = listener), () => {}),
+        read: async () => durable,
+      },
+      { key, target: { kind: "session", session: "s" } } as never,
+      (value) => values.push(value),
+      { maxCount: 256, maxBytes },
+    );
+    return { values, release };
+  };
+  const first = open();
+  await Promise.resolve();
+  // A live terminal emission is the same bounded projection as ready.
+  deliver(heavy("plan", 330_000, 2));
+  const live = first.values.at(-1);
+  expect(live).toMatchObject({ kind: "receipt", receipt: { id: "plan", state: "succeeded" } });
+  expect(live).not.toHaveProperty("receipt.prepared");
+  first.release();
+  // Full reload: the browser owner is recreated and the host rebuilds ready from durable rows.
+  const second = open();
+  await Promise.resolve();
+  const ready = second.values.at(-1);
+  if (ready?.kind !== "ready") throw Error("missing acquisition");
+  expect(ready.receipts.rows.map((row) => row.id)).toEqual(["plan", "apply"]);
+  expect(ready.receipts.from).toBe(0);
+  for (const row of ready.receipts.rows) {
+    expect(row).toMatchObject({ consumes: [consumed], outcome: { state: "succeeded" } });
+    for (const heavyField of ["steps", "prepared", "recovery", "result"])
+      expect(row).not.toHaveProperty(heavyField);
+  }
+  expect(new TextEncoder().encode(JSON.stringify(ready.receipts.rows)).byteLength).toBeLessThan(maxBytes);
+  second.release();
 });

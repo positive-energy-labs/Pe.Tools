@@ -1,4 +1,4 @@
-import { workKey, type WorkKey, type ActionReceipt } from "@pe/agent-contracts";
+import { workKey, type WorkKey, type ActionStatus } from "@pe/agent-contracts";
 import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
 import type {
   WorkJournalDoor,
@@ -19,12 +19,14 @@ export function createApplicationWorkRegistry() {
   const entries = new Map<string, ReturnType<typeof createEntry>>();
   function createEntry(key: WorkKey) {
     const journal = createWorkJournal(key);
-    const rows = new Map<string, { cursor: ReceiptCursor; receipt: ActionReceipt }>();
+    const rows = new Map<string, { cursor: ReceiptCursor; receipt: ActionStatus }>();
+    /** First retained cursor when ready trimmed terminal evidence; cursors start at 1. */
+    let trimmed: ReceiptCursor | null = null;
     const listeners = new Set<() => void>();
     let refs = 0;
     let stop: (() => void) | undefined;
     const notify = () => listeners.forEach((listener) => listener());
-    const record = (receipt: ActionReceipt) => {
+    const record = (receipt: ActionStatus) => {
       const paths = receipt.consumes.flatMap((item) =>
         item.kind === "work" && workKey(item.probe.handle.key) === workKey(key)
           ? item.probe.paths
@@ -38,6 +40,18 @@ export function createApplicationWorkRegistry() {
         outcome: receipt.outcome,
         basis: { receipt },
       });
+    };
+    const recordAll = () => {
+      // A trimmed window cannot prove which edits a lost receipt consumed, so every step is held
+      // behind one typed barrier: never silently undoable. Root path [] overlaps every Work path.
+      if (trimmed !== null)
+        journal.record({
+          kind: "receipt",
+          at: 0,
+          receiptId: `receipts:trimmed-below:${trimmed}`,
+          paths: [[]],
+        });
+      for (const { receipt } of rows.values()) record(receipt);
     };
     const entry = {
       journal,
@@ -63,13 +77,14 @@ export function createApplicationWorkRegistry() {
           }
           if (state.kind === "ready") {
             rows.clear();
+            trimmed = state.receipts.from > 1 ? state.receipts.from : null;
             for (const receipt of state.receipts.rows)
               rows.set(receipt.id, { cursor: state.receipts.through, receipt });
           } else if (state.kind === "receipt") {
             if ((rows.get(state.receipt.id)?.cursor ?? -1) >= state.cursor) return;
             rows.set(state.receipt.id, { cursor: state.cursor, receipt: state.receipt });
           } else return;
-          for (const { receipt } of rows.values()) record(receipt);
+          recordAll();
           notify();
         }, notify);
       },
@@ -78,7 +93,7 @@ export function createApplicationWorkRegistry() {
           { revision: state.snapshot.revision, doc: state.snapshot.value },
           state.history,
         );
-        for (const { receipt } of rows.values()) record(receipt);
+        recordAll();
         notify();
       },
       timeline: () =>
@@ -101,7 +116,7 @@ export function createApplicationWorkRegistry() {
             })),
           ].sort((a, b) => Number(new Date(a.at)) - Number(new Date(b.at))),
         ),
-      activity: (): ReadonlyArray<Readonly<ActionReceipt>> =>
+      activity: (): ReadonlyArray<Readonly<ActionStatus>> =>
         freezePage([...rows.values()].map(({ receipt }) => receipt)),
       subscribe(listener: () => void) {
         listeners.add(listener);

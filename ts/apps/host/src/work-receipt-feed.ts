@@ -1,10 +1,12 @@
 import { DEFAULT_WORK_HISTORY_LIMITS } from "@pe/runtime";
 // The WeakMap feed registry is ambient module state; phase 5 D re-homes it as a scoped subscription service.
 import {
+  actionStatusSchema,
   canonicalRouteInput,
   receiptsForWork,
   workKey,
   type ActionReceipt,
+  type ActionStatus,
   type Receipt,
 } from "@pe/agent-contracts";
 import type {
@@ -38,7 +40,7 @@ export function observeWorkReceipts(
   let from = 0;
   const rows = new Map<
     string,
-    { cursor: number; revision: number; receipt: ActionReceipt; bytes: number }
+    { cursor: number; revision: number; receipt: ActionStatus; bytes: number }
   >();
   const encoder = new TextEncoder();
   let totalBytes = 2; // JSON array brackets; each additional row also contributes a comma.
@@ -56,7 +58,8 @@ export function observeWorkReceipts(
       canonicalRouteInput(scope.target) || receiptsForWork([row], scope.key).length > 0;
   const ingest = (value: Receipt) => {
     if (value.body.kind !== "action" || !matches(value.body.value)) return;
-    const receipt = value.body.value;
+    // Bounds count the projection consumers read; a plan's preparation never evicts its own evidence.
+    const receipt = actionStatusSchema.parse(value.body.value);
     if ((versions.get(receipt.id) ?? rows.get(receipt.id)?.revision ?? -1) >= value.revision)
       return;
     versions.delete(receipt.id);
