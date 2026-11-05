@@ -10,52 +10,50 @@ export function trustedBaseline(cwd = tsRoot): { baseline: Islands; ref: string 
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
-  const target = ["origin/main", "main"].find((ref) => {
-    try {
-      git("rev-parse", "--verify", `refs/${ref === "main" ? "heads" : "remotes"}/${ref}`);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-  let ref = target ? git("merge-base", "HEAD", target) : "HEAD";
-  console.log(
-    `effect islands: ${target ? `merge-base HEAD ${target}` : "HEAD (no origin/main or main)"} = ${ref}`,
-  );
-  // Before main adopts this guard, pin its introduction rather than trusting mutable HEAD.
-  if (!git("ls-tree", "--full-tree", ref, "--", baselinePath)) {
-    const introduction = git(
-      "log",
-      "--reverse",
-      "--format=%H",
-      "--diff-filter=A",
-      "HEAD",
-      "--",
-      `:(top)${baselinePath}`,
-    ).split("\n")[0];
-    if (!introduction) throw new Error(`No committed effect islands baseline at ${ref}`);
-    console.log(`effect islands: baseline absent at ${ref}; using introduction ${introduction}`);
-    ref = introduction;
-  }
-  const baseline: Islands = JSON.parse(git("show", `${ref}:${baselinePath}`));
   // Only Git-detected renames inherit a cap; copies and additions remain new files.
-  const changes = git("diff", "-M", "--name-status", "-z", "--no-relative", `${ref}..HEAD`).split(
-    "\0",
-  );
-  const renames = new Map<string, string>();
-  for (let i = 0; i < changes.length; ) {
-    const status = changes[i++];
-    const oldPath = changes[i++];
-    if (!status?.startsWith("R")) continue;
-    const newPath = changes[i++];
-    if (oldPath?.startsWith("ts/") && newPath?.startsWith("ts/"))
-      renames.set(oldPath.slice(3), newPath.slice(3));
+  const rename = (from: string, to: string, islands: Islands): Islands => {
+    const changes = git("diff", "-M", "--name-status", "-z", "--no-relative", from, to).split("\0");
+    const renames = new Map<string, string>();
+    for (let i = 0; i < changes.length; ) {
+      const status = changes[i++];
+      const oldPath = changes[i++];
+      if (!status?.startsWith("R")) continue;
+      const newPath = changes[i++];
+      if (oldPath?.startsWith("ts/") && newPath?.startsWith("ts/"))
+        renames.set(oldPath.slice(3), newPath.slice(3));
+    }
+    const renamed: Islands = { src: {}, tests: {} };
+    for (const kind of ["src", "tests"] as const)
+      for (const [file, count] of Object.entries(islands[kind]))
+        renamed[kind][renames.get(file) ?? file] = count;
+    return renamed;
+  };
+  // Trust every committed version reachable from HEAD, oldest first, each capped by the ones before
+  // it. merge-base HEAD main is HEAD on main, so it let a committed raise become its own cap.
+  const versions = git(
+    "log",
+    "--reverse",
+    "--topo-order",
+    "--format=%H",
+    "HEAD",
+    "--",
+    `:(top)${baselinePath}`,
+  )
+    .split("\n")
+    .filter(Boolean);
+  if (!versions.length) throw new Error("No committed effect islands baseline");
+  const show = (ref: string): Islands => JSON.parse(git("show", `${ref}:${baselinePath}`));
+  let cap = show(versions[0]!);
+  for (const [i, ref] of versions.entries()) {
+    const prior = rename(versions[i - 1] ?? ref, ref, cap);
+    cap = show(ref);
+    for (const kind of ["src", "tests"] as const)
+      for (const [file, count] of Object.entries(cap[kind]))
+        cap[kind][file] = Math.min(count, prior[kind][file] ?? 0);
   }
-  const renamed: Islands = { src: {}, tests: {} };
-  for (const kind of ["src", "tests"] as const)
-    for (const [file, count] of Object.entries(baseline[kind]))
-      renamed[kind][renames.get(file) ?? file] = count;
-  return { baseline: renamed, ref };
+  const ref = versions.at(-1)!;
+  console.log(`effect islands: ${versions.length} committed baselines, newest ${ref}`);
+  return { baseline: rename(ref, "HEAD", cap), ref };
 }
 
 export function increases(actual: Islands, cap: Islands, kind: keyof Islands): string[] {

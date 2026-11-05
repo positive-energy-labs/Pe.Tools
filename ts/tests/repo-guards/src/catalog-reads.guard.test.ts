@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
-import { resolve, relative } from "node:path";
+import { resolve } from "node:path";
 import ts from "typescript";
 import { expect, test } from "vite-plus/test";
+import { imports } from "./import-census.ts";
 import { root, syntax, walk } from "./unification-2-census.ts";
 import { globSync } from "node:fs";
 
@@ -77,13 +78,12 @@ test("the guard rejects both raw transport and inline response decoders", () => 
 });
 test("shared family progress is a leaf and contracts never import ducts-domain", () => {
   const source = resolve(root, "ts/packages/agent-contracts/src");
-  expect(readFileSync(resolve(source, "families-progress.ts"), "utf8")).not.toMatch(/from ["']\./);
-  const found = globSync("**/*.ts", { cwd: source }).flatMap((file) => {
-    const text = readFileSync(resolve(source, file), "utf8");
-    return /(?:from\s*|import\s*\()["']@pe\/ducts-domain/.test(text)
-      ? [relative(root, resolve(source, file))]
-      : [];
-  });
+  const modules = (file: string) =>
+    imports(readFileSync(resolve(source, file), "utf8"), file, true).map(({ module }) => module);
+  expect(modules("families-progress.ts").filter((module) => module.startsWith("."))).toEqual([]);
+  const found = globSync("**/*.ts", { cwd: source }).filter((file) =>
+    modules(file).some((module) => module.startsWith("@pe/ducts-domain")),
+  );
   expect(found).toEqual([]);
 });
 

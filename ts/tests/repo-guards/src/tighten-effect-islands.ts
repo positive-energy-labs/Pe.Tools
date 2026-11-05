@@ -1,4 +1,4 @@
-// Lower counts against both the working baseline and the trusted merge-base baseline.
+// Lower counts against both the working baseline and the trusted committed-history baseline.
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
