@@ -46,6 +46,13 @@ test("a directory tool link keeps the selected chat", async () => {
   });
 });
 
+test("a tool destination keeps structured and numeric route values", async () => {
+  const open = await at("/pea?thread=T");
+  const fan = { kind: "some", keys: ["MUAS-1 50%@2", "8081605"] };
+  const query = new URLSearchParams({ fan: JSON.stringify(fan), contextRadiusFt: "15" });
+  expect(await open(`/ducts?${query}`)).toEqual({ thread: "T", fan, contextRadiusFt: 15 });
+});
+
 test("with no chat selected a tool link adds no thread and infers no target", async () => {
   const open = await at("/pea");
   expect(await open("/ducts")).toEqual({});

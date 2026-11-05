@@ -57,7 +57,7 @@ export function useDestination() {
       const admitted = admittedDestination(destination, window.location.origin);
       if (!admitted) return false;
       const url = new URL(admitted, window.location.origin);
-      const search = Object.fromEntries(url.searchParams);
+      const search = router.options.parseSearch(url.search);
       void navigate({
         to: url.pathname,
         search: {
