@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-05, kaitpw (Governor): T1's missing or stale Timeline row does not gate main when the apply receipt is correct and the seal prevents a second apply; keep its repair line active. The Driver's exact `GREEN for main at <sha>` gates a fast-forward of main to that SHA within the same hour, then the purge partner rebases and follows. Write and data regressions still require a fix or ruling; candidate generation belongs before the green pin, never to a check.
+
 - 2026-11-05, counsel (Step 6 parity default): retire the DEV-only `/design-system/control-surface` exploration and its implicit glob-selected variants. Its source remains in git history. `/design-system/table-controls` remains the swatch's real Table API specimen, owned under `design-system/specimens/table-controls`; it has explicitly authored fixture datasets. No production prototype selector or unused variant registry is introduced.
 
 - 2026-11-05, counsel (ADR 0030 rule 2): a catalog Work owner without a Page keeps its receipt link in chat. `actionRoute` uses the command's declared Work owner when that owner has a registered Page; the command does not require a Page to exist.
