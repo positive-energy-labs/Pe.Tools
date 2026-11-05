@@ -2,9 +2,10 @@ import { mkdir, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, Fiber, Queue, Schema } from "effect";
 import { expect, test, vi } from "vite-plus/test";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationSchemas } from "@pe/host-contracts/operation-types";
-import { bindWork, tools } from "@pe/agent-contracts";
+import { bindWork, tools, type ActionAdmission } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { HOST_CONTEXT_HEADER, type BridgeFrame } from "@pe/host-contracts/contracts";
 import { ActionJournal } from "../src/action-journal.ts";
@@ -35,8 +36,14 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
         const { bridge, incoming, outgoing, target, connection } = yield* connectTestBridge();
         const native = yield* Queue.make<NonNullable<BridgeFrame["request"]>>();
         const sent: NonNullable<BridgeFrame["request"]>[] = [];
-        const key = "revit.apply.command.execute";
-        const value = { posted: true, matches: [] };
+        const key = "revit.context.lens";
+        const value = nativeResponseSchema("revit.context.lens").parse({
+          viewId: 101,
+          viewName: "Pe lens",
+          created: true,
+          boxed: 1,
+          note: "Boxed element 11",
+        });
         const metrics = {
           requestBytes: 0,
           responseBytes: 0,
@@ -153,9 +160,17 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
           };
           const admission = (
             id: string,
-            input: Record<string, unknown> = { commandId: "ID_REVIT_SAVE" },
-          ) => ({ id, key, target: { kind: "document", ref: target }, input });
+            input: Record<string, unknown> = { elementIds: [11] },
+          ): ActionAdmission => ({ id, key, target: { kind: "document", ref: target }, input });
+          const nextRequest = (id: string) =>
+            Promise.race([
+              Effect.runPromise(Queue.take(native), { signal }),
+              owner.wait(id).then((row) => {
+                throw Error(`Action ${id} ended before native Request: ${JSON.stringify(row)}`);
+              }),
+            ]);
           let releaseFault = () => {};
+          let closed = false;
           try {
             // A real cold catalog read journals through this same owner during definition/bind.
             await post("/actions", admission("invalid", { unexpectedProperty: true }));
@@ -209,9 +224,9 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
                 heldMark?.mockRestore();
               };
               await post("/actions", admission(id));
-              const request = await Effect.runPromise(Queue.take(native), { signal });
+              const request = await nextRequest(id);
               expect(request.operationKey).toBe(key);
-              expect(JSON.parse(request.payloadJson!)).toEqual({ commandId: "ID_REVIT_SAVE" });
+              expect(JSON.parse(request.payloadJson!)).toEqual({ elementIds: [11] });
               if (succeeds) {
                 bindRead = async () => {
                   binding.resolve();
@@ -224,11 +239,13 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
                   bindRead = undefined;
                 }
               }
-              expect((await owner.list(undefined, id))[0]!.steps[0]).toMatchObject({
-                state: "running",
-                process: originalProcess,
-                dispatchedAt: expect.any(String),
-              });
+              await expect
+                .poll(async () => (await owner.list(undefined, id))[0]!.steps[0])
+                .toMatchObject({
+                  state: "running",
+                  process: originalProcess,
+                  dispatchedAt: expect.any(String),
+                });
               await Effect.runPromise(reply(request.requestId, value, succeeds ? 200 : 422));
               expect((await owner.wait(id)).steps[0]).toMatchObject({
                 state: succeeds ? "succeeded" : "failed",
@@ -236,14 +253,14 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
                 dispatchedAt: expect.any(String),
               });
               if (succeeds) {
-                const bound = await Effect.runPromise(Queue.take(native), { signal });
+                const bound = await nextRequest("binding");
                 expect(bound.operationKey).toBe("families.capture");
                 await Effect.runPromise(reply(bound.requestId, { families: [], diagnostics: [] }));
                 expect((await owner.wait("binding")).state).toBe("succeeded");
               }
             }
             await post("/actions", admission("lost"));
-            const lost = await Effect.runPromise(Queue.take(native), { signal });
+            const lost = await nextRequest("lost");
             await Effect.runPromise(reply(lost.requestId, null, 423, "AbandonedStillRunning"));
             expect((await owner.wait("lost")).state).toBe("unknown");
             const beforeRecovery = sent.length;
@@ -275,9 +292,19 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
             }
             const capture = { ...bindingCapture, id: "child-commit" };
             await post("/actions", capture, pea);
-            const committed = await Effect.runPromise(Queue.take(native), { signal });
+            const committed = await nextRequest("child-commit");
             expect(committed.operationKey).toBe("families.capture");
+            await expect
+              .poll(
+                async () =>
+                  (await owner.list(undefined, "child-commit"))[0]!.steps[0]?.dispatchedAt,
+              )
+              .toEqual(expect.any(String));
             await post("/actions", admission("child-next"), pea);
+            await expect
+              .poll(async () => (await owner.list(undefined, "child-next"))[0]!.steps.length)
+              .toBe(1);
+            expect(sent).toHaveLength(beforeRecovery + 1);
             runs.close(root, "stopped");
             const captured = {
               families: [{ familyId: 1, success: true, modelJson: "{}" }],
@@ -303,7 +330,7 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
               code: "ENOENT",
             });
             const next = await owner.wait("child-next");
-            expect(next.state).toBe("cancelled");
+            expect(next.state, JSON.stringify(next)).toBe("cancelled");
             expect(next.steps.every((step) => !step.dispatchedAt)).toBe(true);
             expect(sent).toHaveLength(beforeRecovery + 1);
             expect(asks).toHaveLength(1);
@@ -326,8 +353,7 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
             await persisted.close();
             // Closing joins the actual native dispatch and refuses admissions before the final flush.
             await post("/actions", admission("shutdown"));
-            const held = await Effect.runPromise(Queue.take(native), { signal });
-            let closed = false;
+            const held = await nextRequest("shutdown");
             const closing = owner.close().then(() => {
               closed = true;
             });
@@ -354,7 +380,7 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
             life.alive = false;
             await Effect.runPromise(Fiber.interrupt(connection));
             await Effect.runPromise(Fiber.interrupt(responder));
-            await owner.close();
+            if (!closed) await owner.close();
             releaseHostReceipts(owner);
           }
         });
