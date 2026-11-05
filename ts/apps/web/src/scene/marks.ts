@@ -3,7 +3,16 @@ import * as THREE from "three";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import type { IssueState, LayerFrame } from "./types";
-import { BLACK, HIDDEN_STROKE_ALPHA, isLit, LOOK, markAlpha, markMaterial, sceneLineMaterial, WHITE } from "./grounds";
+import {
+  BLACK,
+  HIDDEN_STROKE_ALPHA,
+  isLit,
+  LOOK,
+  markAlpha,
+  markMaterial,
+  sceneLineMaterial,
+  WHITE,
+} from "./grounds";
 
 type Edge = readonly [readonly number[], readonly number[]];
 
@@ -24,10 +33,7 @@ export function markLines(
   { dash, weight = 1 }: { dash?: { size: number; gap: number }; weight?: number } = {},
 ): THREE.Group {
   const geometry = new LineSegmentsGeometry().setPositions(edges.flatMap(([p, q]) => [...p, ...q]));
-  const ink = new LineSegments2(
-    geometry,
-    sceneLineMaterial({ color }),
-  );
+  const ink = new LineSegments2(geometry, sceneLineMaterial({ color }));
   const casing = new LineSegments2(geometry, ink.material.clone());
   // Semantic lines remain individually pickable; the renderer batches their visible strokes.
   ink.userData.markStroke = casing.userData.markStroke = true;
@@ -61,10 +67,7 @@ export function markVolume(
   // A ghost is a proposal not yet consented: dashed edges and a fainter body than a solid volume.
   { ghost = false }: { ghost?: boolean } = {},
 ): THREE.Group {
-  const mesh = new THREE.Mesh(
-    geometry,
-    markMaterial(color),
-  );
+  const mesh = new THREE.Mesh(geometry, markMaterial(color));
   mesh.renderOrder = 9;
   mesh.userData.ghost = ghost;
   const position = new THREE.EdgesGeometry(geometry, 30).getAttribute("position");
@@ -86,7 +89,7 @@ export function markFrame(group: THREE.Object3D, at: LayerFrame): boolean {
   const lit = isLit(at);
   group.traverse((object) => {
     if (object instanceof LineSegments2) {
-      const material = object.material as LineMaterial;
+      const material = object.material;
       const width = WIDTH[at.state] * (object.parent?.userData.weight ?? 1) + swell * 5;
       if (object.userData.casing) {
         material.linewidth = width + CASING * 2;

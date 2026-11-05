@@ -27,8 +27,12 @@ export function ReviewSurface({
   cancel(this: void): void;
 }) {
   const [anchor] = useState(() => document.activeElement);
-  const list = useList({ items: rows.map((label, index) => ({ key: String(index), label })),
-    keyOf: (row) => row.key, search: (row) => ({ text: [row.label] }), select: "none" });
+  const list = useList({
+    items: rows.map((label, index) => ({ key: String(index), label })),
+    keyOf: (row) => row.key,
+    search: (row) => ({ text: [row.label] }),
+    select: "none",
+  });
   const borrows = borrowWords(worksharing);
   const commit = `Commit ${label}${borrows ? ` · ${borrows}` : ""}`;
   return (
@@ -50,9 +54,12 @@ export function ReviewSurface({
         <div className="min-h-0 overflow-y-auto">
           <output>{sentence}</output>
           {rows.length > 0 && (
-            <PlainList list={list} aria-label={`${label} changes`}
+            <PlainList
+              list={list}
+              aria-label={`${label} changes`}
               row={(row) => ({ label: row.label })}
-              empty={{ message: "No changes", exit: "Cancel this review" }} />
+              empty={{ message: "No changes", exit: "Cancel this review" }}
+            />
           )}
           {worksharing && <WorksharingNote worksharing={worksharing} />}
         </div>

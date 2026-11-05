@@ -246,22 +246,39 @@ function History({ mount, data }: { mount: AdmittedMount; data: RouteGraphJson }
   const timeline: readonly TimelineEntry[] = mount.timeline();
   const list = useList({
     items: [
-      ...(journal?.moves ?? []).map((move) => ({ key: `work:${move.revision}:${move.kind}`,
-        label: move.label, sub: `${move.kind} / ${move.by === "pea" ? "Pea" : "you"} / r${move.revision}`, actions: undefined })),
-      ...mount.activity().map((receipt) => ({ key: receipt.id,
-        label: Object.values(data.verbs).find((v) => "entry" in v && v.entry === receipt.key)?.label ?? "Command",
+      ...(journal?.moves ?? []).map((move) => ({
+        key: `work:${move.revision}:${move.kind}`,
+        label: move.label,
+        sub: `${move.kind} / ${move.by === "pea" ? "Pea" : "you"} / r${move.revision}`,
+        actions: undefined,
+      })),
+      ...mount.activity().map((receipt) => ({
+        key: receipt.id,
+        label:
+          Object.values(data.verbs).find((v) => "entry" in v && v.entry === receipt.key)?.label ??
+          "Command",
         sub: receipt.state,
-        actions: ["waiting", "running", "unknown"].includes(receipt.state)
-          ? <Button label="Stop command" onClick={() => void mount.stopCommand(receipt.id)}>Stop</Button> : undefined })),
+        actions: ["waiting", "running", "unknown"].includes(receipt.state) ? (
+          <Button label="Stop command" onClick={() => void mount.stopCommand(receipt.id)}>
+            Stop
+          </Button>
+        ) : undefined,
+      })),
     ],
-    keyOf: (row) => row.key, search: (row) => ({ text: [row.label, row.sub] }), select: "none",
+    keyOf: (row) => row.key,
+    search: (row) => ({ text: [row.label, row.sub] }),
+    select: "none",
   });
   return (
     <section aria-label="History">
       <JournalButtons owner={mount} words />
-      <ListView list={list} aria-label="History" maxHeight="min(24rem, 60vh)"
+      <ListView
+        list={list}
+        aria-label="History"
+        maxHeight="min(24rem, 60vh)"
         row={(row) => ({ label: row.label, sub: row.sub, actions: row.actions, lines: 2 })}
-        empty={{ message: "No activity yet", exit: "Run a command or edit Work" }} />
+        empty={{ message: "No activity yet", exit: "Run a command or edit Work" }}
+      />
       {timeline
         .filter((entry) => entry.kind === "feed")
         .map((entry, index) => (

@@ -1,5 +1,3 @@
-import { useList } from "@pe/kit/lang/collection";
-import { PlainList } from "@pe/kit/lang/list-view";
 /**
  * The fan sheet view of /ducts (`?stage=sheet`, the head's "Pricing fans" stage; protoui rounds 1 to 3, 2026-10-28, variant A "Ledger"
  * promoted): pane bodies for the kernel's graph layout, using the house `ListView`. The
@@ -10,7 +8,7 @@ import { PlainList } from "@pe/kit/lang/list-view";
  */
 import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
-import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
+import { ListView, PlainList, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
 import { Fragment, useMemo, useState } from "react";
 import { BlockerRow } from "./blocker-row";
@@ -165,8 +163,12 @@ function TierGroup({
         ? null
         : (closers.find((c) => c.refusal)?.refusal ?? "Nothing to close");
   const verb = tier === "preview" ? "heal" : "accept";
-  const taken = useList({ items: props.taken, keyOf: (text) => text,
-    search: (text) => ({ text: [text] }), select: "none" });
+  const taken = useList({
+    items: props.taken,
+    keyOf: (text) => text,
+    search: (text) => ({ text: [text] }),
+    select: "none",
+  });
   const count = tier === "taken" ? props.taken.length : blockers.length;
   return (
     <section aria-label={`${tier} tier`} data-tier-group={tier} className="flex flex-col gap-1">
@@ -187,8 +189,12 @@ function TierGroup({
         )}
       </header>
       {tier === "taken" ? (
-        <PlainList list={taken} aria-label="Taken assumptions" row={(text) => ({ label: text })}
-          empty={{ message: "nothing taken silently", exit: "Review the remaining blockers" }} />
+        <PlainList
+          list={taken}
+          aria-label="Taken assumptions"
+          row={(text) => ({ label: text })}
+          empty={{ message: "nothing taken silently", exit: "Review the remaining blockers" }}
+        />
       ) : (
         <div role="table">
           {blockers.map((blocker) => (

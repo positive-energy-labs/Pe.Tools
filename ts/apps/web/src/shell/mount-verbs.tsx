@@ -20,8 +20,10 @@ export function WorksharingNote({ worksharing: w }: { worksharing: Worksharing }
   const blocked = w.elements.filter((e) => e.status === "blocked");
   const central = w.cloud ? "cloud central" : "central";
   const list = useList({
-    items: [...borrows.map((e) => ({ key: `borrow:${e.id}`, label: `borrows ${e.name} [${e.id}]` })),
-      ...w.creates.map((name) => ({ key: `create:${name}`, label: `creates ${name}` }))],
+    items: [
+      ...borrows.map((e) => ({ key: `borrow:${e.id}`, label: `borrows ${e.name} [${e.id}]` })),
+      ...w.creates.map((name) => ({ key: `create:${name}`, label: `creates ${name}` })),
+    ],
     keyOf: (row) => row.key,
     search: (row) => ({ text: [row.label] }),
     select: "none",
@@ -37,9 +39,12 @@ export function WorksharingNote({ worksharing: w }: { worksharing: Worksharing }
         }
         says="they stay borrowed until you sync with central or relinquish"
       />
-      <PlainList list={list} aria-label="Borrowed and created elements"
+      <PlainList
+        list={list}
+        aria-label="Borrowed and created elements"
         row={(row) => ({ label: row.label })}
-        empty={{ message: "No new borrowing", exit: "All changed elements are already owned" }} />
+        empty={{ message: "No new borrowing", exit: "All changed elements are already owned" }}
+      />
       {blocked.map((e) => (
         <OutcomeLine
           key={e.id}

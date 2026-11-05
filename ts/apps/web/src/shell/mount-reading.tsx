@@ -67,7 +67,11 @@ export function readingList<T, Row>(reading: ReadingState<T>, rows: (value: T) =
   const value = reading.value ?? reading.previous;
   return {
     items: value === undefined ? [] : rows(value),
-    status: (reading.status === "failed" ? "failed" : reading.current ? "ready" : "pending") as ListReading,
+    status: (reading.status === "failed"
+      ? "failed"
+      : reading.current
+        ? "ready"
+        : "pending") as ListReading,
     failure: reading.error,
   };
 }

@@ -93,19 +93,27 @@ it("Escape cancels the typed ask without running it", () => {
   expect(onClose).not.toHaveBeenCalled();
 });
 
-
 it("delegates row hover to the document subject scope and withdraws the issue on leave", () => {
   function Probe() {
     return <output data-testid="hovered-issue">{useHoveredIssue() ?? "none"}</output>;
   }
-  const selected = Atom.make<ReadonlySet<SubjectKey>>(new Set());
+  const selected = Atom.make<ReadonlySet<SubjectKey>>(new Set<SubjectKey>());
   const view = render(
-    <AttentionScope doc="blocker-model" selected={selected}
-      members={new Map([[`issue:${blocker.id}`, ["e:9"]]])}>
+    <AttentionScope
+      doc="blocker-model"
+      selected={selected}
+      members={new Map<SubjectKey, readonly SubjectKey[]>([[`issue:${blocker.id}`, ["e:9"]]])}
+    >
       <Probe />
-      <BlockerRow blocker={blocker} focused={false}
-        closerOf={(b, typed) => describeCloser(b, typed, { terminalDrop: null, nameOf: () => "duct", wait: null })}
-        onClose={() => {}} onFocus={() => {}} />
+      <BlockerRow
+        blocker={blocker}
+        focused={false}
+        closerOf={(b, typed) =>
+          describeCloser(b, typed, { terminalDrop: null, nameOf: () => "duct", wait: null })
+        }
+        onClose={() => {}}
+        onFocus={() => {}}
+      />
     </AttentionScope>,
   );
   fireEvent.pointerOver(view.getByRole("row"));

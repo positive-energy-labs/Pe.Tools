@@ -69,9 +69,14 @@ test("ducts refreshes from the pane head, never from a stage verb", () => {
   expect(refused.map((r) => r.message)).toContain("'refresh' is the pane head's refresh");
 });
 
-test("a stale builtin stamp refuses that route with the fix, instead of throwing", () => {
-  const stale = { ...podsGraph, moduleHash: "0".repeat(64) };
-  expect(builtinAdmission(stale as never)).toMatch(/hash.*codegen:routes/);
+test("legacy registration refuses missing directory and unenumerated routes", () => {
+  // Module closure hashes belong to validateRouteModule, not the temporary legacy graph door.
+  expect(builtinAdmission({ ...podsGraph, directory: undefined })).toBe(
+    "Route registration needs a directory declaration",
+  );
+  expect(builtinAdmission({ ...podsGraph, key: "unregistered-route" })).toBe(
+    "Unenumerated legacy route: unregistered-route",
+  );
 });
 
 test("an open consent window draws its countdown with Reject, refused on the fixture lane", () => {
