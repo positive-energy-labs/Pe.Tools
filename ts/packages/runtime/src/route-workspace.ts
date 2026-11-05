@@ -1097,7 +1097,8 @@ export class RouteWorkspace {
     scope: WorkKey,
     admission: WorkAdmission,
     shape: WorkFeedShape,
-    deliver: (value: OwnerValue<unknown>) => void,
+    /** Each delivery carries the exact token its acquisition began with; none once uncaptured. */
+    deliver: (value: OwnerValue<unknown>, carriage?: WorkCarriage) => void,
     ack: (ack: WorkWriteAck) => void,
     failed: (error: unknown) => void,
     context?: WorkReadContext,
@@ -1138,7 +1139,7 @@ export class RouteWorkspace {
         begun.ok
           ? recorded.feed(scope, admission, shape, begun.carriage).then((value) => this.#requested(scope, value))
           : Promise.reject(begun.error),
-      ).then((got) => got && deliver(got));
+      ).then((got) => got && deliver(got, begun.ok ? begun.carriage : undefined));
       return close;
     }
     // A failed acquisition is offered to capture first; the original failure is what follows.
@@ -1158,17 +1159,22 @@ export class RouteWorkspace {
       captures = captures.then(() => persisted);
       fellBack();
     };
-    /** Resolves once this value is recorded, or as soon as capture stops; a late completion loses. */
-    const captured = (record: (carriage: WorkCarriage | undefined) => Promise<unknown>): Promise<unknown> => {
-      if (!capturing) return Promise.resolve();
-      if (++pending > limit) return Promise.resolve(overflow());
+    /**
+     * Resolves to this value's begun token once it is recorded, or as soon as capture stops; a late
+     * completion loses. A value that never began (uncaptured) resolves to undefined.
+     */
+    const captured = (
+      record: (carriage: WorkCarriage | undefined) => Promise<unknown>,
+    ): Promise<WorkCarriage | undefined> => {
+      if (!capturing) return Promise.resolve(undefined);
+      if (++pending > limit) return Promise.resolve(void overflow());
       // Each owner value begins its own attempt here, before the capture queue; after the
       // fallback nothing is captured, so nothing begins.
       const begun = capture!.begin(request, context);
       const carriage = begun.ok ? begun.carriage : undefined;
       const done = captures.then(() => (capturing ? record(carriage) : undefined)).finally(() => pending--);
       captures = done.catch(() => undefined);
-      return Promise.race([done, fallback]);
+      return Promise.race([done, fallback]).then(() => carriage);
     };
     if (shape === "work") {
       // One delivery chain keeps observation order, captured or not.
@@ -1178,17 +1184,15 @@ export class RouteWorkspace {
         scope.route,
         (value) => {
           if (closed) return;
-          const ready =
+          const begun = captured((carriage) =>
             "error" in value
-              ? captured((carriage) => lost(value.error, carriage)).then(() => value)
-              : acquire(
-                  captured((carriage) => capture!.feed(scope, admission, shape, value.value, carriage)).then(
-                    () => value.value,
-                  ),
-                );
+              ? lost(value.error, carriage)
+              : capture!.feed(scope, admission, shape, value.value, carriage),
+          );
+          const ready = "error" in value ? begun.then(() => value) : acquire(begun.then(() => value.value));
           deliveries = deliveries.then(async () => {
-            const got = await ready;
-            if (got && !closed) deliver(got);
+            const [got, carriage] = await Promise.all([ready, begun]);
+            if (got && !closed) deliver(got, carriage);
           });
         },
         true,
@@ -1198,17 +1202,17 @@ export class RouteWorkspace {
       let held: WorkWriteAck[] | null = [];
       stop = this.observeFeed(
         scope,
-        (snapshot) =>
-          void acquire(
-            captured((carriage) => capture!.feed(scope, admission, shape, snapshot, carriage)).then(() => snapshot),
-          ).then(
-            (got) => {
+        (snapshot) => {
+          const begun = captured((carriage) => capture!.feed(scope, admission, shape, snapshot, carriage));
+          void Promise.all([acquire(begun.then(() => snapshot)), begun]).then(
+            ([got, carriage]) => {
               if (!got) return;
-              deliver(got);
+              deliver(got, carriage);
               for (const write of held ?? []) ack(write);
               held = null;
             },
-          ),
+          );
+        },
         (write) => {
           if (closed) return;
           if (!held) return ack(write);

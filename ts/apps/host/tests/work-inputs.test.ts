@@ -7,6 +7,7 @@ import { address, bindWork } from "@pe/agent-contracts";
 import {
   RouteWorkspace,
   type RouteDocumentStore,
+  type WorkCarriage,
   type WorkReadContext,
   type WorkReadSource,
 } from "@pe/runtime";
@@ -108,6 +109,19 @@ async function consumer(lane: HostInputLane, selected: ReadSetId | null = null) 
   );
   return { consumption, context: workReadContext(consumption, run) };
 }
+
+/** The same context, keeping every token its begin minted, for delivery identity checks. */
+const minting = (context: WorkReadContext) => {
+  const minted: (WorkCarriage | undefined)[] = [];
+  const counted: WorkReadContext = {
+    begin: (request) => {
+      const begun = context.begin(request);
+      if (begun.ok) minted.push(begun.carriage);
+      return begun;
+    },
+  };
+  return { context: counted, minted };
+};
 
 test("a recorded workspace with no store serves the delivered Work, feed and history; it never mutates", async () => {
   const { dir, writer } = await bundle();
@@ -252,6 +266,8 @@ test.each(["work", "work-acks"] as const)(
     const { writer } = await bundle();
     const real = capturedWorkReads(writer, run);
     const request = await consumer({ kind: "live", captureStore: writer });
+    const tokens = minting(request.context);
+    const carried: (WorkCarriage | undefined)[] = [];
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     let feeds = 0;
@@ -268,10 +284,13 @@ test.each(["work", "work-acks"] as const)(
       key,
       admission,
       shape,
-      (value) => seen.push("error" in value ? -1 : (value.value as { revision: number }).revision),
+      (value, carriage) => {
+        carried.push(carriage);
+        seen.push("error" in value ? -1 : (value.value as { revision: number }).revision);
+      },
       (ack) => seen.push(ack.revision),
       (error) => failures.push(error),
-      request.context,
+      tokens.context,
     );
     await settled();
     for (let i = 0; i < 3; i++) await f.write(); // the third exceeds maxCount 2 while capture holds
@@ -290,8 +309,45 @@ test.each(["work", "work-acks"] as const)(
     await f.write();
     await settled();
     expect(seen).toEqual([0, 1, 2, 3, 4]);
+    // Values begun before the fallback carry their own exact token; after it nothing begins.
+    const begun = shape === "work" ? 2 : 1;
+    expect(tokens.minted).toHaveLength(begun);
+    expect(carried).toHaveLength(shape === "work" ? 5 : 1);
+    carried.forEach((carriage, index) => expect(carriage).toBe(tokens.minted[index]));
   },
 );
+
+test("each admitted-feed delivery carries the exact token its begin minted, live and recorded", async () => {
+  const { dir, writer } = await bundle();
+  const live = new RouteWorkspace({ registrations: [], store: memory(), capture: capturedWorkReads(writer, run) });
+  await admit(live);
+  const request = await consumer({ kind: "live", captureStore: writer });
+  const deliveries = (workspace: RouteWorkspace, shape: "work" | "work-acks", context: WorkReadContext) =>
+    new Promise<WorkCarriage | undefined>((resolve, reject) => {
+      const stop = workspace.observeAdmittedFeed(key, admission, shape, (_value, carriage) => {
+        stop();
+        resolve(carriage);
+      }, () => {}, reject, context);
+    });
+  for (const shape of ["work", "work-acks"] as const) {
+    const tokens = minting(request.context);
+    const carried = await deliveries(live, shape, tokens.context);
+    expect(tokens.minted).toHaveLength(1);
+    expect(carried).toBeDefined();
+    expect(carried).toBe(tokens.minted[0]);
+  }
+  await run(request.consumption.seal);
+  const recorded = new RouteWorkspace({ registrations: [], recorded: recordedWorkSource(await reader(dir)) });
+  await admit(recorded);
+  const { context } = await consumer(
+    { kind: "recording", recordingStore: await reader(dir), at: null },
+    request.consumption.id,
+  );
+  const tokens = minting(context);
+  const carried = await deliveries(recorded, "work", tokens.context);
+  expect(carried).toBeDefined();
+  expect(carried).toBe(tokens.minted[0]);
+});
 
 test("Work that cannot be recorded truncates capture; the live Work still answers and replay stays strict", async () => {
   const { dir, writer } = await bundle();
