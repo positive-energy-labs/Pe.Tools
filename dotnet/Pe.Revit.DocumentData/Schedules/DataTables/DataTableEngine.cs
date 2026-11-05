@@ -71,7 +71,9 @@ public static class DataTableEngine {
                 field.ColumnHeading,
                 poolColumn.Kind,
                 poolColumn.Name,
-                poolColumn.Guid.ToString()));
+                poolColumn.Guid.ToString()) {
+                Slot = DataTableColumnPool.OfKind(poolColumn.Kind).ToList().FindIndex(c => c.Guid == poolColumn.Guid)
+            });
         }
 
         // Collector order matches the schedule's displayed row order for key schedules.

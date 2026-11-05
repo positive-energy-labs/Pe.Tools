@@ -120,6 +120,7 @@ public static class DuctApplier {
             After = $"revision {storeRevision + 1}"
         };
         if (storeError is not null) store.Refuse($"the model's {StoreText.Name} is unreadable ({storeError}); refusing to overwrite it");
+        else if (UnbackedProvenance(request, stored) is { } unbacked) store.Refuse(unbacked);
         else if (request.Store.WorkRevision < storeRevision)
             store.Refuse($"stale: the model holds store revision {storeRevision}, the request carries {request.Store.WorkRevision}; re-read ducts.snapshot");
         items.Add(store);
@@ -197,19 +198,45 @@ public static class DuctApplier {
         foreach (var (name, before, after) in names)
             if (!string.Equals(before, after, StringComparison.Ordinal))
                 yield return Entry(null, "slot", name, before ?? "none", after ?? "none");
-        // Per key against the merged next store: an entry is removed only by an explicit delete, never by omission.
-        var verdicts = stored?.Verdicts ?? new Dictionary<string, DuctVerdictRecord>();
-        foreach (var key in verdicts.Keys.Union(next.Verdicts.Keys).OrderBy(k => k, StringComparer.Ordinal)) {
-            var before = verdicts.TryGetValue(key, out var b) ? b.Verdict : "none";
-            var after = next.Verdicts.TryGetValue(key, out var a) ? a.Verdict : "none";
-            if (before != after) yield return Entry(FirstId(key), "verdict", key, before, after);
+        // Every map, per key, against the merged next store: an entry is removed only by an explicit delete, never
+        // by omission. Values are shown without their timestamps, so a plan and its apply disclose the same change.
+        foreach (var e in Changes("verdict", stored?.Verdicts, next.Verdicts, v => v.Verdict, FirstId, k => k)) yield return e;
+        foreach (var e in Changes("role", stored?.Roles, next.Roles, v => v.Role, k => k, _ => null)) yield return e;
+        foreach (var e in Changes("store-rule", stored?.Rules, next.Rules, v => v.Table ?? "none", _ => null, k => k)) yield return e;
+        foreach (var e in Changes("store-instance", stored?.Instances, next.Instances, v => $"{v.Table ?? "no table"} c={v.Coefficient:0.#####}", k => k, _ => null)) yield return e;
+        foreach (var e in Changes("store-drop", stored?.Terminals, next.Terminals, v => $"{v.InWg:0.#####} in-wg ({v.Source ?? "no source"})", k => k, _ => null)) yield return e;
+        foreach (var e in Changes("store-terminal-flow", stored?.TerminalFlows, next.TerminalFlows, v => $"{v.Cfm:0.###} cfm ({v.Source ?? "no source"})", k => k, _ => null)) yield return e;
+        foreach (var e in Changes("store-equipment-flow", stored?.EquipmentFlows, next.EquipmentFlows, v => $"{v.Cfm:0.###} cfm ({v.Source ?? "no source"})", k => k, _ => null)) yield return e;
+
+        IEnumerable<Item> Changes<TKey, TValue>(string kind, IReadOnlyDictionary<TKey, TValue>? had, IReadOnlyDictionary<TKey, TValue> will,
+            Func<TValue, string> show, Func<TKey, long?> id, Func<TKey, string?> key) where TKey : notnull {
+            had ??= new Dictionary<TKey, TValue>();
+            foreach (var k in had.Keys.Union(will.Keys).OrderBy(k => k)) {
+                var before = had.TryGetValue(k, out var b) ? show(b) : "none";
+                var after = will.TryGetValue(k, out var a) ? show(a) : "none";
+                if (before != after) yield return Entry(id(k), kind, key(k), before, after);
+            }
         }
-        var roles = stored?.Roles ?? new Dictionary<long, DuctRoleRecord>();
-        foreach (var id in roles.Keys.Union(next.Roles.Keys).OrderBy(k => k)) {
-            var before = roles.TryGetValue(id, out var b) ? b.Role : "none";
-            var after = next.Roles.TryGetValue(id, out var a) ? a.Role : "none";
-            if (before != after) yield return Entry(id, "role", null, before, after);
-        }
+    }
+
+    /// <summary>
+    ///     Provenance records only writes that land (Compose). A request entry that changes stored provenance with no
+    ///     write of its id in this request would be silently dropped, so it is named and the store refuses instead.
+    /// </summary>
+    private static string? UnbackedProvenance(DuctApplyRequest request, DuctLossStore? stored) {
+        var asked = request.Store;
+        IEnumerable<string> Unbacked<TValue>(string map, IReadOnlyDictionary<long, TValue>? had, IReadOnlyDictionary<long, TValue>? want,
+            IEnumerable<long> written, Func<TValue, string> show) =>
+            (want ?? new Dictionary<long, TValue>())
+            .Where(kv => !written.Contains(kv.Key) && (had is null || !had.TryGetValue(kv.Key, out var h) || show(h) != show(kv.Value)))
+            .Select(kv => $"{map} {kv.Key}");
+        var unbacked = Unbacked("instances", stored?.Instances, asked.Instances, (request.Fittings ?? []).Select(w => w.Id), v => $"{v.Table}|{v.Inputs}|{v.Coefficient:R}")
+            .Concat(Unbacked("terminals", stored?.Terminals, asked.Terminals, (request.Terminals ?? []).Concat(request.Components ?? []).Select(w => w.Id), v => $"{v.InWg:R}|{v.Source}"))
+            .Concat(Unbacked("terminalFlows", stored?.TerminalFlows, asked.TerminalFlows, (request.TerminalFlows ?? []).Select(w => w.Id), v => $"{v.Cfm:R}|{v.Source}"))
+            .Concat(Unbacked("equipmentFlows", stored?.EquipmentFlows, asked.EquipmentFlows, (request.EquipmentFlows ?? []).Select(w => w.Id), v => $"{v.Cfm:R}|{v.Source}"))
+            .ToList();
+        return unbacked.Count == 0 ? null
+            : $"the request authors provenance with no write of its own ({string.Join(", ", unbacked)}); provenance records only writes that land, so stage the write or delete the entry";
     }
 
     /// <summary>The first element id an issue or finding id names: `open-end:123:1` is 123, `proximity:12:0|34:1` is 12.</summary>

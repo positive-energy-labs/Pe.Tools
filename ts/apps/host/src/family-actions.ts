@@ -1665,7 +1665,7 @@ export async function readFamily(
     return readLiveFamily(key, input, raw.scope, raw.target, bridge, deps);
   const scope = workKeySchema.parse(raw.scope);
   const target = documentRefSchema.parse(raw.target);
-  const reader = await parameterLinksReader(bridge, target, deps);
+  const reader = await projectReader(bridge, target, deps);
   if (!deps.workspace) throw refused("Route Work is unavailable");
   const view = await deps.workspace.read(scope, "parameter-links");
   if (!view) throw refused("Author this route's Work before reading it");
@@ -1708,11 +1708,11 @@ const storedProfile = (detail: unknown): ParameterLinkProfile | null =>
   parameterLinksDataSchema.shape.profile.parse((detail as { profile?: unknown }).profile) ?? null;
 
 /**
- * The one Parameter Links Read owner: a project document's lifetime, fenced on the process and the
+ * The one project-document Read owner (Parameter Links readings, every catalog Work base): a project document's lifetime, fenced on the process and the
  * document mark, around each native read. The reading above captures through it; the catalog plan reads
  * the stored profile through it and captures nothing.
  */
-export async function parameterLinksReader(
+export async function projectReader(
   bridge: RevitBridge["Service"],
   target: DocumentRef,
   deps: FamilyActionDependencies = {},
@@ -1738,14 +1738,3 @@ export async function parameterLinksReader(
   return { process, capturedAt, fence, read };
 }
 
-/** The catalog base for `parameter-links`: what Revit stores now, through the one Read owner. */
-export const storedParameterLinks = async (
-  bridge: RevitBridge["Service"],
-  target: DocumentRef,
-  deps: FamilyActionDependencies = {},
-) =>
-  storedProfile(
-    await (await parameterLinksReader(bridge, target, deps)).read("revit.detail.parameter-links", {
-      includeEvaluation: false,
-    }),
-  );

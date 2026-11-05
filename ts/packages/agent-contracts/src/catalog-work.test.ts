@@ -23,49 +23,39 @@ describe("Work identity", () => {
   });
 });
 
-const cell = (value: unknown) => ({ edit: { value } });
-const table = (doc: object) =>
-  catalogWorks["data-tables"].derive(catalogWorks["data-tables"].schema.parse({ name: cell("T"), ...doc })).request;
+const cell = (value: unknown, by: "pea" | "human" = "pea") => ({ edit: { value, by } });
 
-describe("data-tables derive", () => {
-  it("sends columns by pool slot, Text before Number, and leaves unstaged rows untouched", () => {
-    expect(
-      table({
-        columns: { "number:0": cell("N"), "text:1": cell("B"), "text:0": cell("A") },
-        rows: { r1: { "text:0": cell("a"), "text:1": cell(null) }, r2: {} },
-      }),
-    ).toEqual({
-      table: {
-        name: "T",
-        columns: [{ heading: "A", kind: "Text" }, { heading: "B", kind: "Text" }, { heading: "N", kind: "Number" }],
-        rows: [{ key: "r1", values: ["a", null] }],
-      },
-    });
+describe("data-tables keyed semantics", () => {
+  const work = catalogWorks["data-tables"];
+  const base = {
+    columns: { "text:0": "A", "text:1": "B", "number:0": "N" },
+    rows: { r1: { "text:0": "a1", "text:1": "b1", "number:0": "1" }, r2: { "text:0": "a2", "text:1": "b2", "number:0": "2" } },
+  };
+  const derive = (doc: object) => work.derive(work.schema.parse({ name: cell("T"), ...doc }), base);
+
+  it("a heading edit resends every column at its slot, so the others keep their parameters and values", () => {
+    const { request, touched } = derive({ columns: { "text:0": cell("A2") } });
+    expect(request.table.columns).toEqual([{ heading: "A2", kind: "Text" }, { heading: "B", kind: "Text" }, { heading: "N", kind: "Number" }]);
+    expect(request.table.rows).toEqual([]);
+    expect(touched.find((t) => t.path[0] === "columns")).toMatchObject({ before: "A", after: "A2" });
   });
 
-  it("refuses a slot gap, which the ordinal engine would fill with the next column", () => {
-    expect(() => table({ columns: { "text:0": { edit: { delete: true } }, "text:1": cell("B") } })).toThrow(
-      CatalogWorkRefused,
-    );
+  it("a sparse cell edit resends its row with every unstaged cell's stored value", () => {
+    expect(derive({ rows: { r2: { "number:0": cell("9") } } }).request.table.rows).toEqual([{ key: "r2", values: ["a2", "b2", "9"] }]);
   });
 
-  it("refuses a skipped cell before a staged one, which the native op would clear", () => {
-    expect(() =>
-      table({ columns: { "text:0": cell("A"), "text:1": cell("B") }, rows: { r1: { "text:1": cell("b") } } }),
-    ).toThrow(CatalogWorkRefused);
+  it("deletes the last slot of a kind, and refuses a delete that would remap a later column", () => {
+    expect(derive({ columns: { "text:1": { edit: { delete: true } } } }).request.table.columns.map((c) => c.heading)).toEqual(["A", "N"]);
+    expect(() => derive({ columns: { "text:0": { edit: { delete: true } } } })).toThrow(CatalogWorkRefused);
+    expect(() => derive({ columns: { "text:5": { edit: { delete: true } } } })).toThrow(CatalogWorkRefused);
   });
 
-  it.each([
-    { "number:0": cell("9") },
-    { "text:0": cell("a"), "number:0": cell("9") },
-  ])("refuses staged row cells outside the authored column set", (cells) => {
-    expect(() => table({ columns: { "text:0": cell("A") }, rows: { r1: cells } }))
-      .toThrow("Row r1: number:0 is not a staged column");
-  });
-
-  it("has no authored order and no heading-keyed columns", () => {
-    expect(() => table({ order: ["text:1", "text:0"] })).toThrow();
-    expect(() => table({ columns: { Condition: cell("A") } })).toThrow();
+  it("projects the native read by slot, and a missing table is a new one", () => {
+    const doc = work.schema.parse({ name: cell("T") });
+    const native = { tables: [{ name: "T", columns: [{ heading: "B", kind: "Text", slot: 1 }, { heading: "A", kind: "Text", slot: 0 }], rows: [{ key: "r1", values: ["b", "a"] }] }] };
+    expect(work.base.project(native, doc)).toEqual({ columns: { "text:1": "B", "text:0": "A" }, rows: { r1: { "text:1": "b", "text:0": "a" } } });
+    expect(work.base.project({ tables: [] }, doc)).toBeNull();
+    expect(work.derive(work.schema.parse({ name: cell("New"), columns: { "text:0": cell("A") } }), null).request.table.columns).toHaveLength(1);
   });
 });
 
