@@ -1,3 +1,4 @@
+import { z } from "zod";
 /** Catalog selection is an adapter; immutable request retention and execution belong to shared owners. */
 import {
   commands,
@@ -9,6 +10,8 @@ import {
   workKeySchema,
   workHandleSchema,
   ductsDocumentSchema,
+  fansDocumentSchema,
+  type WorkHandle,
   type ActionControlKey,
   type ScheduleReadKey,
   type FamilyReadKey,
@@ -175,24 +178,32 @@ export async function runCapability(
       ? host.callOperation(key, input)
       : host.call(key as never, (Object.keys(input).length ? input : undefined) as never);
   }
-  // Prerequisites are checked before submission, so an unscoped probe is not a journal attempt.
+  // Prerequisites are checked before submission, so an unscoped probe is not a journal attempt. Mirrors the
+  // host derive (ducts-actions.ts lossSnapshot): the ducts handle, with the fan walk read from fans Work at the
+  // same key (or readWorks.fans), or writeIntent.groups in ducts Work.
   if (key === "ducts.preview-losses") {
     const handle = workHandleSchema.parse(input.work);
-    const response = await createPeClient(context.hostBaseUrl, fetch).response("work.get", {
-      params: { route: "ducts" },
-      query: handle.key.binding === "address"
-        ? { target: handle.key.target, ...(handle.key.from ? { open: `${handle.key.from.session}/${handle.key.from.openId}` } : {}) }
-        : handle.key.binding === "open"
-          ? { open: `${handle.key.open.session}/${handle.key.open.openId}` }
-          : handle.key.binding === "workspace" ? { work: handle.key.work } : {},
-    });
-    if (!response.ok) throw Error(`Read Ducts Work before preview (${response.status})`);
-    const saved = await response.json() as { revision: number; doc: unknown };
-    if (saved.revision !== handle.revision) throw Error("Ducts Work changed; read its current revision before preview");
-    const scope = ductsDocumentSchema.parse(saved.doc).writeIntent.edit?.value;
-    // The fan walk scope is fans Work since FANSPLIT; U4 wires it into this preflight.
-    if (!scope?.groups?.length)
-      throw Error('Preview needs a scope. Read route:ducts.analysis, then stage writeIntent.edit = {"value":{"groups":["<group id>"]}} in route:ducts Work. Retry with the accepted Work revision. No preview was submitted.');
+    if (handle.key.route !== "ducts")
+      throw Error("Preview needs the route:ducts Work handle; the fan walk is read from route:fans Work at the same document. No preview was submitted.");
+    const fansHandle = z.object({ fans: workHandleSchema.optional() }).optional().parse(input.readWorks)?.fans;
+    const read = async (key: WorkHandle["key"]) => {
+      const response = await createPeClient(context.hostBaseUrl, fetch).response("work.get", {
+        params: { route: key.route },
+        query: key.binding === "address"
+          ? { target: key.target, ...(key.from ? { open: `${key.from.session}/${key.from.openId}` } : {}) }
+          : key.binding === "open"
+            ? { open: `${key.open.session}/${key.open.openId}` }
+            : key.binding === "workspace" ? { work: key.work } : {},
+      });
+      if (!response.ok) throw Error(`Read route:${key.route} Work before preview (${response.status})`);
+      return await response.json() as { revision: number; doc: unknown };
+    };
+    const [ducts, fans] = await Promise.all([read(handle.key), read(fansHandle?.key ?? { ...handle.key, route: "fans" })]);
+    if (ducts.revision !== handle.revision) throw Error("Ducts Work changed; read its current revision before preview");
+    if (fansHandle && fans.revision !== fansHandle.revision) throw Error("Fans Work changed; read its current revision before preview");
+    const walk = fansDocumentSchema.parse(fans.doc).writeIntent.edit?.value?.walk;
+    if (!walk && !ductsDocumentSchema.parse(ducts.doc).writeIntent.edit?.value?.groups?.length)
+      throw Error('Preview needs a fan walk. Read route:ducts.roster, then stage writeIntent.edit = {"value":{"walk":{"unitId":<id>,"portIndex":<n>}}} in route:fans Work. Retry with the accepted Work revision. No preview was submitted.');
   }
   const id = context.actionId ?? crypto.randomUUID();
   await context.beforeAdmission?.(id);

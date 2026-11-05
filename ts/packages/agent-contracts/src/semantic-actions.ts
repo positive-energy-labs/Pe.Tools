@@ -125,7 +125,7 @@ export const ductsActions = {
   },
   "ducts.preview-losses": {
     native: ["ducts.apply.preview"],
-    says: "First stage writeIntent.groups from route:ducts.analysis, and cells naming exactly the rule cells requested (the fan walk and fan cells are /fans Work). Then plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
+    says: "First stage the fan walk { unitId, portIndex } from route:ducts.roster in route:fans writeIntent, and cells naming exactly the cells requested (fan cells are route:fans Work, rule cells route:ducts Work). Then plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
     needs: "project-document",
     effect: "query",
     input: z.strictObject({}),

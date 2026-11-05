@@ -368,8 +368,8 @@ test("a direct RPC caller recovers its original command before consulting a miss
 
 
 import { runCapability } from "../src/shared/admission.ts";
-import { ductsDocumentSchema } from "@pe/agent-contracts";
-test.each(["open", "address", "workspace", "host"] as const)("loss preview reads exact %s Work before submission", async binding => {
+import { ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-contracts";
+test.each(["open", "address", "workspace", "host"] as const)("loss preview reads exact %s ducts and fans Work before submission", async binding => {
  for (const scoped of [false, true]) {
   const posts: unknown[] = [];
   const key = binding === "address" ? {route: "ducts", binding, target: "C:/Models/A.rvt"}
@@ -379,12 +379,15 @@ test.each(["open", "address", "workspace", "host"] as const)("loss preview reads
   const work = { key, revision: 3 };
   vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
-    if (url.pathname === "/pe/route-state/ducts") {
+    if (url.pathname === "/pe/route-state/ducts" || url.pathname === "/pe/route-state/fans") {
       const expected = binding === "address" ? {target: "C:/Models/A.rvt"}
         : binding === "open" ? {open: "A/open-A"}
         : binding === "workspace" ? {work: "draft"} : {};
       expect(Object.fromEntries(url.searchParams)).toEqual(expected);
-      return Response.json({revision: 3, doc: ductsDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {groups: ["g14577391"]}}}} : {})});
+      // The fan walk lives in fans Work at the same document key (the host derive reads it there).
+      return Response.json(url.pathname.endsWith("/fans")
+        ? {revision: 5, doc: fansDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {walk: {unitId: 14577391, portIndex: 0}}}}} : {})}
+        : {revision: 3, doc: ductsDocumentSchema.parse({})});
     }
     if (url.pathname === "/actions" && init?.method === "POST") {
       const body = JSON.parse(String(init.body)); posts.push(body);
@@ -397,8 +400,20 @@ test.each(["open", "address", "workspace", "host"] as const)("loss preview reads
     expect(await run()).toMatchObject({state: "succeeded"});
     expect(posts).toHaveLength(1);
   } else {
-    await expect(run()).rejects.toThrow("No preview was submitted");
+    await expect(run()).rejects.toThrow("Preview needs a fan walk. Read route:ducts.roster");
+    await expect(run()).rejects.not.toThrow("ducts.analysis");
     expect(posts).toEqual([]);
   }
  }
+});
+test("loss preview refuses a non-ducts Work handle before any read or submission", async () => {
+  const seen: string[] = [];
+  vi.stubGlobal("fetch", async (input: Request | string | URL) => {
+    seen.push(new URL(input instanceof Request ? input.url : String(input)).pathname);
+    throw Error("no request expected");
+  });
+  const work = { key: {route: "fans", binding: "host", target: null}, revision: 1 };
+  await expect(runCapability("ducts.preview-losses", {work}, {hostBaseUrl: "http://preflight.test", receipt: true}, {door: "command", mutates: false, needs: "project-document"}))
+    .rejects.toThrow("Preview needs the route:ducts Work handle");
+  expect(seen).toEqual([]);
 });
