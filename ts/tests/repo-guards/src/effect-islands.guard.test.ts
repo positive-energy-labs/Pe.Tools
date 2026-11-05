@@ -28,7 +28,6 @@ it.each(["rename", "rename and raise", "new", "copy"])("ratchets a committed %s"
     writeFileSync(path, JSON.stringify({ src: { [oldFile]: 1 }, tests: {} }));
     git("add", "ts");
     git("commit", "-m", "initial baseline");
-    const base = git("rev-parse", "HEAD");
     git("checkout", "-b", "change");
     if (change.startsWith("rename")) git("mv", `ts/${oldFile}`, `ts/${newFile}`);
     const count = change === "rename and raise" ? 2 : 1;
@@ -47,7 +46,6 @@ it.each(["rename", "rename and raise", "new", "copy"])("ratchets a committed %s"
     git("commit", "-m", change);
     expect(git("status", "--porcelain")).toBe("");
     const selected = trustedBaseline(cwd);
-    expect(selected.ref).toBe(base);
     expect(increases(actual, selected.baseline, "src")).toEqual(
       change === "rename"
         ? []
@@ -64,7 +62,7 @@ it.each(["rename", "rename and raise", "new", "copy"])("ratchets a committed %s"
   }
 });
 
-it("detects a committed baseline increase against the merge base", () => {
+it("never trusts a committed baseline raise, even on main", () => {
   const cwd = mkdtempSync(join(tmpdir(), "effect-islands-"));
   const git = (...args: string[]) =>
     execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe" }).trim();
@@ -79,20 +77,16 @@ it("detects a committed baseline increase against the merge base", () => {
     writeFileSync(path, JSON.stringify(original));
     git("add", ".");
     git("commit", "-m", "initial baseline");
-    const base = git("rev-parse", "HEAD");
-    git("update-ref", "refs/remotes/origin/main", base);
-    git("checkout", "-b", "raise");
     const raised = { src: { "apps/probe.ts": 2 }, tests: {} };
     writeFileSync(path, JSON.stringify(raised));
-    git("commit", "-am", "raise baseline");
-    expect(git("status", "--porcelain")).toBe("");
-    const selected = trustedBaseline(cwd);
-    expect(selected.ref).toBe(base);
-    expect(increases(raised, selected.baseline, "src")).toEqual(["apps/probe.ts: 2 > 1"]);
-    git("update-ref", "-d", "refs/remotes/origin/main");
-    expect(trustedBaseline(cwd).ref).toBe(base);
-    git("branch", "-D", "main");
-    expect(trustedBaseline(cwd).baseline).toEqual(raised);
+    git("commit", "-am", "raise baseline on main");
+    expect(increases(raised, trustedBaseline(cwd).baseline, "src")).toEqual([
+      "apps/probe.ts: 2 > 1",
+    ]);
+    // A later commit naming the raise as its base cannot ratify it.
+    writeFileSync(path, JSON.stringify(raised, null, 2));
+    git("commit", "-am", "ratify");
+    expect(trustedBaseline(cwd).baseline).toEqual(original);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
@@ -107,7 +101,7 @@ describe("effect islands shrink only (ADR 0029 rule 2)", () => {
       const untrusted = increases(actual, trusted.baseline, kind);
       expect(untrusted, `islands exceed ${trusted.ref}:\n${untrusted.join("\n")}`).toEqual([]);
     });
-    it(`${kind}: the baseline never rises above the merge-base one`, () => {
+    it(`${kind}: the baseline never rises above a committed one`, () => {
       const raised = increases(baseline, trusted.baseline, kind);
       expect(raised, `baseline raised above ${trusted.ref}:\n${raised.join("\n")}`).toEqual([]);
     });
