@@ -96,6 +96,7 @@ function Sides({ props }: { props: LedgerProps }) {
   const fan = props.sheet?.overview.fan;
   if (!fan || !totals)
     return props.busy || props.loading ? null : <p className="t-small text-ink-2">No fan open.</p>;
+  const currentEsp = props.inputs?.units[String(fan.unitId)]?.esp;
   // One aligned overview: the required ESP line, then a side per row with fixed numeric columns,
   // so the numbers read down a column instead of wrapping as run-on sentences.
   return (
@@ -114,9 +115,11 @@ function Sides({ props }: { props: LedgerProps }) {
           {totals.requiredEspAssumedInWg != null &&
             ` · with assumptions ${pressure(totals.requiredEspAssumedInWg)}`}
         </span>
-        {/* R3: the unit's PE_M_Fan_ExternalStaticPressure value is the required ESP written, not a rating. */}
-        <span className="text-ink-2">required (written)</span>
-        <span className="face-mono">{pressure(fan.ratedEspInWg)}</span>
+        {/* The resolver includes staged Work; a Read plan cannot claim a native write. */}
+        <span className="text-ink-2">required ({currentEsp?.source ?? "source unknown"})</span>
+        <span className="face-mono">
+          {pressure(currentEsp ? currentEsp.value : fan.ratedEspInWg)}
+        </span>
       </div>
       <div className="t-small grid grid-cols-[4rem_5.5rem_repeat(2,minmax(0,6rem))] gap-x-3">
         <span className="contents">
