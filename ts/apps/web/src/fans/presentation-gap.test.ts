@@ -1,4 +1,5 @@
 import { placeInput } from "../shell/admitted-place.test-fixture";
+import { acceptedWork } from "../shell/admitted-work.test-support";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { ductsDocumentSchema, workHandleSchema, writePreviewSchema } from "@pe/agent-contracts";
@@ -208,6 +209,7 @@ test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)
       }),
     );
     try {
+      await acceptedWork(mount);
       expect(mount.read("names")).toMatchObject({
         current: true,
         value: { nodes: snapshot.nodes },

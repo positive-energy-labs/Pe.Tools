@@ -1,4 +1,5 @@
 import { placeInput } from "../shell/admitted-place.test-fixture";
+import { acceptedWork } from "../shell/admitted-work.test-support";
 // @vitest-environment jsdom
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
@@ -121,6 +122,7 @@ test("drive-7 S8a labels cannot retain the edited row and value at the admitted 
     }),
   );
   try {
+    await acceptedWork(mount);
     expect(
       await settle(
         mount.invoke("drop", { row: "DS-1", value: 0.0132 }) as Observation<WorkWriteOutcome>,

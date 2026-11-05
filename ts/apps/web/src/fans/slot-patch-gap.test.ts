@@ -1,4 +1,5 @@
 import { placeInput } from "../shell/admitted-place.test-fixture";
+import { acceptedWork } from "../shell/admitted-work.test-support";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { fansDocumentSchema } from "@pe/agent-contracts";
@@ -129,6 +130,7 @@ test("the real admitted mount accepts the typed finite-key slot", async () => {
     }),
   );
   try {
+    await acceptedWork(mount);
     const observation = mount.invoke("slot", {}) as Observation<WorkWriteOutcome>;
     const outcome = await new Promise<WorkWriteOutcome>((resolve) =>
       observation.subscribe(

@@ -1,4 +1,5 @@
 import { placeInput } from "../shell/admitted-place.test-fixture";
+import { acceptedWork } from "../shell/admitted-work.test-support";
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -55,6 +56,7 @@ async function fixture(name = "read") {
     ),
   );
   close.push(mount.close);
+  if (name === "read") await acceptedWork(mount);
   return { mount, open, shell, route };
 }
 test("real admitted mount draws retained schedule cells and resolves the schedule picker without transport", async () => {
@@ -265,7 +267,7 @@ test("keyed mount edit preserves an untouched stale cell on the real domain Work
     ),
   );
   close.push(mount.close);
-  await vi.waitFor(() => expect(mount.workBasis()).not.toBeNull());
+  await acceptedWork(mount);
   const result = mount.invoke(
     "edit",
     { patches: [{ path: ["cells", "1::1", "edit"], value: { value: "reviewed" } }] },
@@ -388,7 +390,7 @@ async function interactive(measured = false, native = true) {
     ),
   );
   close.push(mount.close);
-  await vi.waitFor(() => expect(mount.workBasis()).not.toBeNull());
+  await acceptedWork(mount);
   return {
     mount,
     store,
@@ -510,7 +512,7 @@ test("push traverses U8s preview, review, real consent owner, commit and retaine
       ),
     );
     close.push(connected.close);
-    await vi.waitFor(() => expect(connected.workBasis()).not.toBeNull());
+    await acceptedWork(connected);
     vi.useFakeTimers();
     try {
       connected.invoke("push", {});

@@ -1,4 +1,5 @@
 import { placeInput } from "./admitted-place.test-fixture";
+import { acceptedWork } from "./admitted-work.test-support";
 import { expect, test, vi } from "vite-plus/test";
 import { familiesModule } from "../families/kernel";
 import { familiesScopeId } from "../families/neutral";
@@ -134,6 +135,7 @@ test("Families admission preserves axes and the mount journals preview with capt
     ),
   );
   try {
+    await acceptedWork(mount);
     mount.invoke("read", { filter, readId: "00000000-0000-4000-8000-000000000001" });
     const basis = mount.workBasis()!;
     expect(mount.invoke("apply", {}, basis)).toEqual({ kind: "preview" });

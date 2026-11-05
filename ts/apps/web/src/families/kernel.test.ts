@@ -1,4 +1,5 @@
 import { placeInput } from "../shell/admitted-place.test-fixture";
+import { acceptedWork } from "../shell/admitted-work.test-support";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { familiesModule } from "./kernel";
 import { familiesRouteState, familyCellKey } from "@pe/agent-contracts";
@@ -143,6 +144,7 @@ async function setup(
     ),
   );
   closes.push(mount.close);
+  await acceptedWork(mount);
   const read = () => {
     mount.invoke("read", { filter, readId: "00000000-0000-4000-8000-000000000001" });
     if (!application)
