@@ -1,10 +1,4 @@
 // @vitest-environment jsdom
-/**
- * The patch bay over the recorded world: the plan refuses before the press, the verb names every
- * consequence, a jack patched by click and by the command line builds the same launch, an
- * icon-started Revit is reached by pid, hr shows only for a hot-reload shape, and Stop keeps
- * work unless the Revit is a checkout session.
- */
 import {
   actionReceiptSchema,
   type Machine,
@@ -133,7 +127,7 @@ test("the frozen Open route renders the bay and patches without opening a host t
     await router.load();
     render(<RouterProvider router={router} />);
     expect(await screen.findByTestId("patch-bay")).toBeTruthy();
-    fireEvent.click(screen.getByText("Clinic-Fitout.rvt"));
+    fireEvent.click(await screen.findByText("Clinic-Fitout.rvt"));
     fireEvent.click(
       screen.getByText("patch Clinic-Fitout.rvt here", {
         selector: "[data-key='free:pid:18244'] *",
@@ -308,7 +302,6 @@ function Bay({
   );
 }
 
-/** The bay over a machine, with the table rebuilt from that machine's own sessions. */
 const BayOf = ({ machine }: { machine: Machine }) => (
   <Bay machine={machine} docs={modelRows(machine.revit.sessions!, BAY_RECENTS.result.recents)} />
 );
@@ -355,7 +348,6 @@ test("the command line typed one character at a time equals the click path", asy
     name: "Open in a new Revit 2024 and upgrade from 2023",
   });
   expect(verb.getAttribute("aria-disabled")).toBeNull();
-  // The chips are the draft: the socket the jack in hand was patched into.
   expect(chip("new 2024")).toBeTruthy();
   fireEvent.keyDown(box(), { key: "Enter" });
   await waitFor(() => expect(runSemanticAction).toHaveBeenCalled());

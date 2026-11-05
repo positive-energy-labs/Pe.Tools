@@ -12,10 +12,20 @@ export async function connectTypedPage() {
   const client = await connectCdp(target.webSocketDebuggerUrl);
   const send: CdpClient["send"] = client.send.bind(client);
   const errors: string[] = [];
+  const consoleErrors: string[] = [];
   let loadCount = 0;
   const unsubscribe = client.subscribe((event) => {
     if (event.method === "Page.loadEventFired") loadCount++;
     if (event.method === "Runtime.exceptionThrown") errors.push(JSON.stringify(event.params));
+    // Route-address refusals log through console.error, not as uncaught exceptions.
+    if (event.method === "Runtime.consoleAPICalled") {
+      const { type, args } = event.params as {
+        type: string;
+        args: { description?: string; value?: unknown }[];
+      };
+      if (type === "error")
+        consoleErrors.push(args.map((arg) => arg.description ?? String(arg.value)).join(" "));
+    }
   });
   try {
     await client.send("Runtime.enable");
@@ -37,6 +47,7 @@ export async function connectTypedPage() {
     send,
     evaluate: client.evaluate.bind(client),
     errors,
+    consoleErrors,
     loadCount: () => loadCount,
     async close() {
       unsubscribe();

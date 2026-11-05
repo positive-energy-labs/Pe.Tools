@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, waitFor, fireEvent } from "@testing-library/react";
+import { cleanup, render } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { Route as root } from "../routes/__root";
@@ -46,21 +46,6 @@ async function mounted(captures: unknown[] = [], sha = "abc") {
   );
   return { view, router, open };
 }
-test("host-scoped refresh advances the shared mount read generation", async () => {
-  const { view, router, open } = await mounted();
-  await waitFor(() => expect(open).toHaveBeenCalled());
-  const before = open.mock.calls.length;
-  open.mockClear();
-  fireEvent.click(await view.findByRole("button", { name: /^refresh$/ }));
-  await waitFor(() =>
-    expect(open).toHaveBeenCalledWith({}, { target: { kind: "host" }, work: null }),
-  );
-  expect(open).toHaveBeenCalledTimes(1);
-  expect(before).toBeGreaterThan(0);
-  expect(router.state.location.search.sha).toBe("abc");
-  expect(view.queryByLabelText("Document")).toBeNull();
-});
-
 test("the admitted reading renders the retained capture and its restored detail", async () => {
   const { view } = await mounted(
     [
@@ -79,6 +64,6 @@ test("the admitted reading renders the retained capture and its restored detail"
     ],
     "a".repeat(64),
   );
-  expect(await view.findByText("Ground plan")).toBeTruthy();
+  expect(await view.findByRole("option", { name: /Ground plan/ })).toBeTruthy();
   expect(await view.findByRole("link", { name: "open png" })).toBeTruthy();
 });

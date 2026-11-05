@@ -1,3 +1,4 @@
+import { testHostFiles, testDocumentMarks } from "./effect-test.ts";
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
@@ -86,6 +87,8 @@ function fixture() {
       bridge,
       {
         sdk: sdkSessions,
+        files: testHostFiles(),
+        marks: testDocumentMarks(bridge),
         workspace,
       },
     );

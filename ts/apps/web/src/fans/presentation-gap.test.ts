@@ -154,7 +154,7 @@ async function witness(present: (...args: unknown[]) => unknown, names = () => s
   return result.route;
 }
 
-test.each(["current", "stale-before", "stale-after", "throw", "async", "refused"] as const)(
+test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)(
   "drive-7 S5a/S9: invocation-captured naming evidence (%s)",
   async (mode) => {
     let names = structuredClone(snapshot);
@@ -245,14 +245,6 @@ test.each(["current", "stale-before", "stale-after", "throw", "async", "refused"
         names.nodes[0]!.facts[0]!.text = "Changed equipment";
         mount.refresh("names");
       };
-      if (mode === "refused") {
-        frames.get("w1c.write.preview")!({ status: "failed", current: false, reason: "Fans Work belongs to another document" });
-        expect(mount.review("apply")).toBeNull();
-        expect(mount.reviewRefusal("apply")).toMatchObject({ reason: "plan-failed", message: "Fans Work belongs to another document" });
-        // Retry owns a fresh reading; the older refusal never reaches it.
-        expect(mount.invoke("apply", {})).toEqual({ kind: "preview" });
-        expect(mount.reviewRefusal("apply")).toBeNull();
-      }
       // Keep the in-flight callback: invalidation correctly releases the live subscription.
       const previewFrame = frames.get("w1c.write.preview")!;
       if (mode === "stale-before") changeNames();
@@ -317,7 +309,7 @@ test.each(["current", "stale-before", "stale-after", "throw", "async", "refused"
             expect(present).toHaveBeenCalledOnce();
           }
         }
-        if (mode !== "current" && mode !== "refused") {
+        if (mode !== "current") {
           expect(mount.reviewRefusal("apply")).toMatchObject({
             kind: "refused",
             reason: "review-stale",

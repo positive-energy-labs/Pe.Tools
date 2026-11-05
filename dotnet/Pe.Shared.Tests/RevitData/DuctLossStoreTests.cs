@@ -90,6 +90,7 @@ public sealed class DuctLossStoreTests {
         var slots = Newtonsoft.Json.JsonConvert.DeserializeObject<DuctParameterSlotOverrides>("""{"componentDrop":"Damper Drop"}""")!;
 
         Assert.That(slots.FanStatic, Is.Null, "Newtonsoft passes null for a missing ctor argument");
+        Assert.That(slots.Resolve().FanStatic, Is.EqualTo("PE_M_Fan_ExternalStaticPressure"));
         Assert.That(slots.Resolve(), Is.EqualTo(new DuctParameterSlotOverrides(ComponentDrop: "Damper Drop").Resolve()));
     }
 

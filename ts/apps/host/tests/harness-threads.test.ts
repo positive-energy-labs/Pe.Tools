@@ -1,5 +1,5 @@
 import { fansDocumentSchema } from "@pe/agent-contracts";
-import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle, testHostInputs } from "./effect-test.ts";
+import { detachedBridge, sessionView, consentService, harnessThreads, testSpawner, settle, testHostInputs, captureStore } from "./effect-test.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { RevitBridge } from "../src/bridge.ts";
@@ -49,13 +49,15 @@ import { createUpdateReader, type UpdateRunner } from "../src/update-reader.ts";
 import type { Envelope } from "@pe/host-contracts/pe-revit-contract";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { ductsExecutors } from "../src/ducts-actions.ts";
-import { workWriteBoundary } from "../src/work-write-boundary.ts";
+import { commandRegistry } from "../src/command-registry.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { buildCapabilities, peFind, peRead } from "@pe/mcps";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
+// Process journeys spawn real harness children, so machine load moves their time. Budget is 3x the
+// slowest solo run (10.8 s, 2026-11-04); the 15 s default stays for unit files (vite.config.ts:59).
+vi.setConfig({ testTimeout: 30_000 });
 
 let root = "";
 let previousLocalAppData: string | undefined;
@@ -272,19 +274,13 @@ test.each(["claude", "codex"] as const)(
       ), readScope,
     ));
     const deps = { sdk: sdkSessions, nativeRead: Context.get(readContext, HostNativeRead), files: Context.get(readContext, HostFiles), marks: Context.get(readContext, HostDocumentMarks) };
-    const executors = ductsExecutors(bridge, deps);
-    const entries = Object.fromEntries(
-      Object.entries(executors)
-        .filter(([name]) => name !== "ducts.refresh")
-        .map(([name, executor]) => [
-          name,
-          workWriteBoundary(executor, bridge, deps),
-        ]),
-    );
+    const resolve = commandRegistry(bridge, captureStore("harness-threads"), deps, async () => {
+      throw Error("No local command in this journey");
+    });
     const journal = new ActionJournal(join(dir, "journal.jsonl"), Date.now);
     journal.bindCommands({
       work: routes.workspace,
-      resolve: (name) => entries[name]!,
+      resolve,
       probe: async () => true,
     });
     let base = "";

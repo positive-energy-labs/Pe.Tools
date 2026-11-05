@@ -1,3 +1,5 @@
+import { testHostFiles, settle } from "./effect-test.ts";
+import { SdkDriver } from "../src/sdk-session.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostFiles } from "../src/host-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
@@ -5,7 +7,7 @@ import { PictureCaptureStore } from "../src/captures-route.ts";
 /** Port of main .artifacts/runs/review-20261030-ducts/contracts/contracts-review/
  * write-repro.cjs and repro.cjs (2026-10-30). Real journal, executor, workspace and
  * route handler; stand-in native socket and SDK receipts. No host or Revit process.
- * These are ordinary failing tests, not test.fails: missing kernel primitives stay red.
+ * These regressions exercise the real ownership boundary; every assertion must stay green.
  */
 import { captureStore } from "./effect-test.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
@@ -101,7 +103,7 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
       makeCallRoute(owner, captureStore(join(dir, "captures")), {
         sdk,
         workspace: work,
-      }).pipe(nativeReadRoot()).pipe(Layer.provide(HostFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, marks))).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+      }).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdk(args))))).pipe(Layer.provide(HostFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, marks))).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       { disableLogger: true },
     );
     const post = (body: unknown) =>
@@ -115,13 +117,14 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
           Context.empty() as never,
         ),
       );
-    const answer = (requestId: string, value: unknown, lost = false) =>
+    const answer = (requestId: string, value: unknown, lost = false, openDocumentId: string | null = target.openId) =>
       Queue.offer(
         incoming,
         JSON.stringify({
           kind: "Response",
           response: {
             requestId,
+            openDocumentId,
             metrics,
             ok: !lost,
             statusCode: lost ? 504 : 200,
@@ -186,7 +189,7 @@ type Harness = {
   revitChanged: () => Effect.Effect<void>;
   outgoing: Queue.Queue<import("@pe/host-contracts/contracts").BridgeFrame>;
   post: (body: unknown) => Effect.Effect<Response>;
-  answer: (requestId: string, value: unknown, lost?: boolean) => Effect.Effect<boolean>;
+  answer: (requestId: string, value: unknown, lost?: boolean, openDocumentId?: string | null) => Effect.Effect<boolean>;
   intent: (
     id: string,
     key: DuctsActionKey,
@@ -244,9 +247,9 @@ const dispatchOrReceipt = (
       if (next.kind === "receipt") return next;
       const request = next.frame.request!;
       if (request.operationKey.startsWith("ducts.snapshot."))
-        yield* answer(request.requestId, snapshot);
+        yield* answer(request.requestId, snapshot, false, request.openDocumentId ?? null);
       else if (request.operationKey === "ducts.tables")
-        yield* answer(request.requestId, { tables: {}, missing: [], unsupported: [] });
+        yield* answer(request.requestId, { folder: "fixture", tables: {}, missing: [], unsupported: {} }, false, request.openDocumentId ?? null);
       else return next;
     }
   });
@@ -328,6 +331,8 @@ test("kernel gap: sheet read cannot overwrite Work at the server revision", asyn
   const before = structuredClone(stored);
   const sheets = createDuctsSheets(
     {
+      firm: () => settle(testHostFiles().firm),
+      catalogs: () => settle(testHostFiles().ductCatalogs),
       call: async () => {
         throw Error("read unavailable");
       },
