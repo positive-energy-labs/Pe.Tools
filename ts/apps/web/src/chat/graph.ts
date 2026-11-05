@@ -11,6 +11,7 @@ import {
   pane,
   split,
   threadHeadSchema,
+  threadWorkSnapshotSchema,
   promptRequestSchema,
   type DocumentRequest,
   type Machine,
@@ -125,6 +126,7 @@ export function chatGraph(deps: () => ChatRouteDeps, minOtherSize?: number): Rou
     },
     readings: {
       threads: { source: "threads", retire: "never" },
+      threadWork: { source: "threadWork", retire: "never" },
       transcript: { source: "transcript", args: (page) => page.thread },
       head: {
         source: "head",
@@ -246,6 +248,10 @@ export function chatAdapters(navigate: () => void): RouteAdapters<ChatPage, unkn
       threads: subscriptionSource({
         request: () => ({ kind: "threads" }),
         decode: (value) => value,
+      }),
+      threadWork: subscriptionSource({
+        request: () => ({ kind: "thread-work" }),
+        decode: (value) => threadWorkSnapshotSchema.parse(value),
       }),
       ...Object.fromEntries(
         (["head", "machine", "receipts", "capabilities"] as const).map((id) => {

@@ -75,8 +75,9 @@ test("the demo fixture is the published snapshot contract", () => {
   expect(threadWorkSnapshotSchema.parse(CHAT_SEED_THREAD_WORK)).toEqual(CHAT_SEED_THREAD_WORK);
 });
 
-test("rows lead with remembered documents and unfinished Work, never session or target labels", () => {
+test("rows lead with remembered documents and unfinished Work, never session or target labels", async () => {
   mount();
+  await screen.findByText("Operations Demo.rvt");
   // One document with two Works: its name, the lead Work's chip and intent, the rest counted.
   expect(row("Operations Demo.rvt").textContent).toContain("2 unfinished");
   expect(row("Operations Demo.rvt").textContent).toContain("duct resize +1");
@@ -99,6 +100,7 @@ test("rows lead with remembered documents and unfinished Work, never session or 
 
 test("a thread press opens the conversation; a Work press opens the tool", async () => {
   const { onSelect, onWork } = mount();
+  await screen.findByText("Operations Demo.rvt");
   fireEvent.click(row("Operations Demo.rvt"));
   expect(onSelect).toHaveBeenCalledWith("demo-review");
   expect(onWork).not.toHaveBeenCalled();
@@ -114,6 +116,7 @@ test("a thread press opens the conversation; a Work press opens the tool", async
 
 test("a demo Work press asks the host nothing and opens its route", async () => {
   const { onWork } = mount();
+  await screen.findByText("Level 1.rvt");
   fireEvent.click(
     row("Level 1.rvt").querySelector<HTMLElement>('button[aria-label="Open duct resize"]')!,
   );
@@ -128,8 +131,9 @@ test("a demo Work press asks the host nothing and opens its route", async () => 
   expect(call).not.toHaveBeenCalled();
 });
 
-test("partial discovery says so once at the list's end", () => {
+test("partial discovery says so once at the list's end", async () => {
   mount();
+  await screen.findByText("Work partly read");
   expect(document.querySelectorAll("[data-thread-work-partial]")).toHaveLength(1);
   expect(screen.getByText("Work partly read")).toBeTruthy();
 });
