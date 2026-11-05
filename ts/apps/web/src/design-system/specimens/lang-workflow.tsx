@@ -15,7 +15,7 @@ import {
 } from "#/components/work/band";
 import { StateCell } from "@pe/kit/lang/cell";
 import { Tag } from "@pe/kit/lang/chip";
-import { KeyHint, KeyLegend, type LegendKey } from "@pe/kit/lang/key-hint";
+import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
 import { Legend, legendWord } from "@pe/kit/lang/legend";
 import { tokenRef } from "@pe/kit/lib/token";
@@ -26,15 +26,6 @@ import { RecipeGrid, SpecimenFrame, type GridVariantProps } from "./recipe-grid"
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 const noop = () => {};
-
-/** A drawing's keys: pointer gestures as words, keys as `KeyHint`. */
-const LEGEND_SPECIMEN: readonly LegendKey[] = [
-  { pointer: "drag", does: "orbit" },
-  { keys: ["Shift"], pointer: "drag", does: "pan" },
-  { pointer: "wheel", does: "zoom" },
-  { keys: ["F"], does: "frame the selection" },
-  { keys: ["Esc"], does: "clear the selection" },
-];
 
 /** Open, contested and Pea-agreed edit: the three verb sets the reviewer draws. */
 const REVIEW_SPECIMEN: Record<string, CellLike> = {
@@ -54,12 +45,6 @@ export function LangWorkflowSpecimens() {
         <div className="flex items-center gap-2">
           <KeyHint>⌘K</KeyHint>
           <KeyHint mute>Esc</KeyHint>
-        </div>
-      </SpecimenFrame>
-      <SpecimenFrame name="KeyLegend" importPath="@pe/kit/lang/key-hint">
-        <div className="flex items-end gap-6">
-          <KeyLegend keys={LEGEND_SPECIMEN} />
-          <KeyLegend keys={LEGEND_SPECIMEN} defaultOpen />
         </div>
       </SpecimenFrame>
       <SpecimenFrame name="Legend" importPath="@pe/kit/lang/legend">

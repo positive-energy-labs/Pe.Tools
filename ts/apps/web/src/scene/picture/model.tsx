@@ -32,6 +32,7 @@ import type { PicturePage, SceneView } from "@pe/agent-contracts";
 import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { PaneOverlay } from "@pe/kit/lang/pane";
+import { Switcher } from "@pe/kit/lang/switcher";
 import { DetailedRead } from "./detail";
 
 const NONE: ReadonlySet<string> = new Set();
@@ -137,6 +138,7 @@ export function ModelPicture({
   lit,
   paint,
   contextMode,
+  onContextMode,
   contextRadiusFt,
   contextRepresentation,
   onContextRepresentation,
@@ -168,6 +170,7 @@ export function ModelPicture({
   /** The surface's paint over the shown meshes; absent: focus is the subject. */
   paint?: (meshes: SceneMeshes | null) => PaintOf | undefined;
   contextMode?: ContextMode;
+  onContextMode?: (mode: ContextMode) => void;
   contextRadiusFt?: number;
   contextRepresentation?: PictureContext;
   onContextRepresentation?: (representation: PictureContext) => void;
@@ -186,7 +189,7 @@ export function ModelPicture({
   onIssuePick: (target: IssueTarget) => void;
   issue: string;
   setPage: (
-    next: Partial<Pick<PicturePage, "sceneView" | "contextRadiusFt">>,
+    next: Partial<Pick<PicturePage, "sceneView" | "contextRadiusFt" | "contextStyle">>,
     move?: { history: "push" | "replace" },
   ) => void;
   onPick: (id: number, at: { x: number; y: number }) => void;
@@ -313,7 +316,9 @@ export function ModelPicture({
         selected={selectedKeys}
         lit={litKeys}
         paintOf={paintOf}
-        contextMode={preset === "nearby-structure" ? "lines" : contextMode}
+        contextMode={
+          contextMode === "off" ? "off" : preset === "nearby-structure" ? "lines" : contextMode
+        }
         kinds={kinds}
         colour={colour}
         contextRadiusFt={contextRadiusFt}
@@ -338,35 +343,43 @@ export function ModelPicture({
           onPick(pick.instance.revitId, { x: event.clientX, y: event.clientY });
         }}
       />
-      {meshes && sectionSubject && (
-        <PaneOverlay label="section and context" place="tr">
-          <SectionControls
-            view={shownView}
-            subject={sectionSubject}
-            padding={look.section.paddingFt}
-            proximity={
-              contextRadiusFt === undefined
-                ? undefined
-                : {
-                    radiusFt: contextRadiusFt,
-                    onChange: (radius) =>
-                      setPage({ contextRadiusFt: radius }, { history: "replace" }),
-                  }
-            }
-            onChange={(next) => {
-              setSectionDraft(undefined);
-              setPage({ sceneView: next }, { history: "push" });
-            }}
-          />
-        </PaneOverlay>
-      )}
       {onContextRepresentation ||
       read.completeness?.complete === false ||
       read.notice ||
       read.contextError ||
       read.omittedElements ||
       read.unavailableElements ? (
-        <PaneOverlay label="scene completeness" place="br">
+        <PaneOverlay label="section and context" place="tr">
+          {sectionSubject && (
+            <SectionControls
+              view={shownView}
+              subject={sectionSubject}
+              padding={look.section.paddingFt}
+              proximity={
+                contextRadiusFt === undefined
+                  ? undefined
+                  : {
+                      radiusFt: contextRadiusFt,
+                      onChange: (radius) =>
+                        setPage({ contextRadiusFt: radius }, { history: "replace" }),
+                    }
+              }
+              onChange={(next) => {
+                setSectionDraft(undefined);
+                setPage({ sceneView: next }, { history: "push" });
+              }}
+            />
+          )}
+          <Switcher
+            ariaLabel="Context style"
+            value={contextMode ?? "off"}
+            options={[
+              { value: "off", label: "off", title: "Hide context" },
+              { value: "lines", label: "lines", title: "Context edges" },
+              { value: "glass", label: "glass", title: "Transparent context" },
+            ]}
+            onChange={(style) => onContextMode?.(style as ContextMode)}
+          />
           <OutcomeLine
             kind="advisory"
             label={[

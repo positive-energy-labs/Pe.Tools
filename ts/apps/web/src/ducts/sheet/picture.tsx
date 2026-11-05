@@ -23,6 +23,10 @@ import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import type * as Atom from "effect/reactivity/Atom";
 import { useMemo, type RefObject } from "react";
 import { coloursOf } from "../colours";
+import { NodeFactsView, SegmentFactsView } from "../facts";
+import { EncodingPicker } from "../proto/encoding/picker";
+import { ScaleLegend } from "../proto/encoding/scale-legend";
+import { flowDirections } from "../proto/encoding/flow";
 import { encodingFor } from "../encoding";
 import type { OpenSheet } from "../neutral.ts";
 import { DuctsOverlay, linesOf, useEquipment } from "../picture-content";
@@ -196,7 +200,7 @@ export function SheetPicture({
       ]),
     [sheet, blockers, runs],
   );
-  const scene = useMemo(
+  const baseScene = useMemo(
     () =>
       sceneOf(
         indexOf(snapshot, null),
@@ -206,6 +210,29 @@ export function SheetPicture({
       ),
     [snapshot, focusIds],
   );
+  const legs = useMemo(() => Object.values(sheet?.worksheet?.legs ?? {}), [sheet]);
+  const legsByElement = useMemo(() => {
+    const index = new Map<number, typeof legs>();
+    for (const leg of legs) index.set(leg.elementId, [...(index.get(leg.elementId) ?? []), leg]);
+    return index;
+  }, [legs]);
+  const scene = useMemo(() => {
+    const pressure = (id: number) => {
+      const own = legsByElement.get(id) ?? [];
+      const losses = own.flatMap((leg) => (leg.lossInWg == null ? [] : [leg.lossInWg]));
+      return losses.length && losses.length === own.length
+        ? { drop: Math.max(...losses) }
+        : undefined;
+    };
+    return {
+      ...baseScene,
+      segments: baseScene.segments.map((facts) => ({
+        ...facts,
+        pressure: pressure(facts.segment.id),
+      })),
+      nodes: baseScene.nodes.map((facts) => ({ ...facts, pressure: pressure(facts.node.id) })),
+    };
+  }, [baseScene, legsByElement]);
   const lines = useMemo(() => linesOf(scene), [scene]);
   const routePaint = useMemo(
     () => paintOfDucts(snapshot, focusIds, beyond.ids),
@@ -249,7 +276,22 @@ export function SheetPicture({
   // Hovering a context element names it in the readout (no tooltip): whose air it is.
   const { hovered } = useElementAttention();
   const hoveredBeyond = hovered != null && beyond.markOf.has(hovered) ? hovered : null;
-  const encoding = useMemo(() => encodingFor("none"), []);
+  const encoding = useMemo(() => {
+    const directions = new Map(snapshot.groups.flatMap((g) => [...flowDirections(snapshot, g.id)]));
+    const value = encodingFor(page.encoding, scene, directions);
+    return page.encoding === "legs"
+      ? {
+          ...value,
+          bin: (facts: { segment?: { id: number } }) =>
+            legs.some((leg) => leg.elementId === facts.segment?.id) ? "leg" : "off",
+        }
+      : value;
+  }, [page.encoding, scene, snapshot]);
+  const counts = new Map<string, number>();
+  for (const facts of [...scene.segments, ...(encoding.nodes ? scene.nodes : [])]) {
+    const key = encoding.bin(facts);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
   const pointOf = (id: number): readonly number[] | null => {
     const node = byId.nodes.get(id);
     if (node) return node.point ?? null;
@@ -257,13 +299,32 @@ export function SheetPicture({
     return line ? (line[Math.floor((line.length - 1) / 2)] ?? null) : null;
   };
   const marksOn = new Set<string>(page.layers);
+  const labels = scene.nodes.flatMap(({ node }) =>
+    node.point
+      ? [
+          {
+            key: `element:${node.id}`,
+            at: node.point,
+            text: nameOf(node.id),
+            priced: false,
+            ids: [node.id],
+          },
+        ]
+      : [],
+  );
+  const stubLabels = [...beyond.markOf].flatMap(([id, mark]) => {
+    const at = pointOf(id);
+    return at
+      ? [{ key: `beyond:${id}`, at, text: beyondWords(mark), priced: false, ids: [id], stub: true }]
+      : [];
+  });
   const overlay = (frame: PictureOverlayFrame) => (
     <DuctsOverlay
       frame={frame}
       scene={scene}
       layers={marksOn}
       encoding={encoding}
-      labels={NONE}
+      labels={[...labels, ...stubLabels]}
       rulings={NONE}
       covered={NONE}
       issues={issues}
@@ -272,6 +333,9 @@ export function SheetPicture({
       onRuling={() => {}}
     />
   );
+  const sides = [sheet?.worksheet?.supply, sheet?.worksheet?.return];
+  const runFor = (key: SubjectKey) =>
+    sides.flatMap((side) => side?.runs ?? []).find((run) => `run:${run.id}` === key);
   const fan = overviewFans[0];
   // With no fan open there is nothing to capture; say what to do instead of the network picture's words.
   if (!fan)
@@ -333,15 +397,102 @@ export function SheetPicture({
         strands: runs.strands,
         over: runs.over,
         lines,
-        name: (key) => nameOf(idOf(key)) ?? "element not in snapshot",
+        name: (key) =>
+          key.startsWith("run:")
+            ? `Run to ${nameOf(runFor(key)?.end.elementId ?? NaN)}`
+            : key.startsWith("section:")
+              ? `Section ${key.slice(8)}`
+              : (nameOf(idOf(key)) ?? "element not in snapshot"),
         paint,
         kinds,
         colour,
         layers,
-        layerOptions: DUCTS_LAYER_OPTIONS,
+        // The worksheet has no old network "no-run" overlay; do not advertise an inert layer.
+        layerOptions: DUCTS_LAYER_OPTIONS.filter((option) => option.key !== "no-run"),
         capture: { cuts: beyond.cuts },
         overlay,
-        readout: { subject: fan.mark, summary },
+        readout: {
+          subject: fan.mark,
+          summary,
+          facts: (key) => {
+            const run = runFor(key);
+            const section = sides
+              .flatMap((side) => side?.sections ?? [])
+              .find((part) => `section:${part.id}` === key);
+            const path = run ?? section;
+            if (path)
+              return (
+                <dl data-run-facts={run?.id} data-section-facts={section?.id}>
+                  <dt>
+                    {path.side} {run ? "run" : "section"} {run?.critical ? "· critical" : ""}
+                  </dt>
+                  <dd className="face-mono">
+                    {path.cfm ?? "missing"} cfm · {path.telFt.toFixed(1)} eq ft
+                  </dd>
+                  <dd className="face-mono">
+                    {path.knownInWg.toFixed(4)} in-wg known ·{" "}
+                    {run
+                      ? run.complete
+                        ? "complete"
+                        : "incomplete"
+                      : `${section?.unpricedLegs ?? 0} unpriced legs`}
+                  </dd>
+                  <dd>
+                    {path.legIds.length} legs · max {path.maxFpm ?? "missing"} fpm
+                  </dd>
+                </dl>
+              );
+            const id = idOf(key);
+            const segment = baseScene.segments.find((f) => f.segment.id === id);
+            const node = scene.nodes.find((f) => f.node.id === id);
+            return (
+              <>
+                {segment ? (
+                  <SegmentFactsView {...segment} />
+                ) : node ? (
+                  <NodeFactsView {...node} />
+                ) : (
+                  <p>Element {id} is outside the snapshot</p>
+                )}
+                {legs
+                  .filter((leg) => leg.elementId === id)
+                  .map((leg) => (
+                    <dl key={leg.id} data-leg-facts={leg.id}>
+                      <dt>Sheet leg · {leg.flowSource ?? "flow source missing"}</dt>
+                      <dd className="face-mono">
+                        {leg.flowCfm ?? "missing"} cfm · {leg.velocityFpm ?? "missing"} fpm
+                      </dd>
+                      <dd className="face-mono">
+                        {leg.lossInWg == null ? "missing" : leg.lossInWg.toFixed(4)} in-wg ·{" "}
+                        {leg.lossSource.kind}: {leg.lossSource.ref}
+                      </dd>
+                    </dl>
+                  ))}
+              </>
+            );
+          },
+        },
+        furniture: {
+          actions: (
+            <EncodingPicker
+              value={encoding.key}
+              onPick={(encoding) =>
+                setPage(
+                  { encoding, layers: [...new Set([...page.layers, "centrelines"])] },
+                  { history: "push" },
+                )
+              }
+            />
+          ),
+          legend: (
+            <ScaleLegend
+              encoding={encoding}
+              counts={counts}
+              nameOf={nameOf}
+              onSelect={(id) => setPage({ selected: String(id) }, { history: "push" })}
+            />
+          ),
+        },
         goTo: (jumpTo) => (
           <GoToSubject
             snapshot={snapshot}
