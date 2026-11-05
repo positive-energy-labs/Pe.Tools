@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 import { catalogWorks, catalogWorkSpecs, type CatalogTouch } from "./catalog-work.ts";
 import { commandCatalogAxes } from "./command-axes.ts";
@@ -6,11 +5,9 @@ import { editableCells } from "./command.ts";
 import { commands } from "./semantic-actions.ts";
 
 /**
- * K3 class-wide falsifier over every ModelWrite command, discovered from the catalog axes. Each write is
- * classified from its own input schema, not from a label:
- *   non-keyed: the input holds no collection of records, so the op can only write what it names; nothing to omit.
- *   keyed: the input holds a collection of records (path listed). It must have an executable omission check here;
- *   a keyed write without one FAILS. Unknown semantics never pass.
+ * K3 class-wide falsifier over every ModelWrite command, discovered from the catalog axes.
+ * Only an executable omission check passes. A write without one FAILS, whatever its schema shows; native-only
+ * proof and source census live in step-4/K3-REPAIR.md, not as passes here. Unknown semantics never pass.
  * Catalog owners run the generic check below, driven by their declared `mutation`: per untouched stored key, a
  * `replace` collection must resend it unchanged, a `patch` collection may omit it but never send it changed, and
  * every touched key's before is the stored value (full before).
@@ -110,11 +107,10 @@ function catalogCheck(owner: keyof typeof catalogWorks) {
   }
 }
 
-/** Keyed writes with an executable omission check; `native` names a C# test root runs fresh (testimony here). */
-const checks: Record<string, { catalog: keyof typeof catalogWorks } | { native: [file: string, test: string] }> = {
+/** Writes with an executable omission check in this lane. Native-only proof (fresh C#) is not a pass here. */
+const checks: Record<string, { catalog: keyof typeof catalogWorks }> = {
   "data-table.apply": { catalog: "data-tables" },
   "parameter-links.apply": { catalog: "parameter-links" },
-  "ducts.apply-losses": { native: ["../../../../dotnet/Pe.Revit.Tests/LibraryBehavior/DuctStoreOverlayReadbackTests.cs", "A_sparse_apply_keeps_every_stored_sentinel_and_removes_only_the_named_delete"] },
 };
 
 const writes = Object.entries(commandCatalogAxes).filter(([, a]) => a.effect === "ModelWrite").map(([k]) => k).sort();
@@ -127,11 +123,11 @@ describe("every ModelWrite: omission semantics classified from source and checke
       const command = (commands as Record<string, { input?: unknown; authoredInput?: unknown }>)[key];
       const input = command?.authoredInput ?? command?.input;
       expect(input, `${key} has an input schema`).toBeDefined();
+      // The schema only locates record collections for the failure message: a compiled spec (SpecJson) or a native
+      // replace can hide omission, so "no collection in the schema" is not proof either (governor, K3).
       const keyed = keyedCollections(input);
       const check = checks[key];
-      if (!keyed.length && !check) return; // non-keyed by its schema: it writes only what it names
-      expect(check, `${key} is keyed at ${keyed.join(", ")} and has no omission check`).toBeDefined();
-      if ("catalog" in check!) catalogCheck(check.catalog);
-      else expect(readFileSync(new URL(check!.native[0], import.meta.url), "utf8")).toContain(check!.native[1]);
+      expect(check, `${key}: no executable omission check (schema record collections: ${keyed.join(", ") || "none"})`).toBeDefined();
+      catalogCheck(check!.catalog);
     });
 });
