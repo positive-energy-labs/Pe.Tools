@@ -78,6 +78,7 @@ const titlesOf = (grids: ReturnType<typeof toGrids>): Record<string, string> =>
     }),
   );
 export interface DuctsSheetSources {
+  workKey?: (target: DocumentRef) => Promise<WorkKey>;
   firm: () => Promise<import("./ducts-inputs.ts").FirmReading>;
   catalogs: () => Promise<import("./duct-catalogs.ts").CatalogReading>;
   call: (
@@ -223,14 +224,14 @@ interface SheetWork {
   key(target: DocumentRef): Promise<WorkKey>;
   author(): WorkAuthor;
 }
-export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) {
+export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?: SheetWork) {
   /** The layers the resolver reads: Work's staged edits and the firm file, with the state that names them. */
-  async function loadLayers(target: DocumentRef) {
-    const scope = work ? await work.key(target) : null;
+  async function loadLayers(target: DocumentRef, reads: DuctsSheetSources) {
+    const scope = reads.workKey ? await reads.workKey(target) : work ? await work.key(target) : null;
     const owned = scope && work ? await work.workspace.readRaw(scope, "ducts") : null;
     const fans = scope && work ? await work.workspace.view({ ...scope, route: "fans" }, "fans") : null;
     const doc = ductsDesign(owned ? ductsDocumentSchema.parse(owned.doc) : null, fansDocumentSchema.parse(fans?.doc ?? {}));
-    const firm = await sources.firm();
+    const firm = await reads.firm();
     return {
       scope,
       revision: owned?.revision ?? 0,
@@ -257,12 +258,13 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
   const entries = new Map<string, Entry>();
   // TODO: docs/features/routes/LEDGER.md#s7-09645d33ea Trace the FC-23 (13760867) sheet self-fetch termination seen in k2-live-proof.log; raw walk succeeds.
   async function readNative(
+    reads: DuctsSheetSources,
     key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
     request: SnapshotRequest | { ids: string[] },
     target: DocumentRef,
     version?: string,
   ) {
-    const response = await sources.call(key, request, target, version);
+    const response = await reads.call(key, request, target, version);
     if (!response.ok)
       throw new BridgeError(await response.text(), response.status, { notDispatched: true });
     return response;
@@ -277,6 +279,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
    */
   const beyondReads = new Map<string, DuctSnapshot>();
   async function readBeyond(
+    reads: DuctsSheetSources,
     sheet: Sheet,
     snapshot: DuctSnapshot,
     target: DocumentRef,
@@ -292,6 +295,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       if (!read) {
         read = (await (
           await readNative(
+            reads,
             "ducts.snapshot.walk",
             {
               ...(slots ? { slots } : {}),
@@ -307,21 +311,22 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
     }
     return beyondOf(merged, sheet, markOf);
   }
-  async function current(entry: Entry) {
+  async function current(entry: Entry, reads: DuctsSheetSources) {
     const responses = await Promise.all([
-      readNative("ducts.snapshot.walk", entry.request, entry.target, entry.version),
-      readNative("ducts.tables", tableRequest, entry.target, entry.tablesVersion),
+      readNative(reads, "ducts.snapshot.walk", entry.request, entry.target, entry.version),
+      readNative(reads, "ducts.tables", tableRequest, entry.target, entry.tablesVersion),
     ]);
     await Promise.all(responses.map((response) => response.body?.cancel()));
   }
   return {
-    async sheet(request: DuctsSheetRequest): Promise<DuctsSheetResponse> {
-      const saved = await loadLayers(request.target);
+    async sheet(request: DuctsSheetRequest, reads = sources): Promise<DuctsSheetResponse> {
+      if (!reads) throw new BridgeError("Duct sheets require their admitted input source", 503);
+      const saved = await loadLayers(request.target, reads);
       const subject = subjectOf(request, saved);
       if (request.detail) {
         const entry = request.basis ? entries.get(request.basis) : undefined;
         if (!entry || entry.subject !== subject) throw stale();
-        await current(entry);
+        await current(entry, reads);
         const base = { target: entry.target, basis: entry.value.basis };
         if (request.detail.kind === "elements")
           return {
@@ -406,8 +411,8 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
               },
       };
       const [response, tables] = await Promise.all([
-        readNative("ducts.snapshot.walk", acquisition, request.target),
-        readNative("ducts.tables", tableRequest, request.target),
+        readNative(reads, "ducts.snapshot.walk", acquisition, request.target),
+        readNative(reads, "ducts.tables", tableRequest, request.target),
       ]);
       const version = response.headers.get(DUCTS_BODY_VERSION_HEADER);
       const tablesVersion = tables.headers.get(DUCTS_BODY_VERSION_HEADER);
@@ -415,7 +420,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         throw new BridgeError("Ducts read did not return an observation version", 409, {
           notDispatched: true,
         });
-      const catalogs = (await sources.catalogs()).tables;
+      const catalogs = (await reads.catalogs()).tables;
       const first = (await response.json()) as DuctSnapshot;
       const layersOf = (snap: DuctSnapshot) => ({
         snapshot: snap,
@@ -431,6 +436,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         async (unitId) =>
           (
             await readNative(
+              reads,
               "ducts.snapshot.walk",
               { slots, selector: { kind: "from", unitId, ...tolerances } },
               request.target,
@@ -465,6 +471,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
       const beyond =
         request.mode === "fan"
           ? await readBeyond(
+              reads,
               value as Sheet,
               snapshot,
               request.target,
@@ -492,24 +499,25 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         titles: titlesOf(grids),
         beyond,
       };
-      await current(entry);
+      await current(entry, reads);
       for (const [basis, previous] of entries)
         if (previous.subject === subject) entries.delete(basis);
       while (entries.size >= 16) entries.delete(entries.keys().next().value!);
       entries.set(value.basis, entry);
       return ductsSheetResponseSchema.parse(overview(entry));
     },
-    async roster(request: DuctsRosterRequest) {
+    async roster(request: DuctsRosterRequest, reads = sources) {
+      if (!reads) throw new BridgeError("Duct roster requires its admitted input source", 503);
       // Units and terminals only: the whole-document read exceeded the 16 MiB bridge frame on Chadds (2026-10-28).
       // Work's protocol slots ride along as on the sheet's own read: a unit's fanFlow fact (its design
       // flow, and whether the roster proposes it a fan) is read under the person's fan-flow slot.
-      const saved = await loadLayers(request.target);
+      const saved = await loadLayers(request.target, reads);
       const staged = stagedDucts(saved.doc, saved.doc).parameters;
       const acquisition: SnapshotRequest = {
         ...(Object.keys(staged).length ? { slots: staged } : {}),
         selector: { kind: "roster" },
       };
-      const response = await readNative("ducts.snapshot.roster", acquisition, request.target);
+      const response = await readNative(reads, "ducts.snapshot.roster", acquisition, request.target);
       const snapshot = (await response.json()) as DuctSnapshot;
       const inputs = resolveInputs({
         snapshot,
@@ -537,7 +545,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         let sheet: Sheet | undefined;
         if (cached) {
           try {
-            await current(cached);
+            await current(cached, reads);
             const candidate = cached.value as Sheet;
             if (saved.layers === cached.layers) sheet = candidate;
           } catch (error) {

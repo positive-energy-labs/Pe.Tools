@@ -111,49 +111,59 @@ const documentIn = (value: unknown): DocumentRef | null => {
 };
 
 /**
- * A document-bound Reading carries the change mark on its envelope: `changed` is false the moment
- * the host serves it and becomes true when Revit changes that document afterwards, which the host
- * publishes as a new envelope over the same value. No consumer compares clocks, and a client that
- * missed the world event still sees what the envelope says. Wraps every Reading the host serves,
- * Work included.
+ * A document-bound Reading compares captured marks with its source time before publication.
+ * Later changes retain that comparison time over the same value; historical frames never compare
+ * against today's clock. No consumer compares clocks. Work uses this same envelope boundary.
  */
 export const markReadings =
-  (marks: DocumentMarks) =>
+  (marks: DocumentMarks, readFrame: (ref: DocumentRef, key: string, at?: number) => Promise<import('./document-marks.ts').MarkFrame>) =>
   (observe: ResourceObserver): ResourceObserver =>
-  (request, rawPublish, after) => {
+  (request, publish, after) => {
     let bound = documentOf(request as never);
-    let servedAt = Number.POSITIVE_INFINITY;
-    let latest: (ReadingFrame & { kind: "snapshot" }) | null = null;
-    let changed = false;
-    const markedNow = () =>
-      bound !== null &&
-      ((marks.observedSince ?? 0) > servedAt || (marks.changedAt(bound) ?? 0) > servedAt);
-    const unwatch = marks.subscribe(() => {
-      if (!latest || markedNow() === changed) return;
-      changed = markedNow();
-      rawPublish({ ...latest, changed });
-    });
-    const release = observe(
-      request,
-      (frame) => {
-        if (frame.kind !== "snapshot") return rawPublish(frame);
-        // A request that does not name the document (a workspace id, a capture id) is still one
-        // document's Reading: the served value names the document it was read from.
-        bound ??= documentIn(frame.value);
-        if (bound === null) return rawPublish(frame);
-        servedAt = takenIn(frame.value) ?? Date.now();
-        changed = markedNow();
-        latest = frame;
-        rawPublish({ ...frame, changed });
-      },
-      after,
-    );
-    return () => {
-      release();
-      unwatch();
+    let latest: (ReadingFrame & { kind: 'snapshot' }) | null = null;
+    let servedAt: number | undefined;
+    let emittedChanged: boolean | undefined;
+    let closed = false, queued = 0;
+    let tail = Promise.resolve();
+    let release = () => {};
+    let unwatch = () => {};
+    const end = () => {
+      closed = true;
+      const stopSource = release, stopMarks = unwatch;
+      release = unwatch = () => {};
+      stopSource(); stopMarks();
     };
+    const fail = (error: unknown) => {
+      if (closed) return;
+      const failure = error as { problem?: string; message?: string };
+      publish({ kind: 'failure', key: readingKey(request), error: failure.message ?? String(error),
+        failure: { kind: 'failed', code: failure.problem ?? 'ReadingFrameFailed', message: failure.message ?? String(error) } });
+      end();
+    };
+    const enqueue = (frame: ReadingFrame, update = false) => {
+      if (closed) return;
+      if (!update && frame.kind === 'snapshot') latest = frame;
+      if (++queued > 64) return fail({ problem: 'ReadingFrameBacklog', message: 'Mark-frame capture backlog exceeded its bound' });
+      tail = tail.then(async () => {
+        if (closed) return;
+        if (frame.kind !== 'snapshot') { publish(frame); return; }
+        bound ??= documentIn(frame.value);
+        if (!bound) { publish(frame); return; }
+        const consumed = await readFrame(bound, readingKey(request), update ? servedAt : takenIn(frame.value) ?? undefined);
+        if (closed) return;
+        if (!update) servedAt = consumed.servedAt;
+        const changed = (consumed.marks.observedSince ?? 0) > consumed.servedAt || (consumed.marks.changedAt ?? 0) > consumed.servedAt;
+        if (update && changed === emittedChanged) return;
+        emittedChanged = changed;
+        publish({ ...frame, changed });
+      }).catch(fail).finally(() => { queued--; });
+    };
+    unwatch = marks.subscribe(() => { if (latest) enqueue(latest, true); });
+    try { release = observe(request, (frame) => enqueue(frame), after); }
+    catch (error) { fail(error); }
+    if (closed) end();
+    return end;
   };
-
 /** Typed adapters into existing owners. No calls, mutations, or transport-owned revisions. */
 export function hostResourceObserver(
   bridge?: RevitBridge["Service"],

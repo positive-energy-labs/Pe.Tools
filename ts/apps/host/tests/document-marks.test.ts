@@ -23,6 +23,38 @@ import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts"
 
 const A = { session: "S1", openId: "open-A" };
 
+test("mark frames await capture, retain comparison time through queued changes and suppress late completion", async () => {
+  const frames: ReadingFrame[] = [];
+  const pending: { at?: number; done: (frame: import("../src/document-marks.ts").MarkFrame) => void }[] = [];
+  let changed = () => {}, released = 0, unwatched = 0;
+  const release = markReadings({
+    changedAt: () => { throw Error("A frame must use its Effect input boundary"); },
+    subscribe: (notify) => { changed = notify; return () => { unwatched++; }; },
+  }, (_ref, _key, at) => new Promise((done) => pending.push({ at, done })))(
+    (request, publish) => {
+      publish({ kind: "snapshot", key: "frame", value: { target: A } });
+      return () => { released++; };
+    },
+  )({ kind: "schedule-reading", subject: "saved", target: A }, (frame) => frames.push(frame));
+  await vi.waitFor(() => expect(pending).toHaveLength(1));
+  expect(frames).toEqual([]);
+  changed();
+  pending[0]!.done({ marks: { changedAt: 0 }, servedAt: 200 });
+  await vi.waitFor(() => expect(pending).toHaveLength(2));
+  expect(frames).toMatchObject([{ changed: false }]);
+  expect(pending[1]!.at).toBe(200);
+  pending[1]!.done({ marks: { changedAt: 300 }, servedAt: 200 });
+  await vi.waitFor(() => expect(frames).toHaveLength(2));
+  expect(frames[1]).toMatchObject({ changed: true });
+  changed();
+  await vi.waitFor(() => expect(pending).toHaveLength(3));
+  release();
+  pending[2]!.done({ marks: { changedAt: 400 }, servedAt: 200 });
+  await Promise.resolve(); await Promise.resolve();
+  expect(frames).toHaveLength(2);
+  expect([released, unwatched]).toEqual([1, 1]);
+});
+
 /** A bridge that is only its event tap and its session view. */
 function fakeBridge() {
   const listeners = new Set<(event: HostBridgeEvent) => void>();
@@ -101,7 +133,7 @@ test("the envelope carries the mark: served unchanged, republished changed, with
   const { marks } = await holdMarks(world.bridge);
   const frames: ReadingFrame[] = [];
   const capture = { id: "c1", target: A, capturedAt: new Date().toISOString() };
-  const observe = markReadings(marks)(
+  const observe = markReadings(marks, (ref, key, at) => Effect.runPromise(marks.readFrame(ref, key, at)))(
     hostResourceObserver(
       world.bridge,
       undefined as never,
@@ -161,7 +193,7 @@ test("the families matrix Reading streams an envelope, never the body, and wears
     placementScope: "AllLoaded" as const,
   };
   const frames: ReadingFrame[] = [];
-  const release = markReadings(marks)(
+  const release = markReadings(marks, (ref, key, at) => Effect.runPromise(marks.readFrame(ref, key, at)))(
     hostResourceObserver(world.bridge, undefined as never, () => captures),
   )({ kind: "families-matrix", target: A, filter }, (frame) => frames.push(frame));
   await vi.waitFor(() => expect(frames).toHaveLength(1));

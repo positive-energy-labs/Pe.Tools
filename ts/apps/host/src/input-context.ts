@@ -39,7 +39,7 @@ function check(lane: HostInputLane, use: InputUse): InvalidRead | null {
     return refused("recording.fixture", `Host fixture '${lane.name}' has no input source`);
   switch (use.kind) {
     case "input":
-      return uncovered(NATIVE_BUNDLE, [use.input], "this view");
+      return uncovered(lane.recordingStore.coverage(), [use.input], "this view");
     case "native": {
       const operation = hostOpCatalog.find((entry) => entry.key === use.key);
       if (!operation) return refused("read.contract", `${use.key} has no generated contract`);
@@ -81,7 +81,7 @@ const provenance = (lane: HostInputLane): SourceProvenance => {
     at: lane.at,
     build: lane.recordingStore.identity.build,
     catalog: lane.recordingStore.identity.catalog,
-    coverage: [...NATIVE_BUNDLE],
+    coverage: [...lane.recordingStore.coverage()],
     ...(truncated ? { truncated } : {}),
   };
 };
