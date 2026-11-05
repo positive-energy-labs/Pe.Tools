@@ -169,5 +169,5 @@ export function ruleFanOut(
 }
 
 /** The fan-out as the chip says it. */
-export const fanOutWords = ({ grilles, systems }: { grilles: number; systems: number }) =>
+export const clearWords = ({ grilles, systems }: { grilles: number; systems: number }) =>
   `moves ${grilles} grille${grilles === 1 ? "" : "s"} in ${systems} system${systems === 1 ? "" : "s"}`;

@@ -18,7 +18,7 @@ import { unpriced, type Priced } from "@pe/ducts-domain/pricing";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { memo, useMemo } from "react";
 
-import { fanOutWords, ruleFanOut } from "../../inputs";
+import { clearWords, ruleFanOut } from "../../inputs";
 import type { LossesWork } from "../../work";
 import { RuleAssignment } from "./rule-assignment";
 import { Chips, DropCell, StagedRules } from "./rules";
@@ -213,7 +213,7 @@ export const RulesTree = memo(function RulesTree({
                 <Chips ruleKey={n.key} priced={priced} work={work} />
                 <TooltipHint content="What staging another table for this rule would re-price, in every system">
                   <span data-e-fanout={n.key}>
-                    {fanOutWords(fanOuts.get(n.key) ?? { grilles: 0, systems: 0 })}
+                    {clearWords(fanOuts.get(n.key) ?? { grilles: 0, systems: 0 })}
                   </span>
                 </TooltipHint>
               </div>

@@ -1,4 +1,4 @@
-import { transitionPatches } from "@pe/agent-contracts";
+import { cellPatches } from "@pe/agent-contracts";
 import { LOSS_RULES } from "@pe/ducts-domain/loss-rules";
 import { useState } from "react";
 import type { LossesWork } from "../../work";
@@ -8,7 +8,7 @@ type RuleWork = Pick<LossesWork, "doc" | "write">;
 /** The inbox, sidebar and bar editor change one family-wide Work cell. */
 export function assignFamilyRule(work: RuleWork, family: string, rule: string) {
   return work.write(
-    transitionPatches(
+    cellPatches(
       ["ruleAssignments"],
       family,
       work.doc?.ruleAssignments?.[family] ?? {},

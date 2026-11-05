@@ -36,7 +36,7 @@ export interface ParamRow {
   ageMin?: number;
   fresh: "fresh" | "stale" | "unverified" | "never";
   agree: "agree" | "drift";
-  stage: "clean" | "proposed" | "edit";
+  stage: "clean" | "edit";
   author?: "pea" | "human" | "unknown";
   cap: "editable" | "locked" | "nohome";
   capReason?: string;
@@ -65,7 +65,8 @@ export const PARAM_ROWS: readonly ParamRow[] = [
     ageMin: 2,
     fresh: "fresh",
     agree: "agree",
-    stage: "proposed",
+    stage: "edit",
+    author: "pea",
     cap: "editable",
     confidence: "high",
     note: "matches the UL listing on the submittal",
@@ -213,7 +214,8 @@ export const PARAM_ROWS: readonly ParamRow[] = [
     ageMin: 2,
     fresh: "fresh",
     agree: "drift",
-    stage: "proposed",
+    stage: "edit",
+    author: "pea",
     cap: "editable",
     confidence: "low",
     note: "inferred from motor schedule; Revit disagrees — two marks at once",

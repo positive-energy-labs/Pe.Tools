@@ -160,11 +160,7 @@ export function AnatomyDrawing({
               meta: part.proposed ? (
                 // The reading has none: Pea's object is a cell of its own, accept and deny on it.
                 <StateCell
-                  {...cellFromDraft(
-                    fields[part.proposed] ?? {},
-                    { value: part.text },
-                    () => part.text,
-                  )}
+                  {...cellFromDraft(fields[part.proposed] ?? {}, { value: part.text })}
                   scale="row"
                   transitions={transitionsAt(part.proposed)}
                 />
@@ -173,11 +169,9 @@ export function AnatomyDrawing({
                   {part.proposedProps!.map((entry) => (
                     <StateCell
                       key={entry.id}
-                      {...cellFromDraft(
-                        fields[entry.id] ?? {},
-                        { value: `${entry.property} ${entry.text}` },
-                        () => `${entry.property} ${entry.text}`,
-                      )}
+                      {...cellFromDraft(fields[entry.id] ?? {}, {
+                        value: `${entry.property} ${entry.text}`,
+                      })}
                       scale="row"
                       transitions={transitionsAt(entry.id)}
                     />

@@ -59,8 +59,8 @@ function environment() {
     version: 1 as const,
     revision: 1,
     doc: schema.parse({
-      rules: { a: { suggestion: { value: "one" } }, b: { suggestion: { value: "two" } } },
-      scope: { suggestion: { value: "wide" } },
+      rules: { a: { edit: { value: "one" } }, b: { edit: { value: "two" } } },
+      scope: { edit: { value: "wide" } },
     }),
   };
   const journal = createWorkJournal(key);
@@ -147,19 +147,15 @@ const row = (type: string, path: string[]) => ({
   path,
 });
 
-test("the graph is the only authority: each family gets four ids, placed on its own row", () => {
+test("the graph is the only authority: each family gets two ids, placed on its own row", () => {
   const { verbs, placement } = kernelCellVerbs(graph);
   expect(Object.keys(verbs)).toEqual([
-    "cell:rules.take",
-    "cell:rules.reject",
-    "cell:rules.reopen",
+    "cell:rules.clear",
     "cell:rules.delete",
-    "cell:scope.take",
-    "cell:scope.reject",
-    "cell:scope.reopen",
+    "cell:scope.clear",
     "cell:scope.delete",
   ]);
-  expect(placement["cell:rules"]).toEqual(Object.keys(verbs).slice(0, 4));
+  expect(placement["cell:rules"]).toEqual(Object.keys(verbs).slice(0, 2));
   for (const verb of Object.values(verbs))
     expect(verb).toMatchObject({ kind: "work", review: "none" });
   expect(Object.values(verbs).some((verb) => verb.chord)).toBe(false);
@@ -171,11 +167,7 @@ test("each verb lands one single-step journal entry whose undo restores the docu
   const rule = row("cell:rules", ["rules", "a"]);
   const before = structuredClone(env.doc());
 
-  expect((await invoke(env.ctx, env.verbs["cell:rules.take"]!, rule, undefined)).state).toBe(
-    "done",
-  );
-  expect(env.doc().rules.a).toMatchObject({ edit: { value: "one" }, suggestion: null });
-  expect((await invoke(env.ctx, env.verbs["cell:rules.reopen"]!, rule, undefined)).state).toBe(
+  expect((await invoke(env.ctx, env.verbs["cell:rules.clear"]!, rule, undefined)).state).toBe(
     "done",
   );
   expect(env.doc().rules.a?.edit).toBeNull();
@@ -183,27 +175,27 @@ test("each verb lands one single-step journal entry whose undo restores the docu
     (
       await invoke(
         env.ctx,
-        env.verbs["cell:rules.reject"]!,
+        env.verbs["cell:rules.clear"]!,
         row("cell:rules", ["rules", "b"]),
         undefined,
       )
     ).state,
   ).toBe("done");
-  expect(env.doc().rules.b?.suggestion).toBeNull();
+  expect(env.doc().rules.b?.edit).toBeNull();
   expect((await invoke(env.ctx, env.verbs["cell:rules.delete"]!, rule, undefined)).state).toBe(
     "done",
   );
   expect(env.doc().rules.a).toBeUndefined();
 
   // Every acknowledgement carries patches and their inverse, and each press is one undo step.
-  expect(env.acks).toHaveLength(4);
+  expect(env.acks).toHaveLength(3);
   for (const ack of env.acks) {
     expect(ack.patches.length).toBeGreaterThan(0);
     expect(ack.inverse.length).toBeGreaterThan(0);
   }
-  expect(env.journal.read().undo.map((step) => step.transitions.length)).toEqual([1, 1, 1, 1]);
+  expect(env.journal.read().undo.map((step) => step.transitions.length)).toEqual([1, 1, 1]);
 
-  for (let step = 0; step < 4; step++) expect((await env.journal.undo(env.restorer)).ok).toBe(true);
+  for (let step = 0; step < 3; step++) expect((await env.journal.undo(env.restorer)).ok).toBe(true);
   expect(env.doc()).toEqual(before);
 });
 
@@ -212,10 +204,10 @@ test("a root cell resolves only at its own key, and delete removes it", async ()
   const scope = row("cell:scope", ["scope"]);
   expect(env.ctx.subjects["cell:scope"]!({}, scope)).toBe("scope");
   expect(env.ctx.subjects["cell:scope"]!({}, row("cell:scope", ["note"]))).toBeNull();
-  expect((await invoke(env.ctx, env.verbs["cell:scope.take"]!, scope, undefined)).state).toBe(
+  expect((await invoke(env.ctx, env.verbs["cell:scope.clear"]!, scope, undefined)).state).toBe(
     "done",
   );
-  expect(env.doc().scope).toMatchObject({ edit: { value: "wide" } });
+  expect(env.doc().scope?.edit).toBeNull();
   expect((await invoke(env.ctx, env.verbs["cell:scope.delete"]!, scope, undefined)).state).toBe(
     "done",
   );

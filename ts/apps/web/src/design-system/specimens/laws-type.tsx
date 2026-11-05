@@ -18,7 +18,7 @@ export function TypeLaws({ owner }: { owner: (name: string) => string }) {
       >
         <div className="flex flex-wrap items-baseline gap-4">
           <StateCell value="36 in" stage="edit" author="human" />
-          <StateCell value="2 hr" stage="proposed" />
+          <StateCell value="2 hr" stage="edit" author="pea" />
         </div>
         <CounterExample why="freshness is a fact, so weight must remain available for unsaved work">
           <strong className="t-small">fresh reading</strong>

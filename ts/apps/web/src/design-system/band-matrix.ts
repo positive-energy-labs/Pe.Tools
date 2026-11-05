@@ -1,11 +1,4 @@
-/**
- * The band specimen's Families matrix: 6 families × 3 types × 8 parameters, grown from the
- * Families demo seeds (`families/seeds.ts`). A stand-in for a live `families` matrix reading; the
- * proposals are shaped like real Pea work — one uniform group (with one contested cell in it), one diverse
- * group, one contested cell, one locked cell with a stray suggestion. Writes go through the same
- * `RouteStatePatch`es a route document takes, applied locally.
- */
-import { transitionPatches, type RouteStatePatch, type CellLike } from "@pe/agent-contracts";
+import { cellPatches, type RouteStatePatch, type CellLike } from "@pe/agent-contracts";
 
 import { DEMO_FAMILIES } from "#/families/seeds";
 
@@ -28,7 +21,7 @@ export interface MatrixRow {
   baseline: Record<Parameter, string>;
 }
 
-type Proposal = NonNullable<CellLike["suggestion"]>;
+type Proposal = NonNullable<CellLike["edit"]>;
 export type MatrixCells = Record<string, CellLike>;
 
 const seedModel = (family: number, type: string) =>
@@ -151,9 +144,8 @@ export const baselineOf = (key: string) => {
   return ROWS.get(row)?.baseline[parameter] ?? null;
 };
 
-const pea = (value: string, note?: string): Proposal => ({ value, note });
+const pea = (value: string, note?: string): Proposal => ({ value, note, by: "pea" });
 
-/** Why a cell refuses writes. The locked cell still carries a stray Pea suggestion: deny only. */
 export const LOCKS: Readonly<Record<string, string>> = {
   [cellKey("AHU-1", "MCA")]: "driven by a formula in the host project",
 };
@@ -163,7 +155,7 @@ export const MATRIX_CELLS: MatrixCells = {
   ...Object.fromEntries(
     MATRIX.filter((row) => row.baseline.Voltage === "230V").map((row) => [
       cellKey(row.key, "Voltage"),
-      { suggestion: pea("208V", "service is 208V/3ph per E-001"), edit: null },
+      { edit: pea("208V", "service is 208V/3ph per E-001") },
     ]),
   ),
   // diverse: nine different airflows read off the air schedule
@@ -180,45 +172,39 @@ export const MATRIX_CELLS: MatrixCells = {
         ["VAV-2", "575"],
         ["VAV-3", "950"],
       ] as const
-    ).map(([row, value]) => [
-      cellKey(row, "Airflow"),
-      { suggestion: pea(value, "M-401 air schedule"), edit: null },
-    ]),
+    ).map(([row, value]) => [cellKey(row, "Airflow"), { edit: pea(value, "M-401 air schedule") }]),
   ),
   // contested inside the uniform group: you edit 240V before Pea said 208V
   [cellKey("FCU-2", "Voltage")]: {
-    suggestion: pea("208V", "service is 208V/3ph per E-001"),
     edit: { value: "240V" },
   },
   // contested: you edit 30A, Pea argues 25A
   [cellKey("HP-2", "MOCP")]: {
-    suggestion: pea("25A", "nameplate MOCP is 25A"),
     edit: { value: "30A" },
   },
   // locked, with a stray suggestion Pea should not have made
-  [cellKey("AHU-1", "MCA")]: { suggestion: pea("38A"), edit: null },
+  [cellKey("AHU-1", "MCA")]: { edit: pea("38A") },
 };
 
 /** Apply route-document patches (`["cells", key, rung]`, no value = clear) to the local cells. */
 export function applyPatches(cells: MatrixCells, patches: readonly RouteStatePatch[]): MatrixCells {
   const next = { ...cells };
   for (const { path, value } of patches) {
-    const [, key, rung] = path as [string, string, "suggestion" | "edit"];
-    next[key] = { suggestion: null, edit: null, ...next[key], [rung]: value ?? null };
+    const [, key, rung] = path as [string, string, "edit"];
+    next[key] = { ...next[key], [rung]: value ?? null };
   }
   return next;
 }
 
 /** A typed edit is the contract's `stage`: the exact value, nothing when it equals the baseline. */
 export const stagePatches = (cells: MatrixCells, key: string, text: string) =>
-  transitionPatches(["cells"], key, cells[key] ?? {}, {
+  cellPatches(["cells"], key, cells[key] ?? {}, {
     kind: "set",
     rung: { value: text },
     baseline: { value: baselineOf(key) },
   });
 
-/** The value the cell shows: edit, else the suggestion, else the baseline. */
 export const shownOf = (key: string, cell: CellLike | undefined) => {
-  const rung = cell?.edit ?? cell?.suggestion;
+  const rung = cell?.edit;
   return rung?.delete ? "DELETE" : rung ? String(rung.value) : (baselineOf(key) ?? "—");
 };

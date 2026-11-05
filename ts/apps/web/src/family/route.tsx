@@ -32,7 +32,12 @@ function ParametersBody() {
       {store.editFailure && (
         <Button
           label="Retry staging"
-          onClick={() => void store.actions.flush().catch((error) => { console.error("route: asynchronous operation failed", error); return undefined; })}
+          onClick={() =>
+            void store.actions.flush().catch((error) => {
+              console.error("route: asynchronous operation failed", error);
+              return undefined;
+            })
+          }
         >
           Retry staging
         </Button>
@@ -53,7 +58,7 @@ function WorkBody({ owner, verbs }: Body) {
         <OutcomeLine kind="refused" label="Shared source" says={store.sharedEdit.pointer} />
       )}
       {Object.entries(store.fields)
-        .filter(([, cell]) => cell.edit || cell.suggestion)
+        .filter(([, cell]) => cell.edit)
         .map(([key]) => (
           <div key={key} role="group" aria-label={`Cell ${key}`}>
             <Button

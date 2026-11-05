@@ -116,7 +116,7 @@ function environment<C extends Caller>(caller: C, identity: WorkKey = key) {
     revision: 4,
     doc: schema.parse({
       rows: { slot: { id: "a", value: 1, note: "before" } },
-      cells: { first: { suggestion: { value: "proposed" } } },
+      cells: { first: { edit: { value: "proposed" } } },
     }),
   };
   let readingVersion = 1;
@@ -383,29 +383,11 @@ test("kernel cell verbs use the shared transitions and host acknowledgement", as
   const { verbs, subjects } = kernelCellVerbs({ cells: [{ segment: "cells", groupOf: () => [] }] });
   const ctx = { ...env.ctx, subjects: { ...env.ctx.subjects, ...subjects } };
   const subject = { type: "cell:cells", id: "first", work: key, path: ["cells", "first"] };
-  expect(Object.keys(verbs)).toEqual([
-    "cell:cells.take",
-    "cell:cells.reject",
-    "cell:cells.reopen",
-    "cell:cells.delete",
-  ]);
-  expect(z.toJSONSchema(verbs["cell:cells.take"]!.input, { io: "input" })).toMatchObject({
-    type: "object",
-  });
-  const taken = await invoke(ctx, verbs["cell:cells.take"]!, subject, undefined);
-  expect(taken).toMatchObject({ state: "done", kind: "work" });
-  expect(env.doc().cells.first).toMatchObject({
-    edit: { value: "proposed", by: "human", base: 4 },
-    suggestion: null,
-  });
-  expect(env.writes[0]!.patches).toEqual([
-    { path: ["cells", "first", "edit"], value: { value: "proposed" } },
-    { path: ["cells", "first", "suggestion"], value: null },
-  ]);
-  expect((await invoke(ctx, verbs["cell:cells.reopen"]!, subject, undefined)).state).toBe("done");
+  expect(Object.keys(verbs)).toEqual(["cell:cells.clear", "cell:cells.delete"]);
+  const cleared = await invoke(ctx, verbs["cell:cells.clear"]!, subject, undefined);
+  expect(cleared).toMatchObject({ state: "done", kind: "work" });
   expect(env.doc().cells.first?.edit).toBeNull();
-  expect((await invoke(ctx, verbs["cell:cells.delete"]!, subject, undefined)).state).toBe("done");
-  expect(env.doc().cells.first).toBeUndefined();
+  expect(env.writes[0]!.patches).toEqual([{ path: ["cells", "first", "edit"], value: null }]);
 });
 
 test("validation, readiness and busy admission prevent writes", async () => {
@@ -502,13 +484,13 @@ test("a host refusal and a transport failure retain distinct terminal evidence",
   });
 });
 
-test("reject uses unsuggest, and cell admission can refuse deletion", async () => {
+test("clear removes the staged value, and cell admission can refuse deletion", async () => {
   const env = environment("human");
   const { verbs, subjects } = kernelCellVerbs({ cells: [{ segment: "cells", groupOf: () => [] }] });
   const ctx = { ...env.ctx, subjects };
   const subject = { type: "cell:cells", id: "first", work: key, path: ["cells", "first"] };
-  expect((await invoke(ctx, verbs["cell:cells.reject"]!, subject, undefined)).state).toBe("done");
-  expect(env.doc().cells.first?.suggestion).toBeNull();
+  expect((await invoke(ctx, verbs["cell:cells.clear"]!, subject, undefined)).state).toBe("done");
+  expect(env.doc().cells.first?.edit).toBeNull();
   const locked = kernelCellVerbs({
     cells: [
       {
@@ -739,39 +721,6 @@ test("K1.6: a sequence has one press, separate reviewed receipts, and stops at f
   expect(transport.run.mock.calls[0]![5]).not.toBe(transport.run.mock.calls[1]![5]);
 });
 
-test("K1.7: take-derived patches share the proposal's one write and inverse", async () => {
-  const env = environment("human");
-  const kernel = kernelCellVerbs({
-    cells: [
-      {
-        segment: "cells",
-        groupOf: (key) => [key],
-        take: () => [{ path: ["rows", "slot", "note"], value: "first base" }],
-      },
-    ],
-  });
-  const subject: VerbSubject = {
-    type: "cell:cells",
-    id: "first",
-    work: key,
-    path: ["cells", "first"],
-  };
-  const result = await invoke(
-    { ...env.ctx, subjects: kernel.subjects },
-    kernel.verbs["cell:cells.take"]!,
-    subject,
-    {},
-  );
-  expect(result).toMatchObject({ state: "done", kind: "work" });
-  expect(env.writes).toHaveLength(1);
-  expect(env.doc().rows.slot!.note).toBe("first base");
-  if (result.state !== "done" || result.kind !== "work") throw Error("missing ack");
-  expect(result.acknowledgement.inverse).toContainEqual({
-    path: ["rows", "slot", "note"],
-    value: "before",
-  });
-});
-
 test("Page verbs run without Work, host transport, or undo writes", async () => {
   const env = environment("human");
   const verb = pageVerb(
@@ -808,7 +757,9 @@ test("K1.2: page.bind resolves its HTTP contract at invocation and validates bef
 
 // A Work write that reaches Revit is sealed at a host preview. `takeoffs.adopt` is a ModelWrite; the
 // capture `takeoffs.initialize` is SessionWrite and has no preview (ADR 0028), so the two differ here.
-const adoption = { views: [{ view: "plan", items: [{ elementId: 1, name: "Zone", systemTag: "S1" }] }] };
+const adoption = {
+  views: [{ view: "plan", items: [{ elementId: 1, name: "Zone", systemTag: "S1" }] }],
+};
 const sealedWrite = () =>
   commandVerb(
     "takeoffs.adopt",

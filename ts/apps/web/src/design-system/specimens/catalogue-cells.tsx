@@ -71,7 +71,13 @@ export function CatalogueCells() {
           ))}
         </div>
         <CounterExample why="a suggestion on a locked cell is swallowed, and the caller receives no refusal">
-          <StateCell value="84 in" cap="locked" capReason="driven by formula" stage="proposed" />
+          <StateCell
+            value="84 in"
+            cap="locked"
+            capReason="driven by formula"
+            stage="edit"
+            author="pea"
+          />
         </CounterExample>
       </Demo>
 

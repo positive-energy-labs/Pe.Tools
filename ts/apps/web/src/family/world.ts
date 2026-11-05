@@ -145,6 +145,7 @@ export interface ProtoProposal {
   /** What the reading holds at the pointer, when it holds anything: the cell's tooltip says it. */
   current: string | null;
   proposed: string;
+  by?: "pea" | "human" | "unknown";
   sourceBlockId: string;
   note: string;
   /** Pea's own confidence in the reading. Contract-shaped (`cellProposalSchema`), so the shared

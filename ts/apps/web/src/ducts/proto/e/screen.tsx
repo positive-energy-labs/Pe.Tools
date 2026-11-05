@@ -1,87 +1,94 @@
 import { useRouteSearchSlice } from "#/route/activity";
 import { fansLink } from "../../../fans/neutral.ts";
-import { AttentionRoot,useHoveredIssue } from "#/attention";
+import { AttentionRoot, useHoveredIssue } from "#/attention";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
-import { NativeObservationScope,type NativeObservation } from "#/revit/observation";
+import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
 import { LoadingContext } from "#/route/loading-context";
 import { PaneActions } from "#/shell/pane-actions";
 import { useAdmittedSubject } from "#/shell/subject";
 import { settleWork } from "#/shell/work-door-observation";
-import { DUCT_UNIT_KINDS,ductsDesign,neutralFansWork,stagedDucts,transitionPatches,type RouteStatePatch } from "@pe/agent-contracts";
+import {
+  DUCT_UNIT_KINDS,
+  ductsDesign,
+  neutralFansWork,
+  stagedDucts,
+  cellPatches,
+  type RouteStatePatch,
+} from "@pe/agent-contracts";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
 import { suggestKind } from "@pe/ducts-domain/roster";
 import { ChoiceCell } from "../../sheet/choice-cell.tsx";
 import { kindMeaning, kindDisabledReason } from "../../sheet/kind-meaning.ts";
-import { healTarget,offeredFan } from "@pe/ducts-domain/action-targets";
+import { healTarget, offeredFan } from "@pe/ducts-domain/action-targets";
 import { claimsForGroup } from "@pe/ducts-domain/claims";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
 import { healPlan } from "@pe/ducts-domain/heal";
-import { neighboursOf,type Neighbour } from "@pe/ducts-domain/neighbours";
+import { neighboursOf, type Neighbour } from "@pe/ducts-domain/neighbours";
 import { noRunBranches } from "@pe/ducts-domain/no-runs";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
-import { pendingCount,stagedEsp } from "@pe/ducts-domain/staged";
-import { survey,unitFlowsIn } from "@pe/ducts-domain/survey";
-import { scopeOf,sectionsOf,systemScope } from "@pe/ducts-domain/system-scope";
+import { pendingCount, stagedEsp } from "@pe/ducts-domain/staged";
+import { survey, unitFlowsIn } from "@pe/ducts-domain/survey";
+import { scopeOf, sectionsOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { systemSearch } from "@pe/ducts-domain/system-search";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { groupLabels } from "@pe/ducts-domain/words";
-import { elementKey,type SubjectKey } from "@pe/kit/lang/attention";
+import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { Button } from "@pe/kit/lang/button";
-import { emptyListState,useList,type ListOptions } from "@pe/kit/lang/collection";
+import { emptyListState, useList, type ListOptions } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { Scroll } from "@pe/kit/lang/scroll";
 import * as Atom from "effect/reactivity/Atom";
 import type { ReactNode } from "react";
 import {
-memo,
-useCallback,
-useEffect,
-useMemo,
-useRef,
-useSyncExternalStore,
-type ComponentProps,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+  type ComponentProps,
 } from "react";
 import { z } from "zod";
 import type { PaneContext } from "../../../../../../packages/agent-contracts/src/route-kernel-bodies";
 import { airflowOptions } from "../../airflow";
-import { attentionSubjects,cellFocusOf,cellFocusSubject,focusedElement } from "../../cell-focus";
-import { elementNamer,verdictPatches } from "../../claims";
+import { attentionSubjects, cellFocusOf, cellFocusSubject, focusedElement } from "../../cell-focus";
+import { elementNamer, verdictPatches } from "../../claims";
 import {
-annotatedFindings,
-focusRow,
-inboxRows,
-stageIssues,
-type InboxItem,
+  annotatedFindings,
+  focusRow,
+  inboxRows,
+  stageIssues,
+  type InboxItem,
 } from "../../inbox-rows";
-import { claimsOf,type Claim } from "../../legs";
+import { claimsOf, type Claim } from "../../legs";
 import {
-activeName,
-ductsData,
-entries,
-localId,
-localSubject,
-namesOf,
-schemas,
+  activeName,
+  ductsData,
+  entries,
+  localId,
+  localSubject,
+  namesOf,
+  schemas,
 } from "../../neutral";
-import { DuctsOwner,commands } from "../../pane-context";
+import { DuctsOwner, commands } from "../../pane-context";
 import { type PricingResult } from "../../pricing-job";
 import { DUCTS_MULTI } from "../../selection";
 import type { EditMeta } from "../../sheet/input-history.neutral";
 import { EMPTY_SNAPSHOT } from "../../sheet/scoped-snapshot";
-import { noRunParts,subjectNamer } from "../../subject-text";
+import { noRunParts, subjectNamer } from "../../subject-text";
 import type { systemList } from "../../system-list";
 import type { SystemNote } from "../../system-list-search";
 import { systemReadCoverage } from "../../system-reads";
-import { buildTree,type TreeNode } from "../b/model";
+import { buildTree, type TreeNode } from "../b/model";
 import { useGroupEncoding } from "../encoding/use-encoding";
-import { BarRules,systemNoteCount,systemRowParts } from "./bar";
-import { FanFacts,fanFacts,type FanFact } from "./fan-sections";
-import { Inbox,type FanVerbs } from "./inbox";
+import { BarRules, systemNoteCount, systemRowParts } from "./bar";
+import { FanFacts, fanFacts, type FanFact } from "./fan-sections";
+import { Inbox, type FanVerbs } from "./inbox";
 import { grilleLabels } from "./labels";
 import { DuctsPicture } from "./picture";
-import { RulesTree,ruleOfIds } from "./rules-pane";
+import { RulesTree, ruleOfIds } from "./rules-pane";
 import { SystemColours } from "./settings";
 import { SystemTree } from "./tree-sidebar";
 type NetworkContext = PaneContext<
@@ -91,7 +98,10 @@ type NetworkContext = PaneContext<
   keyof typeof ductsData.panes
 >;
 function useNetworkData(ctx: NetworkContext) {
-  const workDoc = useMemo(() => ductsDesign(ctx.work, ctx.readings.fansWork.value ?? neutralFansWork), [ctx.work, ctx.readings.fansWork.value]);
+  const workDoc = useMemo(
+    () => ductsDesign(ctx.work, ctx.readings.fansWork.value ?? neutralFansWork),
+    [ctx.work, ctx.readings.fansWork.value],
+  );
   const target = ctx.workBasis?.token.scope.identity.target ?? { kind: "host" as const };
   const page = ctx.page.read();
   const roster = ctx.readings.roster.value;
@@ -145,7 +155,7 @@ function useNetworkData(ctx: NetworkContext) {
     () =>
       Object.fromEntries(
         Object.entries(workDoc?.claims ?? {}).flatMap(([id, cell]) => {
-          const value = cell.edit?.value ?? cell.suggestion?.value;
+          const value = cell.edit?.value;
           return value ? [[id, value]] : [];
         }),
       ),
@@ -157,7 +167,7 @@ function useNetworkData(ctx: NetworkContext) {
     [scope, claimCells],
   );
   const subjectIds = scope?.groups
-    .map((group) => edit.subject[group] ?? workDoc?.subject[group]?.suggestion?.value)
+    .map((group) => edit.subject[group] ?? workDoc?.subject[group]?.edit?.value)
     .find((ids) => ids != null);
   const current = networkRead.current;
   const version = snapshot?.sourceVersion;
@@ -365,7 +375,7 @@ function ReadCoverage({ coverage }: { coverage: Coverage }) {
   );
 }
 export function SystemsPane({ ctx }: { ctx: OwnContext<"e-systems"> }) {
-  const search = useRouteSearchSlice(search => search);
+  const search = useRouteSearchSlice((search) => search);
   const data = useNetworkData(ctx);
   const { snapshot, priced, page, systems, active, work, analysis, captureSource, coverage } = data;
   const { drawn, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
@@ -928,28 +938,60 @@ function ReachInbox(props: Omit<ComponentProps<typeof Inbox>, "hoveredIssue">) {
 }
 export function AllRulesBody({ ctx }: { ctx: OwnContext<"e-rules-all"> }) {
   const { snapshot, work } = useNetworkData(ctx);
-  const kinds = new Map((snapshot?.nodes ?? []).filter(node => node.kind === "equipment")
-    .map(node => [catalogLinkKey(node.family, node.type), node]));
-  return <>
-    <RulesBody ctx={ctx} wide />
-    <section aria-label="Unit kinds" className="flex flex-col gap-2 p-2">
-      <h3 className="t-head">Unit kinds</h3>
-      {[...kinds].map(([key, node]) => {
-        const cell = ctx.work?.kinds[key] ?? {};
-        const label = [node.family, node.type].filter(Boolean).join(" / ");
-        return <label key={key} className="flex flex-col gap-1"><span>{label}</span>
-          <ChoiceCell label={`Unit kind ${label}`} cell={cell} path={["kinds", key]}
-            current={cell.edit?.value.kind ?? suggestKind(node).kind} show={JSON.stringify}
-            options={DUCT_UNIT_KINDS.map(kind => ({ key: kind, label: kind,
-              description: kindMeaning(node, kind), disabled: kindDisabledReason(node, kind) ?? undefined }))}
-            refusal={ctx.workBasis ? null : "Read Work before editing"}
-            pick={kind => void work.write(transitionPatches(["kinds"], key, cell, { kind: "set", rung: { value: { kind } } }))}
-            act={async (path, cell, kind) => (await work.write(transitionPatches(path.slice(0, -1), key, cell, { kind }))) ?? null} />
-          {cell.edit && <Button label="Clear unit kind" onClick={() => void work.write(transitionPatches(["kinds"], key, cell, { kind: "clear" }))}>Clear unit kind</Button>}
-        </label>;
-      })}
-    </section>
-  </>;
+  const kinds = new Map(
+    (snapshot?.nodes ?? [])
+      .filter((node) => node.kind === "equipment")
+      .map((node) => [catalogLinkKey(node.family, node.type), node]),
+  );
+  return (
+    <>
+      <RulesBody ctx={ctx} wide />
+      <section aria-label="Unit kinds" className="flex flex-col gap-2 p-2">
+        <h3 className="t-head">Unit kinds</h3>
+        {[...kinds].map(([key, node]) => {
+          const cell = ctx.work?.kinds[key] ?? {};
+          const label = [node.family, node.type].filter(Boolean).join(" / ");
+          return (
+            <label key={key} className="flex flex-col gap-1">
+              <span>{label}</span>
+              <ChoiceCell
+                label={`Unit kind ${label}`}
+                cell={cell}
+                path={["kinds", key]}
+                current={cell.edit?.value.kind ?? suggestKind(node).kind}
+                show={JSON.stringify}
+                options={DUCT_UNIT_KINDS.map((kind) => ({
+                  key: kind,
+                  label: kind,
+                  description: kindMeaning(node, kind),
+                  disabled: kindDisabledReason(node, kind) ?? undefined,
+                }))}
+                refusal={ctx.workBasis ? null : "Read Work before editing"}
+                pick={(kind) =>
+                  void work.write(
+                    cellPatches(["kinds"], key, cell, { kind: "set", rung: { value: { kind } } }),
+                  )
+                }
+                act={async (path, cell, kind) =>
+                  (await work.write(cellPatches(path.slice(0, -1), key, cell, { kind }))) ?? null
+                }
+              />
+              {cell.edit && (
+                <Button
+                  label="Clear unit kind"
+                  onClick={() =>
+                    void work.write(cellPatches(["kinds"], key, cell, { kind: "clear" }))
+                  }
+                >
+                  Clear unit kind
+                </Button>
+              )}
+            </label>
+          );
+        })}
+      </section>
+    </>
+  );
 }
 function useTreeProjection(
   snapshot: DuctSnapshot,

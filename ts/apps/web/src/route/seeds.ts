@@ -114,16 +114,14 @@ const SCHEDULE_SEED_RAW = SCHEDULE_SEED_BYTES;
  */
 const SCHEDULE_SEED_FIELDS: Record<string, SettingsFieldState> = {
   "/ViewTemplateName": {
-    suggestion: {
+    edit: {
       value: "Schedule - PE Standard v2",
       note: "office template register lists v2 as current for performance schedules",
       confidence: "high",
     },
-    edit: null,
   },
-  "/IsItemized": { suggestion: null, edit: { value: false } },
+  "/IsItemized": { edit: { value: false } },
   "/Fields/1/ColumnHeaderOverride": {
-    suggestion: null,
     edit: { value: "REFRIGERANT TYPE (FULL DESIGNATION)" },
   },
 };

@@ -1,18 +1,16 @@
 import { z } from "zod";
 import {
-  availableTransitions,
   CELL_VERB_KINDS,
   cellSubjectType,
   cellVerbId,
-  transitionPatches,
+  cellPatches,
   type CellLike,
   type CellsDecl,
   type VerbDecl,
 } from "@pe/agent-contracts";
 import { workVerb, type VerbContext, type VerbSubject, type VerbScope } from "./verbs";
 
-const transitions = { take: "take", reject: "unsuggest", reopen: "clear" } as const;
-export type CellVerb = keyof typeof transitions | "delete";
+export type CellVerb = "clear" | "delete";
 
 /**
  * Derives lifecycle verbs from `graph.cells`, the only authority; no per-route handlers.
@@ -47,16 +45,9 @@ export function kernelCellVerbs<W>(graph: { readonly cells?: readonly CellsDecl<
       const patches = (scope: VerbScope) => {
         const cell = scope.value as CellLike;
         const key = scope.subject!.id;
-        const transition =
-          kind === "delete"
-            ? [{ path: [...prefix, key] }]
-            : transitionPatches(prefix, key, cell, { kind: transitions[kind] });
-        return kind === "take"
-          ? [
-              ...transition,
-              ...(family.take?.(scope.snapshot.work!.doc as W, key, scope.readings) ?? []),
-            ]
-          : transition;
+        return kind === "delete"
+          ? [{ path: [...prefix, key] }]
+          : cellPatches(prefix, key, cell, { kind: "clear" });
       };
       const id = cellVerbId(family, kind);
       placement[type]!.push(id);
@@ -69,12 +60,7 @@ export function kernelCellVerbs<W>(graph: { readonly cells?: readonly CellsDecl<
         },
         {
           ready: (scope) => {
-            if (
-              kind !== "delete" &&
-              !availableTransitions(scope.value as CellLike, { lock: null }).includes(
-                transitions[kind],
-              )
-            )
+            if (kind === "clear" && (scope.value as CellLike).edit == null)
               return `There is nothing to ${kind} on this cell`;
             return family.admit?.(scope.snapshot.work!.doc as W, patches(scope))?.message ?? null;
           },

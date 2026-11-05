@@ -5,7 +5,7 @@ import {
   settingsCandidate,
   settingsFieldDirectives,
   settingsFieldSegments,
-  transitionPatches,
+  cellPatches,
   type ActionReceipt,
   type FamilyDraft,
   type PodMember,
@@ -57,7 +57,11 @@ export function useFamilyStore(owner: FamilyMount) {
     [page.pod, page.path],
   );
   const table = useMemo<TableState>(
-    () => ({ sorts: page.sort.columns, query: page.query, hiddenColumns: Object.keys(page.hidden) }),
+    () => ({
+      sorts: page.sort.columns,
+      query: page.query,
+      hiddenColumns: Object.keys(page.hidden),
+    }),
     [page.sort, page.query, page.hidden],
   );
   const inspect = useMemo(() => inspectOf(page.inspector), [page.inspector]);
@@ -130,7 +134,8 @@ export function useFamilyStore(owner: FamilyMount) {
   const authored = useMemo((): unknown => {
     try {
       return snapshot ? JSON.parse(snapshot.rawContent.replace(/^\uFEFF/, "")) : null;
-    } catch (error) { console.warn("ts/apps/web/src/family/store.ts: fallback after failure", error);
+    } catch (error) {
+      console.warn("ts/apps/web/src/family/store.ts: fallback after failure", error);
       return null;
     }
   }, [snapshot]);
@@ -230,10 +235,12 @@ export function useFamilyStore(owner: FamilyMount) {
             return text;
           }
         }
-        for (const id of updated.cleared.filter((id) => !previous.cleared.includes(id)))
-          patches.push(
-            ...transitionPatches([FAMILY_CELLS], id, fields[id] ?? {}, { kind: "unsuggest" }),
-          );
+        for (const id of updated.cleared.filter(
+          (id) =>
+            !previous.cleared.includes(id) &&
+            !patches.some((p) => p.path[1] === id && p.path[2] === "edit" && p.value != null),
+        ))
+          patches.push(...cellPatches([FAMILY_CELLS], id, fields[id] ?? {}, { kind: "clear" }));
         edits.stage(updated, patches, work.handle.revision);
       },
       setOverlay: (value: Setter<Overlay>) =>
@@ -241,7 +248,13 @@ export function useFamilyStore(owner: FamilyMount) {
       setTable: (value: Setter<TableState>) => {
         const updated = next(value, table);
         owner.view.setPage(
-          { query: updated.query, sort: { columns: updated.sorts }, hidden: Object.fromEntries((updated.hiddenColumns ?? []).map(key => [key, true as const])) },
+          {
+            query: updated.query,
+            sort: { columns: updated.sorts },
+            hidden: Object.fromEntries(
+              (updated.hiddenColumns ?? []).map((key) => [key, true as const]),
+            ),
+          },
           { history: "replace" },
         );
       },

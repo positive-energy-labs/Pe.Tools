@@ -38,12 +38,11 @@ const LEGEND_SPECIMEN: readonly LegendKey[] = [
 
 /** Open, contested and Pea-agreed edit: the three verb sets the reviewer draws. */
 const REVIEW_SPECIMEN: Record<string, CellLike> = {
-  "Neck Width": { suggestion: { value: "10in", confidence: "high" }, edit: null },
+  "Neck Width": { edit: { value: "10in", confidence: "high" } },
   "Face Width": {
-    suggestion: { value: "Neck Width + 5in" },
     edit: { value: "Neck Width + 6in" },
   },
-  "Neck Height": { suggestion: { value: "10in" }, edit: { value: "10in" } },
+  "Neck Height": { edit: { value: "10in" } },
 };
 const wire: CellWire = { segment: "fields", write: async () => null, revision: 4 };
 
@@ -104,29 +103,11 @@ export function LangWorkflowSpecimens() {
       </SpecimenFrame>
       <SpecimenFrame name="Verdict" importPath="@pe/kit/lang/verdict">
         <div className="flex items-center gap-1">
-          <TooltipHint content="Stage Pea's suggestion">
-            <Verdict kind="take" onClick={noop} />
-          </TooltipHint>
-          <TooltipHint content="Clear Pea's suggestion">
-            <Verdict kind="unsuggest" onClick={noop} />
+          <TooltipHint content="Clear the staged value">
+            <Verdict kind="clear" onClick={noop} />
           </TooltipHint>
           <TooltipHint content="Clear the edit value">
             <Verdict kind="clear" onClick={noop} />
-          </TooltipHint>
-          <TooltipHint content="Stage Pea's suggestion on 3 cells">
-            <Verdict kind="take" onClick={noop}>
-              3
-            </Verdict>
-          </TooltipHint>
-          <TooltipHint content="Refuse this call">
-            <Verdict kind="unsuggest" onClick={noop}>
-              deny
-            </Verdict>
-          </TooltipHint>
-          <TooltipHint content="in flight">
-            <Verdict kind="take" disabled onClick={noop}>
-              accept
-            </Verdict>
           </TooltipHint>
         </div>
       </SpecimenFrame>
@@ -152,7 +133,7 @@ export function LangWorkflowSpecimens() {
             address={address}
             label={address}
             cell={cell}
-            facts={{ value: String((cell.edit ?? cell.suggestion)?.value) }}
+            facts={{ value: String(cell.edit?.value) }}
           />
         ))}
         <WorkStanding

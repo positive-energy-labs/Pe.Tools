@@ -5,7 +5,7 @@
  * clears the delta, taking it back stages a delete (`rulingRung`, ducts-domain `rulings.ts`).
  */
 import {
-  transitionPatches,
+  cellPatches,
   type DuctAssumption,
   type DuctsDesign,
   type RouteStatePatch,
@@ -25,7 +25,7 @@ export const rulingPatches = (
 ): RouteStatePatch[] => {
   const rung = rulingRung(store, segment, key, choice);
   const cell = (doc?.[segment] as Record<string, object> | undefined)?.[key] ?? {};
-  return transitionPatches(
+  return cellPatches(
     [segment],
     key,
     cell,

@@ -13,7 +13,7 @@ import {
   familyCellKey,
   familyCellValueSchema,
   familyCellAddress,
-  transitionPatches,
+  cellPatches,
   applyPatches,
   familyCellStateSchema,
   workKeySchema,
@@ -392,8 +392,7 @@ export const familiesNeutralBodies: Omit<
     slot: "cells.parameters.show",
     kind: "show",
     source,
-    run: (cell) =>
-      (cell.edit ?? cell.suggestion) ? showFamilyCell((cell.edit ?? cell.suggestion)!.value) : "",
+    run: (cell) => (cell.edit ? showFamilyCell(cell.edit!.value) : ""),
   },
   focus: { slot: "cells.parameters.focus", kind: "focus", source, run: (key) => ({ focus: key }) },
   salvage: {
@@ -531,7 +530,7 @@ export const familiesNeutralBodies: Omit<
     source,
     run: (ctx, input) => {
       const key = familyCellKey(input.address);
-      const patches = transitionPatches(["cells"], key, ctx.work.cells[key] ?? {}, {
+      const patches = cellPatches(["cells"], key, ctx.work.cells[key] ?? {}, {
         kind: "set",
         rung: { value: input.value },
         baseline: { value: { value: input.current, storageType: input.value.storageType } },

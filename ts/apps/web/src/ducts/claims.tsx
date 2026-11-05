@@ -1,9 +1,5 @@
 /** Claim verdicts and names. SubjectText owns prose references and attention. */
-import {
-  transitionPatches,
-  type DuctsDesign,
-  type RouteStatePatch,
-} from "@pe/agent-contracts";
+import { cellPatches, type DuctsDesign, type RouteStatePatch } from "@pe/agent-contracts";
 
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -23,7 +19,7 @@ export const verdictPatches = (
   claim: Claim,
   verdict: Verdict,
 ): RouteStatePatch[] =>
-  transitionPatches(["claims"], claim.id, doc?.claims[claim.id] ?? {}, {
+  cellPatches(["claims"], claim.id, doc?.claims[claim.id] ?? {}, {
     kind: "set",
     rung: {
       value: {

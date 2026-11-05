@@ -3,7 +3,6 @@ import { token } from "@pe/kit/lib/token";
 import { PressContent } from "@pe/kit/anatomy/press-content";
 import { Button } from "@pe/kit/lang/button";
 import { cellFromDraft } from "@pe/kit/lang/cell";
-import { parameterText } from "#/family/family-model";
 import { NavStateCell } from "#/family/marks";
 import {
   authoredText,
@@ -131,14 +130,10 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
       const propertyCell = (entry: (typeof properties)[number]) => (
         <span key={entry.id} className="ml-1 inline-block w-44 align-middle">
           <NavStateCell
-            {...cellFromDraft(
-              proposalCell([entry], null),
-              {
-                value: `${entry.property} ${entry.proposed}`,
-                currentValue: entry.current ?? "(not set)",
-              },
-              () => `${entry.property} ${entry.proposed}`,
-            )}
+            {...cellFromDraft(proposalCell([entry], null), {
+              value: `${entry.property} ${entry.proposed}`,
+              modelValue: entry.current ?? "(not set)",
+            })}
             onLocate={() => locate(entry)}
             transitions={transitionsAt(entry.id)}
           />
@@ -238,11 +233,10 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
             // with the same accept and deny every other suggestion has.
             <span className="w-44 shrink-0">
               <NavStateCell
-                {...cellFromDraft(
-                  proposalCell(family, null),
-                  { value: "", currentValue: "(not in the reading)" },
-                  parameterText,
-                )}
+                {...cellFromDraft(proposalCell(family, null), {
+                  value: "",
+                  modelValue: "(not in the reading)",
+                })}
                 onLocate={() => locate(family[0]!)}
                 transitions={transitionsAt(family[0].id)}
               />

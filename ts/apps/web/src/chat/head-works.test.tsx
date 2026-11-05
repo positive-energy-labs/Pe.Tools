@@ -35,7 +35,7 @@ test("the chat head reads executable graph Work and cell families for addressed 
   reads.route = "rooms";
   const key = roomEditKey("room-a", "name");
   reads.doc = roomsRouteState.schema.parse({
-    edits: { [key]: { suggestion: { value: "Pantry" } } },
+    edits: { [key]: { edit: { value: "Pantry" } } },
   });
   const doc = { session: "session-one", openId: "unsaved-one" };
   const exits = { open: vi.fn(), planIn: vi.fn() };
@@ -52,7 +52,7 @@ test("the chat head reads executable graph Work and cell families for addressed 
     reads.entries.some((entry) => entry.work.route === "pods" || entry.work.route === "open"),
   ).toBe(false);
   const head = rendered.result.current.find((head) => head.route === "Rooms")!;
-  expect(head.cells[key]?.suggestion?.value).toBe("Pantry");
+  expect(head.cells[key]?.edit?.value).toBe("Pantry");
   head.open?.();
   expect(exits.open).toHaveBeenCalledWith(expect.objectContaining({ route: "rooms", ok: true }));
   rendered.rerender({ target: null });
@@ -66,7 +66,7 @@ test("the chat head reads executable graph Work and cell families for addressed 
 
 test("admitted Families contributes a head row with its typed focus and exact recorded target", () => {
   reads.route = "families";
-  reads.doc = { cells: { '["Family","Type","Parameter"]': { suggestion: { value: "changed" } } } };
+  reads.doc = { cells: { '["Family","Type","Parameter"]': { edit: { value: "changed" } } } };
   const document = { session: "original-session", openId: "original-open" };
   const exits = { open: vi.fn(), planIn: vi.fn() };
   const { result } = renderHook(() => useHeadWorks(null, "Building", exits, document));

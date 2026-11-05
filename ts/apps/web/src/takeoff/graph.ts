@@ -13,7 +13,11 @@ import {
   type TakeoffsRouteDocument,
   type TakeoffObservation,
 } from "@pe/agent-contracts";
-import { field, text, type ScalarSchema } from "../../../../packages/agent-contracts/src/route-field";
+import {
+  field,
+  text,
+  type ScalarSchema,
+} from "../../../../packages/agent-contracts/src/route-field";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 import { takeoffsAddress } from "../../../../packages/agent-contracts/src/routes/takeoffs";
 import { takeoffPageSchema } from "./actions";
@@ -140,10 +144,10 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
       groupOf: (key) => [takeoffEditAddress(key).roomId],
       nouns: ["room"],
       noun: "room edits",
-      take: (doc, key, readings) => {
+      stage: (doc, key, readings) => {
         const observation = readings.snapshot?.value as TakeoffObservation | undefined;
         if (!readings.snapshot?.current || observation?.kind !== "ready")
-          throw Error("Read the current document before accepting a room proposal");
+          throw Error("Read the current document before staging a room edit");
         const patches = withEditBases(doc, observation.capture.snapshot.world, [
           { path: ["edits", key, "edit"], value: {} },
         ]);
@@ -160,7 +164,7 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
   ],
   readings: {
     // TODO: docs/features/routes/LEDGER.md#s7-e8f071edc9 native metadata zone roster is missing; saved captures supply zone choices.
-    roster: {    deps: ["saved"] },
+    roster: { deps: ["saved"] },
     snapshot: {
       deps: ["roster"],
       args: (p) => [p.work, p.views, p.zones],
@@ -181,8 +185,8 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
       args: (p) => [p.work, p.r10],
     },
     receipts: {},
-    captures: {   retire: "never" },
-    saved: {    args: (p) => p.work },
+    captures: { retire: "never" },
+    saved: { args: (p) => p.work },
     text: {
       args: (p) => [p.work, p.fileText],
     },
@@ -215,7 +219,7 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
       purpose: "Edit Manual J room data and decide calls",
       draws: ["snapshot", "saved"],
     },
-    room: { label: "Room details", purpose: "Inspect the selected room", },
+    room: { label: "Room details", purpose: "Inspect the selected room" },
     review: {
       label: "Review",
       purpose: "Review native partition evidence and authored proposals",

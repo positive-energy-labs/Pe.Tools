@@ -8,9 +8,9 @@ import { Check, X } from "lucide-react";
 import { Button } from "@pe/kit/lang/button";
 import {
   reviewTransitions,
-  runFanOut,
+  runClear,
   type CellWire,
-  type FanOutOutcome,
+  type ClearOutcome,
 } from "#/components/work/band";
 import { cellFromDraft, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
@@ -37,7 +37,7 @@ import {
 export interface Matrix {
   cells: MatrixCells;
   wire: CellWire;
-  outcome: FanOutOutcome | null;
+  outcome: ClearOutcome | null;
 }
 
 export const matrixWire = (write: CellWire["write"]): CellWire => ({
@@ -102,12 +102,12 @@ export const MATRIX_COLUMNS: Column<StatefulRow>[] = [
 ];
 
 /** The column aggregate: `accept` fanned over every Voltage address. Contested keys are skipped. */
-export const acceptVoltage = ({ cells, wire }: Matrix) =>
-  runFanOut(
+export const clearVoltage = ({ cells, wire }: Matrix) =>
+  runClear(
     wire,
     cells,
     MATRIX.map((row) => cellKey(row.key, "Voltage")),
-    "take",
+    "clear",
   );
 
 /** A spec-editor field per parameter of one type: the same cell, at card scale. */
@@ -183,8 +183,8 @@ export function BandGaps() {
     <section className="flex flex-col gap-1.5">
       <span>known gaps and owed work</span>
       <Gap>
-        <strong>Fixture revision:</strong> the specimen holds no Work, so accept and deny bind to a
-        stand-in r0 that nothing else writes; it cannot show a stale-revision refusal.
+        <strong>Fixture revision:</strong> the specimen holds no Work, so clear binds to a stand-in
+        r0 that nothing else writes; it cannot show a stale-revision refusal.
       </Gap>
       <Gap>
         <strong>Delete:</strong> a person clears a value to empty everywhere; deleting the property

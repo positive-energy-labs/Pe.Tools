@@ -474,7 +474,7 @@ interface CoreItem {
   kind: string;
   shelf: string;
   loss: number;
-  stage: "clean" | "proposed" | "edit";
+  stage: "clean" | "edit";
   author: "pea" | "human";
   children: CoreItem[];
 }
@@ -488,7 +488,7 @@ const CORE_ITEMS: CoreItem[] = Array.from({ length: 5 }, (_, shelf) => {
     kind: index % 3 === 0 ? "Return" : "Supply",
     shelf: shelf < 3 ? "Active" : "Settled",
     loss: Math.round((355 - index) * 1.37) / 100,
-    stage: index % 17 === 0 ? "proposed" : index % 13 === 0 ? "edit" : "clean",
+    stage: index % 17 === 0 || index % 13 === 0 ? "edit" : "clean",
     author: index % 2 === 0 ? "pea" : "human",
     children: [],
   });

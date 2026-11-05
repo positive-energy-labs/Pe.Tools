@@ -11,13 +11,12 @@ type Region = RoomsSnapshot.Res.RoomsRegion;
 type Loop = readonly (readonly number[])[];
 type Point = readonly [number, number];
 type MarkCell = RoomsRouteDocument["marks"][string];
-type MarkState = "proposed" | "accepted" | "pass" | "fail" | "stale" | "gone";
+type MarkState = "accepted" | "pass" | "fail" | "stale" | "gone";
 /** A card's state: a mark's derived glyph, or a note, which has no rungs. */
 export type CardState = MarkState | "note";
 
 /** Inbox order: what wants a person first; passing last among marks; notes after every mark. */
 export const CARD_STATES = [
-  "proposed",
   "fail",
   "stale",
   "gone",
@@ -32,15 +31,10 @@ export const CARD_META: Record<
   CardState,
   { glyph: string; tone: "pea" | "done" | "alarm" | "caution" | null; says: string }
 > = {
-  proposed: {
-    glyph: "◆",
-    tone: "pea",
-    says: "proposed · Pea's mark, not edit. Next: accept stages it, reject drops it.",
-  },
   accepted: {
     glyph: "●",
     tone: null,
-    says: "accepted · edit against the newest run. Next: a rerun honours it or not.",
+    says: "staged · edit against the newest run. Next: a rerun honours it or not.",
   },
   pass: { glyph: "✓", tone: "done", says: "passing · the newest run honours it. Nothing to do." },
   fail: {
@@ -130,7 +124,7 @@ function iou(polygon: Loop, region: Pick<Region, "outer" | "holes">): number {
 /** A mark's glyph: its rungs, then its anchor's overlap with the newest run on its view. */
 function markState(cell: MarkCell, snapshot: Snapshot): MarkState {
   const mark = cell.edit?.value;
-  if (!mark) return "proposed";
+  if (!mark) return "gone";
   const newest = newestRun(snapshot, mark.anchor.view);
   if (newest === null || newest === mark.run) return "accepted";
   let best: { region: Region; score: number } | null = null;
@@ -173,7 +167,7 @@ export function cardsMarkdown(doc: RoomsRouteDocument, snapshot: Snapshot): stri
   };
   const lines: { view: string; rank: number; id: string; text: string }[] = [];
   for (const [id, cell] of Object.entries(doc.marks)) {
-    const mark: Mark | undefined = cell.edit?.value ?? cell.suggestion?.value;
+    const mark: Mark | undefined = cell.edit?.value;
     if (!mark) continue;
     const state = markState(cell, snapshot);
     const labels = (mark.guids ?? []).map(label).filter((name) => name !== null);
@@ -242,13 +236,13 @@ export function inboxCards(doc: RoomsRouteDocument, snapshot: Snapshot, view: st
   };
   const cards: Card[] = [];
   for (const [id, cell] of Object.entries(doc.marks)) {
-    const mark = cell.edit?.value ?? cell.suggestion?.value;
+    const mark = cell.edit?.value;
     if (!mark || mark.anchor.view !== view) continue;
     const polygon = mark.anchor.polygon;
     cards.push({
       id,
       state: markState(cell, snapshot),
-      by: cell.suggestion ? "pea" : "person",
+      by: cell.edit?.by === "pea" ? "pea" : "person",
       kind: mark.kind,
       polygon,
       guids: concerns(polygon),

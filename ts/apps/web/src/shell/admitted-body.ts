@@ -25,8 +25,6 @@ export function createAdmittedBody<W extends Record<string, unknown>>(context: M
         workBasis: basis,
         history,
         cells: {
-          take: (id: string, key: unknown) => transitionCell.public.takeCell(id, key),
-          unsuggest: (id: string, key: unknown) => transitionCell.public.unsuggestCell(id, key),
           clear: (id: string, key: unknown) => transitionCell.public.clearCell(id, key),
         },
         recovery: route.data.work ? { state: recovery, startFresh, carryOver: salvage } : undefined,

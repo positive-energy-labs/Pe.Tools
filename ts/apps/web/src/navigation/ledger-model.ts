@@ -175,14 +175,14 @@ export function ledgerRows(sources: LedgerSources, now: number): LedgerRow[] {
     ...sources.receipts.flatMap((receipt) => receiptRow(receipt) ?? []),
     // A Work enters only when Pea proposed on it; Home's directory already lists every saved Work.
     ...sources.works
-      .filter((work) => work.proposals > 0)
+      .filter((work) => work.staged > 0)
       .map((work) => ({
         key: `work:${work.id}`,
         group: "waits" as const,
         verb: "review",
         what: work.label,
         where: work.context,
-        says: `${work.proposals} Pea suggestion${work.proposals === 1 ? "" : "s"} to review`,
+        says: `${work.staged} Pea suggestion${work.staged === 1 ? "" : "s"} to review`,
         at: null,
         url: work.url,
         refusal: work.url ? undefined : (work.reason ?? "No resumable destination"),
