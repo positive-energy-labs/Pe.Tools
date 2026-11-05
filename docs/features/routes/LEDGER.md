@@ -4,6 +4,14 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-05, kaitpw (Governor GAUGES): Step 8 migrates `/chat` first (stable; no feature loss), then `/pods` and `/settings` as kernel projections (Pods' schema and form remain unstable), then `/family` preserving the doc-lab flow where Pea proposes with a visible citation even though it is untested, then `/rooms`; `/family` acceptance uses a real PDF and real cells, with no mock witness, through the [five Driver cases](MAP.md#step-8-family-acceptance).
+
+- 2026-11-05, kaitpw (K4): automatic recording must not fail a live read. On capture full or I/O failure, stop capturing, mark coverage truncated at the failed taking, and preserve the actual live answer or original failure. Bounds still refuse further recording; historical misses never fall through to live. The required falsifier uses `maxTakings: 1` and proves that the second live read answers. Dev sessions run with capture off, so their Driver pass cannot prove this path.
+
+- 2026-11-05, Driver: `GREEN for main at d30b82d7`; main fast-forwarded from bea8b467 with local edits preserved. This lands the v2 input store; later read-set and recorded Workspace fills are excluded. K4 was then confirmed in source and takes priority before those fills resume.
+
+- 2026-11-05, Driver: `GREEN for main at bea8b467`; main fast-forwarded from bdc7d499 to that exact candidate with local edits preserved. This lands the Step 7 service wiring; production bytes match the driven 8f7eddf0. Recording remains incomplete. The next input candidate is frozen separately at d30b82d7; later read-set fills are excluded from this landing.
+
 - 2026-11-05, Driver: `GREEN for main at c03d720c`; main fast-forwarded from f39b616f to that exact superset, with local edits preserved. Fresh controlled ke277/pristine Chadds proved staged cohort apply/readback, consumed replan, shared-type refusal, one write across a network drop and retained apply History after full reload. Presentation/perf follow-on remains non-blocking; Step 7 was excluded.
 
 - 2026-11-05, Step 7 extraction repair: delete kit's unused route registry/export and its duplicate-only tests. No production caller consumed it; browser publicRoutes remains the authenticated registration owner. The kit extraction guard and registry-admission guard tests stay intact; only the obsolete producer's baseline allowance is removed.
@@ -136,6 +144,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-09-09, the claim that document keys and receipts alone prevent every stale read or duplicate mutation: keys separate open lifetimes; Effect refresh orders reads within one lifetime; host admission and request identity govern retries.
 
 ## Owed
+
+- **K4 live capture continuity:** automatic capture on main d30b82d7 can fail plan/apply reads when full or after I/O failure. Main-based repair must preserve live outcomes and expose truncated coverage; the maxTakings-1 falsifier plus the usual Driver GREEN gates its landing. Other recording fills are checkpointed until it lands.
 
 - Step 5 presentation follow-on, Driver `drive/step-5/CASES.md`, explicitly non-blocking for main: refresh copied-Pod discovery without host restart; replace the dead `/pod-admin` link; investigate a second-turn Pod set-view rendered-ack refusal, absent Pea `pod.import` discovery, refusal text rendered with misleading fan chips, the initial missing Ducts handle, `sheetSnapshot` unavailable after Back, a route-open 403 and the legacy outcome-unknown chip. T1 cb88e274 is not browser-proven yet. Preserve this classification unless a new write/data consequence is observed.
 

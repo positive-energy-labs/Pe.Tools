@@ -31,7 +31,7 @@ A parity gap that is presentation only, with no data or write consequence, is dr
 
 ## Cutover order (ADR 0027 rule 15)
 
-Progress 2026-11-05: steps 0–5 landed on main at the Driver's exact GREEN SHA `0b63d5d8`; Step 6 then landed at exact GREEN `c03d720c`, including current main and T1 cb88e274. The fresh controlled ke277 drive proved write/data and full-reload apply History; prior chaos proof stands at 5728ab22. The two dependency engines and empty hook Page remain Owed to the legacy route cutover. Step 7 remains kernel-only and incomplete. Navigation memory growth, the Pea plan's Ducts-handle prompt and Work row status wording are carried presentation findings, not reopened merge gates.
+Progress 2026-11-05: steps 0–5 landed on main at the Driver's exact GREEN SHA `0b63d5d8`; Step 6 then landed at exact GREEN `c03d720c`, including current main and T1 cb88e274. Step 7 service wiring and the v2 input store landed at exact GREENs `bea8b467` and `d30b82d7`. K4 (capture failure blocking live reads) is the priority main-based repair; later recording fills are checkpointed until it lands. Recording remains incomplete. The fresh controlled ke277 drives proved write/data and full-reload apply History; prior chaos proof stands at 5728ab22. The two dependency engines and empty hook Page remain Owed to the legacy route cutover. Navigation memory growth, the Pea plan's Ducts-handle prompt and Work row status wording are carried presentation findings, not reopened merge gates.
 
 1. The first-fix table above.
 2. Plan, rehearse, apply (ADR 0030 rules 4 to 7): the linker and `OpCallGate` change; the one write button (`ts/packages/kit/src/components/lang/preview-action.tsx` is the seed) adopted by /ducts and /fans; the Timeline as a projection with invocation starts and consent windows.
@@ -40,7 +40,17 @@ Progress 2026-11-05: steps 0–5 landed on main at the Driver's exact GREEN SHA 
 5. Catalog export and the DAG linker, then Pea projection (ADR 0028); subject, selection and directory; Pod registration so Pod routes mount like builtins; one reading engine; the value resolver.
 6. Purge and fold (2026-11-02 list, where not yet done): the two reading engines, `prototypes/` behind manifest-declared variants, the hand rows and `z.custom` decodes in `capabilities.ts`, the hand dispatch in `capability-tools.ts`.
 7. Recording (ADR 0031 step order): services first, then the recording source behind a Lane union, then epochs and the History rail, then keyed diff, then recompute, then cloud.
-8. The Manual D Load Driver proves each route in the browser on its controlled Chadds copy. Driver green, with no objection from kaitpw, gates a fast-forward merge to main. Test-, support- or ledger-only fast-forwards skip the Driver gate if they touch no production file and carry a deterministic stamp at their SHA. A driveable step starts the next step while that merge waits; from step 6 the Driver includes chaos runs.
+8. Migrate legacy routes in kaitpw's 2026-11-05 order: `/chat` (stable; no feature loss), then `/pods`, then `/settings` (kernel projections; Pods' schema and form are unstable), then `/family` (keep the untested doc-lab flow where Pea proposes with a visible citation), then `/rooms` ([ruling](LEDGER.md#decided)). The Manual D Load Driver proves each route in the browser on its controlled Chadds copy. Driver green, with no objection from kaitpw, gates a fast-forward merge to main. Test-, support- or ledger-only fast-forwards skip the Driver gate if they touch no production file and carry a deterministic stamp at their SHA. A driveable step starts the next step while that merge waits; from step 6 the Driver includes chaos runs.
+
+### Step 8 /family acceptance
+
+kaitpw, 2026-11-05: the Driver uses a real PDF and real cells on `/family`; no mock witness counts. Preserve the doc-lab flow ([ledger](LEDGER.md#decided)); source census: `purge/step-0/DOCLAB-CENSUS.md` at `23867de7`.
+
+1. Pea proposes a value with a citation to a page, block or image region; hovering the citation lights that evidence.
+2. Pin keeps the proposed value and citation through review.
+3. `attach_spec` accepts a path, a URL and an upload.
+4. A saved member reopens without reparsing the PDF.
+5. Accept and Reject sit beside the highlighted evidence and act on the proposed value.
 
 Kit has one owner thread per wave; route threads add red `kernel gap:` tests, never local kit patches. Merge main daily.
 

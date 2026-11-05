@@ -22,9 +22,23 @@ export const inputKinds = [
 ] as const;
 export type InputKind = (typeof inputKinds)[number];
 
+/**
+ * Where automatic capture stopped: `at` is the failed attempt's ordinal (1-based, in start order).
+ * Interrupted or concurrent attempts can leave other gaps; this never claims a complete prefix.
+ */
+export const truncationSchema = z.strictObject({
+  at: z.number().int().positive(),
+  reason: z.enum(["full", "io", "encoding", "unsupported", "setup", "observer"]),
+});
+export type Truncation = z.infer<typeof truncationSchema>;
+
 /** The lane as surfaces may show it. A recording names its build, catalog and partial coverage. */
 export const sourceProvenanceSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("live"), capturing: z.boolean() }),
+  z.strictObject({
+    kind: z.literal("live"),
+    capturing: z.boolean(),
+    truncated: truncationSchema.optional(),
+  }),
   z.strictObject({ kind: z.literal("fixture"), name: z.string() }),
   z.strictObject({
     kind: z.literal("recording"),
@@ -32,6 +46,7 @@ export const sourceProvenanceSchema = z.discriminatedUnion("kind", [
     build: z.string(),
     catalog: z.string(),
     coverage: z.array(z.enum(inputKinds)),
+    truncated: truncationSchema.optional(),
   }),
 ]);
 export type SourceProvenance = z.infer<typeof sourceProvenanceSchema>;
