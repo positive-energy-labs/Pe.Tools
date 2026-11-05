@@ -162,12 +162,28 @@ export function routeModuleHash(
   let projections: Record<string, string> = {};
   let pending: Promise<void> = Promise.resolve();
   let started = false;
+  let refreshing = false;
+  let dirty = false;
+  let notified: Promise<void> | undefined;
   const update = async () => {
     projections = (await generate()) ?? {};
   };
   const refresh = () => {
     started = true;
-    return (pending = pending.then(update, update));
+    dirty = true;
+    if (refreshing) return pending;
+    refreshing = true;
+    // Edits during verification need one more pass, not one subprocess per event.
+    return (pending = (async () => {
+      try {
+        do {
+          dirty = false;
+          await update();
+        } while (dirty);
+      } finally {
+        refreshing = false;
+      }
+    })());
   };
   const watchFiles = () =>
     Object.entries(projections)
@@ -217,7 +233,10 @@ export function routeModuleHash(
     async handleHotUpdate({ server }) {
       // The closure includes schemas, codecs, assets and build inputs outside graph.ts.
       // Recompute on every watched source edit; invalid declarations block reload.
-      await refresh();
+      const generation = refresh();
+      await generation;
+      if (notified === generation) return [];
+      notified = generation;
       for (const file of watchFiles()) server.watcher?.add(file);
       // Graphs register at module scope. Replace graph + directory together, never HMR one half.
       server.moduleGraph.invalidateAll();
