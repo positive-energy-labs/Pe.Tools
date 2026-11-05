@@ -480,3 +480,30 @@ effectTest(
       );
     }),
 );
+
+effectTest("an observer failure after a native answer keeps its dispatch evidence", () =>
+  Effect.gen(function* () {
+    const store = yield* openRecordingWriter(yield* bundle, identity, bounds);
+    const seen: string[] = [];
+    const observe = (fail: boolean) => (taking: { id: string }) =>
+      fail
+        ? Effect.fail(new InvalidRead({ message: "read set closed", status: 409, problem: "read-set.closed" }))
+        : Effect.sync(() => void seen.push(taking.id));
+    const lane = { kind: "live", captureStore: store } as const;
+    const through = (fail: boolean) =>
+      read("host.ops.catalog").pipe(
+        Effect.provideService(RequestIdentity, admittedRequestIdentity(pea, {})),
+        Effect.provide(hostNativeReadFor(lane, live().layer, observe(fail))),
+      );
+    yield* through(false);
+    const identityOf = yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope: {} });
+    expect(seen).toEqual(store.candidates(identityOf).map((taking) => taking.id));
+    expect(yield* outcome(through(true))).toMatchObject({
+      tag: "BridgeError",
+      status: 409,
+      problem: "read-set.closed",
+      native: "committed",
+      evidence: { nativeRequestId: "native-1", actualTarget: { processIncarnation: { pid: 7, startedAt: 1_000 } } },
+    });
+  }),
+);

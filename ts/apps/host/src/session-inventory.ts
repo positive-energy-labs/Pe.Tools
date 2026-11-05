@@ -19,10 +19,12 @@ import { RevitBridge } from "./bridge.ts";
 import { InvalidRead } from "./native-reads.ts";
 import {
   captureInput,
+  inputBindingKey,
   replayInput,
   type RecordedInput,
   type RecordingReader,
   type RecordingWriter,
+  type TakingObserver,
 } from "./native-recording.ts";
 import { SdkSession } from "./sdk-session.ts";
 
@@ -90,7 +92,7 @@ export class HostSessionInventory extends Context.Service<HostSessionInventory, 
     }),
   );
   /** The live inventory, each answer or refusal kept as a taking of that selector. */
-  static readonly capturing = (writer: RecordingWriter) =>
+  static readonly capturing = (writer: RecordingWriter, observed?: TakingObserver) =>
     Layer.effect(
       HostSessionInventory,
       Effect.map(Effect.service(HostSessionInventory), (live) => {
@@ -102,7 +104,14 @@ export class HostSessionInventory extends Context.Service<HostSessionInventory, 
         ): Read<A> =>
           Effect.flatMap(Effect.context<RequestIdentity>(), (context) => {
             const { input, scope } = selector(name, args);
-            return captureInput(writer, input, scope, codec, Effect.provide(read, context));
+            return captureInput(
+              writer,
+              input,
+              scope,
+              codec,
+              Effect.provide(read, context),
+              observed,
+            );
           });
         return {
           attachment: (id) => keep("attachment", id, sessionCodec, live.attachment(id)),
@@ -112,10 +121,13 @@ export class HostSessionInventory extends Context.Service<HostSessionInventory, 
       }),
     );
   /** Recorded inventory only: a miss refuses, and no SDK or bridge is built or read. */
-  static readonly recorded = (reader: RecordingReader) => {
+  static readonly recorded = (
+    reader: RecordingReader,
+    bindings: ReadonlyMap<string, string> = new Map(),
+  ) => {
     const replay = <A, I>(name: keyof Inventory, args: Schema.Json, codec: Schema.Codec<A, I>) => {
       const { input, scope } = selector(name, args);
-      return replayInput(reader, input, scope, codec);
+      return replayInput(reader, input, scope, codec, bindings.get(inputBindingKey(input, scope)));
     };
     return Layer.succeed(HostSessionInventory, {
       attachment: (id) => replay("attachment", id, sessionCodec),
