@@ -46,7 +46,7 @@ import {
   attachmentRefusal,
   createThreadRequestSchema,
   emptyThreadLifecycle,
-  routeAddress,
+  canonicalPlace,
   threadPlaceRequestSchema,
   updateThreadRequestSchema,
   forkThreadRequestSchema,
@@ -2012,7 +2012,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         if (caller.kind === "pea" && caller.thread !== t.meta.id)
           return json({ error: "A Pea context may only link Work to its own conversation" }, 403);
         const change = await input(threadPlaceRequestSchema);
-        const canonical = routeAddress(change.route).tab(change.link);
+        const canonical = canonicalPlace(change.route, change.link);
         if (!canonical.ok) return json({ error: canonical.error }, 400);
         const context = readWorkContext(t.meta.workContext);
         if (!context)
