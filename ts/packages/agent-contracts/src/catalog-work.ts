@@ -17,6 +17,7 @@ import {
   type ParameterLinksDocument,
 } from "./parameter-links.ts";
 import type { RouteStateSpec } from "./route-state.ts";
+import type { CatalogAxes } from "./catalog.ts";
 import { workWriteCommands } from "./write-intent.ts";
 
 /** One staged id the plan changes: the model's value it read (null: absent), the result, and its author. */
@@ -163,21 +164,36 @@ export const catalogWorkSpecs = Object.fromEntries(
 
 function catalogWorkCommand<const K extends string>(owner: Owner, key: K, dirties: readonly ActionReadingKey[]) {
   const work: CatalogWork<z.ZodType, never> = catalogWorks[owner];
+  const leaf = native(work.op);
+  // The apply carries its native ModelWrite's axes; the plan declares its own Read (ADR 0030 rule 4).
+  const axes: CatalogAxes = {
+    subject: leaf.subject as CatalogAxes["subject"],
+    touches: leaf.touches.split(", ") as CatalogAxes["touches"],
+    effect: leaf.effect as CatalogAxes["effect"],
+    cost: "Mutation",
+    cardinality: leaf.cardinality as CatalogAxes["cardinality"],
+  };
   const definition = {
-    says: native(work.op).description,
+    says: leaf.description,
     native: [work.op],
     needs: "project-document",
     effect: "command",
     dirties,
     input: z.object({}),
+    axes,
   } as const;
-  // The plan sends nothing native, so it names no leaf; command-axes gives a catalog Work plan Effect Read.
+  // The plan only derives from Work and sends nothing native, so it names no leaf and declares Read.
   // The boundary only parses the Work; the host executor reads the owner's base and derives (both phases).
   return workWriteCommands(owner, key, definition, {
     derive: (doc) => ({ doc: work.schema.parse(doc) }),
     preview: {
       key: `${key}.plan`,
-      definition: { ...definition, native: [], says: `Plan, nothing committed: ${definition.says}` },
+      definition: {
+        ...definition,
+        native: [],
+        axes: { ...axes, effect: "Read" },
+        says: `Plan, nothing committed: ${definition.says}`,
+      },
     },
   });
 }

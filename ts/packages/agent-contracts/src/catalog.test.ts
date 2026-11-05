@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vite-plus/test";
-import { linkCatalog, type CatalogLink } from "./catalog.ts";
-import { catalogEntries, httpRoutes, peRoutes } from "./pe-api.ts";
+import { link, type CatalogLink } from "./catalog.ts";
+const errorsOf = (entries: readonly CatalogLink[]) => {
+  const result = link(entries);
+  return result.ok ? [] : [...result.errors];
+};
+import { httpRoutes, linkedCatalog, peRoutes } from "./pe-api.ts";
+const catalogEntries = [...linkedCatalog().entries.values()];
 const leaf = (key: string, uses: CatalogLink["uses"] = []): CatalogLink => ({
   key,
   uses,
@@ -12,7 +17,7 @@ const leaf = (key: string, uses: CatalogLink["uses"] = []): CatalogLink => ({
 });
 describe("catalog dependency graph", () => {
   test("links the shipped catalog", () => {
-    expect(linkCatalog(catalogEntries)).toEqual([]);
+    expect(errorsOf(catalogEntries)).toEqual([]);
   });
   test("declares every HTTP route and includes its children's touched data", () => {
     const byKey = new Map(catalogEntries.map((row) => [row.key, row]));
@@ -29,49 +34,49 @@ describe("catalog dependency graph", () => {
       expect(peRoutes[id].catalog.effect).toBe("SessionWrite");
   });
   test("refuses uncapped geometry cardinality", () => {
-    expect(linkCatalog([{ ...leaf("all"), cardinality: "Many" }]).join()).toContain(
+    expect(errorsOf([{ ...leaf("all"), cardinality: "Many" }]).join()).toContain(
       "requires a cap",
     );
   });
   test("rejects missing keys and cycles", () => {
-    expect(linkCatalog([leaf("a", ["missing"])]).join()).toContain("unknown dependency");
-    expect(linkCatalog([leaf("a", ["b"]), leaf("b", ["a"])]).join()).toContain("cycle");
+    expect(errorsOf([leaf("a", ["missing"])]).join()).toContain("unknown dependency");
+    expect(errorsOf([leaf("a", ["b"]), leaf("b", ["a"])]).join()).toContain("cycle");
   });
   test("refuses an HTTP route priced below its native child", () => {
     const child = { ...leaf("native.walk"), cost: "Expensive" as const };
     const route = { ...leaf("route:sheet", [child.key]), cost: "Cheap" as const };
-    expect(linkCatalog([route, child])).toEqual(["route:sheet: cost understates native.walk"]);
-    expect(linkCatalog([{ ...route, cost: "Expensive" }, child])).toEqual([]);
+    expect(errorsOf([route, child])).toEqual(["route:sheet: cost understates native.walk"]);
+    expect(errorsOf([{ ...route, cost: "Expensive" }, child])).toEqual([]);
   });
   test("charges repeated child calls, including uncapped calls", () => {
     const child = leaf("walk");
     const parent = leaf("all", [{ key: "walk", cardinality: "Many", cap: 99 }]);
-    expect(linkCatalog([parent, child]).join()).toContain("understates");
-    expect(linkCatalog([{ ...parent, cardinality: "Many", cap: 99 }, child])).toEqual([]);
+    expect(errorsOf([parent, child]).join()).toContain("understates");
+    expect(errorsOf([{ ...parent, cardinality: "Many", cap: 99 }, child])).toEqual([]);
     expect(
-      linkCatalog([{ ...parent, uses: [{ key: "walk", cardinality: "Many" }] }, child]).join(),
+      errorsOf([{ ...parent, uses: [{ key: "walk", cardinality: "Many" }] }, child]).join(),
     ).toContain("understates");
   });
   test("binds every ModelWrite's seal step to a plan (Read or rolled-back TransactRead) of the same footprint", () => {
     const derivation = { derive: (work: unknown) => work, preview: (request: unknown) => request };
     const write = { ...leaf("command:x.apply"), ...derivation, effect: "ModelWrite" as const, previewBy: "command:x.preview" };
     const preview = { ...leaf("command:x.preview"), effect: "TransactRead" as const, rollsBack: true };
-    expect(linkCatalog([write, preview])).toEqual([]);
+    expect(errorsOf([write, preview])).toEqual([]);
     // ADR 0030 rule 4: a plan that opens no transaction is a Read and links.
-    expect(linkCatalog([write, { ...preview, effect: "Read", rollsBack: undefined }])).toEqual([]);
+    expect(errorsOf([write, { ...preview, effect: "Read", rollsBack: undefined }])).toEqual([]);
     // A plan that may write is refused, whatever it is called.
-    expect(linkCatalog([write, { ...preview, effect: "ModelWrite" }])).toContain(
+    expect(errorsOf([write, { ...preview, effect: "ModelWrite" }])).toContain(
       "command:x.apply: plan command:x.preview is ModelWrite, not Read or TransactRead",
     );
-    expect(linkCatalog([write, { ...preview, effect: "SessionWrite" }]).join()).toContain("not Read or TransactRead");
-    expect(linkCatalog([write, { ...preview, rollsBack: false }])).toContain(
+    expect(errorsOf([write, { ...preview, effect: "SessionWrite" }]).join()).toContain("not Read or TransactRead");
+    expect(errorsOf([write, { ...preview, rollsBack: false }])).toContain(
       "command:x.preview: TransactRead must declare rollback",
     );
-    expect(linkCatalog([write, { ...preview, touches: ["Metadata"] }])).toContain(
+    expect(errorsOf([write, { ...preview, touches: ["Metadata"] }])).toContain(
       "command:x.apply: preview command:x.preview touches differ",
     );
-    expect(linkCatalog([write])).toContain("command:x.apply: unknown preview command:x.preview");
-    expect(linkCatalog([{ ...write, previewBy: undefined }])).toContain(
+    expect(errorsOf([write])).toContain("command:x.apply: unknown preview command:x.preview");
+    expect(errorsOf([{ ...write, previewBy: undefined }])).toContain(
       "command:x.apply: ModelWrite has no preview binding",
     );
   });
