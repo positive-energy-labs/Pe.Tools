@@ -47,16 +47,13 @@ const closureDestination = process.argv
 if (closureDestination && !/^(?:[A-Za-z]:[\\/]|\/)/.test(closureDestination))
   throw Error("--closure-output requires an absolute path");
 const runtime = process.argv.includes("--runtime");
-const writePins = process.argv.includes("--write-builtin-closures");
-if (check && (writePins || runtime))
+if (check && runtime)
   throw Error("--check is read-only and cannot use runtime projection flags");
 const projections: Record<string, string> = {};
 const stale: string[] = [];
 async function emit(destination: URL, text: string) {
   if (runtime) {
     projections[fileURLToPath(destination)] = text;
-    if (writePins && destination.pathname.endsWith("/source-closure.generated.json"))
-      writeBuiltinClosurePin(fileURLToPath(destination), text);
   } else if (check) {
     let current: string | undefined;
     try {
