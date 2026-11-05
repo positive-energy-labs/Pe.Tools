@@ -10,7 +10,7 @@ import {
   type CapabilityCatalog,
   type CapabilityRecent,
   type RouteStateSpec,
-  type AdmittedFields,
+  type AdmittedView,
   type PackageProjection,
 } from "@pe/agent-contracts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
@@ -40,7 +40,8 @@ export interface CapabilitySources {
   skills: readonly SkillSnapshot[];
   pages?: readonly Capability[];
   /** Agent policy of an admitted route's fields (the host workspace's admission), else null. */
-  admittedFields?: (route: string) => AdmittedFields | null;
+  /** Live registrations from the workspace's admission owner; withdrawn routes are absent. */
+  admittedRoutes?: () => readonly AdmittedView[];
 }
 
 /** Pure projection, ordered by compiled operations/routes, packaged content and scratch Pages. */
@@ -113,7 +114,7 @@ export function createCapabilityCatalogSource(options: {
   content?: () => Promise<CapabilityContent>;
   /** Scratch Pages read fresh on every catalog read, whatever the cached snapshot holds. */
   pages?: () => Promise<readonly Capability[]>;
-  admittedFields?: CapabilitySources["admittedFields"];
+  admittedRoutes?: CapabilitySources["admittedRoutes"];
 }): CapabilityCatalogSource {
   const base = options.hostBaseUrl.replace(/\/$/, "");
   const routes = options.registrations.map((registration) => registration.spec);
@@ -156,7 +157,8 @@ export function createCapabilityCatalogSource(options: {
   };
 
   async function readScoped(scope: HostSessionScope): Promise<Omit<CapabilityCatalog, "machine">> {
-    const cacheKey = JSON.stringify(scope);
+    // Live registrations key the cache, so a trusted, replaced or withdrawn route is never served stale.
+    const cacheKey = JSON.stringify([scope, options.admittedRoutes?.() ?? []]);
     const hit = cache.get(cacheKey);
     if (hit && Date.now() - hit.at < CATALOG_TTL_MS) return hit.catalog;
 
@@ -189,7 +191,7 @@ export function createCapabilityCatalogSource(options: {
         ops: opsValue.operations ?? [],
         availabilityKnown: ops.status === "fulfilled" && !opsValue.bridgeCatalogError,
         routes,
-        admittedFields: options.admittedFields,
+        admittedRoutes: options.admittedRoutes,
         ...(admitted.status === "fulfilled" ? admitted.value : { packages: [], skills: [] }),
       }),
     };

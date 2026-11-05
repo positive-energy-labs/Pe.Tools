@@ -4,14 +4,13 @@ import {
   nativePrincipals,
   admittedRouteEntries,
   routeAddress,
-  routeViewRoutes,
+  viewRoutes,
   agentFields,
   parseContributionKey,
   type Capability,
   type RouteStateSpec,
   type PackageProjection,
-  type RouteViewRoute,
-  type AdmittedFields,
+  type ViewRoute,
 } from "@pe/agent-contracts";
 import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
@@ -47,7 +46,7 @@ export function dynamicCapabilityProvider(sources: CapabilitySources): Capabilit
   return [
     ...podCapabilities(),
     ...sources.routes.flatMap(routeRows),
-    ...routeViewRoutes.flatMap((route) => routeViewRows(route, sources.admittedFields?.(route) ?? null)),
+    ...viewRoutes(sources.admittedRoutes?.() ?? []).flatMap(routeViewRows),
     ...sources.packages.flatMap(packageRows),
     ...sources.skills.map(skillRow),
     ...(sources.pages ?? []),
@@ -83,10 +82,9 @@ export function opRow(op: OpsCatalogEntry): Capability {
   };
 }
 
-/** A route that leases its view (`routeAddress(route).agent`) gets one read and one set, both over the person's open page. */
-function routeViewRows(route: RouteViewRoute, admitted: AdmittedFields | null): Capability[] {
-  const spec = routeAddress(route);
-  const legacy = spec.agent;
+/** A route that leases its view (`viewRoute`) gets one read and one set, both over the person's open page. */
+function routeViewRows({ key: route, title, fields: admitted, legacy: builtin }: ViewRoute): Capability[] {
+  const legacy = builtin && routeAddress(builtin).agent;
   // An admitted route projects its keys from the admitted graph's agent policy; the browser owner
   // holds the codecs, so each settable key is the text the view shows (ADR 0030 rule 10).
   const settable = admitted && agentFields(admitted, "set").map(([key]) => key);
@@ -96,17 +94,17 @@ function routeViewRows(route: RouteViewRoute, admitted: AdmittedFields | null): 
         words: undefined,
         keys: agentFields(admitted!).map(([key]) => key),
         fields: z.object(Object.fromEntries(settable.map((key) => [key, z.string()]))),
-        finds: legacy.finds,
+        finds: legacy ? legacy.finds : [],
       }
-    : legacy;
+    : legacy!; // `viewRoute` gives a route without admitted fields only for a builtin address.
   const sets = Object.keys(fields.shape);
-  const lower = spec.title.toLowerCase();
+  const lower = title.toLowerCase();
   return [
     {
       key: `route:${route}.view`,
       kind: "route-command",
-      title: `${spec.title} visible view`,
-      description: `Read the ${spec.title} page associated with this conversation in the person's browser: its keys (${keys.join(", ")}; settable: ${sets.join(", ")}) with their current values, the identity of what is shown, and the facts it derives. ${policy} Returns instance and revision for ${`route:${route}.set-view`}. If two panes are open, pass an instance from the ambiguity result. No Revit read.`,
+      title: `${title} visible view`,
+      description: `Read the ${title} page associated with this conversation in the person's browser: its keys (${keys.join(", ")}; settable: ${sets.join(", ")}) with their current values, the identity of what is shown, and the facts it derives. ${policy} Returns instance and revision for ${`route:${route}.set-view`}. If two panes are open, pass an instance from the ambiguity result. No Revit read.`,
       finds: [lower, "visible", "page", ...finds],
       needs: "nothing",
       effect: "query",
@@ -119,7 +117,7 @@ function routeViewRows(route: RouteViewRoute, admitted: AdmittedFields | null): 
     {
       key: `route:${route}.set-view`,
       kind: "route-command",
-      title: `Set ${spec.title} visible view`,
+      title: `Set ${title} visible view`,
       description: `${policy} For a mounted view, read route:${route}.view first, then pass its instance and revision. To explicitly open this tool in the browser showing this conversation, omit both instance and revision; the call waits for that command's rendered view and uses its revision, or returns applied: false if none mounts. Browser Places and saved Work remain independent of the conversation. Pass a nonempty subset of ${sets.join(", ")}${words ? ` or ${Object.keys(words.shape).join(", ")}` : ""}. The browser acknowledges an applied render before this returns.`,
       finds: [lower, "filter", "visible", "page", ...finds],
       needs: "nothing",

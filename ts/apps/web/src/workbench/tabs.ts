@@ -7,7 +7,7 @@ import {
   routeAddress,
   canonicalPlace,
   admittedBuiltinKeys,
-  routeViewOpenSchema,
+  routeViewOpenedSchema,
   THREAD_TABS_MAX,
   threadTabSchema,
   routeAt,
@@ -424,7 +424,7 @@ export function useRouteTabs() {
     (event: RouteViewOpenIntent) => {
       if (
         event.type !== "route-view-open" ||
-        !routeViewOpenSchema.safeParse({ thread: event.thread, link: event.link }).success ||
+        !routeViewOpenedSchema.safeParse({ thread: event.thread, link: event.link }).success ||
         !z.uuid().safeParse(event.commandId).success
       )
         return;

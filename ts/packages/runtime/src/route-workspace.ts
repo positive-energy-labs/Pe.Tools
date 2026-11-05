@@ -100,6 +100,8 @@ export class RouteWorkspace {
       readings: import("@pe/agent-contracts").RouteGraphJson["readings"];
       /** The admitted graph's fields: the host's attention fence reads their agent policy, never a codec. */
       fields: import("@pe/agent-contracts").AdmittedFields;
+      title: string;
+      address: string;
       ready: Promise<WorkFeedFailure | null>;
       close(): void;
     }
@@ -236,6 +238,8 @@ export class RouteWorkspace {
       workRoute: work.route,
       readings: route.data.readings,
       fields: route.data.fields,
+      title: route.data.name,
+      address: route.data.address,
       ready,
       close: () => {
         if (this.#admissions.get(route.data.key) !== record) return;
@@ -267,9 +271,12 @@ export class RouteWorkspace {
     };
   }
 
-  /** Agent policy of an admitted route's fields, or null for a legacy route (ADR 0030 rule 10). */
-  admittedFields(routeKey: string) {
-    return this.#admissions.get(routeKey)?.fields ?? null;
+  /**
+   * Read-only projection of the live admissions, the one registration owner: identity, name,
+   * address and agent policy (ADR 0030 rule 10). Withdrawal removes the row; nothing is cached.
+   */
+  admittedRoutes(): import("@pe/agent-contracts").AdmittedView[] {
+    return [...this.#admissions].map(([key, { title, address, fields }]) => ({ key, title, address, fields }));
   }
 
   requiresAdmission(workRoute: string): boolean {

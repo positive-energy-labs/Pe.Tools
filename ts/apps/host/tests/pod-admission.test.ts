@@ -325,3 +325,124 @@ test("replacement during persisted Work census fences the retired migration", as
     await f.close();
   }
 }, 30_000);
+
+test("Pea finds, reads, sets and opens a trusted Pod view through its one registration; withdrawal refuses", async () => {
+  const { createPeRoutes } = await import("../src/pe-routes.ts");
+  const { createRouteRegistrations } = await import("@pe/mcps");
+  const { buildCapabilities } = await import("../../../packages/mcps/src/pea/capabilities.ts");
+  const { peDo } = await import("../../../packages/mcps/src/pea/capability-tools.ts");
+  const { fakeRuntimeHost } = await import("../../../packages/mcps/tests/runtime-host-fixture.ts");
+  const { machineFixture } = await import("../../../packages/agent-contracts/tests/machine-fixture.ts");
+  const { hostResourceObserver } = await import("../src/resource-adapters.ts");
+  const { emptyThreadHead } = await import("@pe/agent-contracts");
+  const root = await mkdtemp(join(tmpdir(), "pe-pod-view-"));
+  const abort = new AbortController();
+  const route = "pod.fixture.tool";
+  const thread = "t1";
+  try {
+    const { fingerprint } = await fixture(root);
+    const lifecycle = createPackageLifecycle({
+      packages: () => listPackages(join(root, "Pods")),
+      decisionsPath: join(root, "enabled.json"),
+    });
+    const app = createPeRoutes({
+      registrations: createRouteRegistrations(),
+      store: fileRouteDocumentStore(join(root, "Work")),
+      heads: { observe: () => () => {} },
+      observeHostResource: hostResourceObserver(),
+    });
+    const pods = createPodRoutes(lifecycle, { workspace: app.workspace, trustPath: join(root, "trust.json") });
+    // The host's capability provider wiring (pe-routes `admittedRoutes`), over this app's workspace.
+    const rows = () =>
+      buildCapabilities({ ops: [], routes: [], packages: [], skills: [], admittedRoutes: () => app.workspace.admittedRoutes() });
+    fakeRuntimeHost("http://127.0.0.1:9");
+    vi.stubEnv("PE_CONTEXT", `context-${thread}`);
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      if (url.pathname === "/pe/scope/self") return Response.json({ ...emptyThreadHead, thread });
+      if (url.pathname === "/pe/capabilities")
+        return Response.json({ at: new Date().toISOString(), machine: machineFixture([]), sources: {}, diagnostics: [], capabilities: rows() });
+      return app.fetch(input instanceof Request ? input : new Request(url, init));
+    });
+    const pe = (key: string, input: object) =>
+      peDo.execute!({ key, input, timeoutSeconds: 30 } as never, { agent: { toolCallId: "call-1" } } as never) as Promise<Record<string, unknown>>;
+    const stream = await app.fetch(
+      new Request(`http://host/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "world" }]))}`, { signal: abort.signal }),
+    );
+    const reader = stream.body!.getReader();
+    const intents: Record<string, unknown>[] = [];
+    void (async () => {
+      let buffer = "";
+      for (;;) {
+        const chunk = await reader.read().catch(() => ({ done: true, value: undefined }));
+        if (chunk.done) return;
+        buffer += new TextDecoder().decode(chunk.value);
+        for (let end = buffer.indexOf("\n\n"); end >= 0; end = buffer.indexOf("\n\n")) {
+          const data = /^data: (.*)$/m.exec(buffer.slice(0, end))?.[1];
+          buffer = buffer.slice(end + 2);
+          const value = data && JSON.parse(data).value;
+          if (value?.type?.startsWith("route-view-")) intents.push(value);
+        }
+      }
+    })();
+    const instance = "00000000-0000-4000-8000-0000000000a1";
+    // The browser owner: publishes its mounted Page as its codec writes it, and acks what rendered.
+    const mounted = (page: Record<string, string>, openCommandId?: string) =>
+      app.fetch(
+        new Request(`http://host/pe/route-view/${route}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ route, thread, instance, surface: "route", page, context: {}, facts: {}, ...(openCommandId ? { openCommandId } : {}) }),
+        }),
+      );
+
+    // Untrusted inventory publishes no rows and its channel refuses.
+    expect(rows().some((row) => row.key.startsWith(`route:${route}.`))).toBe(false);
+    expect((await mounted({ system: "" })).status).toBe(404);
+    const [row] = await pods.list();
+    await pods.trust(row!.key, fingerprint, true);
+    await vi.waitFor(() => expect(app.workspace.admittedRoutes().map((each) => each.key)).toContain(route));
+    expect(rows().filter((each) => each.key.startsWith(`route:${route}.`)).map((each) => each.key)).toEqual([
+      `route:${route}.view`,
+      `route:${route}.set-view`,
+    ]);
+
+    // Explicit open: the host links the registered address; the call waits for the matching rendered command.
+    const opening = pe(`route:${route}.set-view`, { system: "owner-text" });
+    await vi.waitFor(() => expect(intents.some((each) => each.type === "route-view-open")).toBe(true));
+    const open = intents.find((each) => each.type === "route-view-open")!;
+    expect(open).toMatchObject({ route, thread, link: "/pod/fixture/tool" });
+    const page = { system: "", viewport: "" };
+    expect((await mounted(page, open.commandId as string)).status).toBe(200);
+    await vi.waitFor(() => expect(intents.some((each) => each.type === "route-view-intent")).toBe(true));
+    const intent = intents.find((each) => each.type === "route-view-intent")!;
+    // The owner codec's text crosses undecoded.
+    expect(intent.patch).toEqual({ system: "owner-text" });
+    await mounted({ ...page, system: "owner-text" }, open.commandId as string);
+    const ack = await app.fetch(
+      new Request(`http://host/pe/route-view/${route}/ack`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ outcome: "rendered", instance, commandId: intent.commandId, revision: intent.revision, page: { ...page, system: "owner-text" }, facts: {} }),
+      }),
+    );
+    expect(ack.status).toBe(200);
+    expect(await opening).toMatchObject({ ok: true });
+    expect(await pe(`route:${route}.view`, {})).toMatchObject({ ok: true });
+
+    // Withdrawal: discovery drops the rows, and execution through a stale row refuses at the live gate.
+    const work = await readdir(join(root, "Work")).catch(() => []);
+    await pods.trust(row!.key, fingerprint, false);
+    await vi.waitFor(() => expect(app.workspace.admittedRoutes().map((each) => each.key)).not.toContain(route));
+    expect(rows().some((each) => each.key.startsWith(`route:${route}.`))).toBe(false);
+    expect((await mounted(page)).status).toBe(404);
+    expect(await readdir(join(root, "Work")).catch(() => [])).toEqual(work);
+    pods.close();
+    await lifecycle.close();
+  } finally {
+    abort.abort();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    await rm(root, { recursive: true, force: true });
+  }
+}, 60_000);
