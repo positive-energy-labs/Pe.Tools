@@ -1162,6 +1162,7 @@ function* hostPeRoutes(
   );
   const routeSettings = createRouteSettings(productRouteSettingsPath());
   const threads = yield* makeHarnessThreads({
+    admittedRoutes: () => routes.workspace.admittedRoutes(),
     runs,
     // An unreadable settings file asks a person: unknown consent never applies by itself.
     autoApprove: () => {
