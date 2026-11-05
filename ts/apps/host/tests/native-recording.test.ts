@@ -520,3 +520,27 @@ effectTest("K4: an I/O capture failure keeps the exact native answer, and a live
       expect(yield* outcome(run(lane)(read(key)))).toEqual(yield* outcome(run({ kind: "live" })(read(key))));
   }),
 );
+
+effectTest("an observer failure truncates capture and leaves the actual native answer exact", () =>
+  Effect.gen(function* () {
+    const store = yield* openRecordingWriter(yield* bundle, identity, bounds);
+    const seen: string[] = [];
+    const observe = (fail: boolean) => (taking: { id: string }) =>
+      fail
+        ? Effect.fail(new InvalidRead({ message: "read set closed", status: 409, problem: "read-set.closed" }))
+        : Effect.sync(() => void seen.push(taking.id));
+    const lane = { kind: "live", captureStore: store } as const;
+    const through = (fail: boolean) =>
+      read("host.ops.catalog").pipe(
+        Effect.provideService(RequestIdentity, admittedRequestIdentity(pea, {})),
+        Effect.provide(hostNativeReadFor(lane, live().layer, observe(fail))),
+      );
+    const answer = yield* through(false);
+    const identityOf = yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope: {} });
+    expect(seen).toEqual(store.candidates(identityOf).map((taking) => taking.id));
+    expect(yield* through(true)).toEqual(answer);
+    expect(store.capture.truncated()).toEqual({ at: 2, reason: "observer" });
+    expect(yield* through(false)).toEqual(answer);
+    expect(seen).toHaveLength(1);
+  }),
+);

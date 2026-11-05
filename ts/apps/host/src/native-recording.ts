@@ -90,6 +90,8 @@ const failure = Schema.Union([
 const sha256Name = Schema.String.check(
   Schema.makeFilter((name) => /^[0-9a-f]{64}$/.test(name) || "Observation name is not a SHA-256"),
 );
+// Format 3: the marks input carries its frame. Older formats are refused, never migrated.
+const FORMAT = 3;
 /** What one taking recorded: a native read, or one input owner's exact read shape. */
 const recordedInput = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("native"), key: Schema.String, args: Schema.String }),
@@ -101,6 +103,8 @@ const recordedInput = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("marks"),
     ref: Schema.Struct({ session: Schema.String, openId: Schema.String }),
+    /** Null for a bare snapshot; the consuming frame's own key for a frame read, so they never alias. */
+    frame: Schema.NullOr(Schema.String),
   }),
   Schema.Struct({
     kind: Schema.Literal("work"),
@@ -110,7 +114,7 @@ const recordedInput = Schema.Union([
 ]);
 export type RecordedInput = typeof recordedInput.Type;
 const takingSchema = Schema.Struct({
-  version: Schema.Literal(2),
+  version: Schema.Literal(FORMAT),
   id: Schema.String,
   at: Schema.Number,
   input: recordedInput,
@@ -149,7 +153,6 @@ type Outcome =
     }
   | { readonly kind: "observed"; readonly value: Schema.Json }
   | Exclude<Taking["outcome"], { kind: "answered" | "observed" }>;
-const FORMAT = 2;
 const manifestSchema = Schema.Struct({
   version: Schema.Literal(FORMAT),
   build: Schema.String,
@@ -168,6 +171,15 @@ const observationSha = (kind: string, outputVersion: string, bytes: string) =>
   createHash("sha256").update(`${kind}\n${outputVersion}\n${bytes}`).digest("hex");
 /** One input's identity across takings: its whole canonical discriminant. */
 export const inputIdentity = (input: RecordedInput) => canonicalJson(input);
+/** The root's explicit binding key for one non-native input occurrence: its identity and its scope. */
+export const inputBindingKey = (input: RecordedInput, scope: string) =>
+  canonicalJson([inputIdentity(input), scope]);
+/**
+ * A host-owned provenance port: told the exact durable taking a capture just appended, before the
+ * read answers. Observer failure truncates capture, preserving the actual live result (K4).
+ */
+export type TakingObserver = (taking: Taking) => Effect.Effect<void, DoorFailure>;
+const unobserved: TakingObserver = () => Effect.void;
 const observationOf = (taking: Taking) =>
   taking.outcome.kind === "answered" || taking.outcome.kind === "observed"
     ? taking.outcome.observation
@@ -537,6 +549,8 @@ const reasonOf = (cause: Cause.Cause<InvalidRead>): Truncation["reason"] => {
   const problem = Option.getOrUndefined(Cause.findErrorOption(cause))?.problem;
   return problem === "recording.full"
     ? "full"
+    : problem === "recording.observer"
+      ? "observer"
     : problem === "recording.unsupported"
       ? "unsupported"
       : problem === "recording.input"
@@ -556,6 +570,7 @@ const captured = <A, E, R>(
     { readonly input: TakingInput; readonly outcome: Outcome } | null,
     InvalidRead
   >,
+  observed: TakingObserver = unobserved,
 ): Effect.Effect<A, E, R> =>
   Effect.gen(function* () {
     const at = writer.capture.begin();
@@ -565,7 +580,11 @@ const captured = <A, E, R>(
       Effect.flatMap(record(exit), (taking) =>
         taking === null || writer.capture.truncated()
           ? Effect.void
-          : writer.append(taking.input, taking.outcome),
+          : writer.append(taking.input, taking.outcome).pipe(
+              Effect.flatMap((stored) => observed(stored).pipe(
+                Effect.mapError(() => refuse("observer", "Taking observer failed")),
+              )),
+            ),
       ),
     );
     if (Exit.isFailure(kept)) yield* writer.capture.stop(at, reasonOf(kept.cause));
@@ -579,7 +598,7 @@ const failedOutcome = <A>(exit: Exit.Exit<A, DoorFailure>) => {
 };
 
 /** Live reads, captured into `store` while its capture has not stopped. */
-const capturing = (store: RecordingWriter) =>
+const capturing = (store: RecordingWriter, observed: TakingObserver) =>
   Layer.effect(
     HostNativeRead,
     Effect.gen(function* () {
@@ -610,6 +629,7 @@ const capturing = (store: RecordingWriter) =>
               };
               return { input, outcome };
             }),
+            observed,
           ),
       };
     }),
@@ -676,13 +696,14 @@ const replaying = (store: RecordingReader, bindings: ReadonlyMap<string, string>
 export const hostNativeReadFor = <R>(
   lane: HostInputLane,
   live: Layer.Layer<HostNativeRead, never, R>,
+  observed: TakingObserver = unobserved,
 ): Layer.Layer<HostNativeRead, never, R> =>
   lane.kind === "recording"
     ? replaying(lane.recordingStore, lane.bindings)
     : lane.kind === "fixture"
       ? sourceless(lane.name)
       : lane.captureStore
-        ? capturing(lane.captureStore).pipe(Layer.provide(live))
+        ? capturing(lane.captureStore, observed).pipe(Layer.provide(live))
         : live;
 
 /** A host fixture with no input adapter: every read refuses, and live is never built. */
@@ -710,6 +731,7 @@ export const captureInput = <A, I>(
   scope: string,
   codec: Schema.Codec<A, I>,
   live: Effect.Effect<A, DoorFailure>,
+  observed: TakingObserver = unobserved,
 ): Effect.Effect<A, DoorFailure> =>
   captured(writer, live, (exit) =>
     Effect.gen(function* () {
@@ -718,6 +740,7 @@ export const captureInput = <A, I>(
         : yield* failedOutcome(exit);
       return outcome && { input: { input, scope, outputVersion: BUILD_VERSION }, outcome };
     }),
+    observed,
   );
 
 /** The one recorded answer to an owner's read in this scope, decoded by that owner's codec. */
@@ -726,9 +749,16 @@ export const replayInput = <A, I>(
   input: RecordedInput,
   scope: string,
   codec: Schema.Codec<A, I>,
+  boundTakingId?: string,
 ): Effect.Effect<A, DoorFailure> =>
   Effect.gen(function* () {
-    const taking = yield* chooseTaking(reader, inputIdentity(input), scope, input.kind);
+    const taking = yield* chooseTaking(
+      reader,
+      inputIdentity(input),
+      scope,
+      input.kind,
+      boundTakingId,
+    );
     if (taking.outputVersion !== BUILD_VERSION || taking.outcome.kind === "answered")
       return yield* refuse("mismatch", `The taking of ${input.kind} is not an owner observation`);
     if (taking.outcome.kind !== "observed")

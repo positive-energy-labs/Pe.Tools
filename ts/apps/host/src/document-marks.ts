@@ -15,9 +15,11 @@ import { canonicalJson } from "@pe/host-internal/native-read";
 import { InvalidRead } from "./native-reads.ts";
 import {
   captureInput,
+  inputBindingKey,
   replayInput,
   type RecordingReader,
   type RecordingWriter,
+  type TakingObserver,
 } from "./native-recording.ts";
 
 export interface DocumentRef {
@@ -45,21 +47,46 @@ const markSnapshot = Schema.Struct({
   observedSince: Schema.optionalKey(Schema.Number),
   changedAt: Schema.NullOr(Schema.Number),
 });
+const markFrame = Schema.Struct({ marks: markSnapshot, servedAt: Schema.Number });
 
 /** The host's marks: the synchronous holder plus the one explicit boundary a recording can keep. */
 export interface HostMarks extends DocumentMarks {
   /** The holder's current marks for `ref`; the capture and replay boundary for a reading's freshness. */
   readonly snapshot: (ref: DocumentRef) => Effect.Effect<MarkSnapshot, DoorFailure>;
+  /**
+   * The marks one served frame is compared against, with that frame's comparison time captured
+   * once: the source's own `servedAt` when the frame has one, else the Clock when it is consumed.
+   * Later mark updates compare against this time, never a newer one.
+   */
+  readonly readFrame: (
+    ref: DocumentRef,
+    frameKey: string,
+    servedAt?: number,
+  ) => Effect.Effect<MarkFrame, DoorFailure>;
+}
+export interface MarkFrame {
+  readonly marks: MarkSnapshot;
+  readonly servedAt: number;
 }
 /** A synchronous holder with its snapshot read straight from it, at the moment of the call. */
-export const hostMarks = (marks: DocumentMarks): HostMarks => ({
-  ...marks,
-  snapshot: (ref: DocumentRef) =>
-    Effect.sync(() => ({
-      ...(marks.observedSince === undefined ? {} : { observedSince: marks.observedSince }),
-      changedAt: marks.changedAt(ref),
-    })),
-});
+export const hostMarks = (marks: DocumentMarks): HostMarks => {
+  const snapshot = (ref: DocumentRef) =>
+    Effect.sync(
+      (): MarkSnapshot => ({
+        ...(marks.observedSince === undefined ? {} : { observedSince: marks.observedSince }),
+        changedAt: marks.changedAt(ref),
+      }),
+    );
+  return {
+    ...marks,
+    snapshot,
+    readFrame: (ref, _frameKey, servedAt) =>
+      Effect.gen(function* () {
+        const at = servedAt ?? (yield* Clock.currentTimeMillis);
+        return { marks: yield* snapshot(ref), servedAt: at };
+      }),
+  };
+};
 
 /** The one refusal an apply over a newer change mark gets. */
 export const STALE_READ = "This read is no longer verified against Revit; read again, then apply.";
@@ -165,37 +192,64 @@ export class HostDocumentMarks extends Context.Service<HostDocumentMarks, HostMa
     }),
   );
   /**
-   * The live holder, each snapshot kept as a taking of exactly the values it answered, for exactly
-   * that ref, at the moment the reading asked. The synchronous accessors stay the live holder's.
+   * The live holder, each snapshot and frame kept as a taking of exactly the values it answered,
+   * for exactly that ref (and frame), at the moment the reading asked. The synchronous accessors
+   * stay the live holder's.
    */
-  static readonly capturing = (writer: RecordingWriter) =>
+  static readonly capturing = (writer: RecordingWriter, observed?: TakingObserver) =>
     Layer.effect(
       HostDocumentMarks,
-      Effect.map(Effect.service(HostDocumentMarks), (live) =>
-        Object.assign(Object.create(live) as HostMarks, {
-          snapshot: (ref: DocumentRef) =>
+      Effect.map(
+        Effect.service(HostDocumentMarks),
+        (live): HostMarks => ({
+          ...live,
+          snapshot: (ref) =>
             captureInput(
               writer,
-              marksInput(ref),
-              canonicalJson(marksInput(ref).ref),
+              marksInput(ref, null),
+              scopeOf(ref),
               markSnapshot,
               live.snapshot(ref),
+              observed,
+            ),
+          readFrame: (ref, frameKey, servedAt) =>
+            captureInput(
+              writer,
+              marksInput(ref, frameKey),
+              scopeOf(ref),
+              markFrame,
+              live.readFrame(ref, frameKey, servedAt),
+              observed,
             ),
         }),
       ),
     );
   /**
-   * Recorded marks only: `snapshot` replays the exact recorded values for that ref. No clock, no
-   * bridge, nothing moves. The synchronous accessors have no recorded answer, so they refuse rather
-   * than invent one; a historical reading reads its freshness through `snapshot`.
+   * Recorded marks only: `snapshot` and `readFrame` replay the exact recorded values (and frame
+   * time) for that ref, under the root's explicit binding when one is given. No clock, no bridge,
+   * nothing moves. The synchronous accessors have no recorded answer, so they refuse rather than
+   * invent one.
    */
-  static readonly recorded = (reader: RecordingReader) => {
+  static readonly recorded = (
+    reader: RecordingReader,
+    bindings: ReadonlyMap<string, string> = new Map(),
+  ) => {
     const unrecorded = () => {
       throw new InvalidRead({
-        message: "A recording answers document marks only through snapshot(ref)",
+        message: "A recording answers document marks only through snapshot(ref) or readFrame",
         status: 409,
         problem: "recording.miss",
       });
+    };
+    const replay = <A, I>(ref: DocumentRef, frame: string | null, codec: Schema.Codec<A, I>) => {
+      const input = marksInput(ref, frame);
+      return replayInput(
+        reader,
+        input,
+        scopeOf(ref),
+        codec,
+        bindings.get(inputBindingKey(input, scopeOf(ref))),
+      );
     };
     return Layer.succeed(HostDocumentMarks, {
       get observedSince(): number {
@@ -203,9 +257,20 @@ export class HostDocumentMarks extends Context.Service<HostDocumentMarks, HostMa
       },
       changedAt: unrecorded,
       subscribe: () => () => {},
-      snapshot: (ref) =>
-        replayInput(reader, marksInput(ref), canonicalJson(marksInput(ref).ref), markSnapshot),
-    });
+      snapshot: (ref) => replay(ref, null, markSnapshot),
+      readFrame: (ref, frameKey, servedAt) =>
+        Effect.flatMap(replay(ref, frameKey, markFrame), (frame) =>
+          servedAt === undefined || servedAt === frame.servedAt
+            ? Effect.succeed(frame)
+            : Effect.fail(
+                new InvalidRead({
+                  message: `Frame ${frameKey} was served at ${frame.servedAt}, not ${servedAt}`,
+                  status: 409,
+                  problem: "recording.mismatch",
+                }),
+              ),
+        ),
+    } satisfies HostMarks);
   };
   /** Tests only: a host that observes no Revit, so nothing ever changes. Never a production fallback. */
   static readonly none = Layer.succeed(
@@ -214,5 +279,6 @@ export class HostDocumentMarks extends Context.Service<HostDocumentMarks, HostMa
   );
 }
 
-const marksInput = (ref: DocumentRef) =>
-  ({ kind: "marks", ref: { session: ref.session, openId: ref.openId } }) as const;
+const marksInput = (ref: DocumentRef, frame: string | null) =>
+  ({ kind: "marks", ref: { session: ref.session, openId: ref.openId }, frame }) as const;
+const scopeOf = (ref: DocumentRef) => canonicalJson({ session: ref.session, openId: ref.openId });
