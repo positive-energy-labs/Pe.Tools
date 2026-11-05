@@ -17,7 +17,7 @@ import { WorkbenchContext } from "#/workbench/provider/thread-summary";
 import { resolveWorkbenchConfig } from "#/workbench/config";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import type { GraphMount } from "./mount-owner";
-import { activityTime, type TimelineEntry } from "./timeline";
+import { activityTime, projectTimeline, type TimelineVerbs, type TimelineEntry } from "./timeline";
 import { secondsLeft, useSecondTick } from "./countdown";
 import "./situation-band.css";
 
@@ -92,27 +92,6 @@ export const entryCaller = (entry: TimelineEntry) =>
     ?.kind === "pea"
     ? "Pea"
     : "you";
-
-/** An invocation still waiting on its consent window; every other state has resolved it. */
-const WAITING = new Set(["queued", "running"]);
-
-/**
- * The latest entry per press or receipt; a consent window is open until its entry moves on. A
- * cancelled, refused, failed or succeeded receipt that still carries the window it was stamped
- * with is resolved: it leaves the head at once (D8, "apply · 17s / Reject?" beside "cancelled").
- */
-export function openConsentWindows(entries: readonly TimelineEntry[], now = Date.now()) {
-  const latest = new Map<string, TimelineEntry>();
-  entries.forEach((entry, index) =>
-    latest.set(entry.outcome?.receiptId ?? entry.press ?? `entry:${index}`, entry),
-  );
-  return [...latest.values()].flatMap((entry) => {
-    const window = entry.outcome?.consentWindow;
-    if (!window || !WAITING.has(entry.outcome!.state)) return [];
-    const left = window.deadline ? secondsLeft(window.deadline, now) : null;
-    return left === null || left > 0 ? [{ entry, left }] : [];
-  });
-}
 
 /** The Work journal behind the owner's current scope: the one history of authored edits. */
 type HistoryOwner<P, W> = GraphMount<P, W> | AdmittedMount;
@@ -210,7 +189,7 @@ export function TimelineHead<P, W>({
   verbs: declaredVerbs,
 }: {
   owner: HistoryOwner<P, W>;
-  verbs?: Readonly<Record<string, { label: string; kind: string }>>;
+  verbs?: TimelineVerbs;
   history: ReactNode;
   thread?: string;
 }) {
@@ -223,8 +202,6 @@ export function TimelineHead<P, W>({
   );
   const timeline: readonly TimelineEntry[] = admitted ? owner.timeline() : owner.timeline.read();
   const verbs = declaredVerbs ?? (admitted ? {} : owner.verbs);
-  const labelOf = (id?: string) =>
-    admitted ? ((id ? verbs[id]?.label : undefined) ?? "Command") : (id ?? "Command");
   // The selected thread's run consent (ADR 0027 rule 11) is the same window Pea's composer card
   // answers; the head shows it too, so a "Reject?" countdown is never only inside the chat pane.
   const workbench = useContext(WorkbenchContext);
@@ -232,32 +209,35 @@ export function TimelineHead<P, W>({
   // One host window is one countdown: a receipt stamped with a window the run ask already draws
   // is not drawn twice. Both read the host's deadline from the clock at render (countdown.ts).
   const asked = new Set(runAsks.map((ask) => ask.requestId));
-  const windows = openConsentWindows(timeline).filter(
-    ({ entry }) => !asked.has(entry.outcome!.consentWindow!.requestId),
-  );
-  useSecondTick(windows.some((open) => open.left !== null) || runAsks.some((ask) => ask.deadline));
   const journal = useWorkJournal(owner);
-  const step = journal?.last?.step;
-  // A command press or any receipt (Pea's previews included, ADR 0028) outranks an older Work edit.
-  const command = [...timeline]
-    .reverse()
-    .find((entry) => entry.kind === "receipt" || verbs[entry.verb ?? ""]?.kind === "command");
+  const rows = projectTimeline(timeline, verbs, journal);
+  const windows = rows.filter(
+    (row) => row.kind === "consent" && !asked.has(row.outcome!.consentWindow!.requestId),
+  );
+  useSecondTick(windows.some((row) => row.consentUntil) || runAsks.some((ask) => ask.deadline));
   const last =
-    step && !(command && new Date(command.at).getTime() > step.at)
-      ? null
-      : (command ?? timeline.at(-1));
+    rows.findLast(
+      (row) =>
+        row.kind === "journal" ||
+        row.kind === "receipt" ||
+        row.kind === "consent" ||
+        (row.kind === "press" && verbs[row.entry.verb ?? ""]?.kind === "command"),
+    ) ?? rows.at(-1);
+  const step = last?.kind === "journal" ? last.step : undefined;
   return (
     <span data-slot="timeline-head" role="group" aria-label="Timeline">
-      {windows.map(({ entry, left }) => {
-        const window = entry.outcome!.consentWindow!;
+      {windows.map((row) => {
+        const entry = row.entry;
+        const left = row.consentUntil ? secondsLeft(row.consentUntil) : null;
+        const window = row.outcome!.consentWindow!;
         const consent = consentThread(entry, thread);
         return (
           <span key={entry.outcome?.receiptId ?? entry.press} data-slot="consent-window">
-            <span role="timer" data-tone="caution" aria-label={`${labelOf(entry.verb)} applies in`}>
-              {labelOf(entry.verb)} · {left === null ? "awaiting approval" : `${left}s`}
+            <span role="timer" data-tone="caution" aria-label={`${row.verb} applies in`}>
+              {row.verb} · {left === null ? "awaiting approval" : `${left}s`}
             </span>
             <Button
-              label={`Reject ${labelOf(entry.verb)}`}
+              label={`Reject ${row.verb}`}
               refusal={
                 (!admitted ? owner.commandRefusal : owner.journalRefusal()) ??
                 (consent ? null : "No thread holds this consent window")
@@ -297,7 +277,7 @@ export function TimelineHead<P, W>({
       })}
       <Popover>
         <PopoverTrigger aria-label="Open the Timeline" data-slot="timeline-trigger">
-          {step && !last ? (
+          {step && last?.kind === "journal" ? (
             <>
               <span>{step.label}</span>
               <span data-slot="timeline-state">
@@ -306,9 +286,10 @@ export function TimelineHead<P, W>({
             </>
           ) : last ? (
             <>
-              <span>{labelOf(last.verb)}</span>
+              <span>{last.verb}</span>
               <span data-slot="timeline-state">
-                {entryCaller(last)} · {last.outcome?.state ?? last.kind} · {activityTime(last.at)}
+                {entryCaller(last.entry)} · {last.outcome?.state ?? last.kind} ·{" "}
+                {activityTime(last.at)}
               </span>
             </>
           ) : (

@@ -10,7 +10,7 @@ import {
 import { z } from "zod";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
 import { createWorkJournal, type JournalWriter } from "./journal";
-import { createRouteTimeline, TIMELINE_LIMIT } from "./timeline";
+import { projectTimeline, createRouteTimeline, TIMELINE_LIMIT } from "./timeline";
 import { writeLabel } from "./work-writes";
 
 afterEach(() => vi.useRealTimers());
@@ -127,16 +127,20 @@ test.each([{ path: ["settings"] }, { path: ["settings", "width", "child"] }, { p
   },
 );
 
-test("only later overlapping receipts block a step, and timeline eviction never removes its barrier", async () => {
+test.each(["succeeded", "outcome-unknown"] as const)("%s: timeline eviction never removes the journal barrier", async (state) => {
   const f = fixture();
   f.timeline.append({ kind: "receipt", at: 100, receiptId: "earlier", paths: [[]] });
   await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
   f.timeline.append({ kind: "checkpoint", at: 2, paths: [[]] });
   f.timeline.append({ kind: "receipt", at: 3, paths: [["cells"]] });
   expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true });
-  f.timeline.append({ kind: "receipt", at: 0, receiptId: "after-undo", paths: [["settings"]] });
+  f.timeline.append({ kind: "receipt", at: 0, receiptId: "after-undo", outcome: { id: "after-undo", state, input: {} }, paths: [["settings"]] });
   for (let at = 0; at <= TIMELINE_LIMIT; at++) f.timeline.append({ kind: "invocation", at });
   expect(f.timeline.read().some(({ receiptId }) => receiptId === "after-undo")).toBe(false);
+  expect(projectTimeline([], {}, f.journal.read()).filter((row) => row.kind === "journal")).toMatchObject([
+    { move: { kind: "apply" }, barrier: { receiptId: "after-undo" } },
+    { move: { kind: "undo" }, barrier: { receiptId: "after-undo" } },
+  ]);
   expect(await f.journal.redo(f.writer)).toMatchObject({
     ok: false,
     code: "barrier",

@@ -40,6 +40,9 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     notify,
     schedule,
     submitNative,
+    entryFor,
+    sourceTimeline,
+    now,
   } = context;
   const work = context.work();
   const { snapshots, beginQuery, workHandles } = context.readings();
@@ -256,6 +259,17 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       preview = freezePage({ work: accepted.work, input: intent });
       // ActionJournal owns the existing Reject? consent window after this admission.
       send = () => {
+        // A press is visible before ActionJournal delivers its receipt. Keep identity, not a label.
+        const key = accepted.scope.identity.work;
+        const timelineOwner = key ? entryFor(key) : owner;
+        const starts = sourceTimeline.get(timelineOwner) ?? [];
+        starts.push({
+          kind: "invocation", at: now(), press: invocation.id, verb: id,
+          outcome: { id: invocation.id, state: "running", input: intent },
+        });
+        if (starts.length > 200) starts.shift();
+        sourceTimeline.set(timelineOwner, starts);
+        notify();
         const submission = submitNative({
           id: invocation.id,
           key: declaration.entry,

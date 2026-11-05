@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { activityTime, createRouteTimeline, TIMELINE_LIMIT, timelineBarriers } from "./timeline";
+import { projectTimeline, activityTime, createRouteTimeline, TIMELINE_LIMIT, receiptBarrier, type TimelineVerbs } from "./timeline";
 
 test("activity clocks accept ISO or epoch times, never echo invalid times, and omit negative durations", () => {
   const at = 1793363026741;
@@ -40,19 +40,19 @@ test("timeline preserves append order across invocation, receipt and checkpoint,
     },
   ]);
   expect(
-    timelineBarriers(timeline.read()).map(({ receiptId, paths }) => ({ receiptId, paths })),
+    timeline.read().flatMap((entry) => receiptBarrier(entry) ?? []).map(({ receiptId, paths }) => ({ receiptId, paths })),
   ).toEqual([{ receiptId: "receipt-1", paths: [["marks", "room-1"]] }]);
 });
 
 test("only receipts with nonempty footprints derive barriers; a root path blocks the whole Work", () => {
   expect(
-    timelineBarriers([
+    [
       { kind: "invocation", at: 1, paths: [["width"]] },
       { kind: "checkpoint", at: 2, paths: [["width"]] },
       { kind: "receipt", at: 3 },
       { kind: "receipt", at: 4, paths: [] },
       { kind: "receipt", at: 5, receiptId: "rebind", paths: [[]] },
-    ]),
+    ].flatMap((entry) => receiptBarrier(entry as import("./timeline").TimelineEntry) ?? []),
   ).toEqual([{ kind: "receipt", at: 5, receiptId: "rebind", paths: [[]] }]);
 });
 
@@ -80,30 +80,35 @@ test("callers and subscribers cannot mutate recorded timeline evidence", () => {
   expect(timeline.read()[0]!.paths).toEqual([["width"]]);
 });
 
-test("an invocation keeps its identity and input as its outcome advances", () => {
+test("a press shows immediately; latest receipt identity and declaration replace its text and consent", () => {
   const timeline = createRouteTimeline();
-  timeline.append({
-    kind: "invocation",
-    press: "one",
-    at: 1,
-    outcome: { id: "one", state: "queued", input: { value: 13 } },
+  const verbs: TimelineVerbs = { start: { kind: "command", label: "Old declaration", does: "old.command" },
+    current: { kind: "command", label: "Current declaration", does: "new.command" } };
+  timeline.append({ kind: "invocation", at: 1, press: "p", verb: "start", outcome: { id: "p", state: "queued", input: { value: 13 } } });
+  timeline.outcome("p", { id: "p", state: "running", input: { value: 13 } });
+  expect(timeline.read()).toMatchObject([{ at: 1, press: "p", outcome: { state: "running", input: { value: 13 } } }]);
+  expect(projectTimeline(timeline.read(), verbs)).toMatchObject([{ kind: "press", verb: "Old declaration" }]);
+  const consentWindow = { requestId: "ask", deadline: "2099-01-01T00:00:00Z" };
+  const receipt = (state: "waiting" | "cancelled" | "unknown") => ({
+    kind: "receipt" as const, at: 2, press: "p", receiptId: "r", paths: [["width"]],
+    // A receipt wins even when earlier presentation and outcome disagree with it.
+    verb: "start", outcome: { id: "r", state: "running" as const, input: {} },
+    basis: { receipt: { id: "r", key: "new.command", state, input: {}, consentWindow } },
   });
-  timeline.outcome("one", {
-    id: "one",
-    state: "outcome-unknown",
-    input: { value: 13 },
-    reason: "Disconnected",
-    recovery: "reconcile",
+  timeline.append(receipt("waiting"));
+  expect(projectTimeline(timeline.read(), verbs)).toMatchObject([
+    { kind: "consent", verb: "Current declaration", outcome: { state: "queued" } },
+  ]);
+  timeline.append(receipt("cancelled"));
+  const resolved = projectTimeline(timeline.read(), verbs);
+  expect(resolved).toHaveLength(1);
+  expect(resolved[0]).toMatchObject({ kind: "receipt", outcome: { state: "cancelled" } });
+  expect(resolved[0]?.consentUntil).toBeUndefined();
+  expect(resolved[0]?.barrier).toBeUndefined();
+  timeline.append(receipt("unknown"));
+  expect(projectTimeline(timeline.read(), verbs)[0]).toMatchObject({
+    outcome: { state: "outcome-unknown", recovery: "reconcile" }, barrier: { receiptId: "r" },
   });
-  expect(timeline.read()).toHaveLength(1);
-  expect(timeline.read()[0]).toMatchObject({
-    at: 1,
-    press: "one",
-    outcome: {
-      state: "outcome-unknown",
-      reason: "Disconnected",
-      recovery: "reconcile",
-      input: { value: 13 },
-    },
-  });
+  verbs.current.label = "Renamed declaration";
+  expect(projectTimeline(timeline.read(), verbs)[0]?.verb).toBe("Renamed declaration");
 });

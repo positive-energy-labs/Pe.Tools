@@ -309,10 +309,9 @@ export function createAdmittedHistory<W extends Record<string, unknown>>(context
       },
       timeline: () => {
         const key = owner.read()?.scope.identity.work;
-        if (!key) return [];
-        const entry = entryFor(key);
+        const entry = key ? entryFor(key) : null;
         return freezePage(
-          [...entry.timeline(), ...(sourceTimeline.get(entry) ?? [])].sort(
+          [...(entry?.timeline() ?? []), ...(sourceTimeline.get(entry ?? owner) ?? [])].sort(
             (a, b) => Number(new Date(a.at)) - Number(new Date(b.at)),
           ),
         );
