@@ -371,7 +371,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       );
       expect(new URL(await p.url()).searchParams.has("thread")).toBe(false);
       expect(
-        await p.count('[aria-label="Places"] button[aria-pressed][aria-label^="Takeoffs"]'),
+        await p.count('[aria-label="Places"] button[aria-pressed][aria-label^="View adoption"]'),
         "one second tool URL enrolls exactly one Place",
       ).toBe(1);
       receipt.coverage.standalone = { thread: null, browserPlaceId, hostWrites: [] };
@@ -510,7 +510,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       );
       expect(await draft()).toBe(message);
       expect(await composerIdentity()).toBe(officeComposer);
-      await choosePlace("Takeoffs");
+      await choosePlace("View adoption");
       await p.until(
         async () => new URL(await p.url()).pathname === "/takeoffs",
         "second persisted Place",
