@@ -24,6 +24,7 @@ import {
   namesOf,
   openSheetSchema,
   schemas as sharedSchemas,
+  authoredPatches,
 } from "../ducts/neutral.ts";
 import { fanLabel, TIERS } from "../ducts/sheet/model.ts";
 import { describeInputHistory, editLabel } from "../ducts/sheet/input-history.neutral.ts";
@@ -47,7 +48,7 @@ const pane = <const K extends string>(body: K, label: string, purpose: string) =
     label,
     purpose,
     draws: ["fans", "sheet", "sheetSnapshot", "sheetView", "ductsWork", "pricing"],
-    verbs: ["browse", "edit", "scope", "sheetEdit"],
+    verbs: ["browse", "edit", "scope", "sheetEdit", "ductsEdit"],
   }) as const;
 
 const pageField = <const R extends "pose" | "query", const K extends string, const V>(
@@ -300,6 +301,19 @@ export const fansData = {
       ready: "sheetReady",
       review: "none",
     },
+    // ADR 0030 rule 9: a join cell /ducts owns lands in ducts Work through the ductsWork handle.
+    ductsEdit: {
+      captures: [],
+      deps: { page: [], readings: ["sheet", "ductsWork"], work: [] },
+      describe: "describeDucts",
+      input: "ductsEdit",
+      kind: "work",
+      label: "Edit duct rules",
+      patches: "ductsEdit",
+      ready: "ductsReady",
+      review: "none",
+      target: "ductsWork",
+    },
   },
   version: 1,
   work: { schema: "work", route: "fans", version: 1, migrations: {} },
@@ -319,6 +333,7 @@ const fanSchemas = {
       roles: true,
     }),
   }),
+  ductsEdit: sharedSchemas.sheetEdit.extend({ edits: ductsSheetEditsSchema.pick({ joins: true }) }),
   work: fansDocumentSchema,
   scope: fansDocumentSchema.shape.writeIntent.unwrap().shape.edit.unwrap().unwrap().shape.value,
   browse: z.strictObject({
@@ -482,6 +497,32 @@ export const fansNeutralBodies: Omit<
   },
   describeSheet: {
     slot: "verbs.sheetEdit.describe",
+    kind: "describe",
+    source,
+    run: (input) =>
+      describeInputHistory(input.history ?? { label: editLabel(input.edits, () => null) }),
+  },
+  ductsEdit: {
+    slot: "verbs.ductsEdit.patches",
+    kind: "work",
+    source,
+    run: (ctx, input) =>
+      authoredPatches(ctx.readings.ductsWork.value!, editPatches(input.edits, null)),
+  },
+  ductsReady: {
+    slot: "verbs.ductsEdit.ready",
+    kind: "ready",
+    source,
+    run: (ctx, input) =>
+      !ctx.readings.ductsWork.current
+        ? "Read the current /ducts rules before editing them"
+        : ctx.readings.sheet.current &&
+            input.basis === ctx.readings.sheet.value?.open?.overview.basis
+          ? true
+          : "Read the current sheet before editing its inputs",
+  },
+  describeDucts: {
+    slot: "verbs.ductsEdit.describe",
     kind: "describe",
     source,
     run: (input) =>
