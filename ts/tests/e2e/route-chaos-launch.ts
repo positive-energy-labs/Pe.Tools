@@ -20,11 +20,15 @@ const { values } = parseArgs({
     seed: { type: "string", default: "20261023" },
     test: { type: "string" },
     require: { type: "string", default: "refresh,reconnect,worker" },
+    // fans only: start the host with Revit, sharing the caller's LOCALAPPDATA/PE_TOOLS_PRODUCT_HOME.
+    revit: { type: "boolean" },
   },
 });
-if (!["chaos", "selection", "conversation-work"].includes(values.suite!))
-  throw new Error("--suite must be chaos, selection or conversation-work");
-if (values.suite !== "chaos" && (values.attached || values.url || values.port || values.target))
+if (!["chaos", "selection", "conversation-work", "fans"].includes(values.suite!))
+  throw new Error("--suite must be chaos, selection, conversation-work or fans");
+if (values.revit && (values.suite !== "fans" || !process.env.PE_TOOLS_PRODUCT_HOME))
+  throw new Error("--revit is fans-only and requires the caller's PE_TOOLS_PRODUCT_HOME");
+if (!["chaos", "fans"].includes(values.suite!) && (values.attached || values.url || values.port || values.target))
   throw new Error("The required product suites own their isolated runtime and browser");
 const testTs = resolve(import.meta.dirname, "../..");
 const source = resolve(values.source ?? join(testTs, ".."));
@@ -174,9 +178,10 @@ try {
           });
       }, 1000);
     }
-    const home = join(dir, "home");
+    // --revit shares the caller's drive home with Pe.App; every other suite isolates its own.
+    const home = values.revit ? env.PE_TOOLS_PRODUCT_HOME! : join(dir, "home");
     env.PE_TOOLS_PRODUCT_HOME = home;
-    env.LOCALAPPDATA = join(dir, "localappdata");
+    env.LOCALAPPDATA = values.revit ? home : join(dir, "localappdata");
     env.APPDATA = join(dir, "appdata");
     env.PE_LANE = "dev";
     // Discard inherited bindings. The source entrypoint creates its canonical isolated receipt.
@@ -232,7 +237,13 @@ try {
     }
     host = spawn(
       process.execPath,
-      ["--import", "jiti/register", "src/dev.ts", "--no-revit", "--no-tray"],
+      [
+        "--import",
+        "jiti/register",
+        "src/dev.ts",
+        ...(values.revit ? [] : ["--no-revit"]),
+        "--no-tray",
+      ],
       {
         cwd: join(source, "ts", "apps", "host"),
         env,
@@ -256,7 +267,9 @@ try {
       async () => {
         if (host!.exitCode !== null) throw new Error(`Source host exited: ${hostLog.slice(-3000)}`);
         const files = await readdir(serviceDir).catch(() => []);
-        for (const file of files.filter((file) => file.endsWith("-no-revit.json"))) {
+        for (const file of files.filter((file) =>
+          file.endsWith(values.revit ? ".json" : "-no-revit.json"),
+        )) {
           const row = JSON.parse(await readFile(join(serviceDir, file), "utf8"));
           if (
             row.pid === host!.pid &&
@@ -283,7 +296,9 @@ try {
     web = new URL(
       conversation
         ? "/pea"
-        : `/ducts?demo=navigation${values.suite === "chaos" ? `&thread=${leaseThread}` : ""}`,
+        : values.suite === "fans"
+          ? `/fans${values.revit ? "" : "?demo=navigation"}`
+          : `/ducts?demo=navigation${values.suite === "chaos" ? `&thread=${leaseThread}` : ""}`,
       web,
     ).href;
     receipt.web = web;
@@ -311,7 +326,7 @@ try {
     )
       throw new Error(`Source document readiness failed: HTTP ${document.status}`);
     browser = await openBrowser({
-      mode: values.suite === "selection" ? "headless" : "visible",
+      mode: values.suite === "selection" || values.suite === "fans" ? "headless" : "visible",
       home: env.PE_BROWSER_HOME,
       args: [
         "--disable-background-timer-throttling",
@@ -348,7 +363,9 @@ try {
     ? "conversation-work"
     : values.suite === "selection"
       ? "product-selection"
-      : "route-chaos";
+      : values.suite === "fans"
+        ? "fans-reds"
+        : "route-chaos";
   testProcess = spawn(
     process.execPath,
     [
@@ -367,10 +384,13 @@ try {
     },
   );
   const code = await new Promise<number>((done, reject) => {
-    const timer = setTimeout(() => {
-      void stopOwned(testProcess!).catch((error) => receipt.cleanup.push(String(error)));
-      reject(new Error("Vitest process deadline exceeded"));
-    }, 360_000);
+    const timer = setTimeout(
+      () => {
+        void stopOwned(testProcess!).catch((error) => receipt.cleanup.push(String(error)));
+        reject(new Error("Vitest process deadline exceeded"));
+      },
+      values.revit ? 1_800_000 : 360_000,
+    );
     testProcess!.once("error", (error) => {
       clearTimeout(timer);
       reject(error);
@@ -383,7 +403,7 @@ try {
   process.exitCode = code;
   receipt.result =
     code === 0
-      ? conversation
+      ? conversation || values.suite === "fans"
         ? "PROVEN_BROWSER_SOURCE"
         : (JSON.parse(await readFile(journeyResultPath, "utf8")) as { result: string }).result
       : "failed";

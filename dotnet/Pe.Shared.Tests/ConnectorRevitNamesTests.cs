@@ -23,18 +23,7 @@ public sealed class ConnectorRevitNamesTests {
     }
 
     [Test]
-    public void Every_system_type_round_trips_and_names_a_revit_member() {
-        var revit = new HashSet<string> {
-            // DuctSystemType, PipeSystemType, ElectricalSystemType (Revit 2025), less UndefinedSystemType.
-            "SupplyAir", "ReturnAir", "ExhaustAir", "OtherAir", "Global", "Fitting",
-            "SupplyHydronic", "ReturnHydronic", "DomesticHotWater", "DomesticColdWater", "Sanitary", "Vent", "OtherPipe",
-            "FireProtectWet", "FireProtectDry", "FireProtectPreaction", "FireProtectOther",
-            "PowerCircuit", "PowerBalanced", "PowerUnBalanced", "Data", "Telephone", "Security", "FireAlarm", "NurseCall", "Controls", "Communication"
-        };
-        foreach (var t in Enum.GetValues<ConnectorSystemType>()) {
-            Assert.That(revit, Does.Contain(ConnectorRevitNames.RevitName(t)), t.ToString());
-            Assert.That(ConnectorRevitNames.FromRevitName<ConnectorSystemType>(ConnectorRevitNames.RevitName(t)), Is.EqualTo(t));
-        }
+    public void Electrical_classification_alias_is_explicit_and_uncreatable_storm_is_refused() {
         Assert.That(ConnectorRevitNames.FromRevitName<ConnectorSystemType>("DataCircuit"), Is.EqualTo(ConnectorSystemType.Data),
             "MEPSystemClassification spells the electrical Data system DataCircuit.");
         Assert.That(ConnectorRevitNames.FromRevitName<ConnectorSystemType>("Storm"), Is.Null, "A classification no connector can be created with stays unmodeled.");

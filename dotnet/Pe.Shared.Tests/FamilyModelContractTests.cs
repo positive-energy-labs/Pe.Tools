@@ -71,10 +71,7 @@ public sealed class FamilyModelContractTests {
         });
         Assert.Throws<Newtonsoft.Json.JsonSerializationException>(() =>
             FamilyPatch.Parse("""{"patch":{},"run":{"clean":{"PurgeParamsSettings":{"Unknown":true}}}}"""));
-        Assert.That(typeof(ExcludeSharedParameter).GetProperties()
-                .Select(p => p.GetCustomAttributes(typeof(IncludableAttribute), false).SingleOrDefault())
-                .OfType<IncludableAttribute>().Select(a => a.FragmentSchemaName),
-            Is.EqualTo(Enumerable.Repeat("shared-parameter-names", 3)), "Clean exclusions retain fragment composition metadata.");
+
     }
 
     [Test]

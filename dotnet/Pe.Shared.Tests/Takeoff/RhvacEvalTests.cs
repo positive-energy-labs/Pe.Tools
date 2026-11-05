@@ -9,13 +9,20 @@ namespace Pe.Takeoff.Tests;
 // controlled perturbation must surface at exactly the expected path. No files are written.
 public sealed class RhvacEvalTests
 {
-    private static readonly string FixtureDir = FindFixtureDir();
-    private static readonly OracleExtract Oracle =
-        RhvacEval.LoadOracle(Path.Combine(FixtureDir, "oracle.extract.json"));
-    private static readonly ToleranceProfile Bootstrap =
-        RhvacEval.LoadTolerances(Path.Combine(FixtureDir, "tolerances.json"), "bootstrap");
-    private static readonly ToleranceProfile Standard =
-        RhvacEval.LoadTolerances(Path.Combine(FixtureDir, "tolerances.json"), "standard");
+    // Loaded in OneTimeSetUp, not a static initializer: an absent private fixture throws
+    // IgnoreException, which a type initializer wraps into a failure in every worktree.
+    private static OracleExtract Oracle = null!;
+    private static ToleranceProfile Bootstrap = null!;
+    private static ToleranceProfile Standard = null!;
+
+    [OneTimeSetUp]
+    public void LoadFixture()
+    {
+        var dir = FindFixtureDir();
+        Oracle = RhvacEval.LoadOracle(Path.Combine(dir, "oracle.extract.json"));
+        Bootstrap = RhvacEval.LoadTolerances(Path.Combine(dir, "tolerances.json"), "bootstrap");
+        Standard = RhvacEval.LoadTolerances(Path.Combine(dir, "tolerances.json"), "standard");
+    }
     // In-memory, deliberately NOT the committed room-map.json: the fixture map is curated data
     // that evolves (skips shrink the oracle pool), while these self-tests need the full 150-room
     // oracle.

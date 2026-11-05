@@ -1,3 +1,4 @@
+import { testHostFiles, testDocumentMarks } from "./effect-test.ts";
 import { detachedBridge, sessionView, testConsents } from "./effect-test.ts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -62,7 +63,7 @@ async function catalogRun(
       }),
   });
   const apply = owner === "data-tables" ? "data-table.apply" : "parameter-links.apply";
-  const deps = { workspace: work, sdk: sdkSessions };
+  const deps = { workspace: work, sdk: sdkSessions, files: testHostFiles(), marks: testDocumentMarks(bridge) };
   const write = catalogWorkExecutors(bridge, deps)[apply]!;
   try {
     await work.publish(key, owner, patches, 0);

@@ -50,17 +50,13 @@ describe("salvageDuctsWork", () => {
   });
 
   it("drops the cross-cell segments when a rule breaks them", () => {
+    // Each cell parses alone; the document rule (an assumption's kind follows its key) breaks.
     const out = salvageDuctsWork({
-      claims: {
-        c: {
-          suggestion: {
-            value: { title: "Run", text: "x", ids: [1], state: "assumed", verdictBy: "person" },
-          },
-        },
-      },
+      assumptions: { "proximity:1:2|2:1": { edit: { value: { kind: "fan-static", inWg: 1 } } } },
       rules: { "2": rule },
     });
     expect(Object.keys(out.doc.rules)).toEqual(["2"]);
-    expect(out.dropped.length).toBeGreaterThan(0);
+    expect(out.doc.assumptions).toEqual({});
+    expect(out.dropped).toEqual(["assumptions"]);
   });
 });

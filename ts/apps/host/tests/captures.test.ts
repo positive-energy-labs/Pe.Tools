@@ -1,253 +1,97 @@
-import { SdkDriver } from "../src/sdk-session.ts";
-import { nativeReadRoot } from "../src/app.ts";
-import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
-import { invocationContext } from "@pe/runtime/context";
-import { readSessionScope } from "../src/sdk-session.ts";
+import { pictureCaptures } from "./effect-test.ts";
+import { acknowledgedReadBridge, detachedBridge, sessionView } from "./effect-test.ts";
 import { HostFiles } from "../src/host-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
-import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import type { Caller } from "@pe/agent-contracts";
-import { withInvocationContext } from "@pe/runtime/context";
-import { human, pea } from "./callers.ts";
+import { nativeReadRoot } from "../src/app.ts";
+import { SdkDriver } from "../src/sdk-session.ts";
+import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
+import { RevitBridge } from "../src/bridge.ts";
+import { ActionJournal } from "../src/action-journal.ts";
+import { makeCallRoute } from "../src/call-route.ts";
+import { sdkSessions } from "./native-receipt-fixture.ts";
+import { hostOwnership } from "../src/host-ownership.ts";
+import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { afterEach, expect, test } from "vite-plus/test";
-import { captureListSchema } from "@pe/agent-contracts";
-import { RevitBridge } from "../src/bridge.ts";
-import { acknowledgedReadBridge, detachedBridge, sessionView } from "./effect-test.ts";
-import { ActionJournal } from "../src/action-journal.ts";
-import { makeCallRoute } from "../src/call-route.ts";
-import {
-  capturesRoute,
-  PICTURE_STORE_MAX_BYTES,
-  PictureCaptures,
-  PictureCaptureStore,
-  PictureStoreFull,
-} from "../src/captures-route.ts";
-import { hostOwnership } from "../src/host-ownership.ts";
-import { sdkSessions } from "./native-receipt-fixture.ts";
+import { expect, test } from "vite-plus/test";
+import { PictureCaptureStore, capturesRoute } from "../src/captures-route.ts";
 
-const cleanup: (() => Promise<void>)[] = [];
-afterEach(async () => {
-  for (const release of cleanup.splice(0).reverse()) await release();
-});
 const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
-/** The real /call and /captures routes over one temp store; only native execution is substituted. */
-async function host(
-  exports: Record<string, Buffer>,
-  registered = true,
-  /** What Revit's registration claims the bytes hash to, when it is not the bytes on disk. */
-  claimed: Record<string, Buffer> = {},
-  maxBytes = PICTURE_STORE_MAX_BYTES,
-) {
+test("/captures serves the store only: a navigation is the SPA, a caller path never reaches the filesystem", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-captures-"));
-  const store = new PictureCaptures(join(dir, "store"), maxBytes, Date.now);
-  const bridge = acknowledgedReadBridge(detachedBridge({
-    list: Effect.succeed([
-      sessionView({
-        sessionId: "bridge-a",
-        connected: true,
-        lane: hostOwnership.lane,
-        sourceRoot: hostOwnership.sourceRoot,
-        serviceName: hostOwnership.serviceName,
-        processId: 42,
-        processStartUtcUnixMs: 1000,
-        state: {
-          openDocuments: [
-            {
-              openId: "open-a",
-              address: "C:/HVAC.rvt",
-              title: "HVAC.rvt",
-              isFamilyDocument: false,
-            },
-          ],
-        },
-      }),
-    ]),
-    invoke: (key: string, input: any) =>
-      Effect.promise(async () => {
-        if (key === "host.ops.catalog")
-          return {
-            value: {
-              operations: [hostOpCatalog.find((op) => op.key === "revit.context.view-image")!],
-            },
-            target: { session: "bridge-a", document: null },
-          };
-        const name = input.target?.name ?? "L1";
-        const filePath = join(dir, `${name}.png`);
-        await writeFile(filePath, exports[name]!);
-        return {
-          value: {
-            view: { kind: "View", documentKey: "fixture", elementId: 7, label: `Floor Plan: ${name}` },
-            filePath,
-            byteSize: exports[name]!.length,
-            width: 1500,
-            height: 1500,
-            ...(registered
-              ? {
-                  registration: {
-                    width: 10,
-                    height: 10,
-                    imageSha256: sha(claimed[name] ?? exports[name]!),
-                    topLeft: [0, 1],
-                    topRight: [1, 1],
-                    bottomLeft: [0, 0],
-                  },
-                }
-              : { registrationRefusal: "NoCrop" }),
-          },
-          target: { session: "bridge-a", document: "C:/HVAC.rvt" },
-        };
-      }),
-  }));
-  const spa = () => Effect.succeed(HttpServerResponse.text("spa"));
+  const store = pictureCaptures(join(dir, "store"));
   const web = HttpRouter.toWebHandler(
-    Layer.mergeAll(
-      makeCallRoute(new ActionJournal(join(dir, "journal.jsonl"), Date.now), undefined, {
-          sdk: sdkSessions,
-      }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(Layer.succeed(PictureCaptureStore, store)), Layer.provide(HostDocumentMarks.layer)),
-      capturesRoute(spa),
-    ).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args))))).pipe(
-      Layer.provideMerge(
-        Layer.mergeAll(
-          Layer.succeed(RevitBridge, bridge),
-          NodeServices.layer, NodeHttpClient.layerUndici,
-          Layer.succeed(PictureCaptureStore, store),
-        ),
-      ),
-    ),
-    { disableLogger: true },
-  );
-  cleanup.push(
-    () => rm(dir, { recursive: true, force: true }),
-    () => web.dispose(),
+    capturesRoute(() => Effect.succeed(HttpServerResponse.text("spa"))),
   );
   const fetch = (path: string, init?: RequestInit) =>
-    web.handler(new Request(`http://host${path}`, init), Context.make(RequestIdentity,
-      admittedRequestIdentity(invocationContext()?.caller ?? human, readSessionScope(Object.fromEntries(new Headers(init?.headers))))));
-  const capture = (request: unknown, headers: Record<string, string> = {}, as: Caller = human) =>
-    withInvocationContext({ caller: as }, () =>
-      fetch("/call", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-pe-bridge-session-id": "bridge-a",
-          "x-pe-open-document-id": "open-a",
-          ...headers,
-        },
-        body: JSON.stringify({ key: "revit.context.view-image", request }),
-      }),
-    );
-  return { dir, store, fetch, capture };
-}
-
-test("every view-image answer through /call keeps one blob per sha and one receipt per taking", async () => {
-  const l1 = Buffer.from("png-l1");
-  const { dir, fetch, capture } = await host({ L1: l1, L2: Buffer.from("png-l2") });
-
-  const first = await capture(
-    { target: { name: "L1" }, focus: { elementIds: [1, 2] } },
-    { "x-pe-origin": "web:/rooms" },
-  );
-  expect(first.status, await first.clone().text()).toBe(200);
-  const id = first.headers.get("x-pe-capture-id");
-  expect(first.headers.get("x-pe-capture-url")).toBe(`/captures/${sha(l1)}.png`);
-  expect((await capture({ target: { name: "L1" } }, {}, pea())).status).toBe(200);
-  expect((await capture({ target: { name: "L2" } })).status).toBe(200);
-
-  expect((await readdir(join(dir, "store", "blobs"))).sort()).toHaveLength(2);
-  const lines = (await readFile(join(dir, "store", "receipts.jsonl"), "utf8")).trim().split("\n");
-  expect(lines).toHaveLength(3);
-
-  const listed = await fetch("/captures", { headers: { accept: "application/json" } });
-  const { captures } = captureListSchema.parse(await listed.json());
-  expect(captures.map((c) => [c.view.name, c.origin])).toEqual([
-    ["Floor Plan: L2", "human"],
-    ["Floor Plan: L1", "agent"],
-    ["Floor Plan: L1", "web:/rooms"],
-  ]);
-  expect(captures[2]).toMatchObject({
-    id,
-    sha: sha(l1),
-    document: { openId: "open-a", title: "HVAC.rvt" },
-    view: { id: 7 },
-    focus: { elementIds: [1, 2] },
-    registration: { imageSha256: sha(l1) },
-    byteSize: l1.length,
-    url: `/captures/${sha(l1)}.png`,
-  });
-
-  const blob = await fetch(`/captures/${sha(l1)}.png`);
-  expect(blob.status).toBe(200);
-  expect(blob.headers.get("content-type")).toBe("image/png");
-  expect(Buffer.from(await blob.arrayBuffer())).toEqual(l1);
-});
-
-test("a full picture store refuses a taking by type, keeps every earlier taking, and stamps the store's clock", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pe-captures-full-"));
-  cleanup.push(() => rm(dir, { recursive: true, force: true }));
-  const png = Buffer.from("png-a");
-  const store = new PictureCaptures(dir, png.length + 1_200, () => 0);
-  const facts = { origin: "human", document: {}, view: {}, focus: null, registration: null };
-  await store.keep(png, facts);
-  await store.keep(png, facts);
-  await expect(store.keep(Buffer.alloc(2_000), facts)).rejects.toBeInstanceOf(PictureStoreFull);
-  const kept = await store.list();
-  expect(kept.map((receipt) => [receipt.sha, receipt.at])).toEqual([
-    [sha(png), new Date(0).toISOString()],
-    [sha(png), new Date(0).toISOString()],
-  ]);
-  expect(await readdir(join(dir, "blobs"))).toEqual([`${sha(png)}.png`]);
-});
-
-test("an unregistered taking is kept under the hash of its bytes", async () => {
-  const sheet = Buffer.from("png-sheet");
-  const { fetch, capture } = await host({ A101: sheet }, false);
-  const response = await capture({ target: { name: "A101" } });
-  expect(response.headers.get("x-pe-capture-url")).toBe(`/captures/${sha(sheet)}.png`);
-  const { captures } = captureListSchema.parse(await (await fetch("/captures")).json());
-  expect(captures[0]).toMatchObject({ sha: sha(sheet), registration: null, focus: null });
-});
-
-test("a PNG that no longer matches its registration fails the call and keeps nothing", async () => {
-  const { dir, fetch, capture } = await host({ L1: Buffer.from("overwritten") }, true, {
-    L1: Buffer.from("png-l1"),
-  });
-  const response = await capture({ target: { name: "L1" } });
-  expect(response.status).toBe(500);
-  expect(response.headers.get("x-pe-capture-id")).toBeNull();
-  expect(await response.text()).toContain("not the registration's");
-  await expect(readdir(join(dir, "store"))).rejects.toThrow();
-  expect(await (await fetch("/captures")).json()).toEqual({ captures: [] });
-});
-
-test("/captures serves the store only: a navigation is the SPA, a caller path never reaches the filesystem", async () => {
-  const { dir, fetch } = await host({});
-  expect(await (await fetch("/captures", { headers: { accept: "text/html" } })).text()).toBe("spa");
-  expect(await (await fetch("/captures")).json()).toEqual({ captures: [] });
-  const outside = Buffer.from("secret");
-  await writeFile(join(dir, `${sha(outside)}.png`), outside);
-  for (const path of [
-    `/captures/${sha(outside)}.png`,
-    `/captures/..%2F${sha(outside)}.png`,
-    `/captures/${sha(outside).toUpperCase()}.png`,
-    `/captures/${sha(outside)}`,
-    `/captures/${sha(outside)}.png/x`,
-  ])
-    expect([400, 404]).toContain((await fetch(path)).status);
+    web.handler(new Request(`http://host${path}`, init), Context.make(PictureCaptureStore, store));
+  try {
+    const navigation = await fetch("/captures", { headers: { accept: "text/html" } });
+    expect(await navigation.text(), `navigation status ${navigation.status}`).toBe("spa");
+    expect(await (await fetch("/captures")).json()).toEqual({ captures: [] });
+    const outside = Buffer.from("secret");
+    await writeFile(join(dir, `${sha(outside)}.png`), outside);
+    for (const path of [
+      `/captures/${sha(outside)}.png`,
+      `/captures/..%2F${sha(outside)}.png`,
+      `/captures/${sha(outside).toUpperCase()}.png`,
+      `/captures/${sha(outside)}`,
+      `/captures/${sha(outside)}.png/x`,
+    ])
+      expect([400, 404]).toContain((await fetch(path)).status);
+  } finally {
+    await web.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("a full picture service refuses /call without advertising an unkept capture", async () => {
-  const { capture, store } = await host({ L1: Buffer.from("png") }, true, {}, 0);
-  const response = await capture({ target: { name: "L1" } });
-  expect(response.status).toBe(409);
-  expect(await response.json()).toMatchObject({ message: expect.stringContaining("Picture store is full") });
-  expect(response.headers.get("x-pe-capture-id")).toBeNull();
-  expect(await store.list()).toEqual([]);
+  const dir = await mkdtemp(join(tmpdir(), "pe-capture-full-"));
+  const path = join(dir, "image.png");
+  await writeFile(path, "png");
+  const scope = { bridgeSessionId: "bridge-a", openDocumentId: "open-a" };
+  const bridge = acknowledgedReadBridge(detachedBridge({
+    list: Effect.succeed([sessionView({
+      sessionId: scope.bridgeSessionId, connected: true, ...hostOwnership,
+      processId: 42, processStartUtcUnixMs: 1000,
+      state: { openDocuments: [{ openId: scope.openDocumentId, title: "HVAC", address: "C:/HVAC.rvt", isFamilyDocument: false }] },
+    })]),
+    invoke: () => Effect.succeed({
+      value: { view: { kind: "View", documentKey: "fixture", elementId: 7, label: "L1" }, filePath: path, byteSize: 3, width: 1500, height: 1500, registrationRefusal: "NoCrop" },
+      target: { session: scope.bridgeSessionId, document: "C:/HVAC.rvt" },
+    }),
+  }));
+  const journal = new ActionJournal(join(dir, "journal.jsonl"), Date.now);
+  let store!: PictureCaptureStore["Service"];
+  const web = HttpRouter.toWebHandler(
+    Layer.mergeAll(
+      makeCallRoute(journal, undefined, { sdk: sdkSessions }),
+      Layer.effectDiscard(Effect.map(PictureCaptureStore, (value) => { store = value; })),
+    ).pipe(
+      nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
+      Layer.provide(Layer.mergeAll(HostFiles.layer(), HostDocumentMarks.layer)),
+      Layer.provideMerge(PictureCaptureStore.layer(join(dir, "store"), 0)),
+      HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
+      Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
+    ), { disableLogger: true },
+  );
+  try {
+    const response = await web.handler(new Request("http://host/call", {
+      method: "POST", headers: { "content-type": "application/json", "x-pe-bridge-session-id": scope.bridgeSessionId, "x-pe-open-document-id": scope.openDocumentId },
+      body: JSON.stringify({ key: "revit.context.view-image", request: {} }),
+    }), Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, scope)));
+    expect(response.status, await response.clone().text()).toBe(409);
+    expect(await response.json()).toMatchObject({ message: expect.stringContaining("Picture store is full") });
+    expect(response.headers.get("x-pe-capture-id")).toBeNull();
+    expect(await store.list()).toEqual([]);
+  } finally {
+    await journal.close();
+    await web.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
 });

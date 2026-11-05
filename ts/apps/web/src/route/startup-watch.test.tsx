@@ -14,9 +14,13 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-test.each([false, true])(
-  "startup watchdog preserves hydratable markup (timeout: %s)",
-  async (timeout) => {
+test.each([
+  [false, undefined],
+  [true, undefined],
+  [true, "Failed to fetch families/route.tsx"],
+])(
+  "startup watchdog preserves hydratable markup (timeout: %s, module error: %s)",
+  async (timeout, moduleError) => {
     vi.useFakeTimers();
     const consoleError = vi.spyOn(console, "error");
     const recoverable = vi.fn();
@@ -31,12 +35,13 @@ test.each([false, true])(
     document.body.append(container);
     // Run the exact inline watchdog before React, as on a slow cold module load.
     new Function(startupWatch)();
+    if (moduleError) window.dispatchEvent(new ErrorEvent("error", { message: moduleError }));
     if (timeout) vi.advanceTimersByTime(HOST_READ_WAIT_S * 1000);
     expect(container.innerHTML).toBe(server);
     const diagnostic = container.querySelector("[data-startup-diagnostic]")?.shadowRoot;
     if (timeout) {
       expect(diagnostic?.querySelector('[role="alert"]')?.textContent).toContain(
-        "Page startup did not finish",
+        moduleError ?? "Page startup did not finish",
       );
       expect(diagnostic?.querySelector("a")?.textContent).toBe("Reload page");
     }

@@ -266,6 +266,7 @@ test("sealed named review refuses stale, Reject retains Work, fresh deadline com
         seal: {
           requestHash: "sealed",
           work: { handle: a.input.work },
+          documentMark: { session: "", openId: "", observedSince: null, changedAt: null },
           incarnation: {},
           dependencies: "deps",
         },

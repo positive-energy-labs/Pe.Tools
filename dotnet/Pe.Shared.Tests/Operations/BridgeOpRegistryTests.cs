@@ -28,32 +28,6 @@ public sealed class OpRegistryTests {
         }
     }
 
-    [Test]
-    public void Transaction_metadata_survives_offline_attribute_projection() {
-        var handler = typeof(OpRegistryTests).GetMethod(nameof(Handle), BindingFlags.NonPublic | BindingFlags.Static)!;
-        var attribute = OpRegistry.ReadAttribute(handler.CustomAttributes.Single(data => data.AttributeType == typeof(OpAttribute)));
-        var definition = OpRegistry.Define(attribute, typeof(NoRequest), typeof(SchemaData));
-        var catalog = HostOpsCatalogEntry.FromDefinition(definition);
-        Assert.That(catalog.Intent, Is.EqualTo("Read"));
-        Assert.That(catalog.UsesTransactions, Is.True, "A rolled-back preview is still a transaction.");
-        var read = OpRegistry.Define(new OpAttribute("test.read", OpSubject.None, OpTouches.Metadata, OpEffect.Read) { Does = "Read without transactions" }, typeof(NoRequest), typeof(SchemaData));
-        Assert.That(HostOpsCatalogEntry.FromDefinition(read).UsesTransactions, Is.False);
-    }
-
-    [Test]
-    public void Artifact_metadata_survives_offline_attribute_projection_without_expanding_the_receipt() {
-        var handler = typeof(OpRegistryTests).GetMethod(nameof(Handle), BindingFlags.NonPublic | BindingFlags.Static)!;
-        var attribute = OpRegistry.ReadAttribute(handler.CustomAttributes.Single(data => data.AttributeType == typeof(OpAttribute)));
-        var definition = OpRegistry.Define(attribute, handler);
-        var catalog = HostOpsCatalogEntry.FromDefinition(definition);
-        Assert.That(definition.ArtifactMetadataType, Is.EqualTo(typeof(ProbeArtifact)));
-        var schema = Newtonsoft.Json.Linq.JObject.Parse(catalog.ArtifactSchemaJson!);
-        Assert.That(schema["required"]!.Values<string>(), Does.Contain("elements"));
-        Assert.That(catalog.ResponseSchemaJson, Does.Not.Contain("ProbeArtifact"));
-        var ordinary = OpRegistry.Define(new OpAttribute("test.no-artifact", OpSubject.None, OpTouches.Metadata, OpEffect.Read) { Does = "Return a receipt." }, typeof(NoRequest), typeof(SchemaData));
-        Assert.That(HostOpsCatalogEntry.FromDefinition(ordinary).ArtifactSchemaJson, Is.Null);
-    }
-
     private sealed record ProbeArtifact(IReadOnlyList<string> Elements);
     private sealed class BrokenAssembly : Assembly {
         public override Type[] GetTypes() =>
@@ -100,6 +74,9 @@ public sealed class OpRegistryTests {
         Assert.That(OpRegistry.TryGet("test.registry.probe", out var op), Is.True);
         Assert.That(op.Definition.DisplayName, Is.EqualTo("Registry Probe"));
         Assert.That(op.Definition.IsPublic, Is.False);
+        Assert.That(op.Definition.UsesTransactions, Is.True);
+        Assert.That(op.Definition.ArtifactMetadataType, Is.EqualTo(typeof(ProbeArtifact)));
+        Assert.That(HostOpsCatalogEntry.FromOp(op).ArtifactSchemaJson, Does.Contain("\"elements\""));
         Assert.That(op.Thread, Is.EqualTo(OpThread.Any));
         Assert.That(OpRegistry.TryGet("test.revit-document", out var revitOp), Is.True);
         Assert.That(revitOp.Definition.Needs, Is.EqualTo(OpNeeds.Document));

@@ -149,7 +149,7 @@ test("the mounted bay patches a document and dispatches its exact semantic inten
   act(() => history({ kind: "complete", value: [actionStatusSchema.parse(receipt)], revision: 2 }));
   const activity = within(view.container.querySelector('section[aria-label="History"]')!);
   expect(activity.getByRole("link", { name: "Open document" })).toBeTruthy();
-  expect(activity.getAllByRole("listitem")).toHaveLength(1);
+  expect(activity.getAllByRole("option")).toHaveLength(1);
   expect(router.state.location.search).not.toHaveProperty("draft");
   expect(view.queryByRole("textbox", { name: "draft" })).toBeNull();
   expect(view.queryByRole("textbox", { name: "table" })).toBeNull();

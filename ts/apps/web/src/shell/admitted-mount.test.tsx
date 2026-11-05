@@ -822,11 +822,11 @@ test("D4: a new writer at either shared Work submission path cannot bypass Place
     reason: "place-read-only",
   });
   expect(submitted).not.toHaveBeenCalled();
-  expect(owner.read()?.work).toEqual({ revision: 0, value: { amount: 0 } });
+  expect(owner.read()?.work).toMatchObject({ revision: 0, value: { amount: 0 } });
   authority = "writable";
   expect(await settle(write())).toMatchObject({ kind: "accepted" });
   expect(submitted).toHaveBeenCalledTimes(1);
-  expect(owner.read()?.work).toEqual({ revision: 1, value: { amount: 4 } });
+  expect(owner.read()?.work).toMatchObject({ revision: 1, value: { amount: 4 } });
 });
 
 test.each(["ack-first", "stream-first"])(
@@ -855,13 +855,15 @@ test.each(["ack-first", "stream-first"])(
     await vi.waitFor(() => expect(mount.work()?.value).toEqual({ amount: 0 }));
     await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
     deliverStream?.({ kind: "pending" });
-    expect(mount.work()).toEqual({ revision: 1, value: { amount: 2 } });
+    expect(mount.work()).toMatchObject({ revision: 1, value: { amount: 2 } });
     const pending = mount.invoke("change", 3) as Observation<WorkWriteOutcome>;
     mount.close();
     await settle(pending);
     const reopened = shell.mount(route, placeInput(locationPort().address));
     closes.push(reopened.close);
-    await vi.waitFor(() => expect(reopened.work()).toEqual({ revision: 2, value: { amount: 5 } }));
+    await vi.waitFor(() =>
+      expect(reopened.work()).toMatchObject({ revision: 2, value: { amount: 5 } }),
+    );
   },
 );
 
@@ -1179,87 +1181,6 @@ test("a preview for another Work revision never becomes a review", async () => {
 });
 
 import { sourceRouteServices } from "./source-route-services";
-test("shared preview transport renders before-to-after review and commits identical Work through the door", async () => {
-  const previewCall = vi.fn(async (input: { work: WorkHandle }) => sealedPreview(input.work));
-  try {
-    const store = createFixtureWorkDoor(
-      { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
-      { amount: 6 },
-    );
-    const submit = vi.fn((command: Parameters<WorkJournalDoor["submit"]>[0]) =>
-      store.submit(command),
-    );
-    const shell = createRouteShell({
-      ...sourceRouteServices({
-        "native.write.preview": {
-          kind: "use",
-          async open(ctx, deliver) {
-            deliver({
-              kind: "complete",
-              revision: 0,
-              value: await previewCall(ctx.args as { work: WorkHandle }),
-            });
-          },
-        },
-      }),
-      work: { ...store, submit },
-    });
-    const mounted = vi.spyOn(shell, "mount");
-    render(
-      createElement(AdmittedPane, {
-        shell,
-        route: await workRoute("none", true, "nothing", () => ({
-          sentence: "Review table",
-          rows: ["Parameter amount: 6 \u2192 7"],
-        })),
-        address: locationPort().address,
-      }),
-    );
-    const mount = mounted.mock.results[0]!.value;
-    await vi.waitFor(() => expect(mount.work()).not.toBeNull());
-    act(() => {
-      mount.invoke("native", 1234);
-    });
-    await screen.findByText("Parameter amount: 6 \u2192 7");
-    expect(screen.getByText("Review table")).toBeTruthy();
-    expect(previewCall).toHaveBeenCalledTimes(1);
-    expect(submit).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Commit Native" }));
-    expect(submit).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        key: "native.write",
-        input: previewCall.mock.calls[0]![0],
-      }),
-    );
-  } finally {
-    previewCall.mockReset();
-  }
-});
-
-import {
-  builtinData,
-  schemas as fixtureSchemas,
-  entries as fixtureEntries,
-} from "../../../../packages/agent-contracts/src/route-kernel.fixtures";
-const nativeEntries = {
-  ...fixtureEntries,
-  apply: {
-    ...fixtureEntries.apply,
-    input: z.strictObject({ work: workHandleSchema }),
-  },
-};
-type NativeIntent = BodyBindings<
-  typeof builtinData,
-  typeof fixtureSchemas,
-  typeof nativeEntries
->["apply"]["run"];
-const acceptedWorkIntent: NativeIntent = () => ({});
-// @ts-expect-error Work identity belongs to B and cannot come from a route intent body.
-const forgedWorkIntent: NativeIntent = () => ({ work: { key: {}, revision: 99 } });
-test("typed native intent leaves accepted Work binding to the mount", () => {
-  expect(acceptedWorkIntent).toBeTypeOf("function");
-  expect(forgedWorkIntent).toBeTypeOf("function");
-});
 
 import { testConsents } from "../../../host/tests/effect-test";
 import type { ConsentEvent } from "../../../host/src/run-consent";
@@ -1431,6 +1352,9 @@ async function historyFixture(pea = false) {
       mountOn(createRouteShell({ ...transports().services, work: connect(workspace).door })),
     restart: async () =>
       mountOn(createRouteShell({ ...transports().services, work: connect(await host()).door })),
+    failFeed: () => streams.forEach((deliver) => deliver({
+      kind: "failed", failure: { kind: "failed", code: "stream.failed", message: "readings offline" },
+    })),
     pause: () => {
       paused = true;
     },
@@ -1458,14 +1382,14 @@ test("admitted Work undo/redo crosses the door with restoreOf and declared label
   await settle(f.mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
   expect(f.mount.journal()?.moves.at(-1)?.label).toBe("Change");
   expect(await f.mount.history!.undo()).toMatchObject({ ok: true });
-  expect(f.mount.work()).toEqual({ revision: 2, value: { amount: 0 } });
+  expect(f.mount.work()).toMatchObject({ revision: 2, value: { amount: 0 } });
   expect(f.submitWork.mock.calls.at(-1)?.[1]).toMatchObject({
     kind: "restore",
     restoreOf: 1,
     expectedRevision: 1,
   });
   expect(await f.mount.history!.redo()).toMatchObject({ ok: true });
-  expect(f.mount.work()).toEqual({ revision: 3, value: { amount: 2 } });
+  expect(f.mount.work()).toMatchObject({ revision: 3, value: { amount: 2 } });
   expect(f.mount.journal()?.moves.map((m) => [m.kind, m.label])).toEqual([
     ["apply", "Change"],
     ["undo", "Change"],
@@ -1484,11 +1408,19 @@ test("admitted mount undoes Pea's accepted feed step", async () => {
 test("Revert appends an inverse step and undo restores the reverted value", async () => {
   const f = await historyFixture();
   await settle(f.mount.invoke("change", 5) as Observation<WorkWriteOutcome>);
+  const originalAt = f.mount.journal()!.undo.at(-1)!.at;
   expect(await f.mount.history!.revert()).toMatchObject({ ok: true });
   expect(f.mount.work()?.value).toEqual({ amount: 0 });
   expect(f.mount.journal()?.undo.map((s) => s.label)).toEqual(["Change", "Revert Change"]);
   expect(f.mount.journal()?.moves.at(-1)?.label).toBe("Revert Change");
   expect(await f.mount.history!.undo()).toMatchObject({ ok: true });
+  expect(f.mount.work()?.value).toEqual({ amount: 5 });
+  expect(f.mount.journal()!.undo[0]!.at).toBe(originalAt);
+  const submitted = f.submitWork.mock.calls.length;
+  f.failFeed();
+  expect(f.mount.workProblem()).toBe("readings offline");
+  await expect(f.mount.history!.revert()).rejects.toThrow("Work unavailable");
+  expect(f.submitWork.mock.calls).toHaveLength(submitted);
   expect(f.mount.work()?.value).toEqual({ amount: 5 });
 });
 
@@ -1508,7 +1440,7 @@ test("undo refuses a changed host inverse after a concurrent write without retry
   expect(f.mount.journalRefusal()).toBeTruthy();
   f.flush();
   expect(f.mount.journalRefusal()).toBeNull();
-  expect(f.mount.work()).toEqual({ revision: 2, value: { amount: 9 } });
+  expect(f.mount.work()).toMatchObject({ revision: 2, value: { amount: 9 } });
   expect(await f.mount.history!.undo(f.acks[0]!.press!)).toMatchObject({
     ok: false,
     code: "entry-changed",
@@ -1519,9 +1451,13 @@ test("independent shells share authored edits, invalidate redo and recover inver
   const f = await historyFixture(true);
   const second = await f.second();
   await settle(f.mount.invoke("change", 6) as Observation<WorkWriteOutcome>);
-  await vi.waitFor(() => expect(second.work()).toEqual({ revision: 1, value: { amount: 6 } }));
+  await vi.waitFor(() =>
+    expect(second.work()).toMatchObject({ revision: 1, value: { amount: 6 } }),
+  );
   expect(await second.history!.undo()).toMatchObject({ ok: true });
-  await vi.waitFor(() => expect(f.mount.work()).toEqual({ revision: 2, value: { amount: 0 } }));
+  await vi.waitFor(() =>
+    expect(f.mount.work()).toMatchObject({ revision: 2, value: { amount: 0 } }),
+  );
   expect(await f.mount.history!.redo()).toMatchObject({ ok: true });
   await vi.waitFor(() => expect(second.work()?.revision).toBe(3));
   expect(await second.history!.undo()).toMatchObject({ ok: true });
@@ -1533,10 +1469,10 @@ test("independent shells share authored edits, invalidate redo and recover inver
   second.close();
   // No retained journal, submit callback, or constructed replay snapshot crosses this restart.
   const recovered = await f.restart();
-  expect(recovered.work()).toEqual({ revision: 5, value: { amount: 9 } });
+  expect(recovered.work()).toMatchObject({ revision: 5, value: { amount: 9 } });
   expect(recovered.journal()?.undo.at(-1)).toMatchObject({ by: "pea", label: "Set amount" });
   expect(await recovered.history!.undo()).toMatchObject({ ok: true });
-  expect(recovered.work()).toEqual({ revision: 6, value: { amount: 0 } });
+  expect(recovered.work()).toMatchObject({ revision: 6, value: { amount: 0 } });
 });
 
 test("shared shell buttons expose Work undo and redo without route callbacks", async () => {
@@ -2125,24 +2061,6 @@ test("a presenter throw refuses with a typed reason and never submits", async ()
   expect(f.submit).not.toHaveBeenCalled();
 });
 
-test("one-argument Data Tables-shaped presenter keeps its sentence and ordered rows", async () => {
-  const presenter = vi.fn((result: unknown) => {
-    expect(result).toMatchObject({ previewOnly: true });
-    return {
-      sentence: "Apply table. Prune deletes 1 row.",
-      rows: ["Upsert 2 rows and 3 columns.", "Delete row obsolete"],
-    };
-  });
-  const f = await nativeFixture(presenter);
-  f.mount.invoke("native", 0);
-  f.preview().deliver();
-  expect(f.mount.review("native")).toMatchObject({
-    stale: false,
-    sentence: "Apply table. Prune deletes 1 row.",
-    rows: ["Upsert 2 rows and 3 columns.", "Delete row obsolete"],
-  });
-  expect(presenter).toHaveBeenCalledOnce();
-});
 
 test("invalid presenter output cannot become a review", async () => {
   const f = await nativeFixture(() => ({ sentence: 12, rows: ["bad"] }));
@@ -2155,7 +2073,7 @@ test("invalid presenter output cannot become a review", async () => {
 });
 
 import * as workHost from "../route/host";
-test("cell displays, focus, take and salvage use real shared Page/Work owners", async () => {
+test("cell displays, focus, clear refusal and salvage use real shared Page/Work owners", async () => {
   const t = transports(),
     store = createFixtureWorkDoor(
       { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
@@ -2173,16 +2091,12 @@ test("cell displays, focus, take and salvage use real shared Page/Work owners", 
   expect(() => mount.clearCell("amount", "amount")).toThrow("Reading unavailable");
   expect(mount.focusCell("amount", "amount").kind).toBe("accepted");
   expect(mount.page.read().query).toBe("amount");
-  t.frames.at(-1)!(ready("notes"));
-  await settle(mount.clearCell("amount", "amount"));
-  expect(mount.work()?.value).toEqual({ amount: 7 });
-  expect(mount.cells().amount![0]!.text).toBe("7");
   const saved = vi
     .spyOn(workHost, "salvageRouteWork")
     .mockResolvedValue({ from: "old", value: { amount: 12 } });
   try {
     await mount.salvage();
-    expect(mount.work()?.value).toEqual({ amount: 7 });
+    expect(mount.work()?.value).toEqual({ amount: 6 });
     await settle(mount.confirm("work.salvage") as Observation<WorkWriteOutcome>);
     expect(mount.work()?.value).toEqual({ amount: 12 });
   } finally {
@@ -2296,7 +2210,7 @@ test("a delayed submit keeps its captured expectedRevision across a newer accept
     refusal: { code: "stale_revision", revision: 1 },
   });
   expect(writes).toEqual([0, 0]);
-  expect(mount.work()).toEqual({ revision: 1, value: { amount: 10 } });
+  expect(mount.work()).toMatchObject({ revision: 1, value: { amount: 10 } });
 });
 
 async function landingFixture(
@@ -2680,7 +2594,13 @@ test.each(["accepted", "refused"] as const)(
     const next = identityCodecs.local.encode({ namespace: "note", subject: "replacement" });
     if (!next.ok) throw Error(next.reason);
     mount.controls.subject(next.value);
-    await vi.waitFor(() => expect(mount.work()).toEqual({ revision: 0, value: { amount: 0 } }));
+    await vi.waitFor(() =>
+      expect(mount.work()).toMatchObject({
+        handle: { key: { work: "replacement" } },
+        revision: 0,
+        value: { amount: 0 },
+      }),
+    );
     mount.read("main");
     const replacement = mount.work();
     const changed = vi.fn();

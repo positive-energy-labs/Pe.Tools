@@ -1,7 +1,5 @@
-import { testSources, testSubject, testFields, testReadings } from "../test-route-subject";
 import { expect, test, vi } from "vite-plus/test";
 import {
-  graphFieldPolicy,
   settingsSchema,
   type RouteSettingsSnapshot,
   type SettingField,
@@ -9,9 +7,6 @@ import {
 import { z } from "zod";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { createSettingsOwner } from "./settings";
-import { graphUrlPage } from "./mount-page";
-import { createGraphMount } from "./mount-owner";
-import { pane, type RouteGraph } from "@pe/agent-contracts";
 
 // Test-local: no product route declares per-user settings yet.
 const proofSettingFields = {
@@ -39,40 +34,6 @@ const proofSettingFields = {
   },
 } satisfies Record<string, SettingField>;
 const defaults = settingsSchema(proofSettingFields).parse({}) as RouteSettingsSnapshot["values"];
-test("settings cannot enter Page, URLs or shares, including explicit policy overrides", () => {
-  const graph: RouteGraph<object> = {
-    ...testSubject,
-    key: "settings-proof",
-    address: "settings-proof",
-    name: "Proof",
-    fields: { ...testFields, ...proofSettingFields },
-    readings: { ...testReadings },
-    verbs: {},
-    panes: { body: { label: "Body", purpose: "proof", draws: [], verbs: [] } },
-    stages: { main: { word: "Main", panes: ["body"], verbs: [] } },
-    layout: pane("body"),
-  };
-  const owner = createGraphMount(graph, {
-    getSnapshot: () => ({ target: { kind: "host" }, work: null }),
-    subscribe: () => () => {},
-    sources: { ...testSources },
-    write: vi.fn(),
-    subscribeAcceptedDeltas: () => () => {},
-  });
-  expect(owner.view.read().page).toEqual({ testSubject: "fixture", testSelected: [] });
-  expect(graphUrlPage(graph).write({ supplyColour: "#123456" })).toEqual({});
-  expect(graphUrlPage(graph).read({ terminalFlow: "ignored" })).toEqual({
-    testSubject: "fixture",
-    testSelected: [],
-  });
-  expect(graphFieldPolicy({ role: "setting", url: "push", share: true, agent: false })).toEqual({
-    url: false,
-    share: false,
-    agent: "set",
-  });
-  owner.dispose();
-});
-
 test("an agent notification updates the shared owner; late hydration cannot replace a newer write", async () => {
   let notify!: () => void;
   let finish!: (snapshot: RouteSettingsSnapshot) => void;

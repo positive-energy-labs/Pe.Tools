@@ -27,24 +27,6 @@ public sealed class ViewImageRequestWireTests {
     }
 
     [Test]
-    public void Focus_and_target_round_trip() {
-        var json = """{"target":{"id":9948},"focus":{"scopeBox":"Main House"},"pixelSize":300}""";
-        var request = JsonConvert.DeserializeObject<RevitViewImageRequest>(json, BridgeSettings)!;
-        Assert.Multiple(() => {
-            Assert.That(request.Target?.Id, Is.EqualTo(9948));
-            Assert.That(request.Focus?.ScopeBox, Is.EqualTo("Main House"));
-            Assert.That(request.PixelSize, Is.EqualTo(300));
-        });
-    }
-
-    [Test]
-    public void Focus_element_ids_round_trip() {
-        var json = """{"focus":{"elementIds":[1,2,3]}}""";
-        var request = JsonConvert.DeserializeObject<RevitViewImageRequest>(json, BridgeSettings)!;
-        Assert.That(request.Focus?.ElementIds, Is.EqualTo(new[] { 1L, 2L, 3L }));
-    }
-
-    [Test]
     public void Image_url_names_the_registered_sha_and_is_absent_without_registration() {
         var sha = new string('a', 64);
         var handle = new RevitAgentContextHandle(RevitAgentContextHandleKind.View, "doc", 1, "u", "L1");

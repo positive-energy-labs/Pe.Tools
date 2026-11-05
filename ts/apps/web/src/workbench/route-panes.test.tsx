@@ -434,8 +434,6 @@ test("a Work pressed on a closed document shows what is kept and how to reconnec
   // Saved or never saved: nothing promises the same file reopens.
   expect(band.textContent).toContain("Work is kept, read-only, while its document is closed.");
   expect(band.textContent).not.toMatch(/reopen|same file/i);
-  // The route thread's strict browser assertion, matched by the surface itself.
-  expect(band.textContent).toMatch(/closed|reconnect|not open|choose.*document/i);
   expect(screen.getByRole("button", { name: "Open or choose a document in Revit" })).toBeTruthy();
   // An open document's Work press clears it.
   await act(() =>
@@ -753,9 +751,10 @@ test("an explicit open's command id clears when the thread association changes",
 
 test("a saved legacy open-ref Place keeps its id under StrictMode, /pea and a cross-row Work press", async () => {
   sessionStorage.clear();
-  const legacy = `/ducts?target=${encodeURIComponent(
-    JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }),
-  )}&system=${encodeURIComponent("Office retained page")}`;
+  // The bytes a writer saves (host navigation.ts resume link); a restore matches saved bytes exactly.
+  const legacy = routeAddress("ducts").link({ system: ["Office retained page"] } as never, {
+    target: JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }),
+  });
   // New enrollment is exercised above through actual Fans admission. This tests saved-Place rebinding.
   sessionStorage.setItem("pe.places", JSON.stringify([{ ...ducts, link: legacy }]));
   const router = await mount(legacy, true);

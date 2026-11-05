@@ -693,7 +693,6 @@ export function consumeWorkWrite(outcome: WorkWriteOutcome) {
     case "refused":
       return outcome.kind;
     default:
-      expectTypeOf(outcome).toBeNever();
       return outcome satisfies never;
   }
 }
@@ -708,7 +707,6 @@ export function consumeWorkFeed(state: WorkFeedState) {
     case "gap":
       return state.kind;
     default:
-      expectTypeOf(state).toBeNever();
       return state satisfies never;
   }
 }
@@ -761,7 +759,6 @@ export function consumeReceiptFeed(
     case "gap":
       return state.kind;
     default:
-      expectTypeOf(state).toBeNever();
       return state satisfies never;
   }
 }

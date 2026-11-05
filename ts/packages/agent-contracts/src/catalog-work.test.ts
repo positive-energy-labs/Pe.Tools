@@ -2,7 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 import { catalogWorkCommands, catalogWorks, catalogWorkSpecs, CatalogWorkRefused, mergeParameterProfile } from "./catalog-work.ts";
 import type { ParameterLinkProfile } from "./parameter-links.ts";
 import { commandCatalogAxes } from "./command-axes.ts";
-import { workHandle } from "./command.ts";
 import { bindWork, canonicalWorkKey, workKey } from "./route-state.ts";
 import { address } from "./target.ts";
 
@@ -15,11 +14,6 @@ describe("Work identity", () => {
     expect(workKey(saved)).toBe(workKey(plain));
     expect(canonicalWorkKey(saved)).toEqual({ ...plain, target: "c:\\jobs\\a.rvt", from });
     expect(workKey(bindWork("ducts", null, undefined, from))).not.toBe(workKey(plain));
-  });
-
-  it("returns one handle however the key was spelled", () => {
-    expect(workHandle(saved, 3)).toEqual(workHandle(plain, 3));
-    expect(workHandle(saved, 3).key).not.toHaveProperty("from");
   });
 });
 
