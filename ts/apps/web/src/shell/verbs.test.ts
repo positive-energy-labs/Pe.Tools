@@ -150,6 +150,7 @@ function environment<C extends Caller>(caller: C, identity: WorkKey = key) {
       return {
         ok: true,
         revision: envelope.revision,
+        handle: { key, revision: envelope.revision },
         write: {
           key,
           kind: "apply",

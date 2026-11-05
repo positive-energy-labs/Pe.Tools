@@ -93,6 +93,7 @@ test("consecutive graph edits bind each authoritative Work revision", async () =
     return {
       ok: true,
       revision,
+      handle: { key, revision },
       write: {
         key,
         kind,

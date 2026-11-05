@@ -100,7 +100,7 @@ function environment() {
     acks.push(write);
     journal.observe(envelope);
     journal.accept(write, press ? { label: press } : undefined);
-    return { ok: true, revision: envelope.revision, write };
+    return { ok: true, revision: envelope.revision, handle: { key: write.key, revision: write.revision }, write };
   };
   const ctx: VerbContext<"human"> = {
     caller: "human",

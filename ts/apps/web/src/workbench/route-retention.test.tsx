@@ -378,6 +378,7 @@ test("an action admitted while visible finishes native receipt and Work bookkeep
     return {
       ok: true,
       revision: expectedRevision + 1,
+      handle: { key, revision: expectedRevision + 1 },
       write: {
         key,
         kind,

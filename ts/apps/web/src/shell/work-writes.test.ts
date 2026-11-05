@@ -68,7 +68,7 @@ test("refused input survives release, shares conflict admission, and clears only
       undoable: true,
     };
     expect(
-      (await next.writer.write(fresh, retry, async () => ({ ok: true, revision: 5, write: ack })))
+      (await next.writer.write(fresh, retry, async () => ({ ok: true, revision: 5, handle: { key: ack.key, revision: 5 }, write: ack })))
         .ok,
     ).toBe(true);
     expect(next.writer.pending()).toEqual([]);
@@ -165,7 +165,7 @@ test("a transport failure retains the edit and an acknowledgement for another Wo
       undoable: true,
     };
     expect(
-      (await held.writer.write(scope, request, async () => ({ ok: true, revision: 1, write: ack })))
+      (await held.writer.write(scope, request, async () => ({ ok: true, revision: 1, handle: { key: ack.key, revision: 1 }, write: ack })))
         .ok,
     ).toBe(false);
     expect(held.writer.journal.read().undo).toEqual([]);
@@ -193,6 +193,7 @@ test("sequential human edits wait for the acknowledged revision of the same Work
     return {
       ok: true,
       revision: request.expectedRevision + 1,
+      handle: { key, revision: request.expectedRevision + 1 },
       write: {
         ...request,
         key,

@@ -100,10 +100,21 @@ const native = (op: string) => {
 };
 
 /** The non-UI owner registrations the runtime binds; the Page-less Work a route may later attach to. */
+/** The staged-cell paths each owner's Work lets a person or Pea write: one StateCell per path. */
+const editable: Record<Owner, readonly WorkPath[]> = {
+  "data-tables": [["name"], ["columns", "*"], ["rows", "*", "*"]],
+  "parameter-links": [["definitions", "*"], ["assignments", "*"]],
+};
 export const catalogWorkSpecs = Object.fromEntries(
   Object.values(catalogWorks).map((work) => [
     work.owner,
-    { route: work.owner, title: native(work.op).displayName, description: native(work.op).description, schema: work.schema },
+    {
+      route: work.owner,
+      title: native(work.op).displayName,
+      description: native(work.op).description,
+      schema: work.schema,
+      editable: editable[work.owner as Owner],
+    },
   ]),
 ) as { [O in Owner]: RouteStateSpec<(typeof catalogWorks)[O]["schema"]> };
 
