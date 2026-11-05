@@ -175,9 +175,9 @@ export function subjectOf(mount: AdmittedMount, data: RouteGraphJson) {
     setActive: (id: unknown) => (many ? move(set.setActive(open, id)) : one(id)),
   };
 }
-export function paneOwnsSubjectList(data: RouteGraphJson, pane: string) {
+export function routeHasSubjectList(data: RouteGraphJson) {
   const field = data.fields[data.subject.field];
-  return field?.role === "subject" && !!data.panes[pane]?.draws.includes(field.picker.reading);
+  return field?.role === "subject" && Object.values(data.panes).some((pane) => pane.draws.includes(field.picker.reading));
 }
 
 export function AdmittedSubjectPicker({
@@ -571,7 +571,7 @@ function Chrome({
                       fit: id === data.subject.pane ? "wrap" : undefined,
                       actions: (
                         <>
-                          {id === data.subject.pane && !paneOwnsSubjectList(data, id) && (
+                          {id === data.subject.pane && !routeHasSubjectList(data) && (
                             <AdmittedSubjectPicker mount={mount} data={data} />
                           )}
                           {/* Pane-owned controls only: route verbs render once, in the situation band

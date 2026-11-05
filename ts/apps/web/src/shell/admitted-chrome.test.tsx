@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import {
   admittedJournalKeys,
   admittedSubjectDoor,
-  paneOwnsSubjectList,
+  routeHasSubjectList,
   PaneStatus,
   AdmittedSubjectPicker,
   subjectOf,
@@ -191,10 +191,14 @@ test("the subject door adds beside what is open, and never narrows all to explic
   expect(subject.mock.calls).toEqual([[{ kind: "ids", ids: [] }]]);
  });
 
-test("a pane drawing the subject list owns its picker; other panes keep chrome's picker", () => {
-  const data = { subject: { field: "system" }, fields: { system: { role: "subject", picker: { reading: "roster" } } }, panes: { list: { draws: ["roster"] }, detail: { draws: ["detail"] } } } as unknown as RouteGraphJson;
-  expect(paneOwnsSubjectList(data, "list")).toBe(true);
-  expect(paneOwnsSubjectList(data, "detail")).toBe(false);
+test("a route with a subject-list pane suppresses chrome's picker even on another pane", () => {
+  const data = { subject: { field: "system", pane: "detail" }, fields: { system: { role: "subject", picker: { reading: "roster" } } }, panes: { list: { draws: ["roster"] }, detail: { draws: ["detail"] } } } as unknown as RouteGraphJson;
+  expect(routeHasSubjectList(data)).toBe(true);
+});
+
+test("a route without a subject-list pane keeps chrome's picker", () => {
+  const data = { subject: { field: "system", pane: "detail" }, fields: { system: { role: "subject", picker: { reading: "roster" } } }, panes: { detail: { draws: ["detail"] } } } as unknown as RouteGraphJson;
+  expect(routeHasSubjectList(data)).toBe(false);
 });
 
 test("idle explicit readings draw no explanation while real failures remain visible", () => {
