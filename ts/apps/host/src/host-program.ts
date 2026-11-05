@@ -1,5 +1,4 @@
-import { catalogEntries } from "@pe/agent-contracts/pe-api";
-import { requireLinkedCatalog } from "../../../packages/agent-contracts/src/catalog.ts";
+import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { execFile, spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -24,7 +23,7 @@ export const hostProgram = (
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
-      requireLinkedCatalog(catalogEntries);
+      linkedCatalog();
       // One exporter for the launch: its scope unbinds the native producers and drains pending sends.
       const telemetry = Context.get(yield* Layer.build(ReceiptExport.layer), ReceiptExport);
       yield* Effect.promise(() =>

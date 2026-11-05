@@ -12,11 +12,11 @@ import { createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
 import { createPodRoutes } from "../src/pod-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
-import { peRouteUrl } from "@pe/agent-contracts/pe-api";
+import { linkedCatalog, peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { admitPodArtifact } from "../src/pod-artifact.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 
-async function fixture(root: string, fail = false, salt = "first") {
+async function fixture(root: string, fail = false, salt = "first", native?: { key: string; cost: "Cheap" | "Bounded" }) {
   const data = {
     ...builtinData,
     key: "pod.fixture.tool",
@@ -30,7 +30,8 @@ async function fixture(root: string, fail = false, salt = "first") {
   await writeFile(
     entry,
     `import { builtinModule } from ${JSON.stringify(imports)};
-export const module = { ...builtinModule, data: ${JSON.stringify(data)}, bodies: {
+export const module = { ...builtinModule, data: ${JSON.stringify(data)},
+entries: {...builtinModule.entries, roster: {...builtinModule.entries.roster, ${native ? `native: [${JSON.stringify(native.key)}], axes: {...builtinModule.entries.roster.axes, cost: '${native.cost}'}` : ""}}}, bodies: {
 ...Object.fromEntries(Object.entries(builtinModule.bodies).map(([key, body]) => [key, {...body, source: {module:'route.js', export:key}}])),
 upgrade: {kind:'migration', slot:'work.migrations.1', source:{module:'route.js',export:'upgrade'}, run(raw) { ${fail ? "raw.oldAmount = 999; throw Error('broken upgrade');" : `return {amount: raw.oldAmount + 1, note: '${salt}'};`} }}
 }};`,
@@ -64,6 +65,24 @@ upgrade: {kind:'migration', slot:'work.migrations.1', source:{module:'route.js',
   );
   return { wire, fingerprint: workFingerprintSchema.parse(fingerprint) };
 }
+
+test("Pod loader preserves native dependency cost through the linked catalog", async () => {
+  const leaf = [...linkedCatalog().entries.values()].find(
+    (entry) => !entry.key.startsWith("command:") && entry.cost === "Bounded" && entry.cardinality === "One" && entry.effect === "Read",
+  )!;
+  expect(leaf).toBeDefined();
+  const root = await mkdtemp(join(tmpdir(), "pe-pod-native-link-"));
+  try {
+    const valid = await fixture(root, false, "linked", { key: leaf.key, cost: "Bounded" });
+    expect((await admitPodArtifact(valid.wire, valid.fingerprint)).data.key).toBe("pod.fixture.tool");
+    const understated = await fixture(root, false, "refused", { key: leaf.key, cost: "Cheap" });
+    await expect(admitPodArtifact(understated.wire, understated.fingerprint)).rejects.toThrow(
+      `roster: cost understates ${leaf.key}`,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 30_000);
 
 async function setup(fail = false) {
   const root = await mkdtemp(join(tmpdir(), "pe-p2-"));

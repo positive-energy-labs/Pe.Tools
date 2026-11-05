@@ -1,5 +1,5 @@
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { catalogEntries } from "@pe/agent-contracts/pe-api";
+import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import {
   discoveryMachine,
   capabilityPrincipals,
@@ -68,7 +68,7 @@ export function buildCapabilities(sources: CapabilitySources): Capability[] {
                 : ("unknown" as const),
         },
       })),
-    ...catalogEntries.flatMap((entry): Capability[] => {
+    ...[...linkedCatalog().entries.values()].flatMap((entry): Capability[] => {
       const row = entry.discovery;
       if (!row) return [];
       return [

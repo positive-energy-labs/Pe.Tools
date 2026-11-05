@@ -11,7 +11,7 @@ export type { BridgeRequest } from "@pe/host-internal/dispatch";
 import type { BridgeStateSnapshot, ValidationIssue } from "@pe/host-contracts/contracts";
 
 import { admittedRouteEntries } from "@pe/agent-contracts";
-import { catalogEntries } from "@pe/agent-contracts/pe-api";
+import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 import { StepFailure } from "./command-executor.ts";
 import { Context, Effect, Layer, PubSub, Ref, Schema } from "effect";
@@ -46,7 +46,7 @@ export function commandLeafRefusal(
   operationKey: string,
   command: string | undefined,
 ): string | null {
-  const leaf = catalogEntries.find((entry) => entry.key === operationKey);
+  const leaf = linkedCatalog().entries.get(operationKey);
   if (!leaf?.internal) return null;
   if (
     command &&
@@ -56,7 +56,7 @@ export function commandLeafRefusal(
     )
   )
     return null;
-  const owner = command && catalogEntries.find((entry) => entry.key === `command:${command}`);
+  const owner = command && linkedCatalog().entries.get(`command:${command}`);
   return owner &&
     owner.uses.some((use) => (typeof use === "string" ? use : use.key) === operationKey)
     ? null
