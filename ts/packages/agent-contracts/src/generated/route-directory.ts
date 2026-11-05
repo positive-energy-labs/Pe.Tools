@@ -155,30 +155,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
-    "key": "data-tables",
-    "directory": {
-      "path": "/data-tables",
-      "title": "Data Tables",
-      "label": "Revit data",
-      "exposure": "Preview",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "Table",
-      "category": "Coordinate model data",
-      "blurb": "Author synthetic data tables — draft columns and keyed rows, then upsert them in one apply; rows deleted here are pruned in Revit.",
-      "aliases": [
-        "Revit",
-        "data"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      }
-    }
-  },
-  {
     "key": "design-system",
     "directory": {
       "path": "/design-system",
@@ -282,34 +258,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
-    "key": "grilles",
-    "directory": {
-      "path": "/grilles",
-      "title": "Grilles",
-      "label": "Wood floor grille",
-      "exposure": "Main",
-      "runtimeNeed": "Browser calculation and export",
-      "icon": "LayoutGrid",
-      "category": "Calculate loads & airflow",
-      "blurb": "The custom wood floor grille calculator — profiles in a sheet, the active one drawn to submittal scale, the buildable field charted; export a sheet to PDF or .svg.",
-      "aliases": [
-        "wood",
-        "floor",
-        "submittal",
-        "calculator",
-        "pdf",
-        "svg"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      }
-    }
-  },
-  {
     "key": "index",
     "directory": {
       "path": "/",
@@ -410,55 +358,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
-    "key": "parameter-links",
-    "directory": {
-      "path": "/parameter-links",
-      "title": "Parameter Links",
-      "label": "Revit data",
-      "exposure": "Preview",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "Link2",
-      "category": "Coordinate model data",
-      "blurb": "Cross-element parameter links â€” co-edit the link profile with pea, preview the projected target writes, then apply to reconcile them.",
-      "aliases": [
-        "Revit",
-        "data"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      }
-    }
-  },
-  {
-    "key": "pod-admin",
-    "directory": {
-      "path": "/pod-admin",
-      "title": "Pod administration",
-      "label": "Pod administration",
-      "icon": "Settings2",
-      "category": "Ask / automate",
-      "exposure": "Preview",
-      "runtimeNeed": "Host",
-      "blurb": "Install Pods and manage activation and executable route trust.",
-      "aliases": [
-        "install",
-        "trust",
-        "plugins"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      }
-    }
-  },
-  {
     "key": "pods",
     "directory": {
       "path": "/pods",
@@ -479,34 +378,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
         "pwa": "full",
         "tray": false
       }
-    }
-  },
-  {
-    "key": "rhvac-sync",
-    "directory": {
-      "path": "/rhvac-sync",
-      "title": "RHVAC sync",
-      "label": "Manual J",
-      "exposure": "Main",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "Map",
-      "category": "Calculate loads & airflow",
-      "blurb": "Sync selected zones to one RHVAC file.",
-      "aliases": [
-        "manual",
-        "j",
-        "loads",
-        "rhvac",
-        "zones"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "resume": "document"
     }
   },
   {
@@ -598,34 +469,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
-    "key": "space",
-    "directory": {
-      "path": "/space",
-      "title": "Space",
-      "label": "MEP context",
-      "exposure": "Preview",
-      "runtimeNeed": "Revit for capture; saved scenes open without Revit",
-      "icon": "Boxes",
-      "category": "Coordinate model data",
-      "blurb": "Inspect real model geometry, select elements, and draw straight or bent sections locally.",
-      "aliases": [
-        "3d",
-        "mesh",
-        "section",
-        "viewer",
-        "spatial",
-        "context"
-      ],
-      "listed": true,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      }
-    }
-  },
-  {
     "key": "takeoffs",
     "directory": {
       "path": "/takeoffs",
@@ -650,34 +493,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
           "label": "Zone audit"
         }
       ],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "resume": "document"
-    }
-  },
-  {
-    "key": "zone-audit",
-    "directory": {
-      "path": "/zone-audit",
-      "title": "Zone audit",
-      "label": "Manual J",
-      "exposure": "Main",
-      "runtimeNeed": "Revit for model actions; browsing saved data is separate",
-      "icon": "Map",
-      "category": "Calculate loads & airflow",
-      "blurb": "Audit rooms in selected zones.",
-      "aliases": [
-        "manual",
-        "j",
-        "loads",
-        "rhvac",
-        "zones"
-      ],
-      "listed": true,
-      "satellites": [],
       "surfaces": {
         "web": "full",
         "pwa": "full",

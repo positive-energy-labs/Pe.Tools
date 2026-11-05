@@ -27,8 +27,6 @@ const FamilyRoute = lazy(async () => ({
   default: mountRoute(familyGraph, (await import("#/family/route")).familyAdapters),
 }));
 
-}));
-
 const SettingsRoute = lazy(async () => ({
   default: mountRoute(settingsGraph, (await import("#/settings/route")).settingsAdapters),
 }));

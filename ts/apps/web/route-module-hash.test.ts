@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { buildRouteArtifact, routeModuleHash } from "./route-module-hash.ts";
 import { routeSourceHash } from "./route-source-hash.ts";
 
-const id = fileURLToPath(new URL("./src/grilles/graph.ts", import.meta.url));
+const id = fileURLToPath(new URL("./src/rooms/graph.ts", import.meta.url));
 
 test("the retired graph-only transform never injects moduleHash", async () => {
   const transform = routeModuleHash().transform as Function;

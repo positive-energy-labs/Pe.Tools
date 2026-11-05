@@ -6,7 +6,6 @@ import {
   builtinClosureFingerprint,
   createBuiltinRouteInventory,
 } from "../../../../packages/agent-contracts/src/route-module";
-import { dataTablesSources } from "../data-tables/sources";
 import { admittedSources } from "./admitted-sources";
 async function admit(sources: Record<string, unknown>) {
   const candidate = { ...module, sources };
@@ -32,8 +31,8 @@ async function admit(sources: Record<string, unknown>) {
   const admission = await inventory.prepare("witness", fingerprint);
   return { admission, candidate };
 }
-test("admission supplies Captures and Data Tables sources without application enrollment", async () => {
-  for (const sources of [module.sources, dataTablesSources()]) {
+test("admission supplies Captures sources without application enrollment", async () => {
+  for (const sources of [module.sources]) {
     const { admission, candidate } = await admit(sources);
     const result = admission.admit(candidate);
     if (!result.ok) throw Error(JSON.stringify(result.diagnostics));

@@ -1,9 +1,8 @@
 import { expect, test } from "vite-plus/test";
 import { takeoffGraph } from "../takeoff/graph";
 import { selectedTakeoffPage } from "../takeoff/subject";
-test("takeoff siblings share Work and expand all against the current roster", () => {
-  for (const graph of [takeoffGraph])
-    expect(graph.workRoute).toBe("takeoffs");
+test("takeoff Work expands all against the current roster", () => {
+  expect(takeoffGraph.workRoute).toBe("takeoffs");
   expect(
     selectedTakeoffPage(
       { views: "all", zones: "all" },

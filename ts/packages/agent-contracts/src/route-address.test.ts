@@ -254,14 +254,6 @@ describe("the thin routes adopt the contract", () => {
       "/?query=duct&folded=%252Fducts&sort=name",
     );
     expect(routeAddress("settings").link({ section: "none" })).toBe("/settings?section=none");
-    expect(routeAddress("data-tables").link({ table: "Loads" })).toBe("/data-tables?table=Loads");
-    expect(routeAddress("parameter-links").link({ rail: "folded" })).toBe(
-      "/parameter-links?rail=folded",
-    );
-  });
-
-  test("a route that declared a key nothing renders no longer carries it", () => {
-    expect(routeAddress("parameter-links").keys).toEqual(["threadSearch", "threadSort", "rail"]);
   });
 
   test("history: a pick pushes, a typed or receipt move replaces", () => {
@@ -277,13 +269,9 @@ describe("the thin routes adopt the contract", () => {
     expect(routeAddress("duct-loss").agent.keys).toContain("cfm");
     expect(routeAddress("settings").agent.read({ section: "none" })).toEqual({ section: "none" });
     expect(routeAddress("settings").agent.patch.safeParse({ session: "s" }).success).toBe(false);
-    expect(routeAddress("data-tables").agent.patch.safeParse({ table: "Loads" }).success).toBe(
-      true,
-    );
     // Binding is the person's door and Pea does not lease /pea: no lease at all.
     expect(routeAddress("bind").agent).toBeUndefined();
     expect(routeAddress("pea").agent).toBeUndefined();
-    expect(routeAddress("parameter-links").agent).toBeUndefined();
     // Ops is the admin door: Pea runs an operation through pe_do, not a second path to it.
     expect(routeAddress("ops").agent).toBeUndefined();
   });

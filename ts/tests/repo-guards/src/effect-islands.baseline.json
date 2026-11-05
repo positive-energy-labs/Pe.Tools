@@ -136,7 +136,6 @@
     "apps/web/src/shell/selection-codec.test.ts": 0,
     "apps/web/src/shell/work-feed-client.test.ts": 0,
     "apps/web/src/shell/work-journal-client.test.ts": 0,
-    "apps/web/src/space/capture-input.test.ts": 0,
     "packages/agent-contracts/src/native-read-door.types.test.ts": 0,
     "packages/agent-contracts/src/route-field.test.ts": 0,
     "packages/agent-contracts/src/route-kernel-link.test.ts": 0,

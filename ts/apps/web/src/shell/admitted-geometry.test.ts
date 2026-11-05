@@ -23,8 +23,7 @@ import {
 } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import type { IdentityId } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import { spaceBinding, spacePageSchema } from "../space/graph";
-import { spaceReads } from "../space/reads";
+import { sceneRequest } from "../scene/host";
 function decoded<T>(result: { ok: true; value: T } | { ok: false; reason: string }): T {
   if (!result.ok) throw Error(result.reason);
   return result.value;
@@ -168,9 +167,7 @@ async function admit(
               source: { module: "bodies.js", export: "captureArgs" },
               run: (_ctx: unknown, input: { elementIds: number[] }) => ({
                 ...(options.subject === null
-                  ? spaceReads["revit.detail.space-scene"].input.parse(
-                      spaceBinding("detailed", { input }, { page: spacePageSchema.parse({}) }).args,
-                    )
+                  ? sceneRequest(input.elementIds, false, 15, "meshes")
                   : { ...regionInput, elementIds: input.elementIds }),
                 contextRepresentation: "meshes",
               }),
@@ -313,11 +310,10 @@ test("mount composes default overview and declared explicit detail with cost met
 const regionId = decoded(
   identityCodecs.local.encode({ namespace: "space.region", subject: "room-uid" }),
 );
-const regionInput = spaceReads["revit.detail.space-scene"].input.parse(
-  spaceBinding("detailed", undefined, {
-    page: spacePageSchema.parse({ region: { kind: "room", uniqueId: "room-uid" } }),
-  }).args,
-);
+const regionInput = {
+  ...sceneRequest([], false, 15, "meshes"),
+  region: { kind: "room", uniqueId: "room-uid" },
+};
 test.each([5, 15])(
   "region detail prepares %s-ft reach and joins the exact host descriptor",
   async (reachFt) => {

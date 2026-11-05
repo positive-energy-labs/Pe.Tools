@@ -1,4 +1,4 @@
-import { zoneAuditAddress, rhvacSyncAddress, scheduleSpecsAddress, sessionAdminAddress } from "./g4-splits.ts";
+import { sessionAdminAddress } from "./g4-splits.ts";
 import type { RouteDeclaration } from "../route-field.ts";
 import { fansAddress } from "./fans.ts";
 import { ductsAddress } from "./ducts.ts";
@@ -8,7 +8,6 @@ import { schedulesAddress } from "./schedules.ts";
 import { roomsAddress } from "./rooms.ts";
 import { takeoffsAddress } from "./takeoffs.ts";
 import { spaceAddress } from "./space.ts";
-import { podAdminAddress } from "./pod-admin.ts";
 import { podsAddress } from "./pods.ts";
 import { bindAddress } from "./bind.ts";
 import { settingsAddress } from "./settings.ts";
@@ -16,10 +15,7 @@ import { opsAddress } from "./ops.ts";
 import { peaAddress } from "./pea.ts";
 import { homeAddress } from "./home.ts";
 import { ductLossAddress } from "./duct-loss.ts";
-import { grillesAddress } from "./grilles.ts";
-import { parameterLinksAddress } from "./parameter-links.ts";
 import { capturesAddress } from "./captures.ts";
-import { dataTablesAddress } from "./data-tables.ts";
 
 export { DUCTS_LAYERS } from "./ducts.ts";
 export { ROOMS_LAYERS } from "./rooms.ts";
@@ -30,9 +26,6 @@ export { GALVANIZED_STEEL_ROUGHNESS } from "./duct-loss.ts";
 
 /** Every route's address, by route key; each route declares its own in `routes/<route>.ts`. */
 export const routeAddresses = {
-  "zone-audit": zoneAuditAddress,
-  "rhvac-sync": rhvacSyncAddress,
-  "schedule-specs": scheduleSpecsAddress,
   "session-admin": sessionAdminAddress,
   ducts: ductsAddress,
   fans: fansAddress,
@@ -43,15 +36,11 @@ export const routeAddresses = {
   takeoffs: takeoffsAddress,
   space: spaceAddress,
   pods: podsAddress,
-  "pod-admin": podAdminAddress,
   bind: bindAddress,
   settings: settingsAddress,
   ops: opsAddress,
   pea: peaAddress,
   home: homeAddress,
   "duct-loss": ductLossAddress,
-  grilles: grillesAddress,
-  "parameter-links": parameterLinksAddress,
   captures: capturesAddress,
-  "data-tables": dataTablesAddress,
 } satisfies Record<string, RouteDeclaration>;

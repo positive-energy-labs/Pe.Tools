@@ -280,7 +280,7 @@ const RULES: Rule[] = [
     roots: [K + "**/*.css"], select: "hover-css", allow: [], cannotSee: "Nested CSS, inherited dimensions and media-query interactions." },
   { id: "web-hover-handler", doctrine: "N7", pattern: /onMouseEnter|onPointerEnter|onMouseOver/g,
     roots: [W + "**/*.tsx"], allow: [
-      { glob: W + "{ducts/schematic,family/anatomy-model-views,space/cuts,rooms/plan,takeoff/level-plan}.tsx", reason: "SVG hit-testing projects geometry to domain identity; it does not paint hover locally." },
+      { glob: W + "{ducts/schematic,family/anatomy-model-views,rooms/plan,takeoff/level-plan}.tsx", reason: "SVG hit-testing projects geometry to domain identity; it does not paint hover locally." },
       ...allow({
         "scene/footnotes.tsx": "The reusable footnote layer writes citation focus and travel grace; delegated Subject markup owns hover.",
         "ducts/proto/e/inbox.tsx": "Issue dwell and subject-numbering ownership include expanded detail.",
