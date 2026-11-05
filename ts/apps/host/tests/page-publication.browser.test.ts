@@ -1,3 +1,4 @@
+import { pictureCaptures } from "./effect-test.ts";
 import { testConsents } from "./effect-test.ts";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,9 +7,9 @@ import { fileURLToPath } from "node:url";
 import { afterEach, expect, it } from "vite-plus/test";
 import { servePeRoute } from "@pe/agent-contracts/pe-api";
 import { createHash } from "node:crypto";
-import { Context, Effect } from "effect";
+import { Layer, Context, Effect } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { CaptureStore, capturesRoute } from "../src/captures-route.ts";
+import { PictureCaptures, PictureCaptureStore, capturesRoute } from "../src/captures-route.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { bindControl } from "../src/control.ts";
 import {
@@ -31,7 +32,7 @@ async function fixture(caller: Caller = human) {
   await mkdir(join(root, "flow", ".state"), { recursive: true });
   await writeFile(join(root, "flow", "index.html"), "old");
   await writeFile(join(root, "flow", ".state", "binding.json"), "binding retained");
-  const captures = new CaptureStore(join(home, "captures"));
+  const captures = pictureCaptures(join(home, "captures"));
   const journal = new ActionJournal(join(home, "actions.json"));
   const executor = pagePublicationExecutor(root, "http://fixture", pageLibrary, captures);
   journal.bindCommands({
@@ -107,8 +108,7 @@ it("captures through real Edge, publishes only on success, and preserves authore
   const assets = HttpRouter.toWebHandler(
     capturesRoute(
       () => Effect.succeed(HttpServerResponse.text("spa")),
-      () => captures,
-    ),
+    ).pipe(Layer.provide(Layer.succeed(PictureCaptureStore, captures))),
     { disableLogger: true },
   );
   try {

@@ -1,3 +1,4 @@
+import { HostReceipts } from "../src/gateway-owner.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
@@ -67,7 +68,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
             nodeServer,
             port: 0,
             webRoot: null,
-          }),
+          }).pipe(Layer.provide(HostReceipts.layer(null))),
         ),
         Deferred.await(latch),
       );

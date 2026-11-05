@@ -54,10 +54,12 @@ import { ActionJournal } from "./action-journal.ts";
 import { bindCommandRuntime } from "./command-registry.ts";
 import {
   captureOrigin,
-  hostCaptures,
+  PictureCaptureStore,
+  PictureStoreFull,
   registerViewImage,
-  type CaptureStore,
 } from "./captures-route.ts";
+import { HostDocumentMarks } from "./document-marks.ts";
+import { HostFiles } from "./host-files.ts";
 import { randomUUID } from "node:crypto";
 import { recordHostFact } from "./receipt-export.ts";
 import { HttpRouter, HttpServerResponse as Response } from "effect/http";
@@ -160,8 +162,6 @@ export function makeCallRoute(
   captures?: TakeoffCaptures,
   actionDeps: FamilyActionDependencies & {
     launchShell?: (path: string) => Promise<void>;
-    /** Where `revit.context.view-image` answers are kept; the product store by default. */
-    captureStore?: CaptureStore;
   } = {},
   composition?: {
     readonly sdkDriver?: Context.Service.Shape<typeof SdkDriver>;
@@ -637,7 +637,6 @@ export function makeCallRoute(
           : requestId;
       const kept = entry.capture
         ? yield* registerViewImage(
-            actionDeps.captureStore ?? hostCaptures(),
             result.value,
             request,
             captureOrigin(origin, caller),
@@ -1091,6 +1090,7 @@ export function makeCallRoute(
           captures ??=
             Option.getOrUndefined(yield* Effect.serviceOption(TakeoffCaptureStore)) ??
             Context.get(yield* Layer.build(TakeoffCaptureStore.layer()), TakeoffCaptureStore);
+          actionDeps = { ...actionDeps, marks: yield* HostDocumentMarks, pictures: yield* PictureCaptureStore, files: yield* HostFiles };
           const freshness = yield* ReadFreshness;
           yield* Effect.acquireRelease(
             // Queue/native-read telemetry must not invalidate an in-flight read's identity.
@@ -1121,7 +1121,7 @@ export function makeCallRoute(
             { ...actionDeps, families: composition?.families },
             composition?.local ??
               ((key, input) =>
-                executeGatewayLocal(key, input, bridge, observations(), actionDeps.launchShell)),
+                executeGatewayLocal(key, input, bridge, observations(), actionDeps.pictures!, actionDeps.launchShell)),
             composition?.origin,
           );
         }),
@@ -1137,6 +1137,7 @@ export function makeCallRoute(
     scheduleReadings,
     ...controls,
   ).pipe(
+    HttpRouter.provideRequest(Layer.effect(PictureCaptureStore, PictureCaptureStore)),
     HttpRouter.provideRequest(NativeReads.layer),
     HttpRouter.provideRequest(
       SdkSession.layer.pipe(
@@ -1345,15 +1346,18 @@ const localEntries = {
   }),
   "pod.export": Effect.fnUntraced(function* ({ request }: LocalCall) {
     const input = yield* decodeRequest("pod.export", request);
-    return yield* transfer("pod.export", () => exportPod(input));
+    const captures = yield* PictureCaptureStore;
+    return yield* transfer("pod.export", () => exportPod(input, { captures }));
   }),
   "pod.import": Effect.fnUntraced(function* ({ request }: LocalCall) {
     const input = yield* decodeRequest("pod.import", request);
-    return yield* transfer("pod.import", () => importPod(input));
+    const captures = yield* PictureCaptureStore;
+    return yield* transfer("pod.import", () => importPod(input, { captures }));
   }),
   "pod.promote": Effect.fnUntraced(function* ({ request }: LocalCall) {
     const input = yield* decodeRequest("pod.promote", request);
-    return yield* transfer("pod.promote", () => promotePage(input));
+    const captures = yield* PictureCaptureStore;
+    return yield* transfer("pod.promote", () => promotePage(input, { captures }));
   }),
   "pod.runs": Effect.fnUntraced(function* ({ request }: LocalCall) {
     return yield* listRuns(yield* decodeRequest("pod.runs", request));
@@ -1497,6 +1501,8 @@ function toProblem(error: unknown): {
       nativeOutcome: error.details?.nativeOutcome,
       issues: error.details?.issues,
     };
+  if (error instanceof PictureStoreFull)
+    return { kind: "HostFailure", message: error.message, status: 409 };
   if (error instanceof Refused)
     return { kind: "InvalidRequest", message: error.message, status: 403, notDispatched: true };
   // BridgeError is a Schema.TaggedError (an Error) since ADR 0029 phase 3b; its _tag branch below owns it.
@@ -1546,6 +1552,7 @@ function executeGatewayLocal(
   input: unknown,
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
+  pictures: PictureCaptureStore["Service"],
   launch?: (path: string) => Promise<void>,
 ): Promise<unknown> {
   if (!isTsOnlyOperationKey(key))
@@ -1558,6 +1565,7 @@ function executeGatewayLocal(
       }).pipe(
         Effect.provide(NodeServices.layer),
         Effect.provide(NodeHttpClient.layerUndici),
+        Effect.provideService(PictureCaptureStore, pictures),
       ),
     );
   // effect-edge: island, phase 5

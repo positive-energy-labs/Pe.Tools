@@ -6,7 +6,9 @@ import { expect, vi } from "vite-plus/test";
 import type { BridgeFrame } from "@pe/host-contracts/contracts";
 import { CANCEL_OPERATION_KEY, RevitBridgeLive, RevitProcessAlive } from "../src/bridge.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
-import { hostActionJournal, releaseHostReceipts } from "../src/gateway-owner.ts";
+import { HostReceipts } from "../src/gateway-owner.ts";
+import type { ActionJournal } from "../src/action-journal.ts";
+import type { HostLog } from "../src/host-log.ts";
 import { effectTest } from "./effect-test.ts";
 
 // The session line's law (ADR 0029 phase 3b; a PROVEN 7.6 GB regression class lives behind it):
@@ -321,19 +323,13 @@ effectTest(
   () =>
     Effect.gen(function* () {
       // Hold the "started" receipt: the worker has taken A but has not sent it.
-      const journal = hostActionJournal();
-      const held = vi
-        .spyOn(journal, "recordQueue")
-        .mockImplementation((...args) =>
-          args[3] === "started" ? new Promise(() => {}) : Promise.reject(Error("not held")),
-        );
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          held.mockRestore();
-          releaseHostReceipts(journal);
-        }),
+      const held = vi.fn((...args: Parameters<ActionJournal["recordQueue"]>) =>
+        args[3] === "started" ? new Promise<never>(() => {}) : Promise.reject(Error("not held")),
       );
-      const { bridgeScope, call, outgoing } = yield* harness;
+      const journal = { recordQueue: held } as unknown as ActionJournal;
+      const { bridgeScope, call, outgoing } = yield* harness.pipe(
+        Effect.provideService(HostReceipts, { journal, log: {} as HostLog }),
+      );
       const a = yield* call("test.a");
       yield* Effect.promise(() => vi.waitFor(() => expect(held).toHaveBeenCalled()));
       yield* Scope.close(bridgeScope, Exit.void);

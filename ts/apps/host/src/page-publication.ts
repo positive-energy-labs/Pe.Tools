@@ -6,7 +6,7 @@ import { lstat, readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { createServer } from "node:net";
 import { connectCdp, openBrowser, type BrowserSession, type CdpClient } from "@pe/browser";
-import type { CaptureStore } from "./captures-route.ts";
+import type { PictureCaptures } from "./captures-route.ts";
 import { pagePublicationSchema, type PagePublication } from "@pe/host-contracts/pe-api";
 import { validatePageHtml, writeArtifact } from "./page-artifacts.ts";
 
@@ -324,7 +324,7 @@ export async function preparePagePublication(
   raw: unknown,
   origin: string,
   library: (path: string) => string | null,
-  captures: Pick<CaptureStore, "adopt">,
+  captures: Pick<PictureCaptures, "adopt">,
 ) {
   const input = pagePublicationSchema.parse(raw);
   validatePageHtml(input.html);
@@ -385,7 +385,7 @@ export async function publishPage(
   raw: unknown,
   origin: string,
   library: (path: string) => string | null,
-  captures: Pick<CaptureStore, "adopt">,
+  captures: Pick<PictureCaptures, "adopt">,
 ) {
   const input = pagePublicationSchema.parse(raw);
   const version = await pageVersion(root, input.slug);
@@ -417,7 +417,7 @@ export const pagePublicationExecutor = (
   root: string,
   origin: string | (() => string),
   library: (path: string) => string | null,
-  captures: Pick<CaptureStore, "adopt">,
+  captures: Pick<PictureCaptures, "adopt">,
 ) =>
   command(
     {

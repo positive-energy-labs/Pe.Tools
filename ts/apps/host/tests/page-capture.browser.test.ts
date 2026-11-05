@@ -1,3 +1,4 @@
+import { pictureCaptures } from "./effect-test.ts";
 import { createServer } from "node:http";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -5,7 +6,7 @@ import { join } from "node:path";
 import { inflateSync } from "node:zlib";
 import { expect, it } from "vite-plus/test";
 import { publishPage } from "../src/page-publication.ts";
-import { CaptureStore } from "../src/captures-route.ts";
+import { PictureCaptures } from "../src/captures-route.ts";
 import { createPagesHandler, pageLibrary } from "../src/pages-route.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { pagePublicationExecutor } from "../src/page-publication.ts";
@@ -55,7 +56,7 @@ it("renders the real public Page kit and settled animation pixels below the view
   const home = await mkdtemp(join(tmpdir(), "pe-cdp-pixels-"));
   try {
     const root = join(home, "Pages");
-    const captures = new CaptureStore(join(home, "captures"));
+    const captures = pictureCaptures(join(home, "captures"));
     const journal = new ActionJournal(join(home, "commands.jsonl"));
     const executor = pagePublicationExecutor(root, "http://fixture", pageLibrary, captures);
     journal.bindCommands({ resolve: () => executor, probe: async () => null });
@@ -118,7 +119,7 @@ it("denies actual loopback HTTP, CONNECT, WebSocket and worker egress but permit
         : null;
   };
   const root = join(home, "Pages");
-  const captures = new CaptureStore(join(home, "captures"));
+  const captures = pictureCaptures(join(home, "captures"));
   await mkdir(join(root, "network"), { recursive: true });
   await writeFile(join(root, "network", "index.html"), "prior");
   const input = { kind: "page", slug: "network", title: "Network" };
@@ -196,7 +197,7 @@ it("refuses uncaught runtime errors in self-contained workers", async () => {
         },
         "http://fixture",
         () => null,
-        new CaptureStore(join(home, "captures")),
+        pictureCaptures(join(home, "captures")),
       ),
     ).rejects.toThrow("worker capture refused");
     expect(await readFile(join(home, "Pages", "worker-error", "index.html"), "utf8")).toBe("prior");

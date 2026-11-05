@@ -1,3 +1,5 @@
+import { testHostInputs } from "./effect-test.ts";
+import { pictureCaptures } from "./effect-test.ts";
 /**
  * Host-local pod reads and archive transport over the production `/call` route. No Revit: the
  * bridge is a stub that fails the test if anything reaches it.
@@ -19,7 +21,7 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
-import { CaptureStore } from "../src/captures-route.ts";
+import { PictureCaptures } from "../src/captures-route.ts";
 import { listPackages } from "../src/packages.ts";
 import { exportPod, importPod, writeZip } from "../src/pod-transfer.ts";
 import { human } from "./callers.ts";
@@ -45,7 +47,7 @@ beforeEach(async () => {
     makeCallRoute(
       new ActionJournal(join(root, "journal.json")),
       captureStore(join(root, "captures")),
-    ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+    ).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },
   );
 });
@@ -178,7 +180,7 @@ const machineProject = `<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup><Using Include="My.Namespace" /></ItemGroup>
 </Project>`;
 
-async function shared(store: CaptureStore) {
+async function shared(store: PictureCaptures) {
   const png = Buffer.from("not really a png, but bytes with a hash");
   const kept = await store.keep(png, {
     origin: "human",
@@ -211,7 +213,7 @@ async function shared(store: CaptureStore) {
 }
 
 test("export vendors, ports the project, closes captures; import into a renamed folder elsewhere lands the same pod", async () => {
-  const store = new CaptureStore(join(root, "store-a"));
+  const store = pictureCaptures(join(root, "store-a"));
   const sha = await shared(store);
   const archivePath = join(root, "out", "ducts.zip");
 
@@ -241,7 +243,7 @@ test("export vendors, ports the project, closes captures; import into a renamed 
   expect(again.archiveSha256).toBe(exported.archiveSha256);
 
   const otherPods = join(root, "Other Machine", "Pods");
-  const otherStore = new CaptureStore(join(root, "store-b"));
+  const otherStore = pictureCaptures(join(root, "store-b"));
   const imported = await importPod(
     { archivePath, folder: "Other Name" },
     { podsRoot: otherPods, captures: otherStore },
@@ -288,14 +290,14 @@ test("export vendors, ports the project, closes captures; import into a renamed 
 });
 
 test("a capture this host does not hold refuses export and writes nothing", async () => {
-  const store = new CaptureStore(join(root, "store-a"));
+  const store = pictureCaptures(join(root, "store-a"));
   await shared(store);
   const archivePath = join(root, "out", "ducts.zip");
 
   await expect(
     exportPod(
       { pod: "ducts", archivePath },
-      { podsRoot: pods, captures: new CaptureStore(join(root, "empty")) },
+      { podsRoot: pods, captures: pictureCaptures(join(root, "empty")) },
     ),
   ).rejects.toThrow(/names capture [0-9a-f]{64}, which this host does not hold/);
   await expect(readFile(archivePath)).rejects.toThrow();

@@ -1,3 +1,4 @@
+import { testHostInputs } from "./effect-test.ts";
 import { captureStore } from "./effect-test.ts";
 import { invokeCommand } from "./command-fixture.ts";
 /**
@@ -51,7 +52,7 @@ beforeEach(async () => {
         // `pod.list` is host-local: it answers without Revit, so a read needs no bridge.
         dispatch: () => Effect.succeed({ pods: [] }),
       },
-    ).pipe(Layer.provideMerge(RevitBridgeDetached())),
+    ).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(RevitBridgeDetached())),
     { disableLogger: true },
   );
   // Every document is in a session the person owns, unless a test says otherwise.

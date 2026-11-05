@@ -1,3 +1,7 @@
+import { PictureCaptureStore } from "../src/captures-route.ts";
+import { HostFiles } from "../src/host-files.ts";
+import { HostDocumentMarks } from "../src/document-marks.ts";
+import { HostReceipts } from "../src/gateway-owner.ts";
 import * as adapter from "../src/harness/adapter.ts";
 import { Spawner } from "../src/harness/spawner.ts";
 import { NodeCrypto, NodeServices } from "@effect/platform-node";
@@ -180,7 +184,7 @@ export const familiesReader = async (
     }
   // effect-edge: test-runner
   const context = await Effect.runPromise(
-    Layer.buildWithScope(FamiliesReader.layer.pipe(Layer.provide(NodeServices.layer)), scope),
+    Layer.buildWithScope(FamiliesReader.layer.pipe(Layer.provide(HostDocumentMarks.none), Layer.provide(NodeServices.layer)), scope),
   );
   return Context.get(context, FamiliesReader);
 };
@@ -261,3 +265,30 @@ export async function testAdapter(...args: Parameters<typeof adapter.openAdapter
     adapter.openAdapter(...args),
   );
 }
+
+export const testDocumentMarks = (bridge: RevitBridge["Service"]) =>
+  Context.get(testScoped(HostDocumentMarks.layer.pipe(Layer.provide(Layer.succeed(RevitBridge, bridge)))), HostDocumentMarks);
+export const testReceipts = () => Context.get(testScoped(HostReceipts.layer(null)), HostReceipts);
+
+export const pictureCaptures = (root: string) => Context.get(testScoped(PictureCaptureStore.layer(root)), PictureCaptureStore);
+export const testHostFiles = () => Context.get(testScoped(HostFiles.layer()), HostFiles);
+
+export const testHostInputs = Layer.mergeAll(HostFiles.layer(), PictureCaptureStore.layer(), HostDocumentMarks.layer);
+
+/** Immediate native acknowledgements for read payload fixtures. Barrier tests supply their own handles. */
+export const acknowledgedReadBridge = (bridge: RevitBridge["Service"]): RevitBridge["Service"] => ({
+  ...bridge,
+  invokeHandle: (key, input, session, openId, requestId) => Effect.gen(function* () {
+    const attached = (yield* bridge.list).find((row) => row.sessionId === session)!;
+    const answer = yield* Effect.cached(bridge.invoke(key, input, session, openId, requestId).pipe(
+      Effect.orDie,
+      Effect.map(({ value }) => ({
+        value, nativeRequestId: requestId!,
+        actualTarget: { processIncarnation: { pid: attached.processId!, startedAt: attached.processStartUtcUnixMs! }, openDocumentLifetime: openId ? { openId } : { kind: "session-only" as const } },
+        freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const },
+        cost: {}, outcome: "native-acknowledged" as const,
+      })),
+    ));
+    return { answer, terminal: Effect.as(answer, "native-acknowledged" as const).pipe(Effect.orDie) };
+  }),
+});

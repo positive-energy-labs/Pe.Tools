@@ -16,7 +16,6 @@ import { OwnerReads, resourceSnapshot, type ResourceObserver, type OwnerValue } 
 import type { BridgeError, RevitBridge } from "./bridge.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { ActionJournal } from "./action-journal.ts";
-import { hostActionJournal } from "./gateway-owner.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { listBridgeSessions } from "./local-ops.ts";
 import { observeSdkReading } from "./session-route.ts";
@@ -158,7 +157,7 @@ export const markReadings =
 /** Typed adapters into existing owners. No calls, mutations, or transport-owned revisions. */
 export function hostResourceObserver(
   bridge?: RevitBridge["Service"],
-  journal: () => ActionJournal = hostActionJournal,
+  journal?: () => ActionJournal,
   captures: () => TakeoffCaptures = () => {
     throw Error("Takeoff captures are unavailable: pass the host's CaptureStore.");
   },
@@ -288,6 +287,7 @@ export function hostResourceObserver(
         case "rhvac-file-version":
           return oneShot([ONE_SHOT[request.kind]!(request as never)], POLL_MS[request.kind]);
         case "receipts":
+          if (!journal) throw Error("Receipt readings require HostReceipts.");
           if (request.scope)
             return observeWorkReceipts(journal(), request.scope, (value) => accept({ value }));
           return journal().observe(request.target, request.id, (result) => {

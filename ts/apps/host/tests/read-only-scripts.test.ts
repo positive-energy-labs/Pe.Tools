@@ -1,3 +1,4 @@
+import { testHostInputs } from "./effect-test.ts";
 import { detachedBridge, sessionView, testConsents } from "./effect-test.ts";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -84,7 +85,7 @@ async function serve(onCatalog?: (documents: (typeof other)[]) => void) {
     Layer.mergeAll(
       makeCallRoute(new ActionJournal(join(dir, "attempts.json")), undefined, {
         sdk: sdkSessions,
-      }),
+      }).pipe(Layer.provide(testHostInputs)),
       pagesRoute(
         () => pages,
         () => join(dir, "pods"),

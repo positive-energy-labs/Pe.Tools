@@ -1,3 +1,4 @@
+import { testHostFiles, settle } from "./effect-test.ts";
 import {
   DUCTS_BODY_VERSION_HEADER,
   ductsRosterResponseSchema,
@@ -45,7 +46,7 @@ test.skipIf(!existsSync(retained))(
           throw Error("No Work writes expected");
         },
       },
-      ductsSheets: {
+      ductsSheets: { firm: () => settle(testHostFiles().firm), catalogs: () => settle(testHostFiles().ductCatalogs),
         call: async (key, request, target, version) => {
           const reading =
             "selector" in request

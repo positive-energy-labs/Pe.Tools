@@ -11,7 +11,7 @@ import {
 } from "../src/turn-element-names.ts";
 import { RevitBridgeLive } from "../src/bridge.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
-import { hostActionJournal } from "../src/gateway-owner.ts";
+import { HostReceipts } from "../src/gateway-owner.ts";
 
 const a = { session: "original-process", openId: "original-document" };
 const b = { session: "original-process", openId: "second-document" };
@@ -54,7 +54,7 @@ test("turn names batch exact pinned documents through the production bridge and 
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        hostActionJournal();
+        yield* HostReceipts;
         const { bridge, outgoing, incoming, target } = yield* connectTestBridge();
         const other = { ...target, openId: "other-open" };
         const pinned = { ...snapshot, targets: [target, target, other] };
@@ -109,7 +109,7 @@ test("turn names batch exact pinned documents through the production bridge and 
         expect(calls).toHaveLength(2);
         expect(yield* Queue.size(outgoing)).toBe(0);
       }),
-    ).pipe(Effect.provide(RevitBridgeLive)),
+    ).pipe(Effect.provide(RevitBridgeLive), Effect.provide(HostReceipts.layer(null))),
   );
 });
 

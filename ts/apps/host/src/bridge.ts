@@ -14,16 +14,12 @@ import { admittedRouteEntries } from "@pe/agent-contracts";
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 import { StepFailure } from "./command-executor.ts";
-import { Context, Effect, Layer, PubSub, Ref, Schema } from "effect";
+import { Context, Effect, Layer, Option, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { Socket } from "effect/socket";
 import { HttpServerResponse as Response } from "effect/http";
-import {
-  bridgeDispatchRefusal,
-  bridgeValidateDispatch,
-  markBridgeDispatched,
-  recordBridgeQueue,
-} from "./gateway-owner.ts";
+import { dispatchRefusal, markDispatched, validateDispatch } from "./action-dispatch.ts";
+import { HostReceipts } from "./gateway-owner.ts";
 import { receiptProducerSchema, type DocumentRef, type ReceiptProducer } from "@pe/agent-contracts";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 import { hostOwnership } from "./host-ownership.ts";
@@ -300,14 +296,19 @@ const encodeFrame = Effect.fnUntraced(function* (frame: BridgeFrame) {
 export const RevitBridgeLive = Layer.effect(
   RevitBridge,
   Effect.gen(function* () {
+    // Queue facts go to this runtime's journal; a bridge composed without one refuses to record them.
+    const receipts = Option.getOrUndefined(yield* Effect.serviceOption(HostReceipts));
     // Session workers are forked here, so closing the host closes every line (see `serve`).
     const dispatcher = yield* makeDispatcher({
       command: () => catalogCommandContext.getStore(),
       commandLeafRefusal,
-      bridgeValidateDispatch,
-      bridgeDispatchRefusal,
-      markBridgeDispatched,
-      recordBridgeQueue,
+      bridgeValidateDispatch: validateDispatch,
+      bridgeDispatchRefusal: dispatchRefusal,
+      markBridgeDispatched: markDispatched,
+      recordBridgeQueue: (...args) =>
+        receipts
+          ? receipts.journal.recordQueue(...args)
+          : Promise.reject(Error("Receipt owner has not been initialized")),
     });
     const { sessions, attached, settleLoss, endIncarnation, settleTerminal } = dispatcher;
     // Transitional legacy failure projection; B/C/I retire this with existing consumers.

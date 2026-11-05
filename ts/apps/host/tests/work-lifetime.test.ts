@@ -1,3 +1,6 @@
+import { PictureCaptureStore } from "../src/captures-route.ts";
+import { HostFiles } from "../src/host-files.ts";
+import { HostDocumentMarks } from "../src/document-marks.ts";
 import { detachedBridge, consentService } from "./effect-test.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -21,7 +24,7 @@ import { RouteWorkspace, type RouteWorkspaceRegistration } from "@pe/runtime";
 import { Effect, Layer, PubSub } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { MachineOwner } from "../src/machine.ts";
-import { hostActionJournal } from "../src/gateway-owner.ts";
+import { HostReceipts } from "../src/gateway-owner.ts";
 import { createReceiptExport } from "../src/receipt-export.ts";
 import type { HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
 import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
@@ -365,7 +368,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             },
           });
           const telemetry = createReceiptExport({
-            journal: hostActionJournal(),
+            journal: (yield* HostReceipts).journal,
             root: directory,
             stamps: { host: null, web: null },
           });
@@ -380,7 +383,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             undefined,
             undefined,
             telemetry,
-          );
+          ).pipe(Effect.provide(HostDocumentMarks.none), Effect.provide(HostFiles.layer()), Effect.provide(PictureCaptureStore.layer()));
           yield* Layer.build(MachineOwner.layer(machineSpec.sources, machineSpec.options));
           yield* Effect.gen(function* () {
             yield* Effect.promise(async () => {
@@ -444,7 +447,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             });
           });
         }),
-      ).pipe(Effect.provide(Spawner.live), Effect.provide(NodeServices.layer)),
+      ).pipe(Effect.provide(HostReceipts.layer(null, directory)), Effect.provide(Spawner.live), Effect.provide(NodeServices.layer)),
     );
   } finally {
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;

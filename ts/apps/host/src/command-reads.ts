@@ -4,7 +4,7 @@ import { NodeServices } from "@effect/platform-node";
 import type { CommandResources } from "./command-executor.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { FamilyActionDependencies } from "./family-actions.ts";
-import { assertFresh, assertSealed, documentMarks } from "./document-marks.ts";
+import { assertFresh, assertSealed } from "./document-marks.ts";
 import { readOriginalProcess } from "./native-receipts.ts";
 import { readMember } from "./settings.ts";
 import { captureDirectory, listPackages } from "./packages.ts";
@@ -88,8 +88,8 @@ export function commandResources(
           );
         case "document-mark":
           if ("sealed" in dependency.probe)
-            await assertSealed(documentMarks(bridge), dependency.probe.ref, dependency.probe.sealed);
-          else assertFresh(documentMarks(bridge), dependency.probe.ref, dependency.probe.takenAt);
+            await assertSealed(deps.marks!, dependency.probe.ref, dependency.probe.sealed);
+          else assertFresh(deps.marks!, dependency.probe.ref, dependency.probe.takenAt);
           return true;
         case "incarnation": {
           const actual = await readOriginalProcess(

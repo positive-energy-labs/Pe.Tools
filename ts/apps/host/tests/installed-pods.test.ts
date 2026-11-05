@@ -1,3 +1,4 @@
+import { pictureCaptures } from "./effect-test.ts";
 /**
  * First-run import of shipped pods: ordinary import, once per archive, never over a user's pod.
  * The shipped archive is written by the production exporter, never a fixture zip writer.
@@ -6,7 +7,7 @@ import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CaptureStore } from "../src/captures-route.ts";
+import { PictureCaptures } from "../src/captures-route.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { listPackages } from "../src/packages.ts";
 import { exportPod } from "../src/pod-transfer.ts";
@@ -15,14 +16,14 @@ let root: string;
 let shipped: string;
 let pods: string;
 let ledger: string;
-let captures: CaptureStore;
+let captures: PictureCaptures;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "pe-installed-pods-"));
   shipped = join(root, "app", "pods");
   pods = join(root, "Documents", "Pods");
   ledger = join(root, "state", "shipped-pods.json");
-  captures = new CaptureStore(join(root, "captures"));
+  captures = pictureCaptures(join(root, "captures"));
   const source = join(root, "examples");
   await mkdir(join(source, "example", "pages", "tour"), { recursive: true });
   await writeFile(

@@ -1,4 +1,5 @@
-import { Effect } from "effect";
+import { testHostInputs } from "./effect-test.ts";
+import { Layer, Effect } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -1243,7 +1244,7 @@ test("R4d: after recovery over HTTP, cleanup closes and stops the Revit that sur
   const { f, world, row, input } = await crashWorld();
   world.crash = "open";
   const server = await serveRoutes(
-    makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), f.deps),
+    makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
     sdkOnlyBridge,
   );
   cleanup.push(() => server.close());
@@ -1460,7 +1461,7 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
     return { result: { state: "cancelled" } };
   });
   const server = await serveRoutes(
-    makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), f.deps),
+    makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
     sdkOnlyBridge,
   );
   cleanup.push(async () => {
@@ -1517,7 +1518,7 @@ test.each([
       result: { id: "dev", state: "ok", phase: verb === "reset" ? "ready" : "stopped" },
     }));
     const server = await serveRoutes(
-      makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), { sdk: f.deps.sdk }),
+      makeCallRoute(f.owner, captureStore(join(f.dir, "captures")), { sdk: f.deps.sdk }).pipe(Layer.provide(testHostInputs)),
       sdkOnlyBridge,
     );
     cleanup.push(() => server.close());

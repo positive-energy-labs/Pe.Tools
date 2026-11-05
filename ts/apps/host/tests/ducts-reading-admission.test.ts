@@ -1,3 +1,4 @@
+import { testHostInputs } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -87,7 +88,7 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
         dispatch: () => Effect.die("No TS-only calls expected"),
         captureHostOp: () => {},
       },
-    ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+    ).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },
   );
   const post = (

@@ -1,3 +1,4 @@
+import { testHostInputs } from "./effect-test.ts";
 import { test, expect, vi } from "vite-plus/test";
 import { createServer } from "node:http";
 import { PassThrough } from "node:stream";
@@ -172,7 +173,7 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
   const makeWeb = () =>
     HttpRouter.toWebHandler(
       Layer.mergeAll(
-        makeCallRoute(owner, undefined, { sdk: sdkSessions }),
+        makeCallRoute(owner, undefined, { sdk: sdkSessions }).pipe(Layer.provide(testHostInputs)),
         opsCatalogRoute(() => Effect.die("not navigation"), sdkSessions),
       ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       { disableLogger: true },

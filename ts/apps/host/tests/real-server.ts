@@ -1,3 +1,4 @@
+import { HostReceipts } from "../src/gateway-owner.ts";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -98,7 +99,7 @@ export async function bootHost() {
           port: 0,
           lifecycle: { latch, handle },
           webRoot: webDir,
-        });
+        }).pipe(Layer.provide(HostReceipts.layer(null)));
         yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));
       }),
     ),

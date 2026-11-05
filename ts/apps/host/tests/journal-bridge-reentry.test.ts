@@ -1,6 +1,7 @@
+import { testHostInputs } from "./effect-test.ts";
 import { mkdir, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect, Fiber, Queue, Schema } from "effect";
+import { Layer, Effect, Fiber, Queue, Schema } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -12,7 +13,7 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { RevitBridgeLive, RevitProcessAlive } from "../src/bridge.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import { bindControl, mintContext, retireContext } from "../src/control.ts";
-import { hostActionJournal, releaseHostReceipts } from "../src/gateway-owner.ts";
+import { HostReceipts } from "../src/gateway-owner.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { productPodsRootPath } from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -32,7 +33,7 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const owner = hostActionJournal();
+        const { journal: owner } = yield* HostReceipts;
         const { bridge, incoming, outgoing, target, connection } = yield* connectTestBridge();
         const native = yield* Queue.make<NonNullable<BridgeFrame["request"]>>();
         const sent: NonNullable<BridgeFrame["request"]>[] = [];
@@ -142,7 +143,7 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
         });
         const podsRoot = productPodsRootPath();
         const server = yield* Effect.promise(() =>
-          serveRoutes(makeCallRoute(owner, undefined, { sdk, workspace, podsRoot }), bridge),
+          serveRoutes(makeCallRoute(owner, undefined, { sdk, workspace, podsRoot }).pipe(Layer.provide(testHostInputs)), bridge),
         );
         yield* Effect.promise(async () => {
           const post = async (path: string, body: unknown, token = human) => {
@@ -381,12 +382,12 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
             await Effect.runPromise(Fiber.interrupt(connection));
             await Effect.runPromise(Fiber.interrupt(responder));
             if (!closed) await owner.close();
-            releaseHostReceipts(owner);
           }
         });
       }),
     ).pipe(
       Effect.provide(RevitBridgeLive),
+      Effect.provide(HostReceipts.layer(null)),
       Effect.provideService(RevitProcessAlive, () => life.alive),
     ),
     { signal },

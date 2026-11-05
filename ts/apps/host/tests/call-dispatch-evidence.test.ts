@@ -1,3 +1,4 @@
+import { testHostInputs } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,7 +34,7 @@ async function failedCall(error: unknown) {
           },
           captureHostOp: () => {},
         },
-      ),
+      ).pipe(Layer.provide(testHostInputs)),
       Context.get(context, RevitBridge),
     );
     try {

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { documentMarks, type DocumentMarks, type DocumentRef } from "./document-marks.ts";
+import { type DocumentMarks, type DocumentRef } from "./document-marks.ts";
 import { lifetime } from "./family-actions.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
@@ -121,7 +121,7 @@ const intentPrepared = z.object({ input: z.record(z.string(), z.unknown()), valu
 export function workIntentBoundary(
   executor: CommandExecutor,
   bridge: RevitBridge["Service"],
-  deps: { sdk?: SdkReceiptReader } = {},
+  deps: { sdk?: SdkReceiptReader; marks?: DocumentMarks } = {},
 ): CommandExecutor {
   const definition = executor.definition as import("@pe/agent-contracts").Command & {
     workIntent: WorkIntentBinding;
@@ -158,7 +158,7 @@ export function workIntentBoundary(
 export function workWriteBoundary(
   executor: CommandExecutor,
   bridge: RevitBridge["Service"],
-  deps: { sdk?: SdkReceiptReader } = {},
+  deps: { sdk?: SdkReceiptReader; marks?: DocumentMarks } = {},
   registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
   /** The preview entry has its own executor (a native plan leaf); otherwise it is synthesized. */
   ownsPreview = false,
@@ -181,7 +181,7 @@ export function workWriteBoundary(
     boundary: "work",
     prepared: preparedSchema,
     bind: async (ctx) => {
-      const marks = documentMarks(bridge);
+      const marks = deps.marks!;
       // The entry is the mode: seal at the plan, recheck at the ModelWrite.
       const previewOnly = hooks.phase === "preview";
       const { work, input, target, observed } = await deriveFromWork(

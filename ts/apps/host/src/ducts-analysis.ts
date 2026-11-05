@@ -31,7 +31,6 @@ import {
   type DuctsAnalysisResponse,
 } from "@pe/agent-contracts";
 import { EMPTY_CATALOGS, type Catalogs } from "@pe/ducts-domain/catalog";
-import { readDuctCatalogs } from "./duct-catalogs.ts";
 import { assessDucts } from "@pe/ducts-domain/assessment";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import {
@@ -55,7 +54,7 @@ type Observation = {
 };
 export interface DuctsAnalysisSources {
   root: string;
-  catalogs?: () => Promise<{ tables: Catalogs; findings: string[] }>;
+  catalogs: () => Promise<{ tables: Catalogs; findings: string[] }>;
   producer: unknown;
   marks: DocumentMarks;
   resolve: (target: DocumentRef) => Promise<Observation>;
@@ -382,7 +381,7 @@ export function createDuctsAnalysis(sources: DuctsAnalysisSources) {
     if (!scope) throw Error("Fresh analysis requires an equipment or terminal subject; read the roster first. Document/group projections remain available on saved artifacts.");
     const snapshot = await read("ducts.snapshot.walk", { ...readOptions, selector: scope }) as DuctSnapshot;
     const tables = await read("ducts.tables", { ids: [...TABLE_IDS] });
-    const catalogs = await (sources.catalogs ?? readDuctCatalogs)();
+    const catalogs = await sources.catalogs();
     const inputJson = JSON.stringify({
       snapshot,
       tables,

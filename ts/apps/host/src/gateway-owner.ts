@@ -1,47 +1,40 @@
-import { dispatchRefusal, validateDispatch, markDispatched } from "./action-dispatch.ts";
 import { join } from "node:path";
+import { Context, Effect, Layer } from "effect";
 import { ActionJournal } from "./action-journal.ts";
 import { HostLog } from "./host-log.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { receiptStampSchema, type ReceiptStamp } from "@pe/agent-contracts";
-let journal: ActionJournal | undefined;
-let log: HostLog | undefined;
-let stamp: ReceiptStamp | null = null;
+
 const stateDir = () => join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName);
-/** Called by host boot only after its runtime identity has been admitted. */
-export function setHostReceiptStamp(value: ReceiptStamp) {
-  const next = receiptStampSchema.parse(value);
-  if (next.component !== "host") throw Error("The host receipt owner requires a host stamp");
-  if (stamp && JSON.stringify(stamp) !== JSON.stringify(next))
-    throw Error("Host receipt identity is immutable");
-  stamp = next;
-  hostActionJournal();
-}
-/** The one host log (`@pe/agent-contracts` `host-log.ts`). */
-export function hostLog() {
-  return (log ??= new HostLog(join(stateDir(), "log")));
-}
-/** Every committed receipt revision is appended to the host log, in commit order. */
-const logReceipts = (receipts: ActionJournal, into: HostLog) =>
-  receipts.subscribe({}, (receipt) => into.append({ kind: "receipt", receipt }));
-export function hostActionJournal() {
-  if (journal) return journal;
-  journal = new ActionJournal(join(stateDir(), "partition-operations.json"), () => stamp);
-  logReceipts(journal, hostLog());
-  return journal;
-}
-/** A released HTTP runtime never lends its bound bridge or Work owner to its successor. */
-export function releaseHostReceipts(owner: ActionJournal) {
-  if (journal !== owner) return;
-  journal = undefined;
-  log = undefined;
-}
 
-export const recordBridgeQueue: ActionJournal["recordQueue"] = (...args) =>
-  journal
-    ? journal.recordQueue(...args)
-    : Promise.reject(Error("Receipt owner has not been initialized"));
-
-export const bridgeDispatchRefusal = dispatchRefusal;
-export const bridgeValidateDispatch = validateDispatch;
-export const markBridgeDispatched = markDispatched;
+/** The host's one ActionJournal and the HostLog that mirrors it, owned by one host runtime's scope. */
+export class HostReceipts extends Context.Service<
+  HostReceipts,
+  { readonly journal: ActionJournal; readonly log: HostLog }
+>()("pe/HostReceipts") {
+  /**
+   * Admit the stamp once, open the journal and log, and append every committed receipt revision
+   * to the log in commit order. Provide it outermost: its finalizer joins admitted commands and
+   * flushes after the bridge and threads close, so a successor runtime never borrows this journal.
+   */
+  static layer(stamp: ReceiptStamp | null, dir: string = stateDir()) {
+    return Layer.effect(
+      HostReceipts,
+      Effect.gen(function* () {
+        const admitted = stamp && receiptStampSchema.parse(stamp);
+        if (admitted && admitted.component !== "host")
+          return yield* Effect.die(Error("The host receipt owner requires a host stamp"));
+        const log = new HostLog(join(dir, "log"));
+        const journal = new ActionJournal(join(dir, "partition-operations.json"), () => admitted);
+        const stop = journal.subscribe({}, (receipt) => log.append({ kind: "receipt", receipt }));
+        yield* Effect.addFinalizer(() =>
+          Effect.promise(async () => {
+            await journal.close();
+            stop();
+          }),
+        );
+        return { journal, log };
+      }),
+    );
+  }
+}

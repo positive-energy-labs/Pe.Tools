@@ -28,7 +28,7 @@ import { catalogWorkSpecs } from "@pe/agent-contracts";
 import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { productRouteWorkPath } from "./product-paths.ts";
-import { hostActionJournal, releaseHostReceipts } from "./gateway-owner.ts";
+import { HostReceipts } from "./gateway-owner.ts";
 import { ReceiptExport, type ReceiptExporter } from "./receipt-export.ts";
 import { CaptureStore } from "./takeoff-captures.ts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
@@ -52,7 +52,9 @@ import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer, peApiErrorsLayer, type HostWork } from "./pe-routes.ts";
 import { threadPointerPort } from "./thread-pointers.ts";
 import { capturesRoute } from "./captures-route.ts";
-import { ductCatalogsRoute } from "./duct-catalogs.ts";
+import { ductCatalogsRoute, HostFiles } from "./host-files.ts";
+import { HostDocumentMarks } from "./document-marks.ts";
+import { PictureCaptureStore } from "./captures-route.ts";
 import { pagesRoute } from "./pages-route.ts";
 import { makeInstalledUpdateReader, updateRoutes } from "./update-route.ts";
 import { UpdateReader, type UpdateFact } from "./update-reader.ts";
@@ -152,7 +154,7 @@ function makeRevitComposition(
         Effect.gen(function* () {
           const families = yield* FamiliesReader;
           return makeCallRoute(
-            hostActionJournal(),
+            (yield* HostReceipts).journal,
             undefined,
             { workspace: work?.workspace },
             { origin, families, pointers: work?.pointers },
@@ -198,19 +200,9 @@ export interface HttpLiveOptions {
  * (via `NodeHttpServer.layer`) and shared by the router and the service-file writer.
  */
 export function makeHttpLive(options: HttpLiveOptions) {
-  const receiptOwner = hostActionJournal();
-  const ReceiptLifetime = Layer.effectDiscard(
-    Effect.addFinalizer(() =>
-      // Provided outermost, so this runs after the bridge and threads closed: join, flush, release.
-      Effect.promise(async () => {
-        await receiptOwner.close();
-        releaseHostReceipts(receiptOwner);
-      }),
-    ),
-  );
   const ReceiptsLive = options.receipts
     ? Layer.succeed(ReceiptExport, options.receipts)
-    : ReceiptExport.layer;
+    : ReceiptExport.layer({ host: null, web: null });
   const UpdateLive = Layer.succeed(
     UpdateReader,
     options.updateReader ?? makeInstalledUpdateReader(options.updateFact),
@@ -326,65 +318,52 @@ export function makeHttpLive(options: HttpLiveOptions) {
       : staticSpaLayer(options.webRoot),
   );
 
-  if (options.capabilities.revit) {
-    const revitComposition = (options.revitCompositionFactory ?? makeRevitComposition)(
-      spa,
-      work,
-      () => `http://127.0.0.1:${port()}`,
-    );
-    // Install the request handler before acquiring/publishing the service claim. A request
-    // accepted while claim acquisition awaits SDK work must not be stranded without a handler.
-    return ServiceFileLive.pipe(
-      Layer.provideMerge(
-        HttpRouter.serve(
-          Layer.mergeAll(revitComposition.routes, CommonAppLive).pipe(Layer.provide(identity)),
-        ).pipe(Layer.provideMerge(ServerLive)),
-      ),
-      Layer.provide(NodeHttpClient.layerUndici),
-      // Inside the bridge's provision, so the reader's finalizer (cancel, then join its reads)
-      // runs while the bridge it cancels through is still alive.
-      Layer.provide(FamiliesReader.layer),
-      Layer.provide(revitComposition.provider),
-      Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
-      Layer.provide(UpdateLive),
-      Layer.provide(RunConsents.layer),
-      Layer.provide(Spawner.live),
-      Layer.provide(CaptureStore.layer()),
-      Layer.provide(ReceiptsLive),
-      Layer.provide(NodeServices.layer),
-      Layer.provide(ReceiptLifetime),
-      Layer.provide(admittedBuiltinsLayer(work.workspace, undefined, registrations)),
-    );
-  }
-
-  return ServiceFileLive.pipe(
-    Layer.provideMerge(
-      HttpRouter.serve(
-        Layer.mergeAll(
+  const revit = options.capabilities.revit;
+  const composition = revit
+    ? (options.revitCompositionFactory ?? makeRevitComposition)(
+        spa,
+        work,
+        () => `http://127.0.0.1:${port()}`,
+      )
+    : {
+        provider: RevitBridgeLive,
+        routes: Layer.mergeAll(
           noRevitBoundary(),
-          makeCallRoute(
-            hostActionJournal(),
-            undefined,
-            { workspace: work.workspace },
-            { origin: () => `http://127.0.0.1:${port()}`, pointers: work.pointers },
+          Layer.unwrap(
+            Effect.gen(function* () {
+              return makeCallRoute(
+                (yield* HostReceipts).journal,
+                undefined,
+                { workspace: work.workspace },
+                { origin: () => `http://127.0.0.1:${port()}`, pointers: work.pointers },
+              );
+            }),
           ),
           opsCatalogRoute(spa),
           noRevitHostStatusRoute,
-          CommonAppLive,
-        ).pipe(Layer.provide(identity)),
+        ),
+      };
+  // The request handler is installed before publishing the claim. Readers and marks close
+  // before the bridge; the composing runtime owns receipts beyond all of these resources.
+  return ServiceFileLive.pipe(
+    Layer.provideMerge(
+      HttpRouter.serve(
+        Layer.mergeAll(composition.routes, CommonAppLive).pipe(Layer.provide(identity)),
       ).pipe(Layer.provideMerge(ServerLive)),
     ),
-    // The empty in-memory bridge registry admits no native connection on this composition.
-    Layer.provide(RevitBridgeLive),
     Layer.provide(NodeHttpClient.layerUndici),
+    Layer.provide(FamiliesReader.layer),
+    Layer.provide(HostDocumentMarks.layer),
+    Layer.provide(composition.provider),
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
     Layer.provide(UpdateLive),
     Layer.provide(RunConsents.layer),
     Layer.provide(Spawner.live),
     Layer.provide(CaptureStore.layer()),
+    Layer.provide(HostFiles.layer()),
+    Layer.provide(PictureCaptureStore.layer()),
     Layer.provide(ReceiptsLive),
     Layer.provide(NodeServices.layer),
-    Layer.provide(ReceiptLifetime),
     Layer.provide(admittedBuiltinsLayer(work.workspace, undefined, registrations)),
   );
 }

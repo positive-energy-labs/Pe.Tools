@@ -1,3 +1,4 @@
+import { HostReceipts } from "../src/gateway-owner.ts";
 /** Real isolated-host browser proof: draft retention and durable-thread recovery. */
 import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { createServer as createNodeServer } from "node:http";
@@ -54,7 +55,7 @@ beforeAll(async () => {
             port: 0,
             webRoot: null,
             webUrl,
-          }),
+          }).pipe(Layer.provide(HostReceipts.layer(null))),
         ),
         Deferred.await(latch),
       );
