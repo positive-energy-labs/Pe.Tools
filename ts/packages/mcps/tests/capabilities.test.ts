@@ -986,3 +986,25 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
   expect(opens).toHaveLength(1);
   expect(sets).toEqual([]);
 });
+
+test("an admitted route's view rows project keys from its agent policy, never the legacy codec", () => {
+  const admitted = {
+    fan: { role: "subject", agent: "set" },
+    viewport: { role: "pose", agent: "read" },
+    notes: { role: "pose", agent: "none" },
+  } as never;
+  const rows = buildCapabilities({
+    ops: [],
+    routes: [],
+    packages: [],
+    skills: [],
+    admittedFields: (route) => (route === "fans" ? admitted : null),
+  });
+  const view = rows.find((row) => row.key === "route:fans.view")!;
+  expect(view.description).toContain("its keys (fan, viewport; settable: fan)");
+  const set = rows.find((row) => row.key === "route:fans.set-view")!;
+  expect(JSON.stringify(set.input)).toContain('"fan":{"type":"string"}');
+  expect(JSON.stringify(set.input)).not.toContain('"viewport"');
+  // A legacy route keeps its own lease projection.
+  expect(rows.find((row) => row.key === "route:ducts.view")!.description).not.toContain("settable: fan)");
+});

@@ -8,6 +8,7 @@ import {
 import type {
   FieldControls,
   InvocationToken,
+  MoveResult,
   PagePort,
   SchemaTable,
 } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
@@ -35,6 +36,7 @@ import { createAdmittedWork } from "./admitted-work.ts";
 import { createApplicationWorkRegistry } from "./application-work-registry.ts";
 import { fixtureGeometryDoor } from "./fixture-geometry-door.ts";
 import { createNamedFixtureRouteEnvironment } from "./fixture-lane";
+import { createAttention } from "./admitted-attention.ts";
 import { createPagePorts } from "./page-port.ts";
 import { createRouteEnvironment } from "./route-environment.ts";
 import { sourceReadingEvidence } from "./source-route-services.ts";
@@ -271,6 +273,16 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         // The exact admission supplies both these schemas and field roles.
         page: ports.page as PagePort<G, S>,
         controls: ports.controls as FieldControls<G, S>,
+        // ADR 0030 rule 10: attention projects the agent fields with this admission's codecs; null opts out.
+        attention: createAttention(route.data.fields, bindings.codecs),
+        /** Pea's only Page door: a pea-origin owner move, fenced to agent "set" keys by the page policy. */
+        peaMove: (patch: Record<string, unknown>): MoveResult => {
+          const basis = owner.invocation(owner.capture("pea:attention"), {});
+          const lease = basis.ok ? issuer.lease(basis.value) : basis;
+          return lease.ok
+            ? owner.acceptPage(lease.value, patch as Parameters<typeof owner.acceptPage>[1])
+            : { kind: "refused", code: "lease", message: lease.reason };
+        },
         subscribe: (listener: () => void) => {
           if (closed) return () => {};
           if (resources === "released" && input.custody.current()) {

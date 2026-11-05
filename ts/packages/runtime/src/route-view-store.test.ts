@@ -30,6 +30,27 @@ const id1 = "00000000-0000-4000-8000-000000000001";
 const id2 = "00000000-0000-4000-8000-000000000002";
 
 describe("mounted route view custody", () => {
+  it("fences an admitted route by agent policy and forwards its codec text undecoded", async () => {
+    const fields = {
+      fan: { role: "subject", agent: "set" },
+      viewport: { role: "pose", agent: "read" },
+    } as never;
+    const store = new RouteViewStore((route) => (route === "ducts" ? fields : null));
+    const lease = store.publish({ ...ducts(id1), page: { fan: "", viewport: "" } });
+    expect(await store.set("t", "ducts", id1, lease.revision, { viewport: "{}" })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("may not set"),
+    });
+    let patch: unknown;
+    store.subscribe((value) => {
+      if (value.type === "route-view-intent") patch = value.patch;
+    });
+    // Admitted JSON codec text that no legacy ducts codec reads; the owner decodes and settles it.
+    const text = JSON.stringify({ kind: "ids", ids: [4] });
+    void store.set("t", "ducts", id1, lease.revision, { fan: text });
+    expect(patch).toEqual({ fan: text });
+  });
+
   it("refuses ambiguity and only acknowledges the rendered patch on the exact context", async () => {
     const store = new RouteViewStore();
     const first = store.publish(view(id1));

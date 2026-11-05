@@ -246,7 +246,7 @@ export const parity = {
   X01: scenario("fans/cutover.test.ts", "a new workspace reacquires Pea history"),
   X02: scenario("route/route-discovery.test.tsx", "hosted admitted address retains the call"),
   X03: scenario("workbench/hosted-route.test.tsx", "workbench mounts the admitted registration"),
-  X04: except("not-applicable", "Ducts/Fans never acquired the optional browser Page lease."),
+  X04: scenario("shell/admitted-attention.test.tsx", "admitted /fans publishes attention; a route without an agent field publishes none"),
   X05: scenario("route/route-discovery.test.tsx", "every admitted builtin is discoverable once"),
 } satisfies BrowserMountCapabilities;
 

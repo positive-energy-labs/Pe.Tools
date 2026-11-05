@@ -2,11 +2,14 @@ import { useContext, useRef } from "react";
 import { RouteVisibility, useRouteActivity } from "../route/activity";
 import { createAdmittedPlace, type AdmittedPlace, type PlaceInput } from "./admitted-place";
 import { AdmittedChrome } from "./admitted-chrome";
+import { useRouteLease } from "../route/view-bridge";
+import type { RouteViewRoute } from "@pe/agent-contracts";
 import { useRouter } from "@tanstack/react-router";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import {
   createElement,
+  Fragment,
   useEffect,
   useMemo,
   useState,
@@ -42,6 +45,25 @@ export function admittedRouterAddress(history: {
     },
     subscribe: (listener) => history.subscribe(listener),
   };
+}
+
+/** Opt-in attention (ADR 0030 rule 10): the lease transport carries the admission's own codec. */
+function AdmittedAttention({
+  mount,
+  route,
+  codec,
+}: {
+  mount: AdmittedMount;
+  route: AdmittedRoute;
+  codec: NonNullable<AdmittedMount["attention"]>;
+}) {
+  useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
+  useRouteLease(
+    route.data.key as RouteViewRoute,
+    [mount.page.read() as object, (patch) => void mount.peaMove(patch as Record<string, unknown>)],
+    { codec, visible: useContext(RouteVisibility) },
+  );
+  return null;
 }
 
 function Pane({ mount, route }: { mount: AdmittedMount; route: AdmittedRoute }) {
@@ -212,7 +234,15 @@ export function AdmittedPlacePane({
       mount.release();
     };
   }, [shell, route, place, visible, input]);
-  return mounted?.shell === shell ? createElement(Pane, { mount: mounted.mount, route }) : null;
+  return mounted?.shell === shell
+    ? createElement(
+        Fragment,
+        null,
+        mounted.mount.attention &&
+          createElement(AdmittedAttention, { mount: mounted.mount, route, codec: mounted.mount.attention }),
+        createElement(Pane, { mount: mounted.mount, route }),
+      )
+    : null;
 }
 
 /** Preserve router values; the address reads codec text from raw history. */

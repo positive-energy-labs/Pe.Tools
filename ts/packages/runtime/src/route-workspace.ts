@@ -89,6 +89,8 @@ export class RouteWorkspace {
       fingerprint: RouteFingerprint;
       workRoute: string;
       readings: import("@pe/agent-contracts").RouteGraphJson["readings"];
+      /** The admitted graph's fields: the host's attention fence reads their agent policy, never a codec. */
+      fields: import("@pe/agent-contracts").AdmittedFields;
       ready: Promise<WorkFeedFailure | null>;
       close(): void;
     }
@@ -224,6 +226,7 @@ export class RouteWorkspace {
       fingerprint: route.workFingerprint,
       workRoute: work.route,
       readings: route.data.readings,
+      fields: route.data.fields,
       ready,
       close: () => {
         if (this.#admissions.get(route.data.key) !== record) return;
@@ -253,6 +256,11 @@ export class RouteWorkspace {
       listeners.delete(notify);
       if (!listeners.size) this.#admissionListeners.delete(routeKey);
     };
+  }
+
+  /** Agent policy of an admitted route's fields, or null for a legacy route (ADR 0030 rule 10). */
+  admittedFields(routeKey: string) {
+    return this.#admissions.get(routeKey)?.fields ?? null;
   }
 
   requiresAdmission(workRoute: string): boolean {

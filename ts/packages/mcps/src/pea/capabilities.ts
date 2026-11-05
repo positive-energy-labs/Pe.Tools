@@ -10,6 +10,7 @@ import {
   type CapabilityCatalog,
   type CapabilityRecent,
   type RouteStateSpec,
+  type AdmittedFields,
   type PackageProjection,
 } from "@pe/agent-contracts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
@@ -38,6 +39,8 @@ export interface CapabilitySources {
   packages: readonly PackageProjection[];
   skills: readonly SkillSnapshot[];
   pages?: readonly Capability[];
+  /** Agent policy of an admitted route's fields (the host workspace's admission), else null. */
+  admittedFields?: (route: string) => AdmittedFields | null;
 }
 
 /** Pure projection, ordered by compiled operations/routes, packaged content and scratch Pages. */
@@ -110,6 +113,7 @@ export function createCapabilityCatalogSource(options: {
   content?: () => Promise<CapabilityContent>;
   /** Scratch Pages read fresh on every catalog read, whatever the cached snapshot holds. */
   pages?: () => Promise<readonly Capability[]>;
+  admittedFields?: CapabilitySources["admittedFields"];
 }): CapabilityCatalogSource {
   const base = options.hostBaseUrl.replace(/\/$/, "");
   const routes = options.registrations.map((registration) => registration.spec);
@@ -185,6 +189,7 @@ export function createCapabilityCatalogSource(options: {
         ops: opsValue.operations ?? [],
         availabilityKnown: ops.status === "fulfilled" && !opsValue.bridgeCatalogError,
         routes,
+        admittedFields: options.admittedFields,
         ...(admitted.status === "fulfilled" ? admitted.value : { packages: [], skills: [] }),
       }),
     };

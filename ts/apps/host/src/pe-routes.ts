@@ -294,7 +294,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
         },
       })
     : null;
-  const views = new RouteViewStore();
+  const views = new RouteViewStore((route) => work.admittedFields(route));
   const workReads = new OwnerReads();
   const resources = observeResources(work, options.heads, (request, publish, after) => {
     if (request.kind !== "thread-work")
@@ -1271,6 +1271,7 @@ function* hostPeRoutes(
       return content.read();
     },
     pages: content.pages,
+    admittedFields: (route) => hostWork?.workspace.admittedFields(route) ?? null,
   });
   invalidateCatalog = () => catalog.invalidate();
   const hostObserve = hostResourceObserver(

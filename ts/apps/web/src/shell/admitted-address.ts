@@ -127,10 +127,13 @@ export function createAdmittedAddress<G extends RouteGraphJson, S extends Schema
     const search = new URLSearchParams(address.read());
     // Include defaults: omission would let stale tab memory win on Back/Forward.
     encodePage(search, snapshot);
+    // ADR 0030 rule 10: a Pea move pushes history so Back undoes it.
     const history =
       origin?.kind === "human"
         ? origin.history
-        : changed.some(
+        : origin?.kind === "pea"
+          ? "push"
+          : changed.some(
               ([, field]) => field.role === "selection" || ("url" in field && field.url === "push"),
             )
           ? "push"

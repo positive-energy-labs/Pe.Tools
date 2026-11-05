@@ -1,4 +1,4 @@
-import { agentFields, type RouteGraphJson, type RouteBindings, type ViewCodec } from "@pe/agent-contracts";
+import { agentFields, type AdmittedFields, type RouteBindings, type ViewCodec } from "@pe/agent-contracts";
 
 /**
  * Attention for an admitted route (ADR 0030 rule 10): an opt-in read projection of the fields whose
@@ -12,14 +12,33 @@ export interface Attention extends ViewCodec {
 }
 
 export function createAttention(
-  graph: RouteGraphJson,
+  graphFields: AdmittedFields,
   codecs: RouteBindings["codecs"],
 ): Attention | null {
-  const fields = agentFields(graph.fields);
+  const fields = agentFields(graphFields).map(
+    ([key, field]) => [key, codecs[(field as { codec: string }).codec]!] as const,
+  );
   if (!fields.length) return null;
-  // X04 fill (Opus): `write` encodes each key through codecs[field.codec].encode (a string);
-  // `read` decodes through codecs[field.codec].decode (`{ok,value}`; throw on `ok:false` or an
-  // unknown key, the bridge answers "failed"), exactly as admitted-address.ts encodePage/restore do.
-  void codecs;
-  throw Error("X04 scaffold: createAttention body not yet filled");
+  const byKey = new Map(fields);
+  return {
+    keys: fields.map(([key]) => key),
+    write: (page) =>
+      Object.fromEntries(
+        fields.map(([key, codec]) => {
+          const text = codec.encode((page as Record<string, unknown>)[key]);
+          if (typeof text !== "string") throw Error(`Attention codec for ${key} wrote no text`);
+          return [key, text];
+        }),
+      ),
+    read: (patch) =>
+      Object.fromEntries(
+        Object.entries(patch).map(([key, text]) => {
+          const codec = byKey.get(key);
+          if (!codec) throw Error(`${key} is not an attention field`);
+          const decoded = codec.decode(text) as { ok: true; value: unknown } | { ok: false; reason: string };
+          if (!decoded.ok) throw Error(`${key} does not read as its codec writes it: ${decoded.reason}`);
+          return [key, decoded.value];
+        }),
+      ),
+  };
 }

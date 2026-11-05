@@ -5,11 +5,13 @@ import {
   admittedRouteEntries,
   routeAddress,
   routeViewRoutes,
+  agentFields,
   parseContributionKey,
   type Capability,
   type RouteStateSpec,
   type PackageProjection,
   type RouteViewRoute,
+  type AdmittedFields,
 } from "@pe/agent-contracts";
 import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
@@ -45,7 +47,7 @@ export function dynamicCapabilityProvider(sources: CapabilitySources): Capabilit
   return [
     ...podCapabilities(),
     ...sources.routes.flatMap(routeRows),
-    ...routeViewRoutes.flatMap(routeViewRows),
+    ...routeViewRoutes.flatMap((route) => routeViewRows(route, sources.admittedFields?.(route) ?? null)),
     ...sources.packages.flatMap(packageRows),
     ...sources.skills.map(skillRow),
     ...(sources.pages ?? []),
@@ -82,9 +84,21 @@ export function opRow(op: OpsCatalogEntry): Capability {
 }
 
 /** A route that leases its view (`routeAddress(route).agent`) gets one read and one set, both over the person's open page. */
-function routeViewRows(route: RouteViewRoute): Capability[] {
+function routeViewRows(route: RouteViewRoute, admitted: AdmittedFields | null): Capability[] {
   const spec = routeAddress(route);
-  const { policy, words, keys, fields, finds = [] } = spec.agent;
+  const legacy = spec.agent;
+  // An admitted route projects its keys from the admitted graph's agent policy; the browser owner
+  // holds the codecs, so each settable key is the text the view shows (ADR 0030 rule 10).
+  const settable = admitted && agentFields(admitted, "set").map(([key]) => key);
+  const { policy, words, keys, fields, finds = [] } = settable
+    ? {
+        policy: "Read the view, then patch a key in the form the view shows it.",
+        words: undefined,
+        keys: agentFields(admitted!).map(([key]) => key),
+        fields: z.object(Object.fromEntries(settable.map((key) => [key, z.string()]))),
+        finds: legacy.finds,
+      }
+    : legacy;
   const sets = Object.keys(fields.shape);
   const lower = spec.title.toLowerCase();
   return [

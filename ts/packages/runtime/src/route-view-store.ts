@@ -1,5 +1,7 @@
 import {
+  agentFields,
   routeAddress,
+  type AdmittedFields,
   type RouteView,
   type RouteViewAck,
   type RouteViewOpen,
@@ -24,6 +26,8 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  * only after the view acknowledges its render.
  */
 export class RouteViewStore {
+  /** Admitted routes fence keys by agent policy; the browser's Page owner holds their codecs and decodes. */
+  constructor(private readonly admitted: (route: string) => AdmittedFields | null = () => null) {}
   private leases = new Map<string, Lease>();
   private listeners = new Set<(intent: Intent | RouteViewOpenIntent) => void>();
   private pending = new Map<
@@ -106,9 +110,14 @@ export class RouteViewStore {
     const selected = this.select(thread, route, instance);
     if (!selected || "ok" in selected) return { ok: false, error: "view unavailable" };
     const lease = this.leases.get(instance)!;
+    const fields = this.admitted(lease.view.route);
+    const settable = fields && new Set(agentFields(fields, "set").map(([key]) => key));
     const agent = routeAddress(lease.view.route).agent;
     if (
-      !agent.patch.safeParse(patch).success ||
+      !Object.keys(patch).length ||
+      (settable
+        ? Object.entries(patch).some(([key, text]) => !settable.has(key) || typeof text !== "string")
+        : !agent.patch.safeParse(patch).success) ||
       Object.keys(patch).some((key) => !(key in lease.view.page))
     )
       return { ok: false, error: `patch names keys Pea may not set on ${route}` };
@@ -116,7 +125,8 @@ export class RouteViewStore {
       return { ok: false, error: "view changed; read it again", view: selected };
     if ([...this.pending.values()].some((entry) => entry.lease.view.instance === instance))
       return { ok: false, error: "view command already pending" };
-    const settled = agent.settle(lease.view.page, patch);
+    // An admitted route's owner settles the move itself (pea-origin acceptPage); the host never decodes.
+    const settled = settable ? { ok: true as const, patch } : agent.settle(lease.view.page, patch);
     if (!settled.ok) return settled;
     if (Object.keys(settled.patch).some((key) => !(key in lease.view.page)))
       return { ok: false, error: `patch names keys Pea may not set on ${route}` };

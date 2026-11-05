@@ -14,8 +14,10 @@ export interface ViewCodec {
   read(patch: Record<string, string>): object;
 }
 
+/** An admitted graph's field table (the kernel graph, not the legacy RouteGraph projection). */
+export type AdmittedFields = RouteGraphJson["fields"];
 /** An admitted route's attention keys: the fields whose agent policy is not "none" (opt-in). */
-export const agentFields = (fields: RouteGraphJson["fields"], policy?: "read" | "set") =>
+export const agentFields = (fields: AdmittedFields, policy?: "read" | "set") =>
   Object.entries(fields).filter(
     ([, field]) => "agent" in field && field.agent !== "none" && (!policy || field.agent === policy),
   );
