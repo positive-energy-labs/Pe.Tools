@@ -34,7 +34,7 @@ export const resourceSnapshot = (key: string, result: OwnerValue<unknown>): Read
 
 export function observeResources(
   work: RouteWorkspace,
-  heads: ThreadHeadSource,
+  heads: ThreadHeadSource | undefined,
   host?: ResourceObserver,
 ): ResourceObserver {
   return (request, publish, after) => {
@@ -106,7 +106,7 @@ export function observeResources(
       return () => {};
     }
     if (request.kind === "work") return work.observe(request, request.route, accept);
-    if (request.kind === "thread-head") return heads.observe(request.thread, accept);
+    if (request.kind === "thread-head" && heads) return heads.observe(request.thread, accept);
     if (request.kind === "work-acks")
       return work.observeAccepted(
         request.work,
@@ -175,6 +175,7 @@ export function resourceResponse(
     stallMs: 10_000,
     logFrames: 4096,
   },
+  registryOwner: ResourceObserver = observe,
 ): Response {
   const url = new URL(request.url);
   const raw = url.searchParams.get("keys") ?? "";
@@ -205,8 +206,8 @@ export function resourceResponse(
   let stalled: ReturnType<typeof setTimeout> | undefined;
   const releases = new Map<string, () => void>();
   const connection = url.searchParams.get("connection");
-  let registry = connections.get(observe);
-  if (!registry) connections.set(observe, (registry = new Map()));
+  let registry = connections.get(registryOwner);
+  if (!registry) connections.set(registryOwner, (registry = new Map()));
   if (connection && registry.has(connection))
     return Response.json({ error: "Connection already exists" }, { status: 409 });
   let controller: ReadableStreamDefaultController<Uint8Array>;

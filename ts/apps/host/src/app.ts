@@ -1,10 +1,22 @@
 import { HostInputContext } from "./input-context.ts";
+import type { TakingObserver, HostInputLane } from "./native-recording.ts";
+import { recordedWorkSource, capturedWorkReads } from "./work-inputs.ts";
+import { HostSessionInventory } from "./session-inventory.ts";
+import { createDuctsBodyBasis } from "./ducts-body-basis.ts";
+import { DuctsReadings } from "./ducts-readings.ts";
+import { createPeRoutes, peCoreRoutes } from "./pe-routes.ts";
+import { runPods } from "./family-actions.ts";
+import { bindWork, readingKey } from "@pe/agent-contracts";
+import { observeResources, resourceSnapshot, type ResourceObserver } from "@pe/runtime";
+import { markReadings } from "./resource-adapters.ts";
+import { retainedDuctsRead } from "./call-route.ts";
+import { HttpServerResponse } from "effect/http";
+import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
-import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { hostNativeReadFor } from "./native-recording.ts";
 import { httpProblems } from "./http-problems.ts";
 import { InvalidRead } from "./native-reads.ts";
-import { nativeCallRoute, nativeReadResolveRoute } from "./call-route.ts";
+import { nativeCallRouteFor, nativeReadResolveRoute } from "./call-route.ts";
 import { Spawner } from "./harness/spawner.ts";
 import { currentMachine } from "./machine.ts";
 import { SdkSession, SdkDriverLive } from "./sdk-session.ts";
@@ -215,37 +227,98 @@ const liveNativeRecipe = HostNativeReadLive.pipe(
   Layer.provide(RevitBridgeLive),
 );
 
-export const historicalRoutes = (inputs: HostInputContext["Service"]) => Layer.unwrap(Effect.gen(function* () {
-  const context = yield* Layer.build(guardedNativeRead.pipe(
-    Layer.provide(hostNativeReadFor(inputs.lane, liveNativeRecipe)),
-    Layer.provideMerge(Layer.succeed(HostInputContext, inputs)),
+export const historicalRoutes = (inputs: HostInputContext["Service"]) => fansInputRoutes(inputs);
+
+/** Existing Fans HTTP and Work owners over one explicit input graph. Live ports are test/source
+ * composition inputs; the historical branch never builds any of those factories. */
+export const fansInputRoutes = (inputs: HostInputContext["Service"], options: {
+  readonly live?: { native: Layer.Layer<HostNativeRead>; files: Layer.Layer<HostFiles>;
+    marks: Layer.Layer<HostDocumentMarks>; inventory: Layer.Layer<HostSessionInventory> };
+  readonly store?: import("@pe/runtime").RouteDocumentStore;
+  readonly observed?: TakingObserver;
+  readonly initialize?: (workspace: RouteWorkspace) => Promise<void>;
+} = {}) => Layer.unwrap(Effect.gen(function* () {
+  const runtime = yield* Effect.context<never>();
+  const lane = inputs.lane;
+  if (lane.kind === "fixture") return Layer.empty;
+  const basis = createDuctsBodyBasis(lane, options.observed);
+  const recorded = lane.kind === "recording";
+  const live = recorded ? undefined : options.live;
+  if (!recorded && (!live || !options.store)) return yield* Effect.die(Error("Live Fans graph needs its real live inputs and Work store"));
+  const writer = lane.kind === "live" ? lane.captureStore : undefined;
+  const services = yield* Layer.build(Layer.mergeAll(
+    guardedNativeRead.pipe(Layer.provide(hostNativeReadFor(lane, recorded ? liveNativeRecipe : live!.native, basis?.observed)), Layer.provide(Layer.succeed(HostInputContext, inputs))),
+    recorded ? HostFiles.recorded(lane.recordingStore, lane.bindings) : writer ? HostFiles.capturing(writer, options.observed).pipe(Layer.provide(live!.files)) : live!.files,
+    recorded ? HostDocumentMarks.recorded(lane.recordingStore, lane.bindings) : writer ? HostDocumentMarks.capturing(writer, options.observed).pipe(Layer.provide(live!.marks)) : live!.marks,
+    recorded ? HostSessionInventory.recorded(lane.recordingStore, lane.bindings) : writer ? HostSessionInventory.capturing(writer, options.observed).pipe(Layer.provide(live!.inventory)) : live!.inventory,
   ));
-  const provided = Layer.succeedContext(context);
-  return Layer.mergeAll(
-  nativeCallRoute, nativeReadResolveRoute,
-  // Provenance is read per response: automatic capture may stop after boot.
-  HttpRouter.add(peRoutes["features.get"].method, peRoutes["features.get"].path, Effect.sync(() => Response.jsonUnsafe(hostDescriptor(resolveHostVersion()), {
-    headers: { "x-pe-source": JSON.stringify(inputs.source) },
-  }))),
-  HttpRouter.add("GET", hostProcessIdentity.healthPath, () => Response.json({ source: inputs.source })),
-  HttpRouter.add("*", "/*", (req) => Effect.gen(function* () {
-    const path = new URL(req.url, "http://host").pathname;
-    if (path === "/actions" && req.method === "POST") {
-      const body = yield* req.json.pipe(Effect.catch(() => Effect.succeed(null)));
-      if (body && typeof body === "object" && "key" in body && typeof body.key === "string") {
-        const denied = inputs.check({ kind: "command", key: body.key });
-        if (denied) return yield* denied;
+  const provided = Context.merge(runtime, services);
+  const run = <A, E>(effect: Effect.Effect<A, E>) => runPods({}, Effect.provide(effect, provided));
+  const registrations = createRouteRegistrations();
+  const workspace = new RouteWorkspace({ registrations: constructorWorkRegistrations(registrations),
+    ...(recorded ? { recorded: recordedWorkSource(lane.recordingStore, run, lane.bindings) } :
+      { store: options.store!, ...(writer ? { capture: capturedWorkReads(writer, run, options.observed) } : {}) }),
+    authorizeMutation: (verb) => { const refusal = inputs.check({ kind: "work", verb }); if (refusal) throw refusal; },
+  });
+  yield* Layer.build(admittedBuiltinsLayer(workspace, undefined, registrations));
+  if (!recorded && options.initialize) yield* Effect.promise(() => options.initialize!(workspace));
+  const owner = new DuctsReadings();
+  const files = Context.get(services, HostFiles), marks = Context.get(services, HostDocumentMarks);
+  const routes = createPeRoutes({ inputs, workspace, registrations });
+  const core = peCoreRoutes(routes, (request) => {
+    const context = Context.merge(provided, request);
+    const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) => runPods({}, Effect.provide(effect, context));
+    const inventory = Context.get(services, HostSessionInventory);
+    const documents = new Map<string, ReturnType<typeof inventory.document>>();
+    const documentRead: typeof inventory.document = (ref) => Effect.gen(function* () {
+      const key = JSON.stringify(ref);
+      let read = documents.get(key);
+      if (!read) { read = yield* Effect.cached(inventory.document(ref)); documents.set(key, read); }
+      return yield* read;
+    });
+    const document = (ref: import("@pe/agent-contracts").DocumentRef) => invoke(documentRead(ref));
+    const retainedResource: ResourceObserver = (reading, publish) => {
+      let closed = false, release = () => {};
+      const key = readingKey(reading);
+      if (reading.kind !== "ducts-snapshot" && reading.kind !== "ducts-tables") {
+        publish({ kind: "failure", key, error: "Recording does not cover this reading owner",
+          failure: { kind: "failed", code: "recording.coverage", message: "Recording does not cover this reading owner" } });
+        return () => {};
       }
-    }
-    const denied = req.method === "GET" || path.includes("/ducts/")
-      ? inputs.check({ kind: "input", input: "document" })
-      : inputs.check({ kind: "work", verb: "edit" });
-    return yield* (denied ?? new InvalidRead({ message: "Historical source input is unavailable", status: 409, problem: "recording.coverage" }));
-  })),
-).pipe(
-  Layer.provide(httpProblems),
-  HttpRouter.provideRequest(provided), Layer.provide(provided),
-);
+      const input = reading.kind === "ducts-snapshot"
+        ? (() => { const { kind, target, ...args } = reading; return { key: reading.selector.kind === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk", input: args,
+          scope: { bridgeSessionId: target.session, openDocumentId: target.openId } }; })()
+        : (() => { const { kind, session, ...args } = reading; return { key: "ducts.tables", input: args, scope: { bridgeSessionId: session } }; })();
+      void invoke(retainedDuctsRead(owner, input, {}, { document: documentRead, basis })).then(async (response) => {
+        await HttpServerResponse.toWeb(response).body?.cancel();
+        if (!closed) release = owner.observe(reading, (value) => publish(resourceSnapshot(key, { value })));
+      }).catch((error) => {
+        if (!closed) publish({ kind: "failure", key, error: error.message,
+          failure: { kind: "failed", code: error.problem ?? "ReadingFailed", message: error.message } });
+      });
+      return () => { closed = true; release(); };
+    };
+    const observe = markReadings(marks, (ref, key, at) => run(marks.readFrame(ref, key, at)))(observeResources(workspace, undefined,
+      retainedResource));
+    return { document, observe, sheets: {
+      firm: () => run(files.firm), catalogs: () => run(files.ductCatalogs),
+      workKey: async (ref) => { const row = await document(ref); return bindWork("ducts", row.address, undefined, ref); },
+      call: async (key, input, ref, version) => HttpServerResponse.toWeb(await invoke(retainedDuctsRead(owner,
+        { key, input, scope: { bridgeSessionId: ref.session, ...(key === "ducts.tables" ? {} : { openDocumentId: ref.openId }) } },
+        { version }, { document: documentRead, basis }))),
+    } };
+  }, inputs);
+  return Layer.mergeAll(core, nativeReadResolveRoute,
+    nativeCallRouteFor((raw, readOptions) => Effect.gen(function* () {
+      const inventory = Context.get(services, HostSessionInventory);
+      const session = yield* inventory.session(raw.scope);
+      const { openDocumentId, ...scope } = raw.scope;
+      return yield* retainedDuctsRead(owner, { ...raw, scope: { ...scope, bridgeSessionId: session.sessionId,
+        ...(raw.key === 'ducts.tables' ? {} : { openDocumentId }) } }, readOptions, { document: inventory.document, basis });
+    })),
+    HttpRouter.add('*', '/*', () => Effect.fail(new InvalidRead({ message: 'Recording does not cover this owner', status: 409, problem: 'recording.coverage' }))),
+  ).pipe(HttpRouter.provideRequest(Layer.succeedContext(Context.add(services, HostInputContext, inputs))),
+    Layer.provide(Layer.succeedContext(Context.add(services, HostInputContext, inputs))), Layer.provide(httpProblems));
 }));
 
 /** Root-fixed selection: the live factory is not even called on a historical/fixture lane. */

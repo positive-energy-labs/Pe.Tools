@@ -1504,7 +1504,7 @@ const retainedReadFailure = (error: unknown) => isDoorFailure(error) ? error : n
 });
 
 /** The same native door without live target/cache acquisition. Unsupported sources refuse first. */
-export const nativeCallRoute = HttpRouter.add("POST", peRoutes["operation.call"].path, (req) =>
+export const nativeCallRouteFor = (retained?: (input: NativeReadInput, options: {version?:string;refresh?:string}) => ReturnType<typeof retainedDuctsRead>) => HttpRouter.add("POST", peRoutes["operation.call"].path, (req) =>
   Effect.gen(function* () {
     const identity = yield* RequestIdentity;
     const body = yield* nativeCallBody(req);
@@ -1513,6 +1513,8 @@ export const nativeCallRoute = HttpRouter.add("POST", peRoutes["operation.call"]
     if (refusal) return yield* refusal;
     // Retained Ducts HTTP bodies also need source metadata and version ownership, not just a native taking.
     if (linkedCatalog().entries.get(body.key)?.call?.reading) {
+      if (retained) return yield* retained({ key: body.key, input: body.request ?? {}, scope: identity.scope },
+        { version: req.headers[DUCTS_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] });
       const missing = inputs.check({ kind: "input", input: "document" });
       if (missing) return yield* missing;
     }
@@ -1524,6 +1526,7 @@ export const nativeCallRoute = HttpRouter.add("POST", peRoutes["operation.call"]
     return Effect.succeed(Response.jsonUnsafe(problem, { status: problem.status, headers: { "content-type": "application/problem+json" } }));
   })),
 );
+export const nativeCallRoute = nativeCallRouteFor();
 
 const nativeCallBody = (req: HttpServerRequest.HttpServerRequest) => Effect.gen(function* () {
   const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));

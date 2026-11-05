@@ -1,4 +1,9 @@
 import { HostInputContext } from "./input-context.ts";
+import { InvalidRead } from "./native-reads.ts";
+import { httpProblems, isDoorFailure } from "./http-problems.ts";
+import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
+import type { DocumentRow } from "./session-inventory.ts";
+import type { DocumentRef } from "@pe/agent-contracts";
 import { createScheduledTasks } from "./scheduled-tasks.ts";
 import { createRouteSettings } from "./route-settings.ts";
 import { productRouteSettingsPath } from "./product-paths.ts";
@@ -177,8 +182,8 @@ export interface PeRoutesOptions {
   routeSettings?: ReturnType<typeof createRouteSettings>;
   workspace?: RouteWorkspace;
   registrations: readonly RouteWorkspaceRegistration[];
-  store: RouteDocumentStore;
-  heads: ThreadHeadSource;
+  store?: RouteDocumentStore;
+  heads?: ThreadHeadSource;
   navigation?: NavigationSources;
   turnElementNames?: (request: TurnElementNamesRequest) => Promise<TurnElementNamesObservation>;
   capabilityCatalog?: { read(scope?: HostSessionScope): Promise<CapabilityCatalog> };
@@ -194,6 +199,11 @@ export interface PeRoutesOptions {
   ductsAnalysis?: Omit<DuctsAnalysisSources, "readWork">;
   ductsSheets?: DuctsSheetSources;
 }
+export interface PeRouteInvocation {
+  readonly sheets?: DuctsSheetSources;
+  readonly document?: (ref: DocumentRef) => Promise<DocumentRow>;
+  readonly observe?: ResourceObserver;
+}
 
 const feedbackSchema = peRoutes["feedback.submit"].body;
 const diagnosticsSchema = peRoutes["diagnostics.submit"].body;
@@ -206,17 +216,26 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 
 /** The route-document, Reading, capability and Families-view surface, host-owned. */
 export function createPeRoutes(options: PeRoutesOptions) {
+  if (!options.workspace && !options.store) throw Error("Pe routes require their canonical workspace or live store");
   const settings = options.routeSettings ?? createRouteSettings(productRouteSettingsPath());
   const work =
     options.workspace ??
-    new RouteWorkspace({ registrations: options.registrations, store: options.store });
-  async function routeWorkKey(url: URL, route: string, shape: "read" | "write", caller: Caller) {
+    new RouteWorkspace({ registrations: options.registrations, store: options.store! });
+  async function routeWorkKey(url: URL, route: string, shape: "read" | "write", caller: Caller, lookup?: PeRouteInvocation["document"]) {
     const scope = workKey(url, route, shape);
     if (scope instanceof Response || scope.binding === "workspace" || scope.binding === "host")
       return scope;
     const shared = caller.kind === "human" || caller.kind === "pea" || caller.kind === "anonymous";
     // Saved Addresses remain usable offline. An explicit open/from claim must match real inventory.
     if (shared && scope.binding === "address" && !scope.from) return scope;
+    const exact = scope.binding === "open" ? scope.open : scope.binding === "address" ? scope.from : undefined;
+    if (shared && exact && lookup) {
+      const row = await lookup(exact);
+      if (row.session !== exact.session || row.openId !== exact.openId ||
+          (scope.binding === "address" && (row.address === null || !sameAddress(scope.target, row.address))))
+        return json({ ok: false, error: "Route Work target Address does not match its exact open document." }, 403);
+      return bindWork(route, row.address, undefined, exact);
+    }
     const refused = (error: string) => json({ ok: false, error, hint: error }, 403);
     const thread = callerThread(caller);
     if (!shared && !thread)
@@ -282,8 +301,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
         },
       })
     : null;
-  const sheets = options.ductsSheets
-    ? createDuctsSheets(options.ductsSheets, {
+  const sheets = createDuctsSheets(options.ductsSheets, {
         workspace: work,
         author: () => (currentCaller().kind === "pea" ? "pea" : "human"),
         key: async (target) => {
@@ -298,8 +316,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
           if (documents && !doc) throw new Error("Sheet Work target is no longer open");
           return bindWork("ducts", doc?.address ?? null, undefined, target);
         },
-      })
-    : null;
+      });
   const views = new RouteViewStore(() => work.admittedRoutes());
   const workReads = new OwnerReads();
   const resources = observeResources(work, options.heads, (request, publish, after) => {
@@ -373,12 +390,19 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
   >;
 
-  async function handle(request: Request): Promise<Response> {
+  async function handle(request: Request, invocation: PeRouteInvocation = {}): Promise<Response> {
     const caller = currentCaller();
     const url = new URL(request.url);
     const method = request.method;
     const declared = matchPeRoute(method, url.pathname);
     if (!declared || declared.route.owner !== "pe") return json({ error: "Unknown Pe route" }, 404);
+    if (options.inputs?.lane.kind === "recording" && ![
+      "ducts.sheet", "ducts.roster", "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get",
+    ].includes(declared.id)) {
+      const denied = method === "GET" ? new InvalidRead({ message: "Recording does not cover this route owner", status: 409, problem: "recording.coverage" })
+        : options.inputs.check({ kind: "work", verb: "edit" });
+      throw denied;
+    }
     if (declared.id === "route-settings.get" || declared.id === "route-settings.set") {
       try {
         const route = declared.params.route!;
@@ -414,14 +438,15 @@ export function createPeRoutes(options: PeRoutesOptions) {
       }
     }
     if (declared.id === "ducts.sheet" || declared.id === "ducts.roster") {
-      if (!sheets) return json({ error: "Duct sheets are unavailable" }, 503);
+      if (!options.ductsSheets && !invocation.sheets) return json({ error: "Duct sheets are unavailable" }, 503);
       try {
         return json(
           declared.id === "ducts.sheet"
-            ? await sheets.sheet(peRoutes["ducts.sheet"].body.parse(await request.json()))
-            : await sheets.roster(peRoutes["ducts.roster"].body.parse(await request.json())),
+            ? await sheets.sheet(peRoutes["ducts.sheet"].body.parse(await request.json()), invocation.sheets)
+            : await sheets.roster(peRoutes["ducts.roster"].body.parse(await request.json()), invocation.sheets),
         );
       } catch (error) {
+        if (isDoorFailure(error)) throw error;
         const problem = error as { statusCode?: number; message?: unknown };
         return json(
           { error: typeof problem?.message === "string" ? problem.message : message(error) },
@@ -576,7 +601,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
     if (method === "POST" && declared.id === "resources.subscriptions")
       return updateResourceSubscriptions(request, observe);
     if (method === "GET" && declared.id === "resources.stream")
-      return resourceResponse(request, observe);
+      return resourceResponse(request, invocation.observe ?? observe, undefined, observe);
     // Agent feedback (owner ruling 2026-10-14): any admitted caller may file; the host stamps it.
     if (method === "POST" && declared.id === "agent-feedback.submit") {
       const parsed = agentFeedbackSchema.safeParse(await body());
@@ -744,12 +769,13 @@ export function createPeRoutes(options: PeRoutesOptions) {
       // Door 9: the author is the host-minted caller, never the path. Reads are free.
       if (method === "GET" && !route) return json(work.list());
       if (method === "GET" && route && !verb) {
-        const scope = await routeWorkKey(url, route, "read", caller);
+        const scope = await routeWorkKey(url, route, "read", caller, invocation.document);
         if (scope instanceof Response) return scope;
         try {
           const view = await work.view(scope, route);
           return view ? json(view) : json({ error: `unknown route '${route}'` }, 404);
         } catch (error) {
+          if (isDoorFailure(error)) throw error;
           return json({ error: message(error) }, 403);
         }
       }
@@ -1122,6 +1148,7 @@ function* hostPeRoutes(
   captures?: TakeoffCaptures,
   telemetry: ReceiptExporter = missingTelemetry(),
 ) {
+  const runtime = yield* Effect.context<never>();
   const receipts = yield* HostReceipts;
   const marks = yield* HostDocumentMarks;
   const pictures = yield* PictureCaptureStore;
@@ -1387,7 +1414,7 @@ function* hostPeRoutes(
       threads.observe(request, publish, after) ??
       notices.observe(request, publish, after) ??
       hostObserve(request, publish, after),
-    markReadings: markReadings(marks),
+    markReadings: markReadings(marks, (ref, key, at) => runPods({}, Effect.provide(marks.readFrame(ref, key, at), runtime))),
     telemetry,
     log: receipts.log,
     reportContext: threads.reportContext,
@@ -1421,6 +1448,38 @@ function* hostPeRoutes(
  * scope stops every harness child, and the replay of the thread directories happens here.
  */
 export const makeHostPeRoutes = Effect.fn("peRoutes.make")(hostPeRoutes);
+
+/** Same declared Pe doors, with request-local source ports and no surrounding live services. */
+const addPeHttpRoutes = (router: HttpRouter.HttpRouter,
+  handlers: Readonly<Record<string, (request: Request, context: Context.Context<RequestIdentityKey>) => Promise<Response>>>,
+  inputs?: HostInputContext["Service"]) => Effect.gen(function* () {
+  for (const route of Object.values(peRoutes)) {
+    const handle = handlers[route.owner];
+    if (!handle) continue;
+    yield* router.add(route.method, route.path, (request) => Effect.gen(function* () {
+      const context = yield* Effect.context<RequestIdentityKey>();
+      let failure: import("@pe/host-internal/request-contracts").DoorFailure | undefined;
+      const response = yield* HttpEffect.fromWebHandler((web) => servePeRoute(web, (req) => handle(req, context).catch((error) => {
+        if (!isDoorFailure(error)) throw error;
+        // The contract adapter normalizes thrown errors to 500. Return the typed failure to
+        // the surrounding Effect so the host's one DoorFailure mapper retains its status/evidence.
+        failure = error;
+        return new Response(null, { status: error.status });
+      })).then((response) => {
+        if (inputs) response.headers.set("x-pe-source", JSON.stringify(inputs.source));
+        return response;
+      }));
+      if (failure) return yield* Effect.fail(failure);
+      return response;
+    }));
+  }
+});
+
+export const peCoreRoutes = (routes: ReturnType<typeof createPeRoutes>,
+  invocation: (context: Context.Context<RequestIdentityKey>) => PeRouteInvocation,
+  inputs?: HostInputContext["Service"]) => HttpRouter.use((router) =>
+    addPeHttpRoutes(router, { pe: (request, context) => routes.fetch(request, invocation(context)) }, inputs),
+  ).pipe(Layer.provide(httpProblems));
 
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */
 export const peRoutesLayer = (
@@ -1497,21 +1556,13 @@ export const peRoutesLayer = (
       const handlers = {
         tasks: tasks.fetch,
         threads: threads.fetch,
-        pe: routes.fetch,
+        pe: (request: Request) => routes.fetch(request),
         providers: providers.fetch,
         plugins: plugins.fetch,
       };
-      for (const route of Object.values(peRoutes)) {
-        if (!(route.owner in handlers)) continue;
-        const handle = handlers[route.owner as keyof typeof handlers];
-        yield* router.add(
-          route.method,
-          route.path,
-          HttpEffect.fromWebHandler((request) => servePeRoute(request, handle)),
-        );
-      }
+      yield* addPeHttpRoutes(router, handlers);
     }),
-  );
+  ).pipe(Layer.provide(httpProblems));
 
 /** Outside request admission too: every declared HTTP door has the same refusal envelope. */
 export const peApiErrorsLayer = HttpRouter.middleware(
