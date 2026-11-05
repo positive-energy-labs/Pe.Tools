@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 import type { Bounds, Layer3D } from "./types";
 import type { Section } from "./section";
+import { datumMaterial } from "./grounds";
 
 const SOURCE_STATES = { loaded: true, unloaded: true, unavailable: true } satisfies Record<
   RevitDetailSpaceScene.Artifact.SceneSourceState,
@@ -67,11 +68,7 @@ export function levelLayer(levels: SceneLevels, bounds: Bounds): Layer3D {
     build(group) {
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-      const material = new THREE.LineBasicMaterial({
-        transparent: true,
-        opacity: 0.24,
-        depthWrite: false,
-      });
+      const material = datumMaterial();
       materials.set(group, material);
       group.add(new THREE.LineSegments(geometry, material));
     },

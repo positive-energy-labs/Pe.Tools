@@ -6,6 +6,9 @@
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
+import { AttentionScope, useHoveredIssue } from "#/attention";
+import * as Atom from "effect/reactivity/Atom";
+import type { SubjectKey } from "@pe/kit/lang/attention";
 import { BlockerRow } from "./blocker-row";
 import { describeCloser, type Closer } from "./closer";
 import type { SheetBlocker } from "./tiers";
@@ -88,4 +91,25 @@ it("Escape cancels the typed ask without running it", () => {
   fireEvent.change(input, { target: { value: "100" } });
   fireEvent.keyDown(input, { key: "Escape" });
   expect(onClose).not.toHaveBeenCalled();
+});
+
+
+it("delegates row hover to the document subject scope and withdraws the issue on leave", () => {
+  function Probe() {
+    return <output data-testid="hovered-issue">{useHoveredIssue() ?? "none"}</output>;
+  }
+  const selected = Atom.make<ReadonlySet<SubjectKey>>(new Set());
+  const view = render(
+    <AttentionScope doc="blocker-model" selected={selected}
+      members={new Map([[`issue:${blocker.id}`, ["e:9"]]])}>
+      <Probe />
+      <BlockerRow blocker={blocker} focused={false}
+        closerOf={(b, typed) => describeCloser(b, typed, { terminalDrop: null, nameOf: () => "duct", wait: null })}
+        onClose={() => {}} onFocus={() => {}} />
+    </AttentionScope>,
+  );
+  fireEvent.pointerOver(view.getByRole("row"));
+  expect(view.getByTestId("hovered-issue").textContent).toBe(blocker.id);
+  fireEvent.pointerLeave(view.getByRole("row").parentElement!);
+  expect(view.getByTestId("hovered-issue").textContent).toBe("none");
 });

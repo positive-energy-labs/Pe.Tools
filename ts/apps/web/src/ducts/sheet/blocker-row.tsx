@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { SubjectText } from "@pe/kit/lang/subject-text";
-import { useElementAttention, useIssueHover } from "#/attention";
+import { useMention } from "@pe/kit/lang/attention";
 import type { Closer, PriceChoice } from "./closer";
 import { SheetCell } from "./sheet-cell";
 import type { SheetBlocker } from "./tiers";
@@ -47,8 +47,7 @@ export function BlockerRow({
   onClose: (closer: Closer) => void;
   onFocus: (id: string | null) => void;
 }) {
-  const attention = useElementAttention();
-  const hoverIssue = useIssueHover();
+  const mention = useMention();
   const [typed, setTyped] = useState<number | null>(null);
   // The box's uncommitted number: the verb is live while the person types (undefined: no draft).
   const [draft, setDraft] = useState<number | null | undefined>(undefined);
@@ -99,14 +98,7 @@ export function BlockerRow({
       // Glyph, subject, effect on the first line; the input and verbs, then the refusal or the
       // consequence detail, on lines under the subject, so a long verb never runs off the pane.
       className={`grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-0.5 py-1${consequence ? " pl-6 text-ink-2" : ""}`}
-      onPointerEnter={() => {
-        attention.onHover(blocker.elementId);
-        hoverIssue(blocker.id);
-      }}
-      onPointerLeave={() => {
-        attention.onHover(null);
-        hoverIssue(null);
-      }}
+      {...mention(`issue:${blocker.id}`)}
       onClick={() => onFocus(focused ? null : blocker.id)}
     >
       <span className="face-mono t-small text-ink-2" aria-label={blocker.kind}>

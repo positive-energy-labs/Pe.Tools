@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
 import { Button } from "@pe/kit/lang/button";
 import { RefreshCw } from "lucide-react";
+import type { ListReading } from "@pe/kit/lang/collection";
+import type { ReadingState } from "./readings";
 import type { GraphMount } from "./mount-owner";
 
 /**
@@ -32,7 +34,7 @@ export function PaneHead<P, W>({
           role="status"
           data-slot="pane-reading"
           data-tone={failed ? "caution" : undefined}
-          className="text-ink-2 text-xs"
+          className="text-ink-2 t-small"
         >
           {failed ? "failed" : status === "pending" ? "reading…" : "stale"}
         </span>
@@ -58,4 +60,14 @@ export function PaneHead<P, W>({
       />
     </>
   );
+}
+
+/** Bridge the shell's freshness state to kit lists without inventing transport provenance. */
+export function readingList<T, Row>(reading: ReadingState<T>, rows: (value: T) => readonly Row[]) {
+  const value = reading.value ?? reading.previous;
+  return {
+    items: value === undefined ? [] : rows(value),
+    status: (reading.status === "failed" ? "failed" : reading.current ? "ready" : "pending") as ListReading,
+    failure: reading.error,
+  };
 }

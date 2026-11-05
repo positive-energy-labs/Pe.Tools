@@ -7,6 +7,7 @@ import { Code, stringify } from "@pe/kit/lang/code";
 import { EmptyState } from "@pe/kit/lang/empty";
 import type { ActionReceipt, ActionStatus } from "@pe/agent-contracts";
 import { routeFromGraph, type MountBody, type RouteAdapters } from "#/shell/mount";
+import { readingList } from "#/shell/mount-reading";
 import { opsGraph, type OpsPage } from "./graph";
 import { requestOf } from "./form";
 import { OpsBody } from "./workspace";
@@ -15,7 +16,7 @@ import { outputRenderers } from "./renderers";
 function ReceiptsBody({ owner, page }: MountBody<OpsPage, unknown>) {
   const reading = owner.readings.get("receipts") as ReadingState<ActionStatus[]>;
   const list = useList({
-    items: reading.value ?? reading.previous ?? [],
+    ...readingList(reading, (rows) => rows),
     keyOf: (row) => row.id,
     search: (row) => ({ text: [row.key, row.state, row.id] }),
     select: "single",

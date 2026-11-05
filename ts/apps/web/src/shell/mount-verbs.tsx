@@ -1,4 +1,6 @@
 import type { VerbDecl } from "@pe/agent-contracts";
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { ReviewSurface } from "./review-surface";
@@ -17,6 +19,13 @@ export function WorksharingNote({ worksharing: w }: { worksharing: Worksharing }
   const borrows = w.elements.filter((e) => e.status === "borrows");
   const blocked = w.elements.filter((e) => e.status === "blocked");
   const central = w.cloud ? "cloud central" : "central";
+  const list = useList({
+    items: [...borrows.map((e) => ({ key: `borrow:${e.id}`, label: `borrows ${e.name} [${e.id}]` })),
+      ...w.creates.map((name) => ({ key: `create:${name}`, label: `creates ${name}` }))],
+    keyOf: (row) => row.key,
+    search: (row) => ({ text: [row.label] }),
+    select: "none",
+  });
   return (
     <section aria-label="Worksharing" className="flex flex-col">
       <OutcomeLine
@@ -28,18 +37,9 @@ export function WorksharingNote({ worksharing: w }: { worksharing: Worksharing }
         }
         says="they stay borrowed until you sync with central or relinquish"
       />
-      <span role="list" className="flex flex-col">
-        {borrows.map((e) => (
-          <span role="listitem" key={e.id}>
-            borrows {e.name} [{e.id}]
-          </span>
-        ))}
-        {w.creates.map((name) => (
-          <span role="listitem" key={name}>
-            creates {name}
-          </span>
-        ))}
-      </span>
+      <PlainList list={list} aria-label="Borrowed and created elements"
+        row={(row) => ({ label: row.label })}
+        empty={{ message: "No new borrowing", exit: "All changed elements are already owned" }} />
       {blocked.map((e) => (
         <OutcomeLine
           key={e.id}

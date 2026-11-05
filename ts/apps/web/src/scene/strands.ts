@@ -13,7 +13,7 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { damageColors } from "./damage";
-import { BLACK, LOOK, markAlpha, WHITE } from "./grounds";
+import { BLACK, LOOK, markAlpha, sceneLineMaterial, WHITE } from "./grounds";
 import type { IssueState, Layer3D, LayerFrame } from "./types";
 
 type Point = readonly number[];
@@ -125,7 +125,7 @@ export function segments(links: readonly Link[], laneOf: ReadonlyMap<SubjectKey,
  * The lane is perpendicular to the projected segment; each end also extends by |lane| along it,
  * closing the outer corner a shifted bend would open (exact to 90°). */
 function laneMaterial(params: THREE.ShaderMaterialParameters & Record<string, unknown>) {
-  const material = new LineMaterial({ transparent: true, depthWrite: false, fog: true, ...params });
+  const material = sceneLineMaterial(params);
   const overColor = { value: new THREE.Color() };
   material.userData.overColor = overColor.value;
   material.onBeforeCompile = (shader) => {
@@ -307,7 +307,7 @@ export function strandLayers(
             } else if (object.userData.flow) {
               object.visible = flowing;
               material.linewidth = width * 0.5;
-              material.opacity = 0.9;
+              material.opacity = look.marks.flowAlpha;
               material.color.copy(inkColour).lerp(dashColour, 0.7);
               overColor.copy(damageColors.core).lerp(dashColour, 0.7);
               material.dashOffset = moving ? -(((at.seconds / FLOW_SECONDS) * period) % period) : 0;

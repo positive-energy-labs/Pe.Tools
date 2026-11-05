@@ -62,8 +62,7 @@
   color: var(--pe-ink-2);
 }
 /* Overflowed verbs read as menu rows: one width, left-aligned words. */
-[data-slot="situation-overflow"] > *,
-[data-slot="situation-overflow"] .dl-button {
+[data-slot="situation-overflow"] > * {
   display: flex;
   width: 100%;
   justify-content: flex-start;
@@ -72,4 +71,9 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
+}
+/* A grouped verb stretches its control through the parent layout; Button still owns its paint. */
+[data-slot="situation-overflow"] > [role="group"] {
+  flex-direction: column;
+  align-items: stretch;
 }

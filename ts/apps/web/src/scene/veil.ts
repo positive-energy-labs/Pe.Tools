@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CONTEXT_OPACITY_LIMIT } from "./grounds";
+import { CONTEXT_OPACITY_LIMIT, DEFAULT_CONTEXT_INK } from "./grounds";
 import { VEIL_REACH_FT, type VeilField } from "./veil-field";
 export { bakeVeil, falloff, veilDistance, VEIL_REACH_FT, type VeilField } from "./veil-field";
 
@@ -40,7 +40,7 @@ export function veilUniforms() {
     stubFadeFt: { value: 10 },
     stubEndAlpha: { value: 0.5 },
     /** The context ink a stub grades to over its fade (`grounds.context`). */
-    stubContext: { value: new THREE.Color(0.6, 0.6, 0.6) },
+    stubContext: { value: DEFAULT_CONTEXT_INK.clone() },
   };
 }
 export type VeilUniforms = ReturnType<typeof veilUniforms>;

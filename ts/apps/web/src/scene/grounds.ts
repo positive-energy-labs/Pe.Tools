@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { SCENE_PRESETS } from "@pe/agent-contracts";
 import { bool, choice, colour, defineKnobs, num, set } from "#/knobs/knobs";
 import { inkOf } from "./ink";
@@ -29,6 +30,20 @@ export const GROUND_MATERIAL = {
   depthWrite: false,
   forceSinglePass: true,
 };
+
+/** Line roles share transparency, depth custody and fog, including shader-extended strands. */
+export const sceneLineMaterial = (params: ConstructorParameters<typeof LineMaterial>[0] = {}) =>
+  new LineMaterial({ transparent: true, depthWrite: false, fog: true, ...params });
+/** Measured datums stay quiet and never write subject depth. */
+export const datumMaterial = () =>
+  new THREE.LineBasicMaterial({ transparent: true, opacity: 0.24, depthWrite: false });
+/** Filled proposals share the subject ground policy without obscuring later marks. */
+export const markMaterial = (color: THREE.Color) =>
+  new THREE.MeshBasicMaterial({ ...GROUND_MATERIAL, color });
+/** Hidden strokes still participate in the batch; their rest alpha contributes no ink. */
+export const HIDDEN_STROKE_ALPHA = 0;
+/** Until the renderer supplies theme context, continuation uniforms use neutral context ink. */
+export const DEFAULT_CONTEXT_INK = Object.freeze(new THREE.Color(0.6, 0.6, 0.6));
 
 /**
  * The scene's look, one typed spec: every default a judgment call is here, and each is a dev knob
@@ -116,6 +131,7 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     spread: num("Damage halo spread", 1, [0.25, 4, 0.05]),
   },
   marks: {
+    flowAlpha: num("Flow stroke alpha", 0.9, [0, 1, 0.01]),
     restCasing: num("Rest casing alpha", 0.35, [0, 1, 0.01]),
     restVolume: num("Rest volume alpha", 0.28, [0, 1, 0.01]),
     reachCasing: num("Reach casing alpha", 0.5, [0, 1, 0.01]),
