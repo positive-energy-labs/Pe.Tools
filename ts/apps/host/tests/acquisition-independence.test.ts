@@ -19,7 +19,7 @@ import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { makeHttpLive } from "../src/app.ts";
-import { hostActionJournal } from "../src/gateway-owner.ts";
+import { HostReceipts } from "../src/gateway-owner.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { planAcquisition } from "../src/acquisition.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -219,7 +219,7 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
     );
     expect((await witness.wait(row.id)).state).toBe("succeeded");
   }
-  const journal = hostActionJournal();
+  let journal!: HostReceipts["Service"]["journal"];
   census("controlled", {});
 
   // effect-edge: island, phase 5
@@ -228,6 +228,7 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
   const done = Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
+        journal = (yield* HostReceipts).journal;
         const handle = yield* Deferred.make<ServiceHostHandle>();
         const HttpLive = makeHttpLive({
           capabilities: { revit: true },
@@ -237,7 +238,7 @@ test("handover certifies Pea's acquisition only from native SDK document facts",
         });
         yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));
       }),
-    ),
+    ).pipe(Effect.provide(HostReceipts.layer(null))),
   );
   let socket: WebSocket | undefined;
   try {

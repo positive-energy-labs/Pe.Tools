@@ -21,7 +21,7 @@ import { RouteWorkspace, type RouteWorkspaceRegistration } from "@pe/runtime";
 import { Effect, Layer, PubSub } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { MachineOwner } from "../src/machine.ts";
-import { hostActionJournal } from "../src/gateway-owner.ts";
+import { HostReceipts } from "../src/gateway-owner.ts";
 import { createReceiptExport } from "../src/receipt-export.ts";
 import type { HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
 import { createPeRoutes, fileRouteDocumentStore, makeHostPeRoutes } from "../src/pe-routes.ts";
@@ -365,7 +365,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             },
           });
           const telemetry = createReceiptExport({
-            journal: hostActionJournal(),
+            journal: (yield* HostReceipts).journal,
             root: directory,
             stamps: { host: null, web: null },
           });
@@ -444,7 +444,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             });
           });
         }),
-      ).pipe(Effect.provide(Spawner.live), Effect.provide(NodeServices.layer)),
+      ).pipe(Effect.provide(HostReceipts.layer(null, directory)), Effect.provide(Spawner.live), Effect.provide(NodeServices.layer)),
     );
   } finally {
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;

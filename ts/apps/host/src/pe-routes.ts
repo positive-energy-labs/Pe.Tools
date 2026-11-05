@@ -114,7 +114,7 @@ import {
   threadHead,
 } from "./control.ts";
 import { bindRevoke } from "./revoke.ts";
-import { hostActionJournal, hostLog } from "./gateway-owner.ts";
+import { HostReceipts } from "./gateway-owner.ts";
 import { RunConsents } from "./run-consent.ts";
 import type { HostLog } from "./host-log.ts";
 import { UpdateReader } from "./update-reader.ts";
@@ -184,7 +184,7 @@ export interface PeRoutesOptions {
   telemetry?: ReceiptExporter;
   /** The running turn and harness behind a thread, for an agent report's stamps. */
   reportContext?: (thread: string) => AgentReportContext | null;
-  /** The host log `log.read` pages; the host's own when absent. */
+  /** The log from the composing HostReceipts service. */
   log?: HostLog;
   ductsAnalysis?: Omit<DuctsAnalysisSources, "readWork">;
   ductsSheets?: DuctsSheetSources;
@@ -448,7 +448,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
     }
     if (declared.id === "features.get") return json(hostDescriptor(resolveHostVersion()));
     if (declared.id === "machine.bootstrap") {
-      const receipt = await alignBootstrap(await request.json(), caller, hostActionJournal());
+      const receipt = await alignBootstrap(await request.json(), caller, telemetryOf(options).journal);
       return json(receipt);
     }
     if (method === "GET" && declared.id === "family.spec") return familySpecAsset(url);
@@ -657,7 +657,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
         .safeParse(Object.fromEntries(url.searchParams));
       if (!query.success) return json({ error: "invalid log query" }, 400);
       const { after, kind, thread, limit } = query.data;
-      const { gap, entries } = (options.log ?? hostLog()).read(after, ({ event }) => {
+      const { gap, entries } = options.log!.read(after, ({ event }) => {
         const of = event.kind === "oversize" ? event.of : event.kind;
         const owner =
           event.kind === "thread"
@@ -1115,6 +1115,7 @@ function* hostPeRoutes(
   captures?: TakeoffCaptures,
   telemetry: ReceiptExporter = missingTelemetry(),
 ) {
+  const receipts = yield* HostReceipts;
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
   let invalidateCatalog = () => {};
@@ -1177,7 +1178,7 @@ function* hostPeRoutes(
     providers,
     updatePending: update.automaticPending,
     root: productHarnessThreadsPath(),
-    log: hostLog(),
+    log: receipts.log,
     worldRoot,
     // The same kernel the Pea MCP server declares, for the harness that cannot read it from there.
     developerInstructions: async () => peaAgentInstructions,
@@ -1241,11 +1242,11 @@ function* hostPeRoutes(
   const notices = createNotices({
     source: { subscribe: (q, consume) => telemetry.journal.subscribe(q, consume) },
     context: receiptThreads.context,
-    log: hostLog(),
+    log: receipts.log,
   });
   // The owner itself is built by the caller's scope (`MachineOwner.layer`); routes reach it late-bound.
   const machineSpec = {
-    sources: machineSources(bridge, providers, update, share, threads.heads),
+    sources: machineSources(receipts, bridge, providers, update, share, threads.heads),
     options: {
       fault: (fault) =>
         telemetry.track(
@@ -1275,7 +1276,7 @@ function* hostPeRoutes(
   invalidateCatalog = () => catalog.invalidate();
   const hostObserve = hostResourceObserver(
     bridge,
-    undefined,
+    () => receipts.journal,
     captures ? () => captures : undefined,
     hostBaseUrl,
     undefined,
@@ -1445,7 +1446,7 @@ export const peRoutesLayer = (
         acquired: machineAcquisition,
         acquiredSession: machineSessionAcquisition,
       });
-      const unbindRevoke = bridge ? bindRevoke(hostActionJournal(), bridge) : undefined;
+      const unbindRevoke = bridge ? bindRevoke((yield* HostReceipts).journal, bridge) : undefined;
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           unbindRevoke?.();

@@ -3,7 +3,7 @@ import { execFile, spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { Context, Deferred, Effect, Layer, type Scope } from "effect";
-import { ReceiptExport, recordUpdateFact } from "./receipt-export.ts";
+import { ReceiptExport, admittedReceiptStamps, recordUpdateFact } from "./receipt-export.ts";
 import { serviceFilePath, type ServiceFile } from "@pe/host-contracts/pe-service";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { openWindow, prepareHostBinding, resolveHostVersion } from "./host-lifecycle.ts";
@@ -11,6 +11,7 @@ import { makeHttpLive, resolveWebRoot } from "./app.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
 import { trayOwnerArguments } from "@pe/host-contracts/service-identity";
 import { makeInstalledUpdateReader } from "./update-route.ts";
+import { HostReceipts } from "./gateway-owner.ts";
 import { installedForeignAddins } from "./foreign-addins.ts";
 
 /** The shared host lifecycle used by both installed startup and source web development. */
@@ -25,7 +26,9 @@ export const hostProgram = (
     Effect.gen(function* () {
       linkedCatalog();
       // One exporter for the launch: its scope unbinds the native producers and drains pending sends.
-      const telemetry = Context.get(yield* Layer.build(ReceiptExport.layer), ReceiptExport);
+      const stamps = admittedReceiptStamps();
+      const receipts = Context.get(yield* Layer.build(HostReceipts.layer(stamps.host)), HostReceipts);
+      const telemetry = Context.get(yield* Layer.build(ReceiptExport.layer(stamps).pipe(Layer.provide(Layer.succeed(HostReceipts, receipts)))), ReceiptExport);
       yield* Effect.promise(() =>
         telemetry.record({
           kind: "usage",
@@ -114,6 +117,7 @@ export const hostProgram = (
       yield* Effect.raceFirst(
         Effect.raceFirst(
           Layer.launch(HttpLive).pipe(
+            Effect.provideService(HostReceipts, receipts),
             Effect.catchTag("ServeError", (error) => {
               const cause = error.cause;
               if (

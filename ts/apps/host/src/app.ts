@@ -28,7 +28,7 @@ import { catalogWorkSpecs } from "@pe/agent-contracts";
 import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { productRouteWorkPath } from "./product-paths.ts";
-import { hostActionJournal, releaseHostReceipts } from "./gateway-owner.ts";
+import { HostReceipts } from "./gateway-owner.ts";
 import { ReceiptExport, type ReceiptExporter } from "./receipt-export.ts";
 import { CaptureStore } from "./takeoff-captures.ts";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
@@ -152,7 +152,7 @@ function makeRevitComposition(
         Effect.gen(function* () {
           const families = yield* FamiliesReader;
           return makeCallRoute(
-            hostActionJournal(),
+            (yield* HostReceipts).journal,
             undefined,
             { workspace: work?.workspace },
             { origin, families, pointers: work?.pointers },
@@ -198,19 +198,9 @@ export interface HttpLiveOptions {
  * (via `NodeHttpServer.layer`) and shared by the router and the service-file writer.
  */
 export function makeHttpLive(options: HttpLiveOptions) {
-  const receiptOwner = hostActionJournal();
-  const ReceiptLifetime = Layer.effectDiscard(
-    Effect.addFinalizer(() =>
-      // Provided outermost, so this runs after the bridge and threads closed: join, flush, release.
-      Effect.promise(async () => {
-        await receiptOwner.close();
-        releaseHostReceipts(receiptOwner);
-      }),
-    ),
-  );
   const ReceiptsLive = options.receipts
     ? Layer.succeed(ReceiptExport, options.receipts)
-    : ReceiptExport.layer;
+    : ReceiptExport.layer({ host: null, web: null });
   const UpdateLive = Layer.succeed(
     UpdateReader,
     options.updateReader ?? makeInstalledUpdateReader(options.updateFact),
@@ -352,7 +342,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
       Layer.provide(CaptureStore.layer()),
       Layer.provide(ReceiptsLive),
       Layer.provide(NodeServices.layer),
-      Layer.provide(ReceiptLifetime),
       Layer.provide(admittedBuiltinsLayer(work.workspace, undefined, registrations)),
     );
   }
@@ -362,12 +351,14 @@ export function makeHttpLive(options: HttpLiveOptions) {
       HttpRouter.serve(
         Layer.mergeAll(
           noRevitBoundary(),
-          makeCallRoute(
-            hostActionJournal(),
-            undefined,
-            { workspace: work.workspace },
-            { origin: () => `http://127.0.0.1:${port()}`, pointers: work.pointers },
-          ),
+          Layer.unwrap(Effect.gen(function* () {
+            return makeCallRoute(
+              (yield* HostReceipts).journal,
+              undefined,
+              { workspace: work.workspace },
+              { origin: () => `http://127.0.0.1:${port()}`, pointers: work.pointers },
+            );
+          })),
           opsCatalogRoute(spa),
           noRevitHostStatusRoute,
           CommonAppLive,
@@ -384,7 +375,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
     Layer.provide(CaptureStore.layer()),
     Layer.provide(ReceiptsLive),
     Layer.provide(NodeServices.layer),
-    Layer.provide(ReceiptLifetime),
     Layer.provide(admittedBuiltinsLayer(work.workspace, undefined, registrations)),
   );
 }

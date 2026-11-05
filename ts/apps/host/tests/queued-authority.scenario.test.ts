@@ -7,7 +7,7 @@ import { expect, test } from "vite-plus/test";
 import { takeoffEditKey, type ThreadHead } from "@pe/agent-contracts";
 import { RevitBridgeLive } from "../src/bridge.ts";
 import { admitCrossing, bindControl } from "../src/control.ts";
-import { hostActionJournal } from "../src/gateway-owner.ts";
+import { HostReceipts } from "../src/gateway-owner.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { partitionFixture } from "./partition-fixture.ts";
 import { approvedPea } from "./callers.ts";
@@ -21,7 +21,7 @@ test.each(["removed", "unchanged"] as const)(
       Effect.scoped(
         Effect.gen(function* () {
           const { bridge, incoming, outgoing, target } = yield* connectTestBridge();
-          const owner = hostActionJournal();
+          const { journal: owner } = yield* HostReceipts;
           const home = join(process.env.PE_TOOLS_PRODUCT_HOME!, randomUUID());
           yield* Effect.promise(() => mkdir(home, { recursive: true }));
           const fixture = yield* Effect.promise(() => partitionFixture(home, target));
@@ -131,7 +131,7 @@ test.each(["removed", "unchanged"] as const)(
             });
           }
         }),
-      ).pipe(Effect.provide(RevitBridgeLive)),
+      ).pipe(Effect.provide(RevitBridgeLive), Effect.provide(HostReceipts.layer(null))),
     );
   },
 );

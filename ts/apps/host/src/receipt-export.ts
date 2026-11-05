@@ -22,7 +22,7 @@ import {
 import { analyticsConfig, readOrCreateInstallId, writeFatalEvidence } from "@pe/runtime";
 import { isAnyOperationKey, isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import { ActionJournal } from "./action-journal.ts";
-import { hostActionJournal, setHostReceiptStamp } from "./gateway-owner.ts";
+import { HostReceipts } from "./gateway-owner.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { subscribeReceiptProducers, type NativeReceiptProducer } from "./bridge.ts";
 import { originOf } from "./control.ts";
@@ -766,6 +766,14 @@ export function admitBuild(
   });
   return result.success ? result.data : null;
 }
+export function admittedReceiptStamps() {
+  const install = readOrCreateInstallId();
+  const processSessionId = randomUUID();
+  return {
+    host: admitBuild("host", typeof __PE_HOST_RECEIPT_BUILD__ !== "undefined" ? __PE_HOST_RECEIPT_BUILD__ : null, install, processSessionId),
+    web: admitBuild("web", typeof __PE_WEB_RECEIPT_BUILD__ !== "undefined" ? __PE_WEB_RECEIPT_BUILD__ : null, install, processSessionId),
+  };
+}
 /**
  * The host's receipt exporter (ADR 0029 rule 3), built by a scoped layer: stamps, the PostHog
  * client, the native-producer subscription and the journal subscription live as long as the scope,
@@ -778,29 +786,11 @@ export function admitBuild(
 export class ReceiptExport extends Context.Service<ReceiptExport, ReceiptExporter>()(
   "pe/ReceiptExport",
 ) {
-  static readonly layer = Layer.effect(
+  static layer(stamps: ReceiptExporter["stamps"]) { return Layer.effect(
     ReceiptExport,
     Effect.acquireRelease(
-      Effect.sync(() => {
-        const install = readOrCreateInstallId();
-        const processSessionId = randomUUID();
-        const stamps = {
-          host: admitBuild(
-            "host",
-            typeof __PE_HOST_RECEIPT_BUILD__ !== "undefined" ? __PE_HOST_RECEIPT_BUILD__ : null,
-            install,
-            processSessionId,
-          ),
-          web: admitBuild(
-            "web",
-            typeof __PE_WEB_RECEIPT_BUILD__ !== "undefined" ? __PE_WEB_RECEIPT_BUILD__ : null,
-            install,
-            processSessionId,
-          ),
-        };
-        if (stamps.host) setHostReceiptStamp(stamps.host);
-        // Seam: ActionJournal becomes a service in its own unit; this line then reads it from context.
-        const journal = hostActionJournal();
+      Effect.gen(function* () {
+        const { journal } = yield* HostReceipts;
         const config = stamps.host ? analyticsConfig(hostOwnership.lane) : null;
         const client = config
           ? new PostHog(config.apiKey, {
@@ -831,7 +821,7 @@ export class ReceiptExport extends Context.Service<ReceiptExport, ReceiptExporte
           await exporter.close();
         }),
     ).pipe(Effect.map(({ exporter }) => exporter)),
-  );
+  ); }
 }
 
 /**
