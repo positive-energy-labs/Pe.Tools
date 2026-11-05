@@ -1,6 +1,6 @@
 import { HostInputContext } from "./input-context.ts";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
-import { peRoutes } from "@pe/host-contracts/pe-api";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { hostNativeReadFor } from "./native-recording.ts";
 import { httpProblems } from "./http-problems.ts";
 import { InvalidRead } from "./native-reads.ts";
