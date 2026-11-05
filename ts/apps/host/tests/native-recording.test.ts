@@ -2,7 +2,7 @@
  * A recording answers HostNativeRead from its own takings and never reaches a live input (ADR 0031
  * rules 1, 2 and 5). Capture runs around the real HostNativeReadLive admission.
  */
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Layer } from "effect";
@@ -20,7 +20,7 @@ import {
   openRecordingStore,
   type InputLane,
 } from "../src/native-recording.ts";
-import { NativeReads } from "../src/native-reads.ts";
+import { InvalidRead, NativeReads } from "../src/native-reads.ts";
 import {
   admittedRequestIdentity,
   ReadFreshness,
@@ -58,7 +58,7 @@ function live() {
         ),
         Layer.succeed(NativeReads, {
           join: (read) =>
-            Effect.suspend(() => {
+            Effect.suspend((): Effect.Effect<never, BridgeError | InvalidRead> => {
               counts.joins++;
               return read.descriptor.operationKey === "host.ops.catalog"
                 ? Effect.succeed({
@@ -72,14 +72,24 @@ function live() {
                     cost: { elapsed: 3 },
                     outcome: "committed",
                   } as never)
-                : Effect.fail(
-                    new BridgeError({
-                      message: "socket closed mid-read",
-                      status: 502,
-                      problem: "bridge.lost",
-                      nativeOutcome: "unknown-until-reconciled",
-                    }),
-                  );
+                : read.descriptor.operationKey === "ducts.snapshot.walk"
+                  ? // A refusal after dispatch: native answered, the generated contract refused it.
+                    Effect.fail(
+                      new InvalidRead({
+                        message: "Native response violates its operation Schema",
+                        status: 502,
+                        problem: "read.response",
+                      }),
+                    )
+                  : Effect.fail(
+                      new BridgeError({
+                        message: "socket closed mid-read",
+                        status: 502,
+                        problem: "bridge.lost",
+                        nativeOutcome: "unknown-until-reconciled",
+                        evidence: { nativeRequestId: "native-lost" },
+                      }),
+                    );
             }),
           retained: Effect.succeed({ entries: 0, joiners: 0 }),
         }),
@@ -90,23 +100,21 @@ function live() {
 }
 
 const run =
-  (lane: InputLane, source = live()) =>
+  (lane: InputLane, source = live(), caller: Caller = pea) =>
   <A, E>(effect: Effect.Effect<A, E, IdentityKey | HostNativeRead>) =>
     effect.pipe(
-      Effect.provideService(RequestIdentity, admittedRequestIdentity(pea, {})),
+      Effect.provideService(RequestIdentity, admittedRequestIdentity(caller, {})),
       Effect.provide(hostNativeReadFor(lane, source.layer)),
     );
-const read = (key: string, input: unknown = {}) =>
-  Effect.flatMap(Effect.service(HostNativeRead), (reads) => reads.read({ key, input, scope: {} }));
+const read = (key: string, input: unknown = {}, scope: { openDocumentId?: string } = {}) =>
+  Effect.flatMap(Effect.service(HostNativeRead), (reads) => reads.read({ key, input, scope }));
 const outcome = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
   effect.pipe(
     Effect.map((answer) => ({ ok: answer })),
-    Effect.catch((error: unknown) =>
-      Effect.succeed({
-        problem: (error as { problem?: string }).problem,
-        native: (error as { nativeOutcome?: string }).nativeOutcome,
-      }),
-    ),
+    Effect.catch((error: unknown) => {
+      const { _tag, status, problem, nativeOutcome, evidence } = error as Record<string, unknown>;
+      return Effect.succeed({ tag: _tag, status, problem, native: nativeOutcome, evidence });
+    }),
   );
 const bundle = Effect.acquireRelease(
   Effect.promise(() => mkdtemp(join(tmpdir(), "pe-recording-"))),
@@ -138,13 +146,20 @@ effectTest(
       } as const;
       const again = yield* run(lane, replayed)(read("host.ops.catalog"));
       expect(again).toEqual({ ...answered, value: catalogAnswer });
+      // Each recorded failure replays as itself: no invented never-dispatched, evidence kept.
       expect(yield* outcome(run(lane, replayed)(read("nope.key")))).toEqual({
-        problem: "recording.refused",
-        native: "never-dispatched",
+        tag: "InvalidRequest",
+        status: 409,
+        problem: "read.intent",
+        native: undefined,
+        evidence: undefined,
       });
       expect(yield* outcome(run(lane, replayed)(read("ducts.snapshot.roster")))).toEqual({
-        problem: "recording.unknown",
+        tag: "BridgeError",
+        status: 502,
+        problem: "bridge.lost",
         native: "unknown-until-reconciled",
+        evidence: { nativeRequestId: "native-lost" },
       });
       expect(replayed.counts).toEqual({ built: 0, joins: 0 });
     }),
@@ -210,10 +225,14 @@ effectTest("a miss, another build, a tampered observation and a full bundle each
       maxTakings: 1,
     });
     yield* run({ kind: "live", capture: full })(read("host.ops.catalog"));
+    // Full after the live read completed: a typed refusal that still says the read was dispatched.
     expect(
       yield* outcome(run({ kind: "live", capture: full })(read("host.ops.catalog"))),
     ).toMatchObject({
+      status: 507,
       problem: "recording.full",
+      native: "committed",
+      evidence: { nativeRequestId: "native-1" },
     });
     expect(
       full.candidates(
@@ -221,4 +240,105 @@ effectTest("a miss, another build, a tampered observation and a full bundle each
       ),
     ).toHaveLength(1);
   }),
+);
+
+effectTest(
+  "replay admits each caller and fences the recorded document, even through a binding",
+  () =>
+    Effect.gen(function* () {
+      const store = yield* openRecordingStore(yield* bundle, identity, bounds);
+      yield* run({ kind: "live", capture: store })(
+        read("ducts.snapshot.walk", {}, { openDocumentId: "doc-A" }),
+      ).pipe(Effect.ignore);
+      const lane = { kind: "recording", store } as const;
+      expect(
+        yield* outcome(
+          run(lane, live(), { kind: "anonymous" })(
+            read("ducts.snapshot.walk", {}, { openDocumentId: "doc-A" }),
+          ),
+        ),
+      ).toMatchObject({ tag: "Refused" });
+      expect(
+        yield* outcome(run(lane)(read("ducts.snapshot.walk", {}, { openDocumentId: "doc-A" }))),
+      ).toMatchObject({
+        tag: "InvalidRequest",
+        status: 502,
+        problem: "read.response",
+        native: undefined,
+      });
+      expect(
+        yield* outcome(run(lane)(read("ducts.snapshot.walk", {}, { openDocumentId: "doc-B" }))),
+      ).toMatchObject({
+        problem: "recording.scope",
+      });
+      const key = yield* nativeInputIdentity({ key: "ducts.snapshot.walk", input: {}, scope: {} });
+      const [taking] = store.candidates(key);
+      const bound = { kind: "recording", store, bindings: new Map([[key, taking!.id]]) } as const;
+      expect(
+        yield* outcome(run(bound)(read("ducts.snapshot.walk", {}, { openDocumentId: "doc-B" }))),
+      ).toMatchObject({
+        problem: "recording.scope",
+      });
+    }),
+);
+
+effectTest(
+  "a failed durable write leaves nothing replayable; concurrent equal observations both persist",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bundle;
+      const broken = yield* openRecordingStore(dir, identity, bounds);
+      yield* Effect.promise(() => rm(join(dir, "observations"), { recursive: true, force: true }));
+      expect(
+        yield* outcome(run({ kind: "live", capture: broken })(read("host.ops.catalog"))),
+      ).toMatchObject({
+        problem: "recording.io",
+      });
+      const key = yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope: {} });
+      expect(broken.candidates(key)).toEqual([]);
+      expect((yield* openRecordingStore(dir, identity, bounds)).candidates(key)).toEqual([]);
+
+      const fresh = yield* bundle;
+      const store = yield* openRecordingStore(fresh, identity, bounds);
+      const source = live();
+      yield* Effect.all(
+        [1, 2].map(() => run({ kind: "live", capture: store }, source)(read("host.ops.catalog"))),
+        {
+          concurrency: "unbounded",
+        },
+      );
+      expect(yield* Effect.promise(() => readdir(join(fresh, "observations")))).toHaveLength(1);
+      const reopened = yield* openRecordingStore(fresh, identity, bounds);
+      const takings = reopened.candidates(key);
+      expect(takings).toHaveLength(2);
+      const bound = {
+        kind: "recording",
+        store: reopened,
+        bindings: new Map([[key, takings[0]!.id]]),
+      } as const;
+      expect((yield* run(bound)(read("host.ops.catalog"))).value).toEqual(catalogAnswer);
+    }),
+);
+
+effectTest(
+  "a damaged bundle refuses at open: a non-hash observation name or an oversized takings file",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bundle;
+      const store = yield* openRecordingStore(dir, identity, bounds);
+      yield* run({ kind: "live", capture: store })(read("host.ops.catalog"));
+      const path = join(dir, "takings.jsonl");
+      const line = (yield* Effect.promise(() => readFile(path, "utf8"))).trim();
+      const sha = (JSON.parse(line) as { outcome: { observation: string } }).outcome.observation;
+      yield* Effect.promise(() => writeFile(path, `${line.replace(sha, "../../manifest")}\n`));
+      expect(yield* outcome(openRecordingStore(dir, identity, bounds))).toMatchObject({
+        problem: "recording.tamper",
+      });
+      yield* Effect.promise(() => writeFile(path, `${line}\n`));
+      expect(
+        yield* outcome(openRecordingStore(dir, identity, { maxBytes: 64, maxTakings: 100 })),
+      ).toMatchObject({
+        problem: "recording.full",
+      });
+    }),
 );
