@@ -58,6 +58,7 @@ async function admit(
     reachFt?: number;
     query?: boolean;
     queryTarget?: string | null;
+    unavailableArgs?: boolean;
   } = {},
 ) {
   const kind = options.kind ?? "element";
@@ -104,7 +105,9 @@ async function admit(
       },
       readings: {
         ...readOnlyModule.data.readings,
-        overview: { ...podData.readings.overview, demand: "visible" as const },
+        overview: { ...podData.readings.overview, demand: "visible" as const,
+          args: "overviewArgs" as const,
+        },
         detail: {
           ...podData.readings.detail,
           geometry: {
@@ -159,6 +162,7 @@ async function admit(
     },
     bodies: {
       ...readOnlyModule.bodies,
+      overviewArgs: { slot: "readings.overview.args" as const, kind: "args" as const, source: { module: "bodies.js", export: "overviewArgs" }, run: () => options.unavailableArgs ? null : {} },
       ...(options.query
         ? {
             captureArgs: {
@@ -685,4 +689,15 @@ test("K4 hidden geometry keeps its accepted value and only rejoins on host gener
     m.close();
     vi.useRealTimers();
   }
+});
+
+test("null geometry arguments wait for a subject without parsing or acquiring native data", async () => {
+  const d = door();
+  const m = mount(await admit({ unavailableArgs: true }), d.geometry);
+  try {
+    expect(m.readingStatus("overview").snapshot).toMatchObject({
+      status: "unavailable", current: false, reason: "Reading arguments unavailable: overview",
+    });
+    expect(d.requests).toEqual([]);
+  } finally { m.close(); }
 });

@@ -335,7 +335,7 @@ export function createAdmittedGeometry(options: {
             }
             const parsed = options.entries[declaration.entry]!.output.safeParse(outcome.value);
             if (!parsed.success) {
-              accept({ status: "failed", current: false, reason: parsed.error.message });
+              accept({ status: "failed", current: false, reason: "This reading could not be decoded. Refresh the pane to try again." });
               return;
             }
             costs[id] = freezePage(result.cost);

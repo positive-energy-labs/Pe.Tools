@@ -1,4 +1,7 @@
-import { createElement, useMemo, useRef, useSyncExternalStore } from "react";
+import { createElement, useMemo, useRef, useSyncExternalStore, Fragment } from "react";
+import { ListPopup } from "@pe/kit/lang/list-popup";
+import { RouteDocument } from "./admitted-chrome";
+import { inventoryOf, previousOf, useInventory } from "./readings-hooks";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { createRouteShell } from "./admitted-mount";
 import {
@@ -63,18 +66,54 @@ function PlaceRouteShell({
     () => createRouteShell(sourceRouteServices(admittedSources(route))),
     [route],
   );
+  const document = createElement(DocumentPicker, { place, target: resolved, needs: route.data.needs });
   if (!resolved && !input.work.address && !input.work.open)
-    return createElement(OutcomeLine, {
+    return createElement(Fragment, null, document, createElement(OutcomeLine, {
       kind: "error",
       label: "Choose a document",
       says: selected.resolution.kind,
-    });
-  return createElement(AdmittedPlacePane, {
+    }));
+  return createElement(RouteDocument.Provider, { value: document }, createElement(AdmittedPlacePane, {
     shell,
     route,
     place,
     input,
-  });
+  }));
 }
 
 export { ApplicationRouteShell as applicationRouteShell };
+
+/** A choice pins this Place to an exact open lifetime; it never changes the chat's targets. */
+export function DocumentPicker({ place, target, needs }: {
+  place: PanePlace;
+  target: PlaceInput["target"];
+  needs: string;
+}) {
+  const inventory = useInventory(place.fixture === null && needs !== "nothing");
+  if (place.fixture !== null || needs === "nothing") return null;
+  const options = inventoryOf(previousOf(inventory)?.sessions ?? []).flatMap((session) =>
+    (session.openDocuments ?? []).filter((doc) =>
+      needs !== "project" && needs !== "family" || doc.isFamilyDocument === (needs === "family"),
+    ).map((doc) => ({
+      ref: { session: session.sessionId, openId: doc.openId },
+      label: doc.title,
+      session: session.sdkSessionId ?? `Revit - pid ${session.processId}`,
+    })),
+  );
+  const key = (ref: { session: string; openId: string }) => JSON.stringify(ref);
+  const selected = target?.kind === "document" ? key(target.ref) : null;
+  return createElement(ListPopup<(typeof options)[number]>, {
+    anchor: "trigger", face: "control", triggerLabel: "Choose a document",
+    trigger: options.find((option) => key(option.ref) === selected)?.label ?? "Choose a document",
+    "aria-label": "Document", items: options, keyOf: (option) => key(option.ref),
+    labelOf: (option) => option.label, filter: "substring", select: "single",
+    selected: selected ? [selected] : [],
+    empty: inventory.state === "loading" ? "Reading documents..." : "No open documents available",
+    row: (option) => ({ label: option.label, sub: option.session }),
+    onPick: (option) => {
+      const search = place.address.read();
+      search.set("target", JSON.stringify({ kind: "open", ref: option.ref }));
+      place.address.write(search, "push");
+    },
+  });
+}

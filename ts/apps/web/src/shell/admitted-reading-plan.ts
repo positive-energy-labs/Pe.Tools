@@ -199,13 +199,12 @@ export function createAdmittedReadingPlan(options: {
             if (reading.kind === "use" && reading.geometry) {
               const linked = bindings();
               const invocation = invocationFor?.(id);
-              const input = linked.entries[reading.entry]!.input.parse(
-                invocation
-                  ? invocation.input
-                  : reading.args
-                    ? linked.bodies[reading.args]!.run(context)
-                    : {},
-              );
+              const args = invocation ? invocation.input : reading.args
+                ? linked.bodies[reading.args]!.run(context) : {};
+              // Null is the adapter's unavailable signal, as for every non-geometry reading.
+              if (args === null && !invocation)
+                return unavailable(`Reading arguments unavailable: ${id}`);
+              const input = linked.entries[reading.entry]!.input.parse(args);
               result = geometry
                 ? geometry(id, context, input)
                 : unavailable("Geometry composition unavailable");
@@ -218,7 +217,7 @@ export function createAdmittedReadingPlan(options: {
               : unavailable(`Reading arguments unavailable: ${id}`);
           }
         } catch (error) {
-          result = { status: "failed", current: false, reason: String(error) };
+          result = { status: "failed", current: false, reason: error instanceof z.ZodError ? "This reading could not be decoded. Refresh the pane to try again." : String(error) };
         }
         cache.set(id, result);
         return result;

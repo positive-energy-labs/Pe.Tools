@@ -94,7 +94,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
             if (state.kind === "ready") {
               const decoded = schema.safeParse(state.snapshot.value);
               if (!decoded.success) {
-                record.snapshot = unavailable(decoded.error.message);
+                record.snapshot = unavailable("Work could not be decoded. Refresh the pane to reconnect.");
                 schedule();
                 return;
               }
@@ -441,7 +441,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
                   if (parsed.success) previous.set(readingId, freezePage(parsed.data));
                   record.snapshot = parsed.success
                     ? freezePage({ ...snapshot, value: parsed.data })
-                    : { status: "failed", current: false, reason: parsed.error.message };
+                    : { status: "failed", current: false, reason: "This reading could not be decoded. Refresh the pane to try again." };
                 };
                 accept(record.handle.read());
                 const stopEvidence = watchEvidence(readingId, request, record);

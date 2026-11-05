@@ -298,7 +298,7 @@ export function TimelineHead<P, W>({
         </PopoverTrigger>
         <SubjectPopoverContent
           aria-label="Timeline"
-          className="max-h-(--available-height) overflow-y-auto"
+          className="max-h-(--available-height) overflow-y-auto p-(--gutter)"
         >
           {history}
         </SubjectPopoverContent>

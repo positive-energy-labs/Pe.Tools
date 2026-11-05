@@ -548,9 +548,6 @@ tr.dl-row[data-active] {
 [data-list-trigger="inline"]:active {
   background-image: var(--fill-press);
 }
-.dl-row[data-cursor] {
-  background-image: var(--fill-veil);
-}
 /* Inset focus rings survive scrolling; refused rows keep the arrow. */
 .dl-row:is([role="option"], [role="treeitem"], [role="row"]):not([aria-disabled="true"]) {
   cursor: pointer;
@@ -1249,25 +1246,14 @@ tr.dl-row[data-active] {
 [data-reach="rest"] {
   transition: outline-color var(--motion-control);
 }
-[data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref):is([data-reach="reach"]) {
-  background-image: var(--fill-veil);
-  --dl-cell-ring: inset 0 0 0 1px var(--pe-line-2);
+/* Reach is indirect; a local pointer is stronger; selection always keeps its rung. */
+:where([data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref)):is([data-reach="reach"], [data-reach="hover"], [data-reach="cited"]) {
+  background-color: var(--pe-indirect);
 }
-[data-scrollbar]:hover > [data-scrollbar-frame] {
-  border-color: var(--pe-ink-2);
-  background: color-mix(in srgb, var(--pe-ink) 18%, transparent);
-  cursor: grab;
-}
-[data-scrollbar]:hover {
-  cursor: default;
-}
-[data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref):is(
-    [data-reach="hover"],
-    [data-reach="cited"],
-    :hover
-  ) {
-  background-image: var(--fill-press);
-  --dl-cell-ring: inset 0 0 0 1px var(--pe-ink-2);
+:where([data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref)):hover,
+.dl-row[data-cursor] {
+  background-color: var(--pe-hover);
+  background-image: none;
 }
 :is([data-svg-tip], svg [data-reach]):is(
   [data-reach="reach"],
@@ -1312,7 +1298,7 @@ tr.dl-row[data-active] {
   color: var(--pe-ink);
 }
 .dl-button[data-kind="nav"]:hover:not(:disabled, [aria-disabled="true"]) {
-  background-color: var(--pe-select);
+  background-color: var(--pe-hover);
   color: var(--pe-ink);
   text-decoration: underline 2px;
   text-underline-offset: 3px;
@@ -1375,7 +1361,7 @@ tr.dl-row[data-active] {
 [data-subject-text]:is(:hover, [data-lit]) .subject-ref {
   text-decoration-color: var(--pe-ink-2);
 }
-.subject-ref:is(:hover, :focus-visible, [data-reach="hover"], [data-reach="cited"]) {
+.subject-ref:is(:hover, :focus-visible, [data-reach="reach"], [data-reach="hover"], [data-reach="cited"]) {
   text-decoration-color: var(--pe-ink);
 }
 [data-subject-text]:is(:hover, [data-lit]) .subject-mark {
@@ -1594,4 +1580,10 @@ tr.dl-row[data-active] {
 }
 [data-deferred="false"] {
   min-height: 24rem;
+}
+
+/* A selected control cannot climb above selection when the pointer enters it. */
+[data-pe] :is([aria-selected="true"], [aria-pressed="true"], [data-selected], [data-reach="selected"]) {
+  background-color: var(--pe-select);
+  background-image: none;
 }

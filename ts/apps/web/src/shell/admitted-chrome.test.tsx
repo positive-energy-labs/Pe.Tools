@@ -4,6 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import {
   admittedJournalKeys,
   admittedSubjectDoor,
+  paneOwnsSubjectList,
+  PaneStatus,
   AdmittedSubjectPicker,
   subjectOf,
 } from "./admitted-chrome";
@@ -189,3 +191,18 @@ test("the subject door adds beside what is open, and never narrows all to explic
   expect(subject.mock.calls).toEqual([[{ kind: "ids", ids: [] }]]);
  });
 
+test("a pane drawing the subject list owns its picker; other panes keep chrome's picker", () => {
+  const data = { subject: { field: "system" }, fields: { system: { role: "subject", picker: { reading: "roster" } } }, panes: { list: { draws: ["roster"] }, detail: { draws: ["detail"] } } } as unknown as RouteGraphJson;
+  expect(paneOwnsSubjectList(data, "list")).toBe(true);
+  expect(paneOwnsSubjectList(data, "detail")).toBe(false);
+});
+
+test("idle explicit readings draw no explanation while real failures remain visible", () => {
+  let reason = "Explicit demand required";
+  const mount = { readingStatus: () => ({ snapshot: { status: "unavailable", current: false, reason } }) } as unknown as AdmittedMount;
+  const view = render(<PaneStatus mount={mount} draws={["detail"]} />);
+  expect(view.container.textContent).toBe("");
+  reason = "Document closed";
+  view.rerender(<PaneStatus mount={mount} draws={["detail"]} />);
+  expect(screen.getByRole("status").textContent).toBe("Document closed");
+});

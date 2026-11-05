@@ -4,7 +4,9 @@
   --pe-page: light-dark(#f7f3ea, #16140f);
   --pe-artifact: light-dark(#efeadf, #1c1915);
   --pe-recess: light-dark(#e4ded0, #262219);
-  --pe-select: light-dark(#e4ded0, #262219);
+  --pe-select: light-dark(#d6c5a3, #635133);
+  --pe-hover: color-mix(in srgb, var(--pe-select) 65%, var(--pe-page));
+  --pe-indirect: color-mix(in srgb, var(--pe-select) 30%, var(--pe-page));
   --pe-document: #fff;
   --pe-scrim: rgb(0 0 0 / 80%);
   /* What a lifted plane casts, and the lit top edge it wears. A dark ground swallows a 14% shade,
@@ -36,9 +38,8 @@
 
   /* Plumbing and parallel data-viz palette */
   --pe-on: var(--pe-page);
-  /* Hover is the veil; a press doubles it (`--fill-press`). 14%: at 10% a hovered row on the dark
-     recess ground read as unlit (reach audit, 2026-10-23). */
-  --pe-veil: color-mix(in srgb, var(--pe-ink) 14%, transparent);
+  /* Controls and subject rows share the same attention ladder. */
+  --pe-veil: color-mix(in srgb, var(--pe-select) 65%, transparent);
   --viz-1: light-dark(oklch(0.47 0.085 249.5), oklch(0.795 0.085 249.5));
   --viz-2: light-dark(oklch(0.47 0.085 155), oklch(0.795 0.085 155));
   --viz-3: light-dark(oklch(0.47 0.045 230), oklch(0.795 0.045 230));
