@@ -15,7 +15,7 @@ it("resolves each side of a sided criterion through its own layers", () => {
   // ba4fd56c: criteria use the shared resolver and retain units, status and version.
   expect(c.velocityLimitFpm).toEqual({
     supply: { value: 850, source: "Work", units: "fpm", status: "valid", version: null },
-    return: { value: 650, source: "model", units: "fpm", status: "valid", version: null },
+    return: { value: 650, source: "model-store", ref: "_PE_DuctLosses", units: "fpm", status: "valid", version: null },
   });
   expect(c.allowanceInWg).toEqual({
     supply: { value: 0, source: "firm", units: "in-wg", status: "valid", version: "test" },

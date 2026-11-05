@@ -38,6 +38,9 @@ export interface WorkLayer {
   assumptions?: Readonly<Record<string, { kind: string; verdict?: string; inWg?: number }>>;
 }
 
+/** Where a retired authored value lives: Pe's provenance store parameter on Project Information. */
+const STORE = "_PE_DuctLosses";
+
 /** The model's store as the snapshot carries it; only the fields the resolver reads. */
 export interface StoreLayer {
   verdicts?: Readonly<Record<string, { verdict: string }>>;
@@ -152,7 +155,7 @@ export function resolveCriteria(
       {
         run: { value: immediate },
         Work: { value: typed },
-        model: { value: stored },
+        "model-store": { value: stored, ref: STORE },
         firm: { value: base, version: firm.version },
       },
       units,
@@ -202,7 +205,12 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
   const { snapshot, firm, catalogs } = layers;
   const work = layers.work ?? {};
   const run = layers.run ?? {};
-  const pick = <T>(values: ValueLayers<T>, units: string | null = null): Resolved<T | null> =>
+  const pick = <T>(
+    values: ValueLayers<T>,
+    units: string | null = null,
+    valid: (value: T) => boolean = (value) =>
+      typeof value !== "number" || (Number.isFinite(value) && value >= 0),
+  ): Resolved<T | null> =>
     resolveValue(
       Object.fromEntries(
         Object.entries(values).map(([source, cell]) => [
@@ -211,7 +219,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         ]),
       ),
       units,
-      (value) => typeof value !== "number" || (Number.isFinite(value) && value >= 0),
+      valid,
     );
   const store = layers.store ?? {};
   const slots: Partial<NonNullable<SheetSnapshot["slots"]>> = snapshot.slots ?? {};
@@ -233,7 +241,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         {
           run: { value: run.flows?.[id]?.cfm },
           Work: { value: typed },
-          model: { value: stored ?? positive(revit), ref: flowSlot },
+          "model-store": { value: stored, ref: STORE },
+          model: { value: positive(revit), ref: flowSlot },
         },
         "cfm",
       );
@@ -248,10 +257,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         {
           run: { value: run.terminalDrops?.[id]?.inWg ?? run.criteria?.terminalDropInWg },
           Work: { value: typedDrop ?? work.criteria?.terminalDropInWg },
-          model: {
-            value: storedDrop ?? store.criteria?.terminalDropInWg ?? catalog?.dp ?? parameter,
-            ref: catalog?.table,
-          },
+          "model-store": { value: storedDrop ?? store.criteria?.terminalDropInWg, ref: STORE },
+          model: { value: catalog?.dp ?? parameter, ref: catalog?.table },
           firm: { value: firm.criteria.terminalDropInWg, version: firm.version },
         },
         "in-wg",
@@ -260,26 +267,26 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
     } else if (n.kind === "equipment") {
       const kindKey = catalogLinkKey(n.family, n.type);
       const suggestion = suggestKind(n);
-      const kind = pick<DuctUnitKind>({
-        run: { value: run.kinds?.[kindKey]?.kind },
-        Work: { value: work.kinds?.[kindKey]?.kind },
-        model: {
-          value: isKind(store.kinds?.[kindKey]?.kind)
-            ? (store.kinds![kindKey]!.kind as DuctUnitKind)
-            : null,
+      const kind = pick<DuctUnitKind>(
+        {
+          run: { value: run.kinds?.[kindKey]?.kind },
+          Work: { value: work.kinds?.[kindKey]?.kind },
+          "model-store": { value: store.kinds?.[kindKey]?.kind as DuctUnitKind, ref: STORE },
+          default: { value: suggestion.kind, ref: suggestion.ref },
         },
-        default: { value: suggestion.kind, ref: suggestion.ref },
-      }) as Resolved<DuctUnitKind>;
-      const role = pick<"fan" | "passive">({
-        run: { value: run.roles?.[id]?.role },
-        Work: { value: work.roles?.[id]?.role },
-        model: {
-          value: isRole(store.roles?.[id]?.role)
-            ? (store.roles![id]!.role as "fan" | "passive")
-            : null,
+        null,
+        isKind,
+      ) as Resolved<DuctUnitKind>;
+      const role = pick<"fan" | "passive">(
+        {
+          run: { value: run.roles?.[id]?.role },
+          Work: { value: work.roles?.[id]?.role },
+          "model-store": { value: store.roles?.[id]?.role as "fan" | "passive", ref: STORE },
+          default: { value: suggestRole(n, kind.value), ref: "name" },
         },
-        default: { value: suggestRole(n, kind.value), ref: "name" },
-      }) as Resolved<"fan" | "passive">;
+        null,
+        isRole,
+      ) as Resolved<"fan" | "passive">;
       // Revit categorizes inline heaters and silencers as equipment. They need a part drop,
       // not fan sizing; recognized unit kinds and explicit fan rulings retain their unit inputs.
       if (kind.value === "other" && role.value === "passive" && n.connectors.length === 2) {
@@ -306,7 +313,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         {
           run: { value: run.equipmentFlows?.[id]?.cfm },
           Work: { value: typedCfm },
-          model: { value: storedCfm ?? revitCfm, ref: slots.fanFlow ?? "fanFlow" },
+          "model-store": { value: storedCfm, ref: STORE },
+          model: { value: revitCfm, ref: slots.fanFlow ?? "fanFlow" },
         },
         "cfm",
       );
@@ -389,7 +397,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       Work: {
         value: work.assumptions?.[key]?.kind === "verdict" ? work.assumptions[key]!.verdict : null,
       },
-      model: { value: store.verdicts?.[key]?.verdict },
+      "model-store": { value: store.verdicts?.[key]?.verdict, ref: STORE },
     }).value;
   const joins: DuctsInputs["rulings"]["joins"] = [];
   const ends: DuctsInputs["rulings"]["ends"] = [];
@@ -424,7 +432,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
     const value = pick({
       run: { value: run.rules?.[key]?.table },
       Work: { value: work.rules?.[key]?.table },
-      model: { value: store.rules?.[key]?.table },
+      "model-store": { value: store.rules?.[key]?.table, ref: STORE },
     });
     if (value.value != null) tables[key] = value as Resolved<string>;
   }

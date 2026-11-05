@@ -31,7 +31,7 @@ it("duct readings expose run, Work, model and firm provenance with units", () =>
   });
   expect(
     resolveInputs({ ...layers, run: undefined, work: undefined }).terminals["1"]!.cfm,
-  ).toMatchObject({ value: 200, source: "model" });
+  ).toMatchObject({ value: 200, source: "model-store", ref: "_PE_DuctLosses" });
   expect(resolveInputs({ snapshot, firm: TEST_FIRM }).terminals["1"]!.cfm.status).toBe("missing");
   expect(resolveInputs({ snapshot, firm: TEST_FIRM }).terminals["1"]!.drop).toMatchObject({
     source: "firm",
@@ -42,6 +42,32 @@ it("duct readings expose run, Work, model and firm provenance with units", () =>
     resolveCriteria({ criteria: { allowanceInWg: { return: 0.2 } } }, null, TEST_FIRM)
       .allowanceInWg,
   ).toMatchObject({ supply: { source: "firm" }, return: { source: "Work", value: 0.2 } });
+});
+it("a value retired into the model store keeps the authored tier over native and firm", () => {
+  // Terminal 1 states 0.5 in-wg on its own catalog parameter; the firm default disagrees too.
+  const native = {
+    nodes: [{ id: 1, kind: "terminal", facts: [], connectors: [], terminalDrop: { catalogDropInWg: 0.5 } }],
+    segments: [],
+  } as unknown as SheetSnapshot;
+  const drop = (work: object | undefined, store: object | undefined) =>
+    resolveInputs({ snapshot: native, firm: TEST_FIRM, work, store }).terminals["1"]!.drop;
+  expect(drop({ terminalDrops: { "1": { inWg: 0.2 } } }, undefined)).toMatchObject({ value: 0.2, source: "Work" });
+  // The receipt retires the staged cell: Work is cleared and the store holds the same value.
+  const retired = drop(undefined, { terminals: { "1": { inWg: 0.2 } } });
+  expect(retired).toMatchObject({ value: 0.2, source: "model-store", ref: "_PE_DuctLosses", units: "in-wg" });
+  expect(retired.version).toBeNull();
+  // A pending Work edit wins over the older stored value.
+  expect(drop({ terminalDrops: { "1": { inWg: 0.3 } } }, { terminals: { "1": { inWg: 0.2 } } })).toMatchObject({
+    value: 0.3,
+    source: "Work",
+  });
+  // An invalid stored value blocks fallback, as invalid Work does; it never demotes to native or firm.
+  expect(drop(undefined, { terminals: { "1": { inWg: -1 } } })).toMatchObject({
+    value: null,
+    source: "model-store",
+    status: "invalid",
+  });
+  expect(drop(undefined, undefined)).toMatchObject({ value: 0.5, source: "model" });
 });
 it("unknown inflow creates a missing leg and cannot certify worksheet totals", () => {
   const walk = {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { documentRefSchema } from "./target.ts";
+import { VALUE_SOURCES } from "./work-value.ts";
 
 const elementId = z.number().int().positive();
 const portIndex = z.number().int().nonnegative();
@@ -11,7 +12,7 @@ const detail = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("worksheet") }),
 ]);
 /** Resolved engine inputs expose the winning Work layer and its revision (ADR 0028). */
-export const DUCT_INPUT_SOURCES = ["run", "Work", "model", "firm", "default", "none"] as const;
+export const DUCT_INPUT_SOURCES = [...VALUE_SOURCES, "none"] as const;
 export type DuctInputSource = (typeof DUCT_INPUT_SOURCES)[number];
 const resolved = <T extends z.ZodType>(value: T) =>
   z.strictObject({

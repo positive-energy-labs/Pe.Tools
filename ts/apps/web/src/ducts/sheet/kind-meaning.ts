@@ -31,7 +31,7 @@ const portWord = (node: Node, index: number) => {
 
 /** The role a kind gives the unit: a typed role stands; else the engine's suggestion under that kind. */
 export const roleUnder = (node: Node, kind: DuctUnitKind, unit: Unit | undefined) =>
-  unit?.role.source === "Work" || unit?.role.source === "model"
+  unit?.role.source === "Work" || unit?.role.source === "model-store"
     ? unit.role.value
     : suggestRole(node, kind);
 

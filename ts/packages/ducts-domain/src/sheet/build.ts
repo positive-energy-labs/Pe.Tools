@@ -409,7 +409,7 @@ class Pricer {
       ruleSource: rule ? "matched" : "none",
       tableSource: rule
         ? chosen
-          ? chosen.source === "model"
+          ? chosen.source === "model-store"
             ? "stored"
             : "typed"
           : "default"
@@ -523,7 +523,7 @@ class Pricer {
       tableSource: !src
         ? null
         : chosen && chosen.value.toUpperCase() === src.table
-          ? chosen.source === "model"
+          ? chosen.source === "model-store"
             ? "stored"
             : "typed"
           : src.table === rule?.table
@@ -1512,7 +1512,9 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
   // The unit's own flow: typed is the side-stream exception's asserted flow, a Revit or stored value
   // its design parameter; absent both, an ordinary fan's flow is the sum of its ends (never an input).
   const unitCfm = input.inputs.units[String(unit.id)]?.cfm;
-  const authored = unitCfm?.source === "Work" || unitCfm?.source === "run";
+  // A stored flow is the authored value a receipt retired from Work; it keeps its typed meaning.
+  const authored =
+    unitCfm?.source === "Work" || unitCfm?.source === "run" || unitCfm?.source === "model-store";
   const typedCfm = authored ? unitCfm.value : null;
   const designCfm = unitCfm && !authored ? positive(unitCfm.value) : null;
   const terminalCfm = (id: number) => terminalCfmOf(input.inputs, id);
@@ -1548,7 +1550,7 @@ function buildSheetPass(input: BuildSheetInput, assumeHeals: boolean): Sheet {
     // as a typed one does (ducts LEDGER 2026-10-29). A typed 0 is a share; an untyped 0 is unset.
     unitCfm: (unitId) => {
       const u = input.inputs.units[String(unitId)]?.cfm;
-      return u?.value != null && (u.source === "Work" || u.source === "run" || u.value > 0)
+      return u?.value != null && (u.source === "Work" || u.source === "run" || u.source === "model-store" || u.value > 0)
         ? { cfm: u.value, source: provenance(u) }
         : null;
     },
