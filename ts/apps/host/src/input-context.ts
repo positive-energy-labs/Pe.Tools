@@ -45,8 +45,7 @@ function check(lane: HostInputLane, use: InputUse): InvalidRead | null {
       if (!operation) return refused("read.contract", `${use.key} has no generated contract`);
       // No replay-safe metadata distinguishes transaction-backed inspection from rehearsal yet.
       // Historical invocation therefore admits only ordinary Read/Read.
-      return operation.intent === "Read" &&
-        operation.effect === "Read"
+      return operation.intent === "Read" && operation.effect === "Read"
         ? uncovered(NATIVE_BUNDLE, ["native"], use.key)
         : historical(`${use.key} (${operation.effect})`);
     }
@@ -65,18 +64,27 @@ function check(lane: HostInputLane, use: InputUse): InvalidRead | null {
   }
 }
 
-const provenance = (lane: HostInputLane): SourceProvenance =>
-  lane.kind === "live"
-    ? { kind: "live", capturing: lane.captureStore !== undefined }
-    : lane.kind === "fixture"
-      ? { kind: "fixture", name: lane.name }
-      : {
-          kind: "recording",
-          at: lane.at,
-          build: lane.recordingStore.identity.build,
-          catalog: lane.recordingStore.identity.catalog,
-          coverage: [...NATIVE_BUNDLE],
-        };
+/** Read on every projection: capture can stop while the host runs, and provenance must say so. */
+const provenance = (lane: HostInputLane): SourceProvenance => {
+  if (lane.kind === "fixture") return { kind: "fixture", name: lane.name };
+  if (lane.kind === "live") {
+    const truncated = lane.captureStore?.capture.truncated() ?? lane.captureSetup ?? null;
+    return {
+      kind: "live",
+      capturing: lane.captureStore !== undefined && truncated === null,
+      ...(truncated ? { truncated } : {}),
+    };
+  }
+  const truncated = lane.recordingStore.truncation;
+  return {
+    kind: "recording",
+    at: lane.at,
+    build: lane.recordingStore.identity.build,
+    catalog: lane.recordingStore.identity.catalog,
+    coverage: [...NATIVE_BUNDLE],
+    ...(truncated ? { truncated } : {}),
+  };
+};
 
 /** The root-fixed lane of one host runtime, its provenance and its historical access policy. */
 export class HostInputContext extends Context.Service<
@@ -90,7 +98,9 @@ export class HostInputContext extends Context.Service<
   static layer(lane: HostInputLane) {
     return Layer.succeed(HostInputContext, {
       lane,
-      source: provenance(lane),
+      get source() {
+        return provenance(lane);
+      },
       check: (use) => check(lane, use),
     });
   }

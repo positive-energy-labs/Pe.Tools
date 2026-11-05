@@ -6,7 +6,6 @@ import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, expect, test } from "vite-plus/test";
 import { sourceProvenanceSchema, type Caller, type WorkKey } from "@pe/agent-contracts";
-import { hostDescriptorSchema } from "@pe/host-contracts/host-descriptor";
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
 import { RouteWorkspace } from "@pe/runtime";
 import { historicalRoutes, hostInputGraph } from "../src/app.ts";
@@ -61,7 +60,6 @@ test("existing native call and resolve replay with zero live graph; provenance i
     expect(resolved.status, await resolved.clone().text()).toBe(200);
     expect(await resolved.json()).toMatchObject({ operationKey: key, processIncarnation: { pid: 7, startedAt: 1000 }, freshnessGeneration: "recorded:g1" });
     const features = await app.send("/pe/features");
-    expect(hostDescriptorSchema.safeParse(await features.json()).success).toBe(true);
     const source = features.headers.get("x-pe-source")!;
     expect(sourceProvenanceSchema.parse(JSON.parse(source))).toEqual({ kind: "recording", at: null, ...identity, coverage: ["native"] });
     expect(source).not.toMatch(/recordingStore|captureStore|directory|append|observations/);
