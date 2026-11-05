@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-05, Driver: `GREEN for main at 0b63d5d8`. Steps 0–5 fast-forwarded to that exact SHA from 2be21af8; unrelated main working edits were preserved. T1 and the Step 5 presentation REDs remain follow-on work, not merge gates. Step 6 and partial Step 7 services were excluded from this merge.
+
 - 2026-11-05, kaitpw (Governor): T1's missing or stale Timeline row does not gate main when the apply receipt is correct and the seal prevents a second apply; keep its repair line active. The Driver's exact `GREEN for main at <sha>` gates a fast-forward of main to that SHA within the same hour, then the purge partner rebases and follows. Write and data regressions still require a fix or ruling; candidate generation belongs before the green pin, never to a check.
 
 - 2026-11-05, counsel (Step 6 parity default): retire the DEV-only `/design-system/control-surface` exploration and its implicit glob-selected variants. Its source remains in git history. `/design-system/table-controls` remains the swatch's real Table API specimen, owned under `design-system/specimens/table-controls`; it has explicitly authored fixture datasets. No production prototype selector or unused variant registry is introduced.
@@ -129,6 +131,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-09-09, the claim that document keys and receipts alone prevent every stale read or duplicate mutation: keys separate open lifetimes; Effect refresh orders reads within one lifetime; host admission and request identity govern retries.
 
 ## Owed
+
+- Step 5 presentation follow-on, Driver `drive/step-5/CASES.md`, explicitly non-blocking for main: refresh copied-Pod discovery without host restart; replace the dead `/pod-admin` link; investigate a second-turn Pod set-view rendered-ack refusal, absent Pea `pod.import` discovery, refusal text rendered with misleading fan chips, the initial missing Ducts handle, `sheetSnapshot` unavailable after Back, a route-open 403 and the legacy outcome-unknown chip. T1 cb88e274 is not browser-proven yet. Preserve this classification unless a new write/data consequence is observed.
 
 - Wave 2 engine cutover: legacy `shell/mount-readings-owner.ts` still constructs `createReadingGraph`, while admitted routes use `createAdmittedReadings`. Source opening is shared at 27510ae6; dependency ownership and the hook context's empty Page are not. Migrate or retire the remaining legacy route declarations with their Page and Work doors in Step 8, then delete the legacy scheduler; do not nest two engines or claim this as completed by sharing acquisition.
 

@@ -31,6 +31,8 @@ A parity gap that is presentation only, with no data or write consequence, is dr
 
 ## Cutover order (ADR 0027 rule 15)
 
+Progress 2026-11-05: steps 0–5 landed on main at the Driver's exact GREEN SHA `0b63d5d8`. Step 6's catalog/source-opening and prototype-retirement slice is pinned separately at `5728ab22`, with coupled checks and quality returned; Driver chaos remains. The two dependency engines and empty hook Page remain Owed to the legacy route cutover. Step 7 is services-first on isolated branches; partial service declarations are not on main. Presentation REDs from `drive/step-5/CASES.md` are follow-on work under the Governor's ruling, not a reopened main gate.
+
 1. The first-fix table above.
 2. Plan, rehearse, apply (ADR 0030 rules 4 to 7): the linker and `OpCallGate` change; the one write button (`ts/packages/kit/src/components/lang/preview-action.tsx` is the seed) adopted by /ducts and /fans; the Timeline as a projection with invocation starts and consent windows.
 3. StateCell as the one drawing in production (`ts/packages/kit/src/components/lang/cell.tsx`); Pea stages, the suggestion lane is deleted; batch and in-place review over the same cells; Pointers as a shell list.
