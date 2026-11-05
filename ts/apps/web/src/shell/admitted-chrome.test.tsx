@@ -180,7 +180,7 @@ test("the subject door adds beside what is open, and never narrows all to explic
  test("all and clear each send one generated subject transition, without enumerating the roster", () => {
   const subject = vi.fn();
   const mount = { controls: { subject } } as unknown as AdmittedMount;
-  const data = { subject: { field: "system" }, fields: { system: { cardinality: "many" } } } as unknown as RouteGraphJson;
+  const data = { subject: { field: "system" }, fields: { system: { role: "subject", cardinality: "many" } } } as unknown as RouteGraphJson;
   const door = admittedSubjectDoor(mount, data);
   door.all();
   expect(subject.mock.calls).toEqual([[{ kind: "all" }]]);
@@ -188,3 +188,4 @@ test("the subject door adds beside what is open, and never narrows all to explic
   door.clear();
   expect(subject.mock.calls).toEqual([[{ kind: "ids", ids: [] }]]);
  });
+

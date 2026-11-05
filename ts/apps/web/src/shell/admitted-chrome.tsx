@@ -184,7 +184,7 @@ export function AdmittedSubjectPicker({
   const open = options.filter((o) => selected.includes(identity(o.id)));
   return (
     <>
-      {/* Many: every open subject is its own chip with its own ×; the trigger only adds. */}
+      {/* Many: every open subject is its own chip with its own Ã—; the trigger only adds. */}
       {many &&
         (all ? (
           <NarrowChip
@@ -622,13 +622,14 @@ function PaneStatus({ mount, draws }: { mount: AdmittedMount; draws: readonly st
 }
 
 export function admittedSubjectDoor(mount: AdmittedMount, data: RouteGraphJson): AdmittedSubject {
+  const field = data.fields[data.subject.field];
   return {
     toggle: (id) => subjectOf(mount, data)?.toggle(id),
     add: (ids) => subjectOf(mount, data)?.add(ids),
     remove: (id) => subjectOf(mount, data)?.remove(id),
     setActive: (id) => subjectOf(mount, data)?.setActive(id),
     all: () => { mount.controls.subject({ kind: "all" }); },
-    clear: () => { mount.controls.subject(data.fields[data.subject.field]?.cardinality === "many" ? { kind: "ids", ids: [] } : null); },
+    clear: () => { mount.controls.subject(field?.role === "subject" && field.cardinality === "many" ? { kind: "ids", ids: [] } : null); },
   };
 }
 
