@@ -932,7 +932,9 @@ test("route:ducts.set-view with no mounted view opens only through an explicit c
     input: { system: "sa 19" },
     timeoutSeconds: 30,
   });
-  expect(opens).toEqual([{ thread: "t1", link: expect.stringMatching(/^\/ducts/) }]);
+  // The host builds the link from the registered identity; MCP carries only thread and target.
+  expect(opens).toMatchObject([{ thread: "t1" }]);
+  expect(opens[0]).not.toHaveProperty("link");
   expect(reads).toBeGreaterThanOrEqual(2);
   // The open is the set: the mounted view's own names resolve "sa 19", and its lease revision is used.
   expect(sets).toMatchObject([
@@ -998,7 +1000,7 @@ test("an admitted route's view rows project keys from its agent policy, never th
     routes: [],
     packages: [],
     skills: [],
-    admittedFields: (route) => (route === "fans" ? admitted : null),
+    admittedRoutes: () => [{ key: "fans", title: "Fans", address: "/fans", fields: admitted }],
   });
   const view = rows.find((row) => row.key === "route:fans.view")!;
   expect(view.description).toContain("its keys (fan, viewport; settable: fan)");

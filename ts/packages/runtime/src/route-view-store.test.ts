@@ -35,7 +35,7 @@ describe("mounted route view custody", () => {
       fan: { role: "subject", agent: "set" },
       viewport: { role: "pose", agent: "read" },
     } as never;
-    const store = new RouteViewStore((route) => (route === "ducts" ? fields : null));
+    const store = new RouteViewStore(() => [{ key: "ducts", title: "Ducts", address: "/ducts", fields }]);
     const lease = store.publish({ ...ducts(id1), page: { fan: "", viewport: "" } });
     expect(await store.set("t", "ducts", id1, lease.revision, { viewport: "{}" })).toMatchObject({
       ok: false,
@@ -54,13 +54,16 @@ describe("mounted route view custody", () => {
   it("leases only a builtin agent address or a registered opt-in Pod, through the owner codec", async () => {
     const pod = { fan: { role: "subject", agent: "set" } } as never;
     const silent = { fan: { role: "subject", agent: "none" } } as never;
-    const registered = new Map<string, never>([["acme-fans", pod], ["acme-quiet", silent]]);
-    const store = new RouteViewStore((route) => registered.get(route) ?? null);
+    const registered = [
+      { key: "acme-fans", title: "Acme fans", address: "/tool/acme-fans", fields: pod },
+      { key: "acme-quiet", title: "Acme quiet", address: "/tool/acme-quiet", fields: silent },
+    ];
+    const store = new RouteViewStore(() => registered);
     expect(store.leasesView("families")).toBe(true);
     expect(store.leasesView("acme-unregistered")).toBe(false);
     expect(store.leasesView("acme-quiet")).toBe(false);
     expect(store.leasesView("acme-fans")).toBe(true);
-    expect(store.open("acme-fans", { thread: "t", link: "/tool/acme-fans" }).ok).toBe(false);
+    expect(store.open("acme-quiet", { thread: "t" }).ok).toBe(false);
     const lease = store.publish({ ...ducts(id1), route: "acme-fans", page: { fan: "" } });
     let intent: { commandId: string; patch: unknown } | undefined;
     store.subscribe((value) => {

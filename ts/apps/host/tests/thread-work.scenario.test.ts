@@ -57,15 +57,15 @@ test("explicit Pea opens travel live through world and cannot address another co
       }
     }
   };
-  const open = (thread: string, link = "/families") =>
+  const open = (thread: string, route = "families") =>
     withInvocationContext(
       { caller: { kind: "pea", context: "test-context", thread: "selected-chat" } },
       () =>
         app.fetch(
-          new Request("http://host/pe/route-view/families/open", {
+          new Request(`http://host/pe/route-view/${route}/open`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ thread, link }),
+            body: JSON.stringify({ thread }),
           }),
         ),
     );
@@ -90,7 +90,8 @@ test("explicit Pea opens travel live through world and cannot address another co
         ),
     );
     expect(foreignSet.status).toBe(403);
-    expect((await open("selected-chat", "/ducts")).status).toBe(400);
+    // An unregistered name never reaches the view store: the host's registration gate refuses it.
+    expect((await open("selected-chat", "acme-unregistered")).status).toBe(404);
     const response = await open("selected-chat");
     expect(response.status).toBe(200);
     const receipt = await response.json();

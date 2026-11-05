@@ -12,8 +12,7 @@ import {
   actionControls,
   familiesRouteState,
   routeAddress,
-  routeViewRoutes,
-  type RouteViewRoute,
+  legacyViewRoute,
   familyCatalogRequest,
   refusalSchema,
   type ActionReceipt,
@@ -121,23 +120,19 @@ export async function scopeOf(): Promise<Scope | null> {
 async function openToolTab(
   client: ReturnType<typeof createPeClient>,
   thread: string,
-  route: RouteViewRoute,
+  route: string,
   read: (instance: unknown) => Promise<Response>,
   target: Target,
 ): Promise<
   | { mounted: true; instance: string; revision: number }
   | { mounted: false; outcome: "unmounted"; applied: false; note: string }
 > {
-  const title = routeAddress(route).title;
-  const link = routeAddress(route).link(
-    {},
-    { target: target ? JSON.stringify(target) : undefined },
-  );
+  // The host builds the link from the route's registered identity; this carries only the target.
   const opened = await client.response("view.open", {
     params: { route },
-    body: { thread, link },
+    body: { thread, ...(target ? { target: JSON.stringify(target) } : {}) },
   });
-  if (!opened.ok) throw Error(`Could not open ${title}: ${await opened.text()}`);
+  if (!opened.ok) throw Error(`Could not open ${route}: ${await opened.text()}`);
   const { commandId } = (await opened.json()) as { commandId: string };
   // Bound the acquisition wait. A background/unrelated browser never counts as a rendered open.
   for (let i = 0; i < 12; i++) {
@@ -161,7 +156,7 @@ async function openToolTab(
     mounted: false,
     outcome: "unmounted",
     applied: false,
-    note: `The browser showing this conversation did not render ${title}. Nothing was applied. Select this conversation in Pea, choose the tool's document, then set-view again.`,
+    note: `The browser showing this conversation did not render ${route}. Nothing was applied. Select this conversation in Pea, choose the tool's document, then set-view again.`,
   };
 }
 
@@ -815,10 +810,11 @@ async function dispatch(
         };
       }
 
-      const view = /^route:([a-z-]+)\.(view|set-view)$/.exec(row.key);
-      const route = view && routeViewRoutes.find((key) => key === view[1]);
+      // One executor for every leasing route's projected row (`viewRoutes`). The host's channel
+      // rechecks the live registration, so a withdrawn or unregistered route refuses there.
+      const view = row.source === "browser Page" ? /^route:(.+)\.(view|set-view)$/.exec(row.key) : null;
+      const route = view?.[1];
       if (view && route) {
-        // One channel for every route that leases a view (`routeViewRoutes`): read the leased view, or patch its Page keys.
         if (!viewThread) throw Error("This MCP server has no thread (no harness context).");
         const client = createPeClient(base(), fetch);
         const read = (instance: unknown) =>
@@ -845,10 +841,11 @@ async function dispatch(
               return { ok: true, target: { session: null, document: null }, result: opened };
             ({ instance, revision } = opened);
           }
-          const spec = routeAddress(route).agent;
+          const legacy = legacyViewRoute(route);
+          const spec = legacy && routeAddress(legacy).agent;
           let patch = rest as Record<string, string>;
           let refused: string | null = null;
-          if (spec.resolve) {
+          if (spec && spec.resolve) {
             // The view's own facts say which ids exist; a name resolves against them or not at all.
             const lease = (await (await read(instance)).json()) as {
               facts?: Record<string, unknown>;

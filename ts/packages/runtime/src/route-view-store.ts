@@ -1,9 +1,10 @@
 import {
   agentFields,
-  leasesView,
   legacyViewRoute,
   routeAddress,
-  type AdmittedFields,
+  viewOpenLink,
+  viewRoute,
+  type AdmittedView,
   type RouteView,
   type RouteViewAck,
   type RouteViewOpen,
@@ -24,16 +25,20 @@ const MAX_AGE_MS = 15_000;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /**
- * Mounted Page state of every route that leases a view (`leasesView`), never Work. A command succeeds
+ * Mounted Page state of every route that leases a view (`viewRoute`), never Work. A command succeeds
  * only after the view acknowledges its render.
  */
 export class RouteViewStore {
   /** Admitted routes fence keys by agent policy; the browser's Page owner holds their codecs and decodes. */
-  constructor(private readonly admitted: (route: string) => AdmittedFields | null = () => null) {}
+  constructor(private readonly registered: () => readonly AdmittedView[] = () => []) {}
+  /** Read live at every call, so a withdrawn registration refuses at once. */
+  private admitted(route: string) {
+    return this.registered().find((each) => each.key === route) ?? null;
+  }
   private leases = new Map<string, Lease>();
   /** The host's one membership check: builtin `agent` address, or registered opt-in admission. */
   leasesView(route: string) {
-    return leasesView(route, this.admitted(route));
+    return viewRoute(route, this.admitted(route)) !== null;
   }
   private listeners = new Set<(intent: Intent | RouteViewOpenIntent) => void>();
   private pending = new Map<
@@ -87,18 +92,16 @@ export class RouteViewStore {
 
   /** Commands are live delivery only. A later subscriber cannot open an old tool accidentally. */
   open(route: RouteView["route"], input: RouteViewOpen) {
-    // ponytail: an admitted route's open needs its registered address and owner decode; refused until then.
-    const legacy = legacyViewRoute(route);
-    if (!legacy) return { ok: false as const, error: `${route} opens only from its own tab` };
-    const canonical = routeAddress(legacy).tab(input.link);
-    if (!canonical.ok) return { ok: false as const, error: canonical.error };
+    const view = viewRoute(route, this.admitted(route));
+    if (!view) return { ok: false as const, error: `${route} is not a registered view` };
+    const link = viewOpenLink(view, input.target);
     const commandId = crypto.randomUUID();
     for (const listener of this.listeners)
       listener({
         type: "route-view-open",
         route,
         thread: input.thread,
-        link: canonical.link,
+        link,
         commandId,
       });
     return { ok: true as const, commandId };
@@ -119,7 +122,7 @@ export class RouteViewStore {
     const selected = this.select(thread, route, instance);
     if (!selected || "ok" in selected) return { ok: false, error: "view unavailable" };
     const lease = this.leases.get(instance)!;
-    const fields = this.admitted(lease.view.route);
+    const fields = this.admitted(lease.view.route)?.fields ?? null;
     const settable = fields && new Set(agentFields(fields, "set").map(([key]) => key));
     // A Pod has no builtin address: only the legacy branch reads one.
     const agent = settable ? null : routeAddress(legacyViewRoute(lease.view.route)!).agent;

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { routeViewRoutes, type RouteViewRoute } from "./route-address.ts";
+import { routeAddress, routeViewRoutes, type RouteViewRoute } from "./route-address.ts";
 import type { RouteGraphJson } from "./route-kernel-data.ts";
 
 /**
@@ -25,17 +25,45 @@ export const agentFields = (fields: AdmittedFields, policy?: "read" | "set") =>
 /** A builtin address that declares an `agent` lease, or null. */
 export const legacyViewRoute = (route: string): RouteViewRoute | null =>
   routeViewRoutes.find((key) => key === route) ?? null;
+/** One live registration as the workspace's admission owner projects it (read-only). */
+export interface AdmittedView {
+  key: string;
+  title: string;
+  address: string;
+  fields: AdmittedFields;
+}
+/** A route that leases a view, as Pea discovers, opens and sets it. `legacy` names a builtin address. */
+export interface ViewRoute extends Omit<AdmittedView, "fields"> {
+  fields: AdmittedFields | null;
+  legacy: RouteViewRoute | null;
+}
 /**
  * The one route-view identity authority (ADR 0030 rule 10): a builtin address with an `agent`
- * lease, or a registered admission (`admitted` is its live receipt's fields) that opts a field in.
+ * lease, or a live registration (`admitted`, from the admission owner) that opts a field in.
  * An unregistered key, and a registered Pod whose fields are all agent "none", lease nothing.
  */
-export const leasesView = (route: string, admitted: AdmittedFields | null) =>
-  (admitted !== null && agentFields(admitted).length > 0) || legacyViewRoute(route) !== null;
+export function viewRoute(route: string, admitted: AdmittedView | null): ViewRoute | null {
+  const legacy = legacyViewRoute(route);
+  if (legacy) {
+    const { title, path } = routeAddress(legacy);
+    return { key: legacy, title, address: path, fields: admitted?.fields ?? null, legacy };
+  }
+  return admitted?.key === route && agentFields(admitted.fields).length
+    ? { ...admitted, legacy: null }
+    : null;
+}
+/** Every leasing route once: builtin agent addresses, then registered opt-in admissions. */
+export const viewRoutes = (admitted: readonly AdmittedView[]): ViewRoute[] => [
+  ...routeViewRoutes.map((key) => viewRoute(key, admitted.find((each) => each.key === key) ?? null)!),
+  ...admitted.flatMap((each) => (legacyViewRoute(each.key) ? [] : (viewRoute(each.key, each) ?? []))),
+];
+/** What an explicit open delivers: the registered address carrying the target. The browser owner decodes. */
+export const viewOpenLink = (view: ViewRoute, target?: string) =>
+  `${view.address}${target ? `?${new URLSearchParams({ target })}` : ""}`;
 
 /**
  * Browser-owned Page state of one mounted, visible view. `page` holds exactly the agent keys.
- * `route` is a registered key, so its shape is checked here and its identity by `leasesView` at the
+ * `route` is a registered key, so its shape is checked here and its identity by `viewRoute` at the
  * one store that leases it; a builtin-only enum would refuse every registered Pod.
  */
 export const routeViewSchema = z.strictObject({
@@ -53,13 +81,21 @@ export const routeViewSchema = z.strictObject({
 });
 export type RouteView = z.infer<typeof routeViewSchema>;
 
-/** An explicit request to the browser currently showing this conversation. Never persisted/replayed. */
+/**
+ * An explicit open request. The host builds the link from the route's registered identity
+ * (`viewOpenLink`), one path for builtins and Pods; the caller carries only the target.
+ */
 export const routeViewOpenSchema = z.strictObject({
+  thread: z.string().min(1).max(256),
+  target: z.string().max(8192).optional(),
+});
+export type RouteViewOpen = z.infer<typeof routeViewOpenSchema>;
+/** What the host delivers to the browser currently showing this conversation. Never persisted/replayed. */
+export const routeViewOpenedSchema = z.strictObject({
   thread: z.string().min(1).max(256),
   link: z.string().startsWith("/").max(8192),
 });
-export type RouteViewOpen = z.infer<typeof routeViewOpenSchema>;
-export type RouteViewOpenIntent = RouteViewOpen & {
+export type RouteViewOpenIntent = z.infer<typeof routeViewOpenedSchema> & {
   type: "route-view-open";
   route: RouteView["route"];
   commandId: string;
