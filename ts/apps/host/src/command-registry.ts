@@ -11,6 +11,7 @@ import { scheduleExecutors } from "./schedule-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { takeoffExecutors } from "./takeoff-actions.ts";
 import { ductsExecutors } from "./ducts-actions.ts";
+import { catalogWorkExecutors, catalogWorkSpecs } from "./catalog-work-actions.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
 import { bootstrapExecutor } from "./bootstrap.ts";
 import { pagePublicationExecutor } from "./page-publication.ts";
@@ -51,6 +52,7 @@ export function commandRegistry(
     instancesExecutors(deps),
     takeoffExecutors(captures, bridge, deps),
     ductsExecutors(bridge, deps),
+    catalogWorkExecutors(bridge),
   ]) {
     for (const [key, factory] of Object.entries(group)) {
       if (implementations[key]) throw Error(`Command '${key}' has two executors`);
@@ -120,7 +122,8 @@ export function commandRegistry(
               entry,
               bridge,
               deps,
-              undefined,
+              // A route-free catalog owner has no tool; its Work spec is the catalog entry's.
+              catalogWorkSpecs[boundary.route],
               ownExecutors.has(key) && boundary.phase === "preview",
             )
           : entry;
