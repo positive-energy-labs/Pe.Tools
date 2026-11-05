@@ -98,6 +98,12 @@ export namespace DataTableApply {
       kind: DataTableColumnKind;
       parameterName: string;
       sharedParameterGuid: string;
+      /**
+       * The column's pool slot within its kind: apply binds the n-th spec column of a kind to slot n, so a column
+       * keeps its parameter (and values) only when re-sent at the same ordinal.
+       *
+       */
+      slot: number;
     }
     export interface DataTableRowHandle {
       key: string;
@@ -6248,6 +6254,12 @@ export namespace RevitDetailDataTables {
       kind: DataTableColumnKind;
       parameterName: string;
       sharedParameterGuid: string;
+      /**
+       * The column's pool slot within its kind: apply binds the n-th spec column of a kind to slot n, so a column
+       * keeps its parameter (and values) only when re-sent at the same ordinal.
+       *
+       */
+      slot: number;
     }
     export interface DataTableRowHandle {
       key: string;

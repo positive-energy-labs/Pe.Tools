@@ -63,7 +63,13 @@ public record DataTableColumnHandle(
     DataTableColumnKind Kind,
     string ParameterName,
     string SharedParameterGuid
-);
+) {
+    /// <summary>
+    ///     The column's pool slot within its kind: apply binds the n-th spec column of a kind to slot n, so a column
+    ///     keeps its parameter (and values) only when re-sent at the same ordinal.
+    /// </summary>
+    public int Slot { get; init; }
+}
 
 public record DataTableRowHandle(string Key, long ElementId, string UniqueId) {
     public List<string?> Values { get; init; } = [];

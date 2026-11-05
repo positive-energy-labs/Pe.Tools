@@ -35,6 +35,13 @@ export interface CatalogWork<S extends z.ZodType = z.ZodType, B = unknown> {
   owner: string;
   op: string;
   schema: S;
+  /**
+   * The native Read the plan takes, and apply retakes after consent, for the stored state `derive` lays the
+   * Work over. Required: an owner whose op omits keys must read them to resend them (K3).
+   */
+  base: { op: string; input(doc: z.infer<S>): unknown; project(response: unknown, doc: z.infer<S>): B };
+  /** `replace`: the op drops keys it is not sent, so `derive` resends every stored key and the plan shows the full before. */
+  mutation: "replace" | "patch";
   derive(doc: z.infer<S>, base: B): { request: unknown; touched: readonly CatalogTouch[] };
 }
 
@@ -42,12 +49,12 @@ export interface CatalogWork<S extends z.ZodType = z.ZodType, B = unknown> {
 export class CatalogWorkRefused extends Error {}
 
 /**
- * One data table per document Work. A column's key is its native pool slot, `text:<n>` or `number:<n>`:
- * DataTableEngine.ReconcileFields binds the n-th column of a kind to the n-th pool parameter of that
- * kind, so the slot is the column's durable identity and the heading is its value. Reorder is not
- * authored (Text slots are sent before Number slots), and a slot gap is refused, because the engine
- * would move later columns onto earlier parameters. Cells are never filled from the model: a staged row
- * must stage every cell up to its last one, and rows with no staged cell are left untouched.
+ * One data table per document Work, keyed like the model: a column by its native pool slot, `text:<n>` or
+ * `number:<n>` (DataTableEngine binds a kind's n-th column to slot n), a cell by row key then slot. The op
+ * replaces columns whole and rewrites a sent row positionally, so the plan lays staged cells over the stored
+ * table: every stored column is resent at its slot, a touched row resends its unstaged cells' stored values,
+ * and untouched rows are not sent (rows upsert). A delete that leaves a slot gap would remap later columns
+ * onto other parameters, so it refuses.
  */
 const slot = z.string().regex(/^(text|number):(0|[1-9]\d{0,2})$/);
 const rowKey = z.string().min(1);
@@ -57,39 +64,71 @@ export const dataTablesWorkSchema = z.strictObject({
   rows: z.record(rowKey, z.record(slot, draftCellSchema(z.string().nullable()))).default({}),
 });
 type DataTablesWork = z.infer<typeof dataTablesWorkSchema>;
+/** The stored table by slot: headings, and each row's cells. Null: the document has no table of that name. */
+export type DataTableBase = {
+  columns: Record<string, string>;
+  rows: Record<string, Record<string, string | null>>;
+} | null;
 
-function deriveDataTable(doc: DataTablesWork) {
+const tableName = (doc: DataTablesWork) => {
   const name = doc.name.edit?.value;
   if (!name) throw new CatalogWorkRefused("Stage the table name");
-  const staged = Object.entries(doc.columns)
-    .filter(([, cell]) => cell.edit?.value !== undefined)
-    .map(([key, cell]) => ({ key, kind: key.startsWith("text") ? "Text" : "Number", heading: cell.edit!.value! }));
-  if (!staged.length) throw new CatalogWorkRefused("Stage at least one column");
-  const columns = (["Text", "Number"] as const).flatMap((kind) => {
-    const prefix = `${kind.toLowerCase()}:`;
-    const ofKind = staged.filter((column) => column.kind === kind);
-    for (let n = 0; n < ofKind.length; n++)
-      if (!ofKind.some((column) => column.key === `${prefix}${n}`))
-        throw new CatalogWorkRefused(
-          `${prefix}${n} is not staged: the engine binds ${kind} columns by ordinal, so later ${kind} columns would move onto its parameter`,
-        );
-    return [...ofKind].sort((a, b) => Number(a.key.slice(prefix.length)) - Number(b.key.slice(prefix.length)));
-  });
+  return name;
+};
+const slotOrder = (key: string) => [key.startsWith("text") ? 0 : 1, Number(key.split(":")[1])] as const;
+
+function deriveDataTable(doc: DataTablesWork, base: DataTableBase) {
+  const name = tableName(doc);
+  const touched: CatalogTouch[] = [];
+  const by = (edit: { by?: Author } | null | undefined) => edit?.by ?? "unknown";
+  if (doc.name.edit) touched.push({ path: ["name"], before: base ? name : null, after: name, by: by(doc.name.edit as StagedEdit) });
+  const columns: Record<string, string> = { ...base?.columns };
+  for (const [key, cell] of Object.entries(doc.columns)) {
+    const edit = cell.edit as StagedEdit;
+    if (!edit) continue;
+    const before = base?.columns[key] ?? null;
+    if (edit.delete && before == null) throw new CatalogWorkRefused(`Column ${key} is not stored; nothing to delete`);
+    if (edit.delete) delete columns[key];
+    else columns[key] = edit.value as string;
+    touched.push({ path: ["columns", key], before, after: edit.delete ? null : edit.value, by: by(edit) });
+  }
+  const order = Object.keys(columns).sort((a, b) => slotOrder(a)[0] - slotOrder(b)[0] || slotOrder(a)[1] - slotOrder(b)[1]);
+  for (const kind of ["text", "number"])
+    order.filter((k) => k.startsWith(kind)).forEach((k, n) => {
+      if (k !== `${kind}:${n}`)
+        throw new CatalogWorkRefused(`${kind}:${n} would be empty: the engine binds ${kind} columns by ordinal, so ${k} would move onto another parameter`);
+    });
+  if (!order.length) throw new CatalogWorkRefused("A data table needs at least one column");
   const rows = Object.entries(doc.rows).flatMap(([key, cells]) => {
-    for (const [slot, cell] of Object.entries(cells))
-      if (cell.edit && !columns.some((column) => column.key === slot))
-        throw new CatalogWorkRefused(`Row ${key}: ${slot} is not a staged column`);
-    const last = columns.findLastIndex((column) => cells[column.key]?.edit);
-    if (last < 0) return [];
-    const values = columns.slice(0, last + 1).map((column) => {
-      const edit = cells[column.key]?.edit;
-      if (!edit) throw new CatalogWorkRefused(`Row ${key}: stage ${column.key} too; a skipped cell would be cleared`);
-      return edit.value;
+    const staged = Object.entries(cells).filter(([, cell]) => cell.edit);
+    if (!staged.length) return [];
+    for (const [slotKey, cell] of staged) {
+      if (!(slotKey in columns)) throw new CatalogWorkRefused(`Row ${key}: ${slotKey} is not a column of ${name}`);
+      touched.push({ path: ["rows", key, slotKey], before: base?.rows[key]?.[slotKey] ?? null, after: (cell.edit as StagedEdit)!.value ?? null, by: by(cell.edit as StagedEdit) });
+    }
+    const values = order.map((k) => {
+      const edit = cells[k]?.edit as StagedEdit;
+      return edit ? ((edit.value as string | null) ?? null) : (base?.rows[key]?.[k] ?? null);
     });
     return [{ key, values }];
   });
+  if (!touched.some((t) => t.path[0] !== "name") && base) throw new CatalogWorkRefused(`Stage a column or cell of ${name} first`);
+  const kindOf = (k: string) => (k.startsWith("text") ? "Text" : "Number");
   return {
-    table: { name, columns: columns.map(({ heading, kind }) => ({ heading, kind })), rows },
+    request: { table: { name, columns: order.map((k) => ({ heading: columns[k]!, kind: kindOf(k) })), rows } },
+    touched,
+  };
+}
+
+/** The native detail read, by slot (`DataTableColumnHandle.slot`), for the one table the Work names. */
+function projectDataTable(response: unknown, doc: DataTablesWork): DataTableBase {
+  type Native = { tables: { name: string; columns: { heading: string; kind: string; slot: number }[]; rows: { key: string; values: (string | null)[] }[] }[] };
+  const table = (response as Native).tables.find((t) => t.name === tableName(doc));
+  if (!table) return null;
+  const keys = table.columns.map((c) => `${c.kind.toLowerCase()}:${c.slot}`);
+  return {
+    columns: Object.fromEntries(table.columns.map((c, i) => [keys[i], c.heading])),
+    rows: Object.fromEntries(table.rows.map((r) => [r.key, Object.fromEntries(keys.map((k, i) => [k, r.values[i] ?? null]))])),
   };
 }
 
@@ -125,13 +164,20 @@ export const catalogWorks = {
     owner: "data-tables",
     op: "data-table.apply",
     schema: dataTablesWorkSchema,
-    // Data tables read no base: cells are never filled from the model (above).
-    derive: (doc) => ({ request: deriveDataTable(doc), touched: [] }),
-  } satisfies CatalogWork<typeof dataTablesWorkSchema, undefined>,
+    base: { op: "revit.detail.data-tables", input: (doc) => ({ names: [tableName(doc)] }), project: projectDataTable },
+    mutation: "replace",
+    derive: deriveDataTable,
+  } satisfies CatalogWork<typeof dataTablesWorkSchema, DataTableBase>,
   "parameter-links": {
     owner: "parameter-links",
     op: "revit.apply.parameter-links",
     schema: parameterLinksDocumentSchema,
+    base: {
+      op: "revit.detail.parameter-links",
+      input: () => ({ includeEvaluation: false }),
+      project: (response) => parameterLinkProfileSchema.nullish().parse((response as { profile?: unknown }).profile) ?? null,
+    },
+    mutation: "replace",
     derive: mergeParameterProfile,
   } satisfies CatalogWork<typeof parameterLinksDocumentSchema, ParameterLinkProfile | null>,
 };
@@ -163,7 +209,7 @@ export const catalogWorkSpecs = Object.fromEntries(
 ) as { [O in Owner]: RouteStateSpec<(typeof catalogWorks)[O]["schema"]> & { editable: readonly WorkPath[] } };
 
 function catalogWorkCommand<const K extends string>(owner: Owner, key: K, dirties: readonly ActionReadingKey[]) {
-  const work: CatalogWork<z.ZodType, never> = catalogWorks[owner];
+  const work: Pick<CatalogWork, "op" | "schema"> = catalogWorks[owner];
   const leaf = native(work.op);
   // The apply carries its native ModelWrite's axes; the plan declares its own Read (ADR 0030 rule 4).
   const axes: CatalogAxes = {

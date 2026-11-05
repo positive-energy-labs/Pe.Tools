@@ -16,6 +16,15 @@ const doc = {
 const sealed = {
   previewOnly: true,
   derivedRequest: {},
+  // The plan's own disclosure: each staged cell with the stored before it read (K3: data tables read a base too).
+  evidence: {
+    before: { columns: { "text:0": "Old A" }, rows: {} },
+    touched: [
+      { path: ["name"], before: "T", after: "T", by: "pea" },
+      { path: ["columns", "text:0"], before: "Old A", after: "A", by: "human" },
+      { path: ["rows", "r1", "text:0"], before: null, after: "a1", by: "pea" },
+    ],
+  },
   seal: {
     requestHash: "h",
     work: {},
@@ -52,8 +61,9 @@ test("a Page-less owner shows its staged cells with authors and plans then appli
   expect(sent.map((a) => [a.key, a.input])).toEqual([
     ["data-table.apply.plan", { work: workHandle(at as never, 4) }],
   ]);
-  // Before is the model's and unread here: the popover says unknown, never a guess.
+  // Before is the plan's stored read, never an inferred unknown.
   expect(document.querySelectorAll("[data-write-cell]").length).toBe(3);
+  expect(document.querySelector('[data-write-cell="columns/text:0"]')?.textContent).toContain("Old A");
   fireEvent.click(screen.getByRole("button", { name: /apply data-tables/ }));
   await waitFor(() => expect(sent.at(-1)?.key).toBe("data-table.apply"));
 });

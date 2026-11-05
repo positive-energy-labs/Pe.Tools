@@ -16,12 +16,9 @@ import {
 } from "@pe/agent-contracts";
 import { invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
 import { command, refused, type CommandExecutor } from "./command-executor.ts";
-import { storedParameterLinks, type FamilyActionDependencies } from "./family-actions.ts";
+import { projectReader, type FamilyActionDependencies } from "./family-actions.ts";
 
 type Owner = keyof typeof catalogWorks;
-type Base = (bridge: RevitBridge["Service"], target: DocumentRef, deps: FamilyActionDependencies) => Promise<unknown>;
-/** Each owner's base reader; an owner whose derive reads no model state has none. */
-const bases: Partial<Record<Owner, Base>> = { "parameter-links": storedParameterLinks };
 
 const prepared = z.object({
   target: z.object({ session: z.string(), openId: z.string() }),
@@ -53,12 +50,10 @@ export function catalogWorkExecutors(
             return {
               effects: [{ kind: "document", ref: target }],
               prepare: async () => {
-                // K3 / ADR 0030 rule 8: whole-table reconcile deletes omitted columns. Refuse until
-                // the catalog patch contract preserves untouched keys and supplies the stored before.
-                if (owner === "data-tables")
-                  throw refused("Data-table apply requires a stored-state plan that preserves unstaged keys", "catalog.table-base-required");
-                const before = (await bases[owner]?.(bridge, target, deps)) ?? null;
                 try {
+                  // The owner's declared base, through the one fenced project Read owner (no capture).
+                  const reader = await projectReader(bridge, target, deps);
+                  const before = work.base.project(await reader.read(work.base.op, work.base.input(doc)), doc);
                   const { request, touched } = work.derive(doc, before);
                   return { target, request, before, touched: [...touched] };
                 } catch (error) {
