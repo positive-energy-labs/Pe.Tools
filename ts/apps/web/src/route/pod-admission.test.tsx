@@ -22,7 +22,7 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { podRouteDescriptorSchema } from "@pe/agent-contracts";
 import { admitPodArtifact } from "./pod-artifact";
-import { podRoutes } from "./pod-registry";
+import { publicRoutes, registerRoute } from "./builtin-routes";
 import { createPodRouteLoader } from "./pod-loader";
 import { createRouteShell } from "../shell/admitted-mount";
 import { AdmittedPane } from "../shell/admitted-place.test-fixture";
@@ -53,11 +53,15 @@ test("published fixture bytes admit and tampering refuses before evaluation or r
   const route = await admitPodArtifact(row, envelope, evaluate);
   expect(route.fingerprint).toBe(row.fingerprint.slice(10));
   expect(route.workFingerprint).toBe(row.fingerprint);
-  const dispose = podRoutes.register(row.key, route);
-  expect(podRoutes.get(row.key)).toBe(route);
+  const dispose = registerRoute(route);
+  // One registration: the same handle mounts, is discovered, and carries its hosted Work.
+  expect(publicRoutes.admitted(row.workRoute)).toBe(route);
+  expect(publicRoutes.get(row.workRoute)).toMatchObject({ admitted: route, work: { route: route.resolvedWork!.spec.route } });
+  expect(publicRoutes.byAddress(route.data.address)?.admitted).toBe(route);
   dispose();
-  expect(podRoutes.get(row.key)).toBeNull();
-  expect(() => podRoutes.register(row.key, route)).toThrow("retired");
+  expect(publicRoutes.admitted(row.workRoute)).toBeNull();
+  expect(publicRoutes.get(row.workRoute)).toBeUndefined();
+  expect(() => registerRoute(route)).toThrow("retired");
   const tampered = structuredClone(envelope);
   tampered.artifact.executables[0].members[0].bytes[0] ^= 1;
   const execute = vi.fn(evaluate);
@@ -66,7 +70,7 @@ test("published fixture bytes admit and tampering refuses before evaluation or r
   await expect(
     admitPodArtifact({ ...row, fingerprint: `pod-bytes:${"0".repeat(64)}` }, envelope, execute),
   ).rejects.toThrow("inventory");
-  expect(podRoutes.get(row.key)).toBeNull();
+  expect(publicRoutes.admitted(row.workRoute)).toBeNull();
 });
 
 test.each(["deactivation", "removal", "replacement"])(
@@ -84,8 +88,7 @@ test.each(["deactivation", "removal", "replacement"])(
     replacement.artifact.fingerprint = await routeFingerprint(replacement.artifact.artifact);
     replacement.fingerprint = `pod-bytes:${replacement.artifact.fingerprint}`;
     const loader = createPodRouteLoader(async (entry) =>
-      podRoutes.register(
-        entry.key,
+      registerRoute(
         await admitPodArtifact(
           entry,
           entry.fingerprint === row.fingerprint ? envelope : replacement,
@@ -94,7 +97,7 @@ test.each(["deactivation", "removal", "replacement"])(
       ),
     );
     await loader.sync([row]);
-    const route = podRoutes.get(row.key)!;
+    const route = publicRoutes.admitted(row.workRoute)!;
     const door = createFixtureWorkDoor(
       {
         route: route.data.key,
@@ -126,8 +129,8 @@ test.each(["deactivation", "removal", "replacement"])(
     const shell = createRouteShell(services);
     const address = { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} };
     function View() {
-      useSyncExternalStore(podRoutes.subscribe, podRoutes.revision, podRoutes.revision);
-      const current = podRoutes.get(row.key);
+      useSyncExternalStore(publicRoutes.subscribe, publicRoutes.revision, publicRoutes.revision);
+      const current = publicRoutes.admitted(row.workRoute);
       return current
         ? createElement(AdmittedPane, { shell, route: current, address })
         : null;
@@ -142,7 +145,7 @@ test.each(["deactivation", "removal", "replacement"])(
       await vi.waitFor(() =>
         expect(screen.getByText(/Authored inputs/).textContent).toContain('"drop"'),
       );
-      expect(podRoutes.get(row.key)?.workFingerprint).toBe(replacement.fingerprint);
+      expect(publicRoutes.admitted(row.workRoute)?.workFingerprint).toBe(replacement.fingerprint);
       expect(releases).toHaveBeenCalledOnce();
       expect(fingerprints).toEqual([row.fingerprint, replacement.fingerprint]);
       await act(() => loader.sync([]));
@@ -152,7 +155,7 @@ test.each(["deactivation", "removal", "replacement"])(
       expect(releases).toHaveBeenCalledOnce();
     }
     expect(screen.queryByText(/Authored inputs/)).toBeNull();
-    expect(podRoutes.get(row.key)).toBeNull();
+    expect(publicRoutes.admitted(row.workRoute)).toBeNull();
     loader.dispose();
   },
 );
@@ -347,14 +350,15 @@ test("stale Pod tab shows reload and cannot reacquire Work feeds after Page chan
 });
 
 test("Pod discovery and tools have no legacy graph mount or member-hash door", async () => {
-  for (const name of ["pod-routes.tsx", "pod-artifact.ts", "pod-registry.ts"]) {
+  for (const name of ["pod-routes.tsx", "pod-artifact.ts", "route-discovery.ts"]) {
     const source = await readFile(resolve(process.cwd(), "src/route", name), "utf8");
     expect(source).not.toMatch(
       /makePodRoute|registerLegacyModule|mountRoute\(|verifyBundle|row\.sha256|row\.sourcePath/,
     );
   }
   const tool = await readFile(resolve(process.cwd(), "src/routes/tool.$key.tsx"), "utf8");
-  expect(tool).not.toMatch(/publicRoutes|\.hosted|row\.sha256|row\.sourcePath/);
+  // The tool page mounts the registered handle itself, never a discovery row's hosted adapter.
+  expect(tool).not.toMatch(/\.hosted|row\.sha256|row\.sourcePath/);
   await expect(readFile(resolve(process.cwd(), "src/route/pod-view.tsx"))).rejects.toMatchObject({
     code: "ENOENT",
   });

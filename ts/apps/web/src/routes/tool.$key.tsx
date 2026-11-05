@@ -1,7 +1,7 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Button } from "@pe/kit/lang/button";
-import { podRoutes } from "#/route/pod-registry";
+import { publicRoutes } from "#/route/builtin-routes";
 import { admittedRouterAddress } from "#/shell/admitted-pane";
 import { applicationRouteShell as ApplicationRouteShell } from "#/shell/application-route-shell";
 import { usePodRoutes } from "#/route/pod-routes";
@@ -15,9 +15,9 @@ function PodTool() {
   const router = useRouter();
   const address = useMemo(() => admittedRouterAddress(router.history), [router]);
   const [error, setError] = useState<string | null>(null);
-  useSyncExternalStore(podRoutes.subscribe, podRoutes.revision, podRoutes.revision);
+  useSyncExternalStore(publicRoutes.subscribe, publicRoutes.revision, publicRoutes.revision);
   const row = inventory?.rows.find((entry) => entry.key === key);
-  const route = row?.trusted ? podRoutes.get(row.key) : null;
+  const route = row?.trusted ? publicRoutes.admitted(row.workRoute) : null;
   const alarm = error || inventory?.errors[key] || inventory?.errors.inventory;
   if (row && route)
     return (
