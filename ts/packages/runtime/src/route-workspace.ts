@@ -91,6 +91,9 @@ export interface WorkReadSource {
  * (K4); a rejection here is a port fault: it fails that read and ends an admitted feed. */
 export interface WorkReadCapture {
   read(key: WorkKey, view: WorkReadView, value: unknown): Promise<void>;
+  /** A live body read that failed after admission; the caller still receives the original error. */
+  readFailed(key: WorkKey, view: WorkReadView, error: unknown): Promise<void>;
+  feedFailed(key: WorkKey, admission: WorkAdmission, shape: WorkFeedShape, error: unknown): Promise<void>;
   feed(key: WorkKey, admission: WorkAdmission, shape: WorkFeedShape, value: unknown): Promise<void>;
 }
 export type RouteWorkspaceOptions = {
@@ -434,11 +437,24 @@ export class RouteWorkspace {
 
   /** The route's Work at the scope; null when the route is unregistered or no Work exists yet. */
   async read(scope: WorkKey, route: string) {
-    return this.#captured(scope, "read", await this.#read(scope, route, false));
+    return this.#captured(scope, "read", () => this.#read(scope, route, false));
   }
-  /** Live capture records exactly the value delivered, a null "no Work" included, before it is returned. */
-  async #captured<A>(scope: WorkKey, view: WorkReadView, value: A): Promise<A> {
-    await this.options.capture?.read(scope, view, value);
+  /**
+   * Live capture records exactly the value delivered, a null "no Work" included, before it is
+   * returned. A failed body read is offered to capture, then its original error is rethrown.
+   */
+  async #captured<A>(scope: WorkKey, view: WorkReadView, live: () => Promise<A>): Promise<A> {
+    const capture = this.options.capture;
+    if (!capture) return live();
+    let value: A;
+    try {
+      value = await live();
+    } catch (error) {
+      // The original error wins; a capture port fault on this path cannot replace it.
+      await capture.readFailed(scope, view, error).catch(() => undefined);
+      throw error;
+    }
+    await capture.read(scope, view, value);
     return value;
   }
 
@@ -454,14 +470,12 @@ export class RouteWorkspace {
     if (!this.#registry.has(route)) return null;
     if (this.options.recorded)
       return (await this.#recorded(scope, "raw")) as { doc: unknown; revision: number; handle: WorkHandle } | null;
-    const raw = await this.#serialized(() => this.#carryOver(scope, route));
-    if (raw == null) return this.#captured(scope, "raw", null);
-    const envelope = envelopeSchema.safeParse(raw);
-    const revision = envelope.success ? envelope.data.revision : 0;
-    return this.#captured(scope, "raw", {
-      doc: envelope.success ? envelope.data.doc : null,
-      revision,
-      handle: workHandle(scope, revision),
+    return this.#captured(scope, "raw", async () => {
+      const raw = await this.#serialized(() => this.#carryOver(scope, route));
+      if (raw == null) return null;
+      const envelope = envelopeSchema.safeParse(raw);
+      const revision = envelope.success ? envelope.data.revision : 0;
+      return { doc: envelope.success ? envelope.data.doc : null, revision, handle: workHandle(scope, revision) };
     });
   }
 
@@ -470,7 +484,7 @@ export class RouteWorkspace {
    * starts from. Null only for an unregistered route, so a registered route never reads unknown.
    */
   async view(scope: WorkKey, route: string) {
-    return this.#captured(scope, "view", await this.#read(scope, route, true));
+    return this.#captured(scope, "view", () => this.#read(scope, route, true));
   }
 
   async #read(scope: WorkKey, route: string, orEmpty: boolean, withHistory = false) {
@@ -1062,6 +1076,8 @@ export class RouteWorkspace {
       return close;
     }
     const keep = (value: unknown) => capture!.feed(scope, admission, shape, value).then(() => value);
+    // A failed acquisition is offered to capture first; the original failure is what follows.
+    const lost = (error: unknown) => capture!.feedFailed(scope, admission, shape, error).catch(() => undefined);
     if (shape === "work") {
       let pending = 0;
       let chain = Promise.resolve();
@@ -1070,13 +1086,12 @@ export class RouteWorkspace {
         scope.route,
         (value) => {
           if (closed) return;
-          if ("error" in value) return deliver(value);
           if (++pending > limit) return backlog();
           // One capture at a time keeps delivery in observation order.
           chain = chain.then(async () => {
-            const got = await acquire(keep(value.value));
+            const got = "error" in value ? await lost(value.error).then(() => value) : await acquire(keep(value.value));
             pending--;
-            if (got) deliver(got);
+            if (got && !closed) deliver(got);
           });
         },
         true,
@@ -1098,7 +1113,7 @@ export class RouteWorkspace {
           if (!held) return ack(write);
           if (held.push(write) > limit) backlog();
         },
-        end,
+        (error) => void lost(error).then(() => end(error)),
       );
     }
     if (closed) stop(); // a synchronous failure ended the feed before its subscription was known

@@ -199,6 +199,8 @@ test.each(["work", "work-acks"] as const)(
     let captures = 0;
     const f = await instrumented({
       read: async () => {},
+      readFailed: async () => {},
+      feedFailed: async () => {},
       feed: async () => {
         captures++;
         throw Error("bundle full");
@@ -217,7 +219,12 @@ test.each(["work", "work-acks"] as const)(
 test.each(["work", "work-acks"] as const)(
   "%s frames waiting on a held capture are bounded by the workspace limit and end typed, undelivered",
   async (shape) => {
-    const f = await instrumented({ read: async () => {}, feed: () => new Promise(() => {}) });
+    const f = await instrumented({
+      read: async () => {},
+      readFailed: async () => {},
+      feedFailed: async () => {},
+      feed: () => new Promise(() => {}),
+    });
     f.open(shape);
     await settled();
     for (let i = 0; i < 3; i++) await f.write();
@@ -278,4 +285,43 @@ test("a failing taking observer truncates capture without failing the live read"
   await admit(live);
   expect(await live.view(key, "fans")).toMatchObject({ revision: 0 });
   expect(writer.truncation).toMatchObject({ reason: "observer" });
+});
+
+test("a live Work body read failure is recorded as its exact DoorFailure, or truncates; callers see the original", async () => {
+  const { dir, writer } = await bundle();
+  const base = memory();
+  let poison: unknown = null;
+  const store: RouteDocumentStore = {
+    ...base,
+    getState: async (query) => {
+      if (poison) throw poison;
+      return base.getState(query);
+    },
+  };
+  const live = new RouteWorkspace({ registrations: [], store, capture: capturedWorkReads(writer, run) });
+  await admit(live); // admission is not a body read; the store is poisoned only after it
+  const busy = new InvalidRead({ message: "Work store poisoned", status: 503, problem: "work.read" });
+  poison = busy;
+  await expect(live.readRaw(key, "fans")).rejects.toBe(busy);
+  await expect(live.view(key, "fans")).rejects.toBe(busy);
+  await expect(live.read(key, "fans")).rejects.toBe(busy);
+  await expect(firstFeed(live, "work-acks")).rejects.toBe(busy);
+  expect(writer.truncation).toBeNull();
+
+  const recorded = new RouteWorkspace({ registrations: [], recorded: recordedWorkSource(await reader(dir), run) });
+  await admit(recorded);
+  const same = { _tag: "InvalidRequest", status: 503, problem: "work.read", message: "Work store poisoned" };
+  await expect(recorded.readRaw(key, "fans")).rejects.toMatchObject(same);
+  await expect(recorded.view(key, "fans")).rejects.toMatchObject(same);
+  await expect(recorded.read(key, "fans")).rejects.toMatchObject(same);
+  await expect(firstFeed(recorded, "work-acks")).rejects.toMatchObject(same);
+
+  // A failure no taking can hold faithfully stops capture; the caller still gets it unchanged.
+  const plain = Error("plain store fault");
+  poison = plain;
+  await expect(live.view(other, "fans")).rejects.toBe(plain);
+  expect(writer.truncation).toMatchObject({ reason: "unsupported" });
+  // The `work` frame reaches the owner as its message only; live delivers it as it always did.
+  poison = busy;
+  await expect(firstFeed(live, "work")).rejects.toBe("Work store poisoned");
 });
