@@ -1,4 +1,5 @@
-import { overlaps } from "./readings";
+import { contentHash, overlaps } from "./readings";
+import { z } from "zod";
 import {
   canonicalEnvironmentInput,
   type ResolvedRead,
@@ -192,7 +193,7 @@ export function createAdmittedReadingPlan(options: {
               status: "ready",
               current: true,
               value,
-              hash: canonicalEnvironmentInput(value),
+              hash: z.string().parse(contentHash(value)),
             };
           } else {
             if (reading.kind === "use" && reading.geometry) {
