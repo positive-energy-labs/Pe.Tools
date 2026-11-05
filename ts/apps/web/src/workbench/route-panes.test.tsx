@@ -27,6 +27,7 @@ import { sourceRouteServices } from "#/shell/source-route-services";
 import { admittedSources } from "#/shell/admitted-sources";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { useRouteThread } from "#/shell/binding";
+import { useRestoreTabPage } from "#/route/url";
 
 const store = createChatPageStore({
   registry: appAtomRegistry,
@@ -188,13 +189,22 @@ function FansProbe() {
   );
   return <AdmittedPane route={route} shell={shell} address={address} />;
 }
-async function mount(entry = "/pea?thread=T", strict = false) {
+function Restore() {
+  useRestoreTabPage();
+  return null;
+}
+async function mount(entry = "/pea?thread=T", strict = false, restore = false) {
   if (entry.startsWith("/fans")) {
     const { admit } = await import("../fans/admission.fixture");
     fansRoute = (await admit()).presenter;
   }
   const root = createRootRoute({
-    component: () => <RouteDock renderRoute={(body) => body}>{null}</RouteDock>,
+    component: () => (
+      <>
+        {restore && <Restore />}
+        <RouteDock renderRoute={(body) => body}>{null}</RouteDock>
+      </>
+    ),
   });
   const routes = [
     createRoute({ getParentRoute: () => root, path: "/pea" }),
@@ -459,6 +469,44 @@ test("an actual admitted standalone Fans Place enrolls without a chat or native 
     ),
   ).toBe("15");
   expect(shown(router).tab).toBe(placeId);
+});
+
+test("an admitted Place keeps its codec bytes through open, switch, bare URL restore and Back", async () => {
+  // Object, list, numeric and literal-percent values: each one the legacy codec or TanStack's
+  // stringify re-encoded (`%257B`, `"{..}"`) before the admitted owner could read it.
+  const fan = JSON.stringify({ kind: "ids", ids: ["MUAS-1 50%@2", "8081605"] });
+  const rosterSearch = JSON.stringify({ keywords: "100%25 off", pills: [], v: 1 });
+  const link = `/fans?${new URLSearchParams({ fixture: "layout", fan, rosterSearch, contextRadiusFt: "15" })}`;
+  const fans: ThreadTab = { id: "aaaaaaaa-0000-4000-8000-0000000000f0", route: "fans", link, at: ducts.at };
+  sessionStorage.setItem("pe.places", JSON.stringify([ducts, fans]));
+  const router = await mount("/fans?fixture=layout", false, true);
+  const held = async () => {
+    await waitFor(() => expect(router.state.location.pathname).toBe("/fans"));
+    await settle();
+    const raw = new URL(router.history.location.href, "http://place.invalid").searchParams;
+    expect([raw.get("fan"), raw.get("rosterSearch"), raw.get("contextRadiusFt")]).toEqual([
+      fan,
+      rosterSearch,
+      "15",
+    ]);
+    expect(places().find((tab) => tab.route === "fans")!.link).toBe(link);
+    expect(document.body.textContent).not.toMatch(/malformed/i);
+  };
+  // A bare URL with no history tag restores the Place from memory through the router's parser.
+  await held();
+  // Reusing the existing Place (the app's tool entry) keeps its bytes; no legacy re-canonicalization.
+  await act(() => router.navigate({ to: "/pea", search: { thread: "T" } } as never));
+  await act(() => store.actions.openTab("fans"));
+  await held();
+  // Tab switch away and back, then Back and Forward through history.
+  fireEvent.click(screen.getByRole("button", { name: TAB }));
+  await waitFor(() => expect(router.state.location.pathname).toBe("/ducts"));
+  fireEvent.click(screen.getByRole("button", { name: "Fans" }));
+  await held();
+  await act(() => router.history.back());
+  await waitFor(() => expect(router.state.location.pathname).toBe("/ducts"));
+  await act(() => router.history.forward());
+  await held();
 });
 
 test("(b)(c) switching conversation lands on /pea collapsed, opens no tool, and leaves Places and their ?target unchanged", async () => {

@@ -1,5 +1,6 @@
 export * from "./api-schemas.ts";
 export * from "./route-module.ts";
+export { admittedBuiltinKeys } from "./admitted-builtin-keys.ts";
 export * from "./write-intent.ts";
 
 export * from "./work-value.ts";

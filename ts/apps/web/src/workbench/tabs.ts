@@ -5,6 +5,7 @@ import { z } from "zod";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import {
   routeAddress,
+  admittedBuiltinKeys,
   routeViewOpenSchema,
   THREAD_TABS_MAX,
   threadTabSchema,
@@ -84,13 +85,53 @@ function place(route: RouteKey, search: Record<string, unknown>, local: boolean)
 const params = (link: string) =>
   Object.fromEntries(new URL(link, "http://tab.invalid").searchParams);
 
+/*
+ * An admitted route's Place link is its admitted address transport's bytes (shell/admitted-address.ts
+ * `link`), the one codec owner. The legacy `routeAddress` codec reads that text as its own and
+ * re-encodes it (`{..}` -> `%257B..`), so admitted links are kept as bytes; only path and carry are
+ * checked here, and a value its codec refuses is refused by the admitted owner on restore.
+ */
+const admitted = (route: string) => admittedBuiltinKeys.includes(route);
+function canonicalTab(route: RouteKey, link: string) {
+  if (!admitted(route)) return routeAddress(route).tab(link);
+  const url = new URL(link, "http://tab.invalid");
+  const path = routeAddress(route).path;
+  if (url.origin !== "http://tab.invalid" || url.hash || url.pathname !== path)
+    return { ok: false as const, error: `a ${route} tab links ${path}, not ${link}` };
+  if (url.searchParams.has("thread"))
+    return { ok: false as const, error: `a ${route} tab link carries no 'thread'` };
+  url.searchParams.delete("shell");
+  return { ok: true as const, link: `${url.pathname}${url.search}` };
+}
+
+/**
+ * The Place link while no owner link is known. Until its owner mounts, an admitted Place takes the
+ * legacy link only when it names exactly the URL's own values; otherwise it waits for the owner's
+ * link rather than store a re-encoded or narrowed Page.
+ */
+function unowned(route: RouteKey, raw: string, search: Record<string, unknown>, local: boolean) {
+  const legacy = place(route, search, local);
+  if (!admitted(route)) return legacy;
+  const own = new URLSearchParams(raw);
+  own.delete("thread");
+  own.delete("shell");
+  const sorted = (entries: URLSearchParams) => JSON.stringify([...entries].sort());
+  return sorted(own) === sorted(new URL(legacy, "http://tab.invalid").searchParams) ? legacy : null;
+}
+
 /** A matched Place keeps its Page and id and takes the resume's stable binding. */
 function rebased(tab: ThreadTab, url: string | null): string {
+  if (!url) return tab.link;
   const at = routeAddress(tab.route);
+  const target = at.read(params(url)).carry.target;
+  if (admitted(tab.route)) {
+    const next = new URL(tab.link, "http://tab.invalid");
+    if (target === undefined) next.searchParams.delete("target");
+    else next.searchParams.set("target", target);
+    return `${next.pathname}${next.search}`;
+  }
   const { page, carry } = at.read(params(tab.link));
-  return url
-    ? at.link(page, { target: at.read(params(url)).carry.target, work: carry.work })
-    : tab.link;
+  return at.link(page, { target, work: carry.work });
 }
 
 /** A Place's binding: its canonical `?target` and `?work`; a Place is reused only on an exact one. */
@@ -184,7 +225,11 @@ export function useRouteTabs() {
     Object.fromEntries(new URLSearchParams(location.searchStr)),
   );
   const link =
-    subject.link === undefined ? (route ? place(route, search, store.local) : null) : subject.link;
+    subject.link !== undefined
+      ? subject.link
+      : route
+        ? unowned(route, location.searchStr, search, store.local)
+        : null;
   const restoring = Object.keys(search).some((key) => !(key in location.search));
   const [tabs, setTabs] = useState<ThreadTab[]>(read);
   const [failure, setFailure] = useState<string | null>(null);
@@ -377,7 +422,7 @@ export function useRouteTabs() {
                 work: explicit !== undefined ? explicit.work : carry.work,
               },
             );
-      const canonical = routeAddress(targetRoute).tab(nextLink);
+      const canonical = canonicalTab(targetRoute, nextLink);
       if (!canonical.ok) throw Error(canonical.error);
       const id = existing ? existing.id : crypto.randomUUID();
       put(id, targetRoute, canonical.link);
@@ -400,8 +445,7 @@ export function useRouteTabs() {
       )
         return;
       if (event.thread !== router.state.location.search.thread) return;
-      const at = routeAddress(event.route as RouteKey);
-      const canonical = at.tab(event.link);
+      const canonical = canonicalTab(event.route as RouteKey, event.link);
       if (!canonical.ok) return;
       const wanted = bindingOf(event.route as RouteKey, canonical.link);
       // The exact binding's Place is focused with its saved Page unchanged (Pea patches only the
@@ -465,7 +509,18 @@ export function useRouteTabs() {
         // A Send while a tool is the current Place names it to that chat.
         sent: (owner) => {
           const at = tabRouteAt(router.state.location.pathname);
-          if (at) recordPlace(owner, at, place(at, router.state.location.search, store.local));
+          const owned = at && subjectState(at, params(router.state.location.href)).link;
+          const link = !at
+            ? null
+            : owned !== undefined
+              ? owned
+              : unowned(
+                  at,
+                  router.state.location.searchStr,
+                  router.state.location.search,
+                  store.local,
+                );
+          if (at && link) recordPlace(owner, at, link);
         },
       }),
     [store, thread, threads, carry.target, carry.work],
@@ -507,7 +562,16 @@ export function useRouteTabs() {
     },
     duplicate: async () => {
       store.actions.cancelPlan();
-      if (active)
+      if (active && admitted(active.route)) {
+        // The admitted Page is the Place's own bytes; a legacy Page read would re-encode it.
+        try {
+          const id = crypto.randomUUID();
+          put(id, active.route, active.link);
+          await navigate(active.link, id);
+        } catch (error) {
+          fail(error);
+        }
+      } else if (active)
         await open(
           active.route,
           routeAddress(active.route).read(location.search).page,

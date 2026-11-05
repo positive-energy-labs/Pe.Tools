@@ -316,11 +316,14 @@ export function useRestoreTabPage() {
   const router = useRouter();
   const at = useRouterState({ select: (state) => state.location });
   const explicit = new Set(new URLSearchParams(at.searchStr).keys());
+  const memory =
+    "__pePageMove" in at.state || "__peRouteTab" in at.state ? undefined : tabPageSearch(at.pathname);
   const search =
     restorePageSearch(
-      "__pePageMove" in at.state || "__peRouteTab" in at.state
-        ? undefined
-        : tabPageSearch(at.pathname),
+      // Memory is codec text; navigate takes parsed values, so it crosses the router's own parser.
+      // Raw text here would be JSON-stringified again (`{..}` -> `"{..}"`) and refused by its codec.
+      memory &&
+        router.options.parseSearch(`?${new URLSearchParams(memory as Record<string, string>)}`),
       Object.fromEntries(Object.entries(at.search).filter(([key]) => explicit.has(key))),
     ) ?? {};
   const restoring = Object.keys(search).some((key) => !(key in at.search));
