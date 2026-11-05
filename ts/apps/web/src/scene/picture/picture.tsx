@@ -23,6 +23,7 @@ import { Button } from "@pe/kit/lang/button";
 import { land } from "@pe/kit/lang/land";
 import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
 import type { Chord } from "@pe/kit/keys";
+import { PaneOverlay } from "@pe/kit/lang/pane";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -632,11 +633,11 @@ export function Picture<L extends string, F extends string>({
               {picture === "model" || !flat ? model : flat.render("main", readout)}
 
               {absent ? (
-                // The readout is a floater that may sit collapsed: the answer stands on the picture,
-                // where ModelPicture's own pick refusals stand.
-                <div data-picture-absent="" className="pointer-events-none absolute top-1 left-2">
-                  <OutcomeLine kind="advisory" label={absent} />
-                </div>
+                <PaneOverlay label="Subject not in picture" place="tl">
+                  <div data-picture-absent="">
+                    <OutcomeLine kind="advisory" label={absent} />
+                  </div>
+                </PaneOverlay>
               ) : null}
               {landed?.box ? (
                 <div

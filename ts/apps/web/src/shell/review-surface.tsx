@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
 import { Popover, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { borrowWords, WorksharingNote } from "./mount-verbs";
@@ -25,6 +27,8 @@ export function ReviewSurface({
   cancel(this: void): void;
 }) {
   const [anchor] = useState(() => document.activeElement);
+  const list = useList({ items: rows.map((label, index) => ({ key: String(index), label })),
+    keyOf: (row) => row.key, search: (row) => ({ text: [row.label] }), select: "none" });
   const borrows = borrowWords(worksharing);
   const commit = `Commit ${label}${borrows ? ` · ${borrows}` : ""}`;
   return (
@@ -46,13 +50,9 @@ export function ReviewSurface({
         <div className="min-h-0 overflow-y-auto">
           <output>{sentence}</output>
           {rows.length > 0 && (
-            <span role="list" className="flex flex-col">
-              {rows.map((row, index) => (
-                <span role="listitem" key={index}>
-                  {row}
-                </span>
-              ))}
-            </span>
+            <PlainList list={list} aria-label={`${label} changes`}
+              row={(row) => ({ label: row.label })}
+              empty={{ message: "No changes", exit: "Cancel this review" }} />
           )}
           {worksharing && <WorksharingNote worksharing={worksharing} />}
         </div>

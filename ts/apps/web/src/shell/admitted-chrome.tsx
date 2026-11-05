@@ -1,3 +1,5 @@
+import { useList } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import { HostedChrome } from "../route/hosted-chrome";
 import { useMemo, useRef, useState, useEffect, useContext, type ReactNode } from "react";
 import { z } from "zod";
@@ -242,28 +244,24 @@ export function AdmittedActions({
 function History({ mount, data }: { mount: AdmittedMount; data: RouteGraphJson }) {
   const journal = mount.journal();
   const timeline: readonly TimelineEntry[] = mount.timeline();
+  const list = useList({
+    items: [
+      ...(journal?.moves ?? []).map((move) => ({ key: `work:${move.revision}:${move.kind}`,
+        label: move.label, sub: `${move.kind} / ${move.by === "pea" ? "Pea" : "you"} / r${move.revision}`, actions: undefined })),
+      ...mount.activity().map((receipt) => ({ key: receipt.id,
+        label: Object.values(data.verbs).find((v) => "entry" in v && v.entry === receipt.key)?.label ?? "Command",
+        sub: receipt.state,
+        actions: ["waiting", "running", "unknown"].includes(receipt.state)
+          ? <Button label="Stop command" onClick={() => void mount.stopCommand(receipt.id)}>Stop</Button> : undefined })),
+    ],
+    keyOf: (row) => row.key, search: (row) => ({ text: [row.label, row.sub] }), select: "none",
+  });
   return (
     <section aria-label="History">
       <JournalButtons owner={mount} words />
-      <ol>
-        {journal?.moves.map((move) => (
-          <li key={`${move.revision}:${move.kind}`}>
-            {move.label} / {move.kind} / {move.by === "pea" ? "Pea" : "you"} / r{move.revision}
-          </li>
-        ))}
-        {mount.activity().map((receipt) => (
-          <li key={receipt.id}>
-            {Object.values(data.verbs).find((v) => "entry" in v && v.entry === receipt.key)
-              ?.label ?? "Command"}{" "}
-            / {receipt.state}
-            {["waiting", "running", "unknown"].includes(receipt.state) && (
-              <Button label="Stop command" onClick={() => void mount.stopCommand(receipt.id)}>
-                Stop
-              </Button>
-            )}
-          </li>
-        ))}
-      </ol>
+      <ListView list={list} aria-label="History" maxHeight="min(24rem, 60vh)"
+        row={(row) => ({ label: row.label, sub: row.sub, actions: row.actions, lines: 2 })}
+        empty={{ message: "No activity yet", exit: "Run a command or edit Work" }} />
       {timeline
         .filter((entry) => entry.kind === "feed")
         .map((entry, index) => (

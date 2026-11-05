@@ -248,8 +248,8 @@ export function Pane({
 }: PicturePaneProps) {
   const teachId = useTeach({
     kind: "region",
-    // A title-less pane teaches by its id ("composer"), never the anonymous word "pane".
-    label: teachText(title) || id || "pane",
+    // Machine ids address panes; only the displayed title names them in Tutorial.
+    label: teachText(title) || "Contents",
     purpose: teachText(help) || undefined,
   });
   const { root, body, field: fieldClass } = paneRecipe({ scroll, flush });

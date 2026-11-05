@@ -18,12 +18,3 @@
 [data-slot="route-tabs"] > :is(:hover, :focus-within) > :last-child button {
   opacity: 1;
 }
-/* A Place reads as a tab, not a boxed button: resting Places sit in secondary ink with no edge;
-   the shown Place keeps the selection fill and takes strong ink. */
-[data-slot="route-tabs"] .dl-button[aria-pressed] {
-  border-color: transparent;
-}
-[data-slot="route-tabs"] .dl-button[aria-pressed="true"] {
-  color: var(--pe-ink);
-  font-weight: var(--weight-strong);
-}

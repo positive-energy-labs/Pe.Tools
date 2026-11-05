@@ -1,10 +1,9 @@
 /** Widths are CSS px: the renderer sets LineMaterial.resolution from the canvas size. */
 import * as THREE from "three";
-import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import type { IssueState, LayerFrame } from "./types";
-import { BLACK, isLit, LOOK, markAlpha, WHITE } from "./grounds";
+import { BLACK, HIDDEN_STROKE_ALPHA, isLit, LOOK, markAlpha, markMaterial, sceneLineMaterial, WHITE } from "./grounds";
 
 type Edge = readonly [readonly number[], readonly number[]];
 
@@ -27,12 +26,7 @@ export function markLines(
   const geometry = new LineSegmentsGeometry().setPositions(edges.flatMap(([p, q]) => [...p, ...q]));
   const ink = new LineSegments2(
     geometry,
-    new LineMaterial({
-      color,
-      transparent: true,
-      depthWrite: false,
-      fog: true,
-    }),
+    sceneLineMaterial({ color }),
   );
   const casing = new LineSegments2(geometry, ink.material.clone());
   // Semantic lines remain individually pickable; the renderer batches their visible strokes.
@@ -50,7 +44,7 @@ export function markLines(
   // is in front (`LOOK.depth.occluded*`). Transparent (opacity 0) at rest; the batch skips it.
   const behind = new LineSegments2(geometry, ink.material.clone());
   behind.material.depthFunc = THREE.GreaterDepth;
-  behind.material.opacity = 0;
+  behind.material.opacity = HIDDEN_STROKE_ALPHA;
   behind.userData.markStroke = behind.userData.behind = true;
   behind.userData.rest = ink.userData.rest;
   behind.renderOrder = 10;
@@ -69,7 +63,7 @@ export function markVolume(
 ): THREE.Group {
   const mesh = new THREE.Mesh(
     geometry,
-    new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false }),
+    markMaterial(color),
   );
   mesh.renderOrder = 9;
   mesh.userData.ghost = ghost;
@@ -99,7 +93,7 @@ export function markFrame(group: THREE.Object3D, at: LayerFrame): boolean {
         material.opacity = casingAlpha;
       } else if (object.userData.behind) {
         material.linewidth = width * depth.occludedWidth;
-        material.opacity = lit ? depth.occludedAlpha : 0;
+        material.opacity = lit ? depth.occludedAlpha : HIDDEN_STROKE_ALPHA;
         material.color.copy(object.userData.rest).lerp(WHITE, LIFT[at.state]);
       } else {
         material.linewidth = width;

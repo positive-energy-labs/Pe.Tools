@@ -272,3 +272,25 @@ test.each([
     expect(owner().results.get("run")?.state).toBe(state === "succeeded" ? "done" : "failed");
   },
 );
+
+
+test("receipt refresh retains the original rows and exposes failure without presenting an empty scope", async () => {
+  let publish!: import("#/shell/readings").ReadingDelivery;
+  opsAdapters.sources = { ...opsAdapters.sources, "ops.receipts": {
+    kind: "use", open: (_, deliver) => {
+      publish = deliver;
+      deliver({ kind: "complete", value: [actionStatusSchema.parse(receipt)], revision: 1 });
+    },
+  } };
+  const { view } = await mounted();
+  const receipts = () => view.getByRole("listbox", { name: "Operation receipts" });
+  await waitFor(() => expect(receipts().textContent).toContain("instances.stop"));
+  act(() => publish({ kind: "pending" }));
+  await waitFor(() => expect(receipts().textContent).toContain("instances.stop"));
+  act(() => publish({ kind: "failure", error: new Error("Receipt journal disconnected") }));
+  await waitFor(() => expect(view.getAllByText("Receipt journal disconnected").length).toBeGreaterThan(0));
+  expect(receipts().textContent).toContain("instances.stop");
+  expect(view.queryByText("No receipts")).toBeNull();
+  act(() => publish({ kind: "complete", value: [], revision: 2 }));
+  await waitFor(() => expect(view.getByText("No receipts")).toBeTruthy());
+});
