@@ -360,7 +360,8 @@
           "designFriction"
         ],
         "readings": [
-          "fans"
+          "fans",
+          "ductsWork"
         ]
       },
       "demand": "visible",
