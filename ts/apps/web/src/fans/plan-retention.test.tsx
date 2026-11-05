@@ -6,7 +6,20 @@ import realMuas from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-
 import { createWitness } from "./cutover.test-support";
 import { AdmittedWrite } from "../shell/admitted-chrome";
 import type { ReadingDelivery } from "../shell/readings";
-const native = vi.hoisted(() => ({ submit: vi.fn() }));
+const native = vi.hoisted(() => ({ submit: vi.fn(), retained: [] as unknown[] }));
+vi.mock("../shell/admitted-retention", async (actual) => {
+  const module = await actual<typeof import("../shell/admitted-retention")>();
+  return {
+    ...module,
+    createAdmittedRetention: <T,>(limits: { entries: number; bytes: number }) => {
+      const retention = module.createAdmittedRetention<T>(limits);
+      return { ...retention, set(id: string, value: T) {
+        native.retained.push(value);
+        return retention.set(id, value);
+      } };
+    },
+  };
+});
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (actual) => ({
   ...(await actual<object>()),
   submitAction: native.submit,
@@ -21,7 +34,12 @@ afterEach(() => {
     .forEach((close) => close());
 });
 
-test("P1: rendered Fans plan retains exact evidence without copying the large MUAS capture", async () => {
+test.each([false, true])("P1: rendered Fans plan keeps bounded dependencies (oversized reading: %s)", async (large) => {
+  native.retained.length = 0;
+  const capture = structuredClone(realMuas);
+  if (large) capture.document.title = "large-model-evidence".repeat(65536);
+  const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  if (large) expect(bytes(capture)).toBeGreaterThan(1024 * 1024);
   let plan!: (result: unknown) => void;
   let snapshot!: ReadingDelivery;
   native.submit.mockImplementation(
@@ -35,7 +53,7 @@ test("P1: rendered Fans plan retains exact evidence without copying the large MU
       kind: "use",
       open(_ctx, deliver) {
         snapshot = deliver;
-        deliver({ kind: "complete", value: realMuas, revision: 1 });
+        deliver({ kind: "complete", value: capture, revision: 1 });
       },
     },
   });
@@ -74,7 +92,15 @@ test("P1: rendered Fans plan retains exact evidence without copying the large MU
   await act(async () =>
     fireEvent.click(screen.getByRole("button", { name: "plan Write to Revit" })),
   );
+  const preparing = native.retained.find((value) => (value as { reading?: string }).reading) as {
+    invocation: { dependencies: Record<string, string> };
+  };
+  const constituents = Object.fromEntries(Object.entries(preparing.invocation.dependencies).map(
+    ([id, hash]) => [id, { hashBytes: bytes(hash), bodyBytes: bytes(f.fans.readingStatus(id).snapshot.value) }],
+  ));
+  console.info("P1 token census", JSON.stringify({ large, bodyBytes: bytes(capture), preparingBytes: bytes(preparing), invocationBytes: bytes(preparing.invocation), constituents }));
   expect(document.body.textContent).not.toContain("retention limit exceeded");
+  for (const hash of Object.values(preparing.invocation.dependencies)) expect(bytes(hash)).toBeLessThan(128);
   expect(plan).toBeTypeOf("function");
   const input = f.inputs.get("fans:ducts.plan-losses") as { work: unknown; readWorks: unknown };
   expect(input.readWorks).toHaveProperty("fans");
@@ -119,7 +145,7 @@ test("P1: rendered Fans plan retains exact evidence without copying the large MU
   });
   expect(f.fans.review("losses")!.rows[0]).toContain("MUAS-1");
   // New naming evidence must revoke the old before/after review rather than silently re-present it.
-  const moved = structuredClone(realMuas);
+  const moved = structuredClone(capture);
   moved.document.title = "changed model evidence";
   act(() => {
     f.fans.refresh("sheetSnapshot");

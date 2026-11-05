@@ -15,6 +15,8 @@ import type {
 import type { AcceptanceToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { ReadingSource, UseSource } from "./readings";
+import { contentHash } from "./readings";
+import { z } from "zod";
 import type { Effect } from "@pe/agent-contracts";
 import { hostFetch } from "../host/runtime";
 import { Schema } from "effect";
@@ -152,7 +154,7 @@ export function sourceRouteServices(
                 current: true,
                 value:
                   value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
-                hash: JSON.stringify(value),
+                hash: z.string().parse(contentHash(value)),
                 receipt: row,
               });
             } catch (error) {
@@ -265,7 +267,7 @@ export function sourceRouteServices(
                           current: true,
                           value:
                             frame.value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
-                          hash: JSON.stringify(frame.value),
+                          hash: z.string().parse(contentHash(frame.value)),
                         };
                   break;
                 case "pending":
