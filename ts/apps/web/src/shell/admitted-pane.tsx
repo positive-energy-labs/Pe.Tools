@@ -219,6 +219,8 @@ export function AdmittedPlacePane({
   const visible = useContext(RouteVisibility);
   const [mounted, setMounted] = useState<PlaceMount | null>(null);
   useEffect(() => {
+    // Child effects resume before the boundary's effect; subscriptions must see visible custody.
+    place.setVisible(visible);
     const state = place.state(() => ({
       shell,
       input,
