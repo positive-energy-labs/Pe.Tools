@@ -222,6 +222,7 @@ test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)
         seal: {
           requestHash: "sealed",
           work: { handle },
+          documentMark: { session: "s", openId: "o", observedSince: null, changedAt: null },
           incarnation: {},
           dependencies: "names-hash",
         },

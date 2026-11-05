@@ -35,7 +35,7 @@ const readVerb = {
 
 const KINDS = ["quiet", "framed", "commit"] as const;
 
-/** A preview-then-do verb on a fake route: its preview rests on `input`, and moving it makes it stale. */
+/** A plan-then-apply verb on a fake route: its plan rests on `input`, and moving it makes it stale. */
 function WriteActionSpecimen() {
   const [input, setInput] = useState(1);
   const [rest, setRest] = useState<number | null>(null);
@@ -43,30 +43,28 @@ function WriteActionSpecimen() {
   return (
     <div className="flex items-center gap-3">
       <WriteAction
-        label="preview heal"
-        says="Preview healing 2 caps in Revit, rolled back"
+        label="plan heal"
+        says="Plan healing 2 caps from the current Work"
         held={
           held
             ? {
-                word: "heal · previewed 2",
+                word: "heal · planned 2",
                 summary: "2 pass · 0 refused",
-                cells: (
-                  <ul className="m-0 list-none p-0 t-small">
-                    <li>cap duct 12 (end 1)</li>
-                    <li>cap duct 18 (end 0)</li>
-                  </ul>
-                ),
+                cells: [
+                  { key: "12", label: "duct 12 end 1", before: "open", after: "capped", author: "pea" },
+                  { key: "18", label: "duct 18 end 0", before: "open", after: "capped", author: "human" },
+                ],
               }
             : null
         }
-        stale={rest !== null && !held ? "changed since preview" : null}
+        stale={rest !== null && !held ? "changed since plan" : null}
         plan={async () => {
           setRest(input);
           return null;
         }}
         apply={{
           label: "apply heal",
-          says: "Heal the items the preview passed, in one transaction",
+          says: "Heal what the plan sealed, in one transaction",
           run: async () => {
             setRest(null);
             return null;
@@ -187,7 +185,7 @@ export function LangPressSpecimens() {
         </ActionGroup>
       </Section>
       <SpecimenFrame
-        name="WriteAction · idle, previewing, armed (popover open or closed), stale, committed"
+        name="WriteAction · idle, planning, armed (popover open or closed), stale, committed"
         importPath="@pe/kit/lang/write-action"
       >
         <WriteActionSpecimen />

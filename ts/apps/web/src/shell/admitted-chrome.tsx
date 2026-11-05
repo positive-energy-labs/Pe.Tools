@@ -27,6 +27,11 @@ import {
 } from "../navigation/route-controls";
 import { SituationBand, TimelineHead, JournalButtons } from "./situation-band";
 import { ReviewSurface } from "./review-surface";
+import { WriteAction, writeWord, type WriteRun } from "@pe/kit/lang/write-action";
+import { writeResponseSchema } from "@pe/agent-contracts";
+import { harnessClient } from "#/workbench/provider/harness-client";
+import { resolveWorkbenchConfig } from "#/workbench/config";
+import { openConsentWindows } from "./situation-band";
 import { worksharingOf } from "./verbs";
 import type { TimelineEntry } from "./timeline";
 
@@ -216,6 +221,76 @@ export function admittedLayout(
   };
   return visit(data.layout);
 }
+/** A reviewed command is a write: the one kit button draws it (ADR 0030 rule 6). */
+const drawsWrite = (verb: RouteGraphJson["verbs"][string] | undefined) =>
+  verb?.kind === "command" && verb.review === "shown";
+/** The thread a receipt's consent window belongs to: the Pea thread that ran it, never this page's. */
+export const originThread = (entry: TimelineEntry) => {
+  const caller = (entry.basis as { receipt?: { caller?: { kind: string; thread?: string } } })
+    ?.receipt?.caller;
+  return caller?.kind === "pea" ? (caller.thread ?? null) : null;
+};
+/** The open Reject? window on this verb's receipt; the ActionJournal receipt is its only source. */
+export function writeReject(
+  entries: readonly TimelineEntry[],
+  ids: readonly string[],
+  reject: (thread: string, requestId: string) => void,
+) {
+  const open = openConsentWindows(entries).find(({ entry }) => ids.includes(entry.verb ?? ""));
+  if (!open) return null;
+  const thread = originThread(open.entry);
+  const requestId = open.entry.outcome!.consentWindow!.requestId;
+  return {
+    until: open.left === null ? "awaiting approval" : `${open.left}s`,
+    run: () => (thread ? reject(thread, requestId) : undefined),
+  };
+}
+/** What a held plan says: armed only from a sealed Read; any consumed change makes it stale. */
+export function writeHeld(
+  label: string,
+  review: { preview?: unknown; sentence: string | null; rows: readonly string[]; stale: boolean } | null,
+) {
+  if (!review) return { held: null, stale: null, sealed: false };
+  if (review.stale) return { held: null, stale: "changed since plan", sealed: false };
+  const sealed = writeResponseSchema.safeParse(review.preview).success;
+  return {
+    // ponytail: the plan is a Read today; rehearsed=true waits on a declared ducts.rehearse-* receipt.
+    held: { word: writeWord(label, review.rows.length, false), summary: review.sentence ?? "", rows: review.rows },
+    stale: null,
+    sealed,
+  };
+}
+const settled = async (run: () => unknown): WriteRun => {
+  try {
+    await run();
+    return null;
+  } catch (error) {
+    return { message: error instanceof Error ? error.message : String(error) };
+  }
+};
+export function AdmittedWrite({ mount, data, id }: { mount: AdmittedMount; data: RouteGraphJson; id: string }) {
+  const verb = data.verbs[id]!;
+  const { held, stale, sealed } = writeHeld(verb.label, mount.review(id));
+  return (
+    <WriteAction
+      label={`plan ${verb.label}`}
+      says={`Plan ${verb.label} from the current Work`}
+      held={held}
+      stale={stale}
+      plan={() => settled(() => mount.invoke(id, undefined))}
+      apply={{
+        label: verb.label,
+        says: `${verb.label} what the plan sealed`,
+        refusal: sealed ? null : "Plan the current Work first",
+        run: () => settled(() => mount.confirm(id)),
+        done: `${verb.label} sent`,
+      }}
+      reject={writeReject(mount.timeline(), [id, "entry" in verb ? verb.entry : id], (thread, requestId) =>
+        void harnessClient(resolveWorkbenchConfig().origin).permission(thread, requestId, "stop_writes"),
+      )}
+    />
+  );
+}
 export function AdmittedActions({
   mount,
   data,
@@ -227,7 +302,10 @@ export function AdmittedActions({
 }) {
   return (
     <>
-      {ids.map((id) => (
+      {ids.map((id) =>
+        drawsWrite(data.verbs[id]) ? (
+          <AdmittedWrite key={id} mount={mount} data={data} id={id} />
+        ) : (
         <Button
           key={id}
           label={data.verbs[id]!.label}
@@ -237,7 +315,8 @@ export function AdmittedActions({
         >
           {data.verbs[id]!.label}
         </Button>
-      ))}
+        ),
+      )}
     </>
   );
 }
@@ -479,7 +558,8 @@ function Chrome({
             )}
           />
         )}
-        {mount.reviewIds().map((id) => {
+        {/* A write's plan draws in its own button's popover; only other reviews take a portal. */}
+        {mount.reviewIds().filter((id) => !drawsWrite(data.verbs[id])).map((id) => {
           const review = mount.review(id)!;
           return (
             <ReviewSurface

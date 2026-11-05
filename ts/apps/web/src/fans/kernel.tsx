@@ -13,6 +13,7 @@ import { ductsSources } from "../ducts/sources.ts";
 import { identityCodecs } from "../shell/page-port.ts";
 import { entries, fansData, fansNeutralBodies, schemas } from "./neutral.ts";
 import { pricingJob } from "../ducts/pricing-job.ts";
+import { presentLosses } from "../ducts/reviews.ts";
 const source = { module: "fans/kernel.tsx", export: "bodies" };
 const seed = <const K extends string>(name: K, snapshot: DuctSnapshot) => ({
   slot: `seeds.${name}.load` as const,
@@ -52,6 +53,9 @@ const seed = <const K extends string>(name: K, snapshot: DuctSnapshot) => ({
 });
 export const bodies = {
   ...fansNeutralBodies,
+  // The fan's losses read their snapshot from the sheet; the ducts document is not fans Work.
+  presentLosses: { slot: "verbs.losses.present", kind: "present", source,
+    run: (result, ctx) => presentLosses(result, { page: { stage: "sheet" }, readings: { sheetSnapshot: ctx.readings.sheetSnapshot } }) },
   seedScene: seed("scene", LAYOUT_FIXTURE.snapshot),
   seedLayout: seed("layout", LAYOUT_FIXTURE.snapshot),
   seedColours: seed("colours", COLOURS_FIXTURE.snapshot),

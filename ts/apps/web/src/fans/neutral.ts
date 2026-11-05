@@ -89,7 +89,7 @@ export const fansData = {
     navigation: { title: "navigation", load: "seedNavigation" },
   },
   address: "/fans",
-  capabilities: ["work", "geometry"],
+  capabilities: ["work", "native-write", "geometry"],
   cells: {
     calculation: fanCell("calculation"),
     terminalDrops: fanCell("terminalDrops"),
@@ -241,6 +241,16 @@ export const fansData = {
       entry: "ducts.sheet-snapshot",
       kind: "use",
     },
+    // The fan's losses plan (ADR 0030 rule 4): an explicit Read the shared write button draws.
+    lossPlan: {
+      kind: "use",
+      entry: "ducts.plan-losses",
+      args: "lossPlanArgs",
+      deps: { page: [], readings: [], work: [] },
+      demand: "explicit",
+      retain: { evidence: "scope", resource: "scope" },
+      refresh: "explicit",
+    },
     sheetView: {
       ...readPolicy,
       deps: { page: [], readings: ["sheet"], work: [] },
@@ -254,7 +264,7 @@ export const fansData = {
   stages: {
     sheet: {
       panes: ["sheet-roster", "sheet-inputs", "sheet-picture", "sheet-ledger"],
-      verbs: [],
+      verbs: ["losses"],
       word: "Pricing fans",
     },
   },
@@ -314,6 +324,21 @@ export const fansData = {
       review: "none",
       target: "ductsWork",
     },
+    // The same write /ducts declares (V2: ducts owns the native command). The shell sends the
+    // ductsWork handle as `work` and this route's own handle as `readWorks.fans`, resolved from
+    // the command's writeBoundary.route; the button is the shared kit WriteAction.
+    losses: {
+      captures: ["sheetSnapshot", "sheet"],
+      deps: { page: ["fan"], readings: ["sheetSnapshot", "sheet", "ductsWork"], work: workKeys },
+      entry: "ducts.apply-losses",
+      input: "none",
+      intent: "losses",
+      kind: "command",
+      label: "Write to Revit",
+      present: "presentLosses",
+      ready: "lossReady",
+      review: "shown",
+    },
   },
   version: 1,
   work: { schema: "work", route: "fans", version: 1, migrations: {} },
@@ -321,6 +346,7 @@ export const fansData = {
 } as const satisfies RouteGraphJson;
 const rosterSort = z.enum(["", "name"]);
 const fanSchemas = {
+  none: z.strictObject({}),
   snapshot: sharedSchemas.sheetSnapshot.nullable(),
   ductsWork: ductsDocumentSchema,
   sheetEdit: sharedSchemas.sheetEdit.extend({
@@ -390,6 +416,8 @@ const sheetReadingSchema: z.ZodType<Immutable<z.output<typeof sharedSchemas.shee
   sharedSchemas.sheet;
 export const entries = {
   "ducts.tables": ductEntries["ducts.tables"],
+  "ducts.plan-losses": ductEntries["ducts.plan-losses"],
+  "ducts.apply-losses": ductEntries["ducts.apply-losses"],
   "ducts.catalogs": ductEntries["ducts.catalogs"],
   "ducts.fans": { ...ductEntries["ducts.fans"], input: z.object({ work: workSchema.nullable(), fanWork: workSchema.optional() }) },
   "ducts.sheet": {
@@ -450,6 +478,7 @@ export const fansNeutralBodies: Omit<
   | "seedColours"
   | "seedNavigation"
   | "price"
+  | "presentLosses"
   | "sheetView"
   | "sheet-roster"
   | "sheet-inputs"
@@ -458,6 +487,15 @@ export const fansNeutralBodies: Omit<
 > = {
   tablesArgs: { slot: "readings.tables.args", kind: "args", source, run: () => ({ ids: [...TABLE_IDS] }) },
   catalogsArgs: { slot: "readings.catalogs.args", kind: "args", source, run: () => ({}) },
+  lossPlanArgs: { slot: "readings.lossPlan.args", kind: "args", source, run: () => null },
+  losses: { slot: "verbs.losses.intent", kind: "intent", source, run: () => ({}) },
+  lossReady: {
+    slot: "verbs.losses.ready",
+    kind: "ready",
+    source,
+    run: (ctx) =>
+      ctx.work.writeIntent.edit?.value.walk ? true : "Choose this fan's write scope before planning",
+  },
   groupdesignFriction: group("designFriction"),
   groupparameters: group("parameters"),
   groupflows: group("flows"),

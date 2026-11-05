@@ -246,20 +246,22 @@ export const entries = {
     output: schemas.sheetSnapshot,
     axes,
   },
-  "ducts.preview-losses": {
-    input: commands["ducts.preview-losses"].input,
-    output: commands["ducts.preview-losses"].result,
-    axes: commandCatalogAxes["ducts.preview-losses"],
+  // ADR 0030 rule 4: a plan is a Read with no effects; the catalog axes are the host's, never
+  // widened here. "checked in Revit" belongs only to a declared ducts.rehearse-* TransactRead.
+  "ducts.plan-losses": {
+    input: commands["ducts.plan-losses"].input,
+    output: commands["ducts.plan-losses"].result,
+    axes: commandCatalogAxes["ducts.plan-losses"],
   },
-  "ducts.preview-heal": {
-    input: commands["ducts.preview-heal"].input,
-    output: commands["ducts.preview-heal"].result,
-    axes: { ...commandCatalogAxes["ducts.preview-heal"], effect: "TransactRead" as const },
+  "ducts.plan-heal": {
+    input: commands["ducts.plan-heal"].input,
+    output: commands["ducts.plan-heal"].result,
+    axes: commandCatalogAxes["ducts.plan-heal"],
   },
-  "ducts.preview-assign-fan": {
-    input: commands["ducts.preview-assign-fan"].input,
-    output: commands["ducts.preview-assign-fan"].result,
-    axes: { ...commandCatalogAxes["ducts.preview-assign-fan"], effect: "TransactRead" as const },
+  "ducts.plan-assign-fan": {
+    input: commands["ducts.plan-assign-fan"].input,
+    output: commands["ducts.plan-assign-fan"].result,
+    axes: commandCatalogAxes["ducts.plan-assign-fan"],
   },
   "ducts.apply-losses": {
     input: commands["ducts.apply-losses"].input,
@@ -288,7 +290,7 @@ export const ductsData = {
   needs: "project",
   directory: {
     group: "Calculate loads & airflow",
-    summary: "Review duct systems, stage inputs and rulings, and preview writes in Revit",
+    summary: "Review duct systems, stage inputs and rulings, and plan writes to Revit",
     label: "Pressure drop",
     icon: "Wind",
     exposure: "Main",
@@ -707,9 +709,9 @@ export const ductsData = {
       },
       refresh: "dependencies",
     },
-    lossPreview: {
+    lossPlan: {
       kind: "use",
-      entry: "ducts.preview-losses",
+      entry: "ducts.plan-losses",
       args: "lossArgs",
       deps: {
         page: [],
@@ -723,9 +725,9 @@ export const ductsData = {
       },
       refresh: "explicit",
     },
-    healPreview: {
+    healPlan: {
       kind: "use",
-      entry: "ducts.preview-heal",
+      entry: "ducts.plan-heal",
       args: "healArgs",
       deps: {
         page: [],
@@ -739,9 +741,9 @@ export const ductsData = {
       },
       refresh: "explicit",
     },
-    fanPreview: {
+    fanPlan: {
       kind: "use",
-      entry: "ducts.preview-assign-fan",
+      entry: "ducts.plan-assign-fan",
       args: "fanArgs",
       deps: {
         page: [],
@@ -1140,11 +1142,11 @@ const selectedGroups = (ctx: ScopeEvidence) => {
 };
 const lossReady = (ctx: ScopeEvidence): true | string => {
   const intent = ctx.work.writeIntent.edit?.value;
-  if (ctx.page.stage === "sheet") return ctx.readings.fansWork.value?.writeIntent.edit?.value.walk ? true : "Choose this fan's write scope before previewing";
+  if (ctx.page.stage === "sheet") return ctx.readings.fansWork.value?.writeIntent.edit?.value.walk ? true : "Choose this fan's write scope before planning";
   const groups = selectedGroups(ctx);
   return groups.length && canonicalRouteInput(intent?.groups) === canonicalRouteInput(groups)
     ? true
-    : "Choose the active system's write scope before previewing";
+    : "Choose the active system's write scope before planning";
 };
 const source = { module: "ducts/neutral.ts", export: "neutralBodies" };
 const records = new Set([
@@ -1368,9 +1370,9 @@ export const neutralBodies: Omit<
     source,
     run: () => ({ label: "Choose write scope" }),
   },
-  lossArgs: { slot: "readings.lossPreview.args", kind: "args", source, run: () => null },
-  healArgs: { slot: "readings.healPreview.args", kind: "args", source, run: () => null },
-  fanArgs: { slot: "readings.fanPreview.args", kind: "args", source, run: () => null },
+  lossArgs: { slot: "readings.lossPlan.args", kind: "args", source, run: () => null },
+  healArgs: { slot: "readings.healPlan.args", kind: "args", source, run: () => null },
+  fanArgs: { slot: "readings.fanPlan.args", kind: "args", source, run: () => null },
   losses: { slot: "verbs.losses.intent", kind: "intent", source, run: () => ({}) },
   heal: { slot: "verbs.heal.intent", kind: "intent", source, run: () => ({}) },
   assign: { slot: "verbs.assign.intent", kind: "intent", source, run: () => ({}) },

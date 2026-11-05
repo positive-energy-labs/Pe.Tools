@@ -9,24 +9,41 @@
  * "checked in Revit" is the caller's, derived from the plan entry's catalog effect (a TransactRead
  * rehearsal) and never from a response flag.
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Popover } from "@base-ui/react/popover";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "./button";
+import { StateCell } from "./cell";
 import { PopoverContent } from "./popover-internal";
 
 /** What a run left behind: a sentence when it was refused or failed, null when it went through. */
 export type WriteRun = Promise<{ readonly message: string } | null>;
+
+/** One consumed value the write changes: the model's value, the staged one, and who staged it. */
+export interface WriteCell {
+  key: string;
+  label: string;
+  before: string | null;
+  after: string;
+  author: "pea" | "human" | "unknown";
+}
 
 export interface WriteHeld {
   /** The armed button's word: "heal · planned 3" or "heal · checked in Revit 3". */
   word: string;
   /** The counts line over the list: "3 pass · 1 refused". */
   summary: string;
-  /** Before and after as StateCells with their authors (ADR 0030 rules 6 and 8); drawn under the counts. */
-  cells?: ReactNode;
+  /** Before and after with their authors (ADR 0030 rules 6 and 8); drawn under the counts. */
+  cells?: readonly WriteCell[];
+  /** Lines the plan names that carry no cell (a presentation row). */
+  rows?: readonly string[];
 }
+
+const AUTHOR = { pea: "Pea", human: "you", unknown: "unknown author" } as const;
+/** The armed word. A plan is a Read: only a successful declared rehearsal says "checked in Revit". */
+export const writeWord = (verb: string, count: number, rehearsed: boolean) =>
+  `${verb} · ${rehearsed ? "checked in Revit" : "planned"} ${count}`;
 
 export interface WriteActionProps {
   /** The idle button's word: the verb ("plan heal"). */
@@ -143,7 +160,20 @@ export function WriteAction({
         {armed ? (
           <div className="flex flex-col gap-1.5">
             <div className="t-small face-mono text-ink-2">{held.summary}</div>
-            {held.cells}
+            {held.cells?.map((cell) => (
+              <div key={cell.key} data-write-cell={cell.key} className="flex flex-col">
+                <span className="t-small text-ink-2">
+                  {cell.label} · was <span data-write-before="">{cell.before ?? "unset"}</span> ·{" "}
+                  <span data-write-author={cell.author}>{AUTHOR[cell.author]}</span>
+                </span>
+                <StateCell value={cell.after} author={cell.author} stage="edit" />
+              </div>
+            ))}
+            {held.rows?.map((row, index) => (
+              <p key={index} className="t-small">
+                {row}
+              </p>
+            ))}
           </div>
         ) : null}
         {outcome ? (
@@ -158,7 +188,6 @@ export function WriteAction({
         {armed && outcome?.kind !== "done" ? (
           <div className="mt-2 flex items-center justify-between gap-2">
             {reject ? (
-              // ponytail: skeleton. The fill draws the countdown to `reject.until` beside this button.
               <Button
                 kind="framed"
                 label="Reject?"
@@ -166,7 +195,7 @@ export function WriteAction({
                 onClick={reject.run}
                 data-write-reject=""
               >
-                Reject?
+                Reject? · {reject.until}
               </Button>
             ) : (
               <Button
