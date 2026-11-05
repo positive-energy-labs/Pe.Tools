@@ -53,6 +53,10 @@ export function catalogWorkExecutors(
             return {
               effects: [{ kind: "document", ref: target }],
               prepare: async () => {
+                // K3 / ADR 0030 rule 8: whole-table reconcile deletes omitted columns. Refuse until
+                // the catalog patch contract preserves untouched keys and supplies the stored before.
+                if (owner === "data-tables")
+                  throw refused("Data-table apply requires a stored-state plan that preserves unstaged keys", "catalog.table-base-required");
                 const before = (await bases[owner]?.(bridge, target, deps)) ?? null;
                 try {
                   const { request, touched } = work.derive(doc, before);

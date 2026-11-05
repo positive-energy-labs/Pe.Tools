@@ -112,18 +112,16 @@ async function catalogRun(
   }
 }
 
-test("catalog Work plans with no native call and applies the derived request once through the boundary", async () => {
+test("data tables refuse without a stored base and keep staged cells without native dispatch", async () => {
   const r = await catalogRun("data-tables", [
     { path: ["name"], value: staged("T") },
     { path: ["columns"], value: { "text:0": staged("A"), "text:1": staged("B") } },
     { path: ["rows"], value: { r1: { "text:0": staged("a1"), "text:1": staged("x") } } },
   ], () => ({ written: 1 }));
-  expect(r.plan.state, JSON.stringify(r.plan)).toBe("succeeded");
+  expect(r.plan).toMatchObject({ state: "failed", notDispatched: true, refusal: { code: "catalog.table-base-required" } });
   expect(r.planCalls).toEqual([]);
-  expect(r.receipt.state, JSON.stringify(r.receipt)).toBe("succeeded");
-  expect(r.applied).toEqual([
-    { key: "data-table.apply", input: { table: { name: "T", columns: [{ heading: "A", kind: "Text" }, { heading: "B", kind: "Text" }], rows: [{ key: "r1", values: ["a1", "x"] }] } } },
-  ]);
+  expect(r.receipt).toMatchObject({ state: "failed", notDispatched: true });
+  expect(r.applied).toEqual([]);
   // Catalog Work is the authored source: the receipt keeps its cells.
   expect(r.doc).toMatchObject({ rows: { r1: { "text:1": staged("x") } } });
 });
