@@ -588,6 +588,58 @@ test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
     expect(f.calls.some((args) => args[0] === "doc" && args[1] !== "list")).toBe(false);
   },
 );
+/** An SDK that starts, opens the copy it is given, saves create-only, closes and stops. */
+async function acquisitionSetup(detached = false) {
+  const row = controlledRow({ shape: shape("background") });
+  const f = await setup(
+    async (args) => {
+      if (args[0] === "session")
+        return args[1] === "start" ? startedAnswer : { result: { state: "ok" } };
+      if (args[1] === "open")
+        return { result: { state: "ok", document: { openId, path: args[2], title: "Tower" } } };
+      if (args[1] === "save") {
+        if (!args.includes("--out")) return { result: { state: "ok" } };
+        // The SDK's own rule (DocCommand.NewOutput): --out names a new file in an existing folder.
+        const out = flag(args, "--out")!;
+        if (!existsSync(dirname(out)))
+          return {
+            result: {},
+            exitCode: 2,
+            diagnostics: [
+              {
+                code: "doc.bad-invocation",
+                detail: `--out parent directory does not exist: '${dirname(out)}'.`,
+                fix: null,
+              },
+            ],
+          };
+        await writeFile(out, "saved result", { flag: "wx" });
+        return { result: { state: "ok" } };
+      }
+      if (args[1] === "close") {
+        f.census.documents = f.census.documents.filter((id) => id !== flag(args, "--doc"));
+        return { result: { state: "ok" } };
+      }
+      return Error(`unexpected ${args.join(" ")}`);
+    },
+    [row],
+  );
+  f.census.facts = { isWorkshared: detached, isDetached: detached };
+  const source = await f.file(
+    "Tower.rvt",
+    detached ? "Worksharing: Enabled" : "Worksharing: Not enabled",
+  );
+  const acquired = await f.admit(
+    "instances.open",
+    { source, into: newRevit({ owner: "pea" }) },
+    undefined,
+    "agent",
+  );
+  expect(acquired.state).toBe("succeeded");
+  await f.machine.refresh();
+  const [acquisition] = foldAcquisitions(await f.owner.list());
+  return { f, source, acquired, acquisition: acquisition! };
+}
 test("handover saves the acquired copy to its create-only result with a diff plan; cleanup keeps it and stops only its own Revit", async () => {
   const { f, source, acquired, acquisition } = await acquisitionSetup();
   const intent = acquisition.intent.document!;
