@@ -3,7 +3,7 @@ import { reachProps } from "./reach";
 import { useWork } from "./work";
 /**
  * The cell: one grammar for a value at any scale (table td, card line, key specimen).
- * Body fill is only a pea suggestion or locked; bold is only unsaved; one squiggle wins; icons
+ * Body fill is only locked; bold is only unsaved; one squiggle wins; icons
  * never go inside a data cell. Precedence is the cascade order in cell.css.
  */
 import {
@@ -34,7 +34,6 @@ export const stateCellRecipe = tv({
     ghost: "dl-ghost",
     foot: "dl-foot",
     citation: "dl-cite",
-    counter: "dl-counter",
   },
   variants: {
     size: { card: {}, row: {} },
@@ -46,6 +45,7 @@ import { focusQuiet } from "../../lib/utils";
 import {
 cellFactsText,
 fmtNum,
+stagedBy,
 parseCell,
 readCell,
 readMeasuredText,
@@ -80,8 +80,6 @@ StateCellProps
 
 /** Each kind's glyph, key and plain sentence. The caller's `reason` overrides the sentence. */
 const TRANSITION: Record<CellTransitionKind, { key: string; says: string }> = {
-  take: { key: "a", says: "Stage the agent's suggestion" },
-  unsuggest: { key: "d", says: "Clear the agent's suggestion" },
   clear: { key: "u", says: "Clear the edit value" },
 };
 
@@ -129,12 +127,12 @@ const RefusalDetail = ({ detail }: { detail: string }) => (
 export const CellHost = createContext<RefObject<HTMLElement | null> | null>(null);
 
 export function StateCell(props: StateCellProps) {
-  const { value, modelValue, capReason, grounding, confidence, note, counterValue } = props;
+  const { value, modelValue, capReason, grounding, confidence, note } = props;
   const read = readCell(props);
   const reviewed = read.unsettled === "drift" && props.reviewed !== undefined && modelValue != null;
-  // An emptied value IS a value (F-J4-1): a edit or proposed "" draws the empty mark, never the
+  // An emptied value IS a value (F-J4-1): a staged "" draws the empty mark, never the
   // caller's placeholder, which would read as the old value still standing.
-  const emptied = value === "" && (props.stage === "edit" || props.stage === "proposed");
+  const emptied = value === "" && props.stage === "edit";
   const shown = emptied ? EMPTY_MARK : value;
   // Refusal machinery lives here so hooks run unconditionally; it only ever fires on an
   // editable row-scale cell. A refused edit restores the input's value IMPERATIVELY (the same
@@ -326,10 +324,8 @@ export function StateCell(props: StateCellProps) {
           onClick={locate}
           data-body={read.body ?? undefined}
           data-author={props.author}
-          data-suggestion-author={props.suggestionAuthor}
           data-damage={props.damage || undefined}
           data-seam={read.seam ? "" : undefined}
-          data-contest={read.contested ? "" : undefined}
           data-never={read.never ? "" : undefined}
           data-unsaved={
             read.unsaved === "pea"
@@ -373,9 +369,7 @@ export function StateCell(props: StateCellProps) {
               }}
               onPick={(o) => {
                 if (o.disabled) return;
-                // A standing suggestion is not the current value: picking the current key over it
-                // is a real choice (it keeps what stands), so only a clean or edit cell skips it.
-                if (o.key === props.choice!.current && props.stage !== "proposed") return;
+                if (o.key === props.choice!.current) return;
                 const out = props.choice!.pick(o.key);
                 const settle = (refused: string | CellRefusal | null | void) =>
                   setRefusal(
@@ -456,10 +450,6 @@ export function StateCell(props: StateCellProps) {
               </span>
             </span>
           ) : null}
-          {/* A contest on the row's one line: a title alone hides it from keyboard, touch and no-hover readers. */}
-          {read.contested ? (
-            <span className={slots.counter()}>agent proposes {props.counterValue}</span>
-          ) : null}
           {hasTransitions ? (
             <span className={slots.acts()}>
               {transitions.map((t) => (
@@ -503,11 +493,8 @@ export function StateCell(props: StateCellProps) {
   const facts: React.ReactNode[] = [];
   if (props.damage) facts.push(props.damage);
   if (capReason != null) facts.push(capReason);
-  // SPECIMEN: /design-system/band. A counter fold without its value makes accept/deny illegible
-  // in hoverless compact heads.
-  if (counterValue != null) facts.push(`agent proposes ${counterValue}`);
-  if (props.stage === "proposed" && props.currentValue != null)
-    facts.push(`currently ${props.currentValue}`);
+  // The author rides the one footline: a hoverless compact head still says who staged it.
+  if (props.stage === "edit") facts.push(`staged by ${stagedBy(props.author)}`);
   if (note != null) facts.push(confidence != null ? `${confidence} confidence — ${note}` : note);
   // A low confidence with nothing else to say still has to say it; silence would read as high.
   else if (confidence === "low") facts.push("low confidence");
@@ -545,11 +532,9 @@ export function StateCell(props: StateCellProps) {
             className={slots.base()}
             data-body={read.body ?? undefined}
             data-author={props.author}
-            data-suggestion-author={props.suggestionAuthor}
-            data-damage={props.damage || undefined}
+              data-damage={props.damage || undefined}
             data-seam={read.seam ? "" : undefined}
-            data-contest={read.contested ? "" : undefined}
-            data-never={read.never ? "" : undefined}
+              data-never={read.never ? "" : undefined}
             data-unsaved={
               read.unsaved === "pea"
                 ? "pea"
@@ -637,12 +622,12 @@ const AXES: readonly KeyAxis[] = [
     asks: "who is holding an unsaved change?",
     items: [
       {
-        label: "agent proposes — fold + green square",
-        specimen: <StateCell value="2 hr" stage="proposed" />,
+        label: "Pea staged — Pea's square",
+        specimen: <StateCell value="2 hr" stage="edit" author="pea" />,
       },
       {
-        label: "you edit — bold + your square",
-        specimen: <StateCell value="36 in" stage="edit" />,
+        label: "you staged — bold + your square",
+        specimen: <StateCell value="36 in" stage="edit" author="human" />,
       },
     ],
   },

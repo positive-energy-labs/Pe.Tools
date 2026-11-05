@@ -1,10 +1,9 @@
 /* The cell grammar (cell.tsx, verdict.tsx). Marks compose by cascade order, so the order here is the
-   precedence: uneditable owns the body, then pea's proposal, then one squiggle (drift > stale >
-   unverified), then the unsaved square; a citation never contends. Body = proposal or locked only;
-   bold = unsaved only; icons never go inside a data cell. Every rule is `dl-` scoped. */
+   precedence: uneditable owns the body, then one squiggle (drift > stale > unverified), then the
+   unsaved square in its author's ink; a citation never contends. Body = locked only; bold = your
+   unsaved value only; icons never go inside a data cell. Every rule is `dl-` scoped. */
 
 .dl-cell {
-  --dl-cell-suggestion-ink: var(--pe-ink-2);
   position: relative;
   display: inline-block;
   padding: 1px var(--item-pad-x);
@@ -30,68 +29,7 @@
   text-overflow: ellipsis;
 }
 
-/* 2 · pea's proposal owns the body: a wash mixed into the cell's ground, a pea ring, the top-right
-   fold and the unsaved square in pea's ink (fold = pea authored it, square = not written yet). */
-.dl-cell[data-suggestion-author="pea"] {
-  --dl-cell-suggestion-ink: var(--pe-pea-ink);
-}
-.dl-cell[data-suggestion-author="human"] {
-  --dl-cell-suggestion-ink: var(--pe-caution);
-}
-.dl-cell[data-body="proposed"] {
-  --dl-cell-fill: color-mix(in srgb, var(--dl-cell-suggestion-ink) 20%, var(--pe-on));
-  --dl-cell-ring: inset 0 0 0 1.5px
-    color-mix(in srgb, var(--dl-cell-suggestion-ink) 70%, transparent);
-  --dl-cell-square: var(--dl-cell-suggestion-ink);
-  /* the mark inset, plus the fold's own clearance on the right */
-  padding-right: calc(var(--item-mark-pad-x) + 4px);
-  padding-left: var(--item-mark-pad-x);
-}
-.dl-cell[data-body="proposed"]::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  border-top: 9px solid var(--dl-cell-suggestion-ink);
-  border-left: 9px solid transparent;
-}
-
-/* Counter-proposal: pea argues against a staged or written value. The fold alone draws; a wash
-   would claim the shown value is pea's. */
-.dl-cell[data-contest] {
-  padding-right: calc(var(--item-mark-pad-x) + 4px);
-}
-.dl-cell[data-contest]::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  border-top: 9px solid var(--dl-cell-suggestion-ink);
-  border-left: 9px solid transparent;
-}
-/* At row scale the counter value rides the same line, after the value. */
-.dl-cell[data-scale="row"][data-contest] {
-  display: flex;
-  align-items: center;
-  gap: var(--item-pad-x);
-}
-.dl-cell[data-scale="row"][data-contest] > .dl-cell-input {
-  flex: 1 1 0;
-}
-.dl-counter {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: var(--font-mono);
-  font-size-adjust: var(--mono-adjust);
-  font-weight: var(--weight-mono);
-  font-size: var(--type-small-size);
-  font-style: normal;
-  color: var(--pe-pea-ink);
-}
-
-/* 1 · uneditable/disabled owns the body, declared after the proposal so the cascade enforces it. */
+/* 1 · uneditable/disabled owns the body. */
 .dl-cell[data-body="locked"] {
   --dl-cell-fill: color-mix(in srgb, var(--pe-ink) 6%, var(--pe-on));
   --dl-cell-ink: var(--pe-ink-mute);
@@ -121,7 +59,6 @@
   font-weight: inherit;
 }
 /* One square, two authors: only `--dl-cell-square` differs. */
-.dl-cell[data-body="proposed"]::before,
 .dl-cell[data-unsaved]::before {
   content: "";
   position: absolute;

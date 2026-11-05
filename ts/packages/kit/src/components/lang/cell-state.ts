@@ -1,5 +1,4 @@
 import {
-  sameValue,
   type CellLike,
   type MeasuredDisplayUnit,
   type MeasuredValue,
@@ -45,24 +44,10 @@ interface StateCellBase {
   agree?: "agree" | "drift";
   /** A blocking value: damage stays on the cell at either scale. */
   damage?: string | null;
-  /** Whose unsaved event, if any, is sitting on this cell. */
-  stage?: "clean" | "proposed" | "edit";
-  /** Host-stamped author. Equal values do not establish who wrote an edit. */
+  /** Whether a staged value (any author's, ADR 0030 rule 8) is sitting on this cell. */
+  stage?: "clean" | "edit";
+  /** Host-stamped author of the staged value. Equal values do not establish who wrote an edit. */
   author?: "pea" | "human" | "unknown";
-  suggestionAuthor?: "pea" | "human" | "unknown";
-  /**
-   * The counter-suggestion: pea's standing proposed value when
-   * it is not what the cell shows — suggestion and edit both present, values differing. Draws the
-   * fold alone (no body wash — the shown value is not pea's) and rides the facts/footline. This
-   * is pea's in-cell voice against a edit value; its other channel is chat.
-   */
-  counterValue?: string;
-  /**
-   * The original: a proposed cell draws Pea's value, so what the model
-   * holds under it rides here — the row-scale title and the card footline say "currently X".
-   * `cellFromDraft` fills it from the value the caller passed, which is the current one.
-   */
-  currentValue?: string;
   /**
    * Whether the cell can be written at all. Anything but `editable` owns the body.
    * `readonly` and `excluded` are one rendering: `locked`, with the distinction in `capReason`.
@@ -108,8 +93,8 @@ interface StateCellBase {
   land?: string;
   /**
    * Locate what this cell describes: a click on the cell body when not editing. An editable
-   * cell's input swallows its clicks, so the suggestion fold and the unsaved square (outside the
-   * input) are the locate target there. A cell with `onLocate` and no mark locates on its body.
+   * cell's input swallows its clicks, so the unsaved square (outside the input) is the locate target
+   * there. A cell with `onLocate` and no mark locates on its body.
    */
   onLocate?: () => void;
   /** Cell-to-cell navigation hook (Enter/Tab/arrows). Return true when the move was taken. */
@@ -195,9 +180,8 @@ export type StateCellProps = StateCellBase &
     | {
         /**
          * The choice cell: a closed option set, picked from a list under the cell. The body, fill,
-         * squiggle and marks are the text cell's, so a Pea suggestion of an option draws as
-         * proposed (`cellFromDraft` with a `show` that names the option) and take / unsuggest /
-         * clear ride `transitions` as on any cell. `value` is the shown option's label; `current`
+         * squiggle and marks are the text cell's, so an option Pea staged draws as any staged value
+         * with Pea's author, and clear rides `transitions` as on any cell. `value` is the shown option's label; `current`
          * is the key standing now (the edit or the source underneath), marked selected in the list.
          * A pick of `current` commits nothing. Requires `scale="row"`; `cap` other than editable
          * draws the value locked, with no list.
@@ -249,7 +233,7 @@ export function readMeasuredText(
       };
 }
 
-export type CellTransitionKind = "take" | "unsuggest" | "clear";
+export type CellTransitionKind = "clear";
 
 export interface CellTransition {
   kind: CellTransitionKind;
@@ -259,51 +243,28 @@ export interface CellTransition {
   reason?: string;
 }
 
-/** The default counter word: a string as written, anything else as JSON — never `[object Object]`. */
-const showJson = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
-
 /** Shared Work plus measured facts becomes one cell drawing. Attribution is host stamped. */
 type DrawingCell<Value> = {
   [K in keyof CellLike]:
     | (Omit<NonNullable<CellLike[K]>, "value"> & { readonly value?: Value })
     | null;
 };
+/**
+ * One staged value becomes the drawing (ADR 0030 rule 8): the person's and Pea's writes are the
+ * same `edit`, last writer wins, the host stamps `by`. The caller's value is already the resolved
+ * one; the model value it overrides rides `modelValue` (drift), never a second lane.
+ */
 export function cellFromDraft<Value>(
   cell: DrawingCell<Value>,
   facts: StateCellBase,
-  /** The caller's word for a counter-proposed value; domain values are the caller's to format. */
-  show: (value: Value | undefined) => string = showJson,
 ): StateCellBase {
-  const { suggestion, edit } = cell;
-  const stage = edit != null ? "edit" : suggestion != null ? "proposed" : "clean";
-  const author = edit?.by ?? suggestion?.by ?? "unknown";
-  const contested =
-    edit != null && suggestion != null && !sameValue(suggestion, edit)
-      ? suggestion.delete === true
-        ? "delete"
-        : show(suggestion.value)
-      : undefined;
-  // A standing suggestion is what the cell DRAWS; the caller's value, which is
-  // the current one, moves to `currentValue` and the tooltip. A deletion draws the empty mark.
-  const proposedText =
-    stage === "proposed" ? (suggestion?.delete === true ? "" : show(suggestion?.value)) : undefined;
-  const callerText =
-    typeof facts.value === "string" || typeof facts.value === "number"
-      ? String(facts.value)
-      : undefined;
-  const flipped = proposedText !== undefined && callerText !== proposedText;
+  const { edit } = cell;
   return {
     ...facts,
-    ...(flipped ? { value: proposedText } : {}),
-    ...(flipped && facts.currentValue === undefined && callerText !== undefined
-      ? { currentValue: callerText === "" ? "(blank)" : callerText }
-      : {}),
-    stage,
-    author,
-    suggestionAuthor: suggestion?.by ?? "unknown",
-    ...(contested != null ? { counterValue: contested } : {}),
-    confidence: facts.confidence ?? suggestion?.confidence ?? undefined,
-    note: facts.note ?? suggestion?.note ?? undefined,
+    stage: edit != null ? "edit" : "clean",
+    author: edit?.by ?? "unknown",
+    confidence: facts.confidence ?? edit?.confidence ?? undefined,
+    note: facts.note ?? edit?.note ?? undefined,
   };
 }
 
@@ -324,10 +285,8 @@ export function parseCell(
 }
 
 interface CellRead {
-  /** The only two things allowed to own the cell BODY. */
-  body: "proposed" | "locked" | null;
-  /** Pea's fold without the body: a standing suggestion against the shown/edit value. */
-  contested: boolean;
+  /** The only thing allowed to own the cell BODY. */
+  body: "locked" | null;
   /** No real element behind it — the reserved dashed seam edge. */
   seam: boolean;
   /** The one squiggle slot; one winner. */
@@ -347,8 +306,7 @@ export function readCell(p: StateCellProps): CellRead {
   const locked = cap !== "editable";
   const stage = p.stage ?? "clean";
   return {
-    body: locked ? "locked" : stage === "proposed" ? "proposed" : null,
-    contested: !locked && stage !== "proposed" && p.counterValue != null,
+    body: locked ? "locked" : null,
     seam: cap === "nohome",
     unsettled:
       p.agree === "drift"
@@ -359,20 +317,18 @@ export function readCell(p: StateCellProps): CellRead {
             ? "unverified"
             : null,
     never: p.fresh === "never",
-    // An open suggestion is unsaved too, but its square is drawn off `body: "proposed"` (cell.css). This slot is only for a STAGED value, whose author is the open question.
     unsaved: !locked && stage === "edit" ? (p.author ?? "unknown") : null,
   };
 }
 
 /**
- * Cell state, in the order attention is owed: fix drift, review the suggestion, commit the edit,
+ * Cell state, in the order attention is owed: fix drift, commit the edit,
  * re-read the stale, check the unverified, leave clean alone, and locked last — nothing to do.
  * A state column with no explicit `sort` orders by this, not alphabetically.
  */
 export const CELL_STATE_ORDER = [
   "damage",
   "drift",
-  "proposed",
   "edit",
   "stale",
   "unverified",
@@ -391,7 +347,6 @@ export function cellStateLabel(p: StateCellProps): CellStateName {
   if (p.damage) return "damage";
   if (read.body === "locked") return "locked";
   if (read.unsettled === "drift") return "drift";
-  if (read.body === "proposed") return "proposed";
   if (read.unsaved != null) return "edit";
   if (read.unsettled != null) return read.unsettled;
   if (read.never) return "never";
@@ -403,6 +358,8 @@ export function cellStateLabel(p: StateCellProps): CellStateName {
  * readout band. Same ranking as the card footline (capReason ▸ note ▸ citation), with the
  * ghost model value leading because drift is the one alarm.
  */
+export const stagedBy = (author: StateCellBase["author"]) =>
+  author === "pea" ? "Pea" : author === "human" ? "you" : "unknown author";
 export function cellFactsText(p: StateCellProps): string | null {
   const parts: string[] = [];
   if (p.damage) parts.push(p.damage);
@@ -412,12 +369,7 @@ export function cellFactsText(p: StateCellProps): string | null {
         ? `you reviewed ${p.reviewed ?? "—"} · Revit now ${p.modelValue} · yours`
         : `model holds ${p.modelValue}`,
     );
-  if (p.counterValue != null)
-    parts.push(`suggestion by ${p.suggestionAuthor ?? "unknown"}: ${p.counterValue}`);
-  // The suggestion is what the cell draws; the original and the author ride the tooltip.
-  if (p.stage === "proposed")
-    parts.push(`suggested by ${p.suggestionAuthor ?? p.author ?? "unknown"}`);
-  if (p.currentValue != null && p.stage === "proposed") parts.push(`currently ${p.currentValue}`);
+  if (p.stage === "edit") parts.push(`staged by ${stagedBy(p.author)}`);
   if (p.capReason != null) parts.push(p.capReason);
   if (p.note != null)
     parts.push(p.confidence != null ? `${p.confidence} confidence — ${p.note}` : p.note);

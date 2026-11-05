@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { cellFromDraft, StateCell, type CellTransition } from "@pe/kit/lang/cell";
+import { cellFactsText, cellFromDraft, StateCell, type CellTransition } from "@pe/kit/lang/cell";
 import { Table } from "@pe/kit/table/table";
 
 afterEach(cleanup);
@@ -28,9 +28,9 @@ const inTable = (node: React.ReactNode) => {
 const gridcell = () => document.querySelector<HTMLElement>('td[role="gridcell"]')!;
 
 test("a refused run keeps the value and says why beside the cell", async () => {
-  const deny = t("unsuggest", { code: "stale-revision", message: "another writer landed first" });
+  const deny = t("clear", { code: "stale-revision", message: "another writer landed first" });
   const { cell } = inTable(<StateCell value="10in" scale="row" transitions={[deny]} />);
-  await act(async () => fireEvent.click(cell.getByRole("button", { name: "unsuggest" })));
+  await act(async () => fireEvent.click(cell.getByRole("button", { name: "clear" })));
   expect(deny.run).toHaveBeenCalledOnce();
   expect(screen.getByText("another writer landed first").className).toBe("dl-refuse");
   expect(screen.getByText("10in")).toBeTruthy();
@@ -39,21 +39,21 @@ test("a refused run keeps the value and says why beside the cell", async () => {
 test("a run in flight marks the cell busy and inerts its verbs", async () => {
   let land!: () => void;
   const accept: CellTransition = {
-    kind: "take",
+    kind: "clear",
     run: () => new Promise<void>((resolve) => (land = resolve)),
   };
   const { container, cell } = inTable(
     <StateCell value="10in" scale="row" transitions={[accept]} />,
   );
-  await act(async () => fireEvent.click(cell.getByRole("button", { name: "take" })));
+  await act(async () => fireEvent.click(cell.getByRole("button", { name: "clear" })));
   expect(container.querySelector(".dl-cell")!.getAttribute("aria-busy")).toBe("true");
-  expect(cell.getByRole("button", { name: "take" }).hasAttribute("disabled")).toBe(true);
+  expect(cell.getByRole("button", { name: "clear" }).hasAttribute("disabled")).toBe(true);
   await act(async () => land());
   expect(container.querySelector(".dl-cell")!.getAttribute("aria-busy")).toBeNull();
 });
 
-test("Escape in the input restores the value and hands focus back to the td, where a accepts", async () => {
-  const accept = t("take");
+test("Escape in the input restores the value and hands focus back to the td, where u clears", async () => {
+  const accept = t("clear");
   const commit = vi.fn();
   const { container } = inTable(
     <StateCell value="10in" scale="row" onCommit={commit} transitions={[accept]} />,
@@ -65,7 +65,7 @@ test("Escape in the input restores the value and hands focus back to the td, whe
   await act(async () => fireEvent.keyDown(input, { key: "Escape", code: "Escape" }));
   expect(input.value).toBe("10in");
   expect(document.activeElement).toBe(td);
-  await act(async () => fireEvent.keyDown(td, { key: "a", code: "KeyA" }));
+  await act(async () => fireEvent.keyDown(td, { key: "u", code: "KeyU" }));
   expect(accept.run).toHaveBeenCalledOnce();
   expect(commit).not.toHaveBeenCalled();
 });
@@ -172,28 +172,31 @@ test("a choice cell lists its options with what each means and commits the picke
   expect(pick).toHaveBeenCalledWith("other");
 });
 
-test("a Pea suggestion on a choice cell draws proposed with Pea's option, and take stages it", async () => {
-  const take = t("take");
-  const label = (v: unknown) => (v as { kind: string }).kind;
-  const drawn = cellFromDraft(
-    { suggestion: { value: { kind: "other" }, by: "pea" } },
-    { value: "erv", scale: "row" },
-    label,
-  );
-  const { container } = render(
-    <StateCell
-      {...drawn}
-      scale="row"
-      choice={{ options: KINDS, current: "erv", pick: vi.fn() }}
-      transitions={[take, t("unsuggest")]}
-    />,
-  );
-  const cell = container.querySelector<HTMLElement>(".dl-cell")!;
-  expect(cell.getAttribute("data-body")).toBe("proposed");
-  expect(cell.getAttribute("data-suggestion-author")).toBe("pea");
-  expect(cell.querySelector("button")!.textContent).toContain("other");
-  await act(async () => fireEvent.click(within(cell).getByRole("button", { name: "take" })));
-  expect(take.run).toHaveBeenCalledOnce();
+test("Pea and the person stage the same cell one way: last writer's value, its author, model struck", () => {
+  const drawn = (by: "pea" | "human") =>
+    cellFromDraft(
+      { edit: { value: "12in", by } },
+      { value: "12in", modelValue: "10in", agree: "drift", scale: "row" },
+    );
+  for (const by of ["pea", "human"] as const) {
+    const { container } = render(<StateCell {...drawn(by)} scale="row" onCommit={vi.fn()} />);
+    const cell = container.querySelector<HTMLElement>(".dl-cell")!;
+    // One stage: no proposed body, no fold, no take; the author names the square and the facts.
+    expect(cell.getAttribute("data-body")).toBeNull();
+    expect(cell.getAttribute("data-unsaved")).toBe(by);
+    expect(cell.getAttribute("data-author")).toBe(by);
+    expect(container.querySelector<HTMLInputElement>("input.dl-cell-input")!.value).toBe("12in");
+    expect(cellFactsText(drawn(by))).toBe(
+      `model holds 10in · staged by ${by === "pea" ? "Pea" : "you"}`,
+    );
+    expect(within(cell).queryByRole("button", { name: /take|unsuggest/ })).toBeNull();
+    cleanup();
+  }
+  // A cell carrying an old suggestion lane draws only its edit (the storage boundary retired it).
+  const legacy = cellFromDraft({ edit: null, suggestion: { value: "9in", by: "pea" } } as never, {
+    value: "10in",
+  });
+  expect(legacy).toMatchObject({ value: "10in", stage: "clean" });
 });
 
 test("a locked choice cell draws its value and opens no list", () => {
