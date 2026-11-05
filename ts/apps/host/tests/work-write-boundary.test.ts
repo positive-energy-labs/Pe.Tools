@@ -7,6 +7,7 @@ import { detachedBridge, sessionView, effectTest } from "./effect-test.ts";
 import { z } from "zod";
 import { commands, tools, writePreviewSchema, type Command, type ActionReceipt } from "@pe/agent-contracts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
+import { documentMarks } from "../src/document-marks.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -38,11 +39,16 @@ test.each(writes)("%s accepts only revisioned Work, never a preview flag", (_key
 
 async function fixture() {
   const ref = { session: "A", openId: "open-A" };
+  const listeners: ((event: never) => void)[] = [];
   const work = {
     key: { binding: "open" as const, route: "schedules", target: null, open: { ...ref } },
     revision: 1,
   };
-  const bridge = detachedBridge({
+  const makeBridge = () => detachedBridge({
+    subscribe: (listener: (event: never) => void) => {
+      listeners.push(listener);
+      return () => {};
+    },
     list: Effect.succeed([
       sessionView({
         sessionId: "A",
@@ -55,12 +61,13 @@ async function fixture() {
         state: { openDocuments: [{ ...ref, isFamilyDocument: false }] },
       }),
     ]),
-  });
+  } as never);
+  let bridge = makeBridge();
   const receipts: ActionReceipt[] = [];
   let request = "one";
   let evidence: unknown = { model: 1 };
   const run = vi.fn(async () => ({ applied: true }));
-  const make = (definition: Command) => workWriteBoundary(
+  const make = (definition: Command) => () => workWriteBoundary(
     {
       definition,
       prepared: z.object({ request: z.string(), dependencies: z.unknown() }),
@@ -85,7 +92,8 @@ async function fixture() {
     { sdk: sdkSessions },
   );
   const executors = { preview: make(commands["schedule.apply.preview"]), apply: make(commands["schedule.apply"]) };
-  let executor = executors.preview;
+  let current = executors.preview;
+  let executor = current();
   const doc = tools.schedules.work.schema.parse({
     writeIntent: {
       "schedule.apply": {
@@ -114,13 +122,27 @@ async function fixture() {
     },
     /** Recheck at apply: the write entry, not a flag on the preview. */
     apply: () => {
-      executor = executors.apply;
+      current = executors.apply;
+      executor = current();
+    },
+    /** Revit reports this document changed; the host's mark moves. */
+    documentChanged: async () => {
+      const before = documentMarks(bridge).changedAt(ref);
+      for (const listener of listeners)
+        listener({ kind: "event", sessionId: "A", eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: ["open-A"] }) } as never);
+      await vi.waitFor(() => expect(documentMarks(bridge).changedAt(ref)).not.toBe(before));
+    },
+    /** A new host process: a fresh bridge and mark holder, so observedSince moves. */
+    restart: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      bridge = makeBridge();
+      executor = current();
     },
     run,
     receipts,
-    recordPreview: (id: string, result: unknown) => receipts.push({
+    recordPreview: (id: string, result: unknown, key = "schedule.apply.preview") => receipts.push({
       id,
-      key: "schedule.apply.preview",
+      key,
       caller: ctx.caller,
       target: ctx.admission.target,
       input: ctx.admission.input,
@@ -161,7 +183,7 @@ test("preview exposes a derived request without running the write; changed deriv
   });
   f.change();
   await expect(apply.preflight!()).rejects.toMatchObject({ refusal: { code: "preview.stale" } });
-  await expect(apply.prepare!()).rejects.toThrow("Preview changed");
+  await expect(apply.prepare!()).rejects.toThrow("Plan changed");
   expect(f.run).not.toHaveBeenCalled();
 });
 
@@ -178,7 +200,7 @@ test("re-derived identical inputs apply; a changed dependency refuses before exe
   await f.executor.run(f.ctx, { prepared: await apply.prepare!() } as ActionExecution);
   expect(f.run).toHaveBeenCalledTimes(1);
   f.evidence({ model: 2 });
-  await expect(apply.prepare!()).rejects.toThrow("Preview changed");
+  await expect(apply.prepare!()).rejects.toThrow("Plan changed");
   expect(f.run).toHaveBeenCalledTimes(1);
 });
 
@@ -187,7 +209,7 @@ test("missing preview and foreign Work refuse before native execution", async ()
   f.apply();
   const binding = await f.executor.bind(f.ctx);
   await expect(binding.preflight!()).rejects.toMatchObject({ refusal: { code: "preview.stale" } });
-  await expect(binding.prepare!()).rejects.toThrow("Preview the current Work");
+  await expect(binding.prepare!()).rejects.toThrow("Plan the current Work first");
   (f.ctx.admission.input.work as { key: { open: { openId: string } } }).key.open.openId = "foreign";
   await expect(f.executor.bind(f.ctx)).rejects.toThrow("another document");
   expect(f.run).not.toHaveBeenCalled();
@@ -203,7 +225,7 @@ test("a new Work revision invalidates the seal even when the request is identica
   f.apply();
   (f.ctx.admission.input.work as { revision: number }).revision++;
   const apply = await f.executor.bind(f.ctx);
-  await expect(apply.prepare!()).rejects.toThrow("Preview changed");
+  await expect(apply.prepare!()).rejects.toThrow("Plan changed");
   expect(f.run).not.toHaveBeenCalled();
 });
 
@@ -318,3 +340,54 @@ effectTest("preview seal survives the real 60-second run-consent auto-approval",
     expect(f.run).toHaveBeenCalledOnce();
   }),
 );
+
+/** Plan, then a change at each seal key; apply must say "Plan changed (key)" and never run the write. */
+async function plannedThenApply() {
+  const f = await fixture();
+  const bound = await f.executor.bind(f.ctx);
+  const plan = await f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution);
+  f.recordPreview("plan", plan);
+  return { f, plan: plan as { seal: { documentMark: unknown } } };
+}
+
+test("a Revit change to the planned document changes the seal; apply refuses plan changed", async () => {
+  const { f } = await plannedThenApply();
+  await f.documentChanged();
+  f.apply();
+  const apply = await f.executor.bind(f.ctx);
+  await expect(apply.prepare!()).rejects.toThrow("Plan changed; plan the current Work again (documentMark)");
+  expect(f.run).not.toHaveBeenCalled();
+});
+
+test("a host restart between plan and apply changes the sealed mark; apply refuses", async () => {
+  const { f, plan } = await plannedThenApply();
+  await f.restart();
+  f.apply();
+  const apply = await f.executor.bind(f.ctx);
+  const refusal = apply.prepare!();
+  await expect(refusal).rejects.toThrow("(documentMark)");
+  expect(plan.seal.documentMark).toMatchObject({ session: "A", openId: "open-A", changedAt: null });
+  expect(f.run).not.toHaveBeenCalled();
+});
+
+test("a plan that goes stale after consent is refused at the post-consent prepare, before the write", async () => {
+  const { f } = await plannedThenApply();
+  f.apply();
+  const apply = await f.executor.bind(f.ctx);
+  await apply.preflight!(); // before consent: still the planned Work
+  await f.documentChanged(); // the person or Revit moves on while the Reject? window is open
+  await expect(apply.prepare!()).rejects.toMatchObject({ refusal: { code: "preview.stale" } });
+  expect(f.run).not.toHaveBeenCalled();
+});
+
+test("a rehearsal receipt cannot arm apply: only the declared plan key seals", async () => {
+  const f = await fixture();
+  const bound = await f.executor.bind(f.ctx);
+  const plan = await f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution);
+  f.recordPreview("rehearsal", plan, "schedule.rehearse");
+  f.apply();
+  const apply = await f.executor.bind(f.ctx);
+  await expect(apply.preflight!()).rejects.toMatchObject({ refusal: { code: "preview.stale" } });
+  await expect(apply.prepare!()).rejects.toThrow("Plan the current Work first");
+  expect(f.run).not.toHaveBeenCalled();
+});

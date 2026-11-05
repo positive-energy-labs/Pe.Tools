@@ -123,7 +123,7 @@ export const ductsActions = {
     input: z.strictObject({}),
     dirties: ["snapshot"],
   },
-  "ducts.preview-losses": {
+  "ducts.plan-losses": {
     native: ["ducts.apply.plan"],
     says: "First stage the fan walk { unitId, portIndex } from route:ducts.roster in route:fans writeIntent, and cells naming exactly the cells requested (fan cells are route:fans Work, rule cells route:ducts Work). Then plan the staged duct loss writes (fitting coefficients, terminal and component drops, fan static) and report each write's outcome without changing Revit.",
     needs: "project-document",
@@ -139,9 +139,16 @@ export const ductsActions = {
     input: z.strictObject({}),
     dirties: ["snapshot"],
   },
-  "ducts.preview-heal": {
+  "ducts.plan-heal": {
+    says: "Plan healing the staged duct groups: derive each group's repairs (cap dangling open ends, connect coincident same-size ends, close same-size gaps of at most 3 in) from Work and seal them, without opening a transaction. Show the person the planned items before any apply.",
+    needs: "project-document",
+    effect: "query",
+    input: z.strictObject({}),
+    dirties: [],
+  },
+  "ducts.rehearse-heal": {
     native: ["ducts.heal.preview"],
-    says: "Preview healing duct groups in Revit: cap dangling open ends, connect coincident same-size ends, close same-size gaps of at most 3 in; runs every repair and Pe's post-check, then rolls all of it back. Name a group without items to preview everything the Ducts route would heal there; show the person the per-item outcome before any apply.",
+    says: "Optionally rehearse the planned heal in Revit: runs every repair and Pe's post-check, then rolls all of it back. Refused on a workshared model before any transaction. A rehearsal never arms apply; plan does.",
     needs: "project-document",
     effect: "query",
     input: z.strictObject({}),
@@ -149,15 +156,22 @@ export const ductsActions = {
   },
   "ducts.apply-heal": {
     native: ["ducts.heal"],
-    says: "Heal duct groups in Revit, one transaction per group, with exactly the items a preview showed and a person approved; an item failing Pe's post-check is refused and rolled back. Revit gives rebuilt elements new ids: read the duct snapshot again after.",
+    says: "Heal duct groups in Revit, one transaction per group, with exactly the items a plan showed and a person approved; an item failing Pe's post-check is refused and rolled back. Revit gives rebuilt elements new ids: read the duct snapshot again after.",
     needs: "project-document",
     effect: "command",
     input: z.strictObject({}),
     dirties: ["snapshot"],
   },
-  "ducts.preview-assign-fan": {
+  "ducts.plan-assign-fan": {
+    says: "Plan making the staged unit the fan of a duct system (Duct Systems > Select Equipment: the system's base equipment): read the system and seal the request, without opening a transaction. Show the person the plan before any apply.",
+    needs: "project-document",
+    effect: "query",
+    input: z.strictObject({}),
+    dirties: [],
+  },
+  "ducts.rehearse-assign-fan": {
     native: ["ducts.assign-fan.preview"],
-    says: "Preview making a unit the fan of a duct system in Revit (Duct Systems > Select Equipment: the system's base equipment): runs Pe's guards, the write and its read back, then rolls it back. Refuses a system that already has base equipment, and a unit with no port of the system's air classification in that system or on its ducts. Show the person the outcome before any apply.",
+    says: "Optionally rehearse the planned fan assignment in Revit: runs Pe's guards, the write and its read back, then rolls it back. Refuses a system that already has base equipment, a unit with no port of the system's air classification, and a workshared model before any transaction. A rehearsal never arms apply; plan does.",
     needs: "project-document",
     effect: "query",
     input: z.strictObject({}),
@@ -165,7 +179,7 @@ export const ductsActions = {
   },
   "ducts.apply-assign-fan": {
     native: ["ducts.assign-fan"],
-    says: "Make a unit the base equipment (the fan) of a duct system in Revit, as a preview showed and a person approved; the system keeps its id, name and type. Read the duct snapshot again after: the unit's role reads base equipment of that system.",
+    says: "Make a unit the base equipment (the fan) of a duct system in Revit, as a plan showed and a person approved; the system keeps its id, name and type. Read the duct snapshot again after: the unit's role reads base equipment of that system.",
     needs: "project-document",
     effect: "command",
     input: z.strictObject({}),
@@ -345,22 +359,22 @@ export const tools = {
       "ducts.refresh": ductsActions["ducts.refresh"],
       ...workWriteCommands("ducts", "ducts.apply-losses", ductsActions["ducts.apply-losses"], {
         derive: ductsDerive,
-        preview: { key: "ducts.preview-losses", definition: ductsActions["ducts.preview-losses"] },
+        preview: { key: "ducts.plan-losses", definition: ductsActions["ducts.plan-losses"] },
       }),
       ...workWriteCommands("ducts", "ducts.apply-heal", ductsActions["ducts.apply-heal"], {
         derive: ductsDerive,
-        preview: { key: "ducts.preview-heal", definition: ductsActions["ducts.preview-heal"] },
+        preview: { key: "ducts.plan-heal", definition: ductsActions["ducts.plan-heal"] },
       }),
+      // A rehearsal derives the same request from Work but is no plan: it carries no seal and cannot arm apply.
+      ...workIntent("ducts", "ducts.rehearse-heal", ductsActions["ducts.rehearse-heal"], { derive: ductsDerive }),
+      ...workIntent("ducts", "ducts.rehearse-assign-fan", ductsActions["ducts.rehearse-assign-fan"], { derive: ductsDerive }),
       ...workWriteCommands(
         "ducts",
         "ducts.apply-assign-fan",
         ductsActions["ducts.apply-assign-fan"],
         {
           derive: ductsDerive,
-          preview: {
-            key: "ducts.preview-assign-fan",
-            definition: ductsActions["ducts.preview-assign-fan"],
-          },
+          preview: { key: "ducts.plan-assign-fan", definition: ductsActions["ducts.plan-assign-fan"] },
         },
       ),
     },

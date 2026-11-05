@@ -217,6 +217,22 @@ const declaredAxes = {
     cost: "Mutation",
     cardinality: "One",
   },
+  "ducts.rehearse-heal": {
+    subject: "Elements",
+    touches: ["Geometry"],
+    effect: "TransactRead",
+    rollsBack: true,
+    cost: "Mutation",
+    cardinality: "One",
+  },
+  "ducts.rehearse-assign-fan": {
+    subject: "Elements",
+    touches: ["Topology"],
+    effect: "TransactRead",
+    rollsBack: true,
+    cost: "Mutation",
+    cardinality: "One",
+  },
   "instances.start": {
     subject: "None",
     touches: ["Metadata"],
@@ -392,8 +408,11 @@ const declaredAxes = {
  * (ADR 0030 rule 4): a Read plan opens no transaction; anything else is a TransactRead rehearsal that
  * declares rollback. The linker refuses a ModelWrite whose preview binding breaks that.
  */
-const isReadPlan = (action: object) =>
-  hostOpCatalog.find((op) => op.key === (action as { native?: readonly string[] }).native?.[0])?.effect === "Read";
+// A plan with no native leaf is computed on the host from reads: a Read by construction.
+const isReadPlan = (action: object) => {
+  const native = (action as { native?: readonly string[] }).native?.[0];
+  return !native || hostOpCatalog.find((op) => op.key === native)?.effect === "Read";
+};
 const previewAxes = Object.fromEntries(
   Object.entries(hostActions).flatMap(([key, action]) =>
     "writeBoundary" in action && action.writeBoundary.phase === "preview"
