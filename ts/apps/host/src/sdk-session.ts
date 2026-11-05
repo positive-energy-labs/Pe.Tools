@@ -282,8 +282,16 @@ const SdkSessionLayer = Layer.effect(
     const resolve = Effect.fn("SdkSession.resolve")(
       function* (scope: Readonly<HostSessionScope>) {
         yield* RequestIdentity;
-        const observed = generation;
-        const resolved = yield* resolveSdkCore(bridge, scope, driver, cache);
+        // A bridge frame mid-resolution makes the evidence stale, not wrong. Admission dispatches
+        // nothing, so re-admit once from scratch: every bridge, SDK, incarnation, ownership and
+        // document check reruns. A second change during that pass still refuses.
+        let observed = generation;
+        let resolved = yield* resolveSdkCore(bridge, scope, driver, cache);
+        if (generation !== observed) {
+          cache.clear(); // the first pass may have cached its stale answer after the frame cleared it
+          observed = generation;
+          resolved = yield* resolveSdkCore(bridge, scope, driver, cache);
+        }
         if (generation !== observed) {
           cache.clear();
           return yield* refuse("SDK attachment changed during resolution; retry admission");
