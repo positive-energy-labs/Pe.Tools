@@ -221,15 +221,11 @@ function InputsContent({
         >
           <span>Design friction</span>
           <StateCell
-            {...cellFromDraft(
-              friction,
-              {
-                value: String(friction.edit?.value ?? DEFAULT_DESIGN_FRICTION_RATE),
-                cap: ctx.workBasis ? "editable" : "locked",
-                capReason: "Read Work before editing",
-              },
-              String,
-            )}
+            {...cellFromDraft(friction, {
+              value: String(friction.edit?.value ?? DEFAULT_DESIGN_FRICTION_RATE),
+              cap: ctx.workBasis ? "editable" : "locked",
+              capReason: "Read Work before editing",
+            })}
             scale="row"
             numeric={{ min: 0, digits: 3 }}
             unit={{ label: "in-wg/100 ft" }}
@@ -269,7 +265,11 @@ function InputsContent({
             <label key={key} className="flex items-baseline gap-2">
               <span>{label}</span>
               <StateCell
-                {...cellFromDraft(cell, { value: snapshot.slots[key], cap: "editable" }, String)}
+                {...cellFromDraft(cell, {
+                  value: cell.edit ? String(cell.edit.value) : snapshot.slots[key],
+                  modelValue: snapshot.slots[key],
+                  cap: "editable",
+                })}
                 scale="row"
                 onCommit={(value: string) =>
                   write(cellPatches(["parameters"], key, cell, { kind: "set", rung: { value } }), {

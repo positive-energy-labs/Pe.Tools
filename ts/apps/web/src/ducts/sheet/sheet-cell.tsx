@@ -11,14 +11,6 @@ import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 
 export type WorkCell = Parameters<typeof cellFromDraft>[0];
 
-/** A Work rung as text: a bare number, or the one number a `{ cfm }` / `{ inWg }` rung carries. */
-const showRung = (v: unknown): string =>
-  typeof v === "number"
-    ? String(v)
-    : v && typeof v === "object"
-      ? String(Object.values(v).find((x) => typeof x === "number") ?? "")
-      : "";
-
 /** The write's outcome as the cell's commit: nothing to refuse once it lands (the sheet shows refusals). */
 const settled = (out: void | Promise<unknown>) =>
   out instanceof Promise
@@ -99,7 +91,6 @@ export function SheetCell({
             refusal
               ? { value: text, cap: "locked", capReason: refusal }
               : { value: text, cap: "editable" },
-            showRung,
           )}
           scale="row"
           unit={unit}

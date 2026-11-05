@@ -298,11 +298,12 @@ function YesNoCell({
         invalid={refused != null}
         display={
           <StateCell
-            {...cellFromDraft(
-              cell ?? { edit: null },
-              { value: shown, currentValue: current || "(blank)", note: reason, scale: "row" },
-              showFamilyCell,
-            )}
+            {...cellFromDraft(cell ?? { edit: null }, {
+              value: shown,
+              modelValue: current || "(blank)",
+              note: reason,
+              scale: "row",
+            })}
           />
         }
         title={`${name} is Yes/No: pick Yes or No`}
@@ -361,7 +362,7 @@ function ProposalCell({
   current: string;
   reason: string;
   cell: FamilyCellState | undefined;
-  /** The cell's own verbs: exactly `availableTransitions`, over the families wire. */
+  /** The cell clear control over the families Work handle. */
   transitions?: readonly CellTransition[];
   /** Why a patch cannot write this cell; present, the cell draws locked and takes no typing. */
   lock?: string;
@@ -382,11 +383,12 @@ function ProposalCell({
   return (
     <span data-author={edit?.by} data-edit={edit ? "" : undefined}>
       <StateCell
-        {...cellFromDraft(
-          cell ?? { edit: null },
-          { value: shown, currentValue: current || "(blank)", note, scale: "row" },
-          showFamilyCell,
-        )}
+        {...cellFromDraft(cell ?? { edit: null }, {
+          value: shown,
+          modelValue: current || "(blank)",
+          note,
+          scale: "row",
+        })}
         cap={lock ? "locked" : "editable"}
         capReason={lock}
         transitions={transitions}

@@ -36,7 +36,7 @@ export interface ParamRow {
   ageMin?: number;
   fresh: "fresh" | "stale" | "unverified" | "never";
   agree: "agree" | "drift";
-  stage: "clean" | "proposed" | "edit";
+  stage: "clean" | "edit";
   author?: "pea" | "human" | "unknown";
   cap: "editable" | "locked" | "nohome";
   capReason?: string;

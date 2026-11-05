@@ -130,7 +130,7 @@ function scheduleCellState(
   return {
     ...cellFromDraft(cell, {
       value: shown,
-      currentValue: current || "(blank)",
+      modelValue: current || "(blank)",
       ...(isStale ? { agree: "drift" as const, modelValue: current, reviewed: staleAt.was } : {}),
       cap: binding == null ? "nohome" : lock ? "locked" : "editable",
       capReason: lock ?? undefined,

@@ -64,7 +64,7 @@ export function TakeoffProposalRows({
           <div key={key} role="group" aria-label={`Staged ${key}`}>
             <span className="t-small face-mono text-ink-2">staged · {label(key)}</span>
             <StateCell
-              {...cellFromDraft(cell, { value: show(cell.edit?.value), scale: "row" }, show)}
+              {...cellFromDraft(cell, { value: show(cell.edit?.value), scale: "row" })}
               transitions={transitions(owner, wire.segment, key)}
             />
           </div>
@@ -110,16 +110,12 @@ export function TakeoffEditCell({
   const shown = cell?.edit != null ? Number(cell.edit.value) : value;
   return (
     <StateCell
-      {...cellFromDraft(
-        cell ?? { edit: null },
-        {
-          value: show(shown),
-          currentValue: show(value),
-          scale: "row",
-          numeric: { integer, min: 0, digits },
-        },
-        show,
-      )}
+      {...cellFromDraft(cell ?? { edit: null }, {
+        value: show(shown),
+        modelValue: show(value),
+        scale: "row",
+        numeric: { integer, min: 0, digits },
+      })}
       transitions={
         cell
           ? owner

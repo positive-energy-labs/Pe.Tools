@@ -48,7 +48,7 @@ function ProjectedCell({ cell, current }: { cell: OverlayCell; current: string }
     <StateCell
       {...cellFromDraft(cell, {
         value: shown.value,
-        currentValue: current || "(blank)",
+        modelValue: current || "(blank)",
         note: `The native patch (${rung}) writes ${current || "(blank)"} → ${shown.value} by ${HOW[shown.how]}. Review it on the patch row; nothing has reached Revit.`,
         scale: "row",
       })}

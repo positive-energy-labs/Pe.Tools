@@ -203,7 +203,10 @@ export function ReviewRow({
 
   mark?: boolean;
 }) {
-  const props = cellFromDraft(cell, facts, show);
+  const props = cellFromDraft(cell, {
+    ...facts,
+    ...(cell.edit && show ? { value: show(cell.edit.delete ? null : cell.edit.value) } : {}),
+  });
   const verbs = transitions ?? reviewTransitions(wire, address, cell);
   const by = props.author;
   return (

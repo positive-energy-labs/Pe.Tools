@@ -91,13 +91,7 @@ function workWire(owner: RoomsOwner): CellWire {
 }
 function cellTransitions(owner: RoomsOwner, key: string): CellTransition[] {
   const row = { segment: "edits", key };
-  return (
-    [
-      ["take", "take"],
-      ["unsuggest", "reject"],
-      ["clear", "reopen"],
-    ] as const
-  ).flatMap(([kind, verb]) => {
+  return ([["clear", "clear"]] as const).flatMap(([kind, verb]) => {
     const control = owner.control(`cell:edits.${verb}`, row);
     return control.refusal ? [] : [{ kind, run: async () => refusalOf(await control.run()) }];
   });

@@ -5,7 +5,6 @@ import { cellFromDraft, type StateCellProps } from "@pe/kit/lang/cell";
 import { PressContent } from "@pe/kit/anatomy/press-content";
 import { Button } from "@pe/kit/lang/button";
 import { NavStateCell } from "#/family/marks";
-import { parameterText } from "#/family/family-model";
 import {
   MARK_TITLE,
   agreementOf,
@@ -124,7 +123,6 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
               // derivation written a second time.
               proposalCell([], isUnsavedAt(world, draft, saved, row, typeName) ? literal : null),
               { value: literal },
-              parameterText,
             )}
             note={`The literal itself, as ONE cell across every type — EDITABLE. Typing here rewrites the number frozen into the geometry; it does not make it reachable. That is what binding is for. Emptying it is refused out loud — a dimension with no number is not a state.${
               isUnsavedAt(world, draft, saved, row, typeName)
@@ -189,14 +187,13 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         const read = cellFromDraft(
           proposalCell(proposals, overlay === "draft" && unsaved ? draftValue : null),
           facts,
-          parameterText,
         );
         return (
           <NavStateCell
             {...read}
             // Under ⇄ live and ⇄ saved the number drawn is another substrate's, so the fold
             // stays but the proposed value does not replace it.
-            {...(overlay === "draft" ? {} : { value: facts.value, currentValue: undefined })}
+            {...(overlay === "draft" ? {} : { value: facts.value, modelValue: undefined })}
             onLocate={proposals[0] ? () => locate(proposals[0]!) : undefined}
             transitions={transitionsAt(
               proposals[0]?.id ?? settingsFieldPointer(["types", typeName, row.name]),
@@ -266,7 +263,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
       return cell({
         value: override ?? "",
         // What the type holds today, for the tooltip when Pea's suggestion is what the cell draws.
-        currentValue:
+        modelValue:
           override !== undefined
             ? override || "(blank)"
             : authored
@@ -275,7 +272,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         placeholder: authored,
         note: `${
           proposals.length > 0
-            ? `Pea proposes ${proposals[0]!.proposed} here. Accept or deny it on the cell, or type your own value and the suggestion is CLEARED on the spot. ${override === undefined ? `Until then the type inherits ${authored || "nothing"}.` : `The type currently overrides with ${override}.`}${groundedNote}`
+            ? `${proposals[0]!.by === "pea" ? "Pea" : "The last writer"} staged ${proposals[0]!.proposed} here. Type to replace it or clear to restore the model value. ${override === undefined ? `Until then the type inherits ${authored || "nothing"}.` : `The type currently overrides with ${override}.`}${groundedNote}`
             : override === undefined
               ? `"${typeName}" inherits ${authored || "nothing"} from the family — the grey number is the inheritance showing through, not a value this type holds. Type here to make it differ.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
               : `"${typeName}" overrides the family value ${authored} with ${override}. Clear the cell to go back to inheriting.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`

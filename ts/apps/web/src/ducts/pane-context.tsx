@@ -26,7 +26,7 @@ export function useCellTransitions(
 ): readonly CellTransition[] {
   const owner = useContext(DuctsOwner);
   if (!owner) return [];
-  return (["take", "unsuggest", "clear"] as const).map((kind) => ({
+  return (["clear"] as const).map((kind) => ({
     kind,
     run: async () => {
       const result = await settleWork(owner.cells[kind](segment, key));

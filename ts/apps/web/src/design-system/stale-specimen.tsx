@@ -88,7 +88,7 @@ function StaleSpecimen({ say }: { say: (text: string) => void }) {
             column: "LOAD",
             row: `r${key.split("::")[0]} (Revit now ${STALE_NOW[key] ?? "?"})`,
             value,
-            look: cellFromDraft(cell, { value }, showCellValue),
+            look: cellFromDraft(cell, { value }),
             locate: () => say(`locate ${key}`),
           };
         })}

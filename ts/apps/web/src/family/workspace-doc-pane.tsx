@@ -1,7 +1,7 @@
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { useRef, useState } from "react";
 import { settingsFieldPointer, type MeasuredValue } from "@pe/agent-contracts";
-import { parameterText, paramSpec } from "#/family/family-model";
+import { paramSpec } from "#/family/family-model";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { FactChip, Tag } from "@pe/kit/lang/chip";
 
@@ -189,7 +189,6 @@ export function FamilyWorkspaceDocPane() {
                 (authoredText(saved.authored[name]) ?? null) !== authored ? authored : null,
               ),
               { value: authored },
-              parameterText,
             )}
             onLocate={family[0] ? () => locate(family[0]!) : undefined}
             transitions={familyKey ? transitionsAt(familyKey) : undefined}

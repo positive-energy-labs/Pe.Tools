@@ -154,7 +154,7 @@ export function RoomsTable({
       return {
         ...cellFromDraft(cell, {
           value: authored ? shown(authored.value) : held,
-          currentValue: held || "(blank)",
+          modelValue: held || "(blank)",
           cap: "editable",
           note:
             authored && shown(authored.value) !== held

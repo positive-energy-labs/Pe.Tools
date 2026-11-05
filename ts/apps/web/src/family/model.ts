@@ -230,7 +230,7 @@ const AGREEMENT_RANK: Agreement[] = [
  */
 export interface FamilyProposal {
   value: string;
-  by: "pea";
+  by: "pea" | "human" | "unknown";
   note: string;
   confidence?: "high" | "low";
   source: ProtoProposal;
@@ -249,7 +249,7 @@ export function proposalCell(
         : first
           ? {
               value: first.proposed,
-              by: "pea",
+              by: first.by ?? "unknown",
               note: first.note,
               ...(first.confidence ? { confidence: first.confidence } : {}),
               source: first,
