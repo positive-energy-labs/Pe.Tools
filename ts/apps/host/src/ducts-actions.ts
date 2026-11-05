@@ -73,6 +73,21 @@ export async function lossSnapshot(
   return snapshot;
 }
 
+/** The requested cells whose segment writes only through request rows but derived none (rules also write the store). */
+export function unwrittenCells(
+  request: Pick<DuctsApplyInput, "terminals" | "components" | "equipment" | "terminalFlows" | "equipmentFlows">,
+  cells: readonly (readonly [string, string])[],
+): (readonly [string, string])[] {
+  const written: Record<string, readonly { id: number }[]> = {
+    terminalDrops: request.terminals,
+    componentDrops: request.components,
+    esp: request.equipment,
+    flows: request.terminalFlows,
+    equipmentFlows: request.equipmentFlows,
+  };
+  return cells.filter(([segment, key]) => written[segment] && !written[segment]!.some((row) => String(row.id) === key));
+}
+
 /** Only a fully confirmed heal consumes its intent; partial/refused/preview results remain editable. */
 export function healedCellPaths(
   input: Record<string, unknown>,
@@ -227,8 +242,14 @@ export function ductsExecutors(
                 ).values(),
               ];
             }
+            const scoped = scopeApplyRequest(request, snapshot.store, intent?.cells);
+            const unwritten = unwrittenCells(scoped, intent?.cells ?? []);
+            if (unwritten.length)
+              throw refused(
+                `These requested cells derive no write in this scope: ${unwritten.map((cell) => cell.join("/")).join(", ")}`,
+              );
             return {
-              input: scopeApplyRequest(request, snapshot.store, intent?.cells) as unknown as Record<string, unknown>,
+              input: scoped as unknown as Record<string, unknown>,
               dependencies: {
                 snapshot: ductWriteEvidence(snapshot),
                 grids,
