@@ -70,6 +70,7 @@ export const dataTablesWorkSchema = z.strictObject({
 type DataTablesWork = z.infer<typeof dataTablesWorkSchema>;
 /** The stored table by slot: headings, and each row's cells. Null: the document has no table of that name. */
 export type DataTableBase = {
+  name: string;
   columns: Record<string, string>;
   rows: Record<string, Record<string, string | null>>;
 } | null;
@@ -85,7 +86,7 @@ function deriveDataTable(doc: DataTablesWork, base: DataTableBase) {
   const name = tableName(doc);
   const touched: CatalogTouch[] = [];
   const by = (edit: { by?: Author } | null | undefined) => edit?.by ?? "unknown";
-  if (doc.name.edit) touched.push({ path: ["name"], before: base ? name : null, after: name, by: by(doc.name.edit as StagedEdit) });
+  if (doc.name.edit) touched.push({ path: ["name"], before: base?.name ?? null, after: name, by: by(doc.name.edit as StagedEdit) });
   const columns: Record<string, string> = { ...base?.columns };
   for (const [key, cell] of Object.entries(doc.columns)) {
     const edit = cell.edit as StagedEdit;
@@ -125,12 +126,17 @@ function deriveDataTable(doc: DataTablesWork, base: DataTableBase) {
 }
 
 /** The native detail read, by slot (`DataTableColumnHandle.slot`), for the one table the Work names. */
-function projectDataTable(response: unknown, doc: DataTablesWork): DataTableBase {
+function projectDataTable(response: unknown): DataTableBase {
   type Native = { tables: { name: string; columns: { heading: string; kind: string; slot: number }[]; rows: { key: string; values: (string | null)[] }[] }[] };
-  const table = (response as Native).tables.find((t) => t.name === tableName(doc));
+  // The native reader owns name matching (OrdinalIgnoreCase). Selecting again here can turn an
+  // existing table into an absent base and drop its unstaged columns on the next reconcile.
+  const { tables } = response as Native;
+  if (tables.length > 1) throw new CatalogWorkRefused("The data-table read matched multiple tables; choose an unambiguous name");
+  const table = tables[0];
   if (!table) return null;
   const keys = table.columns.map((c) => `${c.kind.toLowerCase()}:${c.slot}`);
   return {
+    name: table.name,
     columns: Object.fromEntries(table.columns.map((c, i) => [keys[i], c.heading])),
     rows: Object.fromEntries(table.rows.map((r) => [r.key, Object.fromEntries(keys.map((k, i) => [k, r.values[i] ?? null]))])),
   };

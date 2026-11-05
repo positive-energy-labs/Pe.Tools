@@ -42,6 +42,7 @@ const definition = (name: string) => ({ sourceCategoryId: -2001040, sourceParame
 const catalogFixtures: { [O in keyof typeof catalogWorks]: { base: unknown; doc: unknown; keys(base: unknown): Keyed; sent(request: unknown): Keyed } } = {
   "data-tables": {
     base: {
+      name: "T",
       columns: { "text:0": "A", "text:1": "B", "number:0": "N" },
       rows: { r1: { "text:0": "a1", "text:1": "b1", "number:0": "1" }, r2: { "text:0": "a2", "text:1": "b2", "number:0": "2" } },
     },
