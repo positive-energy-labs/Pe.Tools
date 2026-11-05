@@ -1,9 +1,8 @@
 import { canonicalRouteInput } from "../../../../packages/agent-contracts/src/route-doc";
 /**
- * Transport subjects as readings. Each subscribed `ReadingRequest` is one attempt of the shared
- * source lifecycle (`openSourceReading`, the same one admitted route readings use): it owns the
- * deadline, failure and recovery; `#/readings` is only the wire (SSE frames, fences, wake). The hooks project the
- * engine's state back onto the contract `Reading` so a View reads one vocabulary.
+ * Transport subjects over the one source lifecycle admitted readings use (`openSourceReading`, which
+ * owns deadline, failure and recovery); `#/readings` is only the wire. Hooks project its snapshot
+ * onto the contract `Reading` so a View reads one vocabulary.
  *
  * A reading never feeds the page-wide busy sweep (ADR 0027 rule 9): pane heads say status.
  */
@@ -24,7 +23,7 @@ import { reportFault } from "#/host/diagnostics";
 import { peReadings, type Readings } from "#/readings";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { UseSource } from "./readings";
-import { openSourceReading } from "./readings-use";
+import { demandContext, openSourceReading } from "./readings-use";
 
 export type { Lane };
 
@@ -66,7 +65,7 @@ const shallowSame = (a: object, b: object) => {
   );
 };
 
-/** One subject over the shared source-attempt lifecycle: publishes its projected Reading, returns its release. */
+/** One subject: publishes its projected Reading and returns its release. */
 function subject(
   serialized: string,
   source: Readings,
@@ -124,28 +123,20 @@ function subject(
   };
   emit({ status: "pending", current: false, reason: "Reading pending" });
   const controller = new AbortController();
-  const host = { kind: "host" as const };
   const close = openSourceReading(
     live,
-    {
-      target: host,
-      workKey: null,
-      workRevision: null,
-      page: {},
-      work: null,
-      attempt: { target: host, workKey: null, generation: 0 },
-      trigger: { kind: "demand" },
-      args: null,
-      inputs: {},
-      signal: controller.signal,
-    },
+    demandContext({ kind: "host" }, 0, null, controller.signal),
     emit,
     {
       live: {
         waitS: SUBJECT_WAIT_S,
         onTimeout: () =>
           reportFault(
-            { code: "reading.timeout", elapsedMs: SUBJECT_WAIT_S * 1000, readingKind: request.kind },
+            {
+              code: "reading.timeout",
+              elapsedMs: SUBJECT_WAIT_S * 1000,
+              readingKind: request.kind,
+            },
             Error(`reading ${serialized}: the host sent nothing before its deadline`),
           ),
       },

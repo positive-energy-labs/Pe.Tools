@@ -12,27 +12,43 @@ import {
   type UseSource,
 } from "./readings";
 
-/** A live subject: silence past `waitS` fails it (stale if it holds a value); a failure holds until an answer. */
-export interface LiveReadingPolicy {
-  readonly waitS: number;
-  onTimeout?(): void;
-}
+/** A demand attempt's context: no Page or Work, only its target, attempt generation and args. */
+export const demandContext = (
+  target: ReadingContext["target"],
+  generation: number,
+  args: unknown,
+  signal: AbortSignal,
+): ReadingContext => ({
+  target,
+  workKey: null,
+  workRevision: null,
+  page: {},
+  work: null,
+  attempt: { target, workKey: null, generation },
+  trigger: { kind: "demand" },
+  args,
+  inputs: {},
+  signal,
+});
 
 /**
  * The one source-attempt lifecycle: admitted route readings and shell hook subjects both open
  * sources here. It maps frames to `ReadingSnapshot`, keeps the last value through pending, stale
  * and failure, and closes the source once. The caller owns `context.signal`; aborting it ends delivery.
+ * `live`: silence past `waitS` fails the subject (stale if it holds a value); a failure holds until an answer.
  */
 export function openSourceReading<T>(
   source: Exclude<ReadingSource<T>, DeriveSource<T>>,
   context: ReadingContext,
   deliver: (snapshot: ReadingSnapshot<T>) => void,
-  options: { observe?(log: unknown): void; live?: LiveReadingPolicy } = {},
+  options: { observe?(log: unknown): void; live?: { waitS: number; onTimeout?(): void } } = {},
 ): () => void {
   let value: Immutable<T> | undefined;
   const live = options.live;
   let failed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const held = (status: "pending" | "unavailable" | "failed", reason: string, kept = value) =>
+    ({ status, current: false, value: kept, reason }) as ReadingSnapshot<T>;
   const disarm = () => {
     clearTimeout(timer);
     timer = undefined;
@@ -41,15 +57,12 @@ export function openSourceReading<T>(
     if (!live || timer !== undefined) return;
     timer = setTimeout(() => {
       timer = undefined;
-      if (value !== undefined)
-        return emit({ status: "unavailable", current: false, value, reason: "Reading is stale" });
+      if (value !== undefined) return emit(held("unavailable", "Reading is stale"));
       failed = true;
       live.onTimeout?.();
-      emit({
-        status: "failed",
-        current: false,
-        reason: `Source sent no answer after ${live.waitS}s; explicitly refresh to retry`,
-      });
+      emit(
+        held("failed", `Source sent no answer after ${live.waitS}s; explicitly refresh to retry`),
+      );
     }, live.waitS * 1000);
   };
   const open: UseSource<T>["open"] = (context, deliver) => {
@@ -80,40 +93,27 @@ export function openSourceReading<T>(
         if (failed || (frame.kind === "complete" && frame.fresh !== false)) disarm();
         else arm();
       }
+      const sent = (frame as { value?: unknown }).value as Immutable<T>;
       switch (frame.kind) {
         case "part":
-          return emit({
-            status: "pending",
-            current: false,
-            value: frame.value as Immutable<T>,
-            reason: "Reading incomplete",
-          });
+          return emit(held("pending", "Reading incomplete", sent));
         case "complete":
           return emit(
             frame.fresh === false
-              ? {
-                  status: "unavailable",
-                  current: false,
-                  value: frame.value as Immutable<T>,
-                  reason: "Reading is stale",
-                }
+              ? held("unavailable", "Reading is stale", sent)
               : {
                   status: "ready",
                   current: true,
-                  value: frame.value as Immutable<T>,
-                  hash: z.string().parse(contentHash(frame.value)),
+                  value: sent,
+                  hash: z.string().parse(contentHash(sent)),
                 },
           );
         case "pending":
+          return emit(held("pending", "Reading pending"));
         case "stale":
-          return emit({
-            status: frame.kind === "pending" ? "pending" : "unavailable",
-            current: false,
-            value,
-            reason: frame.kind === "pending" ? "Reading pending" : "Reading is stale",
-          });
+          return emit(held("unavailable", "Reading is stale"));
         case "failure":
-          return emit({ status: "failed", current: false, value, reason: String(frame.error) });
+          return emit(held("failed", String(frame.error)));
         case "log":
           options.observe?.(frame.value);
       }

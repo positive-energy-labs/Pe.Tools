@@ -15,7 +15,7 @@ import type {
 import type { AcceptanceToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { ReadingSource, UseSource } from "./readings";
-import { openSourceReading } from "./readings-use";
+import { demandContext, openSourceReading } from "./readings-use";
 import { contentHash } from "./readings";
 import { z } from "zod";
 import type { Effect } from "@pe/agent-contracts";
@@ -63,22 +63,13 @@ export function sourceRouteServices(
     }
   >();
   const observers = new WeakMap<object, (value: unknown) => void>();
-  const contextFor = (request: ResolvedRead<unknown>, token: AcceptanceToken) => ({
-    target: token.scope.identity.target ?? { kind: "host" as const },
-    workKey: null,
-    workRevision: null,
-    page: {},
-    work: null,
-    attempt: {
-      target: token.scope.identity.target ?? { kind: "host" as const },
-      workKey: null,
-      generation: Number(request.key.freshnessGeneration),
-    },
-    trigger: { kind: "demand" as const },
-    args: JSON.parse(request.key.sortedKeyInput),
-    inputs: {},
-    signal: new AbortController().signal,
-  });
+  const contextFor = (request: ResolvedRead<unknown>, token: AcceptanceToken) =>
+    demandContext(
+      token.scope.identity.target ?? { kind: "host" },
+      Number(request.key.freshnessGeneration),
+      JSON.parse(request.key.sortedKeyInput),
+      new AbortController().signal,
+    );
   const services: KernelServices = {
     geometry: composition.geometry ?? createGeometryReadDoor(),
     target: composition.target,
@@ -207,26 +198,13 @@ export function sourceRouteServices(
           throw Error("Ordinary source requires its attempt generation");
         const close = openSourceReading(
           source,
-          {
-            target: state.target,
-            workKey: null,
-            workRevision: null,
-            page: {},
-            work: null,
-            attempt: {
-              target: state.target,
-              workKey: null,
-              generation: request.key.freshnessGeneration,
-            },
-            trigger: { kind: "demand" },
-            args: JSON.parse(request.key.sortedKeyInput),
-            inputs: {},
-            signal: state.controller.signal,
-          },
-          (snapshot) => {
-            state.snapshot = snapshot as ReadingSnapshot<T>;
-            deliver(snapshot as ReadingSnapshot<T>);
-          },
+          demandContext(
+            state.target,
+            request.key.freshnessGeneration,
+            JSON.parse(request.key.sortedKeyInput),
+            state.controller.signal,
+          ),
+          (snapshot) => deliver((state.snapshot = snapshot as ReadingSnapshot<T>)),
           { observe: (value) => observers.get(request)?.(value) },
         );
         return () => {

@@ -67,7 +67,10 @@ test("a silent hook subject fails at its deadline; one holding evidence goes sta
   const silent = transport();
   const a = watch(silent.source);
   await vi.advanceTimersByTimeAsync(30_000);
-  expect(a.read()).toMatchObject({ state: "failed", message: expect.stringContaining("sent no answer") });
+  expect(a.read()).toMatchObject({
+    state: "failed",
+    message: expect.stringContaining("sent no answer"),
+  });
   const held = transport();
   const b = watch(held.source);
   held.send({ kind: "snapshot", value: { a: 1 }, stale: true });

@@ -80,11 +80,6 @@ interface SourcePolicy {
   /** Defaults to the attempt's exact document/session. Disk and service sources declare theirs. */
   effects?(context: ReadingContext): readonly Effect[];
   dirties?: readonly string[];
-  /**
-   * A live subject (one transport subscription): a failure is said, but the attempt keeps
-   * listening, so the subject's next answer recovers it without a refresh press.
-   */
-  recovers?: boolean;
 }
 export interface UseSource<T = unknown> extends SourcePolicy {
   kind: "use" | "feed";
@@ -272,12 +267,6 @@ export function createReadingGraph<P, W>(
     clearTimeout(node.wait);
     node.wait = setTimeout(() => {
       node.wait = undefined;
-      // A live subject holding evidence is stale, not failed: its transport recovers it.
-      if (node.source.recovers && node.state.value !== undefined) {
-        put(node, { ...node.state, status: "stale", current: false });
-        flush();
-        return;
-      }
       if (node.context)
         deliver(node, node.context, {
           kind: "failure",
@@ -305,16 +294,7 @@ export function createReadingGraph<P, W>(
       });
       return;
     }
-    if (
-      node.state.status === "failed" &&
-      !(
-        node.source.recovers &&
-        (publication.kind === "part" ||
-          publication.kind === "complete" ||
-          publication.kind === "failure")
-      )
-    )
-      return;
+    if (node.state.status === "failed") return;
     if (publication.kind === "pending" && node.state.complete) {
       deps.log({
         kind: "drop",
@@ -400,7 +380,7 @@ export function createReadingGraph<P, W>(
       if (!node.wait) awaitProgress(node);
     }
     flush();
-    if (owned(node, attempt) && publication.kind === "failure" && !node.source.recovers) {
+    if (owned(node, attempt) && publication.kind === "failure") {
       detach(node);
       node.worker?.stop();
       node.worker = undefined;

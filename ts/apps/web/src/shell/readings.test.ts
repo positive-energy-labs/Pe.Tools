@@ -837,17 +837,3 @@ it("partial publications settle to failure within the original deadline", () => 
   vi.useRealTimers();
 });
 
-it("a recovering subscription with partial evidence becomes stale at its deadline", () => {
-  vi.useFakeTimers();
-  const read = controlled();
-  read.source.recovers = true;
-  const { graph } = fixture({ matrix: decl("read") }, { read: read.source });
-  graph.mount(["matrix"]);
-  read.attempts[0]!.deliver({ kind: "part", value: 1, revision: 0 });
-  vi.advanceTimersByTime(DEFAULT_WAIT_S * 1000 + 1);
-  expect(graph.get("matrix")).toMatchObject({ status: "stale", value: 1, current: false });
-  read.attempts[0]!.deliver({ kind: "complete", value: 2, revision: 1 });
-  expect(graph.get("matrix")).toMatchObject({ status: "ready", value: 2, current: true });
-  graph.dispose();
-  vi.useRealTimers();
-});
