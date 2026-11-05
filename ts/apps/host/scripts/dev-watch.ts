@@ -61,11 +61,11 @@ process.once("SIGTERM", interrupt);
 try {
   do {
     restart = false;
-    // Refuse drift before importing pins; validation never rewrites the candidate.
+    // jiti reads builtin closures from disk: write the untracked build output before each start.
+    // An unchanged closure is not rewritten, and web/src is outside the watch roots.
     await promisify(execFile)(process.execPath, [
       fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)),
       "--builtin-closure-only",
-      "--check",
     ]);
     if (stopped) break;
     child = spawn(

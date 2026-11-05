@@ -5,6 +5,9 @@ import { buildRouteArtifact, routeModuleHash } from "./route-module-hash.ts";
 import { routeSourceHash } from "./route-source-hash.ts";
 
 const id = fileURLToPath(new URL("./src/rooms/graph.ts", import.meta.url));
+const closure = fileURLToPath(
+  new URL("./src/rooms/source-closure.generated.json", import.meta.url),
+);
 
 test("the retired graph-only transform never injects moduleHash", async () => {
   const transform = routeModuleHash().transform as Function;
@@ -264,38 +267,26 @@ test("runtime projections replace stale disk content without writing it", async 
   expect(readFileSync(id, "utf8")).toBe(before);
 });
 
-test("drift refusal stops dev startup before serving a projection", async () => {
-  const before = readFileSync(id, "utf8");
-  const plugin = routeModuleHash(async () => {
-    throw Error("Generated route artifacts drifted");
-  });
-  (plugin.configResolved as Function)({ command: "serve", mode: "development" });
-  await expect((plugin.buildStart as Function).call({ addWatchFile: vi.fn() })).rejects.toThrow(
-    "Generated route artifacts drifted",
-  );
-  expect(readFileSync(id, "utf8")).toBe(before);
-});
-
-test("dev startup and HMR select validation; tests select memory projections", async () => {
-  const generate = vi.fn(async (_mode: "dev" | "build" | "test") => ({}));
-  for (const [command, mode, expected] of [
-    ["serve", "development", "dev"],
-    ["build", "production", "build"],
-    ["serve", "test", "test"],
-  ]) {
+test("tests project lazily on the first closure import; dev and build project at startup", async () => {
+  const generate = vi.fn(async () => ({}));
+  for (const [command, mode, eager] of [
+    ["serve", "development", true],
+    ["build", "production", true],
+    ["serve", "test", false],
+  ] as const) {
+    generate.mockClear();
     const plugin = routeModuleHash(generate);
     (plugin.configResolved as Function)({ command, mode });
     await (plugin.buildStart as Function).call({ addWatchFile: vi.fn() });
-    if (expected === "test") {
-      const count = generate.mock.calls.length;
-      await (plugin.load as Function)(id);
-      expect(generate).toHaveBeenCalledTimes(count);
-      await (plugin.load as Function)(id.replace("graph.ts", "source-closure.generated.json"));
-    }
-    expect(generate).toHaveBeenLastCalledWith(expected);
-    await (plugin.handleHotUpdate as Function)({
-      server: { moduleGraph: { invalidateAll: vi.fn() }, ws: { send: vi.fn() } },
-    });
-    expect(generate).toHaveBeenLastCalledWith(expected);
+    await (plugin.load as Function)(id);
+    expect(generate).toHaveBeenCalledTimes(eager ? 1 : 0);
+    await (plugin.load as Function)(closure);
+    expect(generate).toHaveBeenCalledOnce();
   }
+});
+
+test("a closure import resolves without a disk copy", () => {
+  const resolve = routeModuleHash().resolveId as Function;
+  expect(resolve("../rooms/source-closure.generated.json", id)).toBe(closure);
+  expect(resolve("./graph.ts", id)).toBeUndefined();
 });
