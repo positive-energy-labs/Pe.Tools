@@ -6,7 +6,13 @@ import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { hostActions } from "./semantic-actions.ts";
 import type { Command } from "./command.ts";
 import { capabilityPrincipals } from "./capability.ts";
-import type { CatalogLink } from "./catalog.ts";
+import {
+  commandLink,
+  link,
+  requireLinkedCatalog,
+  type CatalogLink,
+  type LinkedCatalog,
+} from "./catalog.ts";
 import { hostRouteAxes } from "./route-axes.ts";
 import { z } from "zod";
 const threadHistoryInput = z.strictObject({
@@ -165,27 +171,27 @@ export function nativeEntry(op: HostOperationDefinition): CatalogRow {
   };
 }
 function commandAxes(key: string, action: Command): CatalogLink {
-  const uses = action.native ?? (hostOpCatalog.some((op) => op.key === key) ? [key] : []);
   const axes = commandCatalogAxes[key as keyof typeof commandCatalogAxes];
-  const boundary = (action as { writeBoundary?: import("./write-intent.ts").WriteBoundaryBinding })
-    .writeBoundary;
   if (!axes) throw Error(`Command ${key} has no declared catalog axes`);
-  return {
-    key: `command:${key}`,
-    uses,
-    ...axes,
-    ...(boundary ? action.derivation : {}),
-    ...(boundary?.phase === "apply" ? { previewBy: `command:${boundary.previewKey}` } : {}),
-  };
+  return commandLink(key, action, axes);
 }
-export const catalogEntries: readonly CatalogRow[] = [
-  ...hostOpCatalog
-    .filter((op) => !tsOnlyOperationCatalog.some((local) => local.key === op.key))
-    .map(nativeEntry),
-  ...Object.values(peRoutes).flatMap((row) =>
-    "catalog" in row ? [row.catalog as CatalogRow] : [],
-  ),
-];
+let linked: LinkedCatalog<CatalogRow> | undefined;
+/**
+ * The linked catalog of native ops and Pe routes, linked once on first use (host boot). Not linked at
+ * import, so a module that only imports this file never sees a catalog refusal.
+ */
+export function linkedCatalog(): LinkedCatalog<CatalogRow> {
+  return (linked ??= requireLinkedCatalog(
+    link<CatalogRow>([
+      ...hostOpCatalog
+        .filter((op) => !tsOnlyOperationCatalog.some((local) => local.key === op.key))
+        .map(nativeEntry),
+      ...Object.values(peRoutes).flatMap((row) =>
+        "catalog" in row ? [row.catalog as CatalogRow] : [],
+      ),
+    ]),
+  ));
+}
 export const isPeRouteId: PeApi<Routes>["isPeRouteId"] = api.isPeRouteId;
 export const peRouteUrl: PeApi<Routes>["peRouteUrl"] = api.peRouteUrl;
 export const matchPeRoute: PeApi<Routes>["matchPeRoute"] = api.matchPeRoute;
@@ -219,4 +225,12 @@ export async function callCatalogRoute(
   });
 }
 
-export { linkCatalog, type CatalogAxes, type CatalogLink } from "./catalog.ts";
+export {
+  commandLink,
+  link,
+  requireLinkedCatalog,
+  type CatalogAxes,
+  type CatalogLink,
+  type LinkedCatalog,
+  type LinkResult,
+} from "./catalog.ts";
