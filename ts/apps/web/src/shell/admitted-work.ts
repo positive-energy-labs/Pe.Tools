@@ -162,6 +162,25 @@ export function createAdmittedWork(
         }),
     );
   };
+  // ADR 0030 rule 9: a foreign cell lands in its owner's journal through the declared reading's
+  // handle. The owner's revision fences it; its feed ack, not this scope, is the truth.
+  const writeTo = (
+    handle: import("@pe/agent-contracts").WorkHandle,
+    reading: string,
+    patches: import("@pe/agent-contracts").WorkWrite["patches"],
+    invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken,
+    detail: Pick<import("@pe/agent-contracts").WorkWrite, "label" | "meta">,
+  ): Observation<WorkWriteOutcome> => {
+    if (!scope || !door) throw Error("Owner Work unavailable");
+    const request = freezePage({
+      kind: "apply" as const,
+      expectedRevision: handle.revision,
+      patches: structuredClone(patches),
+      press: invocation.id,
+      ...detail,
+    });
+    return submitWork({ ...scope, reading, key: handle.key, subject: null }, request, invocation);
+  };
   // Replay is never recomputed over a concurrent edit: return the door's stale refusal.
   const submit = (
     request: import("@pe/agent-contracts").WorkWrite,
@@ -196,6 +215,7 @@ export function createAdmittedWork(
   return {
     sync,
     write,
+    writeTo,
     refused: () =>
       Object.freeze(
         [...refusals()].map(([id, row]) =>

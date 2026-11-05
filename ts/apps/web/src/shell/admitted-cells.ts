@@ -13,8 +13,8 @@ export function admittedWorkPatches(
   value: unknown,
   ownerSchema?: z.ZodType,
 ) {
-  if (!data.work) throw Error("Work unavailable");
-  const shape = bare(ownerSchema ?? schemas[data.work.schema ?? ""]!);
+  if (!data.work && !ownerSchema) throw Error("Work unavailable");
+  const shape = bare(ownerSchema ?? schemas[data.work?.schema ?? ""]!);
   if (!(shape instanceof z.ZodObject)) throw Error("Work must be an object");
   const patchSchema = z.union([
     z.strictObject({ path: z.tuple([z.string()]), value: z.unknown() }),
