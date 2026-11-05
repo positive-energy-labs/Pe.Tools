@@ -20,11 +20,7 @@ import { docListArgv, type SessionObservation } from "@pe/host-contracts/pe-revi
 import { unreadLeg } from "../src/update-reader.ts";
 import { crossingOf } from "./callers.ts";
 import { serveRoutes } from "./real-server.ts";
-import {
-  acquiredOpenIds,
-  acquisitionSessionId,
-  foldAcquisitions,
-} from "../src/acquisition.ts";
+import { acquiredOpenIds, acquisitionSessionId, foldAcquisitions } from "../src/acquisition.ts";
 import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 // Instances owns its SDK transport. These HTTP witnesses expose no bridge attachment or dispatch.
 const sdkOnlyBridge = {
@@ -122,9 +118,6 @@ async function setup(
         },
         resolved: { pid, processStartUtc, id: "dev" },
       });
-      const changed = census.afterDocuments;
-      census.afterDocuments = null;
-      changed?.();
       return reply;
     }
     // The SDK's own rule (DocRoutes.ValidateOpen): unsynced belongs to a cloud source open only.
@@ -169,8 +162,8 @@ async function setup(
     modified: false,
     /** The bridge snapshot's SDK identity marker; null is a payload that did not attest. */
     identity: "sdk-open-v1" as "sdk-open-v1" | null,
-    /** Change external facts after one SDK document response, before its next freshness probe. */
-    afterDocuments: null as null | (() => void),
+    /** External SDK session-list input can change between successive census reads. */
+    beforeCensus: null as null | (() => void),
     /** The incarnation `doc list` resolves; the default fixture process when null. */
     process: null as null | {
       pid: number;
@@ -205,6 +198,7 @@ async function setup(
       setAutomatic: async () => update,
     },
     sessions: async () => {
+      census.beforeCensus?.();
       census.reads++;
       if (census.fail) throw Error("census unavailable");
       return sessionRows.map((row) => ({
@@ -257,9 +251,15 @@ async function setup(
     id?: string,
   ) => {
     if (!bound) {
-      bindCommandRuntime(owner, sdkOnlyBridge, captureStore(join(dir, "captures")), deps, async () => {
-        throw Error("Instances must dispatch through the SDK");
-      });
+      bindCommandRuntime(
+        owner,
+        sdkOnlyBridge,
+        captureStore(join(dir, "captures")),
+        deps,
+        async () => {
+          throw Error("Instances must dispatch through the SDK");
+        },
+      );
       bound = true;
     }
     const selection = instancesSessionSelection(input);
@@ -433,7 +433,13 @@ test("an agent opens a new copy into the Revit an acquisition started; a reload 
   expect(
     (await f.admit("instances.open", { source, into: into() }, undefined, "agent")).state,
   ).toBe("succeeded");
-  await f.admit("instances.start", { year: "2025", owner: "pea", addins: "on" }, undefined, "human", "pea-launch");
+  await f.admit(
+    "instances.start",
+    { year: "2025", owner: "pea", addins: "on" },
+    undefined,
+    "human",
+    "pea-launch",
+  );
   const copy = await f.admit("instances.open", { source, into: into() }, undefined, "agent");
   expect(copy).toMatchObject({
     basis: { kind: "acquisition", id: "pea-launch", scope: { kind: "process" } },
@@ -477,7 +483,13 @@ test("a Pea launch of a workshared model copies first, then opens the copy detac
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
     true,
   );
-  await f.admit("instances.start", { year: "2025", owner: "pea", addins: "on" }, undefined, "human", "pea-launch");
+  await f.admit(
+    "instances.start",
+    { year: "2025", owner: "pea", addins: "on" },
+    undefined,
+    "human",
+    "pea-launch",
+  );
   const source = await f.file("Central.rvt", "Worksharing: Local");
   const before = await readFile(source);
   const receipt = await f.admit("instances.open", { source, into: into("pea-bg") });
@@ -504,7 +516,13 @@ test("Pea refuses, undispatched, a file whose worksharing it cannot read or a so
     [controlledRow({ id: "pea-bg", shape: shape("background") })],
     true,
   );
-  await f.admit("instances.start", { year: "2025", owner: "pea", addins: "on" }, undefined, "human", "pea-launch");
+  await f.admit(
+    "instances.start",
+    { year: "2025", owner: "pea", addins: "on" },
+    undefined,
+    "human",
+    "pea-launch",
+  );
   const unread = await f.file("Unknown.rvt", "no marker here");
   for (const source of [unread, "recent:Tower.rvt"]) {
     const receipt = await f.admit("instances.open", { source, into: into("pea-bg") });
@@ -662,25 +680,33 @@ test("F7: an acquisition records its paths before writing; a crash at any bounda
   const reads: string[][] = [];
   // The SDK's recorded op response carries the bridge's document itself (acceptance R4d journal).
   const response = { openId, path: opened, title: "Tower" };
-  bindCommandRuntime(journal, sdkOnlyBridge, captureStore(join(f.dir, "recovery-captures")), {
-    sdk: async (args) => {
-      reads.push([...args]);
-      return replayAnswer(args, {
-        result: {
-          state: "ok",
-          requestId: openStep.id,
-          receipt: {
+  bindCommandRuntime(
+    journal,
+    sdkOnlyBridge,
+    captureStore(join(f.dir, "recovery-captures")),
+    {
+      sdk: async (args) => {
+        reads.push([...args]);
+        return replayAnswer(args, {
+          result: {
+            state: "ok",
             requestId: openStep.id,
-            key: "doc.open",
-            verdict: "ok",
-            pid: originalProcess.pid,
-            processStartUtc: originalProcess.processStartUtc,
+            receipt: {
+              requestId: openStep.id,
+              key: "doc.open",
+              verdict: "ok",
+              pid: originalProcess.pid,
+              processStartUtc: originalProcess.processStartUtc,
+            },
+            response: { requestId: openStep.id, key: "doc.open", verdict: "ok", result: response },
           },
-          response: { requestId: openStep.id, key: "doc.open", verdict: "ok", result: response },
-        },
-      });
+        });
+      },
     },
-  }, async () => { throw Error("No local dispatch during recovery"); });
+    async () => {
+      throw Error("No local dispatch during recovery");
+    },
+  );
   await journal.recover(done.id);
   expect(reads).toEqual([
     ["op", "result", openStep.id, "--json"],
@@ -1373,8 +1399,9 @@ test("restart, stop and close run for a human; stop and close require an unsaved
 test("a document arriving after admission refuses stop at effect entry", async () => {
   const f = await setup(() => ({ result: { state: "ok" } }));
   f.census.documents = [];
-  f.census.afterDocuments = () => {
-    f.census.documents = [openId];
+  let reads = 0;
+  f.census.beforeCensus = () => {
+    if (++reads === 2) f.census.documents = [openId];
   };
   expect(
     await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent"),
@@ -1387,10 +1414,19 @@ test("a document arriving after admission refuses stop at effect entry", async (
 });
 test("a user document opened in Pea's Revit after admission refuses Pea's stop at effect entry", async () => {
   const f = await setup(() => ({ result: { state: "ok" } }), [controlledRow()], true);
-  await f.admit("instances.start", { year: "2025", owner: "pea", addins: "on" }, undefined, "human", "pea-launch");
+  await f.admit(
+    "instances.start",
+    { year: "2025", owner: "pea", addins: "on" },
+    undefined,
+    "human",
+    "pea-launch",
+  );
+  expect(f.calls.filter((args) => args[1] === "start")).toHaveLength(1);
+  const beforeStop = f.calls.length;
   f.census.documents = [];
-  f.census.afterDocuments = () => {
-    f.census.documents = [openId];
+  let reads = 0;
+  f.census.beforeCensus = () => {
+    if (++reads === 2) f.census.documents = [openId];
   };
   expect(
     await f.admit("instances.stop", { session, unsaved: "keep" }, undefined, "agent"),
@@ -1399,7 +1435,7 @@ test("a user document opened in Pea's Revit after admission refuses Pea's stop a
     notDispatched: true,
     refusal: expect.objectContaining({ kind: "stale" }),
   });
-  expect(f.calls.every((args) => args[1] === "list")).toBe(true);
+  expect(f.calls.slice(beforeStop).every((args) => args[1] === "list")).toBe(true);
 });
 const sdkDocument = { source: "sdk", session: session.selection, openId } as const;
 test("an agent save is one document crossing: the granted lifetime admits, another refuses", async () => {

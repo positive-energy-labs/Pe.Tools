@@ -198,7 +198,11 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
     return replay("doc-open", { result: { document: { path: args[2], openId: "e".repeat(32) } } });
   };
   const bridge = { list: Effect.succeed([]) } as unknown as RevitBridge["Service"];
-  bindCommandRuntime(owner, bridge, captureStore(join(dir, "captures")), {
+  bindCommandRuntime(
+    owner,
+    bridge,
+    captureStore(join(dir, "captures")),
+    {
       sdk,
       peaWork,
       downloadVersion: (source, version, to) =>
@@ -206,12 +210,20 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
           token: async () => "test-bearer",
           fetch: apsResponses(),
         }),
-    }, async () => {
-    throw Error("Instances must dispatch through the SDK");
-  });
-  const started = await owner.invoke({
-    id: "process", key: "instances.start", target: { kind: "host" }, input: into.start,
-  }, crossingOf("human"));
+    },
+    async () => {
+      throw Error("Instances must dispatch through the SDK");
+    },
+  );
+  const started = await owner.invoke(
+    {
+      id: "process",
+      key: "instances.start",
+      target: { kind: "host" },
+      input: into.start,
+    },
+    crossingOf("human"),
+  );
   expect((await owner.wait(started.id)).state).toBe("succeeded");
   calls.length = 0;
   const admitted = await owner.invoke(

@@ -8,7 +8,7 @@ import type { RevitBridge } from "./bridge.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { familyExecutors, type FamilyActionDependencies } from "./family-actions.ts";
 import { scheduleExecutors } from "./schedule-actions.ts";
-import { instancesExecutors } from "./instances-actions.ts";
+import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { takeoffExecutors } from "./takeoff-actions.ts";
 import { ductsExecutors } from "./ducts-actions.ts";
 import { dataTableExecutors } from "./data-table-actions.ts";
@@ -29,7 +29,7 @@ import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 export function commandRegistry(
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
-  deps: FamilyActionDependencies,
+  deps: FamilyActionDependencies & InstancesActionDependencies,
   local: (key: string, input: unknown) => Promise<unknown>,
   origin?: () => string,
 ): CommandRegistry {
@@ -144,7 +144,7 @@ export function bindCommandRuntime(
   owner: ActionJournal,
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
-  deps: FamilyActionDependencies,
+  deps: FamilyActionDependencies & InstancesActionDependencies,
   local: (key: string, input: unknown) => Promise<unknown>,
   origin?: () => string,
 ): void {

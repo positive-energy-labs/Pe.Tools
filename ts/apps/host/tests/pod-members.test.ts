@@ -192,22 +192,30 @@ test("settings.write saves reviewed member Work and republishes the new basis", 
   if (!authored.ok) throw Error("Expected accepted authored Work");
   const owner = new ActionJournal(join(root, "journal.json"));
   const bridge = {} as RevitBridge["Service"];
-  bindCommandRuntime(owner, bridge, captureStore(join(root, "captures")), { workspace: work, podsRoot: root }, async () => {
-    throw Error("settings.write owns its writer");
-  });
+  bindCommandRuntime(
+    owner,
+    bridge,
+    captureStore(join(root, "captures")),
+    { workspace: work, podsRoot: root },
+    async () => {
+      throw Error("settings.write owns its writer");
+    },
+  );
   const admit = (id: string, input: Record<string, unknown>, revision: number) =>
-    owner.invoke(
-      {
-        id,
-        key: "settings.write",
-        target: { kind: "host" },
-        input: {
-          ...input,
-          work: { key: scope, revision },
+    owner
+      .invoke(
+        {
+          id,
+          key: "settings.write",
+          target: { kind: "host" },
+          input: {
+            ...input,
+            work: { key: scope, revision },
+          },
         },
-      },
-      crossingOf("human"),
-    ).then((row) => owner.wait(row.id));
+        crossingOf("human"),
+      )
+      .then((row) => owner.wait(row.id));
   const destination = { pod: member.pod, path: "settings/copy.json" };
   const copied = await admit("copy", { destination }, authored.revision);
   expect(copied.state, JSON.stringify(copied)).toBe("succeeded");
