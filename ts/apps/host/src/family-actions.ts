@@ -7,7 +7,6 @@ import {
   commands,
   familyActions,
   familyReads,
-  familyCaptureSchema,
   familyLiveReadSchema,
   familiesCaptureEvidenceSchema,
   familiesExcluded,
@@ -406,12 +405,6 @@ const buildSchema = nativeSchema.extend({
   input: composedInput("family.build").refine(
     (input) => typeof input.modelDirectory === "string",
     "Build must retain its model directory",
-  ),
-});
-const parameterApplySchema = nativeSchema.extend({
-  input: nativeInputSchema("revit.apply.parameter-links").refine(
-    (input) => input.profile != null && input.reconcile === true,
-    "Apply must write and reconcile",
   ),
 });
 const captureSchema = z.object({
@@ -1499,79 +1492,6 @@ export function familyExecutors(
       return { saved: members.length, members };
     },
   });
-  const parameterApply = command(commands["parameter-links.apply"], parameterApplySchema, {
-    seal: (p) => ({ request: p.input }),
-    bind: async (ctx) => {
-      const handle = handleOf(ctx),
-        doc = await ctx.selectWork(tools["parameter-links"].work, handle, () => ({ facts: [] })),
-        profile = stagedParameterProfile(doc);
-      if (!profile) throw refused("Stage a profile before applying");
-      const bound = await nativeBinding(ctx, "project"),
-        consumes: Dependency[] = [...bound.consumes];
-      if (ctx.admission.input.readingId) {
-        const artifact = await captures.savedFamilyText(ctx.admission.input.readingId),
-          capture = familyCaptureSchema.parse(JSON.parse(artifact.text));
-        if (
-          capture.provenance.kind !== "live" ||
-          !capture.provenance.process ||
-          canonicalRouteInput(capture.provenance.target) !== canonicalRouteInput(bound.target) ||
-          capture.reading.kind !== "parameter-links"
-        )
-          throw refused("The reviewed evaluation is not live evidence for the selected lifetime");
-        const reading = parameterLinksReadingSchema.parse(capture.reading.value);
-        if (!reading.evaluated || !reading.evaluation)
-          throw refused("The reviewed reading is a stored-profile read, not a staged evaluation");
-        if (reading.subject === "suggestion")
-          throw refused(
-            "The reviewed reading is a proposal preview; stage the profile and preview again",
-          );
-        if (reading.basis !== parameterLinksBasis(doc))
-          throw refused("The staged profile changed after the evaluation; preview again");
-        consumes.push(
-          {
-            kind: "file",
-            probe: { path: artifact.path },
-            expected: digest(artifact.text),
-            bytesBase64: Buffer.from(artifact.text).toString("base64"),
-          },
-          {
-            kind: "incarnation",
-            probe: { target: ctx.admission.target, process: capture.provenance.process },
-            expected: true,
-          },
-          ...mark(capture.provenance.target, capture.capturedAt),
-        );
-      }
-      return {
-        consumes,
-        effects: [{ kind: "document", ref: bound.target }],
-        prepare: async () => {
-          if (!ctx.admission.input.readingId) {
-            const result = (await invoke(
-              bridge,
-              bound.target,
-              "revit.apply.parameter-links.preview",
-              { profile, reconcile: false },
-              `${ctx.admission.id}:evaluate`,
-            )) as { evaluation?: { issues?: { severity?: string }[] } };
-            if (
-              !result.evaluation ||
-              result.evaluation.issues?.some((x) => x.severity?.toLowerCase() === "error")
-            )
-              throw refused("Parameter link evaluation refused the submitted edits");
-          }
-          return {
-            kind: "native",
-            process: bound.process,
-            input: { profile, reconcile: true },
-          };
-        },
-      };
-    },
-    run: (ctx, execution) =>
-      native(ctx, execution, "revit.apply.parameter-links", execution.prepared),
-    recover,
-  });
   const build = command(commands["family.build"], buildSchema, {
     seal: (p) => ({ request: p.input }),
     bind: async (ctx) => {
@@ -1637,7 +1557,6 @@ export function familyExecutors(
     "family.apply": familyApply,
     "families.apply": familiesApply,
     "families.save-draft": saveDraft,
-    "parameter-links.apply": parameterApply,
     "family.build": build,
     "family.attach-spec": familySpecExecutor(deps),
   } satisfies Record<FamilyActionKey, CommandExecutor>;

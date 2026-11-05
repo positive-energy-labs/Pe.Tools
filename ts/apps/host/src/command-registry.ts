@@ -11,7 +11,6 @@ import { scheduleExecutors } from "./schedule-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { takeoffExecutors } from "./takeoff-actions.ts";
 import { ductsExecutors } from "./ducts-actions.ts";
-import { dataTableExecutors } from "./data-table-actions.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
 import { bootstrapExecutor } from "./bootstrap.ts";
 import { pagePublicationExecutor } from "./page-publication.ts";
@@ -52,7 +51,6 @@ export function commandRegistry(
     instancesExecutors(deps),
     takeoffExecutors(captures, bridge, deps),
     ductsExecutors(bridge, deps),
-    dataTableExecutors(bridge, deps),
   ]) {
     for (const [key, factory] of Object.entries(group)) {
       if (implementations[key]) throw Error(`Command '${key}' has two executors`);

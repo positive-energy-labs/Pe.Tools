@@ -216,16 +216,8 @@ export const tools = {
       schema: dataTablesWorkSchema,
       editable: [["writeIntent", "*"]],
     },
-    commands: {
-      ...workWriteCommands("data-tables", "data-table.apply", {
-        native: ["data-table.apply"],
-        says: "Upsert the reviewed table by name and row key; prune rows absent from the draft.",
-        needs: "project-document",
-        effect: "command",
-        input: z.object({}),
-        dirties: ["schedules"],
-      }),
-    },
+    // The archived /data-tables route left this Work an address contract with no command owner.
+    commands: {},
   },
   pods: {
     name: "pods",
@@ -274,13 +266,8 @@ export const tools = {
     name: "parameter-links",
     says: parameterLinksRouteState.description,
     work: { ...parameterLinksRouteState, editable: [["writeIntent", "*"], ["profile"]] },
-    commands: {
-      ...workWriteCommands(
-        "parameter-links",
-        "parameter-links.apply",
-        familyActions["parameter-links.apply"],
-      ),
-    },
+    // The archived /parameter-links route left this Work an address contract; parameter-links.read stays a family read.
+    commands: {},
   },
   schedules: {
     name: "schedules",
@@ -425,11 +412,9 @@ export const tools = {
   },
 } satisfies Record<string, Tool>;
 export const commands = {
-  ...tools["data-tables"].commands,
   ...tools.pods.commands,
   ...tools.family.commands,
   ...tools.families.commands,
-  ...tools["parameter-links"].commands,
   ...tools.schedules.commands,
   ...tools.takeoffs.commands,
   ...tools.rooms.commands,

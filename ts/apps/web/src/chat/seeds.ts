@@ -468,12 +468,6 @@ const CATALOG = {
       "Read the stored parameter-link profile and runtime status, and optionally evaluate the authored links.",
     ),
     row(
-      "op:parameter-links.apply",
-      "op",
-      "parameter-links.apply",
-      "Store the reviewed parameter-link draft and reconcile exactly the evaluated writes the human approved.",
-    ),
-    row(
       "op:takeoffs.initialize",
       "op",
       "takeoffs.initialize",

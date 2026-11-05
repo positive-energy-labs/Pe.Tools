@@ -82,7 +82,7 @@ const previewTarget = {
 };
 const previewInput = {
   work: {
-    key: { route: "data-tables", binding: "open" as const, target: null, open: previewTarget.ref },
+    key: { route: "families", binding: "open" as const, target: null, open: previewTarget.ref },
     revision: 7,
   },
 };
@@ -117,7 +117,7 @@ function previewReceipt(key: string, input: unknown, result: unknown) {
 }
 
 function openPreview(
-  key: "data-table.apply.preview" | "ducts.preview-losses" | "families.apply.preview",
+  key: "ducts.preview-losses" | "families.apply.preview",
   input = previewInput,
 ) {
   const issuer = createRouteTokenIssuer();
@@ -146,10 +146,6 @@ function openPreview(
 }
 
 test.each([
-  [
-    "data-table.apply.preview",
-    { table: { name: "Loads", columns: [], rows: [{ key: "a" }], pruneMissingRows: true } },
-  ],
   ["ducts.preview-losses", { edits: [{ element: "duct-A", size: 12 }] }],
   ["families.apply.preview", { familyNames: ["Pump"] }],
 ] as const)(
@@ -160,11 +156,7 @@ test.each([
         ...previewInput.work,
         key: {
           ...previewInput.work.key,
-          route: key.startsWith("families")
-            ? "families"
-            : key.startsWith("ducts")
-              ? "ducts"
-              : "data-tables",
+          route: key.startsWith("ducts") ? "ducts" : "families",
         },
       },
     };
@@ -208,7 +200,7 @@ test("semantic preview retains a typed stale Work refusal and receipt", async ()
     result: _,
     outcome: _outcome,
     ...base
-  } = previewReceipt("data-table.apply.preview", previewInput, {});
+  } = previewReceipt("families.apply.preview", previewInput, {});
   const row = actionReceiptSchema.parse({
     ...base,
     state: "failed",
@@ -217,7 +209,7 @@ test("semantic preview retains a typed stale Work refusal and receipt", async ()
     refusal,
   });
   const submit = vi.spyOn(actions, "submitAction").mockResolvedValue(row);
-  const f = openPreview("data-table.apply.preview");
+  const f = openPreview("families.apply.preview");
   try {
     await vi.waitFor(() =>
       expect(f.deliver).toHaveBeenCalledWith({
@@ -239,7 +231,7 @@ test("semantic preview exposes typed admission refusal", async () => {
   const submit = vi
     .spyOn(actions, "submitAction")
     .mockRejectedValue(Object.assign(Error("Document closed"), { refusal }));
-  const f = openPreview("data-table.apply.preview");
+  const f = openPreview("families.apply.preview");
   try {
     await vi.waitFor(() =>
       expect(f.deliver).toHaveBeenCalledWith(
@@ -253,16 +245,16 @@ test("semantic preview exposes typed admission refusal", async () => {
 });
 
 test("undecodable preview retains receipt and released preview cannot deliver", async () => {
-  const row = previewReceipt("data-table.apply.preview", previewInput, { previewOnly: false });
+  const row = previewReceipt("families.apply.preview", previewInput, { previewOnly: false });
   const submit = vi.spyOn(actions, "submitAction").mockResolvedValue(row);
-  const f = openPreview("data-table.apply.preview");
+  const f = openPreview("families.apply.preview");
   try {
     await vi.waitFor(() =>
       expect(f.deliver).toHaveBeenCalledWith(
         expect.objectContaining({ status: "failed", receipt: row }),
       ),
     );
-    const retired = openPreview("data-table.apply.preview");
+    const retired = openPreview("families.apply.preview");
     retired.close();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(retired.deliver).not.toHaveBeenCalled();

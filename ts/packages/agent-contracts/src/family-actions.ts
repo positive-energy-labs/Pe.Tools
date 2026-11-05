@@ -244,19 +244,6 @@ export const familyActions = {
       members: z.array(podMemberSourceSchema),
     }),
   },
-  "parameter-links.apply": {
-    native: ["revit.apply.parameter-links"],
-    says: "Store the reviewed parameter-link draft and reconcile exactly the evaluated writes the human approved.",
-    needs: "project-document",
-    effect: "command",
-    dirties: ["parameter-links"],
-    input: z.object({
-      readingId: z
-        .string()
-        .regex(/^[a-f0-9]{64}$/)
-        .optional(),
-    }),
-  },
   "family.build": {
     says: "Build a saved composed family spec into its source Pod's run folder. The target is execution context for the new family.",
     needs: "document",

@@ -11,13 +11,6 @@ type PreviewKey = {
 
 /** Explicit command budgets; adding a command requires an axis declaration. */
 const declaredAxes = {
-  "data-table.apply": {
-    subject: "Elements",
-    touches: ["Metadata"],
-    effect: "ModelWrite",
-    cost: "Mutation",
-    cardinality: "One",
-  },
   "settings.observe": {
     subject: "None",
     touches: ["Metadata"],
@@ -108,13 +101,6 @@ const declaredAxes = {
     subject: "None",
     touches: ["Metadata"],
     effect: "SessionWrite",
-    cost: "Mutation",
-    cardinality: "One",
-  },
-  "parameter-links.apply": {
-    subject: "Elements",
-    touches: ["Topology"],
-    effect: "ModelWrite",
     cost: "Mutation",
     cardinality: "One",
   },
