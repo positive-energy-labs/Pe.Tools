@@ -89,7 +89,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
           (state) => {
             if (workReads.get(id) !== record || closed()) return;
             let value: unknown;
-            let revision: number;
+            let handle: WorkHandle;
             if (state.kind === "ready") {
               const decoded = schema.safeParse(state.snapshot.value);
               if (!decoded.success) {
@@ -98,7 +98,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
                 return;
               }
               value = decoded.data;
-              revision = state.snapshot.revision;
+              handle = state.snapshot.handle;
             } else if (state.kind === "ack" && record.snapshot.current) {
               const ack = state.ack;
               if (ack.revision <= record.snapshot.handle.revision) return;
@@ -121,7 +121,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
                 return;
               }
               value = result.envelope.doc;
-              revision = ack.revision;
+              handle = { key: ack.key, revision: ack.revision };
             } else {
               record.snapshot = unavailable(
                 state.kind === "failed" ? "Work feed failed" : "Work pending",
@@ -129,15 +129,15 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
               schedule();
               return;
             }
-            if (record.snapshot.current && record.snapshot.handle.revision !== revision)
+            if (record.snapshot.current && record.snapshot.handle.revision !== handle.revision)
               for (const key of invalidate(id))
                 if (route.data.readings[key]?.refresh === "explicit") demanded.delete(key);
             record.snapshot = freezePage({
               status: "ready",
               current: true,
               value,
-              handle: { key: foreignKey, revision },
-              hash: z.string().parse(contentHash([revision, value])),
+              handle,
+              hash: z.string().parse(contentHash([handle.revision, value])),
             });
             schedule();
           },
