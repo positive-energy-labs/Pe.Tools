@@ -14,7 +14,13 @@ import { RevitBridge } from "../src/bridge.ts";
 import { detachedBridge, sessionView } from "./effect-test.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
-import { CaptureStore, capturesRoute } from "../src/captures-route.ts";
+import {
+  capturesRoute,
+  PICTURE_STORE_MAX_BYTES,
+  PictureCaptures,
+  PictureCaptureStore,
+  PictureStoreFull,
+} from "../src/captures-route.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
@@ -32,7 +38,7 @@ async function host(
   claimed: Record<string, Buffer> = {},
 ) {
   const dir = await mkdtemp(join(tmpdir(), "pe-captures-"));
-  const store = new CaptureStore(join(dir, "store"));
+  const store = new PictureCaptures(join(dir, "store"), PICTURE_STORE_MAX_BYTES, Date.now);
   const bridge = detachedBridge({
     list: Effect.succeed([
       sessionView({
@@ -98,8 +104,15 @@ async function host(
         captureStore: store,
         sdk: sdkSessions,
       }),
-      capturesRoute(spa, () => store),
-    ).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+      capturesRoute(spa),
+    ).pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Layer.succeed(RevitBridge, bridge),
+          Layer.succeed(PictureCaptureStore, store),
+        ),
+      ),
+    ),
     { disableLogger: true },
   );
   cleanup.push(
@@ -164,6 +177,23 @@ test("every view-image answer through /call keeps one blob per sha and one recei
   expect(blob.status).toBe(200);
   expect(blob.headers.get("content-type")).toBe("image/png");
   expect(Buffer.from(await blob.arrayBuffer())).toEqual(l1);
+});
+
+test("a full picture store refuses a taking by type, keeps every earlier taking, and stamps the store's clock", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-captures-full-"));
+  cleanup.push(() => rm(dir, { recursive: true, force: true }));
+  const png = Buffer.from("png-a");
+  const store = new PictureCaptures(dir, png.length + 1_200, () => 0);
+  const facts = { origin: "human", document: {}, view: {}, focus: null, registration: null };
+  await store.keep(png, facts);
+  await store.keep(png, facts);
+  await expect(store.keep(Buffer.alloc(2_000), facts)).rejects.toBeInstanceOf(PictureStoreFull);
+  const kept = await store.list();
+  expect(kept.map((receipt) => [receipt.sha, receipt.at])).toEqual([
+    [sha(png), new Date(0).toISOString()],
+    [sha(png), new Date(0).toISOString()],
+  ]);
+  expect(await readdir(join(dir, "blobs"))).toEqual([`${sha(png)}.png`]);
 });
 
 test("an unregistered taking is kept under the hash of its bytes", async () => {

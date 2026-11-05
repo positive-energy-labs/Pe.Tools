@@ -8,8 +8,8 @@
  * about a model we are not attached to, so every Reading taken before that moment is changed until
  * it is read again.
  */
-import { Effect } from "effect";
-import { BridgeError, type RevitBridge } from "./bridge.ts";
+import { Clock, Context, Effect, Layer } from "effect";
+import { BridgeError, RevitBridge } from "./bridge.ts";
 
 export interface DocumentRef {
   readonly session: string;
@@ -27,8 +27,6 @@ export interface DocumentMarks {
   readonly settled?: () => Promise<void>;
 }
 
-const NO_MARKS: DocumentMarks = { changedAt: () => null, subscribe: () => () => {} };
-
 /** The one refusal an apply over a newer change mark gets. */
 export const STALE_READ = "This read is no longer verified against Revit; read again, then apply.";
 
@@ -40,7 +38,8 @@ export function assertFresh(marks: DocumentMarks, ref: DocumentRef, takenAt: str
 }
 
 /** The one refusal a sealed write gets when its document's mark moved after the plan. */
-export const PLAN_CHANGED = "Plan changed (documentMark): Revit changed this document after the plan; plan the current Work again.";
+export const PLAN_CHANGED =
+  "Plan changed (documentMark): Revit changed this document after the plan; plan the current Work again.";
 
 /**
  * A sealed write rests on the mark its plan sealed. Waits for events already received but still
@@ -53,73 +52,87 @@ export async function assertSealed(
   sealed: { observedSince: number | null; changedAt: number | null },
 ): Promise<void> {
   await marks.settled?.();
-  if ((marks.observedSince ?? null) !== sealed.observedSince || marks.changedAt(ref) !== sealed.changedAt)
+  if (
+    (marks.observedSince ?? null) !== sealed.observedSince ||
+    marks.changedAt(ref) !== sealed.changedAt
+  )
     throw new BridgeError(PLAN_CHANGED, 409, { notDispatched: true });
 }
 
-const held = new WeakMap<RevitBridge["Service"], DocumentMarks>();
-
 /**
- * One holder per bridge, fed by its tap: the Reading observer and every apply share it. `session` is whichever id a Target names: the marks
- * are recorded under both the broker session id and the pe-revit session id the payload reported.
+ * The host's one marks holder, fed by the bridge tap: the Reading observer and every apply share
+ * it. `session` is whichever id a Target names: marks are recorded under both the broker session
+ * id and the pe-revit session id the payload reported. Time is the layer's `Clock`; closing the
+ * layer's scope unsubscribes from the bridge.
  */
-export function documentMarks(bridge?: RevitBridge["Service"]): DocumentMarks {
-  if (!bridge) return NO_MARKS;
-  const known = held.get(bridge);
-  if (known) return known;
-  const marks = new Map<string, Map<string, number>>();
-  const listeners = new Set<() => void>();
-  let tail = Promise.resolve();
-  bridge.subscribe((event) => {
-    const atMs = Date.now();
-    tail = tail
-      .then(async () => {
-        // effect-edge: island, phase 5
-        const sessions = await Effect.runPromise(bridge.list);
-        const ids = (session: (typeof sessions)[number]) =>
-          [session.sessionId, session.sdkSessionId].filter((id): id is string => !!id);
-        const alive = new Set(sessions.flatMap(ids));
-        let changed = false;
-        for (const session of marks.keys())
-          if (!alive.has(session)) changed = marks.delete(session) || changed;
-        const current = sessions.find((session) => session.sessionId === event.sessionId);
-        const openIds: unknown =
-          event.kind === "disconnected"
-            ? [""]
-            : event.kind === "event" && event.eventName === "document-changed" && event.payloadJson
-              ? (JSON.parse(event.payloadJson) as { changedOpenIds?: unknown }).changedOpenIds
-              : [];
-        if (current && Array.isArray(openIds) && openIds.length) {
-          for (const session of ids(current)) {
-            const documents = marks.get(session) ?? new Map<string, number>();
-            for (const openId of openIds) documents.set(String(openId), atMs);
-            marks.set(session, documents);
-          }
-          changed = true;
-        }
-        if (changed) for (const listener of listeners) listener();
-      })
-      .catch((error) => {
-        console.error("document-marks: asynchronous operation failed", error);
-        return undefined;
+export class HostDocumentMarks extends Context.Service<HostDocumentMarks, DocumentMarks>()(
+  "pe/DocumentMarks",
+) {
+  static readonly layer = Layer.effect(
+    HostDocumentMarks,
+    Effect.gen(function* () {
+      const bridge = yield* RevitBridge;
+      const clock = yield* Clock.Clock;
+      const marks = new Map<string, Map<string, number>>();
+      const listeners = new Set<() => void>();
+      let tail = Promise.resolve();
+      const unsubscribe = bridge.subscribe((event) => {
+        const atMs = clock.currentTimeMillisUnsafe();
+        tail = tail
+          .then(async () => {
+            // effect-edge: island, phase 5
+            const sessions = await Effect.runPromise(bridge.list);
+            const ids = (session: (typeof sessions)[number]) =>
+              [session.sessionId, session.sdkSessionId].filter((id): id is string => !!id);
+            const alive = new Set(sessions.flatMap(ids));
+            let changed = false;
+            for (const session of marks.keys())
+              if (!alive.has(session)) changed = marks.delete(session) || changed;
+            const current = sessions.find((session) => session.sessionId === event.sessionId);
+            const openIds: unknown =
+              event.kind === "disconnected"
+                ? [""]
+                : event.kind === "event" &&
+                    event.eventName === "document-changed" &&
+                    event.payloadJson
+                  ? (JSON.parse(event.payloadJson) as { changedOpenIds?: unknown }).changedOpenIds
+                  : [];
+            if (current && Array.isArray(openIds) && openIds.length) {
+              for (const session of ids(current)) {
+                const documents = marks.get(session) ?? new Map<string, number>();
+                for (const openId of openIds) documents.set(String(openId), atMs);
+                marks.set(session, documents);
+              }
+              changed = true;
+            }
+            if (changed) for (const listener of listeners) listener();
+          })
+          .catch((error) => {
+            console.error("document-marks: asynchronous operation failed", error);
+            return undefined;
+          });
       });
+      yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+      return {
+        observedSince: clock.currentTimeMillisUnsafe(),
+        changedAt: (ref) =>
+          Math.max(
+            marks.get(ref.session)?.get(ref.openId) ?? 0,
+            marks.get(ref.session)?.get("") ?? 0,
+          ) || null,
+        subscribe: (listener) => {
+          listeners.add(listener);
+          return () => {
+            listeners.delete(listener);
+          };
+        },
+        settled: () => tail,
+      } satisfies DocumentMarks;
+    }),
+  );
+  /** Tests only: a host that observes no Revit, so nothing ever changes. Never a production fallback. */
+  static readonly none = Layer.succeed(HostDocumentMarks, {
+    changedAt: () => null,
+    subscribe: () => () => {},
   });
-
-  const holder: DocumentMarks = {
-    observedSince: Date.now(),
-    changedAt: (ref) =>
-      Math.max(
-        marks.get(ref.session)?.get(ref.openId) ?? 0,
-        marks.get(ref.session)?.get("") ?? 0,
-      ) || null,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    settled: () => tail,
-  };
-  held.set(bridge, holder);
-  return holder;
 }

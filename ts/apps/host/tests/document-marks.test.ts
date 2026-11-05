@@ -5,7 +5,8 @@
  */
 import { detachedBridge, captureStore } from "./effect-test.ts";
 import { expect, test, vi } from "vite-plus/test";
-import { Effect } from "effect";
+import { Context, Effect, Exit, Layer, Scope } from "effect";
+import * as TestClock from "effect/testing/TestClock";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,8 +16,8 @@ import {
   familiesMatrixEnvelopeSchema,
   type ReadingFrame,
 } from "@pe/agent-contracts";
-import type { HostBridgeEvent } from "../src/bridge.ts";
-import { assertFresh, documentMarks, STALE_READ } from "../src/document-marks.ts";
+import { RevitBridge, type HostBridgeEvent } from "../src/bridge.ts";
+import { assertFresh, HostDocumentMarks, STALE_READ } from "../src/document-marks.ts";
 import { setup } from "./schedule-test-fixture.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 
@@ -48,13 +49,33 @@ function fakeBridge() {
         payloadJson: JSON.stringify({ changedOpenIds: openIds }),
       }),
     detached: (session: string) => emit({ sessionId: session, kind: "disconnected" }),
+    listening: () => listeners.size,
+  };
+}
+
+/** The marks layer over `bridge` in its own scope; on a TestClock standing at `at`, else the live Clock. */
+async function holdMarks(bridge: RevitBridge["Service"], at?: number) {
+  const scope = Scope.makeUnsafe();
+  const built = Layer.buildWithScope(HostDocumentMarks.layer, scope).pipe(
+    Effect.provideService(RevitBridge, bridge),
+  );
+  // effect-edge: test-runner
+  const context = await Effect.runPromise(
+    at === undefined
+      ? built
+      : TestClock.setTime(at).pipe(Effect.andThen(built), Effect.provide(TestClock.layer())),
+  );
+  return {
+    marks: Context.get(context, HostDocumentMarks),
+    // effect-edge: test-runner
+    close: () => Effect.runSync(Scope.close(scope, Exit.void)),
   };
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-test("a restored read from before host observation cannot arm apply", () => {
-  const marks = documentMarks(fakeBridge().bridge);
+test("a restored read from before host observation cannot arm apply", async () => {
+  const { marks } = await holdMarks(fakeBridge().bridge);
   const old = new Date(marks.observedSince! - 1).toISOString();
   expect(() => assertFresh(marks, A, old)).toThrow(STALE_READ);
   expect(() => assertFresh(marks, A, "invalid-time")).toThrow(STALE_READ);
@@ -63,9 +84,21 @@ test("a restored read from before host observation cannot arm apply", () => {
   ).not.toThrow();
 });
 
+test("marks stand on the layer's Clock, and closing its scope leaves the bridge", async () => {
+  const world = fakeBridge();
+  const held = await holdMarks(world.bridge, 5_000);
+  expect(held.marks.observedSince).toBe(5_000);
+  world.changed("S1", "open-A");
+  await held.marks.settled!();
+  expect(held.marks.changedAt(A)).toBe(5_000);
+  expect(world.listening()).toBe(1);
+  held.close();
+  expect(world.listening()).toBe(0);
+});
+
 test("the envelope carries the mark: served unchanged, republished changed, without a new read", async () => {
   const world = fakeBridge();
-  const marks = documentMarks(world.bridge);
+  const { marks } = await holdMarks(world.bridge);
   const frames: ReadingFrame[] = [];
   const capture = { id: "c1", target: A, capturedAt: new Date().toISOString() };
   const observe = markReadings(marks)(
@@ -119,7 +152,7 @@ test.each(["changed", "disconnected"])(
 
 test("the families matrix Reading streams an envelope, never the body, and wears the mark", async () => {
   const world = fakeBridge();
-  const marks = documentMarks(world.bridge);
+  const { marks } = await holdMarks(world.bridge);
   const dir = await mkdtemp(join(tmpdir(), "pe-matrix-envelope-"));
   const captures = captureStore(dir);
   const filter = {
