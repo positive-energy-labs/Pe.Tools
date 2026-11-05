@@ -55,8 +55,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     invocation: import("../../../../packages/agent-contracts/src/route-kernel-page.ts").InvocationToken;
     reading: string;
     handle: string;
-    evidence: PresentationEvidence;
-    input: unknown;
+    evidence(): PresentationEvidence;
     send(): unknown;
   }>({ entries: Object.keys(route.data.verbs).length, bytes: 1024 * 1024 });
   const reviews = new Map<
@@ -208,13 +207,12 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     } else if (declaration.kind === "command") {
       const entry = bindings.entries[declaration.entry]!;
       const modelWrite = entry.axes.effect === "ModelWrite";
-      const captured = context();
-      // Display evidence labels only. owner.current enforces freshness; the host seal binds the write.
-      const evidence = freezePage({
-        page: captured.page,
-        work: captured.work,
-        readings: captured.readings,
-      });
+      // Reading owners retain the exact bodies. Re-project only after owner.current verifies
+      // this invocation's Work revision and reading hashes; do not retain a second full copy.
+      const evidence = () => {
+        const captured = context();
+        return Object.freeze({ page: captured.page, work: captured.work, readings: captured.readings });
+      };
       const accepted = read();
       if (modelWrite && basis && basis.workRevision !== accepted.work?.revision)
         throw Error("Stale accepted Work basis; prepare from the current revision");
@@ -325,7 +323,6 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
         const readingId = candidates[0]![0];
         reviews.delete(id);
         const retained = preparing.set(id, {
-          input: intent,
           evidence,
           invocation,
           reading: readingId,
@@ -419,7 +416,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
         const handle = z.object({ handle: workHandleSchema }).parse(sealed.seal.work).handle;
         if (canonicalEnvironmentInput(handle) !== pending.handle)
           throw Error("Preview sealed a different Work handle");
-        const presentation = present(id, sealed, pending.evidence);
+        const presentation = present(id, sealed, pending.evidence());
         if (!owner.current(pending.invocation)) {
           reviewRefusals.set(id, new ReviewRefusal("review-stale"));
           continue;
