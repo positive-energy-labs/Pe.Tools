@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-05, Driver: `GREEN for main at c03d720c`; main fast-forwarded from f39b616f to that exact superset, with local edits preserved. Fresh controlled ke277/pristine Chadds proved staged cohort apply/readback, consumed replan, shared-type refusal, one write across a network drop and retained apply History after full reload. Presentation/perf follow-on remains non-blocking; Step 7 was excluded.
+
 - 2026-11-05, Step 7 extraction repair: delete kit's unused route registry/export and its duplicate-only tests. No production caller consumed it; browser publicRoutes remains the authenticated registration owner. The kit extraction guard and registry-admission guard tests stay intact; only the obsolete producer's baseline allowance is removed.
 
 - 2026-11-05, Driver: `GREEN for main at 0b63d5d8`. Steps 0–5 fast-forwarded to that exact SHA from 2be21af8; unrelated main working edits were preserved. T1 and the Step 5 presentation REDs remain follow-on work, not merge gates. Step 6 and partial Step 7 services were excluded from this merge.

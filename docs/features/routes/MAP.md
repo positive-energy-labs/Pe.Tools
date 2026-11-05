@@ -31,7 +31,7 @@ A parity gap that is presentation only, with no data or write consequence, is dr
 
 ## Cutover order (ADR 0027 rule 15)
 
-Progress 2026-11-05: steps 0–5 landed on main at the Driver's exact GREEN SHA `0b63d5d8`. Step 6's catalog/source-opening and prototype-retirement slice is pinned separately at `5728ab22`, with coupled checks and quality returned; Driver chaos remains. The two dependency engines and empty hook Page remain Owed to the legacy route cutover. Step 7 is services-first on isolated branches; partial service declarations are not on main. Presentation REDs from `drive/step-5/CASES.md` are follow-on work under the Governor's ruling, not a reopened main gate.
+Progress 2026-11-05: steps 0–5 landed on main at the Driver's exact GREEN SHA `0b63d5d8`; Step 6 then landed at exact GREEN `c03d720c`, including current main and T1 cb88e274. The fresh controlled ke277 drive proved write/data and full-reload apply History; prior chaos proof stands at 5728ab22. The two dependency engines and empty hook Page remain Owed to the legacy route cutover. Step 7 remains kernel-only and incomplete. Navigation memory growth, the Pea plan's Ducts-handle prompt and Work row status wording are carried presentation findings, not reopened merge gates.
 
 1. The first-fix table above.
 2. Plan, rehearse, apply (ADR 0030 rules 4 to 7): the linker and `OpCallGate` change; the one write button (`ts/packages/kit/src/components/lang/preview-action.tsx` is the seed) adopted by /ducts and /fans; the Timeline as a projection with invocation starts and consent windows.
