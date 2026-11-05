@@ -61,47 +61,64 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
     registrations: createRouteRegistrations(),
     store: fileRouteDocumentStore(paths.productRouteWorkPath()),
   });
-  for (const [actor, revision, patches] of [
-    [
-      "human",
-      0,
-      [
-        {
-          path: ["flows", "1001", "edit"],
-          value: { value: { cfm: 100, source: "human effort" } },
-        },
-        { path: ["flows", "1002", "edit"], value: { value: { cfm: 200, source: "reviewed" } } },
-      ],
-    ],
-    [
-      "pea",
-      1,
-      [
-        {
-          path: ["flows", "1002", "suggestion"],
-          value: { value: { cfm: 220, source: "alternative" } },
-        },
-        {
-          path: ["flows", "1003", "suggestion"],
-          value: { value: { cfm: 300, source: "proposal" } },
-        },
-      ],
-    ],
-  ] as const) {
-    for (const key of [scope, unsavedScope]) {
-      const result = await workspace.apply(
-        key,
-        "ducts",
-        actor,
-        patches.map((patch) => ({ ...patch, path: [...patch.path] })),
-        revision,
-      );
-      if (!result.ok) throw Error(`Seed Work refused: ${JSON.stringify(result)}`);
-    }
-  }
-  const census = await workspace.instances();
-  if (census.works.length !== 2 || census.works.some((work) => work.unfinished !== 3))
-    throw Error("Seed did not produce two real Works with three unique unfinished cells each");
+  // Seed through the same admitted builtin enrollment as the HTTP host, not the legacy registry.
+  const { Effect, Layer } = await import("effect");
+  const { admittedBuiltinsLayer } = await import("../../apps/host/src/admitted-builtins.ts");
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* Layer.build(admittedBuiltinsLayer(workspace));
+        yield* Effect.promise(async () => {
+          for (const [actor, revision, patches] of [
+            [
+              "human",
+              0,
+              [
+                {
+                  path: ["flows", "1001", "edit"],
+                  value: { value: { cfm: 100, source: "human effort" } },
+                },
+                {
+                  path: ["flows", "1002", "edit"],
+                  value: { value: { cfm: 200, source: "reviewed" } },
+                },
+              ],
+            ],
+            [
+              "pea",
+              1,
+              [
+                {
+                  path: ["flows", "1002", "suggestion"],
+                  value: { value: { cfm: 220, source: "alternative" } },
+                },
+                {
+                  path: ["flows", "1003", "suggestion"],
+                  value: { value: { cfm: 300, source: "proposal" } },
+                },
+              ],
+            ],
+          ] as const) {
+            for (const key of [scope, unsavedScope]) {
+              const result = await workspace.apply(
+                key,
+                "ducts",
+                actor,
+                patches.map((patch) => ({ ...patch, path: [...patch.path] })),
+                revision,
+              );
+              if (!result.ok) throw Error(`Seed Work refused: ${JSON.stringify(result)}`);
+            }
+          }
+          const census = await workspace.instances();
+          if (census.works.length !== 2 || census.works.some((work) => work.unfinished !== 3))
+            throw Error(
+              "Seed did not produce two real Works with three unique unfinished cells each",
+            );
+        });
+      }),
+    ),
+  );
   const at = "2026-10-24T00:00:00.000Z";
   const workUrl = `/ducts?target=${encodeURIComponent(OFFICE_ADDRESS)}`;
   const retainedPage = "Office retained page";
