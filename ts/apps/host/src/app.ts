@@ -24,6 +24,7 @@ import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { RouteWorkspace, type PeaRuntimeCapabilities } from "@pe/runtime";
 import { createRouteRegistrations } from "@pe/mcps";
 import { admittedBuiltinsLayer, constructorWorkRegistrations } from "./admitted-builtins.ts";
+import { catalogWorkSpecs } from "@pe/agent-contracts";
 import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admission.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { productRouteWorkPath } from "./product-paths.ts";
@@ -256,9 +257,13 @@ export function makeHttpLive(options: HttpLiveOptions) {
     const address = nodeServer.address();
     return address && typeof address !== "string" ? address.port : options.port;
   };
-  const registrations = (options.routeRegistrations ?? createRouteRegistrations)({
-    loadedFamilies: (...args) => hostLoadedFamilies(`http://127.0.0.1:${port()}`)(...args),
-  });
+  const registrations = [
+    ...(options.routeRegistrations ?? createRouteRegistrations)({
+      loadedFamilies: (...args) => hostLoadedFamilies(`http://127.0.0.1:${port()}`)(...args),
+    }),
+    // Route-free catalog owners: Work with no Page (ADR 0030 rule 2). Pea's doors list them like any Work.
+    ...Object.values(catalogWorkSpecs).map((spec) => ({ spec })),
+  ];
   const work: HostWork = {
     // Pea's catalog lists every Work route (ADR 0030 rule 1).
     registrations,

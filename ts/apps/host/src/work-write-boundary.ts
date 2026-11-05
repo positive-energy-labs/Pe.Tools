@@ -6,6 +6,7 @@ import type { SdkReceiptReader } from "./native-receipts.ts";
 import { z } from "zod";
 import {
   canonicalRouteInput,
+  CatalogWorkRefused,
   writeResponseSchema,
   workHandleSchema,
   workBinding,
@@ -76,7 +77,9 @@ type WorkSpec = NonNullable<Tool["work"]> & { schema: z.ZodType<Record<string, u
 const workSpec = (
   route: string,
   registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
-) => (registeredWork ?? (tools[route as keyof typeof tools] as Tool)?.work)! as WorkSpec;
+) =>
+  // ponytail: a catalog spec carries no `editable` yet (edge sent to the contracts line); top-level facts still seal the whole doc.
+  (registeredWork ? { editable: [], ...registeredWork } : (tools[route as keyof typeof tools] as Tool)?.work) as WorkSpec;
 
 /** Primitive 1 on the host: admit the Work to its document, read the authored cells, derive the input. */
 async function deriveFromWork(
@@ -104,7 +107,15 @@ async function deriveFromWork(
       .map((name) => [name]),
     edits: spec.editable,
   }))) as { writeIntent?: Record<string, { edit?: { value: Record<string, unknown> } }> };
-  const input = { ...(hooks.derive(doc) as object), work, ...(readWorks ? { readWorks } : {}) };
+  let derived: object;
+  try {
+    derived = hooks.derive(doc) as object;
+  } catch (error) {
+    // A catalog Work the native op cannot apply faithfully is the owner's refusal, not a host fault.
+    if (error instanceof CatalogWorkRefused) throw refused(error.message, "catalog.refused");
+    throw error;
+  }
+  const input = { ...derived, work, ...(readWorks ? { readWorks } : {}) };
   return { work, input, target, observed };
 }
 const withInput = (ctx: CommandContext, input: Record<string, unknown>): CommandContext => ({
