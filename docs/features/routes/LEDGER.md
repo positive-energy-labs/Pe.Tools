@@ -13,6 +13,7 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-11-05, counsel (ADR 0030 rule 2): a catalog Work owner without a Page keeps its receipt link in chat. `actionRoute` uses the command's declared Work owner when that owner has a registered Page; the command does not require a Page to exist.
 
 - 2026-11-05, kaitpw's K3 ruling: every catalog write carries a keyed patch, reads stored state for per-key before and after, and preserves unstaged keys, including the `ducts.apply` loss store; a native whole replacement declares that contract and shows the full before. One deterministic omission-preservation falsifier covers every catalog write. Data-table apply refuses and the Driver holds apply until it passes (ADR 0030 rule 8).
+- 2026-11-05, Governor: no red-by-design test lands on main. Omission coverage keeps executable checks separate from a named pending list, with one Owed entry per pending operation; any new ModelWrite outside both groups fails classification. Pending is not proof and does not lift a write refusal.
 
 - 2026-11-05, kaitpw's K2 ruling: a parameter-links plan reads the stored profile and shows before and after per staged id; apply overlays keyed edits without dropping unstaged ids. Until that path lands, its catalog apply refuses with a typed reason while staging stays available (ADR 0030 rules 6 and 8).
 
@@ -135,6 +136,21 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - Step 5 presentation follow-on, Driver `drive/step-5/CASES.md`, explicitly non-blocking for main: refresh copied-Pod discovery without host restart; replace the dead `/pod-admin` link; investigate a second-turn Pod set-view rendered-ack refusal, absent Pea `pod.import` discovery, refusal text rendered with misleading fan chips, the initial missing Ducts handle, `sheetSnapshot` unavailable after Back, a route-open 403 and the legacy outcome-unknown chip. T1 cb88e274 is not browser-proven yet. Preserve this classification unless a new write/data consequence is observed.
 
 - Wave 2 engine cutover: legacy `shell/mount-readings-owner.ts` still constructs `createReadingGraph`, while admitted routes use `createAdmittedReadings`. Source opening is shared at 27510ae6; dependency ownership and the hook context's empty Page are not. Migrate or retire the remaining legacy route declarations with their Page and Work doors in Step 8, then delete the legacy scheduler; do not nest two engines or claim this as completed by sharing acquisition.
+
+- Omission check pending: `ducts.apply-losses` needs an executable TypeScript check over untouched loss-store keys; fresh native overlay evidence is not a pass in this suite.
+- Omission check pending: `ducts.apply-heal` must demonstrate that unnamed connections and stored rulings survive.
+- Omission check pending: `ducts.apply-assign-fan` must demonstrate that unnamed fan assignments survive.
+- Omission check pending: `family.apply` must classify the compiled spec's replacement behavior and preserve or disclose omitted parameters and types.
+- Omission check pending: `families.apply` needs the same omission check across a batch of compiled family specs.
+- Omission check pending: `family.build` must demonstrate its effect on existing, unnamed model and family state.
+- Omission check pending: `rooms.write` must demonstrate that unnamed regions and fields stay unchanged.
+- Omission check pending: `rooms.draw` must demonstrate that unnamed regions stay unchanged.
+- Omission check pending: `rooms.partition` must demonstrate what geometric rebinding does to regions absent from the request.
+- Omission check pending: `rooms.merge` must demonstrate that unnamed region identities and data survive.
+- Omission check pending: `takeoffs.partition` must demonstrate what geometric rebinding does to unnamed takeoff regions.
+- Omission check pending: `takeoffs.adopt` must preserve unnamed regions and disclose any whole-provenance replacement for named regions.
+- Omission check pending: `schedule.grid.push` must demonstrate that cells absent from the request stay unchanged.
+- Omission check pending: `schedule.apply` must classify definition replacement and preserve or disclose omitted fields.
 
 - After root integrates testing-world, retire the campaign checkouts and schedule-worktree residue named in the [delivery report](C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/deterministic-20261104-testing-world-implementation/pillar/REPORT.md). Worker processes are stopped; Git removed the schedule registration but left files, and automatic approval review blocked residue deletion.
 
