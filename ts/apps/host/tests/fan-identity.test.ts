@@ -1,3 +1,4 @@
+import { testHostFiles, settle } from "./effect-test.ts";
 import { expect, test } from "vite-plus/test";
 import { createDuctsSheets } from "../src/ducts-sheet.ts";
 import { snapshot } from "../../web/src/ducts/test-fixture.ts";
@@ -8,7 +9,7 @@ test("roster composition retains UniqueId for two equipment instances with the s
     { ...fan, family: "Fan Coil", uniqueId: "fixture-fan-alpha" },
     { ...fan, id: 101, family: "Fan Coil", uniqueId: "fixture-fan-beta" },
   ];
-  const sheets = createDuctsSheets({
+  const sheets = createDuctsSheets({ firm: () => settle(testHostFiles().firm), catalogs: () => settle(testHostFiles().ductCatalogs),
     call: async () => Response.json({ ...snapshot, nodes }),
   });
   const roster = await sheets.roster({ target: { session: "fixture", openId: "doc" } });

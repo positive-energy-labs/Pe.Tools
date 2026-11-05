@@ -13,11 +13,11 @@ import type { ActionExecution } from "./action-journal.ts";
 import { lifetime } from "./family-actions.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { ductsReadings } from "./ducts-readings.ts";
-import { readDuctCatalogs } from "./duct-catalogs.ts";
+import { runPods } from "./family-actions.ts";
 import { buildSheet, resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
 import { accessoryWrites } from "@pe/ducts-domain/sheet/accessory-writes";
 import { suggestRoster } from "@pe/ducts-domain/roster";
-import { readFirm, workLayer } from "./ducts-inputs.ts";
+import { workLayer } from "./ducts-inputs.ts";
 import { followAcceptedJoins } from "./ducts-walk.ts";
 import { scopeApplyRequest, appliedCellPaths } from "@pe/ducts-domain/staged";
 import type { DuctsApply, DuctsHeal } from "@pe/host-contracts/generated";
@@ -119,7 +119,7 @@ export function healedCellPaths(
 /** Work is the only authored input. Plan, rehearsal and apply share the same derivation and journal. */
 export function ductsExecutors(
   bridge: RevitBridge["Service"],
-  deps: { sdk?: SdkReceiptReader } = {},
+  deps: import("./family-actions.ts").FamilyActionDependencies = {},
 ) {
   const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
     const target = targetOf(ctx);
@@ -175,7 +175,7 @@ export function ductsExecutors(
             ? [...(ductsScope?.cells ?? []), ...(fanScope?.cells ?? [])]
             : undefined;
         const intent = { ...ductsScope, walk: fanScope?.walk, cells };
-        const { firm } = await readFirm();
+        const { firm } = await runPods(deps, deps.files!.firm);
         const criteria = resolveCriteria(workLayer(design), null, firm);
         const read = (selector: Record<string, unknown>) =>
           invokeBridge<DuctSnapshot>(
@@ -203,7 +203,7 @@ export function ductsExecutors(
           losses: async () => {
             const tables = await invokeBridge(bridge, target, "ducts.tables", { ids: TABLE_IDS });
             const grids = toGrids(tables as Parameters<typeof toGrids>[0]);
-            const catalogs = await readDuctCatalogs();
+            const catalogs = await runPods(deps, deps.files!.ductCatalogs);
             const layers = () => ({
               snapshot,
               firm,

@@ -1,3 +1,4 @@
+import { HostReceipts } from "../src/gateway-owner.ts";
 import { readFileSync } from "node:fs";
 import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -58,7 +59,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
         port: 0,
         lifecycle: { latch, handle },
         webRoot: webDir,
-      });
+      }).pipe(Layer.provide(HostReceipts.layer(null)));
       yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));
     }),
   );

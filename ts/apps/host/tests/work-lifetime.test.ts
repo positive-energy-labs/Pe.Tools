@@ -1,3 +1,6 @@
+import { PictureCaptureStore } from "../src/captures-route.ts";
+import { HostFiles } from "../src/host-files.ts";
+import { HostDocumentMarks } from "../src/document-marks.ts";
 import { detachedBridge, consentService } from "./effect-test.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -380,7 +383,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             undefined,
             undefined,
             telemetry,
-          );
+          ).pipe(Effect.provide(HostDocumentMarks.none), Effect.provide(HostFiles.layer()), Effect.provide(PictureCaptureStore.layer()));
           yield* Layer.build(MachineOwner.layer(machineSpec.sources, machineSpec.options));
           yield* Effect.gen(function* () {
             yield* Effect.promise(async () => {

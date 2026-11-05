@@ -1,3 +1,4 @@
+import { HostReceipts } from "../src/gateway-owner.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -57,7 +58,7 @@ test("HTTP requests answer during claim acquisition and discovery only publishes
         nodeServer,
         port: 0,
         webRoot: null,
-      }),
+      }).pipe(Layer.provide(HostReceipts.layer(null))),
     ),
   );
   try {
@@ -108,7 +109,7 @@ test("HTTP response lifetime is reader-owned while request upload limits stay bo
     nodeServer,
     port: 0,
     webRoot: null,
-  });
+  }).pipe(Layer.provide(HostReceipts.layer(null)));
   expect(nodeServer.timeout).toBe(0);
   expect(nodeServer.requestTimeout).toBe(uploadTimeout);
   expect(nodeServer.headersTimeout).toBe(headersTimeout);

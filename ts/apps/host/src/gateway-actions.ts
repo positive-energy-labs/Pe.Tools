@@ -191,6 +191,7 @@ export function gatewayExecutor(
   key: string,
   bridge: RevitBridge["Service"],
   local: (key: string, input: unknown) => Promise<unknown>,
+  pictures: import("./captures-route.ts").PictureCaptures,
   sdk?: SdkReceiptReader,
 ): CommandExecutor {
   const observe = async ({ admission }: CommandContext) => {
@@ -355,7 +356,7 @@ export function gatewayExecutor(
             const captured = await preparePodExport({
               pod: String(authored.pod),
               archivePath: String(authored.archivePath),
-            });
+            }, { captures: pictures });
             consumes.push({ kind: "catalog", probe: {}, expected: captured.versions });
             payload = {
               kind: "host-leaf",
@@ -484,6 +485,7 @@ export function gatewayExecutor(
                 Buffer.from(prepared.archive.bytesBase64, "base64"),
                 prepared.archive.locator,
                 prepared.archive.folder,
+                { captures: pictures },
               );
               return prepared.promotedPage
                 ? { ...installed, key: `page:@${installed.id}/pages/${prepared.promotedPage}` }

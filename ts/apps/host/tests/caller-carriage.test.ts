@@ -1,17 +1,23 @@
+import { acknowledgedReadBridge } from "./effect-test.ts";
+import { testHostInputs } from "./effect-test.ts";
+import { pictureCaptures } from "./effect-test.ts";
+import { HostFiles } from "../src/host-files.ts";
+import { HostDocumentMarks } from "../src/document-marks.ts";
+import { PictureCaptureStore } from "../src/captures-route.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { invokeCommand } from "./command-fixture.ts";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { randomUUID } from "node:crypto";
-import { Effect } from "effect";
+import { Layer, Effect } from "effect";
 import ts from "typescript";
 import { expect, test, vi } from "vite-plus/test";
 import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { detachedBridge, sessionView } from "./effect-test.ts";
 import { makeCallRoute } from "../src/call-route.ts";
-import { CaptureStore } from "../src/captures-route.ts";
+import { PictureCaptures } from "../src/captures-route.ts";
 import { mintBrowserContext, mintContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { crossingOf } from "./callers.ts";
@@ -228,7 +234,7 @@ test("the harness, Page and route-state doors carry their caller through the rea
 const bridgeA = (
   onInvoke: (key: string) => { value: unknown; target?: { session: string; document: string | null } },
 ) =>
-  detachedBridge({
+  acknowledgedReadBridge(detachedBridge({
     list: Effect.succeed([
       sessionView({
         sessionId: "bridge-a",
@@ -256,19 +262,18 @@ const bridgeA = (
         await new Promise((resolve) => setTimeout(resolve, 5));
         return { target: { session: "bridge-a", document: null }, ...onInvoke(key) };
       }),
-  });
+  }));
 const scoped = { "x-pe-bridge-session-id": "bridge-a", "x-pe-open-document-id": "open-a" };
 
 /** `/call` reads the caller after the body and the bridge answer: a capture's origin is the caller. */
 test("/call attributes a view-image capture to the caller it was carried by", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-host-carriage-call-"));
   writeFileSync(join(dir, "L1.png"), "png-l1");
-  const store = new CaptureStore(join(dir, "store"));
+  const store = pictureCaptures(join(dir, "store"));
   const server = await serveRoutes(
     makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, {
-      captureStore: store,
       sdk: sdkSessions,
-    }),
+    }, { sdkDriver: (args) => Effect.promise(() => sdkSessions(args)) }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(Layer.succeed(PictureCaptureStore, store)), Layer.provide(HostDocumentMarks.layer)),
     bridgeA((key) =>
       key === "host.ops.catalog"
         ? {
@@ -278,7 +283,7 @@ test("/call attributes a view-image capture to the caller it was carried by", as
           }
         : {
             value: {
-              view: { kind: "View", elementId: 7, label: "Floor Plan: L1" },
+              view: { kind: "View", documentKey: "fixture", elementId: 7, label: "Floor Plan: L1" },
               filePath: join(dir, "L1.png"),
               byteSize: 6,
               width: 1500,
@@ -335,7 +340,7 @@ test("action controls and the Families reading judge their real caller", async (
   await seeded.wait(admitted.id);
   const owner = new ActionJournal(join(dir, "attempts.json"));
   const server = await serveRoutes(
-    makeCallRoute(owner, undefined, { sdk: sdkSessions }),
+    makeCallRoute(owner, undefined, { sdk: sdkSessions }).pipe(Layer.provide(testHostInputs)),
     bridgeA((key) =>
       key === "host.ops.catalog"
         ? {

@@ -1,3 +1,8 @@
+import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
+import { invocationContext } from "@pe/runtime/context";
+import { readSessionScope } from "../src/sdk-session.ts";
+import { HostFiles } from "../src/host-files.ts";
+import { HostDocumentMarks } from "../src/document-marks.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { Caller } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
@@ -7,11 +12,12 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
+import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { afterEach, expect, test } from "vite-plus/test";
 import { captureListSchema } from "@pe/agent-contracts";
 import { RevitBridge } from "../src/bridge.ts";
-import { detachedBridge, sessionView } from "./effect-test.ts";
+import { acknowledgedReadBridge, detachedBridge, sessionView } from "./effect-test.ts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { makeCallRoute } from "../src/call-route.ts";
 import {
@@ -36,10 +42,11 @@ async function host(
   registered = true,
   /** What Revit's registration claims the bytes hash to, when it is not the bytes on disk. */
   claimed: Record<string, Buffer> = {},
+  maxBytes = PICTURE_STORE_MAX_BYTES,
 ) {
   const dir = await mkdtemp(join(tmpdir(), "pe-captures-"));
-  const store = new PictureCaptures(join(dir, "store"), PICTURE_STORE_MAX_BYTES, Date.now);
-  const bridge = detachedBridge({
+  const store = new PictureCaptures(join(dir, "store"), maxBytes, Date.now);
+  const bridge = acknowledgedReadBridge(detachedBridge({
     list: Effect.succeed([
       sessionView({
         sessionId: "bridge-a",
@@ -75,7 +82,7 @@ async function host(
         await writeFile(filePath, exports[name]!);
         return {
           value: {
-            view: { kind: "View", elementId: 7, label: `Floor Plan: ${name}` },
+            view: { kind: "View", documentKey: "fixture", elementId: 7, label: `Floor Plan: ${name}` },
             filePath,
             byteSize: exports[name]!.length,
             width: 1500,
@@ -96,19 +103,19 @@ async function host(
           target: { session: "bridge-a", document: "C:/HVAC.rvt" },
         };
       }),
-  });
+  }));
   const spa = () => Effect.succeed(HttpServerResponse.text("spa"));
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(
       makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, {
-        captureStore: store,
-        sdk: sdkSessions,
-      }),
+          sdk: sdkSessions,
+      }, { sdkDriver: (args) => Effect.promise(() => sdkSessions(args)) }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(Layer.succeed(PictureCaptureStore, store)), Layer.provide(HostDocumentMarks.layer)),
       capturesRoute(spa),
     ).pipe(
       Layer.provideMerge(
         Layer.mergeAll(
           Layer.succeed(RevitBridge, bridge),
+          NodeServices.layer, NodeHttpClient.layerUndici,
           Layer.succeed(PictureCaptureStore, store),
         ),
       ),
@@ -120,7 +127,8 @@ async function host(
     () => web.dispose(),
   );
   const fetch = (path: string, init?: RequestInit) =>
-    web.handler(new Request(`http://host${path}`, init), Context.empty() as never);
+    web.handler(new Request(`http://host${path}`, init), Context.make(RequestIdentity,
+      admittedRequestIdentity(invocationContext()?.caller ?? human, readSessionScope(Object.fromEntries(new Headers(init?.headers))))));
   const capture = (request: unknown, headers: Record<string, string> = {}, as: Caller = human) =>
     withInvocationContext({ caller: as }, () =>
       fetch("/call", {
@@ -231,4 +239,13 @@ test("/captures serves the store only: a navigation is the SPA, a caller path ne
     `/captures/${sha(outside)}.png/x`,
   ])
     expect([400, 404]).toContain((await fetch(path)).status);
+});
+
+test("a full picture service refuses /call without advertising an unkept capture", async () => {
+  const { capture, store } = await host({ L1: Buffer.from("png") }, true, {}, 0);
+  const response = await capture({ target: { name: "L1" } });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ message: expect.stringContaining("Picture store is full") });
+  expect(response.headers.get("x-pe-capture-id")).toBeNull();
+  expect(await store.list()).toEqual([]);
 });

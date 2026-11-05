@@ -84,7 +84,10 @@ import {
 } from "@pe/runtime";
 import { z } from "zod";
 import { RevitBridge } from "./bridge.ts";
-import { documentMarks } from "./document-marks.ts";
+import { HostDocumentMarks } from "./document-marks.ts";
+import { runPods } from "./family-actions.ts";
+import { HostFiles } from "./host-files.ts";
+import { PictureCaptureStore } from "./captures-route.ts";
 import { createProviders } from "./harness/providers.ts";
 import { peaMcpServer } from "./harness/adapter.ts";
 import { makeHarnessThreads } from "./harness/threads.ts";
@@ -1116,6 +1119,9 @@ function* hostPeRoutes(
   telemetry: ReceiptExporter = missingTelemetry(),
 ) {
   const receipts = yield* HostReceipts;
+  const marks = yield* HostDocumentMarks;
+  const pictures = yield* PictureCaptureStore;
+  const files = yield* HostFiles;
   const sourceRoot = hostOwnership.sourceRoot;
   const worldRoot = resolvePeaProductHomePath();
   let invalidateCatalog = () => {};
@@ -1123,7 +1129,7 @@ function* hostPeRoutes(
     worldRoot,
     changed: () => invalidateCatalog(),
     bootstrap: async () => {
-      const imported = await importShippedPods();
+      const imported = await importShippedPods({ captures: pictures });
       const refused = imported.outcomes.filter((outcome) => outcome.outcome === "refused");
       if (refused.length)
         throw Error(
@@ -1286,11 +1292,12 @@ function* hostPeRoutes(
     routeSettings,
     workspace: hostWork?.workspace,
     registrations,
-    ductsSheets: { call: sheetNativeRead(hostBaseUrl) },
+    ductsSheets: { call: sheetNativeRead(hostBaseUrl), firm: () => runPods({}, files.firm), catalogs: () => runPods({}, files.ductCatalogs) },
     ductsAnalysis: {
       root: productDuctsAnalysesPath(),
       producer: { version: resolveHostVersion(), ...hostOwnership },
-      marks: documentMarks(bridge),
+      marks,
+      catalogs: () => runPods({}, files.ductCatalogs),
       resolve: async (target) => {
         if (!bridge) throw Error("No Revit bridge is available");
         const session = await resolveSdkSession(bridge, {
@@ -1374,8 +1381,9 @@ function* hostPeRoutes(
       threads.observe(request, publish, after) ??
       notices.observe(request, publish, after) ??
       hostObserve(request, publish, after),
-    markReadings: markReadings(documentMarks(bridge)),
+    markReadings: markReadings(marks),
     telemetry,
+    log: receipts.log,
     reportContext: threads.reportContext,
   });
   const podRoutes = createPodRoutes(content.lifecycle, { workspace: routes.workspace, bridge });

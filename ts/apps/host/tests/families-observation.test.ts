@@ -1,3 +1,4 @@
+import { testHostInputs } from "./effect-test.ts";
 import { detachedBridge, sessionView, captureStore } from "./effect-test.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -142,7 +143,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
         makeCallRoute(new ActionJournal(join(dir, `actions-${handlers.size}.json`)), captures, {
           sdk: sdkSessions,
           workspace,
-        }, { families }).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+        }, { families }).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
         { disableLogger: true },
       );
       handlers.set(captures, current);

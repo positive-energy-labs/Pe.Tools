@@ -1,3 +1,4 @@
+import { testReceipts } from "./effect-test.ts";
 import { expect, test, vi } from "vite-plus/test";
 import type { ActionReceipt, Machine } from "@pe/agent-contracts";
 import type {
@@ -317,7 +318,7 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
       guide: "session",
       related: [],
     });
-  const sources = machineSources(undefined, {} as Providers, f.sources.update);
+  const sources = machineSources(testReceipts(), undefined, {} as Providers, f.sources.update);
   try {
     sdkRun.mockResolvedValueOnce(envelope({ sessions: [row], processReadErrors: [] }));
     expect(await settle(sources.sessions())).toEqual([row]);
@@ -362,7 +363,7 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
 test("SDK process read errors fail the real census adapter and restart the full automatic wait", async () => {
   vi.useFakeTimers(FAKE_CLOCK);
   const f = fixture();
-  const adapter = machineSources(undefined, {} as Providers, f.sources.update);
+  const adapter = machineSources(testReceipts(), undefined, {} as Providers, f.sources.update);
   const machine = machineOwner(
     { ...f.sources, sessions: () => settle(adapter.sessions()) },
     {

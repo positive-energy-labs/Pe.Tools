@@ -1,3 +1,4 @@
+import { testHostInputs } from "./effect-test.ts";
 import { Context, Deferred, Effect, Fiber, Layer, Schema } from "effect";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { expect } from "vite-plus/test";
@@ -255,7 +256,7 @@ effectTest(
           }),
         );
       const web = HttpRouter.toWebHandler(
-        makeCallRoute(journal, {} as TakeoffCaptures, {}, { sdkDriver }).pipe(
+        makeCallRoute(journal, {} as TakeoffCaptures, {}, { sdkDriver }).pipe(Layer.provide(testHostInputs)).pipe(
           HttpRouter.provideRequest(
             Layer.succeed(
               RequestIdentity,

@@ -27,8 +27,16 @@ export const hostProgram = (
       linkedCatalog();
       // One exporter for the launch: its scope unbinds the native producers and drains pending sends.
       const stamps = admittedReceiptStamps();
-      const receipts = Context.get(yield* Layer.build(HostReceipts.layer(stamps.host)), HostReceipts);
-      const telemetry = Context.get(yield* Layer.build(ReceiptExport.layer(stamps).pipe(Layer.provide(Layer.succeed(HostReceipts, receipts)))), ReceiptExport);
+      const receipts = Context.get(
+        yield* Layer.build(HostReceipts.layer(stamps.host)),
+        HostReceipts,
+      );
+      const telemetry = Context.get(
+        yield* Layer.build(
+          ReceiptExport.layer(stamps).pipe(Layer.provide(Layer.succeed(HostReceipts, receipts))),
+        ),
+        ReceiptExport,
+      );
       yield* Effect.promise(() =>
         telemetry.record({
           kind: "usage",

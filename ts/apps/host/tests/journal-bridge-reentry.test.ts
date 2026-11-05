@@ -1,6 +1,7 @@
+import { testHostInputs } from "./effect-test.ts";
 import { mkdir, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
-import { Effect, Fiber, Queue, Schema } from "effect";
+import { Layer, Effect, Fiber, Queue, Schema } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -142,7 +143,7 @@ test("cold command admission, native outcomes, recovery and root Stop cross the 
         });
         const podsRoot = productPodsRootPath();
         const server = yield* Effect.promise(() =>
-          serveRoutes(makeCallRoute(owner, undefined, { sdk, workspace, podsRoot }), bridge),
+          serveRoutes(makeCallRoute(owner, undefined, { sdk, workspace, podsRoot }).pipe(Layer.provide(testHostInputs)), bridge),
         );
         yield* Effect.promise(async () => {
           const post = async (path: string, body: unknown, token = human) => {

@@ -17,7 +17,6 @@ import { bootstrapExecutor } from "./bootstrap.ts";
 import { pagePublicationExecutor } from "./page-publication.ts";
 import { pageLibrary } from "./pages-route.ts";
 import { productPagesRootPath } from "./product-paths.ts";
-import { hostCaptures } from "./captures-route.ts";
 import { readNativeReceipt } from "./native-receipts.ts";
 import { Effect } from "effect";
 import { CANCEL_OPERATION_KEY } from "./bridge.ts";
@@ -43,7 +42,7 @@ export function commandRegistry(
           process.env[hostProcessIdentity.hostBaseUrlVariable] ||
           hostProcessIdentity.defaultHostBaseUrl),
       pageLibrary,
-      hostCaptures(),
+      deps.pictures!,
     ),
   };
   for (const group of [
@@ -136,7 +135,7 @@ export function commandRegistry(
   return (key) => {
     if (key.startsWith("pod.") && !isAnyOperationKey(key))
       throw Error(`Pod command unavailable: ${key}`);
-    return (implementations[key] ??= complete(gatewayExecutor(key, bridge, local, deps.sdk)));
+    return (implementations[key] ??= complete(gatewayExecutor(key, bridge, local, deps.pictures!, deps.sdk)));
   };
 }
 

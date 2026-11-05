@@ -6,7 +6,7 @@ import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { message, packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
 import { scriptPodMemberBounds } from "@pe/host-contracts/generated";
 import type { PodExport, PodImport, PodPromote } from "@pe/host-contracts/operation-types";
-import { hostCaptures, type CaptureStore } from "./captures-route.ts";
+import { type PictureCaptures } from "./captures-route.ts";
 import {
   captureDirectory,
   capturePackage,
@@ -31,7 +31,7 @@ const MAX_ARCHIVE_BYTES = scriptPodMemberBounds.maxTotalBytes * 2;
 export type TransferOptions = {
   readonly podsRoot?: string;
   readonly pagesRoot?: string;
-  readonly captures?: CaptureStore;
+  readonly captures?: PictureCaptures;
 };
 
 /** A transport refusal: the archive or pod cannot cross as asked. `status` maps to the HTTP answer. */
@@ -79,7 +79,7 @@ export async function preparePodExport(
   const project = files.get("PeScripts.csproj");
   if (project) record("PeScripts.csproj", "portable-project", portableProject(project));
   const vendored = vendor(pod.id, files, listing, record);
-  const captures = await closeCaptures(files, options.captures ?? hostCaptures());
+  const captures = await closeCaptures(files, options.captures!);
 
   bounded([...files].map(([path, bytes]) => ({ path, bytes })));
   const archive = writeZip(files);
@@ -213,7 +213,7 @@ const vendorPath = (podId: string, settingsPath: string) =>
 const isSettingsJson = (path: string) => /^settings\/.+\.json$/i.test(path);
 
 /** Every capture a text member names travels by hash; one this host does not hold refuses export. */
-async function closeCaptures(files: Map<string, Buffer>, store: CaptureStore): Promise<string[]> {
+async function closeCaptures(files: Map<string, Buffer>, store: PictureCaptures): Promise<string[]> {
   const named = new Map<string, string>();
   for (const [path, bytes] of files) {
     if (CAPTURE_MEMBER.test(path)) continue;
@@ -292,7 +292,7 @@ export async function installArchive(
     if (!admitted || admitted.id !== id)
       throw new TransferRefused(`Pod archive '${locator}' is not an admissible pod.`);
     await rename(join(staging, folder), directory);
-    const store = options.captures ?? hostCaptures();
+    const store = options.captures!;
     for (const [path, bytes] of entries)
       if (CAPTURE_MEMBER.exec(path)?.[2] === "png") await store.adopt(bytes);
     await activateImportedPackage(id, podsRoot);

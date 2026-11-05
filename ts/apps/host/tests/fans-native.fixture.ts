@@ -1,3 +1,5 @@
+import { testHostInputs } from "./effect-test.ts";
+import { testHostFiles } from "./effect-test.ts";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -93,7 +95,7 @@ export async function nativeFixture(
         {
           sdkDriver: (args) => Effect.promise(() => sdkSessions(args)),
         },
-      ).pipe(
+      ).pipe(Layer.provide(testHostInputs)).pipe(
         Layer.provideMerge(
           Layer.mergeAll(
             Layer.succeed(RevitBridge, bridge),
@@ -326,7 +328,7 @@ export async function nativeFixture(
         threads: async () => [],
         documents: async () => [{ ...target.ref, address }],
       },
-      ductsSheets: { call: readDucts },
+      ductsSheets: { firm: () => settle(testHostFiles().firm), catalogs: () => settle(testHostFiles().ductCatalogs), call: readDucts },
       observeHostResource,
     });
     return {

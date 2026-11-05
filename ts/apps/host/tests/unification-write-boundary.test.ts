@@ -1,3 +1,6 @@
+import { HostFiles } from "../src/host-files.ts";
+import { HostDocumentMarks } from "../src/document-marks.ts";
+import { PictureCaptureStore } from "../src/captures-route.ts";
 /** Port of main .artifacts/runs/review-20261030-ducts/contracts/contracts-review/
  * write-repro.cjs and repro.cjs (2026-10-30). Real journal, executor, workspace and
  * route handler; stand-in native socket and SDK receipts. No host or Revit process.
@@ -25,7 +28,7 @@ import {
 import { RouteWorkspace } from "@pe/runtime";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { ActionJournal } from "../src/action-journal.ts";
-import { documentMarks } from "../src/document-marks.ts";
+
 import { makeCallRoute } from "../src/call-route.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 
@@ -91,12 +94,13 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
       },
     });
     const workKey = bindWork("ducts", null, undefined, target);
+    const marks = yield* HostDocumentMarks;
     const owner = new ActionJournal(join(dir, "attempts.json"));
     const web = HttpRouter.toWebHandler(
       makeCallRoute(owner, captureStore(join(dir, "captures")), {
         sdk,
         workspace: work,
-      }).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+      }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, marks))).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       { disableLogger: true },
     );
     const post = (body: unknown) =>
@@ -157,7 +161,7 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
     /** Revit reports a change to the target document over the real socket; resolves once the host holds it. */
     const revitChanged = () =>
       Effect.gen(function* () {
-        const before = documentMarks(bridge).changedAt(target);
+        const before = marks.changedAt(target);
         yield* Queue.offer(
           incoming,
           JSON.stringify({
@@ -165,10 +169,10 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
             event: { eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [target.openId] }) },
           }),
         );
-        while (documentMarks(bridge).changedAt(target) === before) yield* Effect.sleep("1 millis");
+        while (marks.changedAt(target) === before) yield* Effect.sleep("1 millis");
       });
     return yield* body({ owner, outgoing, post, answer, intent, work, workKey, target, revitChanged });
-  }).pipe(Effect.scoped, Effect.provide(RevitBridgeLive), (effect) =>
+  }).pipe(Effect.scoped, Effect.provide(HostDocumentMarks.layer.pipe(Layer.provide(RevitBridgeLive))), Effect.provide(RevitBridgeLive), (effect) =>
     // effect-edge: island, phase 5
     Effect.runPromise(effect as Effect.Effect<A>),
   );

@@ -1,8 +1,9 @@
+import { testHostInputs } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ActionJournal } from "../src/action-journal.ts";
-import { Effect } from "effect";
+import { Layer, Effect } from "effect";
 import { expect, test } from "vite-plus/test";
 import { withInvocationContext } from "@pe/runtime/context";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
@@ -63,7 +64,7 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
       }),
   });
   const server = await serveRoutes(
-    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, { sdk: sdkSessions }),
+    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, { sdk: sdkSessions }).pipe(Layer.provide(testHostInputs)),
     bridge,
   );
   try {

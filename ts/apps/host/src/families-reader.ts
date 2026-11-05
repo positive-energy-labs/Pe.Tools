@@ -22,7 +22,7 @@ import {
 } from "@pe/host-contracts/pe-revit-contract";
 import { adaptiveWork, type WorkExecutor } from "./adaptive-work.ts";
 import { CANCEL_OPERATION_KEY, type RevitBridge } from "./bridge.ts";
-import { assertFresh, documentMarks } from "./document-marks.ts";
+import { assertFresh, HostDocumentMarks, type DocumentMarks } from "./document-marks.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { resolveStartProject, runPeRevitCli } from "./session-route.ts";
@@ -50,6 +50,7 @@ type Needs = Effect.Services<ReturnType<typeof runPeRevitCli>>;
  * Effect it needs crosses through `run`, the one island, on the services the layer captured.
  */
 type Reader = {
+  marks: DocumentMarks;
   /** Reads in flight; they are cancelled and forgotten when the layer's scope closes. */
   runs: Map<string, Run>;
   run: <A, E>(effect: Effect.Effect<A, E, Needs>) => Promise<A>;
@@ -107,7 +108,7 @@ async function readFamiliesProgressively(
     },
   };
   runs.set(readId, run);
-  const marks = documentMarks(bridge);
+  const marks = reader.marks;
   const capturedAt = new Date(now()).toISOString();
   const records = new Map<string, Family>();
   const base = { work, document, documentTitle, filter, capturedAt };
@@ -403,6 +404,7 @@ const makeFamiliesReader = Effect.gen(function* () {
     // effect-edge: island, phase 5
     Effect.runPromiseWith(services)(effect);
   const reader: Reader = {
+    marks: yield* HostDocumentMarks,
     runs: new Map(),
     run,
     lifecycle: (operation) => run(lock.withPermits(1)(Effect.promise(operation))),

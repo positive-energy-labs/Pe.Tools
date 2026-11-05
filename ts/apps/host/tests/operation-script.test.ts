@@ -1,3 +1,4 @@
+import { testHostInputs } from "./effect-test.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -92,7 +93,7 @@ it.each([
       Effect.raceFirst(
         Layer.launch(
           HttpRouter.serve(
-            makeCallRoute(journal, undefined, { sdk: sdkSessions }).pipe(
+            makeCallRoute(journal, undefined, { sdk: sdkSessions }).pipe(Layer.provide(testHostInputs)).pipe(
               Layer.provide(
                 requestIdentityLayer({
                   port,

@@ -36,8 +36,7 @@ import {
   resolveInputs,
   scopeInputs,
 } from "@pe/ducts-domain/sheet/index";
-import { readDuctCatalogs } from "./duct-catalogs.ts";
-import { readFirm, workLayer } from "./ducts-inputs.ts";
+import { workLayer } from "./ducts-inputs.ts";
 import type { Sheet, Chain, SheetPath } from "@pe/ducts-domain/sheet/types";
 import { worksheet } from "@pe/ducts-domain/sheet/worksheet";
 import { beyondOf, stoppingUnits, type BeyondUnit } from "@pe/ducts-domain/sheet/beyond";
@@ -79,6 +78,8 @@ const titlesOf = (grids: ReturnType<typeof toGrids>): Record<string, string> =>
     }),
   );
 export interface DuctsSheetSources {
+  firm: () => Promise<import("./ducts-inputs.ts").FirmReading>;
+  catalogs: () => Promise<import("./duct-catalogs.ts").CatalogReading>;
   call: (
     key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
     request: SnapshotRequest | { ids: string[] },
@@ -229,7 +230,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
     const owned = scope && work ? await work.workspace.readRaw(scope, "ducts") : null;
     const fans = scope && work ? await work.workspace.view({ ...scope, route: "fans" }, "fans") : null;
     const doc = ductsDesign(owned ? ductsDocumentSchema.parse(owned.doc) : null, fansDocumentSchema.parse(fans?.doc ?? {}));
-    const firm = await readFirm();
+    const firm = await sources.firm();
     return {
       scope,
       revision: owned?.revision ?? 0,
@@ -414,7 +415,7 @@ export function createDuctsSheets(sources: DuctsSheetSources, work?: SheetWork) 
         throw new BridgeError("Ducts read did not return an observation version", 409, {
           notDispatched: true,
         });
-      const catalogs = (await readDuctCatalogs()).tables;
+      const catalogs = (await sources.catalogs()).tables;
       const first = (await response.json()) as DuctSnapshot;
       const layersOf = (snap: DuctSnapshot) => ({
         snapshot: snap,

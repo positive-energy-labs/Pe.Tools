@@ -70,7 +70,7 @@ import {
   scriptingWorkspaceIdentity,
 } from "@pe/host-contracts/contracts";
 import { CANCEL_OPERATION_KEY, invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
-import { assertFresh, documentMarks } from "./document-marks.ts";
+import { assertFresh, type DocumentMarks } from "./document-marks.ts";
 import type { ActionExecution } from "./action-journal.ts";
 import {
   command,
@@ -122,6 +122,9 @@ export type PodDependencies = {
 };
 export type FamilyActionDependencies = TakeoffActionDependencies &
   PodDependencies & {
+    marks?: DocumentMarks;
+    files?: import("./host-files.ts").HostFiles["Service"];
+    pictures?: import("./captures-route.ts").PictureCaptureStore["Service"];
     families?: Pick<FamiliesReader["Service"], "cancel">;
     /** The demo owner keeps native reads inside its own root; a build has no output path to place. */
     nativePaths?: (
@@ -1610,7 +1613,7 @@ async function readLiveFamily(
       (from && canonicalRouteInput(from) !== canonicalRouteInput(document))
     )
       throw refused("Family Work belongs to a different document");
-    const marks = documentMarks(bridge);
+    const marks = deps.marks!;
     const takenAt = new Date().toISOString();
     const fence = async () => {
       if (running.cancelled) throw refused("Family read cancelled");
@@ -1718,7 +1721,7 @@ export async function projectReader(
   deps: FamilyActionDependencies = {},
 ) {
   const { session: original, process } = await lifetime(bridge, target, "project", deps);
-  const marks = documentMarks(bridge);
+  const marks = deps.marks!;
   const capturedAt = new Date().toISOString();
   const fence = async () => {
     const next = await current(bridge, target, "project");

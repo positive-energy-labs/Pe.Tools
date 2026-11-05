@@ -1,3 +1,4 @@
+import { testDocumentMarks } from "./effect-test.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { Context, Effect, Fiber, Layer } from "effect";
 import { TestClock } from "effect/testing";
@@ -7,7 +8,7 @@ import { detachedBridge, sessionView, effectTest } from "./effect-test.ts";
 import { z } from "zod";
 import { commands, tools, writePreviewSchema, type Command, type ActionReceipt } from "@pe/agent-contracts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
-import { assertSealed, documentMarks } from "../src/document-marks.ts";
+import { assertSealed } from "../src/document-marks.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -63,6 +64,7 @@ async function fixture() {
     ]),
   } as never);
   let bridge = makeBridge();
+  let marks = testDocumentMarks(bridge);
   const receipts: ActionReceipt[] = [];
   let request = "one";
   let evidence: unknown = { model: 1 };
@@ -89,7 +91,7 @@ async function fixture() {
       run,
     },
     bridge,
-    { sdk: sdkSessions },
+    { sdk: sdkSessions, marks },
   );
   const executors = { preview: make(commands["schedule.apply.preview"]), apply: make(commands["schedule.apply"]) };
   let current = executors.preview;
@@ -127,15 +129,16 @@ async function fixture() {
     },
     /** Revit reports this document changed; the host's mark moves. */
     documentChanged: async () => {
-      const before = documentMarks(bridge).changedAt(ref);
+      const before = marks.changedAt(ref);
       for (const listener of listeners)
         listener({ kind: "event", sessionId: "A", eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: ["open-A"] }) } as never);
-      await vi.waitFor(() => expect(documentMarks(bridge).changedAt(ref)).not.toBe(before));
+      await vi.waitFor(() => expect(marks.changedAt(ref)).not.toBe(before));
     },
     /** A new host process: a fresh bridge and mark holder, so observedSince moves. */
     restart: async () => {
       await new Promise((resolve) => setTimeout(resolve, 2));
       bridge = makeBridge();
+      marks = testDocumentMarks(bridge);
       executor = current();
     },
     run,
@@ -402,7 +405,7 @@ test("a change the host received but has not applied yet still refuses the seale
         serviceName: hostOwnership.serviceName, processId: 42, processStartUtcUnixMs: 1000, state: { openDocuments: [{ openId: "open-A" }] } })];
     }),
   } as never);
-  const marks = documentMarks(bridge);
+  const marks = testDocumentMarks(bridge);
   const ref = { session: "A", openId: "open-A" };
   const sealed = { observedSince: marks.observedSince ?? null, changedAt: marks.changedAt(ref) };
   listener({ kind: "event", sessionId: "A", eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: ["open-A"] }) } as never);

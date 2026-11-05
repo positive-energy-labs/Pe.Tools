@@ -1,3 +1,4 @@
+import { HostReceipts } from "../src/gateway-owner.ts";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -59,7 +60,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
             port: 0,
             webRoot: null,
             webUrl,
-          }),
+          }).pipe(Layer.provide(HostReceipts.layer(null))),
         ),
         Deferred.await(latch),
       ),

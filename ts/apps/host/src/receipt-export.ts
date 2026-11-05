@@ -479,7 +479,9 @@ export function createReceiptExport(options: {
     : options.client
       ? (event: ExportEvent) => {
           const next = delivery.then(() => withDeadline(event, sendClient));
-          delivery = next.catch((error) => { console.error("receipt-export: asynchronous operation failed", error); });
+          delivery = next.catch((error) => {
+            console.error("receipt-export: asynchronous operation failed", error);
+          });
           return next;
         }
       : undefined;
@@ -770,8 +772,18 @@ export function admittedReceiptStamps() {
   const install = readOrCreateInstallId();
   const processSessionId = randomUUID();
   return {
-    host: admitBuild("host", typeof __PE_HOST_RECEIPT_BUILD__ !== "undefined" ? __PE_HOST_RECEIPT_BUILD__ : null, install, processSessionId),
-    web: admitBuild("web", typeof __PE_WEB_RECEIPT_BUILD__ !== "undefined" ? __PE_WEB_RECEIPT_BUILD__ : null, install, processSessionId),
+    host: admitBuild(
+      "host",
+      typeof __PE_HOST_RECEIPT_BUILD__ !== "undefined" ? __PE_HOST_RECEIPT_BUILD__ : null,
+      install,
+      processSessionId,
+    ),
+    web: admitBuild(
+      "web",
+      typeof __PE_WEB_RECEIPT_BUILD__ !== "undefined" ? __PE_WEB_RECEIPT_BUILD__ : null,
+      install,
+      processSessionId,
+    ),
   };
 }
 /**
@@ -786,42 +798,45 @@ export function admittedReceiptStamps() {
 export class ReceiptExport extends Context.Service<ReceiptExport, ReceiptExporter>()(
   "pe/ReceiptExport",
 ) {
-  static layer(stamps: ReceiptExporter["stamps"]) { return Layer.effect(
-    ReceiptExport,
-    Effect.acquireRelease(
-      Effect.gen(function* () {
-        const { journal } = yield* HostReceipts;
-        const config = stamps.host ? analyticsConfig(hostOwnership.lane) : null;
-        const client = config
-          ? new PostHog(config.apiKey, {
-              host: config.host,
-              disableGeoip: true,
-              flushAt: 1,
-              fetchRetryCount: 0,
-              enableExceptionAutocapture: false,
-              fetch: abortableFetch(),
-            })
-          : undefined;
-        const exporter = createReceiptExport({
-          journal,
-          stamps,
-          client,
-          root: join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName),
-        });
-        if (!stamps.host)
-          exporter.track(exporter.record({ kind: "diagnostic", code: "identity.unavailable" }));
-        const unbindNative = bindNativeProducers(exporter);
-        receiptProducerPort = exporter;
-        return { exporter, unbindNative };
-      }),
-      ({ exporter, unbindNative }) =>
-        Effect.promise(async () => {
-          unbindNative();
-          if (receiptProducerPort === exporter) receiptProducerPort = undefined;
-          await exporter.close();
+  static layer(stamps: ReceiptExporter["stamps"]) {
+    return Layer.effect(
+      ReceiptExport,
+      Effect.acquireRelease(
+        Effect.gen(function* () {
+          const { journal } = yield* HostReceipts;
+          const config = stamps.host ? analyticsConfig(hostOwnership.lane) : null;
+          const client = config
+            ? new PostHog(config.apiKey, {
+                host: config.host,
+                disableGeoip: true,
+                flushAt: 1,
+                fetchRetryCount: 0,
+                enableExceptionAutocapture: false,
+                fetch: abortableFetch(),
+              })
+            : undefined;
+          const exporter = createReceiptExport({
+            journal,
+            stamps,
+            client,
+            root: join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName),
+          });
+          if (!stamps.host)
+            exporter.track(exporter.record({ kind: "diagnostic", code: "identity.unavailable" }));
+          const unbindNative = bindNativeProducers(exporter);
+          receiptProducerPort = exporter;
+          return { exporter, unbindNative };
         }),
-    ).pipe(Effect.map(({ exporter }) => exporter)),
-  ); }
+        ({ exporter, unbindNative }) =>
+          Effect.promise(async () => {
+            await exporter.journal.close();
+            unbindNative();
+            if (receiptProducerPort === exporter) receiptProducerPort = undefined;
+            await exporter.close();
+          }),
+      ).pipe(Effect.map(({ exporter }) => exporter)),
+    );
+  }
 }
 
 /**
@@ -1115,7 +1130,8 @@ export async function fatalReceipt(
       })(),
       ms,
     );
-  } catch (error) { console.warn("ts/apps/host/src/receipt-export.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/host/src/receipt-export.ts: fallback after failure", error);
     /* local record remains */
   } finally {
     exit(1);

@@ -1,3 +1,7 @@
+import { testDocumentMarks } from "./effect-test.ts";
+import { HostFiles } from "../src/host-files.ts";
+import { HostDocumentMarks } from "../src/document-marks.ts";
+import { PictureCaptureStore } from "../src/captures-route.ts";
 import { detachedBridge, sessionView, captureStore } from "./effect-test.ts";
 import { createPeClient, httpRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterEach, expect, vi } from "vite-plus/test";
@@ -18,7 +22,7 @@ import {
 import { ActionJournal } from "../src/action-journal.ts";
 import { BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
-import { documentMarks } from "../src/document-marks.ts";
+
 import { makeCallRoute } from "../src/call-route.ts";
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
 import { sdkSessions, originalProcess } from "./native-receipt-fixture.ts";
@@ -176,7 +180,7 @@ export async function setup() {
       }),
   });
   // One observer for the whole fixture, as the host builds it: one mark holder, one bridge tap.
-  const marks = documentMarks(bridge);
+  const marks = testDocumentMarks(bridge);
   const observeHost = hostResourceObserver(
     bridge,
     () => owner,
@@ -214,7 +218,7 @@ export async function setup() {
   );
   const mount = () =>
     serveRoutes(
-      Layer.mergeAll(pe, makeCallRoute(owner, captures, { workspace: work, sdk })),
+      Layer.mergeAll(pe, makeCallRoute(owner, captures, { workspace: work, sdk }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, marks)))),
       bridge,
     );
   let server = await mount();
