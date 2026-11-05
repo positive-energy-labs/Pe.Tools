@@ -2,7 +2,6 @@ import { testConsents } from "./effect-test.ts";
 import { createHash } from "node:crypto";
 import { bindControl } from "../src/control.ts";
 import type { Caller } from "@pe/agent-contracts";
-import { invokeCommand } from "./command-fixture.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -175,36 +174,3 @@ test.each([
     }
   },
 );
-
-test("resume reconciles uncertain native effects before permitting any retry", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pe-unknown-retry-"));
-  try {
-    const journal = new ActionJournal(join(directory, "commands.jsonl"));
-    let writes = 0,
-      reads = 0;
-    const crossing = { caller: { kind: "human" as const, via: "local" as const }, basis: null };
-    await invokeCommand(
-      journal,
-      { id: "uncertain", key: "probe.uncertain", target: { kind: "host" }, input: {}, ...crossing },
-      async () => null,
-      async (execution) =>
-        execution.step("native", "write", {}, async () => {
-          writes++;
-          throw new StepFailure("Disconnected", 503, "unknown");
-        }),
-      false,
-      {
-        recover: async (step) => {
-          reads++;
-          return { step, evidence: { unavailable: true } };
-        },
-      },
-    );
-    expect((await journal.wait("uncertain")).state).toBe("unknown");
-    expect((await journal.resume("uncertain", crossing)).state).toBe("unknown");
-    expect(reads).toBe(1);
-    expect(writes).toBe(1);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});

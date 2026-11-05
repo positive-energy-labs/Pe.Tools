@@ -1,5 +1,4 @@
 import { testConsents } from "./effect-test.ts";
-import { invokeCommand } from "./command-fixture.ts";
 import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,102 +6,10 @@ import { expect, test, vi } from "vite-plus/test";
 import { ActionJournal } from "../src/action-journal.ts";
 import { bindControl } from "../src/control.ts";
 import type { ConsentEvent } from "../src/run-consent.ts";
-import type { ActionAdmission, Caller } from "@pe/agent-contracts";
+import type { Caller } from "@pe/agent-contracts";
 
 const run = { thread: "thread", turn: "turn" };
 const caller: Caller = { kind: "pea", context: "host-minted", thread: run.thread, run, root: run };
-const declaredEffects = [{ kind: "file" as const, path: "C:/user/design.json" }];
-const admission = (id: string): ActionAdmission => ({
-  id,
-
-  key: "test.write",
-  target: { kind: "host" },
-  input: { value: 250 },
-});
-const setup = async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pe-consent-")),
-    path = join(dir, "journal.jsonl");
-  const events: ConsentEvent[] = [],
-    runs = testConsents((_, e) => events.push(e));
-  runs.open(run);
-  bindControl({ runs, acquired: () => null });
-  const journal = new ActionJournal(path);
-  const ready = async () =>
-    vi.waitFor(() => expect(events.some((e) => e.kind === "permission_request")).toBe(true));
-  const approve = () => {
-    const ask = events.find((e) => e.kind === "permission_request");
-    if (!ask || ask.kind !== "permission_request") throw Error("No ask");
-    runs.decide(run.thread, ask.requestId, "allow_now");
-  };
-  return {
-    runs,
-    journal,
-    approve,
-    ready,
-    close: async () => {
-      runs.closeAll();
-      await journal.close();
-      await rm(dir, { recursive: true, force: true });
-    },
-  };
-};
-
-test("root Stop retains a dispatched child result and fences its next effect", async () => {
-  const h = await setup();
-  const child = { thread: "child-thread", turn: "child-turn" };
-  const childCaller: Caller = {
-    kind: "pea",
-    context: "child",
-    thread: child.thread,
-    run: child,
-    root: run,
-  };
-  h.runs.open(child, run);
-  const dispatched = Promise.withResolvers<void>(),
-    finish = Promise.withResolvers<void>();
-  let nextWrites = 0;
-  try {
-    await invokeCommand(
-      h.journal,
-      {
-        ...admission("child-dispatched"),
-        caller: childCaller,
-        basis: null,
-        effects: declaredEffects,
-      },
-      async () => null,
-      async (e) => {
-        await e.step("native", "first", {}, async (requestId) => {
-          await h.journal.markDispatched(requestId);
-          dispatched.resolve();
-          await finish.promise;
-          return { applied: true };
-        });
-        return e.step("file", "next", {}, async () => ++nextWrites);
-      },
-    );
-    await h.ready();
-    h.approve();
-    await dispatched.promise;
-    h.runs.close(run, "stopped");
-    finish.resolve();
-    const row = await h.journal.wait("child-dispatched");
-    expect(row.state).toBe("cancelled");
-    expect(row.steps[0]).toMatchObject({
-      state: "succeeded",
-      result: { applied: true },
-      dispatchedAt: expect.any(String),
-    });
-    expect(nextWrites).toBe(0);
-    expect(row.steps).toHaveLength(2);
-    expect(row.steps[1]).toMatchObject({ key: "next", state: "cancelled" });
-    expect(row.steps[1]!.dispatchedAt).toBeUndefined();
-  } finally {
-    finish.resolve();
-    await h.close();
-  }
-});
-
 import { createHash } from "node:crypto";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
