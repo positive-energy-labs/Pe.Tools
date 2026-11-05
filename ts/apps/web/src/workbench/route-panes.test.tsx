@@ -787,11 +787,11 @@ test("after first-Send promotion and a chat pick, a Pea open keeps one lease and
   }
 });
 
-test("an explicit picture link opens tools ahead of remembered conversation layout", async () => {
+test("a route picture link leaves the conversation pane open", async () => {
   await mount("/ducts?system=S1&picture=model");
   await waitFor(() => expect(tools().closest(".hidden")).toBeNull());
   expect(screen.queryByRole("button", { name: "Expand tools" })).toBeNull();
-  expect(screen.getByRole("button", { name: "Expand pea" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Expand pea" })).toBeNull();
   expect(bodyCurrent?.()).toBe(true);
 });
 
@@ -799,7 +799,6 @@ test("subject availability does not fold an expanded Pea pane in the same Place"
   const { observeSubject } = await import("#/shell/subject");
   await mount("/fans?picture=%22model%22&fixture=layout");
   await settle();
-  fireEvent.click(screen.getByRole("button", { name: "Expand pea" }));
   expect(screen.queryByRole("button", { name: "Expand pea" })).toBeNull();
   let withdraw = () => {};
   try {
@@ -950,3 +949,20 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
     podRoute = null;
   }
 }, 30_000);
+
+test("fan selection with picture pose preserves Pea open state and width", async () => {
+  const router = await mount("/fans?fixture=layout");
+  await settle();
+  const dock = () =>
+    [...document.querySelectorAll<HTMLElement>("[data-layout-split]")].find(
+      (el) => el.dataset.layoutSplit === JSON.stringify(["route-dock", "tools"]),
+    )!;
+  const size = dock().style.getPropertyValue("--pane-size");
+  await act(() => router.navigate({
+    to: "/fans",
+    search: { fixture: "layout", fan: JSON.stringify(["fan-1"]), picture: "model" },
+  } as never));
+  await settle();
+  expect(screen.queryByRole("button", { name: "Expand pea" })).toBeNull();
+  expect(dock().style.getPropertyValue("--pane-size")).toBe(size);
+});
