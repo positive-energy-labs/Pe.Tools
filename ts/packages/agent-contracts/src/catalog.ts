@@ -170,20 +170,23 @@ export function requireLinkedCatalog<E extends CatalogLink>(
 
 /**
  * The one command-to-edge mapping, for builtin and Pod commands alike: its native `uses` (a command
- * named for its own native op uses it), its derivation, and the plan its apply is sealed at.
+ * named for its own native op uses it), its derivation, and the plan its apply is sealed at. `prefix`
+ * is the key space: `command:` in the global catalog, `""` in a route's admission catalog, whose
+ * bindings name entries by their bare key.
  */
 export function commandLink(
   key: string,
   command: import("./command.ts").Command,
   axes: CatalogAxes,
+  prefix: "command:" | "" = "command:",
 ): CatalogLink {
   const boundary = (command as { writeBoundary?: import("./write-intent.ts").WriteBoundaryBinding })
     .writeBoundary;
   return {
-    key: `command:${key}`,
+    key: `${prefix}${key}`,
     uses: command.native ?? (hostOpCatalog.some((op) => op.key === key) ? [key] : []),
     ...axes,
     ...(boundary ? command.derivation : {}),
-    ...(boundary?.phase === "apply" ? { previewBy: `command:${boundary.previewKey}` } : {}),
+    ...(boundary?.phase === "apply" ? { previewBy: `${prefix}${boundary.previewKey}` } : {}),
   };
 }
