@@ -229,7 +229,7 @@ export const fansData = {
     sheet: {
       args: "sheetArgs",
       ...readPolicy,
-      deps: { page: ["fan", "sheetPath"], readings: ["fans"], work: workKeys },
+      deps: { page: ["fan", "sheetPath"], readings: ["fans", "ductsWork"], work: workKeys },
       entry: "ducts.sheet",
       kind: "use",
     },
