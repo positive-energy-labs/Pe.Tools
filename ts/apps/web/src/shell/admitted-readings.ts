@@ -15,6 +15,8 @@ import {
   type AdmittedReadingStatus,
 } from "./admitted-reading-plan.ts";
 import { freezePage } from "./page-port.ts";
+import { contentHash } from "./readings.ts";
+import { z } from "zod";
 const unavailable = (reason: string): Extract<ReadingSnapshot<unknown>, { current: false }> => ({
   status: "unavailable",
   current: false,
@@ -135,7 +137,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
               current: true,
               value,
               handle: { key: foreignKey, revision },
-              hash: canonicalEnvironmentInput([revision, value]),
+              hash: z.string().parse(contentHash([revision, value])),
             });
             schedule();
           },
