@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-05, kaitpw (intent for Step 8 Pods, not current scope): HTML pages open from the index at `/pages/<name>/`, and `/bind` retires as a route; page writes stay quick and dirty, with no plan, seal or consent, which distinguishes a page from a route; promotion to a route is optional. Governor's counsel, **unruled**: keep the binding as a visible target chip, use one transaction per write, and show a Timeline row with the page as author.
+
 - 2026-11-05, kaitpw (Governor GAUGES): Step 8 migrates `/chat` first (stable; no feature loss), then `/pods` and `/settings` as kernel projections (Pods' schema and form remain unstable), then `/family` preserving the doc-lab flow where Pea proposes with a visible citation even though it is untested, then `/rooms`; `/family` acceptance uses a real PDF and real cells, with no mock witness, through the [five Driver cases](MAP.md#step-8-family-acceptance).
 
 - 2026-11-05, kaitpw (K4): automatic recording must not fail a live read. On capture full or I/O failure, stop capturing, mark coverage truncated at the failed taking, and preserve the actual live answer or original failure. Bounds still refuse further recording; historical misses never fall through to live. The required falsifier uses `maxTakings: 1` and proves that the second live read answers. Dev sessions run with capture off, so their Driver pass cannot prove this path.
