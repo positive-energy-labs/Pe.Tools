@@ -127,3 +127,10 @@ test("native loss and repair scopes stay inside the active system", () => {
   expect(neutralBodies.lossReady.run(foreign, input)).toMatch(/scope/);
   expect(neutralBodies.healReady.run(foreign, input)).toMatch(/active system/);
 });
+
+test("native snapshot decoding keeps capture and bounded-system evidence and refuses a malformed snapshot", () => {
+  const captured = { ...snapshot, sourceVersion: "native:1", systemReads: { completed: [900], missing: [] } };
+  expect(schemas.snapshot.parse(captured)).toEqual(captured);
+  expect(schemas.snapshot.safeParse({ ...captured, sourceVersion: 1 }).success).toBe(false);
+  expect(schemas.snapshot.safeParse({ ...captured, nodes: "not a native snapshot" }).success).toBe(false);
+});
