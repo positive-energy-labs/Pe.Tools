@@ -100,6 +100,14 @@ export function bindWork(
 }
 
 /** The one encoder for the persisted identity. */
+/**
+ * ADR 0030 rule 9, step 4 scaffold: the one stored identity however a caller spelled it (address case and
+ * slashes folded, Save As `from` dropped). Every Work read returns `{ key: canonicalWorkKey(scope), revision }`.
+ */
+export function canonicalWorkKey(_key: WorkKey): WorkKey {
+  throw new Error("step4 scaffold: canonicalWorkKey is owed");
+}
+
 export function workKey(key: WorkKey): string {
   switch (key.binding) {
     case "workspace":
