@@ -1169,7 +1169,7 @@ test("a declared History pane renders kernel invocations and checkpoints without
   const { wheel: _wheel, ...bodies } = f.adapters.bodies;
   f.adapters.bodies = bodies;
   const { view } = await mounted(f);
-  const history = within(view.getByLabelText("History"));
+  const history = within(view.getByRole("listbox", { name: "History" }));
   expect(history.getByText("No activity yet")).toBeTruthy();
   fireEvent.click(view.getByRole("button", { name: "Edit" }));
   await waitFor(() => expect(history.getByText(/Edit Work.*applied/)).toBeTruthy());
