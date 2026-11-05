@@ -9,7 +9,7 @@ import {
   initial,
   bodies,
 } from "../../../examples/pods/snowdon-circuits/routes/voltage-drop/module.ts";
-import { catalogEntries } from "../../packages/agent-contracts/src/pe-api.ts";
+import { linkedCatalog } from "../../packages/agent-contracts/src/pe-api.ts";
 import { podRouteDeclarationSchema } from "../../packages/host-contracts/src/pod-route.ts";
 
 const root = fileURLToPath(new URL("../../../examples/pods/snowdon-circuits", import.meta.url));
@@ -46,13 +46,13 @@ test("Snowdon publishes deterministic exact bytes and admits the decoded package
   expect(first.bytes).toEqual(second.bytes);
   expect(first.declaration).toEqual(second.declaration);
   expect(podRouteDeclarationSchema.parse(first.declaration)).toEqual(first.declaration);
-  const loaded = await loadRouteArtifact(decode(first.bytes), catalogEntries, evaluate);
+  const loaded = await loadRouteArtifact(decode(first.bytes), [...linkedCatalog().entries.values()], evaluate);
   expect(loaded.ok, JSON.stringify(loaded)).toBe(true);
   if (!loaded.ok) throw Error(JSON.stringify(loaded.diagnostics));
   expect(loaded.route.workFingerprint).toBe(first.declaration.fingerprint);
   const changed = decode(first.bytes);
   changed.executables[0]!.members[0]!.bytes[0] ^= 1;
-  await expect(loadRouteArtifact(changed, catalogEntries, evaluate)).rejects.toThrow(
+  await expect(loadRouteArtifact(changed, [...linkedCatalog().entries.values()], evaluate)).rejects.toThrow(
     "bytes or fingerprint differ",
   );
 }, 30000);

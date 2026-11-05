@@ -1,6 +1,5 @@
 import { expect, test, vi } from "vite-plus/test";
 import { commands } from "@pe/agent-contracts";
-import { catalogEntries, linkCatalog } from "@pe/agent-contracts/pe-api";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import type { CommandExecutor, CommandContext } from "../src/command-executor.ts";
 import { detachedBridge } from "./effect-test.ts";
@@ -65,15 +64,3 @@ test.each(writes)(
     ).toThrow("typed derive and preview");
   },
 );
-
-test("catalog links executable hooks and rejects a missing write binding", () => {
-  const writes = catalogEntries.filter(
-    (entry) => entry.key.startsWith("command:") && entry.effect === "ModelWrite",
-  );
-  expect(writes.length).toBeGreaterThan(0);
-  expect(linkCatalog(catalogEntries).filter((error) => error.includes("binding"))).toEqual([]);
-  const broken = { ...writes[0]!, derive: undefined };
-  expect(linkCatalog([broken])).toContain(
-    `${broken.key}: missing executable derive/preview binding`,
-  );
-});

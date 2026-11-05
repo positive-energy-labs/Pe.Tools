@@ -1,4 +1,4 @@
-import { callCatalogRoute, catalogEntries } from "@pe/agent-contracts/pe-api";
+import { callCatalogRoute, linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { createPeClient, peRoutes } from "@pe/agent-contracts/pe-api";
 import { pagePublicationSchema, pagePublicationResultSchema } from "@pe/host-contracts/pe-api";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
@@ -799,9 +799,7 @@ async function dispatch(
     case "route-doc":
     case "route-command": {
       if (
-        catalogEntries.some(
-          (entry) => entry.discovery?.key === row.key && entry.key.startsWith("route:"),
-        )
+        linkedCatalog().entries.get(row.key)?.discovery?.key === row.key && row.key.startsWith("route:")
       ) {
         const response = await callCatalogRoute(base(), row.key, payload, fetch);
         const result = await response.json();

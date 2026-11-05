@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { catalogEntries } from "@pe/agent-contracts/pe-api";
+import { commandLink, linkedCatalog, requireLinkedCatalog, type CatalogAxes } from "@pe/agent-contracts/pe-api";
+import type { Command } from "@pe/agent-contracts";
 import {
   createRouteAdmission,
   routeFingerprint,
   type AdmittedRoute,
-  type PackageRouteAdmissionEvidence,
 } from "../../../packages/agent-contracts/src/route-module.ts";
 import type { RouteFingerprintInput } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
 
@@ -85,19 +85,15 @@ export async function admitPodArtifact(value: unknown, expected: string): Promis
         .passthrough(),
     })
     .parse(loaded);
-  const catalog = [
-    ...catalogEntries,
-    ...Object.entries(module.entries).map(([key, entry]) => ({
-      key,
-      ...(entry.axes as Omit<PackageRouteAdmissionEvidence["catalog"][number], "key" | "uses">),
-      uses: [],
-    })),
-  ];
+  const catalog = requireLinkedCatalog(linkedCatalog().extend(
+    Object.entries(module.entries).map(([key, entry]) =>
+      commandLink(key, entry as unknown as Command, entry.axes as CatalogAxes, "")),
+  ));
   const port = await createRouteAdmission({
     ...evidence,
     loadedBindings: module,
     expectedFingerprint: evidence.wire.fingerprint,
-    catalog,
+    catalog: [...catalog.entries.values()],
   });
   const result = port.admitUnknown({ ...module, artifact: evidence.artifact });
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
