@@ -217,6 +217,22 @@ const declaredAxes = {
     cost: "Mutation",
     cardinality: "One",
   },
+  "ducts.rehearse-heal": {
+    subject: "Elements",
+    touches: ["Geometry"],
+    effect: "TransactRead",
+    rollsBack: true,
+    cost: "Mutation",
+    cardinality: "One",
+  },
+  "ducts.rehearse-assign-fan": {
+    subject: "Elements",
+    touches: ["Topology"],
+    effect: "TransactRead",
+    rollsBack: true,
+    cost: "Mutation",
+    cardinality: "One",
+  },
   "instances.start": {
     subject: "None",
     touches: ["Metadata"],

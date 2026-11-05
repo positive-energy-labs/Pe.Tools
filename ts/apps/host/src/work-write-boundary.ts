@@ -152,7 +152,7 @@ export function workIntentBoundary(
   };
 }
 
-// TODO: docs/features/routes/LEDGER.md#s3-native-seal Prove preview/refetch/apply in browser against a controlled Revit session.
+// TODO: docs/features/routes/LEDGER.md#s3-native-seal Prove plan/refetch/apply in browser against a controlled Revit session.
 /** Keep native derivation/recovery in its owner; admit only authored, revisioned Work. */
 export function workWriteBoundary(
   executor: CommandExecutor,
@@ -207,9 +207,9 @@ export function workWriteBoundary(
       const prepare = async () => {
         const value = executor.prepared.parse(await bound.prepare?.());
         if (!previewOnly && !preview)
-          throw refused("Preview the current Work first", "preview.stale");
-        // The seal names the mark itself. A leaf that still emits a wall-clock `document-mark` probe
-        // (ducts-actions.ts bind) would move the hash on every prepare; that emission is owed deletion.
+          throw refused("Plan the current Work first", "preview.stale");
+        // The seal names the document mark itself. Family leaves still consume a wall-clock mark probe the
+        // journal checks; it stays out of the hash, which it would move on every prepare.
         const dependencies = [...ctx.consumed, ...(bound.consumes ?? [])].filter(
           (item): item is Exclude<Consumed, { kind: "document-mark" }> => item.kind !== "document-mark",
         );
@@ -234,7 +234,7 @@ export function workWriteBoundary(
               canonicalRouteInput(seal[key as keyof typeof seal]),
           );
           throw refused(
-            `Preview changed; preview the current Work and dependencies again (${changed.join(", ")})`,
+            `Plan changed; plan the current Work again (${changed.join(", ")})`,
             "preview.stale",
           );
         }

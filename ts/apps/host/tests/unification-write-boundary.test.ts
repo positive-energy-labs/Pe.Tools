@@ -337,7 +337,7 @@ test("kernel gap: preview seal refuses apply after Work changes", () =>
       );
       if (!staged.ok) throw Error("Expected accepted staged Work");
       yield* post(
-        intent("preview", "ducts.preview-losses", undefined, {
+        intent("preview", "ducts.plan-losses", undefined, {
           work: { key: workKey, revision: staged.revision },
         }),
       );
@@ -381,7 +381,7 @@ test("unknown outcome blocks a new invocation from dispatching the same write", 
       );
       if (!staged.ok) throw Error("Expected accepted staged Work");
       const payload = { work: { key: workKey, revision: staged.revision } };
-      yield* post(intent("pre-unknown", "ducts.preview-losses", undefined, payload));
+      yield* post(intent("pre-unknown", "ducts.plan-losses", undefined, payload));
       const preview = yield* dispatchOrReceipt(owner, outgoing, "pre-unknown", answer);
       expect(preview.kind).toBe("dispatch");
       yield* answer(preview.frame.request!.requestId, { ...response, previewOnly: true });
@@ -414,7 +414,7 @@ test("host-derived preview and apply send the captured Work flow and retire only
       if (!staged.ok) throw Error("Expected accepted staged Work");
       const payload = { work: { key: workKey, revision: staged.revision } };
       for (const [id, key, previewOnly] of [
-        ["preview-derived", "ducts.preview-losses", true],
+        ["preview-derived", "ducts.plan-losses", true],
         ["apply-derived", "ducts.apply-losses", false],
       ] as const) {
         yield* post(intent(id, key, undefined, payload));

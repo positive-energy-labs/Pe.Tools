@@ -181,7 +181,7 @@ export async function runCapability(
   // Prerequisites are checked before submission, so an unscoped probe is not a journal attempt. Mirrors the
   // host derive (ducts-actions.ts lossSnapshot): the ducts handle, with the fan walk read from fans Work at the
   // same key (or readWorks.fans), or writeIntent.groups in ducts Work.
-  if (key === "ducts.preview-losses") {
+  if (key === "ducts.plan-losses") {
     const handle = workHandleSchema.parse(input.work);
     if (handle.key.route !== "ducts")
       throw Error("Preview needs the route:ducts Work handle; the fan walk is read from route:fans Work at the same document. No preview was submitted.");
