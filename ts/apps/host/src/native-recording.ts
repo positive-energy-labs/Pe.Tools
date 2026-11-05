@@ -702,7 +702,7 @@ const encoded = <A, I>(codec: Schema.Codec<A, I>, value: A) =>
 
 /**
  * One owner's live read, kept as a taking before its answer is returned. A value or a
- * class-faithful failure is recorded; a taking that cannot be kept fails the read with that refusal.
+ * class-faithful failure is recorded; a capture failure stops recording without changing the live exit.
  */
 export const captureInput = <A, I>(
   writer: RecordingWriter,

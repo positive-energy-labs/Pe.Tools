@@ -23,8 +23,8 @@ export const inputKinds = [
 export type InputKind = (typeof inputKinds)[number];
 
 /**
- * Where automatic capture stopped: `at` is the first capture attempt (1-based, in start order) the
- * recording does not hold, and the reason is bounded. A truncated recording is never complete.
+ * Where automatic capture stopped: `at` is the failed attempt's ordinal (1-based, in start order).
+ * Interrupted or concurrent attempts can leave other gaps; this never claims a complete prefix.
  */
 export const truncationSchema = z.strictObject({
   at: z.number().int().positive(),
