@@ -1,5 +1,6 @@
 import { createContext, use, useCallback, useEffect, useState, type ReactNode } from "react";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
+import { commitAddress, rawQuery } from "#/route/url";
 import { navigationClient, type NavigationSnapshot } from "./navigation-client";
 import { admittedDestination } from "./model";
 import { resolveWorkbenchConfig } from "#/workbench/config";
@@ -49,7 +50,6 @@ export function useNavigation() {
   return value;
 }
 export function useDestination() {
-  const navigate = useNavigate();
   const router = useRouter();
   const host = useSurfaceHost();
   return useCallback(
@@ -57,21 +57,21 @@ export function useDestination() {
       const admitted = admittedDestination(destination, window.location.origin);
       if (!admitted) return false;
       const url = new URL(admitted, window.location.origin);
-      const search = router.options.parseSearch(url.search);
-      void navigate({
-        to: url.pathname,
-        search: {
-          ...search,
-          // Tool entry neither creates nor switches a conversation: it carries the selected
-          // `?thread` unchanged; only an explicit conversation link names its own.
-          thread: search.thread ?? router.state.location.search.thread ?? undefined,
-          target: search.target ?? undefined,
-          shell: host.surface === "tray" ? "tray" : undefined,
-        },
-        hash: url.hash.slice(1),
+      const query = url.searchParams;
+      const current = rawQuery(router);
+      // Tool entry neither creates nor switches a conversation: it carries the selected `?thread`
+      // unchanged; only an explicit conversation link names its own. The root's other carries
+      // (`work`, `fixture`) ride along as its retention middleware did; `target` is never inferred.
+      for (const key of ["thread", "work", "fixture"])
+        if (!query.has(key) && current.has(key)) query.set(key, current.get(key)!);
+      query.delete("shell");
+      if (host.surface === "tray") query.set("shell", "tray");
+      void commitAddress(router, url.pathname, query, {
+        state: { ...router.state.location.state },
+        hash: url.hash,
       });
       return true;
     },
-    [navigate, router, host],
+    [router, host],
   );
 }

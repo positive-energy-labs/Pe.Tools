@@ -1,5 +1,5 @@
 import { subjectState, useSubjects } from "../shell/subject";
-import { restorePageSearch, tabPageSearch } from "../route/url";
+import { commitAddress, rawQuery, restorePageSearch, tabPageSearch } from "../route/url";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { useRouter, useRouterState } from "@tanstack/react-router";
@@ -304,13 +304,11 @@ export function useRouteTabs() {
       if (!tabs.some((tab) => tab.id === id && tab.link === active.link))
         put(id, active.route, active.link);
       if (tagged?.id !== id || tagged.route !== active.route)
-        void router.navigate({
-          to: location.pathname,
-          search: location.search,
+        void commitAddress(router, location.pathname, rawQuery(router), {
           state: { ...location.state, __peRouteTab: { id, route: active.route } },
           replace: true,
           ignoreBlocker: true,
-        } as never);
+        });
     } catch (error) {
       fail(error);
     }
@@ -331,14 +329,13 @@ export function useRouteTabs() {
   useEffect(() => {
     if (lastThread.current === thread) return;
     lastThread.current = thread;
-    if (!historyOf(router.state.location.state).__peViewOpenCommandId) return;
-    void router.navigate({
-      to: router.state.location.pathname,
-      search: router.state.location.search,
-      state: { ...router.state.location.state, __peViewOpenCommandId: undefined },
+    const at = router.state.location;
+    if (!historyOf(at.state).__peViewOpenCommandId) return;
+    void commitAddress(router, at.pathname, rawQuery(router), {
+      state: { ...at.state, __peViewOpenCommandId: undefined },
       replace: true,
       ignoreBlocker: true,
-    } as never);
+    });
   }, [thread]);
 
   /** Every move keeps the selected `?thread`; an ordinary move clears an explicit open's id. */
@@ -350,24 +347,21 @@ export function useRouteTabs() {
   ) => {
     const url = new URL(destination, "http://tab.invalid");
     focus(id);
-    await router.navigate({
-      to: url.pathname,
-      search: {
-        // Root carry retention serves ordinary same-scope links. A Place is its own scope.
-        target: undefined,
-        work: undefined,
-        // Place links carry codec text; navigate accepts the router's parsed search values.
-        ...router.options.parseSearch!(url.search),
-        thread: router.state.location.search.thread,
-        shell: surface === "tray" ? "tray" : undefined,
-      },
-      state: (previous: Record<string, unknown>) => ({
-        ...previous,
+    // A Place is its own scope: its link's bytes are the Page, with no root carry retention.
+    const query = url.searchParams;
+    const thread = rawQuery(router).get("thread");
+    query.delete("thread");
+    if (thread) query.set("thread", thread);
+    query.delete("shell");
+    if (surface === "tray") query.set("shell", "tray");
+    await commitAddress(router, url.pathname, query, {
+      state: {
+        ...router.state.location.state,
         __peRouteTab: id ? { id, route: routeAt(url.pathname) ?? undefined } : undefined,
         __peViewOpenCommandId: command,
-      }),
+      },
       replace,
-    } as never);
+    });
   };
   /** A real selected chat records the Place it is talking about; drafts and others record nothing. */
   const recordPlace = (owner: string, tabRoute: RouteKey, tabLink: string) => {
@@ -499,12 +493,13 @@ export function useRouteTabs() {
         },
         // First Send promotes the draft in place: the visible tool stays open and visible.
         promote: async (owner) => {
-          await router.navigate({
-            to: router.state.location.pathname,
-            search: (previous: Record<string, unknown>) => ({ ...previous, thread: owner }),
-            state: (previous: Record<string, unknown>) => ({ ...previous }),
+          const at = router.state.location;
+          const query = rawQuery(router);
+          query.set("thread", owner);
+          await commitAddress(router, at.pathname, query, {
+            state: { ...at.state },
             replace: true,
-          } as never);
+          });
         },
         // A Send while a tool is the current Place names it to that chat.
         sent: (owner) => {

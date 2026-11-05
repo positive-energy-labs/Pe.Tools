@@ -442,7 +442,17 @@ const settle = () => act(() => new Promise((done) => setTimeout(done, 50)));
 
 test("an actual admitted standalone Fans Place enrolls without a chat or native host call", async () => {
   sessionStorage.clear();
-  const router = await mount("/fans?fixture=layout&contextRadiusFt=15", true);
+  // JSON string codec text (plain, empty, numeric-looking) survives the history tag's state write.
+  const strings = {
+    stage: JSON.stringify("sheet"),
+    contextStyle: JSON.stringify("glass"),
+    inputSort: JSON.stringify(""),
+    sheetPath: JSON.stringify("8081605"),
+  };
+  const router = await mount(
+    `/fans?fixture=layout&contextRadiusFt=15&${new URLSearchParams(strings)}`,
+    true,
+  );
   const body = document.querySelector<HTMLElement>("[data-route-tab]")!;
   await waitFor(() => expect(shown(router).tab).not.toBeNull());
   expect(document.querySelector("[data-route-tab]")).toBe(body);
@@ -456,6 +466,16 @@ test("an actual admitted standalone Fans Place enrolls without a chat or native 
   expect(
     JSON.parse(new URL(places()[0]!.link, "http://place.invalid").searchParams.get("fan")!),
   ).toEqual({ kind: "ids", ids: [] });
+  const kept = (href: string) =>
+    Object.fromEntries(
+      Object.keys(strings).map((key) => [
+        key,
+        new URL(href, "http://place.invalid").searchParams.get(key),
+      ]),
+    );
+  expect((router.history.location.state as { __peRouteTab?: unknown }).__peRouteTab).toBeTruthy();
+  expect(kept(router.history.location.href)).toEqual(strings);
+  expect(kept(places()[0]!.link)).toEqual(strings);
   expect(hostEvents.listeners.size).toBe(0);
   const placeId = places()[0]!.id;
   await act(() => router.navigate({ to: "/pea", search: { thread: "T" } } as never));
@@ -469,30 +489,53 @@ test("an actual admitted standalone Fans Place enrolls without a chat or native 
     ),
   ).toBe("15");
   expect(shown(router).tab).toBe(placeId);
+  expect(kept(router.history.location.href)).toEqual(strings);
 });
 
-test("an admitted Place keeps its codec bytes through open, switch, bare URL restore and Back", async () => {
-  // Object, list, numeric and literal-percent values: each one the legacy codec or TanStack's
-  // stringify re-encoded (`%257B`, `"{..}"`) before the admitted owner could read it.
+test("an admitted Place keeps its codec bytes through open, switch, bare URL restore, Back and reload", async () => {
+  // Object, list, numeric, numeric-looking string, empty string, plain string and literal-percent
+  // values: each one the legacy codec or TanStack's parse/stringify re-encoded (`%257B`, `"{..}"`)
+  // or unquoted (`"glass"` -> `glass`) before the admitted owner could read it.
   const fan = JSON.stringify({ kind: "ids", ids: ["MUAS-1 50%@2", "8081605"] });
   const rosterSearch = JSON.stringify({ keywords: "100%25 off", pills: [], v: 1 });
-  const link = `/fans?${new URLSearchParams({ fixture: "layout", fan, rosterSearch, contextRadiusFt: "15" })}`;
-  const fans: ThreadTab = { id: "aaaaaaaa-0000-4000-8000-0000000000f0", route: "fans", link, at: ducts.at };
+  const page = {
+    fixture: "layout",
+    fan,
+    rosterSearch,
+    contextRadiusFt: "15",
+    stage: JSON.stringify("sheet"),
+    contextStyle: JSON.stringify("glass"),
+    inputSort: JSON.stringify(""),
+    sheetPath: JSON.stringify("8081605"),
+  };
+  const link = `/fans?${new URLSearchParams(page)}`;
+  const fans: ThreadTab = {
+    id: "aaaaaaaa-0000-4000-8000-0000000000f0",
+    route: "fans",
+    link,
+    at: ducts.at,
+  };
   sessionStorage.setItem("pe.places", JSON.stringify([ducts, fans]));
-  const router = await mount("/fans?fixture=layout", false, true);
+  // Raw `key=value` pairs, never decoded: byte equality, order-free, the shell's own keys aside.
+  const pairs = (query: string) =>
+    query
+      .replace(/^\?/, "")
+      .split("&")
+      .filter((pair) => pair && !/^(thread|shell)=/.test(pair))
+      .sort();
+  let router = await mount("/fans?fixture=layout", false, true);
   const held = async () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/fans"));
     await settle();
     const raw = new URL(router.history.location.href, "http://place.invalid").searchParams;
-    expect([raw.get("fan"), raw.get("rosterSearch"), raw.get("contextRadiusFt")]).toEqual([
-      fan,
-      rosterSearch,
-      "15",
-    ]);
+    expect(Object.fromEntries(Object.keys(page).map((key) => [key, raw.get(key)]))).toEqual(page);
+    expect(pairs(router.history.location.search)).toEqual(
+      pairs(new URL(link, "http://p.invalid").search),
+    );
     expect(places().find((tab) => tab.route === "fans")!.link).toBe(link);
     expect(document.body.textContent).not.toMatch(/malformed/i);
   };
-  // A bare URL with no history tag restores the Place from memory through the router's parser.
+  // A bare URL with no history tag restores the Place from memory; its history tag keeps the bytes.
   await held();
   // Reusing the existing Place (the app's tool entry) keeps its bytes; no legacy re-canonicalization.
   await act(() => router.navigate({ to: "/pea", search: { thread: "T" } } as never));
@@ -506,6 +549,11 @@ test("an admitted Place keeps its codec bytes through open, switch, bare URL res
   await act(() => router.history.back());
   await waitFor(() => expect(router.state.location.pathname).toBe("/ducts"));
   await act(() => router.history.forward());
+  await held();
+  // Reload: a fresh router mounts on the same address and must not canonicalize its bytes.
+  const href = router.history.location.href;
+  cleanup();
+  router = await mount(href, false, true);
   await held();
 });
 

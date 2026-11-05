@@ -35,7 +35,7 @@ async function at(entry: string) {
     await act(async () => void go!(destination));
     return router.state.location.search as Record<string, unknown>;
   };
-  return open;
+  return Object.assign(open, { router });
 }
 
 test("a directory tool link keeps the selected chat", async () => {
@@ -51,6 +51,17 @@ test("a tool destination keeps structured and numeric route values", async () =>
   const fan = { kind: "some", keys: ["MUAS-1 50%@2", "8081605"] };
   const query = new URLSearchParams({ fan: JSON.stringify(fan), contextRadiusFt: "15" });
   expect(await open(`/ducts?${query}`)).toEqual({ thread: "T", fan, contextRadiusFt: 15 });
+});
+
+test("a tool destination keeps JSON string codec text byte for byte", async () => {
+  const open = await at("/pea?thread=T");
+  const query = new URLSearchParams({
+    stage: JSON.stringify("network"),
+    inputSort: JSON.stringify(""),
+    sheetPath: JSON.stringify("8081605"),
+  });
+  await open(`/ducts?${query}`);
+  expect(open.router.history.location.search).toBe(`?${query}&thread=T`);
 });
 
 test("with no chat selected a tool link adds no thread and infers no target", async () => {

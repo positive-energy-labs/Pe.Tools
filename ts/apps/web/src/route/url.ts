@@ -311,29 +311,51 @@ export function restorePageSearch(memory?: Record<string, unknown>, url?: Record
     : undefined;
 }
 
+/**
+ * Commit an already-encoded address: its query reaches history as these bytes. The router's
+ * parse/stringify pair is not an inverse for codec text (`%22glass%22` parses to `glass` and is
+ * written back unquoted), so a codec link never crosses `navigate({search})`, and the current
+ * query is read from `rawQuery`, never from `location.searchStr` (that is the re-stringified copy).
+ */
+export function commitAddress(
+  router: AnyRouter,
+  pathname: string,
+  query: URLSearchParams,
+  { state, replace = false, ignoreBlocker = false, hash = "" }: CommitOptions = {},
+) {
+  const text = String(query);
+  const href = `${pathname}${text ? `?${text}` : ""}${hash}`;
+  return router.commitLocation({
+    href,
+    publicHref: href,
+    state: { ...state },
+    replace,
+    ignoreBlocker,
+  } as never);
+}
+/** The current address's query as history holds it. */
+export const rawQuery = (router: AnyRouter) => new URLSearchParams(router.history.location.search);
+type CommitOptions = {
+  state?: Record<string, unknown>;
+  replace?: boolean;
+  ignoreBlocker?: boolean;
+  hash?: string;
+};
+
 /** Restore before device admission, so a bare fixture Place never falls into the host lane. */
 export function useRestoreTabPage() {
   const router = useRouter();
   const at = useRouterState({ select: (state) => state.location });
-  const explicit = new Set(new URLSearchParams(at.searchStr).keys());
   const memory =
-    "__pePageMove" in at.state || "__peRouteTab" in at.state ? undefined : tabPageSearch(at.pathname);
-  const search =
-    restorePageSearch(
-      // Memory is codec text; navigate takes parsed values, so it crosses the router's own parser.
-      // Raw text here would be JSON-stringified again (`{..}` -> `"{..}"`) and refused by its codec.
-      memory &&
-        router.options.parseSearch(`?${new URLSearchParams(memory as Record<string, string>)}`),
-      Object.fromEntries(Object.entries(at.search).filter(([key]) => explicit.has(key))),
-    ) ?? {};
-  const restoring = Object.keys(search).some((key) => !(key in at.search));
+    "__pePageMove" in at.state || "__peRouteTab" in at.state
+      ? undefined
+      : tabPageSearch(at.pathname);
+  // Memory is codec text: it fills only the keys the URL leaves out, and an explicit value wins.
+  const missing = Object.entries(memory ?? {}).filter(([key]) => !rawQuery(router).has(key));
   useEffect(() => {
-    if (restoring)
-      void router.navigate({
-        to: at.pathname,
-        search,
-        replace: true,
-        ignoreBlocker: true,
-      } as never);
-  }, [restoring, at.href]);
+    if (!missing.length) return;
+    const query = rawQuery(router);
+    for (const [key, value] of missing) query.set(key, String(value));
+    void commitAddress(router, at.pathname, query, { replace: true, ignoreBlocker: true });
+  }, [missing.length > 0, at.href]);
 }
