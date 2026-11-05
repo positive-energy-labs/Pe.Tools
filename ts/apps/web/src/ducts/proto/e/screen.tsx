@@ -1,6 +1,8 @@
 import { useRouteSearchSlice } from "#/route/activity";
 import { fansLink } from "../../../fans/neutral.ts";
 import { AttentionRoot,useHoveredIssue } from "#/attention";
+import { PointerCite } from "#/shell/pointer-list";
+import { pointerRefs } from "../../pointer-refs";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { NativeObservationScope,type NativeObservation } from "#/revit/observation";
@@ -305,6 +307,10 @@ function NetworkFrame({
     >
       <NativeObservationScope value={data.observation}>
         <AttentionRoot doc={data.attentionDoc}>
+          <PointerCite
+            route="ducts"
+            refs={(place) => pointerRefs(place, data.snapshot, data.attentionDoc, (id) => nameOf(id))}
+          />
           <SubjectTextContext.Provider
             value={{
               doc: data.attentionDoc,

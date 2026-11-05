@@ -1,5 +1,7 @@
-import { useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useSyncExternalStore } from "react";
+import { RegistryContext } from "@effect/atom-react";
 import { Button } from "@pe/kit/lang/button";
+import { cite, clearCitation, type SubjectReference } from "@pe/kit/lang/attention";
 import type { Pointer } from "../../../../packages/agent-contracts/src/pointers.ts";
 import { WorkbenchContext } from "#/workbench/provider/thread-summary";
 import { callOp } from "./readings-api";
@@ -12,25 +14,91 @@ const POLL_MS = 2000;
  * Reads and dismisses through the same host-local ops Pea calls; it never writes the page's
  * selection, attention fields, URL or camera.
  */
-export function PointerList({ route }: { route: string }) {
-  const thread = useContext(WorkbenchContext)?.currentThreadId ?? "";
-  const [pointers, setPointers] = useState<readonly Pointer[]>([]);
-  useEffect(() => {
-    if (!thread) return setPointers([]);
+/*
+ * One read of the host's list per thread, shared by the chrome list and every body's highlight so a
+ * dismissal clears both at once. The host thread meta stays the only owner; this is its last answer.
+ */
+const reads = new Map<string, { pointers: readonly Pointer[]; listeners: Set<() => void>; stop: () => void }>();
+const EMPTY: readonly Pointer[] = [];
+function publish(thread: string, pointers: readonly Pointer[]) {
+  const read = reads.get(thread);
+  if (!read) return;
+  read.pointers = pointers;
+  read.listeners.forEach((notify) => notify());
+}
+function subscribe(thread: string, notify: () => void) {
+  let read = reads.get(thread);
+  if (!read) {
     const control = new AbortController();
-    const read = () =>
+    const fetch = () =>
       void callOp({ signal: control.signal }, "pointers.list", { thread }).then(
-        (list) => setPointers(list.pointers),
+        (list) => publish(thread, list.pointers),
         () => {},
       );
-    read();
-    const timer = setInterval(read, POLL_MS);
-    return () => {
-      control.abort();
-      clearInterval(timer);
-    };
-  }, [thread]);
-  const here = pointers.filter((pointer) => pointer.route === route);
+    const timer = setInterval(fetch, POLL_MS);
+    read = { pointers: EMPTY, listeners: new Set(), stop: () => (control.abort(), clearInterval(timer)) };
+    reads.set(thread, read);
+    fetch();
+  }
+  read.listeners.add(notify);
+  return () => {
+    read.listeners.delete(notify);
+    if (read.listeners.size) return;
+    read.stop();
+    reads.delete(thread);
+  };
+}
+/** This thread's pointers on `route`, read through the host-local op Pea writes with. */
+function usePointers(route: string) {
+  const thread = useContext(WorkbenchContext)?.currentThreadId ?? "";
+  const listen = useCallback(
+    (notify: () => void) => (thread ? subscribe(thread, notify) : () => {}),
+    [thread],
+  );
+  const all = useSyncExternalStore(listen, () => reads.get(thread)?.pointers ?? EMPTY);
+  return {
+    thread,
+    pointers: all.filter((p) => p.route === route),
+    setPointers: (pointers: readonly Pointer[]) => publish(thread, pointers),
+  };
+}
+
+/**
+ * The highlight, mounted INSIDE the route's AttentionRoot: the route maps each pointer's place to
+ * its own refs and this cites them (focus null). It writes only the citation atom, never selection,
+ * the URL or the camera; dismissal, a thread change or unmount clears it.
+ */
+export function PointerCite({
+  route,
+  refs,
+}: {
+  route: string;
+  refs: (place: Pointer["place"]) => readonly SubjectReference[];
+}) {
+  const registry = useContext(RegistryContext);
+  const { pointers } = usePointers(route);
+  const owner = `pointers:${route}`;
+  const cited = pointers.flatMap((pointer) => {
+    try {
+      return refs(pointer.place);
+    } catch {
+      return []; // A place that does not read as this route's codec text highlights nothing.
+    }
+  });
+  const key = JSON.stringify(cited.map((ref) => [ref.doc, ref.key]));
+  useEffect(() => {
+    if (cited.length)
+      cite(registry, { owner, focus: null, refs: cited.map((ref, i) => ({ ...ref, number: i + 1 })) });
+    else clearCitation(registry, owner);
+    return () => clearCitation(registry, owner);
+    // `key` is the cited refs' identity; the array itself is rebuilt every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registry, owner, key]);
+  return null;
+}
+
+export function PointerList({ route }: { route: string }) {
+  const { thread, pointers: here, setPointers } = usePointers(route);
   if (!here.length) return null;
   return (
     <ul aria-label="Pea is pointing at" data-slot="pointers" className="m-0 flex list-none gap-2 p-0">

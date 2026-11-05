@@ -5,6 +5,8 @@ import { ChoiceCell } from "./choice-cell.tsx";
 import { Button } from "@pe/kit/lang/button";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
 import { AttentionRoot } from "#/attention";
+import { PointerCite } from "#/shell/pointer-list";
+import { pointerRefs } from "../pointer-refs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
 import { NativeObservationScope } from "#/revit/observation";
 import { useRouteSearchSlice } from "#/route/activity";
@@ -497,6 +499,12 @@ function SheetFrame({
       : ctx.page.select([{ kind: "focus", id: localId("ducts-focus", String(id)) }]);
   return (
     <AttentionRoot doc={attentionDoc}>
+      {"kind" in snapshot ? null : (
+        <PointerCite
+          route="fans"
+          refs={(place) => pointerRefs(place, snapshot, attentionDoc, (id) => nameOf(id))}
+        />
+      )}
       <SubjectTextContext.Provider value={{ doc: attentionDoc, nameOf, go, refProps }}>
         <NativeObservationScope
           value={{
