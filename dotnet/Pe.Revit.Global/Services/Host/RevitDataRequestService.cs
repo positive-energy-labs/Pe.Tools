@@ -148,7 +148,7 @@ internal sealed class RevitDataRequestService {
     private static DuctHealResult HealDuctsCore(DuctHealRequest request, ProjectDocument activeDocument) =>
         HealDucts(request, activeDocument, false);
 
-    [Op("ducts.heal.preview", OpSubject.Elements, OpTouches.Geometry, OpEffect.TransactRead, RollsBack = true, UsesTransactions = true, Does = "Run every ducts.heal group inside one transaction group and roll all of it back. Same request and result as ducts.heal; nothing is committed.", Title = "Preview Duct Heal", Finds = ["ducts", "heal", "preview"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("ducts.heal.preview", OpSubject.Elements, OpTouches.Geometry, OpEffect.TransactRead, RollsBack = true, UsesTransactions = true, Does = "Run every ducts.heal group inside one transaction group and roll all of it back. Refuses a workshared model before any transaction, naming the elements it could borrow. Same request and result as ducts.heal; nothing is committed.", Title = "Preview Duct Heal", Finds = ["ducts", "heal", "preview"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static DuctHealResult PreviewHealDuctsCore(DuctHealRequest request, ProjectDocument activeDocument) =>
         HealDucts(request, activeDocument, true);
 
@@ -159,6 +159,11 @@ internal sealed class RevitDataRequestService {
                 "The active project document is read-only.",
                 [BridgeOperationExceptions.Issue("$", "DuctsDocumentReadOnly", "The active project document is read-only.",
                     "Open a writable project document and retry.")]);
+        if (preview)
+            RefuseWorksharedRehearsal(document, request.Groups.SelectMany(g => g.Items)
+                .SelectMany(i => new[] { i.End, i.Other })
+                .Select(key => long.TryParse(key?.Split(':')[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) ? id : (long?)null)
+                .OfType<long>());
         try {
             return Lib.Mep.DuctHealer.Heal(document, request, preview);
         } catch (BridgeOperationException) {
@@ -169,11 +174,26 @@ internal sealed class RevitDataRequestService {
         }
     }
 
+    /// <summary>
+    ///     ADR 0030 rule 5: a rehearsal opens transactions, and on a workshared model any transaction may borrow
+    ///     what it touches; rolling back keeps the borrow. Refuse before any transaction, naming the elements,
+    ///     instead of rehearsing then relinquishing. Plans (Reads) stay available on workshared models.
+    /// </summary>
+    // ponytail: refuses every workshared rehearsal, even when the named elements are already owned, because Revit
+    // regenerates neighbours and systems the request does not name; narrow when the healer discloses its full footprint.
+    private static void RefuseWorksharedRehearsal(Autodesk.Revit.DB.Document document, IEnumerable<long> ids) {
+        if (Lib.WorksharingDisclosures.Disclose(document, ids) is not { } disclosed) return;
+        var named = string.Join(", ", disclosed.Elements.Select(e => $"{e.Id} {e.Name} ({e.Status})"));
+        var message = $"Rehearsal refused on a workshared model: it could borrow {named}. Plan instead; nothing was opened.";
+        throw BridgeOperationExceptions.Conflict(message,
+            [BridgeOperationExceptions.Issue("$", "DuctsRehearsalWouldBorrow", message, "Plan the write, or rehearse on a non-workshared copy.")]);
+    }
+
     [Op("ducts.assign-fan", OpSubject.System, OpTouches.Topology, OpEffect.ModelWrite, Internal = true, Does = "Make a unit the base equipment of a duct system (Revit's Duct Systems > Select Equipment), keeping the system's id, name, type and parameters. Refuses a system that already has base equipment (a swap drops the old base from the members and Revit does not restore it), anything that is not mechanical equipment, and a unit with no port of the system's air classification that is a member of the system or joined to its ducts (Revit itself checks neither). Reads back that the base equipment is the unit and the name, type and classification are unchanged, else refuses and rolls back. ducts.assign-fan.preview runs the write and the read back and rolls them back. Returns the outcome and the system before and after (read ducts.snapshot again: systems[].baseEquipmentId).", Title = "Assign Duct System Fan", Finds = ["ducts", "fan", "base-equipment", "system", "select-equipment", "unit", "mutation"], Intent = OpIntent.Mutate, Actor = OpActor.Any, Cost = OpCost.Mutation, Example = "{ \"systemId\": 6103113, \"unitId\": 9668311 }")]
     private static DuctAssignFanResult AssignDuctFanCore(DuctAssignFanRequest request, ProjectDocument activeDocument) =>
         AssignDuctFan(request, activeDocument, false);
 
-    [Op("ducts.assign-fan.preview", OpSubject.System, OpTouches.Topology, OpEffect.TransactRead, RollsBack = true, UsesTransactions = true, Does = "Run the ducts.assign-fan write and its read back inside one transaction group and roll both back. Same request and result as ducts.assign-fan; nothing is committed.", Title = "Preview Duct System Fan", Finds = ["ducts", "fan", "preview"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("ducts.assign-fan.preview", OpSubject.System, OpTouches.Topology, OpEffect.TransactRead, RollsBack = true, UsesTransactions = true, Does = "Run the ducts.assign-fan write and its read back inside one transaction group and roll both back. Refuses a workshared model before any transaction, naming the elements it could borrow. Same request and result as ducts.assign-fan; nothing is committed.", Title = "Preview Duct System Fan", Finds = ["ducts", "fan", "preview"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static DuctAssignFanResult PreviewAssignDuctFanCore(DuctAssignFanRequest request, ProjectDocument activeDocument) =>
         AssignDuctFan(request, activeDocument, true);
 
@@ -184,6 +204,7 @@ internal sealed class RevitDataRequestService {
                 "The active project document is read-only.",
                 [BridgeOperationExceptions.Issue("$", "DuctsDocumentReadOnly", "The active project document is read-only.",
                     "Open a writable project document and retry.")]);
+        if (preview) RefuseWorksharedRehearsal(document, [request.SystemId, request.UnitId]);
         try {
             return Lib.Mep.DuctFanAssigner.Assign(document, request, preview);
         } catch (BridgeOperationException) {

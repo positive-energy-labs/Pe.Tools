@@ -517,6 +517,25 @@
       "ready": "sheetReady",
       "patches": "sheetEdit",
       "describe": "describeSheet"
+    },
+    "ductsEdit": {
+      "kind": "work",
+      "input": "ductsEdit",
+      "label": "Edit duct rules",
+      "review": "none",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": [
+          "sheet",
+          "ductsWork"
+        ]
+      },
+      "captures": [],
+      "ready": "ductsReady",
+      "patches": "ductsEdit",
+      "describe": "describeDucts",
+      "target": "ductsWork"
     }
   },
   "panes": {
@@ -535,7 +554,8 @@
         "browse",
         "edit",
         "scope",
-        "sheetEdit"
+        "sheetEdit",
+        "ductsEdit"
       ],
       "body": "sheet-inputs"
     },
@@ -554,7 +574,8 @@
         "browse",
         "edit",
         "scope",
-        "sheetEdit"
+        "sheetEdit",
+        "ductsEdit"
       ],
       "body": "sheet-ledger"
     },
@@ -573,7 +594,8 @@
         "browse",
         "edit",
         "scope",
-        "sheetEdit"
+        "sheetEdit",
+        "ductsEdit"
       ],
       "body": "sheet-picture"
     },
@@ -592,7 +614,8 @@
         "browse",
         "edit",
         "scope",
-        "sheetEdit"
+        "sheetEdit",
+        "ductsEdit"
       ],
       "body": "sheet-roster"
     }
