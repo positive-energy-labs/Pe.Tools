@@ -83,17 +83,23 @@ export function admittedWork(route: AdmittedRoute): DiscoveredWork | undefined {
   }
 }
 
-/** Admitted registrations win a cutover; legacy entries remain discoverable until ported. */
-export function createRouteDiscovery(
-  admitted: () => readonly DiscoveredRoute[],
-  legacy = legacyRouteDiscovery,
-) {
+/** An authenticated admitted handle, builtin or trusted Pod: one registration feeds mount and discovery. */
+export type RegisteredRoute = DiscoveredRoute & { admitted: AdmittedRoute };
+
+/**
+ * The one route registration projection. Builtins and trusted Pods register the same way; trust stays
+ * the admission authority (a Pod handle exists only after artifact admission). Admitted registrations
+ * win a cutover; legacy entries remain discoverable until ported.
+ */
+export function createRouteDiscovery(legacy = legacyRouteDiscovery) {
   const listeners = new Set<() => void>();
   let revision = 0;
   const changed = () => {
     revision++;
     for (const listener of listeners) listener();
   };
+  const registry = createAdmittedRouteRegistry();
+  const registered = new Map<string, RegisteredRoute>();
   const entries = (): DiscoveredRoute[] => {
     const next = new Map(
       legacy
@@ -103,11 +109,34 @@ export function createRouteDiscovery(
           { ...entry, work: legacyWork(entry.graph) } as DiscoveredRoute,
         ]),
     );
-    for (const entry of admitted()) next.set(entry.manifest.key, entry);
+    for (const entry of registered.values()) next.set(entry.manifest.key, entry);
     return [...next.values()];
   };
   return Object.freeze({
-    changed,
+    /** Withdraw returns only this exact handle; a retired handle cannot register again. */
+    register(entry: RegisteredRoute): () => void {
+      const key = entry.manifest.key;
+      if (registered.has(key)) throw Error(`Route ${key} already registered`);
+      const receipt = registry.register(entry.admitted);
+      registered.set(key, entry);
+      changed();
+      let active = true;
+      return () => {
+        if (!active) return;
+        active = false;
+        if (registered.get(key) === entry) registered.delete(key);
+        receipt.deactivate();
+        changed();
+      };
+    },
+    /** The registered handle, resolved through its live receipt; null once withdrawn. */
+    admitted: (key: string): AdmittedRoute | null => {
+      const entry = registered.get(key);
+      return entry ? registry.resolve(entry.admitted) : null;
+    },
+    /** The route whose authenticated declaration owns this address. */
+    byAddress: (address: string) =>
+      [...registered.values()].find((entry) => entry.admitted.data.address === address),
     subscribe(listener: () => void) {
       listeners.add(listener);
       const stop = legacy.subscribe(listener);
@@ -128,3 +157,9 @@ export function createRouteDiscovery(
     },
   });
 }
+
+/**
+ * The app's one registration projection. It lives here, apart from the builtin inventory, so a route
+ * graph's import tree (navigation reads it) never pulls in builtin closures.
+ */
+export const publicRoutes = createRouteDiscovery();

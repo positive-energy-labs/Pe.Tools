@@ -1,4 +1,5 @@
-import { createRouteDiscovery, admittedWork, type DiscoveredRoute } from "./route-discovery";
+import { admittedWork, publicRoutes } from "./route-discovery";
+import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import { builtinRouteKeys, builtinRouteStamp, loadBuiltinRoute } from "./builtin-inventory";
 import { sessionsGraph } from "#/sessions/graph";
 import { lazy, type ComponentType } from "react";
@@ -30,20 +31,20 @@ const FamilyRoute = lazy(async () => ({
 const SettingsRoute = lazy(async () => ({
   default: mountRoute(settingsGraph, (await import("#/settings/route")).settingsAdapters),
 }));
-const admitted = new Map<string, DiscoveredRoute>();
-export const publicRoutes = createRouteDiscovery(() => [...admitted.values()]);
+export { publicRoutes };
+/** Register an admitted handle (builtin, or a trusted Pod after artifact admission) for mount and discovery. */
+export const registerRoute = (route: AdmittedRoute) =>
+  publicRoutes.register({
+    manifest: route.data,
+    admitted: route,
+    work: admittedWork(route),
+    hosted: (props) => <HostedAdmittedRoute route={route} {...props} />,
+  });
 export const publicRoutesReady = Promise.all(
   builtinRouteKeys.map(async (key) => {
     const result = await loadBuiltinRoute(key, builtinRouteStamp(key));
     if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
-    const route = result.route;
-    admitted.set(key, {
-      manifest: route.data,
-      admitted: route,
-      work: admittedWork(route),
-      hosted: (props) => <HostedAdmittedRoute route={route} {...props} />,
-    });
-    publicRoutes.changed();
+    registerRoute(result.route);
   }),
 );
 void publicRoutesReady.catch((error) => console.error("Builtin discovery refused", error));
