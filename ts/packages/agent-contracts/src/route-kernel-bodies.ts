@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { z } from "zod";
 import type { CatalogAxes } from "./catalog.ts";
 import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
 import type {
@@ -18,6 +18,35 @@ import type { RouteStateSpec } from "./route-state.ts";
 import type { WorkSchema } from "./route-kernel-page.ts";
 import type { ExecutionTarget } from "./target.ts";
 import type { JournalSubmission, Observation, WorkWriteOutcome } from "./work-journal-door.ts";
+
+/**
+ * One consumed value a write changes (ADR 0030 rules 6 and 8). `before` is what the model holds
+ * now, null when no source names it (drawn as unknown, never guessed); `after` is the sealed plan's
+ * value; `author` is the Work cell's stamped author, "unknown" when Work does not carry the value.
+ */
+export const presentCellSchema = z.strictObject({
+  key: z.string(),
+  label: z.string(),
+  before: z.string().nullable(),
+  after: z.string(),
+  author: z.enum(["pea", "human", "unknown"]),
+});
+export type PresentCell = z.output<typeof presentCellSchema>;
+export const presentationSchema = z.union([
+  z.string(),
+  z.strictObject({
+    sentence: z.string(),
+    rows: z.array(z.string()),
+    cells: z.array(presentCellSchema).optional(),
+  }),
+]);
+type Presentation =
+  | string
+  | {
+      readonly sentence: string;
+      readonly rows: readonly string[];
+      readonly cells?: readonly PresentCell[];
+    };
 
 /** Projection of the linked catalog, never a route-authored replacement for its axes. */
 export interface EntryContract {
@@ -418,7 +447,7 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
             | Output<E, `${Extract<At<G["verbs"][K], "entry">, string>}.preview`>
             | Output<E, At<G["verbs"][K], "entry">>,
           evidence: Immutable<BodyContext<G, S, E, G["verbs"][K]>>,
-        ) => string | { readonly sentence: string; readonly rows: readonly string[] }
+        ) => Presentation
       >;
 }[keyof G["verbs"] & string];
 type PaneSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, Render> = {
@@ -565,7 +594,7 @@ export type BodySlots<
       (
         result: WorkPatches<G, S>,
         evidence: Immutable<BodyContext<G, S, E, { deps: At<G, "salvageDeps"> }>>,
-      ) => string | { readonly sentence: string; readonly rows: readonly string[] }
+      ) => Presentation
     >
   | Slot<
       At<G, "salvage">,

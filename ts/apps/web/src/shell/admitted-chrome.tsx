@@ -25,7 +25,7 @@ import {
 } from "../navigation/route-controls";
 import { SituationBand, TimelineHead } from "./situation-band";
 import { ReviewSurface } from "./review-surface";
-import { WriteAction, writeWord, type WriteRun } from "@pe/kit/lang/write-action";
+import { WriteAction, writeWord, type WriteCell, type WriteRun } from "@pe/kit/lang/write-action";
 import { writeResponseSchema } from "@pe/agent-contracts";
 import { harnessClient } from "#/workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "#/workbench/config";
@@ -251,14 +251,23 @@ export function writeReject(
 /** What a held plan says: armed only from a sealed Read; any consumed change makes it stale. */
 export function writeHeld(
   label: string,
-  review: { preview?: unknown; sentence: string | null; rows: readonly string[]; stale: boolean } | null,
+  review: {
+    preview?: unknown;
+    sentence: string | null;
+    rows: readonly string[];
+    cells?: readonly WriteCell[];
+    stale: boolean;
+  } | null,
 ) {
   if (!review) return { held: null, stale: null, sealed: false };
   if (review.stale) return { held: null, stale: "changed since plan", sealed: false };
   const sealed = writeResponseSchema.safeParse(review.preview).success;
   return {
     // ponytail: the plan is a Read today; rehearsed=true waits on a declared ducts.rehearse-* receipt.
-    held: { word: writeWord(label, review.rows.length, false), summary: review.sentence ?? "", rows: review.rows },
+    // Cells replace the rows they describe; rows remain for presenters with no cell source.
+    held: review.cells?.length
+      ? { word: writeWord(label, review.cells.length, false), summary: review.sentence ?? "", cells: review.cells }
+      : { word: writeWord(label, review.rows.length, false), summary: review.sentence ?? "", rows: review.rows },
     stale: null,
     sealed,
   };

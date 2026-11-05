@@ -53,11 +53,11 @@ try {
         text.textContent = `Heal RA 37: 2 caps · ${subject}`;
         element.replaceChildren(text);
       }, subject);
-      const button = row.locator('[data-graph-verb="heal-preview"]');
+      const button = row.locator('[data-graph-verb="heal"]');
       await page.waitForFunction(
         () =>
           document
-            .querySelector('[data-key="heal:g6953999"] [data-graph-verb="heal-preview"]')
+            .querySelector('[data-key="heal:g6953999"] [data-graph-verb="heal"]')
             ?.getAttribute("aria-disabled") !== "true",
       );
       assert.equal(await row.getAttribute("aria-expanded"), "false");
@@ -148,7 +148,7 @@ try {
         assert.equal(hit.box.x, rest.x);
         assert.equal(hit.box.y, rest.y);
         assert.equal(actions.length, 1);
-        assert.equal(actions[0].key, "ducts.preview-heal");
+        assert.equal(actions[0].key, "ducts.plan-heal");
         assert.equal(expanded, "false");
         assert(planned.length > 0, "planned text appears after one physical click");
         assert.deepEqual(errors, []);

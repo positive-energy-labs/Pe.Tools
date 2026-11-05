@@ -1183,7 +1183,7 @@ test("a declared History pane renders kernel invocations and checkpoints without
       kind: "invocation",
       at: 1793363026741,
       press: "heal-time",
-      verb: "heal-preview",
+      verb: "heal",
     });
     f.owner().timeline.append({ kind: "receipt", at: 1793363035343, press: "heal-time" });
   });
