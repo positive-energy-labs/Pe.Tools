@@ -1,5 +1,24 @@
 import { z } from "zod";
 import { routeViewRoutes } from "./route-address.ts";
+import type { RouteGraphJson } from "./route-kernel-data.ts";
+
+/**
+ * The one codec a leased view crosses the browser/host boundary with: `write` the owner's Page as
+ * the strings `RouteView.page` carries, `read` Pea's string patch back into the owner's values.
+ * The legacy address's `agent` is one; an admitted route projects one from its graph's agent
+ * fields through `bindings.codecs` (ADR 0030 rule 10). The host never decodes: it fences keys and
+ * strings, and the Page owner's decode is the only decode.
+ */
+export interface ViewCodec {
+  write(page: object): Record<string, string>;
+  read(patch: Record<string, string>): object;
+}
+
+/** An admitted route's attention keys: the fields whose agent policy is not "none" (opt-in). */
+export const agentFields = (fields: RouteGraphJson["fields"], policy?: "read" | "set") =>
+  Object.entries(fields).filter(
+    ([, field]) => "agent" in field && field.agent !== "none" && (!policy || field.agent === policy),
+  );
 
 /** Browser-owned Page state of one mounted, visible view. `page` holds exactly the agent keys. */
 export const routeViewSchema = z.strictObject({

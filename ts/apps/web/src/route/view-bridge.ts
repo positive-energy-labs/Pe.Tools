@@ -12,6 +12,7 @@ import {
   type RoutePage,
   type RouteView,
   type RouteViewRoute,
+  type ViewCodec,
 } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { reportFault } from "#/host/diagnostics";
@@ -51,6 +52,8 @@ export function useRouteLease<R extends RouteViewRoute, P extends object>(
     context?: Record<string, unknown>;
     /** What the shown Page derives; Pea reads it, never sets it. */
     facts?: Record<string, unknown>;
+    /** Writes the leased page and reads Pea's patch; omitted, the legacy address's `agent` lease. */
+    codec?: ViewCodec;
   } = {},
 ) {
   const url = shown.url ?? true;
@@ -64,6 +67,7 @@ export function useRouteLease<R extends RouteViewRoute, P extends object>(
     apply: (patch) => setPage(patch as Partial<P>, { history: "push" }),
     context: shown.context ?? {},
     facts: shown.facts ?? {},
+    codec: shown.codec,
   });
 }
 
@@ -76,6 +80,7 @@ function useRouteViewBridge<R extends RouteViewRoute>({
   apply,
   context,
   facts,
+  codec,
 }: {
   route: R;
   thread?: string;
@@ -90,6 +95,7 @@ function useRouteViewBridge<R extends RouteViewRoute>({
   context: Record<string, unknown>;
   /** What the shown Page derives; the ack echoes it. */
   facts: Record<string, unknown>;
+  codec?: ViewCodec;
 }) {
   const routeCurrent = useRouteCurrent();
   const instance = useRef(crypto.randomUUID());
@@ -113,7 +119,7 @@ function useRouteViewBridge<R extends RouteViewRoute>({
     return () => document.removeEventListener("visibilitychange", changed);
   }, []);
   // A generic R defers the address's lease type, so the lease is taken over every leasing route.
-  const lease = routeAddress<RouteViewRoute>(route).agent;
+  const lease: ViewCodec = codec ?? routeAddress<RouteViewRoute>(route).agent;
   // The explicit Pea open this rendered Place answers (page-local history, set by the Places'
   // route-view-open listener); MCP waits for its own id, so an older lease never satisfies it.
   // Read at render: the navigation that sets it re-renders this route; a chat pane has no router.
@@ -245,11 +251,10 @@ function useRouteViewBridge<R extends RouteViewRoute>({
           .catch((cause) =>
             reportFault({ code: "host.failed", routeCode: route, streamKind: "view.ack" }, cause),
           );
-      const agent = routeAddress(value.route).agent;
       let patch: Partial<RoutePage<R>>;
       try {
-        // `value` is the view this hook published, so its route is R; `RouteView` carries any route.
-        patch = agent.read(event.patch) as Partial<RoutePage<R>>;
+        // `value` is the view this hook published, so its codec is this lease's.
+        patch = lease.read(event.patch) as Partial<RoutePage<R>>;
       } catch (cause) {
         return refused(refuse("failed", causeRefusal(cause).message));
       }
@@ -257,12 +262,12 @@ function useRouteViewBridge<R extends RouteViewRoute>({
       if (!result.ok) return refused(result.refusal);
       // No move: only a page that already holds the patch may acknowledge it (against the unchanged
       // snapshot); otherwise the Page did nothing Pea asked for, and says so.
-      const wanted = agent.write(patch);
+      const wanted = lease.write(patch);
       if (!result.moved && Object.keys(event.patch).some((key) => value.page[key] !== wanted[key]))
         return refused(refuse("conflict", "The Page made no move for this patch"));
       setIntent({ event, receipt: result.receipt, context: JSON.stringify(value.context) });
     },
-    [routeCurrent],
+    [routeCurrent, lease],
   );
   const onEvent = useCallback(
     (event: Intent) => {
