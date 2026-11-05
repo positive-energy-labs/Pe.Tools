@@ -4,7 +4,7 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
-- 2026-11-05, kaitpw (Governor GAUGES): Step 8 migrates `/chat` first (stable; no feature loss), then `/pods` and `/settings` as kernel projections (Pods' schema and form remain unstable), then `/family` preserving the doc-lab flow where Pea proposes with a visible citation even though it is untested, then `/rooms`.
+- 2026-11-05, kaitpw (Governor GAUGES): Step 8 migrates `/chat` first (stable; no feature loss), then `/pods` and `/settings` as kernel projections (Pods' schema and form remain unstable), then `/family` preserving the doc-lab flow where Pea proposes with a visible citation even though it is untested, then `/rooms`; `/family` acceptance uses a real PDF and real cells, with no mock witness, through the [five Driver cases](MAP.md#step-8-family-acceptance).
 
 - 2026-11-05, kaitpw (K4): automatic recording must not fail a live read. On capture full or I/O failure, stop capturing, mark coverage truncated at the failed taking, and preserve the actual live answer or original failure. Bounds still refuse further recording; historical misses never fall through to live. The required falsifier uses `maxTakings: 1` and proves that the second live read answers. Dev sessions run with capture off, so their Driver pass cannot prove this path.
 

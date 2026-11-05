@@ -42,6 +42,16 @@ Progress 2026-11-05: steps 0–5 landed on main at the Driver's exact GREEN SHA 
 7. Recording (ADR 0031 step order): services first, then the recording source behind a Lane union, then epochs and the History rail, then keyed diff, then recompute, then cloud.
 8. Migrate legacy routes in kaitpw's 2026-11-05 order: `/chat` (stable; no feature loss), then `/pods`, then `/settings` (kernel projections; Pods' schema and form are unstable), then `/family` (keep the untested doc-lab flow where Pea proposes with a visible citation), then `/rooms` ([ruling](LEDGER.md#decided)). The Manual D Load Driver proves each route in the browser on its controlled Chadds copy. Driver green, with no objection from kaitpw, gates a fast-forward merge to main. Test-, support- or ledger-only fast-forwards skip the Driver gate if they touch no production file and carry a deterministic stamp at their SHA. A driveable step starts the next step while that merge waits; from step 6 the Driver includes chaos runs.
 
+### Step 8 /family acceptance
+
+kaitpw, 2026-11-05: the Driver uses a real PDF and real cells on `/family`; no mock witness counts. Preserve the doc-lab flow ([ledger](LEDGER.md#decided)); source census: `purge/step-0/DOCLAB-CENSUS.md` at `23867de7`.
+
+1. Pea proposes a value with a citation to a page, block or image region; hovering the citation lights that evidence.
+2. Pin keeps the proposed value and citation through review.
+3. `attach_spec` accepts a path, a URL and an upload.
+4. A saved member reopens without reparsing the PDF.
+5. Accept and Reject sit beside the highlighted evidence and act on the proposed value.
+
 Kit has one owner thread per wave; route threads add red `kernel gap:` tests, never local kit patches. Merge main daily.
 
 ## Phase 1a checkpoint (2026-11-02)
