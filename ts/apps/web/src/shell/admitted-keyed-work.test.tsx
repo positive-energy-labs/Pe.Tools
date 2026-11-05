@@ -1,4 +1,5 @@
 import { placeInput } from "./admitted-place.test-fixture";
+import { acceptedWork } from "./admitted-work.test-support";
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
@@ -109,7 +110,7 @@ async function fixture(connected = false) {
   });
   const admitted = (await inventory.prepare("witness", fingerprint)).admitUnknown(module);
   if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
-  const store = createFixtureWorkDoor(spec, seed());
+  const store = createFixtureWorkDoor({ ...spec, route: key }, seed());
   const reconcile = vi.fn(spec.reconcileEdit);
   const persisted = new Map<string, unknown>();
   const host = new RouteWorkspace({
@@ -144,6 +145,7 @@ async function fixture(connected = false) {
     }),
   );
   stops.push(mount.close);
+  await acceptedWork(mount);
   const edit = (patches: unknown, basis = mount.workBasis()!) =>
     settle(mount.invoke("edit", patches, basis) as Observation<WorkWriteOutcome>);
   return { mount, door, edit, module, reconcile };

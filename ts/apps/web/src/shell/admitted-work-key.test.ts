@@ -1,4 +1,5 @@
 import { placeInput } from "./admitted-place.test-fixture";
+import { acceptedWork } from "./admitted-work.test-support";
 import { expect, test } from "vite-plus/test";
 import {
   builtinData,
@@ -115,6 +116,7 @@ test("decoded subject opens existing host Work and never opens an encoded worksp
     }),
   );
   try {
+    await acceptedWork(mount);
     expect(mount.work()).toEqual({ revision: 1, value: { amount: 41, note: "" } });
     expect(opened.length).toBeGreaterThan(0);
     expect(
