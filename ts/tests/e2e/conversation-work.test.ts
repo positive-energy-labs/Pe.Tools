@@ -329,7 +329,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
     };
     await step("standalone tool creates no conversation and remembers its own Place", async () => {
       const before = network.length;
-      await p.open(url(`${seed.workUrl}&system=${encodeURIComponent(seed.retainedPage)}`));
+      await p.open(url(`${seed.workUrl}&contextRadiusFt=${encodeURIComponent(seed.retainedPage)}`));
       await p.send("Page.bringToFront");
       await p.until(
         async () => network.some((event) => event.build === head.slice(0, 12)),
@@ -420,7 +420,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         "Work tool opens in current conversation",
       );
       expect(new URL(await p.url()).searchParams.get("thread")).toBe(CONVERSATION_THREADS.empty);
-      expect(new URL(await p.url()).searchParams.get("system")).toBe(seed.retainedPage);
+      expect(new URL(await p.url()).searchParams.get("contextRadiusFt")).toBe(seed.retainedPage);
       expect(await p.read("history.state.__peRouteTab.id")).toBe(browserPlaceId);
       await headTargets(CONVERSATION_THREADS.empty);
       await pickThreadKeepingTool(CONVERSATION_THREADS.empty);
@@ -484,7 +484,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         historyState,
       };
       expect(
-        new URL(await p.url()).searchParams.get("system"),
+        new URL(await p.url()).searchParams.get("contextRadiusFt"),
         "Work press restores the saved Place's nondefault Page",
       ).toBe(seed.retainedPage);
       expect(historyState.__peRouteTab?.id, "Work press preserves the exact saved Place id").toBe(
@@ -702,7 +702,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
         return null;
       }, "pasted route acquires its actual retained Work through SSE");
       await headTargets();
-      expect(new URL(await p.url()).searchParams.get("system")).toBeNull();
+      expect(new URL(await p.url()).searchParams.get("contextRadiusFt")).toBeNull();
       expect(
         await p.read<string[]>(
           `[...document.querySelectorAll('[data-pane-id="tools"] button[data-tone="commit"], [data-pane-id="tools"] button[data-kind="commit"]')].filter(${visible}).filter(e => !e.disabled && e.getAttribute('aria-disabled') !== 'true' && !e.hasAttribute('data-disabled')).map(e => e.getAttribute('aria-label') || e.textContent)`,

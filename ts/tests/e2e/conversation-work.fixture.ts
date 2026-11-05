@@ -121,10 +121,10 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
   );
   const at = "2026-10-24T00:00:00.000Z";
   const workUrl = `/fans?target=${encodeURIComponent(OFFICE_ADDRESS)}`;
-  const retainedPage = "Office retained page";
+  const retainedPage = "15";
   const placeId = "cac00000-0000-4000-8000-000000000011";
   // Real older Places carry only an exact open ref; the Work producer carries no `from`.
-  const placeUrl = `/fans?target=${encodeURIComponent(JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }))}&system=${encodeURIComponent(retainedPage)}`;
+  const placeUrl = `/fans?target=${encodeURIComponent(JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }))}&contextRadiusFt=${encodeURIComponent(retainedPage)}`;
   const unsavedUrl = `/fans?target=${encodeURIComponent(JSON.stringify({ kind: "open", ref: UNSAVED_REF }))}`;
   for (const [kind, id] of Object.entries(CONVERSATION_THREADS)) {
     const office = kind === "office";
