@@ -217,6 +217,24 @@ test.each(["reject", "deadline"] as const)(
 );
 
 
+test("a Plan the native Read refuses settles refused, dispatched and without model writes", async () => {
+  const f = await fixture();
+  const work = await stage(f);
+  f.planRefusal.reason = "Shared type 'Grille 24x24' is used outside this scope";
+  await command(f, "refused-plan", "ducts.plan-losses", work);
+  const receipt = await f.journal.wait("refused-plan");
+  expect(receipt, JSON.stringify(receipt)).toMatchObject({
+    state: "failed",
+    refusal: { kind: "domain", code: "ducts.plan-refused" },
+    outcome: { state: "refused", reason: expect.stringContaining("Shared type") },
+    steps: [{ kind: "native", key: "ducts.apply.plan", effect: "Read", state: "succeeded", dispatchedAt: expect.any(String) }],
+  });
+  expect(receipt).not.toHaveProperty("notDispatched");
+  expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
+  expect(f.native.get(4)).toBe(200);
+  expect((await f.saved.view(f.key, "ducts"))?.revision).toBe(work.revision);
+});
+
 test("a stale Fans revision refuses sealed apply before native dispatch", async () => {
   const f = await fixture();
   const work = await stage(f);

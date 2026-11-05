@@ -6,7 +6,7 @@ import type {
 } from "./command-executor.ts";
 import { CommandRejected, StepFailure, refused } from "./command-executor.ts";
 import { readJournalSnapshot } from "./legacy-action-journal.ts";
-import { validateNativeInput } from "./native-input.ts";
+import { nativeEffect, validateNativeInput } from "./native-input.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
 import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { renameReplacing } from "./rename-retry.ts";
@@ -74,16 +74,25 @@ export type Crossing = {
 
 const messageOf = (error: unknown) =>
   error && typeof error === "object" && "message" in error ? String(error.message) : String(error);
+/** Every step answered without reaching its owner; vacuously true for no steps. */
+const undispatched = (steps: readonly ActionStep[]) =>
+  steps.every(
+    (step) =>
+      !step.dispatchedAt &&
+      (step.state === "failed" || step.state === "cancelled") &&
+      step.notDispatched === true,
+  );
+/** A succeeded step that may have changed something: only the catalog's stamp clears a read. */
+const effected = (step: ActionStep) =>
+  step.state === "succeeded" &&
+  step.kind !== "publication" &&
+  step.effect !== "Read" &&
+  step.effect !== "TransactRead";
 const holdsClaims = (row: ActionReceipt) =>
   !(
     (row.state === "failed" || row.state === "cancelled") &&
     row.notDispatched === true &&
-    row.steps.every(
-      (step) =>
-        !step.dispatchedAt &&
-        (step.state === "failed" || step.state === "cancelled") &&
-        step.notDispatched === true,
-    )
+    undispatched(row.steps)
   );
 const patchSnapshot = (snapshot: unknown, patch: RouteStatePatch): void => {
   if (!snapshot || typeof snapshot !== "object" || !patch.path.length) return;
@@ -316,7 +325,8 @@ type Settled = { state: Exclude<ActionReceipt["state"], "running" | "waiting"> }
  * - an uncertain step is never hidden: the attempt is unknown and nothing redispatches it;
  * - cancelled is a settled answer, never a rollback claim;
  * - a known succeeded effect is never erased: a later failure makes the attempt incomplete;
- * - with no effect, a failure is failed and not dispatched.
+ * - a succeeded catalog Read is a known outcome, not an effect: a later refusal stays known;
+ * - with no effect, a failure is failed, and not dispatched only when no step reached its owner.
  * `null` means recovery proved nothing new and the attempt keeps its state.
  */
 function settle(
@@ -352,15 +362,7 @@ function settle(
     const { notDispatched: _notDispatched, ...cancelled } = thrown;
     return {
       ...cancelled,
-      ...(thrown.notDispatched &&
-      steps.every(
-        (step) =>
-          !step.dispatchedAt &&
-          (step.state === "failed" || step.state === "cancelled") &&
-          step.notDispatched,
-      )
-        ? { notDispatched: true }
-        : {}),
+      ...(thrown.notDispatched && undispatched(steps) ? { notDispatched: true } : {}),
     };
   }
   if (!prepared)
@@ -378,7 +380,7 @@ function settle(
     return { state: "cancelled", error: cancelled.error, status: cancelled.status };
   const failedStep = [...steps].reverse().find((step) => step.state === "failed");
   const why = reason ?? (failedStep?.state === "failed" ? failedStep : undefined);
-  if (steps.some((step) => step.state === "succeeded" && step.kind !== "publication")) {
+  if (steps.some(effected)) {
     if (!why) return null;
     return {
       state: "incomplete",
@@ -395,15 +397,7 @@ function settle(
     state: "failed",
     error: why.error,
     status: why.status,
-    ...(steps.length === 0 ||
-    steps.every(
-      (step) =>
-        !step.dispatchedAt &&
-        (step.state === "failed" || step.state === "cancelled") &&
-        step.notDispatched === true,
-    )
-      ? { notDispatched: true }
-      : {}),
+    ...(undispatched(steps) ? { notDispatched: true } : {}),
     ...(thrown && "nativeOutcome" in thrown && thrown.nativeOutcome
       ? { nativeOutcome: thrown.nativeOutcome }
       : {}),
@@ -1547,6 +1541,7 @@ export class ActionJournal implements ReceiptReader {
                 : randomUUID(),
             kind,
             key,
+            ...(kind === "native" && nativeEffect(key) ? { effect: nativeEffect(key) } : {}),
             input: structuredClone(input),
             ...(kind === "native" && exactProcess
               ? { process: structuredClone(exactProcess) }
