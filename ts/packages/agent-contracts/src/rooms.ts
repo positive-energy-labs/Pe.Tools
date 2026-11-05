@@ -1,7 +1,7 @@
 import { writeIntentSchema } from "./write-intent.ts";
 /**
  * /rooms Work: the seven room fields plus type on each Room Region, one cell per [guid, field];
- * feedback marks as shared cells with edits and optional suggestions; and notes from either author.
+ * feedback marks as cells with one staged edit each; and notes from either author.
  * Region and op shapes are the generated host catalog's (`@pe/host-contracts/generated`).
  */
 import { z } from "zod";
@@ -49,7 +49,7 @@ export const markSchema = z.strictObject({
 });
 export type Mark = z.infer<typeof markSchema>;
 
-/** A note is not a suggestion: no rungs, writable by Pea and a person, never accepted or denied. */
+/** A note is not a staged cell: no rungs, writable by Pea and a person, never accepted or denied. */
 export const noteSchema = z.strictObject({
   anchor: anchorSchema(1),
   text: z.string(),
@@ -80,15 +80,13 @@ export const roomsDocumentSchema = z
         ctx.addIssue({ code: "custom", path: ["edits", key], message: `no room field '${field}'` });
         continue;
       }
-      for (const rung of ["suggestion", "edit"] as const) {
-        const value = (cell as CellLike)[rung]?.value;
-        if (value !== undefined && !schema.unwrap().safeParse(value).success)
-          ctx.addIssue({
-            code: "custom",
-            path: ["edits", key, rung, "value"],
-            message: `not a ${field} value`,
-          });
-      }
+      const value = (cell as CellLike).edit?.value;
+      if (value !== undefined && !schema.unwrap().safeParse(value).success)
+        ctx.addIssue({
+          code: "custom",
+          path: ["edits", key, "edit", "value"],
+          message: `not a ${field} value`,
+        });
     }
   });
 export type RoomsRouteDocument = z.infer<typeof roomsDocumentSchema>;

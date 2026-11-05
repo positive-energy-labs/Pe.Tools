@@ -954,7 +954,7 @@ async function dispatch(
         if (parsed.route !== familiesRouteState.route || "isError" in result)
           return { ok: !("isError" in result), target: scope.target, result };
         const document = familiesRouteState.schema.safeParse(result.doc).data;
-        const familyScope = document?.scope.edit?.value ?? document?.scope.suggestion?.value;
+        const familyScope = document?.scope.edit?.value;
         if (!familyScope)
           return {
             ok: true,

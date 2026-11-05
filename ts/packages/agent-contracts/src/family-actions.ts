@@ -257,7 +257,7 @@ export const familyActions = {
 } as const;
 export const familyReads = {
   "family.read": {
-    says: "Read the open family's spec into the draft baseline; preserve staged cells and proposals and file no Pod member.",
+    says: "Read the open family's spec into the draft baseline; preserve staged cells and file no Pod member.",
     dirties: [],
     needs: "family-document",
     effect: "query",
@@ -286,8 +286,6 @@ export const familyReads = {
     effect: "query",
     input: z.object({
       evaluate: z.boolean().default(false),
-      /** A proposal evaluation is a labelled preview; only the staged profile can arm apply. */
-      subject: z.enum(["edit", "suggestion"]).default("edit"),
     }),
   },
 } as const satisfies Record<string, Command>;

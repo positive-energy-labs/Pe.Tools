@@ -59,7 +59,7 @@ type WorkSpec<S extends z.ZodType = z.ZodType> = RouteStateSpec<S> & {
 interface WorkSelection<W> {
   /** Concrete cell paths, constrained at runtime by the tool's editable universe. */
   cells?: readonly WorkPath[];
-  /** Freeze edited-cell membership in these declared ranges; suggestions remain unrelated. */
+  /** Freeze staged-cell membership in these declared ranges. */
   edits?: readonly WorkPath[];
   /** Non-cell facts used by this command. The first segment belongs to this Work schema. */
   facts?: readonly (readonly [keyof W & string, ...(string | number)[]])[];

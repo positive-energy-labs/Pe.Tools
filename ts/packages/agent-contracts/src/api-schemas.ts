@@ -20,6 +20,7 @@ export * from "./reading.ts";
 export * from "./machine.ts";
 export * from "./discovery-machine.ts";
 export * from "./draft.ts";
+export * from "./pointers.ts";
 export * from "./family.ts";
 export * from "./grounded-doc.ts";
 export * from "./families.ts";

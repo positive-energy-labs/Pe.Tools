@@ -12,7 +12,7 @@ import {
   takeoffsRouteState,
   type TakeoffsRouteDocument,
 } from "./takeoffs.ts";
-import { transitionPatches } from "./draft.ts";
+import { cellPatches } from "./draft.ts";
 import type { z } from "zod";
 
 const spec = takeoffsRouteState as unknown as RouteStateSpec<z.ZodType>;
@@ -22,40 +22,22 @@ const empty = (): RouteEnvelope<unknown> => ({
   doc: spec.schema.parse({}),
 });
 /** Apply as the actor and return the landed document. */
-function land(doc: unknown, actor: "pea" | "human", patches: ReturnType<typeof transitionPatches>) {
+function land(doc: unknown, actor: "pea" | "human", patches: ReturnType<typeof cellPatches>) {
   const result = applyPatches(spec, { version: 1, revision: 0, doc }, actor, patches, 0);
   expect(result, JSON.stringify(result)).toMatchObject({ ok: true });
   return (result as { envelope: { doc: TakeoffsRouteDocument } }).envelope.doc;
 }
 
 describe("takeoffsRouteState", () => {
-  it("suggestions stay optional and either author can set an executable edit", () => {
+  it("a Pea set is staged at once and either author can overwrite it", () => {
     const room = "room-1";
     const decision = takeoffDecisionKey(room, "seedless");
-    const proposed = land(empty().doc, "pea", [
-      ...transitionPatches(
-        ["decisions"],
-        decision,
-        {},
-        { kind: "suggest", rung: { value: "dismiss" } },
-      ),
-      ...transitionPatches(
-        ["adopt"],
-        "v:1",
-        {},
-        { kind: "suggest", rung: { value: { checked: true } } },
-      ),
-    ]);
-    expect(stagedDecisions(proposed)).toEqual({});
-    expect(
-      applyPatches(
-        spec,
-        { ...empty(), doc: proposed },
-        "pea",
-        transitionPatches(["decisions"], decision, {}, { kind: "set", rung: { value: "dismiss" } }),
-        0,
-      ),
-    ).toMatchObject({ ok: true });
+    const proposed = land(
+      empty().doc,
+      "pea",
+      cellPatches(["decisions"], decision, {}, { kind: "set", rung: { value: "dismiss" } }),
+    );
+    expect(Object.keys(stagedDecisions(proposed))).toEqual([decision]);
     // A changed field becomes an edit; an unchanged field creates no edit.
     const edited = land(
       proposed,
@@ -87,24 +69,24 @@ describe("takeoffsRouteState", () => {
     ).toMatchObject({ ok: false });
   });
 
-  it("discard clears room edits and preserves optional suggestions", () => {
+  it("discard clears every staged room edit, whoever wrote it", () => {
     const doc = empty().doc as TakeoffsRouteDocument;
     const edited = land(doc, "human", takeoffEditPatches(doc, "r", { name: "A" }, { name: "B" }));
     const proposed = land(
       edited,
       "pea",
-      transitionPatches(
+      cellPatches(
         ["edits"],
         takeoffEditKey("r", "people"),
         {},
         {
-          kind: "suggest",
+          kind: "set",
           rung: { value: 4 },
         },
       ),
     );
     const discarded = land(proposed, "human", takeoffDiscardEdits(proposed));
     expect(stagedTakeoffEdits(discarded)).toEqual({});
-    expect(discarded.edits[takeoffEditKey("r", "people")]?.suggestion).toMatchObject({ value: 4 });
+    expect(discarded.edits[takeoffEditKey("r", "people")]?.edit ?? null).toBeNull();
   });
 });

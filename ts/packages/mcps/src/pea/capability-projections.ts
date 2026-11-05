@@ -167,7 +167,7 @@ function routeRows(spec: RouteStateSpec<z.ZodType>): Capability[] {
     key: `route:${spec.route}.edit`,
     kind: "route-doc",
     title: `${spec.title}: edit`,
-    description: `Edit shared Work with expectedRevision from the read. Either author may replace an existing edit or leave an optional suggestion. Attribution and host evidence are host-owned. Omit value to delete an authored key. To take back an edit, use route:${spec.route}.history, never a null or cleared value. ${spec.finds?.join(" ") ?? ""} ${scopeHint}`,
+    description: `Edit shared Work with expectedRevision from the read. Each cell holds one staged edit; either author may replace it and the last writer wins, shown with its author. Attribution and host evidence are host-owned. Omit value to delete an authored key. To take back an edit, use route:${spec.route}.history, never a null or cleared value. ${spec.finds?.join(" ") ?? ""} ${scopeHint}`,
     finds:
       spec.route === "ducts"
         ? ["duct network", "network work"]

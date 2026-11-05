@@ -173,7 +173,7 @@ export function commitDoc<S extends z.ZodType>(
   };
 }
 
-function applyPatch(root: Record<string, unknown>, patch: RouteStatePatch): void {
+export function applyPatch(root: Record<string, unknown>, patch: RouteStatePatch): void {
   if (patch.path.length === 0) return;
   if (patch.path.some((segment) => FORBIDDEN_SEGMENTS.has(String(segment))))
     throw new Error(`patch path ${formatPath(patch.path)} contains a forbidden segment`);
@@ -266,7 +266,7 @@ export function stampChanges(
         ];
       }
       if (
-        (key === "edit" || key === "suggestion") &&
+        key === "edit" &&
         isRecord(value) &&
         (Object.hasOwn(value, "value") || value.delete === true)
       ) {

@@ -63,16 +63,13 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
   return async (doc, patches, { scope: work, prior }) => {
     const parsed = familiesRouteState.schema.parse(doc);
     const { cells } = parsed;
-    // F-J1-10: every scope rung a write changes names only families loaded under its own
-    // categories and placement; an unknown name refuses by name. M13-1: only the rung(s) this write
-    // changes, so a stale rung never blocks its own correction.
+    // F-J1-10: a staged scope a write changes names only families loaded under its own categories
+    // and placement; an unknown name refuses by name. M13-1: only when this write changes it, so a
+    // stale scope never blocks its own correction.
     const was = familiesRouteState.schema.parse(prior).scope;
-    const scopes = (["suggestion", "edit"] as const).flatMap((rung) => {
-      const written = parsed.scope[rung];
-      return written?.value.familyNames.length && !sameValue(written, was[rung])
-        ? [written.value]
-        : [];
-    });
+    const written = parsed.scope.edit;
+    const scopes =
+      written?.value.familyNames.length && !sameValue(written, was.edit) ? [written.value] : [];
     for (const written of scopes) {
       let known: Set<string>;
       try {
@@ -104,18 +101,12 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
             : Object.keys(cells),
       ),
     );
-    const written = [...touched].filter(
-      (key) => cells[key]?.suggestion != null || cells[key]?.edit != null,
-    );
-    if (!written.length) return null;
-    // M13-2: a cell belongs to a scope someone named: the edit one, else the proposed one.
-    const keyed = stagedFilter(parsed) ?? parsed.scope.suggestion?.value;
+    const staged = [...touched].filter((key) => cells[key]?.edit != null);
+    if (!staged.length) return null;
+    // M13-2: a cell belongs to the staged scope.
+    const keyed = stagedFilter(parsed);
     if (!keyed)
-      return refuse(
-        "no-scope",
-        "Propose or stage a scope before proposing cells",
-        "Nothing was written.",
-      );
+      return refuse("no-scope", "Stage a scope before staging cells", "Nothing was written.");
     let families: Awaited<ReturnType<LoadedFamilies>>;
     try {
       families = await loadedFamilies(work.target, keyed);
@@ -134,7 +125,7 @@ export function familiesAdmission(loadedFamilies: LoadedFamilies): RouteWriteAdm
       for (const type of family.types) known.add(type.typeName);
       types.set(family.familyName, known);
     }
-    const bad = written.filter((key) => {
+    const bad = staged.filter((key) => {
       const { familyName, typeName } = familyCellAddress(key);
       return !types.get(familyName)?.has(typeName);
     });

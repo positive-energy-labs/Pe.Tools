@@ -22,7 +22,7 @@ const settingsProposalSourceSchema = z.object({
 /** The one cell over any JSON value. Deletable: `/family` and the pods reviewer stage deletes. */
 export const settingsFieldStateSchema = draftCellSchema(z.unknown(), {
   deletable: true,
-  suggestion: {
+  extend: {
     /** Multi-citation: one value may be grounded by several regions (a table
      * cell AND a figure). Order is presentation order. */
     sources: z.array(settingsProposalSourceSchema).nullish(),
@@ -163,14 +163,11 @@ const resolves = (root: unknown, segments: string[]) => {
 export function settingsCandidate(
   rawContent: string,
   fields: Record<string, SettingsFieldState>,
-  includeProposals = false,
 ): string {
-  const edits = Object.entries(fields).filter(
-    ([, field]) => field.edit || (includeProposals && field.suggestion),
-  );
+  const edits = Object.entries(fields).filter(([, field]) => field.edit);
   // A root edit is the person's raw text: it replaces the basis, and pointer edits apply on top.
   const raw = edits.find(([pointer]) => pointer === "")?.[1];
-  const rootEdit = raw ? (raw.edit ?? raw.suggestion!) : null;
+  const rootEdit = raw?.edit ?? null;
   if (rootEdit && (rootEdit.delete || typeof rootEdit.value !== "string"))
     throw new Error("The root edit must contain exact raw text.");
   const base = rootEdit ? (rootEdit.value as string) : rawContent;
@@ -199,7 +196,7 @@ export function settingsCandidate(
       throw new Error("A field edit must address a safe non-root JSON pointer.");
     if (settingsFieldDirectives(root, segments))
       throw new Error("This value belongs to a shared fragment. Open that fragment to edit it.");
-    const edit = field.edit ?? field.suggestion!;
+    const edit = field.edit!;
     let cursor = root as Record<string, unknown>;
     for (const key of segments.slice(0, -1)) {
       if (Array.isArray(cursor) && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= cursor.length))
