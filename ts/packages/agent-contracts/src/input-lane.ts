@@ -28,7 +28,7 @@ export type InputKind = (typeof inputKinds)[number];
  */
 export const truncationSchema = z.strictObject({
   at: z.number().int().positive(),
-  reason: z.enum(["full", "io", "encoding", "unsupported", "setup", "observer"]),
+  reason: z.enum(["full", "io", "encoding", "unsupported", "setup", "observer", "backlog"]),
 });
 export type Truncation = z.infer<typeof truncationSchema>;
 

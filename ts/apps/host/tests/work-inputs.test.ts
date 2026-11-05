@@ -201,6 +201,7 @@ test.each(["work", "work-acks"] as const)(
       read: async () => {},
       readFailed: async () => {},
       feedFailed: async () => {},
+      stop: async () => {},
       feed: async () => {
         captures++;
         throw Error("bundle full");
@@ -217,19 +218,47 @@ test.each(["work", "work-acks"] as const)(
 );
 
 test.each(["work", "work-acks"] as const)(
-  "%s frames waiting on a held capture are bounded by the workspace limit and end typed, undelivered",
+  "%s past a held capture's bound truncates capture, and the same live feed continues exactly once",
   async (shape) => {
+    const { writer } = await bundle();
+    const real = capturedWorkReads(writer, run);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let feeds = 0;
     const f = await instrumented({
-      read: async () => {},
-      readFailed: async () => {},
-      feedFailed: async () => {},
-      feed: () => new Promise(() => {}),
+      ...real,
+      feed: (...args) => {
+        feeds++;
+        return gate.then(() => real.feed(...args));
+      },
     });
-    f.open(shape);
+    const seen: number[] = [];
+    const failures: unknown[] = [];
+    const stop = f.workspace.observeAdmittedFeed(
+      key,
+      admission,
+      shape,
+      (value) => seen.push("error" in value ? -1 : (value.value as { revision: number }).revision),
+      (ack) => seen.push(ack.revision),
+      (error) => failures.push(error),
+    );
     await settled();
-    for (let i = 0; i < 3; i++) await f.write();
+    for (let i = 0; i < 3; i++) await f.write(); // the third exceeds maxCount 2 while capture holds
     await settled();
-    expect(f.events).toEqual(["failed:WorkFeedBacklog"]);
+    expect(writer.truncation).toMatchObject({ reason: "backlog" });
+    expect(failures).toEqual([]);
+    expect(seen).toEqual([0, 1, 2, 3]);
+    release(); // the late capture completes: nothing repeats, nothing restarts capture
+    await settled();
+    await f.write();
+    await settled();
+    expect(seen).toEqual([0, 1, 2, 3, 4]);
+    expect(failures).toEqual([]);
+    expect(feeds).toBe(1);
+    stop(); // cancellation during fallback ends delivery
+    await f.write();
+    await settled();
+    expect(seen).toEqual([0, 1, 2, 3, 4]);
   },
 );
 
