@@ -61,10 +61,11 @@ process.once("SIGTERM", interrupt);
 try {
   do {
     restart = false;
-    // Host imports committed pins before the frontend plugin can run.
+    // Refuse drift before importing pins; validation never rewrites the candidate.
     await promisify(execFile)(process.execPath, [
       fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)),
       "--builtin-closure-only",
+      "--check",
     ]);
     if (stopped) break;
     child = spawn(
