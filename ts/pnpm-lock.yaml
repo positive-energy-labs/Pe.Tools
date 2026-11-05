@@ -101,6 +101,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 25.9.2
+      effect:
+        specifier: 4.0.2
+        version: 4.0.2
       jiti:
         specifier: ^2.7.0
         version: 2.7.0

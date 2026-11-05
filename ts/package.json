@@ -33,6 +33,7 @@
   "devDependencies": {
     "@pe/browser": "workspace:*",
     "@types/node": "catalog:",
+    "effect": "4.0.2",
     "jiti": "^2.7.0",
     "knip": "catalog:",
     "typescript": "catalog:",
