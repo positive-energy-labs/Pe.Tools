@@ -23,7 +23,8 @@ export function productionFiles(root: string): string[] {
 export type Import = { module: string; names: string[] | null };
 
 // Names are the imported names, before aliases. Null means the entire module is reachable.
-export function imports(source: string, path: string): Import[] {
+// `types` adds `import("x").T` nodes; host-door leaves it off.
+export function imports(source: string, path: string, types = false): Import[] {
   const ast = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
   const found: Import[] = [];
   function visit(node: ts.Node) {
@@ -53,6 +54,14 @@ export function imports(source: string, path: string): Import[] {
       ts.isStringLiteral(node.arguments[0])
     ) {
       found.push({ module: node.arguments[0].text, names: null });
+    } else if (
+      types &&
+      ts.isImportTypeNode(node) &&
+      ts.isLiteralTypeNode(node.argument) &&
+      ts.isStringLiteral(node.argument.literal)
+    ) {
+      const name = node.qualifier?.getText(ast).split(".")[0];
+      found.push({ module: node.argument.literal.text, names: name ? [name] : null });
     }
     ts.forEachChild(node, visit);
   }
