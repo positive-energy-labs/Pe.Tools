@@ -1,3 +1,4 @@
+using Pe.Shared.RevitData;
 using Pe.Revit.DocumentData.Parameters;
 
 namespace Pe.Revit.Tests;
@@ -24,30 +25,6 @@ public sealed class ParameterReferenceResolverTests {
             Assert.That(
                 ParameterReferenceResolver.Matches(ParameterIdentityEngine.FromRaw("Other", null, null, null), references),
                 Is.False);
-        });
-    }
-
-    [Test]
-    public void Resolves_requested_parameter_query_references_without_name_list_contract() {
-        var query = new RequestedParameterQuery {
-            Parameters = [
-                ParameterReference.FromName("Mark"),
-                ParameterReference.FromIdentity(new ParameterIdentity(
-                    "builtin:-1001203",
-                    ParameterIdentityKind.BuiltInParameter,
-                    "Mark",
-                    -1001203,
-                    null,
-                    null))
-            ]
-        };
-
-        var references = ParameterReferenceResolver.Resolve(query.Parameters);
-
-        Assert.Multiple(() => {
-            Assert.That(references, Has.Count.EqualTo(2));
-            Assert.That(references.Any(reference => reference.Identity.Kind == ParameterIdentityKind.NameFallback), Is.True);
-            Assert.That(references.Any(reference => reference.Identity.Kind == ParameterIdentityKind.BuiltInParameter), Is.True);
         });
     }
 

@@ -8,7 +8,7 @@ using Pe.Shared.StorageRuntime.Capabilities;
 
 namespace Pe.Revit.Tests.LibraryBehavior.NoDocumentRuntime;
 
-/// <summary>Deterministic proof of the pure half of the reconciler: no Document, no Revit.</summary>
+/// <summary>Mixed diff/lowering proof: operation lowering, schema registration and the unit census require RevitAPI.</summary>
 [TestFixture]
 public sealed class FamilyReconcilerTests {
     [Test]

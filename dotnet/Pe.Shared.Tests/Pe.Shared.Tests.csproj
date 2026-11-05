@@ -36,6 +36,7 @@
         <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj" />
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj" />
         <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj" />
+        <ProjectReference Include="..\Pe.Revit.FamilyFoundry\Pe.Revit.FamilyFoundry.csproj" />
         <ProjectReference Include="..\Pe.Revit.Partition\Pe.Revit.Partition.csproj" />
         <ProjectReference Include="..\Pe.Revit.Space\Pe.Revit.Space.csproj" />
         <ProjectReference Include="..\Pe.Revit.Takeoff\Pe.Revit.Takeoff.csproj" />

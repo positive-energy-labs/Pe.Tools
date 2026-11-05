@@ -2,7 +2,7 @@
 
 ## Scope
 
-Owns ordinary non-Revit tests for shared contracts, host boundaries, APS boundaries, product layout, storage runtime, automation DTOs, bridge request evidence, partition geometry, and takeoff workflows.
+Owns ordinary non-Revit tests for shared contracts, host boundaries, APS boundaries, product layout, storage runtime, automation DTOs, bridge request evidence, partition geometry, takeoff workflows, and proven portable family diff/projection helpers.
 
 ## Purpose
 

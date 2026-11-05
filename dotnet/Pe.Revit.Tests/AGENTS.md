@@ -54,7 +54,7 @@ For freshness outside a test run, `pe-revit session hr --id <session>` hot-appli
 - `Proofs/` tests should say they document Revit behavior; do not present them as ordinary package regression coverage.
 - `Diagnostics/` and `Performance/` tests should be `[Explicit]` unless a named proof lane intentionally runs them by default.
 - `ReviewLater/` files must include a short top-level comment explaining why they are suspect and what decision remains.
-- Non-Revit contract/library tests belong in ordinary test packages such as `Pe.Shared.Tests`, not in this Revit-backed harness.
+- Non-Revit contract/library tests belong in `Pe.Shared.Tests` after actual deterministic API execution proves portability. `NoDocumentRuntime` still includes native-bound cases; absence of a Document is not an assembly-load guarantee.
 - Tests run inside real Revit, not a fake host.
 - `ricaun.RevitTest` handles Revit process launching. If Revit is already open for the configured year, RevitTest can reuse it by default. That is not conducive to always-fresh assemblies, particularly when the open Revit instance is the dev session.
 - Prefer explicit-year `dotnet test`, not raw artifact-path `dotnet vstest`.

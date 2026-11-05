@@ -93,7 +93,7 @@ public sealed class FamilySnapshotProjectionTests {
         var result = FamilyModelParameterProjection.Project([
                 builtIn,
                 Row("FF_Internal_Probe", true, "autodesk.spec.aec:length-2.0.1"),
-                Row("Weird", true, "autodesk.spec.aec:not-a-spec-1.0.0")
+                Row("Weird", true, "autodesk.spec.aec:not-a-spec-1.0.0", cells: [("A", null)])
             ],
             ["A"]);
 
