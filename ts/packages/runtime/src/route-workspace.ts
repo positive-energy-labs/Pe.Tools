@@ -135,8 +135,9 @@ export class RouteWorkspace {
   >();
 
   #authorize(verb: Parameters<NonNullable<RouteWorkspaceOptions["authorizeMutation"]>>[0]) {
-    if (this.options.recorded) throw Error(`A recorded workspace refuses Work ${verb}`);
+    // The injected policy speaks first, so its typed historical refusal wins; the store-less guard remains.
     this.options.authorizeMutation?.(verb);
+    if (this.options.recorded) throw Error(`A recorded workspace refuses Work ${verb}`);
   }
   get #store(): RouteDocumentStore {
     if (!this.options.store) throw Error("A recorded workspace has no Work store");
@@ -1008,8 +1009,9 @@ export class RouteWorkspace {
   /**
    * The admitted Work feed, for a caller that has already admitted it. Its acquisition is admitted
    * again after any asynchronous capture or replay, so a replacement or retirement meanwhile refuses.
-   * A recording delivers its bound snapshot once and no acks. Live capture records the delivered
-   * snapshot under its exact admission, holding acks until it is delivered; live alone is unchanged.
+   * A recording delivers its bound snapshot once and no acks. Live capture records each delivered
+   * value under its exact admission; frames and acks waiting on it are bounded by the history
+   * limit. A capture, admission or backlog failure is terminal: reported once, then detached.
    */
   observeAdmittedFeed(
     scope: WorkKey,
@@ -1019,74 +1021,87 @@ export class RouteWorkspace {
     ack: (ack: WorkWriteAck) => void,
     failed: (error: unknown) => void,
   ): () => void {
-    let closed = false;
-    const fenced = async <A>(value: A) => {
-      const failure = await this.admitFeed(scope, admission);
-      if (failure) throw failure;
-      return value;
-    };
-    const settle = (work: Promise<unknown>) =>
-      work.then(
-        (value) => {
-          if (!closed) deliver({ value });
-        },
-        (error) => {
-          if (!closed) failed(error);
-        },
-      );
     const { recorded, capture } = this.options;
-    if (recorded) {
-      void settle(recorded.feed(scope, admission, shape).then((value) => fenced(this.#requested(scope, value))));
-      return () => {
-        closed = true;
-      };
-    }
-    if (shape === "work") {
-      let chain = Promise.resolve();
-      const stop = this.observe(
-        scope,
-        scope.route,
-        (value) => {
-          if (!capture || "error" in value) return void (closed || deliver(value));
-          // One capture at a time keeps delivery in observation order.
-          chain = chain.then(() =>
-            settle(capture.feed(scope, admission, shape, value.value).then(() => fenced(value.value))),
-          );
-        },
-        true,
-        true,
-      );
-      return () => {
-        closed = true;
-        stop();
-      };
-    }
-    if (!capture) return this.observeFeed(scope, (value) => deliver({ value }), ack, failed);
-    let held: WorkWriteAck[] | null = [];
-    const stop = this.observeFeed(
-      scope,
-      (snapshot) =>
-        void capture
-          .feed(scope, admission, shape, snapshot)
-          .then(() => fenced(snapshot))
-          .then(
-            () => {
-              if (closed) return;
-              deliver({ value: snapshot });
-              for (const write of held ?? []) ack(write);
-              held = null;
-            },
-            (error) => {
-              if (!closed) failed(error);
-            },
-          ),
-      (write) => (held ? held.push(write) : ack(write)),
-      failed,
-    );
-    return () => {
+    if (!recorded && !capture)
+      return shape === "work"
+        ? this.observe(scope, scope.route, deliver, true, true)
+        : this.observeFeed(scope, (value) => deliver({ value }), ack, failed);
+    let closed = false;
+    let stop = () => {};
+    const close = () => {
       closed = true;
       stop();
     };
+    const end = (error: unknown) => {
+      if (closed) return;
+      close();
+      failed(error);
+    };
+    const limit = (this.options.workHistoryLimits ?? DEFAULT_WORK_HISTORY_LIMITS).maxCount;
+    const backlog = () =>
+      end({
+        kind: "failed",
+        code: "WorkFeedBacklog",
+        message: `More than ${limit} Work frames waited on capture`,
+      } satisfies WorkFeedFailure);
+    /** Records (or replays) one value and re-admits it; resolves undefined once the feed has ended. */
+    const acquire = async (value: Promise<unknown>) => {
+      try {
+        const settled = await value;
+        const failure = await this.admitFeed(scope, admission);
+        if (failure) throw failure;
+        return closed ? undefined : { value: settled };
+      } catch (error) {
+        end(error);
+      }
+    };
+    if (recorded) {
+      void acquire(recorded.feed(scope, admission, shape).then((value) => this.#requested(scope, value)))
+        .then((got) => got && deliver(got));
+      return close;
+    }
+    const keep = (value: unknown) => capture!.feed(scope, admission, shape, value).then(() => value);
+    if (shape === "work") {
+      let pending = 0;
+      let chain = Promise.resolve();
+      stop = this.observe(
+        scope,
+        scope.route,
+        (value) => {
+          if (closed) return;
+          if ("error" in value) return deliver(value);
+          if (++pending > limit) return backlog();
+          // One capture at a time keeps delivery in observation order.
+          chain = chain.then(async () => {
+            const got = await acquire(keep(value.value));
+            pending--;
+            if (got) deliver(got);
+          });
+        },
+        true,
+        true,
+      );
+    } else {
+      let held: WorkWriteAck[] | null = [];
+      stop = this.observeFeed(
+        scope,
+        (snapshot) =>
+          void acquire(keep(snapshot)).then((got) => {
+            if (!got) return;
+            deliver(got);
+            for (const write of held ?? []) ack(write);
+            held = null;
+          }),
+        (write) => {
+          if (closed) return;
+          if (!held) return ack(write);
+          if (held.push(write) > limit) backlog();
+        },
+        end,
+      );
+    }
+    if (closed) stop(); // a synchronous failure ended the feed before its subscription was known
+    return close;
   }
 
   #accept(write: WorkWriteAck) {

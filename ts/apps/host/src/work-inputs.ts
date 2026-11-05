@@ -3,12 +3,13 @@
  * identity, and its authoritative codec. The canonical RouteWorkspace reads live, captures what it
  * delivers, or replays through these adapters over the one taking store; never a second Work store.
  */
-import { Cause, Effect, Exit, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { z } from "zod";
 import {
   workHandleSchema,
   workKey,
   workWriteAckSchema,
+  type ReadingRequest,
   type WorkHandle,
   type WorkKey,
   type WorkWriteAck,
@@ -21,13 +22,18 @@ import type {
   WorkReadCapture,
   WorkReadSource,
 } from "@pe/runtime";
-import type { WorkAdmission } from "../../../packages/agent-contracts/src/work-journal-door.ts";
 import {
   captureInput,
+  inputBindingKey,
   replayInput,
   type RecordingReader,
   type RecordingWriter,
+  type TakingObserver,
 } from "./native-recording.ts";
+import { InvalidRead } from "./native-reads.ts";
+
+/** The exact feed admission, from the public Reading contract that carries it. */
+type WorkAdmission = NonNullable<Extract<ReadingRequest, { kind: "work" }>["admission"]>;
 
 export type WorkView = "read" | "raw" | "view" | "feed";
 /** The Work member of RecordedInput: the canonical Work key and the read shape it names. */
@@ -38,20 +44,13 @@ export const workInput = (key: WorkKey, view: WorkView): WorkInput => ({
   view,
 });
 
-/** What the admitted feed acquires: the snapshot and its retained history, as `observeFeed` gives it. */
-export type WorkFeedValue = {
-  readonly doc: unknown;
-  readonly revision: number;
-  readonly handle: WorkHandle;
-  readonly history: { readonly from: number; readonly acks: readonly WorkWriteAck[] };
-};
 type Reads = {
   read: Awaited<ReturnType<RouteWorkspace["read"]>>;
   raw: Awaited<ReturnType<RouteWorkspace["readRaw"]>>;
   view: Awaited<ReturnType<RouteWorkspace["view"]>>;
-  feed: WorkFeedValue;
 };
-export type WorkValue<V extends WorkView> = Reads[V];
+type ReadView = keyof Reads;
+export type WorkValue<V extends ReadView> = Reads[V];
 
 const revision = z.number().int().nonnegative();
 const raw = z.object({ doc: z.unknown(), revision, handle: workHandleSchema })
@@ -61,26 +60,32 @@ const shaped = raw.safeExtend({
   route: z.string(), title: z.string(), description: z.string(),
   schemaVersion: z.number().int().positive().nullable(), schema: z.record(z.string(), z.unknown()),
 }).refine((value) => value.route === value.handle.key.route).passthrough();
-const contracts: { readonly [V in WorkView]: z.ZodType } = {
-  raw: raw.nullable(),
-  read: shaped.nullable(),
-  view: shaped.nullable(),
-  feed: raw.safeExtend({ history: z.object({ from: revision, acks: z.array(workWriteAckSchema) }) })
+const history = <T extends z.ZodType<{ revision: number; handle: WorkHandle }>>(base: T) =>
+  z.intersection(base, z.object({ history: z.object({ from: revision, acks: z.array(workWriteAckSchema) }) }))
     .refine(({ handle, revision, history }) => history.acks.length
       ? history.acks.every((ack, index) => ack.revision === history.from + index &&
           workKey(ack.key) === workKey(handle.key)) &&
         history.acks.at(-1)!.revision === revision
-      : history.from === revision + 1),
+      : history.from === revision + 1);
+const contracts: { readonly [V in ReadView | WorkFeedShape]: z.ZodType } = {
+  raw: raw.nullable(),
+  read: shaped.nullable(),
+  view: shaped.nullable(),
+  // The two feed shapes are different values: `work` is the view with history, `work-acks` the snapshot.
+  work: history(shaped),
+  "work-acks": history(raw),
 };
 /** Recorded Work bytes must satisfy the existing Work handle and ack contracts; nothing is coerced. */
-const codec = <V extends WorkView>(view: V) =>
+const codec = <A>(contract: keyof typeof contracts) =>
   Schema.Json.check(
     Schema.makeFilter(
-      (value) => contracts[view].safeParse(value).success || `Recorded Work ${view} violates its contract`,
+      (value) => contracts[contract].safeParse(value).success || `Recorded Work ${contract} violates its contract`,
     ),
-  ) as unknown as Schema.Codec<WorkValue<V>, Schema.Json>;
-export const workInputCodecs: { readonly [V in WorkView]: Schema.Codec<WorkValue<V>, Schema.Json> } =
-  { read: codec("read"), raw: codec("raw"), view: codec("view"), feed: codec("feed") };
+  ) as unknown as Schema.Codec<A, Schema.Json>;
+export const workInputCodecs: { readonly [V in ReadView]: Schema.Codec<WorkValue<V>, Schema.Json> } =
+  { read: codec("read"), raw: codec("raw"), view: codec("view") };
+export const workFeedCodecs: { readonly [S in WorkFeedShape]: Schema.Codec<unknown, Schema.Json> } =
+  { work: codec("work"), "work-acks": codec("work-acks") };
 
 /** The fence a Work taking is kept under: its canonical key, plus the feed's exact admission and shape. */
 export const workInputScope = (
@@ -88,34 +93,54 @@ export const workInputScope = (
   feed?: { readonly admission: WorkAdmission; readonly shape: WorkFeedShape },
 ) => canonicalJson(feed ? [workKey(key), feed.shape, feed.admission] : [workKey(key)]);
 
-// effect-edge: island, phase 5. RouteWorkspace's Promise read seam meets the Effect taking store
-// here; a rejection is the store's own DoorFailure instance, so class and status survive.
-const promised = <A>(effect: Effect.Effect<A, DoorFailure>): Promise<A> =>
-  Effect.runPromiseExit(effect).then((exit) =>
-    Exit.isSuccess(exit) ? exit.value : Promise.reject(Cause.squash(exit.cause)),
-  );
+/** The composition's captured Effect edge; it rejects with the DoorFailure itself, class and status kept. */
+export type WorkInputRunner = <A>(effect: Effect.Effect<A, DoorFailure>) => Promise<A>;
 
-/** Historical Work: each canonical read and admitted feed answered only by its recorded taking. */
-export const recordedWorkSource = (reader: RecordingReader): WorkReadSource => ({
-  read: (key, view) =>
-    promised(replayInput(reader, workInput(key, view), workInputScope(key), workInputCodecs[view])),
-  feed: (key, admission, shape) =>
-    promised(
-      replayInput(reader, workInput(key, "feed"), workInputScope(key, { admission, shape }), workInputCodecs.feed),
-    ),
-});
-
-/** Live capture of the value a Work read is about to deliver, through the one taking store. */
-export const capturedWorkReads = (writer: RecordingWriter): WorkReadCapture => {
-  const keep = (input: WorkInput, scope: string, value: unknown) =>
-    promised(
-      captureInput(writer, input, scope, workInputCodecs[input.view], Effect.succeed(json(value) as never)),
-    ).then(() => {});
+/**
+ * Historical Work: each canonical read and admitted feed answered only by its recorded taking.
+ * `bindings` names the exact taking per `inputBindingKey`; an unbound repeat stays ambiguous.
+ */
+export const recordedWorkSource = (
+  reader: RecordingReader,
+  run: WorkInputRunner,
+  bindings: ReadonlyMap<string, string> = new Map(),
+): WorkReadSource => {
+  const replay = <A>(input: WorkInput, scope: string, codec: Schema.Codec<A, Schema.Json>) =>
+    run(replayInput(reader, input, scope, codec, bindings.get(inputBindingKey(input, scope))));
   return {
-    read: (key, view, value) => keep(workInput(key, view), workInputScope(key), value),
-    feed: (key, admission, shape, value) =>
-      keep(workInput(key, "feed"), workInputScope(key, { admission, shape }), value),
+    read: (key, view) => replay(workInput(key, view), workInputScope(key), workInputCodecs[view]),
+    feed: (key, admission, shape) =>
+      replay(workInput(key, "feed"), workInputScope(key, { admission, shape }), workFeedCodecs[shape]),
   };
 };
-/** Delivered values carry undefined optionals; their recorded form is their JSON. */
-const json = (value: unknown) => (value === undefined ? null : JSON.parse(JSON.stringify(value)));
+
+const unrecordable = (message: string) =>
+  new InvalidRead({ message, status: 409, problem: "recording.input" });
+/** Live capture of the value a Work read is about to deliver, through the one taking store. */
+export const capturedWorkReads = (
+  writer: RecordingWriter,
+  run: WorkInputRunner,
+  observed?: TakingObserver,
+): WorkReadCapture => {
+  const keep = (input: WorkInput, scope: string, codec: Schema.Codec<unknown, Schema.Json>, value: unknown) =>
+    run(
+      Effect.gen(function* () {
+        // The recorded observation is the delivered value's JSON, checked by its codec before any taking.
+        if (value === undefined) return yield* unrecordable(`Work ${input.view} delivered no value to record`);
+        const serialized = yield* Effect.try({
+          try: () => JSON.parse(JSON.stringify(value)) as unknown,
+          catch: (error) => unrecordable(`Work ${input.view} is not JSON: ${String(error)}`),
+        });
+        const decoded = yield* Schema.decodeUnknownEffect(codec)(serialized).pipe(
+          Effect.mapError(() => unrecordable(`Delivered Work ${input.view} violates its contract`)),
+        );
+        yield* captureInput(writer, input, scope, codec, Effect.succeed(decoded), observed);
+      }),
+    );
+  return {
+    read: (key, view, value) =>
+      keep(workInput(key, view), workInputScope(key), workInputCodecs[view] as Schema.Codec<unknown, Schema.Json>, value),
+    feed: (key, admission, shape, value) =>
+      keep(workInput(key, "feed"), workInputScope(key, { admission, shape }), workFeedCodecs[shape], value),
+  };
+};
