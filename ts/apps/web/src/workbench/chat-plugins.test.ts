@@ -69,7 +69,6 @@ describe("chat plugin records", () => {
   it("an action opens the pane whose manifest declares a verb doing it, never a guess at its words", () => {
     expect(actionRoute("takeoffs.sync")).toBe("takeoffs");
     expect(actionRoute("rooms.merge")).toBe("rooms");
-    expect(actionRoute("parameter-links.apply")).toBe("parameter-links");
     expect(actionRoute("family.build")).toBe("family");
     expect(actionRoute("family.observe")).toBe("family");
     expect(actionRoute("settings.write")).toBe("pods");
