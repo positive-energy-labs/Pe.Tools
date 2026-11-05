@@ -15,6 +15,7 @@ effectTest(
       let sdkStart = 1000;
       let sourceRoot = hostOwnership.sourceRoot;
       let calls = 0;
+      let changeDuringResolution = false;
       let changed: (() => void) | undefined;
       const bridge = detachedBridge({
         list: Effect.sync(() => [
@@ -37,6 +38,10 @@ effectTest(
       const driver = () =>
         Effect.sync(() => {
           calls++;
+          if (changeDuringResolution) {
+            changeDuringResolution = false;
+            changed!();
+          }
           return replay("doc-list", {
             result: { documents: [] },
             resolved: {
@@ -76,6 +81,14 @@ effectTest(
       changed!();
       yield* resolve;
       expect(calls).toBe(2);
+      changeDuringResolution = true;
+      changed!();
+      const raced = yield* resolve.pipe(Effect.result);
+      expect(raced._tag).toBe("Failure");
+      if (raced._tag === "Failure")
+        expect(raced.failure.message).toContain("SDK attachment changed during resolution");
+      // Admission, rather than a write retry, must start again after the event settles.
+      expect((yield* resolve).processIncarnation).toEqual({ pid: process.pid, startedAt: 1000 });
       startedAt = 2000;
       changed!();
       expect((yield* resolve.pipe(Effect.result))._tag).toBe("Failure");
