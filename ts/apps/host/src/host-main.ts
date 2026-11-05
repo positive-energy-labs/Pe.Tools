@@ -1,4 +1,5 @@
 import { NodeRuntime } from "@effect/platform-node";
+import { isSea } from "node:sea";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -7,6 +8,8 @@ import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { hostRedirectionTrust, relaunchOutOfGuard } from "./redirection-trust.ts";
 import { currentReceiptExport, fatalReceipt } from "./receipt-export.ts";
+
+declare const __PE_HOST_RECEIPT_BUILD__: unknown;
 
 // The installer stub and the login Run key start the installed host with no stdio anyone reads, so
 // a host that dies before bind (a refused claim, a thrown binding) leaves nothing behind. Tee every
@@ -66,4 +69,11 @@ for (const [event, code] of [
   });
 
 // effect-edge: process-main
-NodeRuntime.runMain(hostProgram());
+// Explicit unrecorded source exception; baked/SEA launches retain root admission and capture.
+NodeRuntime.runMain(hostProgram(
+  undefined,
+  undefined,
+  !isSea() && typeof __PE_HOST_RECEIPT_BUILD__ === "undefined"
+    ? { kind: "live", capture: "off" }
+    : undefined,
+));
