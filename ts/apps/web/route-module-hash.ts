@@ -149,16 +149,16 @@ async function runtimeRoutes(mode: "dev" | "build" | "test") {
   const producer = fileURLToPath(new URL("./scripts/route-graphs.ts", import.meta.url));
   if (mode === "build")
     await exec(process.execPath, [producer, "--builtin-closure-only", "--check"]);
-  // Dev repairs committed pins before publishing a coordinated generation. Build only checks.
+  // Runtime projections stay in memory; only the explicit generator changes committed pins.
   const { stdout } = await exec(
     process.execPath,
-    [producer, "--runtime", ...(mode === "dev" ? ["--write-builtin-closures"] : [])],
+    [producer, "--runtime"],
     { maxBuffer: 16 * 1024 * 1024 },
   );
   return JSON.parse(stdout) as Record<string, string>;
 }
 
-/** Dev regenerates pins before startup/HMR; production refuses a stale build pin. */
+/** Dev projects in memory for startup/HMR; production refuses a stale committed pin. */
 export function routeModuleHash(
   generate?: (mode: "dev" | "build" | "test") => Promise<Record<string, string> | void>,
 ): Plugin {

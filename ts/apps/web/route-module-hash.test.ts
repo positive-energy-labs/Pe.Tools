@@ -264,7 +264,7 @@ test("runtime projections replace stale disk content without writing it", async 
   expect(readFileSync(id, "utf8")).toBe(before);
 });
 
-test("dev startup and HMR select pin regeneration; build and tests select read-only modes", async () => {
+test("dev startup and HMR select memory projections; build checks committed pins", async () => {
   const generate = vi.fn(async (_mode: "dev" | "build" | "test") => ({}));
   for (const [command, mode, expected] of [
     ["serve", "development", "dev"],
