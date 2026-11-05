@@ -5,6 +5,8 @@ import { fanCandidates, type FanAssignment } from "@pe/ducts-domain/fan-assignme
 import { healFindings, type HealGroup, type HealItem, type HealPlan } from "@pe/ducts-domain/heal";
 import { findingLabel, healSystems, subjectName } from "@pe/ducts-domain/words";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
+import { candidatesOf, classOf, connectorKey } from "@pe/ducts-domain/kernel/inferred-joins";
+import { JOIN_KEY } from "@pe/ducts-domain/sheet/inputs";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -255,6 +257,22 @@ export function triage(input: TriageInput) {
     ],
   });
 
+  // The fan sheet's inferred join at an open end: its nearest candidate from the same model-health
+  // measurement the walk reads, ruled on the sheet's own key (`join:<pair>`), never the finding id.
+  const elements = new Map([...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e]));
+  const acceptJoin = (id: string): RowVerb[] => {
+    const issue = snapshot.issues?.find((i) => i.id === id && i.kind === "open-end");
+    const at = issue?.connector == null ? undefined : elements.get(issue.elementId);
+    const port = at?.connectors.find((c) => c.index === issue!.connector);
+    if (!issue || !port) return [];
+    const open = { k: connectorKey(issue.elementId, port.index), id: issue.elementId, index: port.index, cls: classOf(port.classification) };
+    const best = candidatesOf(open, issue.near ?? undefined, elements)[0];
+    return best
+      ? [verdict(doc, JOIN_KEY(best.pair), "connect", `accept join → ${name(best.toElement)}`,
+          "Accept: the fan sheet walks through this join; a ruling here, never a Revit write")]
+      : [];
+  };
+
   const heal = input.heal ?? null;
   // Heal rows lead Fix: what Pe can make real in Revit comes before what a person must.
   const blocking = new Set(
@@ -500,9 +518,10 @@ export function triage(input: TriageInput) {
                 ]
               : f.findingIds
                   .filter((id) => id.startsWith("open-end:"))
-                  .map((id) =>
+                  .flatMap((id) => [
+                    ...acceptJoin(id),
                     verdict(doc, id, "ignore", "ignore", "Ignore: leave this end out of the walk"),
-                  )),
+                  ])),
           ],
         };
         if (answered)

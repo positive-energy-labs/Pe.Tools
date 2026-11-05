@@ -10,8 +10,13 @@ import {
   stageIssues,
   issueAt,
   inboxRows,
+  triage,
   type TriageInput,
 } from "./inbox-rows";
+import { verdictPatches } from "./assumptions";
+import { JOIN_KEY, resolveInputs } from "@pe/ducts-domain/sheet/inputs";
+import { TEST_FIRM } from "@pe/ducts-domain/sheet/test-inputs";
+import { applyConnectorPairRulings, candidatesOf } from "@pe/ducts-domain/kernel/inferred-joins";
 import type { Claim } from "./legs";
 
 const node = (id: number, kind: string, groupId: string | null) =>
@@ -296,5 +301,53 @@ describe("a heal in a shared group belongs to the systems of the ends it heals",
   it("is offered on RA 37's view and never on FA 20's", () => {
     expect(rows(scope("RA 37", [100, 101]))).toHaveLength(1);
     expect(rows(scope("FA 20", [200]))).toEqual([]);
+  });
+});
+
+describe("Rulings accept-join on an inferred open end", () => {
+  // The walk's candidate for open end 2:1 is vacant port 3:0 (4 in, not opposed, so no auto-join):
+  // the sheet raises it as an inferred-join blocker whose ruling key is `join:2:1|3:0`.
+  const port = (index: number, point: number[]) => ({ index, point, classification: "SupplyAir", connectedTo: null });
+  const near = { ports: [{ elementId: 3, connector: 0, gapIn: 4, opposed: false, aligned: false, autoJoin: false }], faces: [], bodies: [] };
+  const joinSnapshot = {
+    groups: [group("g1", [2], ["open-end:2:1"])],
+    nodes: [
+      { ...node(2, "fitting", "g1"), connectors: [port(1, [0, 0, 0])] },
+      { ...node(3, "equipment", null), connectors: [port(0, [0.33, 0, 0])] },
+    ],
+    segments: [],
+    issues: [{ id: "open-end:2:1", kind: "open-end", elementId: 2, connector: 1, near }],
+  } as unknown as TriageInput["snapshot"];
+  const rows = (doc: TriageInput["doc"]) =>
+    triage({
+      snapshot: joinSnapshot,
+      scope: null,
+      findings: [finding({ id: "open-end:2:1", kind: "open-end", elementIds: [2] })],
+      flows: new Map(),
+      equipmentFlows: new Map(),
+      doc,
+    });
+  const accept = (doc: TriageInput["doc"]) =>
+    rows(doc).fix.flatMap((row) => row.verbs).find((v) => v.kind === "verdict" && v.verdict === "connect");
+
+  it("offers accept join on the canonical sheet key, and the staged cell is the walk's accepted pair", () => {
+    const verb = accept(null);
+    expect(verb).toMatchObject({ kind: "verdict", key: JOIN_KEY(["2:1", "3:0"]), verdict: "connect", on: false });
+    if (verb?.kind !== "verdict") return;
+    const patches = verdictPatches(null, verb.key, "connect");
+    expect(patches).toEqual([{ path: ["assumptions", "join:2:1|3:0", "edit"], value: { value: { kind: "verdict", verdict: "connect" } } }]);
+    // The sheet reads that cell as an accepted join, and the walk's candidate for the end is ruled.
+    const inputs = resolveInputs({
+      snapshot: joinSnapshot as never,
+      work: { assumptions: { [verb.key]: { kind: "verdict", verdict: "connect" } } },
+      firm: TEST_FIRM,
+    });
+    expect(inputs.rulings.joins).toEqual([{ pair: ["2:1", "3:0"], verdict: "accept" }]);
+    const candidates = candidatesOf(
+      { k: "2:1", id: 2, index: 1, cls: "SupplyAir" },
+      near,
+      new Map(joinSnapshot.nodes.map((n) => [n.id, n])) as never,
+    );
+    expect(applyConnectorPairRulings(candidates, inputs.rulings.joins)[0]).toMatchObject({ pair: ["2:1", "3:0"], ruled: true });
   });
 });
