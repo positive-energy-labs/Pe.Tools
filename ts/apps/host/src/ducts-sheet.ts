@@ -23,7 +23,9 @@ import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
-import type { RouteWorkspace } from "@pe/runtime";
+import type { RouteWorkspace, WorkReadContext } from "@pe/runtime";
+import type { WorkInputRunner } from "./work-inputs.ts";
+import type { InputConsumption, ReadSetId } from "./input-occurrence.ts";
 import { slotCoverage } from "@pe/ducts-domain/kernel/terminal-flow";
 import { contextFetch } from "@pe/runtime/context";
 import { suggestRoster } from "@pe/ducts-domain/roster";
@@ -78,6 +80,12 @@ const titlesOf = (grids: ReturnType<typeof toGrids>): Record<string, string> =>
     }),
   );
 export interface DuctsSheetSources {
+  readonly inputs?: {
+    readonly consumption: InputConsumption;
+    readonly run: WorkInputRunner;
+    readonly work: WorkReadContext;
+    readonly overview?: (basis: string, recompute: (request: DuctsSheetRequest, sources: DuctsSheetSources) => Promise<void>) => Promise<void>;
+  };
   workKey?: (target: DocumentRef) => Promise<WorkKey>;
   firm: () => Promise<import("./ducts-inputs.ts").FirmReading>;
   catalogs: () => Promise<import("./duct-catalogs.ts").CatalogReading>;
@@ -86,6 +94,7 @@ export interface DuctsSheetSources {
     request: SnapshotRequest | { ids: string[] },
     target: DocumentRef,
     version?: string,
+    role?: "acquire" | "validate" | "join" | "beyond",
   ) => Promise<Response>;
 }
 
@@ -119,6 +128,7 @@ const subjectKey = ({
   ...subject
 }: DuctsSheetRequest) => canonicalRouteInput(subject);
 type Entry = {
+  readSetId?: ReadSetId;
   /** Target, mode, fan or chain, and the layers' state (Work revision, firm version): what one sheet is a sheet of. */
   subject: string;
   /** Everything the engine priced from, resolved (ducts LEDGER 2026-10-29). */
@@ -228,8 +238,8 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
   /** The layers the resolver reads: Work's staged edits and the firm file, with the state that names them. */
   async function loadLayers(target: DocumentRef, reads: DuctsSheetSources) {
     const scope = reads.workKey ? await reads.workKey(target) : work ? await work.key(target) : null;
-    const owned = scope && work ? await work.workspace.readRaw(scope, "ducts") : null;
-    const fans = scope && work ? await work.workspace.view({ ...scope, route: "fans" }, "fans") : null;
+    const owned = scope && work ? await work.workspace.readRaw(scope, "ducts", reads.inputs?.work) : null;
+    const fans = scope && work ? await work.workspace.view({ ...scope, route: "fans" }, "fans", reads.inputs?.work) : null;
     const doc = ductsDesign(owned ? ductsDocumentSchema.parse(owned.doc) : null, fansDocumentSchema.parse(fans?.doc ?? {}));
     const firm = await reads.firm();
     return {
@@ -262,9 +272,10 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
     key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
     request: SnapshotRequest | { ids: string[] },
     target: DocumentRef,
-    version?: string,
+    version: string | undefined,
+    role: "acquire" | "validate" | "join" | "beyond",
   ) {
-    const response = await reads.call(key, request, target, version);
+    const response = await reads.call(key, request, target, version, role);
     if (!response.ok)
       throw new BridgeError(await response.text(), response.status, { notDispatched: true });
     return response;
@@ -302,6 +313,8 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
               selector: { kind: "from", unitId, maxHops: BEYOND_HOPS, ...tolerances },
             },
             target,
+            undefined,
+            "beyond",
           )
         ).json()) as DuctSnapshot;
         beyondReads.set(key, read);
@@ -313,19 +326,23 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
   }
   async function current(entry: Entry, reads: DuctsSheetSources) {
     const responses = await Promise.all([
-      readNative(reads, "ducts.snapshot.walk", entry.request, entry.target, entry.version),
-      readNative(reads, "ducts.tables", tableRequest, entry.target, entry.tablesVersion),
+      readNative(reads, "ducts.snapshot.walk", entry.request, entry.target, entry.version, "validate"),
+      readNative(reads, "ducts.tables", tableRequest, entry.target, entry.tablesVersion, "validate"),
     ]);
     await Promise.all(responses.map((response) => response.body?.cancel()));
   }
   return {
     async sheet(request: DuctsSheetRequest, reads = sources): Promise<DuctsSheetResponse> {
       if (!reads) throw new BridgeError("Duct sheets require their admitted input source", 503);
+      if (request.detail && request.basis && !entries.has(request.basis) && reads.inputs?.overview)
+        await reads.inputs.overview(request.basis, async (original, source) => { await this.sheet(original, source); });
       const saved = await loadLayers(request.target, reads);
       const subject = subjectOf(request, saved);
       if (request.detail) {
         const entry = request.basis ? entries.get(request.basis) : undefined;
         if (!entry || entry.subject !== subject) throw stale();
+        if (reads.inputs && entry.readSetId)
+          await reads.inputs.run(reads.inputs.consumption.linkReadSet("overview", entry.readSetId));
         await current(entry, reads);
         const base = { target: entry.target, basis: entry.value.basis };
         if (request.detail.kind === "elements")
@@ -411,8 +428,8 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
               },
       };
       const [response, tables] = await Promise.all([
-        readNative(reads, "ducts.snapshot.walk", acquisition, request.target),
-        readNative(reads, "ducts.tables", tableRequest, request.target),
+        readNative(reads, "ducts.snapshot.walk", acquisition, request.target, undefined, "acquire"),
+        readNative(reads, "ducts.tables", tableRequest, request.target, undefined, "acquire"),
       ]);
       const version = response.headers.get(DUCTS_BODY_VERSION_HEADER);
       const tablesVersion = tables.headers.get(DUCTS_BODY_VERSION_HEADER);
@@ -440,6 +457,8 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
               "ducts.snapshot.walk",
               { slots, selector: { kind: "from", unitId, ...tolerances } },
               request.target,
+              undefined,
+              "join",
             )
           ).json(),
       );
@@ -486,6 +505,7 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
         .update(JSON.stringify([request.target, version, tablesVersion, subject, value.basis]))
         .digest("hex");
       const entry: Entry = {
+        ...(reads.inputs ? { readSetId: reads.inputs.consumption.id } : {}),
         subject,
         inputs,
         firm: firmOf(saved),
@@ -500,6 +520,7 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
         beyond,
       };
       await current(entry, reads);
+      if (reads.inputs) await reads.inputs.run(reads.inputs.consumption.exportBasis(value.basis));
       for (const [basis, previous] of entries)
         if (previous.subject === subject) entries.delete(basis);
       while (entries.size >= 16) entries.delete(entries.keys().next().value!);
@@ -517,7 +538,7 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
         ...(Object.keys(staged).length ? { slots: staged } : {}),
         selector: { kind: "roster" },
       };
-      const response = await readNative(reads, "ducts.snapshot.roster", acquisition, request.target);
+      const response = await readNative(reads, "ducts.snapshot.roster", acquisition, request.target, undefined, "acquire");
       const snapshot = (await response.json()) as DuctSnapshot;
       const inputs = resolveInputs({
         snapshot,

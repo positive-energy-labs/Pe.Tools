@@ -12,7 +12,7 @@ import {
   commandTool,
   type ReadingFrame,
 } from "@pe/agent-contracts";
-import { OwnerReads, resourceSnapshot, type ResourceObserver, type OwnerValue } from "@pe/runtime";
+import { OwnerReads, resourceSnapshot, type ResourceObserver, type OwnerValue, type WorkCarriage } from "@pe/runtime";
 import type { BridgeError, RevitBridge } from "./bridge.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { ActionJournal } from "./action-journal.ts";
@@ -116,12 +116,13 @@ const documentIn = (value: unknown): DocumentRef | null => {
  * against today's clock. No consumer compares clocks. Work uses this same envelope boundary.
  */
 export const markReadings =
-  (marks: DocumentMarks, readFrame: (ref: DocumentRef, key: string, at?: number) => Promise<import('./document-marks.ts').MarkFrame>) =>
+  (marks: DocumentMarks, readFrame: (ref: DocumentRef, key: string, at?: number, carriage?: WorkCarriage, update?: boolean) => Promise<import('./document-marks.ts').MarkFrame>) =>
   (observe: ResourceObserver): ResourceObserver =>
   (request, publish, after) => {
     let bound = documentOf(request as never);
     let latest: (ReadingFrame & { kind: 'snapshot' }) | null = null;
     let servedAt: number | undefined;
+    let latestCarriage: WorkCarriage | undefined;
     let emittedChanged: boolean | undefined;
     let closed = false, queued = 0;
     let tail = Promise.resolve();
@@ -140,16 +141,16 @@ export const markReadings =
         failure: { kind: 'failed', code: failure.problem ?? 'ReadingFrameFailed', message: failure.message ?? String(error) } });
       end();
     };
-    const enqueue = (frame: ReadingFrame, update = false) => {
+    const enqueue = (frame: ReadingFrame, update = false, carriage?: WorkCarriage) => {
       if (closed) return;
-      if (!update && frame.kind === 'snapshot') latest = frame;
+      if (!update && frame.kind === 'snapshot') { latest = frame; latestCarriage = carriage; }
       if (++queued > 64) return fail({ problem: 'ReadingFrameBacklog', message: 'Mark-frame capture backlog exceeded its bound' });
       tail = tail.then(async () => {
         if (closed) return;
         if (frame.kind !== 'snapshot') { publish(frame); return; }
         bound ??= documentIn(frame.value);
         if (!bound) { publish(frame); return; }
-        const consumed = await readFrame(bound, readingKey(request), update ? servedAt : takenIn(frame.value) ?? undefined);
+        const consumed = await readFrame(bound, readingKey(request), update ? servedAt : takenIn(frame.value) ?? undefined, carriage, update);
         if (closed) return;
         if (!update) servedAt = consumed.servedAt;
         const changed = (consumed.marks.observedSince ?? 0) > consumed.servedAt || (consumed.marks.changedAt ?? 0) > consumed.servedAt;
@@ -158,8 +159,8 @@ export const markReadings =
         publish({ ...frame, changed });
       }).catch(fail).finally(() => { queued--; });
     };
-    unwatch = marks.subscribe(() => { if (latest) enqueue(latest, true); });
-    try { release = observe(request, (frame) => enqueue(frame), after); }
+    unwatch = marks.subscribe(() => { if (latest) enqueue(latest, true, latestCarriage); });
+    try { release = observe(request, (frame, carriage) => enqueue(frame, false, carriage), after); }
     catch (error) { fail(error); }
     if (closed) end();
     return end;

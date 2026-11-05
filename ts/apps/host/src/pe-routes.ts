@@ -203,6 +203,8 @@ export interface PeRouteInvocation {
   readonly sheets?: DuctsSheetSources;
   readonly document?: (ref: DocumentRef) => Promise<DocumentRow>;
   readonly observe?: ResourceObserver;
+  readonly work?: import("@pe/runtime").WorkReadContext;
+  readonly finish?: (result: { response: Response } | { error: unknown }) => Promise<void>;
 }
 
 const feedbackSchema = peRoutes["feedback.submit"].body;
@@ -772,7 +774,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
         const scope = await routeWorkKey(url, route, "read", caller, invocation.document);
         if (scope instanceof Response) return scope;
         try {
-          const view = await work.view(scope, route);
+          const view = await work.view(scope, route, invocation.work);
           return view ? json(view) : json({ error: `unknown route '${route}'` }, 404);
         } catch (error) {
           if (isDoorFailure(error)) throw error;
@@ -1476,9 +1478,17 @@ const addPeHttpRoutes = (router: HttpRouter.HttpRouter,
 });
 
 export const peCoreRoutes = (routes: ReturnType<typeof createPeRoutes>,
-  invocation: (context: Context.Context<RequestIdentityKey>) => PeRouteInvocation,
+  invocation: (context: Context.Context<RequestIdentityKey>, request: Request) => Promise<PeRouteInvocation>,
   inputs?: HostInputContext["Service"]) => HttpRouter.use((router) =>
-    addPeHttpRoutes(router, { pe: (request, context) => routes.fetch(request, invocation(context)) }, inputs),
+    addPeHttpRoutes(router, { pe: async (request, context) => {
+      const ports = await invocation(context, request);
+      let result: { response: Response } | { error: unknown };
+      try { result = { response: await routes.fetch(request, ports) }; }
+      catch (error) { result = { error }; }
+      await ports.finish?.(result);
+      if ("error" in result) throw result.error;
+      return result.response;
+    } }, inputs),
   ).pipe(Layer.provide(httpProblems));
 
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */

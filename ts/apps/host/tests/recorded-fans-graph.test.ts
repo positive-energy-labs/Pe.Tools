@@ -2,12 +2,13 @@ import { readFileSync, existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
-import { bindWork, address, type ReadingRequest } from "@pe/agent-contracts";
+import { bindWork, address, type Caller, type ReadingRequest } from "@pe/agent-contracts";
+import type { RouteWorkspace } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
 import { fansInputRoutes } from "../src/app.ts";
 import { HostInputContext } from "../src/input-context.ts";
@@ -18,8 +19,9 @@ import { admittedRequestIdentity, RequestIdentity } from "../src/request-service
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { FIRM_SEED } from "../src/ducts-inputs.ts";
 import { admitNativeCaller } from "../src/native-read-policy.ts";
-import { nativeCatalogIdentity, inputBindingKey, inputIdentity, openRecordingWriter, openRecordingReader,
-  type HostInputLane, type Taking } from "../src/native-recording.ts";
+import { nativeCatalogIdentity, openRecordingWriter, openRecordingReader,
+  type HostInputLane, type ConsumerRecipe } from "../src/native-recording.ts";
+import type { ReadSetId } from "../src/input-occurrence.ts";
 import { builtinEnrollments } from "../src/builtin-enrollment.ts";
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
 
@@ -71,9 +73,11 @@ async function firstFrame(response: Response) {
   } finally { await reader.cancel(); }
 }
 
-test.skipIf(!existsSync(source))("real Fans roster and admitted Work resources replay without live inputs; repeated sheet basis stays ambiguous", async () => {
+test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and admitted Work resources replay without live inputs", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-fans-graph-"));
-  const all: Taking[] = []; let nativeCalls = 0, poisoned = 0;
+  const completed: { recipe: ConsumerRecipe; id: ReadSetId; requestId?: string }[] = []; let nativeCalls = 0, poisoned = 0;
+  let workspace: RouteWorkspace, holdHuman = false;
+  const entered = Promise.withResolvers<void>(), releaseHuman = Promise.withResolvers<void>();
   const raw = JSON.parse(readFileSync(source, "utf8").replace(/^\uFEFF/, ""));
   const snapshot = Schema.decodeUnknownSync(Schema.Json)(raw.result ?? raw);
   await mkdir(join(dir, "catalogs")); await writeFile(join(dir, "firm.json"), JSON.stringify(FIRM_SEED));
@@ -100,36 +104,35 @@ test.skipIf(!existsSync(source))("real Fans roster and admitted Work resources r
   const live = HttpRouter.toWebHandler(Layer.unwrap(Effect.gen(function* () {
     yield* TestClock.setTime(200);
     return fansInputRoutes(inputs, { live: livePorts, store: fileRouteDocumentStore(join(dir, "work")),
-      observed: (taking) => Effect.sync(() => { all.push(taking); }),
-      initialize: async (workspace) => {
+      observedReadSet: (recipe, id, requestId) => { completed.push({ recipe, id, requestId }); },
+      observed: (taking) => Effect.gen(function* () {
+        const identity = yield* Effect.serviceOption(RequestIdentity);
+        if (holdHuman && taking.input.kind === "work" && taking.input.view === "view" &&
+            Option.isSome(identity) && identity.value.caller.kind === "human") {
+          holdHuman = false; entered.resolve(); yield* Effect.promise(() => releaseHuman.promise);
+        }
+      }),
+      initialize: async (owner) => {
+        workspace = owner;
         for (const [revision, cfm] of [[0, 250], [1, 300]] as const)
-          expect(await workspace.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm } } }], revision)).toMatchObject({ ok: true });
-        expect(await workspace.apply(key("ducts"), "ducts", "human", [], 0)).toMatchObject({ ok: true });
+          expect(await owner.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm } } }], revision)).toMatchObject({ ok: true });
+        expect(await owner.apply(key("ducts"), "ducts", "human", [], 0)).toMatchObject({ ok: true });
       },
     });
   })).pipe(Layer.provide(TestClock.layer())), { disableLogger: true });
-  const send = (web: typeof live, url: string, body?: unknown) => withInvocationContext({ caller, hostBaseUrl: "http://host" }, () => web.handler(new Request(`http://host${url}`, {
+  const admitted = (who: Caller = caller) => admittedRequestIdentity(who, { bridgeSessionId: ref.session, openDocumentId: ref.openId });
+  const send = (web: typeof live, url: string, body?: unknown, identity = admitted()) => withInvocationContext({ caller: identity.caller, hostBaseUrl: "http://host" }, () => web.handler(new Request(`http://host${url}`, {
     method: body === undefined ? "GET" : "POST", headers: { "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }), Context.make(RequestIdentity, admittedRequestIdentity(caller, { bridgeSessionId: ref.session, openDocumentId: ref.openId }))));
-  const cases: { url: string; body?: any; value: any; bindings: Map<string,string>; stream?: boolean; ambiguous: string[] }[] = [];
-  const dependencies = new Map<string,string>();
-  const capture = async (url: string, body?: unknown, stream = false) => {
-    const start = all.length; const response = await send(live, url, body);
+  }), Context.make(RequestIdentity, identity)));
+  const cases: { url: string; body?: any; value: any; readSet: ReadSetId; stream?: boolean; caller: Caller }[] = [];
+  const capture = async (url: string, body?: unknown, stream = false, who: Caller = caller) => {
+    const identity = admitted(who); const response = await send(live, url, body, identity);
     if (!stream) expect(response.status, await response.clone().text()).toBe(200);
     const value = stream ? await firstFrame(response) : await response.json();
-    const consumed = new Map<string, Taking[]>();
-    for (const taking of all.slice(start)) {
-      const k = taking.input.kind === "native" ? inputIdentity(taking.input) : inputBindingKey(taking.input, taking.scope);
-      consumed.set(k, [...(consumed.get(k) ?? []), taking]);
-    }
-    const ambiguous: string[] = [];
-    for (const [k, takings] of consumed) {
-      if (takings.length === 1) dependencies.set(k, takings[0]!.id);
-      else { dependencies.delete(k); ambiguous.push(k); }
-    }
-    // Carry only previously consumed dependencies, replacing them solely with this request's
-    // explicitly observed occurrence. This is a request read set, never a bundle search.
-    cases.push({ url, body, value, bindings: new Map(dependencies), stream, ambiguous }); return value;
+    const key = stream ? "resource.frame" : url.endsWith("/sheet") ? "ducts.sheet" : url.includes("route-state") ? "work.get" : "ducts.roster";
+    const roots = completed.filter((entry) => entry.requestId === identity.requestId && entry.recipe.key === key);
+    expect(roots, "The actual consumer must complete exactly one stored read set").toHaveLength(1);
+    cases.push({ url, body, value, readSet: roots[0]!.id, stream, caller: who }); return value;
   };
   let historical: typeof live | undefined;
   try {
@@ -145,7 +148,11 @@ test.skipIf(!existsSync(source))("real Fans roster and admitted Work resources r
     const request = { target: ref, mode: "fan", unitId: fan.unitId, portIndex: fan.portIndex };
     const overview = await capture("/pe/ducts/sheet", request);
     expect(overview.kind).toBe("overview");
-    expect(cases.at(-1)!.ambiguous.length).toBeGreaterThan(0);
+    for (const kind of ["inputs", "worksheet"] as const) {
+      const detail = await capture("/pe/ducts/sheet", { ...request, basis: overview.basis, detail: { kind } });
+      expect(detail.kind).toBe(kind);
+      expect(detail.basis).toBe(overview.basis);
+    }
     const fans = builtinEnrollments.find((entry) => entry.routeKey === "fans")!;
     const fingerprint = workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`);
     for (const route of ["fans", "ducts"]) {
@@ -155,26 +162,59 @@ test.skipIf(!existsSync(source))("real Fans roster and admitted Work resources r
       expect(frame.kind).toBe("snapshot"); expect(frame.changed).toBe(true);
       expect(frame.value.handle.key.route).toBe(route); expect(frame.value.history).toBeDefined();
     }
+    holdHuman = true;
+    const workUrl = "/pe/route-state/fans?open=captured-chadds/chadds-open";
+    const humanRead = capture(workUrl);
+    await Promise.race([entered.promise, new Promise<never>((_, reject) => setTimeout(() => reject(Error("Work runner lost the actual human request context")), 10000))]);
+    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm: 400 } } }], 2)).toMatchObject({ ok: true });
+    const pea: Caller = { kind: "pea", context: "occurrence-test", thread: "thread", run: { thread: "thread", turn: "1" }, root: { thread: "thread", turn: "1" } };
+    const peaView = await capture(workUrl, undefined, false, pea);
+    releaseHuman.resolve();
+    const humanView = await humanRead;
+    expect([humanView.revision, peaView.revision]).toEqual([2, 3]);
     await live.dispose();
     liveFactories.recorded = true;
     const liveFiles = vi.spyOn(HostFiles, "layer").mockImplementation(() => { poisoned++; throw Error("Live file readers constructed"); });
     const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
     expect(reader.truncation).toBeNull();
+    const overviewCase = cases.filter((entry) => entry.value.kind === "overview");
+    expect(overviewCase).toHaveLength(1);
+    const overviewSet = await run(reader.readSets.get(overviewCase[0]!.readSet));
+    for (const detail of cases.filter((entry) => ["inputs", "worksheet"].includes(entry.value.kind)))
+      expect((await run(reader.readSets.get(detail.readSet))).dependencies.overview).toBe(overviewCase[0]!.readSet);
+    for (const feed of cases.filter((entry) => entry.stream && entry.value.value?.handle)) {
+      const record = await run(reader.readSets.get(feed.readSet));
+      expect(record.inputs.some((entry) => entry.input.kind === "work" && entry.input.view === "feed")).toBe(true);
+      const marks = record.inputs.filter((entry) => entry.input.kind === "marks");
+      expect(marks).toHaveLength(1);
+      const taking = reader.taking(marks[0]!.takingId)!;
+      expect(await run(reader.observation(taking))).toMatchObject({ servedAt: 200, marks: { changedAt: 300 } });
+    }
+    const nativeRecipe = Schema.Struct({ key: Schema.String, role: Schema.String, request: Schema.Json, expectedVersion: Schema.NullOr(Schema.String) });
+    const children = overviewSet.children.map((entry) => ({ ...entry, input: Schema.decodeUnknownSync(nativeRecipe)(entry.recipe.input) }));
+    expect(children.every((entry) => ["acquire", "validate", "join", "beyond"].includes(entry.input.role))).toBe(true);
+    const acquire = children.filter((entry) => entry.input.key === "ducts.snapshot.walk" && entry.input.role === "acquire");
+    const validate = children.filter((entry) => entry.input.key === "ducts.snapshot.walk" && entry.input.role === "validate");
+    expect(acquire).toHaveLength(1); expect(validate).toHaveLength(1);
+    const original = await run(reader.readSets.get(acquire[0]!.readSetId));
+    const current = await run(reader.readSets.get(validate[0]!.readSetId));
+    expect(original.takingLinks.native).toBeTruthy(); expect(current.takingLinks.native).toBe(original.takingLinks.native);
+    const basis = (record: typeof original) => record.inputs.filter((entry) => entry.input.kind === "document" && entry.input.scope.includes("ducts-body-basis"));
+    expect(basis(original)).toHaveLength(1); expect(basis(current)).toHaveLength(1);
+    expect(basis(original)[0]!.takingId).not.toBe(basis(current)[0]!.takingId);
     const calls = nativeCalls;
     for (const recorded of cases) {
-      const lane: HostInputLane = { kind: "recording", recordingStore: reader, bindings: recorded.bindings, at: null };
+      const lane: HostInputLane = { kind: "recording", recordingStore: reader, at: null };
       const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer(lane))));
       // Each request has an explicit trusted read set; repeated occurrences have no guessed binding.
       historical = HttpRouter.toWebHandler(Layer.unwrap(Effect.gen(function* () {
         yield* TestClock.setTime(10000);
-        return fansInputRoutes(context, { get live(): never { poisoned++; throw Error("live inputs constructed"); },
+        return fansInputRoutes(context, { readSet: recorded.readSet, get live(): never { poisoned++; throw Error("live inputs constructed"); },
           get store(): never { poisoned++; throw Error("live Work store constructed"); }, initialize: async () => { poisoned++; throw Error("live initializer called"); } });
       })).pipe(Layer.provide(TestClock.layer())), { disableLogger: true });
-      const response = await send(historical, recorded.url, recorded.body);
-      if (recorded.ambiguous.length) {
-        expect(response.status, await response.clone().text()).toBe(409);
-        expect(await response.json()).toMatchObject({ problem: "recording.ambiguous" });
-      } else {
+      const response = await send(historical, recorded.url, recorded.body, admitted(recorded.caller));
+      {
+        expect(response.status, recorded.stream ? "resource stream" : await response.clone().text()).toBe(200);
         const provenance = JSON.parse(response.headers.get("x-pe-source")!);
         expect(provenance).toMatchObject({ kind: "recording", at: null, ...identity,
           coverage: expect.arrayContaining(["native", "document", "work", "files", "marks"]) });
@@ -187,11 +227,11 @@ test.skipIf(!existsSync(source))("real Fans roster and admitted Work resources r
       expect(await refused.json()).toMatchObject({ problem: "recording.historical" });
       const missing = await send(historical, "/pe/ducts/roster", { target: { ...ref, openId: "unrecorded-open" } });
       expect(missing.status).toBe(409);
-      expect(await missing.json()).toMatchObject({ problem: "recording.miss" });
+      expect(await missing.json()).toMatchObject({ problem: expect.stringMatching(/^recording\.(miss|mismatch)$/) });
       await historical.dispose(); historical = undefined;
     }
     expect(poisoned).toBe(0); expect(nativeCalls).toBe(calls);
     expect(liveFactories).toMatchObject({ sdk: 0, bridge: 0, work: 0 });
     liveFiles.mockRestore();
-  } finally { vi.restoreAllMocks(); await historical?.dispose(); await live.dispose(); await rm(dir, { recursive: true, force: true }); }
+  } finally { releaseHuman.resolve(); vi.restoreAllMocks(); await historical?.dispose(); await live.dispose(); await rm(dir, { recursive: true, force: true }); }
 }, 180000);

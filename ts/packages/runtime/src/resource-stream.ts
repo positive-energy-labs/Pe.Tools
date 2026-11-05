@@ -13,7 +13,7 @@ import {
   workFeedFailureMessage,
   workFeedFailureSchema,
 } from "../../agent-contracts/src/work-journal-door.ts";
-import type { RouteWorkspace } from "./route-workspace.ts";
+import type { RouteWorkspace, WorkReadContext, WorkCarriage } from "./route-workspace.ts";
 import type { OwnerValue } from "./owner-read.ts";
 
 /** Who answers the `thread-head` Reading: the host's harness thread store. */
@@ -24,7 +24,7 @@ export interface ThreadHeadSource {
 /** `after` is the connection's host log cursor (absent: none); only log-backed Readings read it. */
 export type ResourceObserver = (
   request: ReadingRequest,
-  publish: (frame: ReadingFrame) => void,
+  publish: (frame: ReadingFrame, carriage?: WorkCarriage) => void,
   after?: number | null,
 ) => () => void;
 export const resourceSnapshot = (key: string, result: OwnerValue<unknown>): ReadingFrame =>
@@ -36,10 +36,11 @@ export function observeResources(
   work: RouteWorkspace,
   heads: ThreadHeadSource | undefined,
   host?: ResourceObserver,
+  context?: WorkReadContext,
 ): ResourceObserver {
   return (request, publish, after) => {
     const key = readingKey(request);
-    const accept = (value: OwnerValue<unknown>) => publish(resourceSnapshot(key, value));
+    const accept = (value: OwnerValue<unknown>, carriage?: WorkCarriage) => publish(resourceSnapshot(key, value), carriage);
     if ((request.kind === "work" || request.kind === "work-acks") && request.admission) {
       let closed = false;
       let release = () => {};
@@ -68,8 +69,8 @@ export function observeResources(
             scope,
             admission,
             request.kind,
-            (value) => {
-              if (!closed) accept(value);
+            (value, carriage?: WorkCarriage) => {
+              if (!closed) accept(value, carriage);
             },
             (ack) => publish({ kind: "event", key, value: ack }),
             (error) => {
@@ -81,6 +82,7 @@ export function observeResources(
                 error: error instanceof Error ? error.message : String(error),
               });
             },
+            context,
           );
         },
         (error) => {
