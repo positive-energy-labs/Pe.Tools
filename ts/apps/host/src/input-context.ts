@@ -1,7 +1,7 @@
 import { Context, Layer } from "effect";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { inputKinds, type InputKind, type SourceProvenance } from "@pe/agent-contracts";
-import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
+import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import type { HostInputLane } from "./native-recording.ts";
 import { InvalidRead } from "./native-reads.ts";
 
@@ -51,7 +51,7 @@ function check(lane: HostInputLane, use: InputUse): InvalidRead | null {
         : historical(`${use.key} (${operation.effect})`);
     }
     case "command": {
-      const axes = commandCatalogAxes[use.key as keyof typeof commandCatalogAxes];
+      const axes = linkedCatalog().entries.get(`command:${use.key}`);
       if (!axes) return refused("read.contract", `${use.key} is not a catalog command`);
       if (axes.effect !== "Read") return historical(`${use.key} (${axes.effect})`);
       // A plan computes from every input it reads; until a bundle covers them all it refuses, and

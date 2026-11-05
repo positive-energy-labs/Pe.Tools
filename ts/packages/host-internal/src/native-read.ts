@@ -1,5 +1,6 @@
 import { Context, type Effect, type Schema } from "effect";
-import type { HostSessionScope } from "../../host-contracts/src/operation-types.ts";
+import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+export { canonicalJson } from "./read-admission.ts";
 import type {
   DoorFailure,
   NativeAnswer,

@@ -16,7 +16,6 @@ import { invokeBridge, type RevitBridge } from "./bridge.ts";
 import { command, refused, type CommandContext } from "./command-executor.ts";
 import type { ActionExecution } from "./action-journal.ts";
 import { lifetime } from "./family-actions.ts";
-import type { SdkReceiptReader } from "./native-receipts.ts";
 import { ductsReadings } from "./ducts-readings.ts";
 import { runPods } from "./family-actions.ts";
 import { buildSheet, resolveCriteria, resolveInputs } from "@pe/ducts-domain/sheet/index";
