@@ -52,7 +52,7 @@ export function commandRegistry(
     instancesExecutors(deps),
     takeoffExecutors(captures, bridge, deps),
     ductsExecutors(bridge, deps),
-    catalogWorkExecutors(bridge),
+    catalogWorkExecutors(bridge, deps),
   ]) {
     for (const [key, factory] of Object.entries(group)) {
       if (implementations[key]) throw Error(`Command '${key}' has two executors`);

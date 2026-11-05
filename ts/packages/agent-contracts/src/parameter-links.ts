@@ -10,7 +10,6 @@ export const parameterIdentitySchema = z.object({
 });
 export type ParameterIdentity = z.infer<typeof parameterIdentitySchema>;
 import type { RouteStateSpec } from "./route-state.ts";
-import { canonicalRouteInput } from "./route-doc.ts";
 import { draftCellSchema } from "./draft.ts";
 
 const parameterLinkParameterIdentitySchema = parameterIdentitySchema.extend({
@@ -122,8 +121,8 @@ export type ParameterLinksData = z.infer<typeof parameterLinksDataSchema>;
 
 /**
  * Parameter Links Work: one StateCell per authored id (ADR 0030 rules 2 and 8), so a person and Pea
- * staging different definitions never overwrite each other. The Work holds the whole authored
- * profile, since apply replaces it whole; a delete rung removes an id. Strict, so the old `{ draft }`
+ * staging different definitions never overwrite each other. Staged ids lay over the stored profile at
+ * plan (catalog-work.ts `mergeParameterProfile`); unstaged ids keep their stored value, a delete rung removes its id. Strict, so the old `{ draft }`
  * and whole-`profile` shapes fail closed rather than lose their value.
  */
 const idCells = <V extends z.ZodType>(value: V) =>
@@ -133,30 +132,6 @@ export const parameterLinksDocumentSchema = z.strictObject({
   assignments: idCells(parameterLinkAssignmentSchema.omit({ id: true })),
 });
 export type ParameterLinksDocument = z.infer<typeof parameterLinksDocumentSchema>;
-
-type IdCells<V> = Record<string, { edit?: { value?: V; delete?: true } | null }>;
-/** Each staged id as an entry; a delete rung drops it. An id with no staged value refuses. */
-function stagedEntries<V extends object>(cells: IdCells<V>, kind: string): (V & { id: string })[] {
-  return Object.entries(cells).flatMap(([id, { edit }]) => {
-    if (!edit) throw new Error(`${kind} ${id} has no staged value; the profile is replaced whole`);
-    return edit.delete ? [] : [{ ...edit.value!, id }];
-  });
-}
-
-/** The profile apply would reconcile, whole: every staged id; null when Work stages nothing. */
-export function stagedParameterProfile(work: ParameterLinksDocument): ParameterLinkProfile | null {
-  if (!Object.keys(work.definitions).length && !Object.keys(work.assignments).length) return null;
-  return parameterLinkProfileSchema.parse({
-    definitions: stagedEntries(work.definitions, "definition"),
-    assignments: stagedEntries(work.assignments, "assignment"),
-  });
-}
-
-/**
- * The exact profile an observation was taken against. Identical on the client and the server.
- */
-export const parameterLinksBasis = (work: ParameterLinksDocument): string =>
-  canonicalRouteInput(stagedParameterProfile(work));
 
 /** A host reading, stored by the capture owner: what Revit holds and what the draft would do. */
 export const parameterLinksReadingSchema = z.object({

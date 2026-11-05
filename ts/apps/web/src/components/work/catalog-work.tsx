@@ -1,8 +1,10 @@
 /**
  * The shared review for a Page-less catalog owner (ADR 0030 rule 2): its staged cells with their authors, and
  * the one write button over the generated plan/apply pair. A person on /ducts sees the same Work, handle and
- * sealed plan Pea plans through; no per-op component and no Page. The before value is the model's, which
- * this Work does not read, so it says "unknown" rather than guessing.
+ * sealed plan Pea plans through; no per-op component and no Page. A held plan draws its cells from the plan
+ * response itself (`evidence.touched`: the model's before it read, the after, the author), so an absent
+ * before says "(none)". Only an owner whose plan reads no base (data tables) falls back to its staged cells,
+ * whose before is genuinely unread and says "unknown".
  */
 import { useEffect, useState, type ComponentProps } from "react";
 import {
@@ -14,6 +16,7 @@ import {
   writeResponseSchema,
   type ActionAdmission,
   type ActionReceipt,
+  type CatalogTouch,
   type DocumentRef,
   type WorkHandle,
   type WorkKey,
@@ -62,6 +65,21 @@ export function catalogWorkCells(owner: Owner, doc: unknown) {
         staged: cell,
       };
     });
+}
+
+const shown = (value: unknown, absent: string) =>
+  value == null ? absent : typeof value === "string" ? value : JSON.stringify(value);
+/** The plan's own before/after per touched id (ADR 0030 rule 8); null when the plan reports none. */
+export function touchedCells(evidence: unknown): WriteCell[] | null {
+  const touched = (evidence as { touched?: readonly CatalogTouch[] } | undefined)?.touched;
+  if (!touched?.length) return null;
+  return touched.map(({ path, before, after, by }) => ({
+    key: path.join("/"),
+    label: path.join(" · "),
+    before: shown(before, "(none)"),
+    after: shown(after, "(delete)"),
+    author: by,
+  }));
 }
 
 const applyKeyOf = (owner: Owner) =>
@@ -129,7 +147,8 @@ export function CatalogWorkReview({
     if (refused) return refused;
     const parsed = writeResponseSchema.safeParse((row as { result?: unknown }).result);
     if (!parsed.success) return { message: "Plan returned no seal" };
-    setPlan({ revision: work!.handle.revision, cells, seal: parsed.data.seal });
+    const evidence = (row as { result?: { evidence?: unknown } }).result?.evidence;
+    setPlan({ revision: work!.handle.revision, cells: touchedCells(evidence) ?? cells, seal: parsed.data.seal });
     return null;
   };
   const runApply = async (): WriteRun => {

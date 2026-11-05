@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import { catalogWorkCommands, catalogWorks, catalogWorkSpecs, CatalogWorkRefused } from "./catalog-work.ts";
+import { catalogWorkCommands, catalogWorks, catalogWorkSpecs, CatalogWorkRefused, mergeParameterProfile } from "./catalog-work.ts";
+import type { ParameterLinkProfile } from "./parameter-links.ts";
 import { commandCatalogAxes } from "./command-axes.ts";
 import { workHandle } from "./command.ts";
 import { bindWork, canonicalWorkKey, workKey } from "./route-state.ts";
@@ -24,7 +25,7 @@ describe("Work identity", () => {
 
 const cell = (value: unknown) => ({ edit: { value } });
 const table = (doc: object) =>
-  catalogWorks["data-tables"].derive(catalogWorks["data-tables"].schema.parse({ name: cell("T"), ...doc }));
+  catalogWorks["data-tables"].derive(catalogWorks["data-tables"].schema.parse({ name: cell("T"), ...doc })).request;
 
 describe("data-tables derive", () => {
   it("sends columns by pool slot, Text before Number, and leaves unstaged rows untouched", () => {
@@ -69,20 +70,38 @@ describe("parameter-links derive", () => {
     targetParameter: { name: "Breaker" },
   };
 
-  it("replaces the profile whole from cells keyed by authored id", () => {
-    const doc = schema.parse({
-      definitions: { d1: cell(definition), d2: { edit: { delete: true } } },
-      assignments: { a1: cell({ definitionId: "d1", sourceElementUniqueIds: ["u-1"] }) },
-    });
-    expect(catalogWorks["parameter-links"].derive(doc)).toMatchObject({
-      reconcile: true,
-      profile: { definitions: [{ id: "d1" }], assignments: [{ id: "a1", sourceElementUniqueIds: ["u-1"] }] },
-    });
+  const stored = {
+    formatVersion: 1,
+    definitions: [{ id: "D1", ...definition }, { id: "D2", ...definition, targetParameter: { name: "B2" } }],
+    assignments: [{ id: "A1", definitionId: "D1", sourceElementUniqueIds: ["u-1"] }],
+  } as ParameterLinkProfile;
+  const merge = (doc: object) => mergeParameterProfile(schema.parse(doc), stored);
+  const ids = (doc: object) => merge(doc).request.profile.definitions.map((d) => d.id);
+
+  it("keeps every stored id beside a staged one, and reports only the staged id as touched", () => {
+    const plan = merge({ definitions: { D3: { edit: { value: definition, by: "pea" } } } });
+    expect(plan.request.profile.definitions.map((d) => d.id)).toEqual(["D1", "D2", "D3"]);
+    expect(plan.request.profile.assignments.map((a) => a.id)).toEqual(["A1"]);
+    expect(plan.touched).toMatchObject([{ path: ["definitions", "D3"], before: null, after: { id: "D3", ...definition }, by: "pea" }]);
   });
 
-  it("refuses an empty Work, an unstaged id, and the old whole-profile shape", () => {
-    expect(() => catalogWorks["parameter-links"].derive(schema.parse({}))).toThrow(CatalogWorkRefused);
-    expect(() => catalogWorks["parameter-links"].derive(schema.parse({ definitions: { d1: {} } }))).toThrow();
+  it("an edit of D1 preserves D2 and carries D1's stored before", () => {
+    const edited = { ...definition, targetParameter: { name: "B1-new" } };
+    const plan = merge({ definitions: { D1: cell(edited) } });
+    expect(ids({ definitions: { D1: cell(edited) } })).toEqual(["D1", "D2"]);
+    expect(plan.request.profile.definitions[1]).toMatchObject(stored.definitions[1]!);
+    expect(plan.touched[0]).toMatchObject({ path: ["definitions", "D1"], before: stored.definitions[0], after: { id: "D1", ...edited } });
+  });
+
+  it("an explicit delete removes only the named id; deleting an absent id refuses", () => {
+    expect(ids({ definitions: { D2: { edit: { delete: true } } } })).toEqual(["D1"]);
+    expect(merge({ definitions: { D2: { edit: { delete: true } } } }).touched[0]).toMatchObject({ before: stored.definitions[1], after: null });
+    expect(() => merge({ definitions: { D9: { edit: { delete: true } } } })).toThrow(CatalogWorkRefused);
+  });
+
+  it("refuses an empty Work and the old whole-profile shape; an unstaged cell keeps the stored id", () => {
+    expect(() => merge({})).toThrow(CatalogWorkRefused);
+    expect(() => mergeParameterProfile(schema.parse({ definitions: { D1: {} } }), stored)).toThrow(CatalogWorkRefused);
     expect(() => schema.parse({ profile: {} })).toThrow();
   });
 });
