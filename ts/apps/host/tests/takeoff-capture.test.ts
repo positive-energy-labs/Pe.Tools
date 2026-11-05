@@ -84,7 +84,7 @@ test("actual snapshot read leaves real Work revision and a concurrent authored e
       }),
   });
   const web = HttpRouter.toWebHandler(
-    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), captures, {
+    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl"), Date.now), captures, {
       sdk: sdkSessions,
     }).pipe(nativeReadRoot()).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },
@@ -203,7 +203,7 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
       }),
   });
   const web = HttpRouter.toWebHandler(
-    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), captures, {
+    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl"), Date.now), captures, {
       sdk: sdkSessions,
     }).pipe(nativeReadRoot()).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },
@@ -237,7 +237,7 @@ test("actual /call rejects a closed openId and a late generation; saved HTTP rea
     expect((await read()).status).toBe(409);
     const restored = HttpRouter.toWebHandler(
       makeCallRoute(
-        new ActionJournal(join(dir, "restored-journal.jsonl")),
+        new ActionJournal(join(dir, "restored-journal.jsonl"), Date.now),
         captureStore(dir),
       ).pipe(nativeReadRoot()).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
       {

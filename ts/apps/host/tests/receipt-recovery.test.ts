@@ -61,7 +61,7 @@ test("an executor recovers an uncertain file from actual bytes and resumes witho
       };
     },
   };
-  const owner = new ActionJournal(path);
+  const owner = new ActionJournal(path, Date.now);
   const crossing = crossingOf("human");
   registerFixtureCommand(owner, "test.file-write", factory);
   await owner.invoke(
@@ -69,7 +69,7 @@ test("an executor recovers an uncertain file from actual bytes and resumes witho
     crossing,
   );
   expect(await owner.wait("file-write")).toMatchObject({ state: "unknown" });
-  const restarted = new ActionJournal(path);
+  const restarted = new ActionJournal(path, Date.now);
   registerFixtureCommand(restarted, "test.file-write", factory);
   const recovered = await restarted.recover("file-write");
   expect(recovered.steps).toMatchObject([{ kind: "file", state: "succeeded" }]);
@@ -98,7 +98,7 @@ async function fixture() {
     target: { kind: "host" as const },
     input: { bytes: "\r\noriginal\r\n" },
   };
-  const owner = new ActionJournal(path, () => ({
+  const owner = new ActionJournal(path, Date.now, () => ({
     ...receiptGoldenEnvelope.stamp!,
     component: "host",
   }));
@@ -123,7 +123,7 @@ test("missing recovery preserves unknown; exact cancellation joins the original 
   const { path, owner, action, dispatches, intent } = await fixture();
   expect(action.state).toBe("unknown");
   const root = (await owner.read({ kinds: ["action"] }))[0]!;
-  const restarted = new ActionJournal(path);
+  const restarted = new ActionJournal(path, Date.now);
   const seen: Receipt[] = [];
   restarted.subscribe({}, (r) => {
     seen.push(r);
@@ -208,10 +208,10 @@ test("restart converts running to unknown once; a malformed journal is never ove
   const { path, owner, crash } = await fixture();
   await owner.close();
   await writeFile(path, crash);
-  const restarted = new ActionJournal(path);
+  const restarted = new ActionJournal(path, Date.now);
   expect((await restarted.list())[0]!.state).toBe("unknown");
   const receipts = await restarted.read({});
-  expect(await new ActionJournal(path).read({})).toEqual(receipts);
+  expect(await new ActionJournal(path, Date.now).read({})).toEqual(receipts);
   const valid = await readFile(path, "utf8");
   const lines = valid.trimEnd().split("\n");
   const last = JSON.parse(lines.at(-1)!);
@@ -223,7 +223,7 @@ test("restart converts running to unknown once; a malformed journal is never ove
     `${valid}{"receipt":{}}\n{}\n`, // Malformed interior record cannot be treated as a torn tail.
   ]) {
     await writeFile(path, bytes);
-    await expect(new ActionJournal(path).read({})).rejects.toThrow();
+    await expect(new ActionJournal(path, Date.now).read({})).rejects.toThrow();
     expect(await readFile(path, "utf8")).toBe(bytes);
   }
 });

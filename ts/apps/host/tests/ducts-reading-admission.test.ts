@@ -81,7 +81,7 @@ test("every retained /call hit is admitted, SDK aliases share ownership, and res
   });
   const web = HttpRouter.toWebHandler(
     makeCallRoute(
-      new ActionJournal(join(dir, "journal.jsonl")),
+      new ActionJournal(join(dir, "journal.jsonl"), Date.now),
       undefined,
       { sdk: sdkSessions },
       {

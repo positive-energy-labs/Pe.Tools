@@ -47,7 +47,7 @@ test.each([false, true])(
         0,
       );
       const handle = { key, revision: (await work.view(key, spec.route))!.revision };
-      const journal = new ActionJournal(join(directory, "commands.jsonl"));
+      const journal = new ActionJournal(join(directory, "commands.jsonl"), Date.now);
       let source = "source-before",
         destination = "destination-before",
         writes = 0;

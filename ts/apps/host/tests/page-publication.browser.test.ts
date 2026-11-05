@@ -33,7 +33,7 @@ async function fixture(caller: Caller = human) {
   await writeFile(join(root, "flow", "index.html"), "old");
   await writeFile(join(root, "flow", ".state", "binding.json"), "binding retained");
   const captures = pictureCaptures(join(home, "captures"));
-  const journal = new ActionJournal(join(home, "actions.json"));
+  const journal = new ActionJournal(join(home, "actions.json"), Date.now);
   const executor = pagePublicationExecutor(root, "http://fixture", pageLibrary, captures);
   journal.bindCommands({
     resolve: () => executor,

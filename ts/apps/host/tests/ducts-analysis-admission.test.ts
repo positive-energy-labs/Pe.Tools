@@ -64,7 +64,7 @@ test("the analysis read adapter preserves Pea admission and never borrows a huma
       }),
   });
   const server = await serveRoutes(
-    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, { sdk: sdkSessions }).pipe(Layer.provide(testHostInputs)),
+    makeCallRoute(new ActionJournal(join(dir, "journal.jsonl"), Date.now), undefined, { sdk: sdkSessions }).pipe(Layer.provide(testHostInputs)),
     bridge,
   );
   try {

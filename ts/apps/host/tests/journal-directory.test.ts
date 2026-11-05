@@ -8,7 +8,7 @@ import { ActionJournal } from "../src/action-journal.ts";
 
 test("SDK directory effects queue descendant files and directories without locking adjacent roots", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-directory-effect-"));
-  const journal = new ActionJournal(join(root, "journal.jsonl"));
+  const journal = new ActionJournal(join(root, "journal.jsonl"), Date.now);
   let release!: () => void;
   const blocked = new Promise<void>((resolve) => {
     release = resolve;

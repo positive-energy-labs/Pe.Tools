@@ -96,7 +96,7 @@ const lane = <A>(body: (h: Harness) => Effect.Effect<A, unknown, never>, sdk = s
     });
     const workKey = bindWork("ducts", null, undefined, target);
     const marks = yield* HostDocumentMarks;
-    const owner = new ActionJournal(join(dir, "attempts.json"));
+    const owner = new ActionJournal(join(dir, "attempts.json"), Date.now);
     const web = HttpRouter.toWebHandler(
       makeCallRoute(owner, captureStore(join(dir, "captures")), {
         sdk,

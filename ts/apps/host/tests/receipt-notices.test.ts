@@ -93,7 +93,7 @@ afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, f
 function harness(bufferMs = 0, noticeContext = context) {
   const dir = mkdtempSync(join(tmpdir(), "notices-"));
   dirs.push(dir);
-  const log = new HostLog(dir);
+  const log = new HostLog(dir, Date.now);
   const consumers = new Set<(r: Receipt) => void>();
   const source = {
     subscribe: (_query: unknown, consume: (r: Receipt) => void) => {

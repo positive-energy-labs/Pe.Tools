@@ -51,6 +51,8 @@ export class HostLog {
 
   constructor(
     private readonly dir: string,
+    /** The host runtime's clock for entry times. */
+    private readonly now: () => number,
     private readonly limits = HOST_LOG_LIMITS,
   ) {
     mkdirSync(dir, { recursive: true });
@@ -77,7 +79,7 @@ export class HostLog {
 
   append(event: HostEvent): HostLogEntry {
     const id = this.lastId + 1;
-    const at = new Date().toISOString();
+    const at = new Date(this.now()).toISOString();
     let entry: HostLogEntry = { id, at, event };
     let line = JSON.stringify(entry);
     const bytes = Buffer.byteLength(line);

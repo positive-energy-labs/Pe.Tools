@@ -111,7 +111,7 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
 test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B/A, raw partial reply and lost response replay without catalogue", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pea-cli-owner-"));
   const journal = join(dir, "actions.json");
-  let owner = new ActionJournal(journal),
+  let owner = new ActionJournal(journal, Date.now),
     gone = false,
     lose = true;
   const effects: {
@@ -289,7 +289,7 @@ test("actual pea/Gunshi argv crosses local HTTP: actor/id/openId, file/stdin A/B
     });
     expect(printed.join("\n")).toContain('"failed"');
     await web.dispose();
-    owner = new ActionJournal(journal);
+    owner = new ActionJournal(journal, Date.now);
     web = makeWeb();
     gone = true;
     // No target selectors and no catalogue/session: this is receipt replay by the original ID.

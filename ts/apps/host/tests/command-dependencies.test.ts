@@ -204,7 +204,7 @@ async function setup(probe?: CommandResources["probe"]) {
   const runs = testConsents((_run, event) => events.push(event));
   runs.open(run);
   bindControl({ runs, acquired: () => null });
-  const journal = new ActionJournal(join(directory, "journal.jsonl"));
+  const journal = new ActionJournal(join(directory, "journal.jsonl"), Date.now);
   bindFixtureCommands(journal, {
     work,
     probe:

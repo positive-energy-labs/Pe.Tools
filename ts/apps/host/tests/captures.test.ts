@@ -109,7 +109,7 @@ async function host(
   const spa = () => Effect.succeed(HttpServerResponse.text("spa"));
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(
-      makeCallRoute(new ActionJournal(join(dir, "journal.jsonl")), undefined, {
+      makeCallRoute(new ActionJournal(join(dir, "journal.jsonl"), Date.now), undefined, {
           sdk: sdkSessions,
       }).pipe(Layer.provide(HostFiles.layer()), Layer.provide(Layer.succeed(PictureCaptureStore, store)), Layer.provide(HostDocumentMarks.layer)),
       capturesRoute(spa),

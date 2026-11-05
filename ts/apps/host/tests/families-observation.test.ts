@@ -141,7 +141,7 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
     let current = handlers.get(captures);
     if (!current) {
       current = HttpRouter.toWebHandler(
-        makeCallRoute(new ActionJournal(join(dir, `actions-${handlers.size}.json`)), captures, {
+        makeCallRoute(new ActionJournal(join(dir, `actions-${handlers.size}.json`), Date.now), captures, {
           sdk: sdkSessions,
           workspace,
         }, { families }).pipe(nativeReadRoot()).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),

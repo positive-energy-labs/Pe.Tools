@@ -27,7 +27,7 @@ async function fixture() {
   const dir = await mkdtemp(join(tmpdir(), "pe-spine-"));
   dirs.push(dir);
   const path = join(dir, "actions.json");
-  return { path, owner: new ActionJournal(path, () => stamp) };
+  return { path, owner: new ActionJournal(path, Date.now, () => stamp) };
 }
 
 test("subscribers read one durable action authority, retain opaque ids across restart and cannot settle via facts", async () => {
@@ -79,9 +79,9 @@ test("subscribers read one durable action authority, retain opaque ids across re
   expect(receipt!.join.actionId).not.toBe(admission().id);
   expect(received.at(-1)).toEqual(receipt);
   expect(new Set(received.map((r) => `${r.id}/${r.revision}`)).size).toBe(received.length);
-  const disk = await new ActionJournal(path).read({});
+  const disk = await new ActionJournal(path, Date.now).read({});
   expect(disk.filter((r: Receipt) => r.body.kind === "action")).toEqual([receipt]);
-  const restarted = new ActionJournal(path, () => ({ ...stamp, build: "successor" }));
+  const restarted = new ActionJournal(path, Date.now, () => ({ ...stamp, build: "successor" }));
   expect(await restarted.read({})).toEqual(await owner.read({}));
   const leaf = await restarted.requestJoin(settled.steps[0]!.id);
   expect(leaf).toEqual({
@@ -104,7 +104,7 @@ test("facts publish after commit, isolate listeners, and detach caller data", as
   });
   const body = { kind: "usage" as const, event: "app_boot" as const, counters: {} };
   const r = await owner.recordFact(body);
-  expect(await new ActionJournal(path).read({})).toContainEqual(r);
+  expect(await new ActionJournal(path, Date.now).read({})).toContainEqual(r);
   expect(seen).toEqual([r]);
   expect(r.stamp).toEqual(stamp);
   // A journal the host cannot append to: the commit fails and publishes nothing.

@@ -50,7 +50,7 @@ const terminal = (row: ActionReceipt): Terminal => ({
 async function restart(steps: ActionStep["state"][], prepared: boolean) {
   const path = await journalPath();
   const id = randomUUID();
-  const owner = new ActionJournal(path);
+  const owner = new ActionJournal(path, Date.now);
   let crash = "";
   await invokeCommand(
     owner,
@@ -80,9 +80,9 @@ async function restart(steps: ActionStep["state"][], prepared: boolean) {
   await owner.close();
   // Restore bytes captured at the real persistence boundary, never synthesize current records.
   await writeFile(path, crash);
-  const journal = new ActionJournal(path);
+  const journal = new ActionJournal(path, Date.now);
   const reloaded = (await journal.list(undefined, id))[0]!;
-  const [stored] = await new ActionJournal(path).read({});
+  const [stored] = await new ActionJournal(path, Date.now).read({});
   expect(stored!.body.kind === "action" && stored!.body.value.state).toBe(reloaded.state);
   return reloaded;
 }
@@ -104,7 +104,7 @@ test.each(restarts)("restart with steps %j, prepared %s", async (steps, prepared
 // TransactRead that rolls back). A refusal after one is a known refusal; after any other step it is partial.
 const plan = { fittings: [], terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [], store: {} };
 async function refusedAfter(path: string, key: string) {
-  const journal = new ActionJournal(path);
+  const journal = new ActionJournal(path, Date.now);
   const id = randomUUID();
   let crash = "";
   await invokeCommand(journal, admission(id), async () => ({}), async (execution) => {
@@ -130,7 +130,7 @@ test("a recovered Read step without its catalog stamp stays a conservative effec
   const { id, crash } = await refusedAfter(path, "ducts.apply.plan");
   expect(crash).toMatch(/"effect":"Read",?/);
   await writeFile(path, crash.replace(/"effect":"Read",?/g, ""));
-  const [reloaded] = await new ActionJournal(path).list(undefined, id);
+  const [reloaded] = await new ActionJournal(path, Date.now).list(undefined, id);
   expect(terminal(reloaded!)).toEqual({ state: "incomplete", notDispatched: false });
 });
 
@@ -167,7 +167,7 @@ const admitOn = (journal: ActionJournal, session: string, openId: string) =>
   invokeCommand(journal, onDocument(randomUUID(), session, openId), nativeLeaf, async () => "done");
 
 test("an unknown action on session A, document X does not block session B, document Y", async () => {
-  const journal = new ActionJournal(await journalPath());
+  const journal = new ActionJournal(await journalPath(), Date.now);
   await crashedOn(journal, "session-a", "doc-x");
   const other = await admitOn(journal, "session-b", "doc-y");
   expect((await journal.wait(other.id)).state).toBe("succeeded");
@@ -177,7 +177,7 @@ test("an unknown action on session A, document X does not block session B, docum
 });
 
 test("an unknown action on session A, document X blocks A/X and a session-wide action on A", async () => {
-  const journal = new ActionJournal(await journalPath());
+  const journal = new ActionJournal(await journalPath(), Date.now);
   const crashed = await crashedOn(journal, "session-a", "doc-x");
   await expect(admitOn(journal, "session-a", "doc-x")).resolves.toMatchObject({
     state: "failed",
@@ -218,7 +218,7 @@ const gone: [string, Parameters<typeof sdkRead>, boolean][] = [
   ],
 ];
 test.each(gone)("recovery settles failed when %s", async (_, [state, codes], successor) => {
-  const journal = new ActionJournal(await journalPath());
+  const journal = new ActionJournal(await journalPath(), Date.now);
   const recover: StepRecovery = (step) =>
     readNativeReceipt(
       step,
@@ -243,7 +243,7 @@ test.each(gone)("recovery settles failed when %s", async (_, [state, codes], suc
 });
 
 test("unreadable liveness without a successor process stays unknown", async () => {
-  const journal = new ActionJournal(await journalPath());
+  const journal = new ActionJournal(await journalPath(), Date.now);
   let successor: Parameters<typeof readNativeReceipt>[3];
   const recover: StepRecovery = (step) =>
     readNativeReceipt(

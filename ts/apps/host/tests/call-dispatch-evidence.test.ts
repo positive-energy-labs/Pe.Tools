@@ -24,7 +24,7 @@ async function failedCall(error: unknown) {
     );
     const server = await serveRoutes(
       makeCallRoute(
-        new ActionJournal(join(root, "journal.jsonl")),
+        new ActionJournal(join(root, "journal.jsonl"), Date.now),
         undefined,
         {},
         {

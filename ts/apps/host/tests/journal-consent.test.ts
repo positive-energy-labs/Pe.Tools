@@ -53,7 +53,7 @@ async function files() {
       }
       return saved;
     });
-  const journal = new ActionJournal(path, () => null, 1);
+  const journal = new ActionJournal(path, Date.now, () => null, 1);
   compose(journal);
   const runtime = createPluginRuntime<string>();
   const observed: PluginHooks["op.after"][] = [];
@@ -150,7 +150,7 @@ test("real member saves share consent, freeze input and preserve identity throug
     expect(await f.read("c.txt")).toBe("reviewed");
     for (let i = 0; i < 8; i++) await f.journal.recordFact({ kind: "turn", phase: "started" });
     f.runs.closeAll();
-    const restarted = new ActionJournal(f.path);
+    const restarted = new ActionJournal(f.path, Date.now);
     f.compose(restarted);
     expect((await restarted.read({ kinds: ["turn"] })).length).toBeLessThanOrEqual(2);
     expect((await restarted.list()).map((row) => row.id).sort()).toEqual(["a", "b", "uncertain"]);
@@ -205,7 +205,7 @@ test.each(["cancel", "reject", "child-completed", "stop", "restart"] as const)(
       }
       if (mode === "stop") f.runs.close(run, "stopped");
       if (mode === "restart") {
-        expect((await new ActionJournal(f.path).list())[0]?.state).toBe("cancelled");
+        expect((await new ActionJournal(f.path, Date.now).list())[0]?.state).toBe("cancelled");
         f.runs.closeAll();
       }
       expect((await f.journal.wait("cancelled")).state).toBe("cancelled");

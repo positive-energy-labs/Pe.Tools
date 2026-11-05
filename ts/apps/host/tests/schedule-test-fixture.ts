@@ -82,7 +82,7 @@ export async function setup() {
     ],
   });
   const work = app.workspace;
-  let owner = new ActionJournal(join(dir, "actions.json"));
+  let owner = new ActionJournal(join(dir, "actions.json"), Date.now);
   const a = { session: "A", openId: "open-A" },
     b = { session: "B", openId: "open-B" };
   const document = address(join(dir, "Same.rvt"));
@@ -377,7 +377,7 @@ export async function setup() {
     release: () => release(),
     restart: async () => {
       await server.close();
-      owner = new ActionJournal(join(dir, "actions.json"));
+      owner = new ActionJournal(join(dir, "actions.json"), Date.now);
       server = await mount();
       capabilities = catalogSource();
     },

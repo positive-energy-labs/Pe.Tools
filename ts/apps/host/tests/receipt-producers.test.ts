@@ -18,7 +18,7 @@ import { requestIdentityLayer } from "../src/request-identity.ts";
 
 test("real HTTP feedback retains content and caller before body; diagnostics cannot claim the exception", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-feedback-http-"));
-  const journal = new ActionJournal(join(dir, "journal.json"), () => receiptGoldenEnvelope.stamp);
+  const journal = new ActionJournal(join(dir, "journal.json"), Date.now, () => receiptGoldenEnvelope.stamp);
   const delivered: { properties: unknown; timestamp: string }[] = [];
   const module = await import("../src/receipt-export.ts");
   // The web stamp is the shared build stamp admitted by the host, the same one hostFetch sends as its header.
@@ -183,7 +183,7 @@ test("real HTTP feedback retains content and caller before body; diagnostics can
 
 test("real HTTP refusals, from admission and from a door, export refusal_count with only their closed code", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-refusal-http-"));
-  const journal = new ActionJournal(join(dir, "journal.json"), () => receiptGoldenEnvelope.stamp);
+  const journal = new ActionJournal(join(dir, "journal.json"), Date.now, () => receiptGoldenEnvelope.stamp);
   const sent: { event: string; properties: Record<string, unknown> }[] = [];
   const module = await import("../src/receipt-export.ts");
   const telemetry = module.createReceiptExport({

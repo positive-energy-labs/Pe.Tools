@@ -83,7 +83,7 @@ async function serve(onCatalog?: (documents: (typeof other)[]) => void) {
   ];
   const server = await serveRoutes(
     Layer.mergeAll(
-      makeCallRoute(new ActionJournal(join(dir, "attempts.json")), undefined, {
+      makeCallRoute(new ActionJournal(join(dir, "attempts.json"), Date.now), undefined, {
         sdk: sdkSessions,
       }).pipe(Layer.provide(testHostInputs)),
       pagesRoute(

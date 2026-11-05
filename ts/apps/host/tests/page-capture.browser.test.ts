@@ -57,7 +57,7 @@ it("renders the real public Page kit and settled animation pixels below the view
   try {
     const root = join(home, "Pages");
     const captures = pictureCaptures(join(home, "captures"));
-    const journal = new ActionJournal(join(home, "commands.jsonl"));
+    const journal = new ActionJournal(join(home, "commands.jsonl"), Date.now);
     const executor = pagePublicationExecutor(root, "http://fixture", pageLibrary, captures);
     journal.bindCommands({ resolve: () => executor, probe: async () => null });
     const handler = asCaller(

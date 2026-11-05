@@ -24,7 +24,7 @@ const said = (thread: string, seq: number, text = `t${seq}`): HostEvent => ({
 
 test("retention drops whole old segments; a cursor below the floor reads as a gap", () => {
   const path = dir();
-  const log = new HostLog(path, { segmentBytes: 400, segments: 2, entryBytes: 4096 });
+  const log = new HostLog(path, Date.now, { segmentBytes: 400, segments: 2, entryBytes: 4096 });
   for (let seq = 1; seq <= 40; seq++) log.append(said("a", seq));
   expect(readdirSync(path).length).toBeLessThanOrEqual(2);
   expect(log.floor).toBeGreaterThan(1);
@@ -33,37 +33,37 @@ test("retention drops whole old segments; a cursor below the floor reads as a ga
   expect(stale.entries[0]!.id).toBe(log.floor);
   expect(stale.entries.at(-1)!.id).toBe(40);
   expect(log.read(log.floor - 1).gap).toBe(false);
-  expect(new HostLog(path, { segmentBytes: 400, segments: 2, entryBytes: 4096 }).last).toBe(40);
+  expect(new HostLog(path, Date.now, { segmentBytes: 400, segments: 2, entryBytes: 4096 }).last).toBe(40);
 });
 
 test("forget removes a deleted thread's entries and never reuses its ids", () => {
   const path = dir();
-  const log = new HostLog(path);
+  const log = new HostLog(path, Date.now);
   log.append(said("a", 1));
   log.append(said("gone", 1, "secret"));
   log.append(said("gone", 2, "secret"));
   log.forget((e) => e.event.kind === "thread" && e.event.thread === "gone");
   expect(JSON.stringify(log.read(0).entries)).not.toContain("secret");
-  const reopened = new HostLog(path);
+  const reopened = new HostLog(path, Date.now);
   expect(reopened.last).toBe(3);
   expect(reopened.append(said("a", 2)).id).toBe(4);
 });
 
 test("a torn last line from a crash is skipped, not fatal", async () => {
   const path = dir();
-  const log = new HostLog(path);
+  const log = new HostLog(path, Date.now);
   log.append(said("a", 1));
   const { appendFileSync } = await import("node:fs");
   appendFileSync(join(path, readdirSync(path)[0]!), '{"id":2,"at":"2026');
-  const reopened = new HostLog(path);
+  const reopened = new HostLog(path, Date.now);
   expect(reopened.last).toBe(1);
   expect(reopened.read(0).entries.map((e) => e.id)).toEqual([1]);
   reopened.append(said("a", 2));
-  expect(new HostLog(path).read(0).entries.map((e) => e.id)).toEqual([1, 2]);
+  expect(new HostLog(path, Date.now).read(0).entries.map((e) => e.id)).toEqual([1, 2]);
 });
 
 test("GET /pe/log pages the log after a cursor, by kind and thread", async () => {
-  const log = new HostLog(dir());
+  const log = new HostLog(dir(), Date.now);
   for (let seq = 1; seq <= 3; seq++) log.append(said("a", seq));
   log.append(said("b", 1));
   const routes = createPeRoutes({

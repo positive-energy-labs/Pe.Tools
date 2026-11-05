@@ -30,7 +30,7 @@ afterAll(async () => {
 });
 
 async function host(limits?: { segmentBytes: number; segments: number; entryBytes: number }) {
-  const log = new HostLog(join(root, "log", randomUUID()), limits);
+  const log = new HostLog(join(root, "log", randomUUID()), Date.now, limits);
   const threads = await harnessThreads({
     runs: consentService(),
     root: join(root, "threads"),

@@ -41,7 +41,7 @@ async function fixture(events: HarnessEvent[] = []) {
   );
   const options = {
     root,
-    log: new HostLog(join(root, ".log")),
+    log: new HostLog(join(root, ".log"), Date.now),
     worldRoot: root,
     mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
     providers: {

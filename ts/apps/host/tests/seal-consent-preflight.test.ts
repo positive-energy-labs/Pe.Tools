@@ -12,7 +12,7 @@ test("a typed stale-preview refusal reaches the receipt before consent opens", a
   const dir = await mkdtemp(join(tmpdir(), "pe-seal-consent-"));
   const authorize = vi.spyOn(control, "authorizeCommand");
   try {
-    const owner = new ActionJournal(join(dir, "journal.jsonl"));
+    const owner = new ActionJournal(join(dir, "journal.jsonl"), Date.now);
     const entry = fixtureCommand(
       [{ kind: "file", path: "C:/write" }],
       async () => null,

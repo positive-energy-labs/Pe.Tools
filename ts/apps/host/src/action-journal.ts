@@ -480,6 +480,8 @@ export class ActionJournal implements ReceiptReader {
   private readonly reads = new OwnerReads();
   constructor(
     private readonly path: string,
+    /** The host runtime's clock: every event time this journal produces reads it. */
+    private readonly now: () => number,
     private readonly stamp: () => ReceiptStamp | null = () => null,
     private readonly retain = RETAIN_RECEIPTS,
   ) {}
@@ -585,7 +587,7 @@ export class ActionJournal implements ReceiptReader {
       schema: 1,
       id: randomUUID(),
       revision: 1,
-      at: new Date().toISOString(),
+      at: new Date(this.now()).toISOString(),
       ...source,
       ...fact,
     });
@@ -645,7 +647,7 @@ export class ActionJournal implements ReceiptReader {
         {
           ...row,
           steps: row.steps.map((step) =>
-            step.id === requestId ? { ...step, dispatchedAt: new Date().toISOString() } : step,
+            step.id === requestId ? { ...step, dispatchedAt: new Date(this.now()).toISOString() } : step,
           ),
         },
       ]);
@@ -1160,7 +1162,7 @@ export class ActionJournal implements ReceiptReader {
       steps: prior?.steps ?? [],
       prepared: prior?.prepared ?? { state: "unprepared" },
       recovery: prior?.recovery ?? [],
-      startedAt: prior?.startedAt ?? new Date().toISOString(),
+      startedAt: prior?.startedAt ?? new Date(this.now()).toISOString(),
       state: "running",
     };
     // Invariant: a `serial` body never awaits the bridge, an executor, or a resource probe. The
@@ -1872,7 +1874,7 @@ export class ActionJournal implements ReceiptReader {
           ),
           ...updates.map((update) => ({
             stepId: update.step.id,
-            at: new Date().toISOString(),
+            at: new Date(this.now()).toISOString(),
             evidence: update.evidence,
           })),
         ],
@@ -1894,7 +1896,7 @@ export class ActionJournal implements ReceiptReader {
             schema: 1,
             id: old?.id ?? randomUUID(),
             revision: (old?.revision ?? 0) + 1,
-            at: new Date().toISOString(),
+            at: new Date(this.now()).toISOString(),
             // SDK recovery proves an outcome, not the build of the native producer.
             stamp: null,
             join: this.joinForRequest(update.step.id),
@@ -1960,6 +1962,7 @@ export class ActionJournal implements ReceiptReader {
     });
     if (originalBytes === null) return;
     const version = JSON.parse(originalBytes.toString("utf8").split("\n")[0]!)?.version;
+    // ponytail: archive file naming, not an event time; wall time keeps names unique under a fixed test clock.
     const archive = `${this.path}.v${String(version)}.${Date.now()}.archived`;
     const snapshot = readJournalSnapshot(originalBytes, archive);
     if (!snapshot) {
@@ -2064,7 +2067,7 @@ export class ActionJournal implements ReceiptReader {
       });
       return actionReceiptSchema.parse({ ...row, snapshots });
     });
-    const at = new Date().toISOString();
+    const at = new Date(this.now()).toISOString();
     const receipts = rows.flatMap((row) => {
       const old = this.receipts.get(this.actionReceipt.get(row.id) ?? "");
       if (

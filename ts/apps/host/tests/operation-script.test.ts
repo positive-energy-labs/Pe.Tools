@@ -30,7 +30,7 @@ it.each([
   "HTTP script outcome %s settles the durable action as %s",
   async (status, state) => {
     const dir = await mkdtemp(join(tmpdir(), "pe-script-outcome-"));
-    const journal = new ActionJournal(join(dir, "actions.json"));
+    const journal = new ActionJournal(join(dir, "actions.json"), Date.now);
     const result = {
       ...(status === undefined ? {} : { status }),
       diagnostics: [{ stage: "policy", message: "diagnostic kept" }],
@@ -147,7 +147,7 @@ it.each([
       if (state === "failed") {
         expect(receipt).toMatchObject({ evidence: { result } });
         expect(receipt.steps.at(-1)).toMatchObject({ evidence: { result } });
-        const reloaded = new ActionJournal(join(dir, "actions.json"));
+        const reloaded = new ActionJournal(join(dir, "actions.json"), Date.now);
         expect(await reloaded.wait(id)).toMatchObject({ state, evidence: { result } });
       }
     } finally {

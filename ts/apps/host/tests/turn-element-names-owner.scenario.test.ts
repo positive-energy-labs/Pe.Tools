@@ -34,7 +34,7 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true });
 });
 async function host(home: string, observeDocument?: ObserveDocument) {
-  const log = new HostLog(join(home, "log"));
+  const log = new HostLog(join(home, "log"), Date.now);
   const threads = await harnessThreads({
     runs: consentService(),
     root: join(home, "threads"),
