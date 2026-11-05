@@ -978,6 +978,9 @@ test("mount native review submits accepted Work through the command door", async
     work: { revision: 0 },
   });
   mount.confirm("native");
+  expect(mount.timeline()).toEqual(expect.arrayContaining([
+    expect.objectContaining({ kind: "invocation", verb: "native", outcome: expect.objectContaining({ state: "running" }) }),
+  ]));
   expect(submit).toHaveBeenCalledWith(
     expect.objectContaining({ key: "native.write", input: { amount: 6 } }),
   );
@@ -1082,7 +1085,7 @@ import { workHandleSchema, writePreviewSchema, type WorkHandle } from "@pe/agent
 const sealedPreview = (handle: WorkHandle) => ({
   previewOnly: true,
   derivedRequest: { amount: 7 },
-  seal: { requestHash: "sealed", work: { handle }, incarnation: {}, dependencies: "deps" },
+  seal: { requestHash: "sealed", work: { handle }, documentMark: { session: "", openId: "", observedSince: null, changedAt: null }, incarnation: {}, dependencies: "deps" },
   takenAt: "2026-11-03T00:00:00Z",
   response: { changes: [{ kind: "Parameter", key: "amount", before: 6, after: 7 }] },
 });

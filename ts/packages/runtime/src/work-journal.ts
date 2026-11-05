@@ -14,6 +14,7 @@ export interface TimelineEntry {
   kind: "invocation" | "receipt" | "checkpoint" | "feed";
   at: string | number;
   press?: string;
+  /** Stable declaration/command key, never display text. Retained before a receipt exists. */
   verb?: string;
   subject?: unknown;
   receiptId?: string;

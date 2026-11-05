@@ -119,11 +119,12 @@ test("Pea's preview receipt after a Work edit heads the Timeline with its caller
     undo: [step],
     redo: [],
     revision: 3,
+    moves: [{ kind: "apply", press: "p1", label: step.label, by: "human", at: step.at, revision: 3 }],
   };
   const owner = {
     timeline: createRouteTimeline(),
     fixture: null,
-    verbs: { preview: verb({ does: "ducts.preview-losses" }) },
+    verbs: { preview: verb({ does: "ducts.plan-losses" }) },
     subscribe: () => () => {},
     version: () => 0,
     snapshot: () => ({ workKey: { binding: "host", route: "ducts" } }),
@@ -145,7 +146,7 @@ test("Pea's preview receipt after a Work edit heads the Timeline with its caller
       outcome: { id: "r1", state, input: {}, receiptId: "r1" },
     });
   expect(head()).toMatch(
-    /<span>preview<\/span><span data-slot="timeline-state">Pea · succeeded · /,
+    /<span>v<\/span><span data-slot="timeline-state">Pea · succeeded · /,
   );
   expect(head()).not.toContain("<span>Allowance return</span>");
 });
