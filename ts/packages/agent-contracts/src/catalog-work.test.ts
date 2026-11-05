@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { catalogWorkCommands, catalogWorks, catalogWorkSpecs, CatalogWorkRefused, mergeParameterProfile, type CatalogTouch } from "./catalog-work.ts";
-import { editableCells } from "./command.ts";
+import { catalogWorkCommands, catalogWorks, catalogWorkSpecs, CatalogWorkRefused, mergeParameterProfile } from "./catalog-work.ts";
 import type { ParameterLinkProfile } from "./parameter-links.ts";
 import { commandCatalogAxes } from "./command-axes.ts";
 import { workHandle } from "./command.ts";
@@ -26,94 +25,12 @@ describe("Work identity", () => {
 
 const cell = (value: unknown, by: "pea" | "human" = "pea") => ({ edit: { value, by } });
 
-/**
- * K3 per-owner falsifier, discovered from `catalogWorks` (an owner without a fixture fails): a stored base with
- * several keys, a strict-subset staging, and the owner's model of what its native op leaves (`outcome`, from
- * the census of the engine). Generic assertions: touched names exactly the staged cells with their stored
- * before and author; every stored key the Work did not touch survives the op; a replace op's evidence before is
- * the full stored state.
- */
-type Keyed = Record<string, unknown>;
-const fixtures: { [O in keyof typeof catalogWorks]: {
-  base: unknown;
-  doc: unknown;
-  keys(base: unknown): Keyed;
-  outcome(base: unknown, request: unknown): Keyed;
-} } = {
-  "data-tables": {
-    base: {
-      columns: { "text:0": "A", "text:1": "B", "number:0": "N" },
-      rows: { r1: { "text:0": "a1", "text:1": "b1", "number:0": "1" }, r2: { "text:0": "a2", "text:1": "b2", "number:0": "2" } },
-    },
-    doc: { name: cell("T"), columns: { "text:1": cell("B2", "human") }, rows: { r1: { "text:0": cell("x") } } },
-    keys: (base) => {
-      const b = base as { columns: Record<string, string>; rows: Record<string, Record<string, string | null>> };
-      return {
-        name: "T",
-        ...Object.fromEntries(Object.entries(b.columns).map(([k, v]) => [`columns/${k}`, v])),
-        ...Object.fromEntries(Object.entries(b.rows).flatMap(([r, cells]) => Object.entries(cells).map(([k, v]) => [`rows/${r}/${k}`, v]))),
-      };
-    },
-    // DataTableEngine: columns replaced whole, the n-th of a kind binds slot n; sent rows rewrite positionally; rows upsert.
-    outcome: (base, request) => {
-      const b = base as { rows: Record<string, Record<string, string | null>> };
-      const t = (request as { table: { name: string; columns: { heading: string; kind: string }[]; rows: { key: string; values: (string | null)[] }[] } }).table;
-      const n: Record<string, number> = {};
-      const slots = t.columns.map((c) => `${c.kind.toLowerCase()}:${(n[c.kind] = (n[c.kind] ?? -1) + 1)}`);
-      const rows = structuredClone(b.rows);
-      for (const row of t.rows) rows[row.key] = { ...rows[row.key], ...Object.fromEntries(slots.map((k, i) => [k, row.values[i] ?? null])) };
-      return {
-        name: t.name,
-        ...Object.fromEntries(t.columns.map((c, i) => [`columns/${slots[i]}`, c.heading])),
-        ...Object.fromEntries(Object.entries(rows).flatMap(([r, cells]) => Object.entries(cells).filter(([k]) => slots.includes(k)).map(([k, v]) => [`rows/${r}/${k}`, v]))),
-      };
-    },
-  },
-  "parameter-links": {
-    base: {
-      formatVersion: 1,
-      definitions: [
-        { id: "D1", sourceCategoryId: -2001040, sourceParameter: { name: "MOCP" }, relationship: "sameElement", targetParameter: { name: "B1" } },
-        { id: "D2", sourceCategoryId: -2001040, sourceParameter: { name: "MOCP" }, relationship: "sameElement", targetParameter: { name: "B2" } },
-      ],
-      assignments: [{ id: "A1", definitionId: "D1", sourceElementUniqueIds: ["u-1"] }],
-    },
-    doc: { definitions: { D2: cell({ sourceCategoryId: -2001040, sourceParameter: { name: "MOCP" }, relationship: "sameElement", targetParameter: { name: "B2-new" } }, "human") } },
-    keys: (base) => {
-      const b = base as { definitions: { id: string }[]; assignments: { id: string }[] };
-      return Object.fromEntries([...b.definitions.map((d) => [`definitions/${d.id}`, d.id]), ...b.assignments.map((a) => [`assignments/${a.id}`, a.id])]);
-    },
-    // revit.apply.parameter-links reconciles the profile whole: what is sent is what remains.
-    outcome: (_base, request) => {
-      const p = (request as { profile: { definitions: { id: string }[]; assignments: { id: string }[] } }).profile;
-      return Object.fromEntries([...p.definitions.map((d) => [`definitions/${d.id}`, d.id]), ...p.assignments.map((a) => [`assignments/${a.id}`, a.id])]);
-    },
-  },
-};
-
-describe("every catalog Work owner preserves what it does not touch", () => {
-  for (const [owner, work] of Object.entries(catalogWorks) as [keyof typeof catalogWorks, (typeof catalogWorks)[keyof typeof catalogWorks]][])
-    it(owner, () => {
-      const fixture = fixtures[owner];
-      expect(fixture, `${owner} has no K3 fixture`).toBeDefined();
-      expect(work.base.op).toMatch(/^revit\.detail\./);
-      const doc = work.schema.parse(fixture.doc);
-      const staged = editableCells(doc, catalogWorkSpecs[owner].editable).filter(({ cell }) => cell.edit).map(({ path }) => path.join("/"));
-      const plan = (work.derive as (d: unknown, b: unknown) => { request: unknown; touched: readonly CatalogTouch[] })(doc, fixture.base);
-      expect(plan.touched.map((t) => t.path.join("/")).sort()).toEqual(staged.sort());
-      for (const t of plan.touched) expect(t.by, t.path.join("/")).not.toBe("unknown");
-      const before = fixture.keys(fixture.base);
-      const after = fixture.outcome(fixture.base, plan.request);
-      const touchedIds = new Set(plan.touched.map((t) => t.path.join("/")));
-      for (const [key, value] of Object.entries(before))
-        if (!touchedIds.has(key)) expect(after[key], `${owner}: unstaged ${key} survives`).toEqual(value);
-      expect(work.mutation).toBe("replace");
-    });
-});
-
 describe("data-tables keyed semantics", () => {
   const work = catalogWorks["data-tables"];
-  const base = fixtures["data-tables"].base as Parameters<typeof work.derive>[1];
+  const base = {
+    columns: { "text:0": "A", "text:1": "B", "number:0": "N" },
+    rows: { r1: { "text:0": "a1", "text:1": "b1", "number:0": "1" }, r2: { "text:0": "a2", "text:1": "b2", "number:0": "2" } },
+  };
   const derive = (doc: object) => work.derive(work.schema.parse({ name: cell("T"), ...doc }), base);
 
   it("a heading edit resends every column at its slot, so the others keep their parameters and values", () => {

@@ -50,6 +50,11 @@ export function catalogWorkExecutors(
             return {
               effects: [{ kind: "document", ref: target }],
               prepare: async () => {
+                // K3 / ADR 0030 rule 8: governor keeps data-table apply refused until root accepts the class
+                // falsifier (keyed-write-coverage.test.ts) and the fresh DataTableKeyedApplyTests. The keyed derive
+                // below is complete; this line is the only gate.
+                if (owner === "data-tables")
+                  throw refused("Data-table apply stays refused until its keyed falsifier is accepted", "catalog.table-base-required");
                 try {
                   // The owner's declared base, through the one fenced project Read owner (no capture).
                   const reader = await projectReader(bridge, target, deps);

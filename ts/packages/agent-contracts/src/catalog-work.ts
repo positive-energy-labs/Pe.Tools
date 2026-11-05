@@ -40,8 +40,12 @@ export interface CatalogWork<S extends z.ZodType = z.ZodType, B = unknown> {
    * Work over. Required: an owner whose op omits keys must read them to resend them (K3).
    */
   base: { op: string; input(doc: z.infer<S>): unknown; project(response: unknown, doc: z.infer<S>): B };
-  /** `replace`: the op drops keys it is not sent, so `derive` resends every stored key and the plan shows the full before. */
-  mutation: "replace" | "patch";
+  /**
+   * Per top-level collection of the base: `replace` means the op drops a key it is not sent, so `derive` must resend
+   * every stored key unchanged; `patch` means an omitted key is untouched, so a key sent must carry its stored value.
+   * The class falsifier (keyed-write-coverage.test.ts) enforces this per stored key; an undeclared collection fails.
+   */
+  mutation: Record<string, "replace" | "patch">;
   derive(doc: z.infer<S>, base: B): { request: unknown; touched: readonly CatalogTouch[] };
 }
 
@@ -165,7 +169,7 @@ export const catalogWorks = {
     op: "data-table.apply",
     schema: dataTablesWorkSchema,
     base: { op: "revit.detail.data-tables", input: (doc) => ({ names: [tableName(doc)] }), project: projectDataTable },
-    mutation: "replace",
+    mutation: { name: "replace", columns: "replace", rows: "patch" },
     derive: deriveDataTable,
   } satisfies CatalogWork<typeof dataTablesWorkSchema, DataTableBase>,
   "parameter-links": {
@@ -177,7 +181,7 @@ export const catalogWorks = {
       input: () => ({ includeEvaluation: false }),
       project: (response) => parameterLinkProfileSchema.nullish().parse((response as { profile?: unknown }).profile) ?? null,
     },
-    mutation: "replace",
+    mutation: { definitions: "replace", assignments: "replace" },
     derive: mergeParameterProfile,
   } satisfies CatalogWork<typeof parameterLinksDocumentSchema, ParameterLinkProfile | null>,
 };

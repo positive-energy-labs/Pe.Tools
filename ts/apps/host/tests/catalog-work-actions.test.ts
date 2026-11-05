@@ -136,7 +136,16 @@ const owners: { [O in keyof typeof catalogWorks]: {
   },
 };
 
-test.each(Object.keys(catalogWorks) as (keyof typeof catalogWorks)[])(
+// Data tables stay refused until root accepts the K3 falsifier (governor); their keyed derive is proven in contracts.
+const applying = (Object.keys(catalogWorks) as (keyof typeof catalogWorks)[]).filter((o) => o !== "data-tables");
+
+test("data tables stay refused at plan: nothing is read or sent", async () => {
+  const r = await catalogRun("data-tables", owners["data-tables"].patches, () => ({ written: 1 }));
+  expect(r.plan).toMatchObject({ state: "failed", refusal: { code: "catalog.table-base-required" } });
+  expect(r.planCalls).toEqual([]);
+});
+
+test.each(applying)(
   "%s: the plan only reads the stored base, and apply sends every stored key with the staged ones",
   async (owner) => {
     const fixture = owners[owner];
@@ -150,7 +159,7 @@ test.each(Object.keys(catalogWorks) as (keyof typeof catalogWorks)[])(
   },
 );
 
-test.each(Object.keys(catalogWorks) as (keyof typeof catalogWorks)[])(
+test.each(applying)(
   "%s: a stored base that moved after the plan refuses the apply before dispatch and keeps the cells",
   async (owner) => {
     const fixture = owners[owner];
