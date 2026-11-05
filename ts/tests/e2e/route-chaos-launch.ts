@@ -28,7 +28,7 @@ if (!["chaos", "selection", "conversation-work", "fans"].includes(values.suite!)
   throw new Error("--suite must be chaos, selection, conversation-work or fans");
 if (values.revit && (values.suite !== "fans" || !process.env.PE_TOOLS_PRODUCT_HOME))
   throw new Error("--revit is fans-only and requires the caller's PE_TOOLS_PRODUCT_HOME");
-if (values.suite !== "chaos" && (values.attached || values.url || values.port || values.target))
+if (!["chaos", "fans"].includes(values.suite!) && (values.attached || values.url || values.port || values.target))
   throw new Error("The required product suites own their isolated runtime and browser");
 const testTs = resolve(import.meta.dirname, "../..");
 const source = resolve(values.source ?? join(testTs, ".."));
