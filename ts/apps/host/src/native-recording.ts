@@ -5,9 +5,10 @@
  * reaches a live input. Coverage is only the kinds a bundle durably holds, never a whole document.
  */
 import { randomUUID, createHash } from "node:crypto";
-import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Cause, Clock, Effect, Exit, Layer, Option, Schema } from "effect";
+import { Cause, Clock, Effect, Exit, Layer, Option, Result, Schema } from "effect";
+import { attemptFor } from "./input-occurrence.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { validationIssueSchema } from "@pe/host-contracts/contracts";
 import { BridgeError } from "@pe/host-internal/dispatch";
@@ -179,6 +180,36 @@ export const inputBindingKey = (input: RecordedInput, scope: string) =>
  * read answers. Observer failure truncates capture, preserving the actual live result (K4).
  */
 export type TakingObserver = (taking: Taking) => Effect.Effect<void, DoorFailure>;
+
+/** A consumer's fixed host recipe: its build-bound key, actual validated input and exact scope. */
+const consumerRecipe = Schema.Struct({ key: Schema.String, input: Schema.Json, scope: Schema.String });
+// Host-minted ids only; decoded before any path is built.
+const readSetIdName = Schema.String.check(
+  Schema.makeFilter((id) => /^[0-9a-f-]{36}$/.test(id) || "Read-set id is not host minted"),
+);
+/**
+ * Which exact takings one consumer read, in the same bundle (version 1, beside format-3 takings).
+ * Metadata and links only: source data stays in the owners' observations.
+ */
+export const readSetRecordSchema = Schema.Struct({
+  version: Schema.Literal(1),
+  id: readSetIdName,
+  identity: Schema.Struct({ build: Schema.String, catalog: Schema.String }),
+  recipe: consumerRecipe,
+  state: Schema.Literals(["complete", "incomplete"]),
+  inputs: Schema.Array(
+    Schema.Struct({ input: recordedInput, scope: Schema.String, start: Schema.Number, takingId: Schema.String }),
+  ),
+  children: Schema.Array(
+    Schema.Struct({ recipe: consumerRecipe, start: Schema.Number, readSetId: readSetIdName }),
+  ),
+  takingLinks: Schema.Record(Schema.String, Schema.String),
+  dependencies: Schema.Record(Schema.String, readSetIdName),
+  exports: Schema.Array(Schema.Struct({ kind: Schema.Literal("ducts.sheet"), basis: Schema.String })),
+});
+export type InputReadSetRecord = typeof readSetRecordSchema.Type;
+export type ConsumerRecipe = typeof consumerRecipe.Type;
+const READ_SETS = "read-sets";
 const unobserved: TakingObserver = () => Effect.void;
 const observationOf = (taking: Taking) =>
   taking.outcome.kind === "answered" || taking.outcome.kind === "observed"
@@ -196,6 +227,10 @@ export interface RecordingReader {
   readonly coverage: () => readonly InputKind[];
   /** Where automatic capture stopped, when its marker was kept; such a bundle is not complete. */
   readonly truncation: Truncation | null;
+  /** Sealed consumption metadata, by host-minted id; every input and link names a real taking. */
+  readonly readSets: {
+    readonly get: (id: string) => Effect.Effect<InputReadSetRecord, InvalidRead>;
+  };
 }
 /**
  * One writer's automatic-capture latch. Capture is ancillary to live input: the first capture that
@@ -213,6 +248,10 @@ export interface RecordingWriter extends RecordingReader {
   /** Visible to `candidates` only after its observation and line are durable. */
   readonly append: (input: TakingInput, outcome: Outcome) => Effect.Effect<Taking, InvalidRead>;
   readonly capture: CaptureLatch;
+  readonly readSets: RecordingReader["readSets"] & {
+    /** Durable before it resolves (temp file, then rename); counted against the bundle's bytes. */
+    readonly keep: (record: InputReadSetRecord) => Effect.Effect<void, InvalidRead>;
+  };
 }
 
 /**
@@ -286,6 +325,10 @@ const loadBundle = Effect.fn("Recording.load")(function* (
       used += (yield* io(() => stat(join(observations, `${sha}.json`)))).size;
     }
   }
+  const sets = yield* io(() =>
+    readdir(join(dir, READ_SETS)).catch((error: unknown) => (missing(error) ? [] : Promise.reject(error))),
+  );
+  for (const name of sets) used += (yield* io(() => stat(join(dir, READ_SETS, name)))).size;
   if (used > bounds.maxBytes || takings.length > bounds.maxTakings)
     return yield* refuse("full", "Recording exceeds its bounds", 507);
   const marker = yield* bounded(join(dir, TRUNCATION), null);
@@ -313,6 +356,34 @@ const loadBundle = Effect.fn("Recording.load")(function* (
     }),
     coverage: () => [...new Set(takings.map((taking) => taking.input.kind))],
     truncation,
+    readSets: {
+      get: Effect.fn("Recording.readSet")(function* (id: string) {
+        const name = yield* Schema.decodeUnknownEffect(readSetIdName)(id).pipe(
+          Effect.mapError(() => refuse("context", "Read-set id is not host minted")),
+        );
+        const text = yield* bounded(join(dir, READ_SETS, `${name}.json`), null);
+        if (text === null) return yield* refuse("context", `No read set ${name} in this recording`);
+        const record = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(readSetRecordSchema))(
+          text,
+        ).pipe(Effect.mapError(() => refuse("tamper", `Read set ${name} is damaged`)));
+        if (record.id !== name || record.identity.build !== identity.build || record.identity.catalog !== identity.catalog)
+          return yield* refuse("mismatch", `Read set ${name} belongs to another build or name`);
+        const seen = new Set<string>();
+        for (const entry of record.inputs) {
+          const occurrence = canonicalJson([inputIdentity(entry.input), entry.scope, entry.start]);
+          if (seen.has(occurrence))
+            return yield* refuse("ambiguous", `Read set ${name} names one input occurrence twice`);
+          seen.add(occurrence);
+          const taking = takings.find((candidate) => candidate.id === entry.takingId);
+          if (!taking || inputIdentity(taking.input) !== inputIdentity(entry.input) || taking.scope !== entry.scope)
+            return yield* refuse("mismatch", `Read set ${name} links a taking of another input`);
+        }
+        for (const takingId of Object.values(record.takingLinks))
+          if (!takings.some((candidate) => candidate.id === takingId))
+            return yield* refuse("miss", `Read set ${name} links a missing taking`);
+        return record;
+      }),
+    },
   };
   return { reader, takings, stored, used, takingsPath, observations };
 });
@@ -359,8 +430,32 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
     writing.set(sha, write);
     return write;
   };
+  const keepReadSet = Effect.fn("Recording.keepReadSet")(function* (record: InputReadSetRecord) {
+    const bytes = yield* Schema.encodeUnknownEffect(Schema.fromJsonString(readSetRecordSchema))(record).pipe(
+      Effect.mapError(() => refuse("input", "Read-set metadata is not encodable", 400)),
+    );
+    if (record.identity.build !== identity.build || record.identity.catalog !== identity.catalog)
+      return yield* refuse("mismatch", "Read-set metadata names another build");
+    const size = Buffer.byteLength(bytes);
+    if (used + size > bounds.maxBytes)
+      return yield* refuse("full", `Recording is full; read set ${record.id} was not kept`, 507);
+    used += size;
+    const path = join(dir, READ_SETS, `${record.id}.json`);
+    const kept = yield* Effect.exit(
+      io(async () => {
+        await mkdir(join(dir, READ_SETS), { recursive: true });
+        await writeFile(`${path}.tmp`, bytes, { flag: "w" });
+        await rename(`${path}.tmp`, path);
+      }),
+    );
+    if (Exit.isFailure(kept)) {
+      used -= size;
+      return yield* Effect.failCause(kept.cause);
+    }
+  });
   return {
     ...reader,
+    readSets: { get: reader.readSets.get, keep: keepReadSet },
     get truncation() {
       return truncated;
     },
@@ -561,6 +656,7 @@ const reasonOf = (cause: Cause.Cause<InvalidRead>): Truncation["reason"] => {
  * Automatic capture around one live read. Live runs exactly once and its exit is returned
  * unchanged; a taking that cannot be described or kept stops the writer's capture at this attempt.
  */
+type Occurrence = { readonly input: RecordedInput; readonly scope: string };
 const captured = <A, E, R>(
   writer: RecordingWriter,
   live: Effect.Effect<A, E, R>,
@@ -571,17 +667,29 @@ const captured = <A, E, R>(
     InvalidRead
   >,
   observed: TakingObserver = unobserved,
+  occurrence: Effect.Effect<Occurrence | undefined> = Effect.succeed(undefined),
 ): Effect.Effect<A, E, R> =>
   Effect.gen(function* () {
     const at = writer.capture.begin();
+    // The occurrence is reserved at START, before the live read can await anything.
+    const reserve = at === null ? undefined : yield* occurrence;
+    const attempt = reserve ? yield* attemptFor(reserve.input, reserve.scope) : null;
     const exit = yield* Effect.exit(live);
     if (at === null) return yield* exit;
+    // A consumer whose occurrence cannot be reserved loses capture, not its live answer (K4).
+    if (attempt && Result.isFailure(attempt)) {
+      yield* writer.capture.stop(at, "unsupported");
+      return yield* exit;
+    }
+    const bind: TakingObserver = attempt
+      ? (stored) => Effect.andThen(attempt.success.observed(stored), observed(stored))
+      : observed;
     const kept = yield* Effect.exit(
       Effect.flatMap(record(exit), (taking) =>
         taking === null || writer.capture.truncated()
           ? Effect.void
           : writer.append(taking.input, taking.outcome).pipe(
-              Effect.flatMap((stored) => observed(stored).pipe(
+              Effect.flatMap((stored) => bind(stored).pipe(
                 Effect.mapError(() => refuse("observer", "Taking observer failed")),
               )),
             ),
@@ -630,23 +738,33 @@ const capturing = (store: RecordingWriter, observed: TakingObserver) =>
               return { input, outcome };
             }),
             observed,
+            nativeOccurrence(request),
           ),
       };
     }),
   );
+/** A native read's occurrence, when its input and scope are JSON; otherwise it has none to reserve. */
+const nativeOccurrence = (request: NativeReadInput): Effect.Effect<Occurrence | undefined> =>
+  Effect.all([argsOf(request), scopeOf(request)]).pipe(
+    Effect.map(([args, scope]) => ({ input: { kind: "native" as const, key: request.key, args }, scope })),
+    Effect.orElseSucceed(() => undefined),
+  );
 
 /** Recorded reads only: no live layer is built, and a miss is a typed refusal. */
 const replaying = (store: RecordingReader, bindings: ReadonlyMap<string, string> = new Map()) => {
-  const select = Effect.fn("Recording.select")(function* (request: NativeReadInput) {
+  // `consume` is a read; resolve validates the descriptor and reserves no occurrence.
+  const select = Effect.fn("Recording.select")(function* (request: NativeReadInput, consume: boolean) {
     yield* admitNativeCaller(request.key);
     const args = yield* argsOf(request);
-    const identity = inputIdentity({ kind: "native", key: request.key, args });
+    const input = { kind: "native" as const, key: request.key, args };
+    const identity = inputIdentity(input);
+    const scope = yield* scopeOf(request);
     const taking = yield* chooseTaking(
       store,
       identity,
-      yield* scopeOf(request),
+      scope,
       request.key,
-      bindings.get(identity),
+      consume ? yield* selectedFor(input, scope, bindings.get(identity)) : bindings.get(identity),
     );
     if (taking.outputVersion !== (yield* versionOf(request.key)))
       return yield* refuse(
@@ -661,7 +779,7 @@ const replaying = (store: RecordingReader, bindings: ReadonlyMap<string, string>
   });
   return Layer.succeed(HostNativeRead, {
     resolve: (request) =>
-      select(request).pipe(
+      select(request, false).pipe(
         Effect.map(({ answer, args }) => ({
           operationKey: request.key,
           ...answer.actualTarget,
@@ -672,7 +790,7 @@ const replaying = (store: RecordingReader, bindings: ReadonlyMap<string, string>
       ),
     read: (request) =>
       Effect.gen(function* () {
-        const { taking, answer } = yield* select(request);
+        const { taking, answer } = yield* select(request, true);
         const raw = yield* store.observation(taking);
         const schemas = yield* readSchemas(request.key);
         const value = yield* Schema.decodeUnknownEffect(schemas.response)(raw).pipe(
@@ -725,6 +843,16 @@ const encoded = <A, I>(codec: Schema.Codec<A, I>, value: A) =>
  * One owner's live read, kept as a taking before its answer is returned. A value or a
  * class-faithful failure is recorded; a capture failure stops recording without changing the live exit.
  */
+/** The taking an occurrence selects: its consumer's stored link, else the root's exact binding. */
+const selectedFor = (input: RecordedInput, scope: string, bound: string | undefined) =>
+  Effect.flatMap(attemptFor(input, scope), (attempt) =>
+    attempt === null
+      ? Effect.succeed(bound)
+      : Result.isFailure(attempt)
+        ? Effect.fail(attempt.failure)
+        : attempt.success.selected,
+  );
+
 export const captureInput = <A, I>(
   writer: RecordingWriter,
   input: RecordedInput,
@@ -741,6 +869,7 @@ export const captureInput = <A, I>(
       return outcome && { input: { input, scope, outputVersion: BUILD_VERSION }, outcome };
     }),
     observed,
+    Effect.succeed({ input, scope }),
   );
 
 /** The one recorded answer to an owner's read in this scope, decoded by that owner's codec. */
@@ -757,7 +886,7 @@ export const replayInput = <A, I>(
       inputIdentity(input),
       scope,
       input.kind,
-      boundTakingId,
+      yield* selectedFor(input, scope, boundTakingId),
     );
     if (taking.outputVersion !== BUILD_VERSION || taking.outcome.kind === "answered")
       return yield* refuse("mismatch", `The taking of ${input.kind} is not an owner observation`);

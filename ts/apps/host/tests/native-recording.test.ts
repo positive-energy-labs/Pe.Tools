@@ -463,6 +463,7 @@ effectTest(
         "coverage",
         "identity",
         "observation",
+        "readSets",
         "taking",
         "truncation",
       ]);
