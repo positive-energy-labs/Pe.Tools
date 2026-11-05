@@ -17,10 +17,10 @@
   "type": "module",
   "scripts": {
     "test:browser": "vp run --filter @pe/browser test",
-    "test:browser:product": "tsc --project tests/e2e/tsconfig.selection.json && node tests/e2e/route-chaos-launch.ts --suite selection",
+    "test:browser:product": "tsc --project tests/e2e/tsconfig.selection.json && node --import jiti/register tests/e2e/route-chaos-launch.ts --suite selection && pnpm journey:conversation-work",
     "test:route-chaos": "vp test run --config tests/e2e/route-chaos.config.ts",
-    "journey:routes": "node tests/e2e/route-chaos-launch.ts",
-    "journey:conversation-work": "node --import jiti/register tests/e2e/conversation-work.launch.ts",
+    "journey:routes": "node --import jiti/register tests/e2e/route-chaos-launch.ts",
+    "journey:conversation-work": "node --import jiti/register tests/e2e/route-chaos-launch.ts --suite conversation-work",
     "codegen": "pnpm --filter @pe/host-contracts codegen",
     "verify": "node scripts/verify.ts",
     "gate": "node scripts/gate.ts",

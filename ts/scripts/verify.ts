@@ -7,9 +7,7 @@ const TS = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const steps: [name: string, cwd: string, cmd: string[]][] = [
   ["source gate", TS, [process.execPath, "scripts/gate.ts"]],
   ["knip", TS, ["vp", "exec", "knip", "--no-progress"]],
-  // The host serves and exports Pages from packages/kit/dist (gitignored); a fresh worktree has none
-  // and the snowdon acceptance tests answer 503 without it.
-  ["kit", TS, ["vp", "run", "--filter", "@pe/kit", "build"]],
+  // @pe/host test owns kit preparation, including when run outside verify.
   [
     "test",
     TS,
