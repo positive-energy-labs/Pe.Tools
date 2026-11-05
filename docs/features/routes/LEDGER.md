@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-05, kaitpw's K2 ruling: a parameter-links plan reads the stored profile and shows before and after per staged id; apply overlays keyed edits without dropping unstaged ids. Until that path lands, its catalog apply refuses with a typed reason while staging stays available (ADR 0030 rules 6 and 8).
+
 - 2026-11-05, retire the Fans test-name parity census in favor of real Chrome witnesses. Picker/reconnect P03 remains deferred until a witness fails; recovery row expansion W14 is dropped as presentation-only, while shared confirmation and canonical salvage remain.
 
 - 2026-11-04, kaitpw: the Pea-first kernel rulings are [ADR 0030](../../adr/0030-pea-first-goal-core-plan-statecell.md): the route core is a Goal that leads with what is unresolved; a write is plan, optional Revit rehearsal, apply, with the seal on the plan; every Pea-touchable value is a StateCell, Pea stages and last writer wins; Pointers are a shell list and Pea moves the view only on request; a typed write reaches Pea with no route through an authored Work schema; a rehearsal that would borrow is refused; scripts owe no before-values; the Pod floor is `index.html` plus scripts.
