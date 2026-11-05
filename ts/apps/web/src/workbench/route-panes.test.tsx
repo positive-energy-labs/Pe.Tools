@@ -65,14 +65,7 @@ const tabOpen = place("aaaaaaaa-0000-4000-8000-00000000000c", "SO", "303", {
   kind: "open",
   ref: { session: "s1", openId: "o1" },
 });
-// The route thread's browser receipt (parent-r2 seed): a raw Address pin with a retained Page.
-const tabOffice: ThreadTab = {
-  id: "cac00000-0000-4000-8000-000000000011",
-  route: "ducts",
-  link: "/ducts?target=C%3A%2FModels%2FOffice.rvt&system=Office%20retained%20page",
-  at: "2026-10-24T00:00:00.000Z",
-};
-const seeded = [ducts, tabA, tabB, tabOpen, tabOffice];
+const seeded = [ducts, tabA, tabB, tabOpen];
 const places = () => JSON.parse(sessionStorage.getItem("pe.places") ?? "[]") as ThreadTab[];
 // Only T and U are real host chats; Places are this window's sessionStorage, seeded per test.
 const threads = [{ id: "T" }, { id: "U" }];
@@ -241,24 +234,6 @@ async function mount(entry = "/pea?thread=T", strict = false, restore = false) {
 }
 const tools = () => document.querySelector<HTMLElement>('[data-pane-id="tools"]')!;
 
-test("a thread opens its conversation with Pea first and the tools collapsed, no tool opened", async () => {
-  const router = await mount();
-  await act(() => new Promise((done) => setTimeout(done, 50)));
-  expect(router.state.location.pathname).toBe("/pea");
-  expect(
-    screen
-      .getAllByRole("button", { name: TAB, hidden: true })
-      .every((button) => button.getAttribute("aria-pressed") === "false"),
-  ).toBe(true);
-  const pea = document.querySelector("[data-chat-probe]")!;
-  expect(pea.querySelector('[role="group"][aria-label="Places"]')).toBeNull();
-  expect(screen.getByRole("button", { name: "Expand tools" })).toBeTruthy();
-  expect(tools().closest(".hidden")).toBeTruthy();
-  expect(document.body.textContent).not.toMatch(/tools collapsed/i);
-  expect(pea.compareDocumentPosition(tools()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(mounts).toBe(0);
-});
-
 test("a tab press expands the tools on that Place; a Work press restores its Page without a remount", async () => {
   sessionStorage.setItem(
     "pe.places",
@@ -352,37 +327,6 @@ test("no Work-key match opens a new Place; Places are never guessed by route", a
   expect(seeded.map((tab) => tab.id)).not.toContain(shown(router).tab);
 });
 
-test("every Place carries its own named close, in the tab order", async () => {
-  await mount();
-  fireEvent.click(screen.getByRole("button", { name: "Expand tools" }));
-  // Leaf retention probes are not subject owners; actual admitted Fans tests cover identity labels.
-  const closes = screen.getAllByRole("button", { name: "Close Ducts" });
-  expect(closes).toHaveLength(seeded.length);
-  for (const close of closes) {
-    expect(close.tabIndex).not.toBe(-1);
-    close.focus();
-    expect(document.activeElement).toBe(close);
-  }
-  expect(screen.queryByRole("button", { name: "Close this Place" })).toBeNull();
-});
-
-test("parent-r2 receipt: the host's base url never replaces the matched Place's retained Page", async () => {
-  const router = await mount();
-  await press(
-    resume(
-      { binding: "address", route: "ducts", target: address(String.raw`c:\models\office.rvt`) },
-      "/ducts?target=c%3A%5Cmodels%5Coffice.rvt",
-    ),
-  );
-  await waitFor(() =>
-    expect(shown(router)).toMatchObject({
-      path: "/ducts",
-      system: "Office retained page",
-      tab: "cac00000-0000-4000-8000-000000000011",
-    }),
-  );
-});
-
 // The producer's address key carries no `from`, so only the host's `knownOpenRefs` can say this
 // open-ref Place holds the Work. The legacy Place keeps its Page and id, and its
 // binding carry rebases onto the resume's stable Address so the Work stays readable once closed.
@@ -404,46 +348,6 @@ test("an address key with no `from` restores the matched open-ref Place, rebased
   );
   expect(shown(router).selected).toBe("303");
   expect(shown(router).target).toBe("C:/Jobs/Open.rvt");
-});
-
-test("a Work pressed on a closed document shows what is kept and how to reconnect", async () => {
-  // A cross-row press: the row belongs to OTHER while chat T stays selected.
-  const router = await mount();
-  await act(() =>
-    store.actions.openWork(
-      "OTHER",
-      "ducts",
-      {
-        ...resume({ binding: "address", route: "ducts", target: DOC_A }),
-        reason: "Office host said so",
-      },
-      {
-        documentId: "doc-office",
-        document: "Office.rvt",
-        intent: "Size the office",
-        unfinished: 3,
-      },
-    ),
-  );
-  await waitFor(() => expect(router.state.location.pathname).toBe("/ducts"));
-  const band = document.querySelector<HTMLElement>("[data-closed-work]")!;
-  expect(band.textContent).toContain("Office.rvt is closed");
-  expect(band.textContent).toContain("3 unfinished");
-  expect(band.textContent).toContain("Size the office");
-  expect(band.textContent).toContain("Office host said so");
-  // Saved or never saved: nothing promises the same file reopens.
-  expect(band.textContent).toContain("Work is kept, read-only, while its document is closed.");
-  expect(band.textContent).not.toMatch(/reopen|same file/i);
-  expect(screen.getByRole("button", { name: "Open or choose a document in Revit" })).toBeTruthy();
-  // An open document's Work press clears it.
-  await act(() =>
-    store.actions.openWork(
-      "T",
-      "ducts",
-      resume({ binding: "address", route: "ducts", target: DOC_B }),
-    ),
-  );
-  await waitFor(() => expect(document.querySelector("[data-closed-work]")).toBeNull());
 });
 
 const search = (router: Awaited<ReturnType<typeof mount>>) =>

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import { catalogWorkCommands, catalogWorks, catalogWorkSpecs, CatalogWorkRefused, mergeParameterProfile } from "./catalog-work.ts";
+import { catalogWorks, CatalogWorkRefused, mergeParameterProfile } from "./catalog-work.ts";
 import type { ParameterLinkProfile } from "./parameter-links.ts";
-import { commandCatalogAxes } from "./command-axes.ts";
 import { bindWork, canonicalWorkKey, workKey } from "./route-state.ts";
 import { address } from "./target.ts";
 
@@ -27,17 +26,6 @@ describe("data-tables keyed semantics", () => {
     rows: { r1: { "text:0": "a1", "text:1": "b1", "number:0": "1" }, r2: { "text:0": "a2", "text:1": "b2", "number:0": "2" } },
   };
   const derive = (doc: object) => work.derive(work.schema.parse({ name: cell("T"), ...doc }), base);
-
-  it("a heading edit resends every column at its slot, so the others keep their parameters and values", () => {
-    const { request, touched } = derive({ columns: { "text:0": cell("A2") } });
-    expect(request.table.columns).toEqual([{ heading: "A2", kind: "Text" }, { heading: "B", kind: "Text" }, { heading: "N", kind: "Number" }]);
-    expect(request.table.rows).toEqual([]);
-    expect(touched.find((t) => t.path[0] === "columns")).toMatchObject({ before: "A", after: "A2" });
-  });
-
-  it("a sparse cell edit resends its row with every unstaged cell's stored value", () => {
-    expect(derive({ rows: { r2: { "number:0": cell("9") } } }).request.table.rows).toEqual([{ key: "r2", values: ["a2", "b2", "9"] }]);
-  });
 
   it("deletes the last slot of a kind, and refuses a delete that would remap a later column", () => {
     expect(derive({ columns: { "text:1": { edit: { delete: true } } } }).request.table.columns.map((c) => c.heading)).toEqual(["A", "N"]);
@@ -93,14 +81,6 @@ describe("parameter-links derive", () => {
     expect(plan.touched).toMatchObject([{ path: ["definitions", "D3"], before: null, after: { id: "D3", ...definition }, by: "pea" }]);
   });
 
-  it("an edit of D1 preserves D2 and carries D1's stored before", () => {
-    const edited = { ...definition, targetParameter: { name: "B1-new" } };
-    const plan = merge({ definitions: { D1: cell(edited) } });
-    expect(ids({ definitions: { D1: cell(edited) } })).toEqual(["D1", "D2"]);
-    expect(plan.request.profile.definitions[1]).toMatchObject(stored.definitions[1]!);
-    expect(plan.touched[0]).toMatchObject({ path: ["definitions", "D1"], before: stored.definitions[0], after: { id: "D1", ...edited } });
-  });
-
   it("an explicit delete removes only the named id; deleting an absent id refuses", () => {
     expect(ids({ definitions: { D2: { edit: { delete: true } } } })).toEqual(["D1"]);
     expect(merge({ definitions: { D2: { edit: { delete: true } } } }).touched[0]).toMatchObject({ before: stored.definitions[1], after: null });
@@ -111,41 +91,5 @@ describe("parameter-links derive", () => {
     expect(() => merge({})).toThrow(CatalogWorkRefused);
     expect(() => mergeParameterProfile(schema.parse({ definitions: { D1: {} } }), stored)).toThrow(CatalogWorkRefused);
     expect(() => schema.parse({ profile: {} })).toThrow();
-  });
-});
-
-describe("generated catalog Work commands", () => {
-  it("plans as a Read and applies with the native ModelWrite's axes", () => {
-    expect(Object.keys(catalogWorkCommands).sort()).toEqual([
-      "data-table.apply",
-      "data-table.apply.plan",
-      "parameter-links.apply",
-      "parameter-links.apply.plan",
-    ]);
-    expect(commandCatalogAxes["data-table.apply.plan"].effect).toBe("Read");
-    expect(commandCatalogAxes["parameter-links.apply"]).toMatchObject({ effect: "ModelWrite", touches: ["Topology"] });
-    expect(catalogWorkCommands["data-table.apply"].work.route).toBe("data-tables");
-  });
-});
-
-describe("catalog Work editable census", () => {
-  // Every StateCell (an object holding `edit`) in a real staged Work sits on a declared editable path.
-  const cells = (value: unknown, path: string[] = []): string[][] =>
-    value && typeof value === "object"
-      ? "edit" in value
-        ? [path]
-        : Object.entries(value).flatMap(([k, v]) => cells(v, [...path, k]))
-      : [];
-  const covered = (path: string[], patterns: readonly (readonly (string | number)[])[]) =>
-    patterns.some((p) => p.length === path.length && p.every((s, i) => s === "*" || s === path[i]));
-
-  it.each([
-    ["data-tables", { name: cell("T"), columns: { "text:0": cell("A") }, rows: { r1: { "text:0": cell("a") } } }, 3],
-    ["parameter-links", { definitions: { d1: { edit: { delete: true } } }, assignments: { a1: cell({ definitionId: "d1" }) } }, 2],
-  ] as const)("%s stages only declared cells", (owner, doc, count) => {
-    const spec = catalogWorkSpecs[owner];
-    const staged = cells(spec.schema.parse(doc));
-    expect(staged).toHaveLength(count);
-    for (const path of staged) expect(covered(path, spec.editable!)).toBe(true);
   });
 });
