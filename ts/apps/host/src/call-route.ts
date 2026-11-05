@@ -5,6 +5,11 @@ import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { InvalidRead } from "./native-reads.ts";
 import { ReadFreshness, RequestIdentity } from "./request-services.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
+import type { NativeReadInput } from "@pe/host-internal/native-read";
+import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
+import { ductBodySubject, type DuctsBodyBasisSource } from "./ducts-body-basis.ts";
+import type { DuctsReadings } from "./ducts-readings.ts";
+import type { HostSessionInventory } from "./session-inventory.ts";
 import { canonicalRouteInput, ductsSnapshotReadingSchema, nativePrincipals } from "@pe/agent-contracts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { peRoutes, linkedCatalog } from "@pe/agent-contracts/pe-api";
@@ -105,31 +110,6 @@ import {
 } from "@pe/host-contracts/operation-types";
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
 
-const readingSubjects: Record<
-  "roster" | "walk" | "tables",
-  (request: unknown, session: string, openId: string | null | undefined) => DuctsReadingRequest
-> = {
-  roster: (request, session, openId) => ({
-    ...(request as object),
-    kind: "ducts-snapshot",
-    selector: { kind: "roster" },
-    target: documentRefSchema.parse({ session, openId }),
-  }),
-  walk: (request, session, openId) => ({
-    ...(request as object),
-    kind: "ducts-snapshot",
-    selector: ductsSnapshotReadingSchema.shape.selector.parse(
-      (request as { selector?: unknown }).selector,
-    ),
-    target: documentRefSchema.parse({ session, openId }),
-  }),
-  tables: (request, session) => ({
-    ...(request as { ids: string[] }),
-    kind: "ducts-tables",
-    session,
-  }),
-};
-
 /** A door refusal: 403, named, and never dispatched. */
 const refusedResponse = (error: Refused) =>
   Response.jsonUnsafe(
@@ -174,6 +154,7 @@ export function makeCallRoute(
     readonly families?: FamiliesReader["Service"];
     /** Thread meta's pointer surface; pointer ops refuse without it. */
     readonly pointers?: ThreadPointers;
+    readonly retainedBasis?: DuctsBodyBasisSource;
   },
 ) {
   const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
@@ -379,73 +360,19 @@ export function makeCallRoute(
         }
       }
       if (entry.reading) {
-        const nativeRead = yield* HostNativeRead;
-        const input = {
-          key,
-          input: request ?? {},
-          scope: {
-            ...scope,
-            bridgeSessionId: bridgeSessionId!,
-            openDocumentId: openDocumentId ?? undefined,
-          },
-        };
-        const admitted = yield* nativeRead.resolve(input);
-        const subject = readingSubjects[entry.reading](request, bridgeSessionId!, openDocumentId);
-        const target =
-          subject.kind === "ducts-snapshot"
-            ? subject.target
-            : { session: subject.session, openId: undefined };
-        const services = Context.make(RequestIdentity, identity);
-        const owner = ductsReadings(bridge);
-        let acquired = false;
-        const shared = yield* Effect.tryPromise({
-          try: () =>
-            owner.read(subject, async () => {
-              acquired = true;
-              // effect-edge: island, phase 5; this cache-miss edge keeps the actual request identity.
-              const answer = await Effect.runPromiseWith(services)(nativeRead.read(input));
-              if (canonicalRouteInput(answer.actualTarget) !== canonicalRouteInput({
-                processIncarnation: admitted.processIncarnation,
-                openDocumentLifetime: admitted.openDocumentLifetime,
-              })) throw new InvalidRead({
-                message: "Ducts native response changed its admitted target",
-                status: 409,
-                problem: "read.target",
-              });
-              const actual = answer.actualTarget.openDocumentLifetime;
-              const openId = "openId" in actual ? actual.openId : undefined;
-              return {
-                value: answer.value,
-                nativeRequestId: answer.nativeRequestId,
-                target: {
-                  session: target.session,
-                  document: resolvedSession?.state?.openDocuments.find((doc) => doc.openId === openId)?.address ?? null,
-                  ...(openId ? { documentRef: { session: target.session, openId } } : {}),
-                },
-              };
-            }, {
-              version: req.headers[DUCTS_BODY_VERSION_HEADER],
-              refresh: req.headers[DUCTS_REFRESH_HEADER],
-            }),
-          catch: (error) =>
-            isDoorFailure(error) || error instanceof BridgeError
-              ? error
-              : new BridgeError(String(error), 409),
-        });
-        yield* Effect.try({
-          try: () => owner.assertCurrent(subject, shared.version),
-          catch: (error) => error,
+        const response = yield* retainedDuctsRead(ductsReadings(bridge), {
+          key, input: request ?? {}, scope: { ...scope, bridgeSessionId: bridgeSessionId!, openDocumentId: openDocumentId ?? undefined },
+        }, { version: req.headers[DUCTS_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] }, {
+          basis: composition?.retainedBasis,
+          document: (ref) => Effect.suspend(() => {
+            const document = resolvedSession?.state?.openDocuments.find((doc) => doc.openId === ref.openId);
+            return document && resolvedSession?.sessionId === ref.session
+              ? Effect.succeed({ ...ref, address: addressSchema.nullable().parse(document.address ?? null) })
+              : Effect.fail(new InvalidRead({ message: 'Exact Ducts document is unavailable', status: 409, problem: 'read.target' }));
+          }),
         });
         recordOperation(op, { ok: true });
-        return Response.text(shared.json, {
-          headers: {
-            "content-type": "application/json",
-            ...resolvedTargetHeaders(shared.target),
-            "x-pe-native-request-id": shared.nativeRequestId,
-            [DUCTS_BODY_VERSION_HEADER]: shared.version,
-            "x-pe-ducts-reused": String(!acquired),
-          },
-        });
+        return response;
       }
       const result = isTsOnlyOperationKey(key)
         ? {
@@ -1528,6 +1455,50 @@ export const nativeReadResolveRoute = HttpRouter.add(
 /** One native read operation path; callers keep their existing RequestIdentity. */
 const readNativeCall = (key: string, input: unknown, scope: HostSessionScope) =>
   HostNativeRead.use((reads) => reads.read({ key, input, scope }));
+
+/** The retained acquisition path shared by live /call and explicit historical read sets. */
+export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
+  owner: DuctsReadings,
+  rawInput: NativeReadInput,
+  options: { version?: string; refresh?: string },
+  source: { document: HostSessionInventory["Service"]["document"]; basis?: DuctsBodyBasisSource },
+) {
+  const native = yield* HostNativeRead;
+  const input: NativeReadInput = { ...rawInput, scope: JSON.parse(JSON.stringify(rawInput.scope)) };
+  // Every caller is admitted, including one that will receive already-retained bytes.
+  const admitted = yield* native.resolve(input);
+  const subject = yield* Effect.try({ try: () => ductBodySubject(input), catch: (error) =>
+    isDoorFailure(error) ? error : new InvalidRead({ message: said(error), status: 400, problem: "read.input" }) });
+  const basis = source.basis ? yield* source.basis.prepare(input, subject) : undefined;
+  const target = { processIncarnation: admitted.processIncarnation, openDocumentLifetime: admitted.openDocumentLifetime };
+  const services = yield* Effect.context<RequestIdentityKey>();
+  // Existing phase-5 owner Promise boundary; the same captured caller runs acquisition and metadata.
+  const run = Effect.runPromiseWith(services);
+  let acquired = false;
+  const shared = yield* Effect.tryPromise({ try: () => owner.read(subject, async () => {
+    acquired = true;
+    const answer = await run(native.read(input));
+    if (canonicalRouteInput(answer.actualTarget) !== canonicalRouteInput(target))
+      throw new InvalidRead({ message: "Ducts native response changed its admitted target", status: 409, problem: "read.target" });
+    const actual = answer.actualTarget.openDocumentLifetime;
+    const document = "openId" in actual
+      ? await run(source.document({ session: input.scope.bridgeSessionId!, openId: actual.openId })) : undefined;
+    const nativeTakingId = basis ? await run(basis.link(answer)) : undefined;
+    return { value: answer.value, nativeRequestId: answer.nativeRequestId, nativeTakingId,
+      target: { session: input.scope.bridgeSessionId!, document: document?.address ?? null,
+        ...(document ? { documentRef: { session: document.session, openId: document.openId } } : {}) } };
+  }, { ...options, ...(basis ? { source: {
+    revision: basis.recorded?.version,
+    beforeReady: (body) => run(basis.consume(body, target)),
+  } } : {}) }), catch: (error) => isDoorFailure(error) || error instanceof BridgeError ? error :
+    new BridgeError(String(error), 409) });
+  // Joiners/hits consume the retained dependency; they never invent another native acquisition.
+  if (basis && !acquired) yield* basis.consume(shared, target);
+  yield* Effect.try({ try: () => owner.assertCurrent(subject, shared.version), catch: (error) => error });
+  return Response.text(shared.json, { headers: { "content-type": "application/json",
+    ...resolvedTargetHeaders(shared.target), "x-pe-native-request-id": shared.nativeRequestId,
+    [DUCTS_BODY_VERSION_HEADER]: shared.version, "x-pe-ducts-reused": String(!acquired) } });
+});
 
 /** The same native door without live target/cache acquisition. Unsupported sources refuse first. */
 export const nativeCallRoute = HttpRouter.add("POST", peRoutes["operation.call"].path, (req) =>
