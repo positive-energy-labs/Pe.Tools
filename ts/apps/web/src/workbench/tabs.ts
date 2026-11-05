@@ -311,7 +311,8 @@ export function useRouteTabs() {
         // Root carry retention serves ordinary same-scope links. A Place is its own scope.
         target: undefined,
         work: undefined,
-        ...Object.fromEntries(url.searchParams),
+        // Place links carry codec text; navigate accepts the router's parsed search values.
+        ...router.options.parseSearch!(url.search),
         thread: router.state.location.search.thread,
         shell: surface === "tray" ? "tray" : undefined,
       },

@@ -289,7 +289,7 @@ const shown = (router: Awaited<ReturnType<typeof mount>>) => ({
           " + ",
         )
       : "all",
-  selected: (router.state.location.search as { selected?: string }).selected ?? "",
+  selected: routeAddress("ducts").read(router.state.location.search).page.selected,
   target: (router.state.location.search as { target?: string }).target,
   tab: (router.state.location.state as { __peRouteTab?: { id: string } }).__peRouteTab?.id ?? null,
 });
@@ -432,7 +432,7 @@ const settle = () => act(() => new Promise((done) => setTimeout(done, 50)));
 
 test("an actual admitted standalone Fans Place enrolls without a chat or native host call", async () => {
   sessionStorage.clear();
-  const router = await mount("/fans?fixture=layout", true);
+  const router = await mount("/fans?fixture=layout&contextRadiusFt=15", true);
   const body = document.querySelector<HTMLElement>("[data-route-tab]")!;
   await waitFor(() => expect(shown(router).tab).not.toBeNull());
   expect(document.querySelector("[data-route-tab]")).toBe(body);
@@ -447,6 +447,18 @@ test("an actual admitted standalone Fans Place enrolls without a chat or native 
     JSON.parse(new URL(places()[0]!.link, "http://place.invalid").searchParams.get("fan")!),
   ).toEqual({ kind: "ids", ids: [] });
   expect(hostEvents.listeners.size).toBe(0);
+  const placeId = places()[0]!.id;
+  await act(() => router.navigate({ to: "/pea", search: { thread: "T" } } as never));
+  fireEvent.click(screen.getByRole("button", { name: "Expand tools" }));
+  fireEvent.click(screen.getByRole("button", { name: "Fans" }));
+  await waitFor(() => expect(router.state.location.pathname).toBe("/fans"));
+  expect(router.state.location.search).toMatchObject({ thread: "T", contextRadiusFt: 15 });
+  expect(
+    new URL(router.history.location.href, "http://place.invalid").searchParams.get(
+      "contextRadiusFt",
+    ),
+  ).toBe("15");
+  expect(shown(router).tab).toBe(placeId);
 });
 
 test("(b)(c) switching conversation lands on /pea collapsed, opens no tool, and leaves Places and their ?target unchanged", async () => {
