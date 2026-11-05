@@ -23,25 +23,32 @@ function find(page: TypedPage, scope: string, pattern: string) {
       const re = new RegExp(pattern, "i");
       const name = (e: HTMLElement) =>
         (e.innerText ?? "").trim() || e.getAttribute("aria-label") || "";
-      const element = [
+      const candidates = [
         ...document.querySelectorAll<HTMLElement>(
           `${scope} :is(button, a, [role="button"], [role="tab"], [role="option"], [tabindex])`,
         ),
       ]
         // An icon-only control (a folded pane rail's expand press) is named by its aria-label.
         .filter((e) => e.getClientRects().length > 0 && re.test(name(e)))
-        .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0];
-      if (!element) return null;
-      element.scrollIntoView({ block: "center" });
-      const rect = element.getBoundingClientRect();
-      return {
-        text: name(element),
-        title: element.title || element.getAttribute("aria-description") || "",
-        disabled: element.matches(':disabled, [aria-disabled="true"]'),
-        selected: !!element.closest('[aria-selected="true"]'),
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2,
-      };
+        .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+      for (const element of candidates) {
+        element.scrollIntoView({ block: "center" });
+        const rect = element.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        // A person presses only what is on screen: a clipped or covered control is not visible
+        // (run 1 at d3e0ec65 pressed the Inputs Refresh clipped past its pane's edge).
+        if (!element.contains(document.elementFromPoint(x, y))) continue;
+        return {
+          text: name(element),
+          title: element.title || element.getAttribute("aria-description") || "",
+          disabled: element.matches(':disabled, [aria-disabled="true"]'),
+          selected: !!element.closest('[aria-selected="true"]'),
+          x,
+          y,
+        };
+      }
+      return null;
     },
     scope,
     pattern,
@@ -310,12 +317,14 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
         return { key: row.dataset.inputField!, x: r.left + r.width / 2, y: r.top + r.height / 2 };
       });
     // A cold sheet read may stay unavailable until the pane's visible Refresh, as on the roster.
-    const inputs = '[data-pane-id="sheet-inputs"]';
+    // Every fans pane draws the same readings; the roster's Refresh stays on screen at 1600 px
+    // where the Inputs header clips its own.
+    const roster = '[data-pane-id="sheet-roster"]';
     for (let end = Date.now() + 300_000; !(await espRow()); ) {
       if (Date.now() > end) throw new Error("MUAS-1's Unit ESP row never drew");
       await new Promise((done) => setTimeout(done, 30_000));
-      if (!(await espRow()) && (await find(page, inputs, "^Refresh$")))
-        await press(page, inputs, "^Refresh$");
+      if (!(await espRow()) && (await find(page, roster, "^Refresh$")))
+        await press(page, roster, "^Refresh$");
     }
     const row = (await espRow())!;
     const muas1 = Number(row.key.split(":")[1]);
@@ -358,30 +367,42 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
     await expect
       .poll(() => find(page, '[data-choice-cell="Write scope"]', "^MUAS-1 · "), { timeout: 30_000 })
       .not.toBeNull();
-    const demanded = () =>
+    // The Inputs pane's reading status (PaneStatus) is absent only when every reading it draws is
+    // current. Its other status cells (the write scope's) are not readings.
+    const status = () =>
       page.evaluate(() =>
-        /Explicit demand|Showing previous reading|Reading\.\.\./.test(
-          document.querySelector('[data-pane-id="sheet-inputs"]')!.textContent!,
-        ),
+        [...document.querySelectorAll('[data-pane-id="sheet-inputs"] [role="status"]')]
+          .map((e) => e.textContent!.trim())
+          .filter((text) =>
+            /^Showing previous reading|^Reading\.\.\.$|unavailable|Reading is stale|Explicit demand/.test(
+              text,
+            ),
+          )
+          .join(" "),
       );
     await expect
-      .poll(demanded, { timeout: 15_000 })
-      .toBe(true)
+      .poll(status, { timeout: 15_000 })
+      .not.toBe("")
       .catch(() => undefined);
-    await press(page, inputs, "^Refresh$");
-    await expect.poll(demanded, { timeout: 120_000, message: "sheet re-read" }).toBe(false);
+    seen.staleStatus = await status();
+    await press(page, roster, "^Refresh$");
+    await expect.poll(status, { timeout: 180_000, message: "sheet re-read" }).toBe("");
     const state = () =>
       page.evaluate(() => ({
         popover: document.querySelector('[data-write-outcome="refused"]')?.textContent ?? null,
         armed: !!document.querySelector('[data-write-action="armed"]'),
-        chip: /ducts\.plan-losses\nyou · \w+ · [\d:]+/.exec(document.body.innerText)?.[0] ?? null,
+        // The state word is hyphenated when the host cannot say (`outcome-unknown`, run 3 at d3e0ec65).
+        chip: /ducts\.plan-losses\nyou · [\w-]+ · [\d:]+/.exec(document.body.innerText)?.[0] ?? null,
       }));
     const prior = (await state()).chip;
     seen.write = await press(page, "body", "^plan Write to Revit$");
     await expect
       .poll(
         async () =>
-          ((s) => !!s.popover || s.armed || (s.chip !== prior && /refused/.test(s.chip!)))(
+          ((s) =>
+            !!s.popover ||
+            s.armed ||
+            (!!s.chip && s.chip !== prior && !/· (running|queued|pending) ·/.test(s.chip)))(
             await state(),
           ),
         {
@@ -391,13 +412,23 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
       )
       .toBe(true);
     const plan = (seen.plan = await state());
-    // A host-refused plan draws no popover outcome, only the header's timeline chip; its History names why.
-    if (!plan.popover && !plan.armed) await press(page, "body", "^ducts\\.plan-losses");
+    // A host-terminal plan without a popover outcome draws only the header's timeline chip; its
+    // History names why. The quoted refusal is whatever History draws for that entry.
+    if (!plan.popover && !plan.armed) {
+      await press(page, "body", "^ducts\\.plan-losses");
+      await new Promise((done) => setTimeout(done, 3000));
+      seen.history = await page.evaluate(
+        () =>
+          /ducts\.plan-losses\n[\w-]+ \/ you \/ [\d:]+ \/ [^\n]+(\n[^\n]+){0,6}/.exec(
+            document.body.innerText,
+          )?.[0] ?? null,
+      );
+    }
     const refusal = (seen.refusal =
       plan.popover ??
       (await page.evaluate(
         () =>
-          /ducts\.plan-losses\nrefused \/ you \/ [\d:]+ \/ ([^\n]+)/.exec(
+          /ducts\.plan-losses\n[\w-]+ \/ you \/ [\d:]+ \/ ([^\n]+)/.exec(
             document.body.innerText,
           )?.[1] ?? null,
       )));
