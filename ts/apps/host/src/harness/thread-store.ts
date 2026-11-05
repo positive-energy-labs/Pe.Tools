@@ -52,6 +52,8 @@ const fields = {
   ),
   /** Opaque here: `readWorkContext` decodes it and tolerates a stale shape. */
   workContext: Schema.optionalKey(Schema.Unknown),
+  /** "Pea is pointing at" (ADR 0030 rule 10), newest last, kept until dismissed; `readPointers` decodes. */
+  pointers: Schema.optionalKey(Schema.Unknown),
   consentRoot: Schema.optionalKey(contract(runRefSchema, "RunRef")),
   runConsent: Schema.optionalKey(Schema.NullOr(contract(allowDecisionSchema, "AllowDecision"))),
   acpSessionId: Schema.NullOr(Schema.String),

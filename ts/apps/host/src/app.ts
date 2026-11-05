@@ -49,6 +49,7 @@ import {
 import { hostOwnership } from "./host-ownership.ts";
 import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer, peApiErrorsLayer, type HostWork } from "./pe-routes.ts";
+import { threadPointerPort } from "./thread-pointers.ts";
 import { capturesRoute } from "./captures-route.ts";
 import { ductCatalogsRoute } from "./duct-catalogs.ts";
 import { pagesRoute } from "./pages-route.ts";
@@ -153,7 +154,7 @@ function makeRevitComposition(
             hostActionJournal(),
             undefined,
             { workspace: work?.workspace },
-            { origin, families },
+            { origin, families, pointers: work?.pointers },
           );
         }),
       ),
@@ -261,6 +262,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
   const work: HostWork = {
     // Pea's catalog lists every Work route (ADR 0030 rule 1).
     registrations,
+    pointers: threadPointerPort(),
     workspace: new RouteWorkspace({
       registrations: constructorWorkRegistrations(registrations),
       store: fileRouteDocumentStore(productRouteWorkPath()),
@@ -359,7 +361,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
             hostActionJournal(),
             undefined,
             { workspace: work.workspace },
-            { origin: () => `http://127.0.0.1:${port()}` },
+            { origin: () => `http://127.0.0.1:${port()}`, pointers: work.pointers },
           ),
           opsCatalogRoute(spa),
           noRevitHostStatusRoute,

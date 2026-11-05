@@ -97,6 +97,18 @@ import {
 import { Clock, Context, DateTime, Effect, Layer, Schema } from "effect";
 import { runConsentsPromise, type RunConsents } from "../run-consent.ts";
 import { z } from "zod";
+import type { Pointer, Pointers } from "../../../../packages/agent-contracts/src/pointers.ts";
+
+/** Tolerant decode of a thread's stored pointers; a stale shape reads as none, never as an error. */
+const pointersSchema = z.array(
+  z.object({
+    id: z.string(),
+    route: z.string(),
+    place: z.record(z.string(), z.string()),
+    label: z.string(),
+    at: z.string(),
+  }),
+);
 import type { HostLog } from "../host-log.ts";
 import * as adapter from "./adapter.ts";
 import { Spawner } from "./spawner.ts";
@@ -2394,6 +2406,17 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     if (changed) notifySummaries();
   };
 
+  const storedPointers = (threadId: string): Pointer[] => {
+    const t = threads.get(threadId);
+    if (!t) throw Error(`Unknown thread '${threadId}'`);
+    return pointersSchema.safeParse(t.meta.pointers).data ?? [];
+  };
+  const setPointers = (threadId: string, pointers: Pointer[]): Pointers => {
+    const t = threads.get(threadId)!;
+    t.meta.pointers = pointers;
+    writeMeta(t);
+    return { threadId, pointers };
+  };
   const service = {
     runs,
     readTurnElementNames,
@@ -2414,6 +2437,20 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         changed = true;
       }
       if (changed) notifySummaries();
+    },
+    /** Pointers live in thread meta: they survive a host restart and leave only by dismissal. */
+    pointers: {
+      read: (threadId: string): Pointers => ({ threadId, pointers: storedPointers(threadId) }),
+      point: (threadId: string, input: Omit<Pointer, "id" | "at">): Pointers =>
+        setPointers(threadId, [
+          ...storedPointers(threadId),
+          { ...input, id: randomUUID(), at: new Date().toISOString() },
+        ]),
+      dismiss: (threadId: string, id: string): Pointers =>
+        setPointers(
+          threadId,
+          storedPointers(threadId).filter((pointer) => pointer.id !== id),
+        ),
     },
     /** Read-only context projection; no Work read, native call, or new authority. */
     workContexts: () =>

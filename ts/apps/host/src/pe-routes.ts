@@ -165,6 +165,8 @@ export { fileRouteDocumentStore } from "./route-document-store.ts";
 export interface HostWork {
   workspace: RouteWorkspace;
   registrations: readonly RouteWorkspaceRegistration[];
+  /** Bound here to the thread service so the call route dispatches pointers into thread meta. */
+  pointers?: import("./thread-pointers.ts").ThreadPointerPort;
 }
 
 export interface PeRoutesOptions {
@@ -1215,6 +1217,7 @@ function* hostPeRoutes(
       return matches.length === 1 ? matches[0]! : null;
     },
   });
+  hostWork?.pointers?.bind(threads.pointers);
   const stopWorkContext = bridge?.subscribe(() => threads.refreshWorkContexts());
   const scheduler = createScheduledTasks({
     path: join(hostOwnership.rootPath, "state", hostOwnership.serviceName, "scheduled-tasks.json"),

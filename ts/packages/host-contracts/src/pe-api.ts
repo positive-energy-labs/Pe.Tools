@@ -1469,8 +1469,9 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     subject: "None",
     touches: "Metadata",
     cardinality: "One",
-    // Pointing is shell-only thread state, never document state: Read keeps it out of the write
-    // consent window (ADR 0027) while the host still attributes it to the caller's thread.
+    // Not stateless: point/dismiss rewrite the calling thread's meta.json `pointers` list. The
+    // boundary that makes Read honest is metadata-only: no Revit call, no document or Work read or
+    // write, no selection/URL/camera. Read keeps it out of the write consent window (ADR 0027).
     effect: "Read",
     principal: ["human", "pea"],
     origin: "host-local",
@@ -1490,8 +1491,9 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     subject: "None",
     touches: "Metadata",
     cardinality: "One",
-    // Pointing is shell-only thread state, never document state: Read keeps it out of the write
-    // consent window (ADR 0027) while the host still attributes it to the caller's thread.
+    // Not stateless: point/dismiss rewrite the calling thread's meta.json `pointers` list. The
+    // boundary that makes Read honest is metadata-only: no Revit call, no document or Work read or
+    // write, no selection/URL/camera. Read keeps it out of the write consent window (ADR 0027).
     effect: "Read",
     principal: ["human", "pea"],
     origin: "host-local",
@@ -1511,8 +1513,9 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     subject: "None",
     touches: "Metadata",
     cardinality: "One",
-    // Pointing is shell-only thread state, never document state: Read keeps it out of the write
-    // consent window (ADR 0027) while the host still attributes it to the caller's thread.
+    // Not stateless: point/dismiss rewrite the calling thread's meta.json `pointers` list. The
+    // boundary that makes Read honest is metadata-only: no Revit call, no document or Work read or
+    // write, no selection/URL/camera. Read keeps it out of the write consent window (ADR 0027).
     effect: "Read",
     principal: ["human", "pea"],
     origin: "host-local",

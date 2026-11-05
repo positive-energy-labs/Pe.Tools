@@ -16,7 +16,7 @@ import {
 import { sdkSession, SdkSession, SdkDriverLive, SdkDriver } from "./sdk-session.ts";
 import { readSchedule } from "./schedule-actions.ts";
 import { actionControls, commandTool, receiptsForWork } from "@pe/agent-contracts";
-import { dismiss, point, pointerThread, readPointers } from "./pointers.ts";
+import { pointerThread, type ThreadPointers } from "./thread-pointers.ts";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { operationDefinition, gatewayTarget, requireEligibleCaller } from "./gateway-actions.ts";
 import {
@@ -173,6 +173,8 @@ export function makeCallRoute(
     readonly local?: (key: string, input: unknown) => Promise<unknown>;
     /** The Families reader the host's layer built; absent where no Revit composition exists. */
     readonly families?: FamiliesReader["Service"];
+    /** Thread meta's pointer surface; pointer ops refuse without it. */
+    readonly pointers?: ThreadPointers;
   },
 ) {
   const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
@@ -529,7 +531,10 @@ export function makeCallRoute(
       }
       const result = isTsOnlyOperationKey(key)
         ? {
-            value: yield* dispatch(key, request, scope, bridge, observations(), caller),
+            value: yield* dispatch(key, request, scope, bridge, observations(), {
+              caller,
+              pointers: composition?.pointers,
+            }),
             target: null,
           }
         : entry.snapshot
@@ -1250,9 +1255,9 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   scope: HostSessionScope | undefined,
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
-  caller: Caller,
+  via: { caller: Caller; pointers?: ThreadPointers },
 ) {
-  return yield* localEntries[key]({ request, scope, bridge, captures, caller });
+  return yield* localEntries[key]({ request, scope, bridge, captures, ...via });
 });
 
 type LocalCall = {
@@ -1261,19 +1266,24 @@ type LocalCall = {
   bridge: RevitBridge["Service"];
   captures: TakeoffCaptures;
   caller: Caller;
+  pointers?: ThreadPointers;
+};
+const pointerOwner = (pointers: ThreadPointers | undefined) => {
+  if (!pointers) throw Error("Pointers need this host's thread store.");
+  return pointers;
 };
 const localEntries = {
-  "pointers.point": Effect.fnUntraced(function* ({ request, caller }: LocalCall) {
+  "pointers.point": Effect.fnUntraced(function* ({ request, caller, pointers }: LocalCall) {
     const input = yield* decodeRequest("pointers.point", request);
-    return point(pointerThread(caller, undefined), input);
+    return pointerOwner(pointers).point(pointerThread(caller, undefined), input);
   }),
-  "pointers.list": Effect.fnUntraced(function* ({ request, caller }: LocalCall) {
+  "pointers.list": Effect.fnUntraced(function* ({ request, caller, pointers }: LocalCall) {
     const input = yield* decodeRequest("pointers.list", request);
-    return readPointers(pointerThread(caller, input.thread));
+    return pointerOwner(pointers).read(pointerThread(caller, input.thread));
   }),
-  "pointers.dismiss": Effect.fnUntraced(function* ({ request, caller }: LocalCall) {
+  "pointers.dismiss": Effect.fnUntraced(function* ({ request, caller, pointers }: LocalCall) {
     const input = yield* decodeRequest("pointers.dismiss", request);
-    return dismiss(pointerThread(caller, input.thread), input.id);
+    return pointerOwner(pointers).dismiss(pointerThread(caller, input.thread), input.id);
   }),
   "takeoffs.saved": Effect.fnUntraced(function* ({ request, captures }: LocalCall) {
     return yield* savedTakeoffs(request, captures);
@@ -1544,7 +1554,9 @@ function executeGatewayLocal(
   if (!callEntries.get(key)?.shell)
     // effect-edge: island, phase 5
     return Effect.runPromise(
-      dispatchTsOnlyOperation(key, input, undefined, bridge, captures, { kind: "anonymous" }).pipe(
+      dispatchTsOnlyOperation(key, input, undefined, bridge, captures, {
+        caller: { kind: "anonymous" },
+      }).pipe(
         Effect.provide(NodeServices.layer),
         Effect.provide(NodeHttpClient.layerUndici),
       ),
