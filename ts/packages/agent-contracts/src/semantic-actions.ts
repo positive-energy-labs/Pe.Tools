@@ -140,6 +140,8 @@ export const ductsActions = {
     dirties: ["snapshot"],
   },
   "ducts.plan-heal": {
+    // The host derives the plan from these Reads; it opens no transaction and calls no rehearsal.
+    native: ["ducts.snapshot.walk"],
     says: "Plan healing the staged duct groups: derive each group's repairs (cap dangling open ends, connect coincident same-size ends, close same-size gaps of at most 3 in) from Work and seal them, without opening a transaction. Show the person the planned items before any apply.",
     needs: "project-document",
     effect: "query",
@@ -163,6 +165,8 @@ export const ductsActions = {
     dirties: ["snapshot"],
   },
   "ducts.plan-assign-fan": {
+    // The host derives the plan from these Reads; it opens no transaction and calls no rehearsal.
+    native: ["ducts.snapshot.walk"],
     says: "Plan making the staged unit the fan of a duct system (Duct Systems > Select Equipment: the system's base equipment): read the system and seal the request, without opening a transaction. Show the person the plan before any apply.",
     needs: "project-document",
     effect: "query",
