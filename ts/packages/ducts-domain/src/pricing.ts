@@ -575,6 +575,7 @@ export function applyRequest(
     .sort((a, b) => a.id - b.id);
   const slots = priced.edit.parameters;
   const stored = snapshot.store;
+  const rulings = storeRulings(priced.edit, stored, appliedAt);
   return {
     slots,
     fittings,
@@ -583,8 +584,8 @@ export function applyRequest(
     equipment,
     terminalFlows,
     equipmentFlows,
-    // The native op writes the store as sent: the model's store (unknown keys included) with
-    // this apply over it, at the revision read, so a store that moved since refuses as stale.
+    // The native op overlays these entries per key on the model's store (K3); a ruling Work takes back
+    // is named in storeDeletes, and a store that moved since the read refuses as stale.
     store: {
       ...stored,
       version: 2,
@@ -622,9 +623,14 @@ export function applyRequest(
         Object.entries({ ...snapshot.slots, ...slots }).filter(([, name]) => !!name),
       ),
       // Document-wide: the stored rulings Work leaves standing and its pending ones (`rulings.ts`).
-      ...storeRulings(priced.edit, stored, appliedAt),
+      ...rulings,
       workRevision: stored?.workRevision ?? 0,
       appliedAt,
+    },
+    // The native store overlays per key (K3): a ruling Work takes back is removed only by naming it here.
+    storeDeletes: {
+      verdicts: Object.keys(stored?.verdicts ?? {}).filter((key) => !(key in rulings.verdicts)),
+      roles: Object.keys(stored?.roles ?? {}).filter((id) => !(id in rulings.roles)).map(Number),
     },
   };
 }

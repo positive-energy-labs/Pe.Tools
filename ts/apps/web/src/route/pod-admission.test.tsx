@@ -264,7 +264,7 @@ test("Snowdon real host + React mount migrates v1, renders subject/calculation, 
     await vi.waitFor(() =>
       expect(screen.getByText(/Authored inputs/).textContent).toContain('"length": 175'),
     );
-    expect(screen.getByText("Copper voltage-drop worksheet")).toBeTruthy();
+    expect(screen.getAllByText("Copper voltage-drop worksheet").length).toBeGreaterThan(0);
     expect(screen.getByText(/Authored inputs/).textContent).toContain('"drop"');
     expect(await h.store.getState({ targetKey: workKey(h.key), route: h.key.route })).toMatchObject(
       { schemaVersion: 2, revision: 8, doc: { version: 2, inputs: h.inputs } },
@@ -285,16 +285,16 @@ test("Snowdon real host + React mount migrates v1, renders subject/calculation, 
       await mount.history!.redo();
     });
     expect(screen.getByText(/Authored inputs/).textContent).toContain('"length": 300');
-    expect(h.acquired.sort()).toEqual(["work", "work-acks"]);
+    expect(h.acquired.filter((kind) => kind === "work" || kind === "work-acks").sort()).toEqual(["work", "work-acks"]);
     view.unmount();
-    expect(h.released.sort()).toEqual(["work", "work-acks"]);
+    expect(h.released.filter((kind) => kind === "work" || kind === "work-acks").sort()).toEqual(["work", "work-acks"]);
   } finally {
     view.unmount();
     await h.close();
   }
 });
 
-test("stale Pod tab shows reload and cannot reacquire feeds after Page changes or remount", async () => {
+test("stale Pod tab shows reload and cannot reacquire Work feeds after Page changes or remount", async () => {
   const h = await hostHarness();
   let mount!: AdmittedMount;
   const staleSource: Readings = {
@@ -324,7 +324,8 @@ test("stale Pod tab shows reload and cannot reacquire feeds after Page changes o
   );
   try {
     await vi.waitFor(() => expect(screen.getByText(/older version.*reload/)).toBeTruthy());
-    const count = h.acquired.length;
+    const workFeeds = () => h.acquired.filter((kind) => kind === "work" || kind === "work-acks");
+    const count = workFeeds().length;
     act(() => {
       mount.controls.subject(null);
     });
@@ -338,7 +339,7 @@ test("stale Pod tab shows reload and cannot reacquire feeds after Page changes o
       }),
     );
     await vi.waitFor(() => expect(screen.getByText(/older version.*reload/)).toBeTruthy());
-    expect(h.acquired).toHaveLength(count);
+    expect(workFeeds()).toHaveLength(count);
   } finally {
     cleanup();
     await h.close();

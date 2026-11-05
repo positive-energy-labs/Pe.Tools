@@ -76,8 +76,10 @@ public static class DuctApplier {
     }
 
     public static DuctApplyResult Apply(Document doc, DuctApplyRequest request, bool preview) {
-        // Name by name: a staged slot wins over the stored one, so a partial request never drops a stored name.
-        var slots = (request.Slots ?? new DuctParameterSlotOverrides()).Resolve(request.Store.Slots);
+        // Name by name: a staged slot wins over the model's stored one (never the request's copy of it), so a
+        // partial request never drops a stored name.
+        var (stored, storeError) = ReadStore(doc);
+        var slots = (request.Slots ?? new DuctParameterSlotOverrides()).Resolve(stored?.Slots);
         var schemas = new Dictionary<Guid, Schema?> {
             [SpecificCoefficient] = Schema(SpecificCoefficient),
             [SpecificLoss] = Schema(SpecificLoss),
@@ -110,11 +112,13 @@ public static class DuctApplier {
         var unscoped = SharedTypes(doc, items, "equipment", (request.Equipment ?? []).Select(w => (w.Id, w.ExternalStaticInWg)), "fan statics")
             | SharedTypes(doc, items, "equipment-flow", (request.EquipmentFlows ?? []).Select(w => (w.Id, w.Cfm)), "fan flows");
 
-        var (stored, storeError) = ReadStore(doc);
         var storeRevision = stored?.WorkRevision ?? 0;
-        // The store entries this write changes, one line each, so a preview reviews every change (they land with the store).
-        items.AddRange(StoreEntries(stored, request.Store, slots));
-        var store = new Item(null, "store", stored is null ? storeError is null ? "absent" : "unreadable" : $"revision {storeRevision}");
+        // The store entries this write changes against the model's store, one line each, from the same merged next
+        // store the write lands, so plan and apply review one truth (they land with the store).
+        items.AddRange(StoreEntries(stored, Compose(request, stored, items, DateTimeOffset.UnixEpoch, slots, storeRevision + 1)));
+        var store = new Item(null, "store", stored is null ? storeError is null ? "absent" : "unreadable" : $"revision {storeRevision}") {
+            After = $"revision {storeRevision + 1}"
+        };
         if (storeError is not null) store.Refuse($"the model's {StoreText.Name} is unreadable ({storeError}); refusing to overwrite it");
         else if (request.Store.WorkRevision < storeRevision)
             store.Refuse($"stale: the model holds store revision {storeRevision}, the request carries {request.Store.WorkRevision}; re-read ducts.snapshot");
@@ -175,35 +179,35 @@ public static class DuctApplier {
     ///     The slots and rulings this write changes against the model's store: a slot whose name moves, a verdict or a
     ///     role added, changed or taken back. Each writes nothing itself; the store item carries them.
     /// </summary>
-    private static IEnumerable<Item> StoreEntries(DuctLossStore? stored, DuctLossStore asked, DuctParameterSlots slots) {
+    private static IEnumerable<Item> StoreEntries(DuctLossStore? stored, DuctLossStore next) {
         Item Entry(long? id, string kind, string? key, string before, string after) =>
             new(id, kind, before) { Key = key, After = after, Write = () => after };
         // A model with no record held no slot: "none", never the C# defaults (Manual D #5 defect 8 read
         // PE_M_Fan_AirFlowDesign there while the resolver used PE_M_Fan_AirFlow).
         var had = stored?.Slots?.Resolve();
+        var will = next.Slots!.Resolve();
         var names = new[] {
-            ("fanStatic", had?.FanStatic, slots.FanStatic),
-            ("fanFlow", had?.FanFlow, slots.FanFlow),
-            ("componentDrop", had?.ComponentDrop, slots.ComponentDrop),
-            ("terminalDrop", had?.TerminalDrop, slots.TerminalDrop),
-            ("fittingCoefficient", had?.FittingCoefficient, slots.FittingCoefficient),
-            ("terminalFlow", had?.TerminalFlow, slots.TerminalFlow)
+            ("fanStatic", had?.FanStatic, will.FanStatic),
+            ("fanFlow", had?.FanFlow, will.FanFlow),
+            ("componentDrop", had?.ComponentDrop, will.ComponentDrop),
+            ("terminalDrop", had?.TerminalDrop, will.TerminalDrop),
+            ("fittingCoefficient", had?.FittingCoefficient, will.FittingCoefficient),
+            ("terminalFlow", had?.TerminalFlow, will.TerminalFlow)
         };
         foreach (var (name, before, after) in names)
             if (!string.Equals(before, after, StringComparison.Ordinal))
                 yield return Entry(null, "slot", name, before ?? "none", after ?? "none");
+        // Per key against the merged next store: an entry is removed only by an explicit delete, never by omission.
         var verdicts = stored?.Verdicts ?? new Dictionary<string, DuctVerdictRecord>();
-        var askedVerdicts = asked.Verdicts ?? new Dictionary<string, DuctVerdictRecord>();
-        foreach (var key in verdicts.Keys.Union(askedVerdicts.Keys).OrderBy(k => k, StringComparer.Ordinal)) {
+        foreach (var key in verdicts.Keys.Union(next.Verdicts.Keys).OrderBy(k => k, StringComparer.Ordinal)) {
             var before = verdicts.TryGetValue(key, out var b) ? b.Verdict : "none";
-            var after = askedVerdicts.TryGetValue(key, out var a) ? a.Verdict : "none";
+            var after = next.Verdicts.TryGetValue(key, out var a) ? a.Verdict : "none";
             if (before != after) yield return Entry(FirstId(key), "verdict", key, before, after);
         }
         var roles = stored?.Roles ?? new Dictionary<long, DuctRoleRecord>();
-        var askedRoles = asked.Roles ?? new Dictionary<long, DuctRoleRecord>();
-        foreach (var id in roles.Keys.Union(askedRoles.Keys).OrderBy(k => k)) {
+        foreach (var id in roles.Keys.Union(next.Roles.Keys).OrderBy(k => k)) {
             var before = roles.TryGetValue(id, out var b) ? b.Role : "none";
-            var after = askedRoles.TryGetValue(id, out var a) ? a.Role : "none";
+            var after = next.Roles.TryGetValue(id, out var a) ? a.Role : "none";
             if (before != after) yield return Entry(id, "role", null, before, after);
         }
     }
@@ -500,30 +504,35 @@ public static class DuctApplier {
     private static bool IsAirFlow(Parameter p) =>
         p.StorageType == StorageType.Double && Try(() => p.Definition.GetDataType()) is { } spec && spec == SpecTypeId.AirFlow;
 
+    /// <summary>
+    ///     The next store: the model's store overlaid per key (K3). Rulings (rules, verdicts, roles) take the request's
+    ///     entries; provenance (instances, drops, flows) takes only writes that land, so a refused or rolled-back write
+    ///     never records. A stored key the request omits survives; only an explicit delete removes one.
+    /// </summary>
     private static DuctLossStore Compose(DuctApplyRequest request, DuctLossStore? stored, List<Item> items, DateTimeOffset now,
         DuctParameterSlots slots, int revision) {
         var asked = request.Store;
-        var rules = new Dictionary<string, DuctRuleChoice>(asked.Rules ?? new(), StringComparer.Ordinal);
-        var instances = new Dictionary<long, DuctInstanceRecord>(asked.Instances ?? new());
-        var drops = new Dictionary<long, DuctDropRecord>(asked.Terminals ?? new());
+        var deletes = request.StoreDeletes ?? new DuctStoreDeletes();
         bool Lands(string kind, long id) => items.Any(i => i.Kind == kind && i.Id == id && i.Outcome is "planned" or "unchanged" or "written");
+        var rules = DuctLossStore.Overlay(stored?.Rules, asked.Rules, deletes.Rules, StringComparer.Ordinal);
+        var instances = DuctLossStore.Overlay(stored?.Instances, null, deletes.Instances);
         foreach (var w in (request.Fittings ?? []).Where(w => Lands("fitting", w.Id))) {
             instances[w.Id] = new DuctInstanceRecord(w.Table, w.Inputs, w.Coefficient, now);
             if (w.RuleKey is { Length: > 0 } key && !rules.ContainsKey(key)) rules[key] = new DuctRuleChoice(w.Table);
         }
+        var drops = DuctLossStore.Overlay(stored?.Terminals, null, deletes.Terminals);
         foreach (var w in (request.Terminals ?? []).Where(w => Lands("terminal", w.Id))) drops[w.Id] = new DuctDropRecord(w.InWg, w.Source, now);
         foreach (var w in (request.Components ?? []).Where(w => Lands("component", w.Id))) drops[w.Id] = new DuctDropRecord(w.InWg, w.Source, now);
-        var terminalFlows = new Dictionary<long, DuctFlowRecord>(asked.TerminalFlows ?? new());
+        var terminalFlows = DuctLossStore.Overlay(stored?.TerminalFlows, null, deletes.TerminalFlows);
         foreach (var w in (request.TerminalFlows ?? []).Where(w => Lands("terminal-flow", w.Id))) terminalFlows[w.Id] = new DuctFlowRecord(w.Cfm, w.Source, now);
-        var equipmentFlows = new Dictionary<long, DuctFlowRecord>(asked.EquipmentFlows ?? new());
+        var equipmentFlows = DuctLossStore.Overlay(stored?.EquipmentFlows, null, deletes.EquipmentFlows);
         foreach (var w in (request.EquipmentFlows ?? []).Where(w => Lands("equipment-flow", w.Id))) equipmentFlows[w.Id] = new DuctFlowRecord(w.Cfm, w.Source, now);
         var unknown = new Dictionary<string, Newtonsoft.Json.Linq.JToken>(stored?.Unknown ?? new Dictionary<string, Newtonsoft.Json.Linq.JToken>());
         foreach (var kv in asked.Unknown ?? new Dictionary<string, Newtonsoft.Json.Linq.JToken>()) unknown[kv.Key] = kv.Value;
         return new DuctLossStore {
             Version = DuctLossStore.CurrentVersion, Rules = rules, Instances = instances, Terminals = drops, TerminalFlows = terminalFlows, EquipmentFlows = equipmentFlows,
-            // The rulings as sent: the web composes the model's rulings with the person's pending deltas (`StoreEntries` names each change).
-            Verdicts = new Dictionary<string, DuctVerdictRecord>(asked.Verdicts ?? new(), StringComparer.Ordinal),
-            Roles = new Dictionary<long, DuctRoleRecord>(asked.Roles ?? new()),
+            Verdicts = DuctLossStore.Overlay(stored?.Verdicts, asked.Verdicts, deletes.Verdicts, StringComparer.Ordinal),
+            Roles = DuctLossStore.Overlay(stored?.Roles, asked.Roles, deletes.Roles),
             Slots = new DuctParameterSlotOverrides(slots.FanStatic, slots.FanFlow, slots.ComponentDrop,
                 slots.TerminalDrop, slots.FittingCoefficient, slots.TerminalFlow), WorkRevision = revision, AppliedAt = now, Unknown = unknown
         };

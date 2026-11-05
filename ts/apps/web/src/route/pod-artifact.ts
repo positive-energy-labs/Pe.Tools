@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { catalogEntries } from "@pe/agent-contracts/pe-api";
+import { linkedCatalog } from "@pe/agent-contracts/pe-api";
 import type { PodRouteDescriptor } from "@pe/agent-contracts";
 import { loadRouteArtifact, type RouteArtifactBytes } from "./route-artifact";
 import { podRoutePath } from "./pod-address";
@@ -55,7 +55,7 @@ export async function admitPodArtifact(
     })),
   };
   // loadRouteArtifact owns createRouteAdmission -> admitUnknown. Never mint a second handle.
-  const result = await loadRouteArtifact(input, catalogEntries, evaluate);
+  const result = await loadRouteArtifact(input, [...linkedCatalog().entries.values()], evaluate);
   if (!result.ok) throw Error(result.diagnostics.map((d) => `${d.path}: ${d.message}`).join("; "));
   if (
     result.route.data.key !== row.workRoute ||

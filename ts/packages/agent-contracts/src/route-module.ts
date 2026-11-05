@@ -10,8 +10,8 @@ import {
 } from "./host-route-admission.ts";
 import type { RouteModule as KernelModule, RouteBodyRender } from "./route-kernel-admission.ts";
 import { bare, manyCodec } from "./route-field.ts";
-import { catalogEntries } from "./pe-api.ts";
-import { requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
+import { linkedCatalog } from "./pe-api.ts";
+import { commandLink, requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
 import type { z } from "zod";
 import type { Command } from "./command.ts";
 import type { RouteStateSpec } from "./route-state.ts";
@@ -57,11 +57,6 @@ export interface ExecutableRouteModule<B> extends RouteModule<Record<string, B>>
   work: RouteStateSpec<z.ZodType>;
   entries: Readonly<Record<string, Command & { axes: CatalogAxes }>>;
 }
-const previewOf = (entry: Command) => {
-  const boundary = (entry as { writeBoundary?: import("./write-intent.ts").WriteBoundaryBinding })
-    .writeBoundary;
-  return boundary?.phase === "apply" ? boundary.previewKey : undefined;
-};
 export function validateExecutableRouteModule<B>(
   module: ExecutableRouteModule<B>,
   actualHash: string,
@@ -71,16 +66,11 @@ export function validateExecutableRouteModule<B>(
   for (const [key, entry] of Object.entries(module.entries))
     if (entry.needs !== "nothing" && entry.axes?.subject === "None")
       throw Error(`${key}: a document requirement cannot declare Subject None`);
-  requireLinkedCatalog([
-    ...catalogEntries,
-    ...Object.entries(module.entries).map(([key, entry]) => ({
-      ...entry.axes,
-      key: `command:${key}`,
-      uses: entry.native ?? [],
-      ...entry.derivation,
-      ...(previewOf(entry) ? { previewBy: `command:${previewOf(entry)}` } : {}),
-    })),
-  ]);
+  requireLinkedCatalog(
+    linkedCatalog().extend(
+      Object.entries(module.entries).map(([key, entry]) => commandLink(key, entry, entry.axes)),
+    ),
+  );
   if (module.work.route !== module.graph.key) throw Error("Work belongs to another route");
   for (const key of Object.keys(module.entries)) {
     if (module.namespace !== "builtin" && !key.startsWith(`pod.${module.namespace}.`))

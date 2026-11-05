@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-05, kaitpw's K3 ruling: every catalog write carries a keyed patch, reads stored state for per-key before and after, and preserves unstaged keys, including the `ducts.apply` loss store; a native whole replacement declares that contract and shows the full before. One deterministic omission-preservation falsifier covers every catalog write. Data-table apply refuses and the Driver holds apply until it passes (ADR 0030 rule 8).
+
 - 2026-11-05, kaitpw's K2 ruling: a parameter-links plan reads the stored profile and shows before and after per staged id; apply overlays keyed edits without dropping unstaged ids. Until that path lands, its catalog apply refuses with a typed reason while staging stays available (ADR 0030 rules 6 and 8).
 
 - 2026-11-05, retire the Fans test-name parity census in favor of real Chrome witnesses. Picker/reconnect P03 remains deferred until a witness fails; recovery row expansion W14 is dropped as presentation-only, while shared confirmation and canonical salvage remain.

@@ -6,7 +6,7 @@ import { ReadFreshness, readSchemas, RequestIdentity } from "./request-services.
 import { prepareRead } from "../../../packages/host-internal/src/read-admission.ts";
 import { ductsSnapshotReadingSchema, nativePrincipals } from "@pe/agent-contracts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
-import { peRoutes, catalogEntries } from "@pe/agent-contracts/pe-api";
+import { peRoutes, linkedCatalog } from "@pe/agent-contracts/pe-api";
 import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
 import {
   DUCTS_BODY_VERSION_HEADER,
@@ -102,7 +102,6 @@ import {
 } from "@pe/host-contracts/operation-types";
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
 
-const callEntries = new Map(catalogEntries.map((entry) => [entry.key, entry.call]));
 const readingSubjects: Record<
   "roster" | "walk" | "tables",
   (request: unknown, session: string, openId: string | null | undefined) => DuctsReadingRequest
@@ -368,7 +367,7 @@ export function makeCallRoute(
             reason: `Pod query has no admitted route: ${key}`,
           }),
         );
-      const entry = callEntries.get(key) ?? {};
+      const entry = linkedCatalog().entries.get(key)?.call ?? {};
       const humanDoor = entry.humanOnly;
       if (humanDoor && caller.kind !== "human")
         return Response.jsonUnsafe(
@@ -1551,7 +1550,7 @@ function executeGatewayLocal(
 ): Promise<unknown> {
   if (!isTsOnlyOperationKey(key))
     throw new BridgeError("Unknown host operation", 409, { notDispatched: true });
-  if (!callEntries.get(key)?.shell)
+  if (!linkedCatalog().entries.get(key)?.call?.shell)
     // effect-edge: island, phase 5
     return Effect.runPromise(
       dispatchTsOnlyOperation(key, input, undefined, bridge, captures, {
