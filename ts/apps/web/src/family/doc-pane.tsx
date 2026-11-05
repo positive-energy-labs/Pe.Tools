@@ -199,7 +199,7 @@ export function ProposalCard({
         // The note is the card's paragraph below; the cell keeps its facts on hover.
         facts={{
           value: suggestion.proposed,
-          ...(suggestion.current != null ? { currentValue: suggestion.current } : {}),
+          ...(suggestion.current != null ? { modelValue: suggestion.current } : {}),
           foot: "hover",
         }}
         mark={false}

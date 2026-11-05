@@ -4,7 +4,7 @@ import {
   ductsRouteState,
   fansDocumentSchema,
   applyPatches,
-  transitionPatches,
+  cellPatches,
 } from "@pe/agent-contracts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
 import { neutralBodies, authoredPatches, localId, schemas, ductsData } from "./neutral";
@@ -23,18 +23,20 @@ const scope = (): Scope => {
     fansWork: ready(fansDocumentSchema.parse({})),
     ducts: ready(snapshot),
     sheetSnapshot: ready(snapshot),
-    sheet: ready(schemas.sheet.parse({
-      open: {
-        overview: sheet.overview,
-        inputs: null,
-        elements: null,
-        legs: null,
-        worstLegs: [],
-        worksheet: null,
-      },
-      rows: [],
-      progress: null,
-    })),
+    sheet: ready(
+      schemas.sheet.parse({
+        open: {
+          overview: sheet.overview,
+          inputs: null,
+          elements: null,
+          legs: null,
+          worstLegs: [],
+          worksheet: null,
+        },
+        rows: [],
+        progress: null,
+      }),
+    ),
   };
   return {
     page: {
@@ -46,7 +48,11 @@ const scope = (): Scope => {
     readings,
     // Readiness has no accepted mutation basis; captures are the declared displayed reads.
     workBasis: null,
-    captures: { ducts: readings.ducts, sheetSnapshot: readings.sheetSnapshot, sheet: readings.sheet },
+    captures: {
+      ducts: readings.ducts,
+      sheetSnapshot: readings.sheetSnapshot,
+      sheet: readings.sheet,
+    },
   };
 };
 const input = schemas.none.parse({});
@@ -91,10 +97,7 @@ test("criteria edits merge the selected side and lifecycle actions remain bounde
       value: { edit: { value: { allowanceInWg: { supply: 0.1, return: 0.35 } } } },
     },
   ]);
-  const clear = authoredPatches(
-    doc,
-    transitionPatches([], "criteria", doc.criteria, { kind: "clear" }),
-  );
+  const clear = authoredPatches(doc, cellPatches([], "criteria", doc.criteria, { kind: "clear" }));
   expect(clear).toEqual([{ path: ["criteria"], value: { edit: null } }]);
 });
 

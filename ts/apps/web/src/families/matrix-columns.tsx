@@ -245,7 +245,7 @@ export function ParamCell({
       />
     );
   }
-  if (cell?.suggestion != null || cell?.edit != null)
+  if (cell?.edit != null)
     return (
       <ProposalCell
         current={value}
@@ -288,7 +288,7 @@ function YesNoCell({
   onPick: (choice: string) => ReturnType<ProposeFamilyCell>;
 }) {
   const [refused, setRefused] = useState<string | undefined>();
-  const rung = cell?.edit ?? cell?.suggestion;
+  const rung = cell?.edit;
   const shown = rung ? showFamilyCell(rung.value) : current;
   return (
     <span className="relative block w-full min-w-0">
@@ -298,11 +298,12 @@ function YesNoCell({
         invalid={refused != null}
         display={
           <StateCell
-            {...cellFromDraft(
-              cell ?? { suggestion: null, edit: null },
-              { value: shown, currentValue: current || "(blank)", note: reason, scale: "row" },
-              showFamilyCell,
-            )}
+            {...cellFromDraft(cell ?? { edit: null }, {
+              value: shown,
+              modelValue: current || "(blank)",
+              note: reason,
+              scale: "row",
+            })}
           />
         }
         title={`${name} is Yes/No: pick Yes or No`}
@@ -361,7 +362,7 @@ function ProposalCell({
   current: string;
   reason: string;
   cell: FamilyCellState | undefined;
-  /** The cell's own verbs: exactly `availableTransitions`, over the families wire. */
+  /** The cell clear control over the families Work handle. */
   transitions?: readonly CellTransition[];
   /** Why a patch cannot write this cell; present, the cell draws locked and takes no typing. */
   lock?: string;
@@ -374,34 +375,24 @@ function ProposalCell({
   measured?: { displayUnit: MeasuredDisplayUnit; parse: (text: string) => Promise<MeasuredAnswer> };
 }) {
   const move = useCellNavigation();
-  const suggestion = cell?.suggestion;
   const edit = cell?.edit;
-  const stagedText = edit ? showFamilyCell(edit.value) : undefined;
-  const proposedText = suggestion ? showFamilyCell(suggestion.value) : undefined;
-  const shown = stagedText ?? proposedText ?? current;
-  const note = suggestion
-    ? `Pea proposed ${current || "(blank)"} → ${proposedText}${
-        stagedText === proposedText
-          ? "; edit — plan will include it"
-          : edit
-            ? `; you edit ${stagedText}, so Pea's value is a counter-suggestion`
-            : "; open — accept (a) or deny (d) it on this cell"
-      }. Nothing has reached Revit.`
-    : edit
-      ? `You edit ${current || "(blank)"} → ${stagedText}. Nothing has reached Revit.`
-      : reason;
+  const shown = edit ? showFamilyCell(edit.value) : current;
+  const note = edit
+    ? `${edit.by === "pea" ? "Pea" : "You"} staged ${shown}. Nothing has reached Revit.`
+    : reason;
   return (
-    <span data-suggestion={suggestion ? "pea" : undefined} data-edit={edit ? "" : undefined}>
+    <span data-author={edit?.by} data-edit={edit ? "" : undefined}>
       <StateCell
-        {...cellFromDraft(
-          cell ?? { suggestion: null, edit: null },
-          { value: shown, currentValue: current || "(blank)", note, scale: "row" },
-          showFamilyCell,
-        )}
+        {...cellFromDraft(cell ?? { edit: null }, {
+          value: shown,
+          modelValue: current || "(blank)",
+          note,
+          scale: "row",
+        })}
         cap={lock ? "locked" : "editable"}
         capReason={lock}
         transitions={transitions}
-        placeholder={suggestion || edit ? current : undefined}
+        placeholder={edit ? current : undefined}
         {...(lock || !onCommit
           ? {}
           : measured

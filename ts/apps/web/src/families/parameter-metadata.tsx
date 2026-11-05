@@ -97,7 +97,7 @@ export function ParameterMetadata({
   patch?: OverlayParameter;
 }) {
   const rung = patch?.edit ? "edit" : "proposed";
-  const fields: Record<string, unknown> = patch?.edit ?? patch?.suggestion ?? {};
+  const fields: Record<string, unknown> = patch?.edit ?? {};
   const to = (key: string | null) =>
     key === null
       ? null

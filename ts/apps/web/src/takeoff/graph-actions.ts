@@ -11,7 +11,7 @@ import {
   takeoffDecisionKey,
   takeoffEditPatches,
   takeoffFlagToggle,
-  transitionPatches,
+  cellPatches,
   type TakeoffsRouteDocument,
   type TakeoffObservation,
   type TakeoffCapture,
@@ -67,7 +67,22 @@ export const takeoffVerbs = {
         (scope.snapshot.work?.handle.revision === input.expectedRevision
           ? null
           : "Work changed; edit the current takeoff cells"),
-      patches: (_, input) => input.patches,
+      patches: (scope, input) => {
+        if (
+          !input.patches.some(
+            (p) => p.path[0] === "edits" && p.path[2] === "edit" && p.value != null,
+          )
+        )
+          return input.patches;
+        const observation = scope.readings.snapshot?.value as TakeoffObservation | undefined;
+        if (!scope.readings.snapshot?.current || observation?.kind !== "ready")
+          throw Error("Read the current document before staging a room edit");
+        return withEditBases(
+          scope.snapshot.work!.doc as TakeoffsRouteDocument,
+          observation.capture.snapshot.world,
+          input.patches,
+        );
+      },
     },
   ),
   room: workVerb(
@@ -99,7 +114,7 @@ export const takeoffVerbs = {
     {
       ready: (_, input) => input.refusal,
       patches: (scope, { request }) =>
-        transitionPatches(
+        cellPatches(
           ["adopt"],
           request.key,
           (scope.snapshot.work!.doc as TakeoffsRouteDocument).adopt[request.key] ?? {},
@@ -118,7 +133,7 @@ export const takeoffVerbs = {
       ready: (_, input) => input.refusal,
       patches: (scope, { request }) => {
         const key = takeoffDecisionKey(request.room, request.flag);
-        return transitionPatches(
+        return cellPatches(
           ["decisions"],
           key,
           (scope.snapshot.work!.doc as TakeoffsRouteDocument).decisions[key] ?? {},

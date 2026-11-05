@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@pe/kit/lang/button";
-import { fanOutWord, WorkSentence, workSummary, type FanOutOutcome } from "#/components/work/band";
+import { clearWord, WorkSentence, workSummary, type ClearOutcome } from "#/components/work/band";
 import { FactChip } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Section } from "@pe/kit/lang/section";
@@ -14,7 +14,7 @@ import { applyPatches, MATRIX, MATRIX_CELLS } from "#/design-system/band-matrix"
 import {
   ChatScale,
   BandGaps,
-  acceptVoltage,
+  clearVoltage,
   MATRIX_COLUMNS,
   matrixRows,
   matrixGroupOf,
@@ -34,7 +34,7 @@ function BandRoute() {
   const [picked, setPicked] = useState("HP-2");
   const [ask, setAsk] = useState<Ask>("live");
   const [said, say] = useState<string | null>(null);
-  const [outcome, setOutcome] = useState<FanOutOutcome | null>(null);
+  const [outcome, setOutcome] = useState<ClearOutcome | null>(null);
   const wire = useMemo(
     () =>
       matrixWire(async (patches) => {
@@ -45,7 +45,7 @@ function BandRoute() {
     [],
   );
   const matrix: Matrix = { cells, wire, outcome };
-  const aggregate = (run: Promise<FanOutOutcome>) => void run.then(setOutcome);
+  const aggregate = (run: Promise<ClearOutcome>) => void run.then(setOutcome);
   const rows = useMemo(() => matrixRows(matrix), [cells, outcome]);
   const view = {
     rows,
@@ -84,8 +84,7 @@ function BandRoute() {
               <p className="t-prose text-ink-2">
                 Reviewing Mechanical Equipment in{" "}
                 <SituationCell io="rw">MEP Coordination.rvt</SituationCell>. Hover or focus a cell
-                for its verbs; on a focused cell <b>a</b> accepts, <b>d</b> denies, <b>u</b>{" "}
-                unstages, typing stages.
+                for its clear control; typing stages.
               </p>
               <WorkSentence
                 summary={workSummary(cells, { groupOf: matrixGroupOf }, ["parameter", "family"])}
@@ -109,11 +108,11 @@ function BandRoute() {
                   actions={
                     <Button
                       kind="framed"
-                      label="accept all · Voltage"
-                      reason="Accept every standing Voltage suggestion in one write; your own edit values are skipped"
-                      onClick={() => aggregate(acceptVoltage(matrix))}
+                      label="clear all · Voltage"
+                      reason="Clear staged Voltage values in one write"
+                      onClick={() => aggregate(clearVoltage(matrix))}
                     >
-                      accept all · Voltage
+                      clear all · Voltage
                     </Button>
                   }
                 >
@@ -123,8 +122,8 @@ function BandRoute() {
               {outcome ? (
                 <OutcomeLine
                   kind={outcome.refusal ? "refused" : "receipt"}
-                  label={fanOutWord(outcome)}
-                  says="one write through fanOut"
+                  label={clearWord(outcome)}
+                  says="one write through clearAll"
                 />
               ) : null}
               {said ? (
@@ -135,7 +134,7 @@ function BandRoute() {
             <Section label="03 · form field · the same cells at card scale">
               <p className="t-prose text-ink-2">
                 The picked table row as a spec-editor form. Its verbs are the same transitions over
-                the same addresses: accept here and the table cell changes.
+                the same addresses: clear here and the table cell changes.
               </p>
               <TypeForm row={row} matrix={matrix} />
             </Section>

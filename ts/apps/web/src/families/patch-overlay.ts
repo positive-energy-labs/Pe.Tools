@@ -1,15 +1,9 @@
-/**
- * The native Family Foundry patch, projected onto the reading it would land on: display-only
- * overlays for the param row, the row header and the minimap. Never written into `cells.*`; accept
- * and deny stay on the patch's one review row. Each rung projects separately so the one reader
- * (`cellFromDraft`) ranks edit over suggestion, exactly as on a Work cell.
- */
 import { familyCellKey, type FamiliesPatchCell } from "@pe/agent-contracts";
 
 import type { ParamSpec } from "#/family/family-model";
 import type { ParamColumn, TypeRow } from "./matrix-columns";
 
-type OverlayRung = "suggestion" | "edit";
+type OverlayRung = "edit";
 /** How the patch reaches this cell: an explicit `types` entry, a uniform `value`, a direct alias, or a formula. */
 type OverlayHow = "type" | "uniform" | "alias" | "formula";
 interface OverlayValue {
@@ -21,7 +15,6 @@ export type OverlayCell = Partial<Record<OverlayRung, OverlayValue>>;
 export interface OverlayParameter {
   /** The families the patch selects that this reading carries. */
   families: string[];
-  suggestion?: ParamSpec & Record<string, unknown>;
   edit?: ParamSpec & Record<string, unknown>;
   /** The reading has no parameter by this name: the patch creates it. */
   absent: boolean;
@@ -70,7 +63,7 @@ export function projectPatch(
 ): PatchOverlay {
   const overlay: PatchOverlay = { cells: {}, parameters: {}, unprojected: [] };
   const known = new Set(params.map((param) => param.name));
-  for (const rung of ["edit", "suggestion"] as const) {
+  for (const rung of ["edit"] as const) {
     const content = patch[rung]?.value.content;
     if (content === undefined) continue;
     const say = (why: string) => overlay.unprojected.push(`${rung}: ${why}`);

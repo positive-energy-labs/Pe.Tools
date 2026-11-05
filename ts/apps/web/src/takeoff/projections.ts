@@ -63,11 +63,7 @@ export const EMPTY_WORLD: TakeoffModel = {
   systems: [],
 };
 
-/**
- * An edit's edit rung needs its room's base (what sync compares against), which only a person
- * writes. Staging an edit cell — typing, or accepting Pea's suggestion — carries the base when the
- * room has none yet, read from the authoritative world.
- */
+/** Capture the observed room baseline on its first staged set, by either author. */
 export function withEditBases(
   doc: { bases: Readonly<Record<string, unknown>> },
   world: { zones: readonly { rooms: readonly ModelRoom[] }[] },
@@ -75,7 +71,9 @@ export function withEditBases(
 ): RouteStatePatch[] {
   const rooms = new Set(
     patches
-      .filter((patch) => patch.path[0] === "edits" && patch.path[2] === "edit")
+      .filter(
+        (patch) => patch.path[0] === "edits" && patch.path[2] === "edit" && patch.value != null,
+      )
       .map((patch) => takeoffEditAddress(String(patch.path[1])).roomId),
   );
   const bases = [...rooms].flatMap((roomId) => {

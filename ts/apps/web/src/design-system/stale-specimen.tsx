@@ -40,7 +40,7 @@ const STALE_DOC: ScheduleGridDocument = {
   cells: {
     "1::2": { edit: { value: "150 VA" } },
     "2::2": { edit: { value: "95 VA" } },
-    "3::2": { edit: { value: "75 VA" }, suggestion: { value: "72 VA", note: "panel schedule" } },
+    "3::2": { edit: { value: "75 VA" } },
   },
   takenAt: null,
 } as ScheduleGridDocument;
@@ -82,13 +82,13 @@ function StaleSpecimen({ say }: { say: (text: string) => void }) {
       />
       <WorkLines
         cells={reviewAddresses(doc.cells).map(([key, cell]) => {
-          const value = showCellValue((cell.edit ?? cell.suggestion)?.value);
+          const value = showCellValue(cell.edit?.value);
           return {
             key,
             column: "LOAD",
             row: `r${key.split("::")[0]} (Revit now ${STALE_NOW[key] ?? "?"})`,
             value,
-            look: cellFromDraft(cell, { value }, showCellValue),
+            look: cellFromDraft(cell, { value }),
             locate: () => say(`locate ${key}`),
           };
         })}

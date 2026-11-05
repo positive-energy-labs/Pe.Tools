@@ -2,7 +2,7 @@ import { roomSelection } from "./selection";
 import { useContext, useMemo } from "react";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 import {
-  transitionPatches,
+  cellPatches,
   type Mark,
   type RoomsNote,
   type RoomsRouteDocument,
@@ -91,13 +91,7 @@ function workWire(owner: RoomsOwner): CellWire {
 }
 function cellTransitions(owner: RoomsOwner, key: string): CellTransition[] {
   const row = { segment: "edits", key };
-  return (
-    [
-      ["take", "take"],
-      ["unsuggest", "reject"],
-      ["clear", "reopen"],
-    ] as const
-  ).flatMap(([kind, verb]) => {
+  return ([["clear", "clear"]] as const).flatMap(([kind, verb]) => {
     const control = owner.control(`cell:edits.${verb}`, row);
     return control.refusal ? [] : [{ kind, run: async () => refusalOf(await control.run()) }];
   });
@@ -172,7 +166,7 @@ function PlanBody({
     };
     const id = `m${crypto.randomUUID()}`;
     const refusal = await wire.write(
-      transitionPatches(["marks"], id, {}, { kind: "set", rung: { value: mark } }),
+      cellPatches(["marks"], id, {}, { kind: "set", rung: { value: mark } }),
     );
     if (!refusal) setPinned(id);
     return refusal?.message ?? null;

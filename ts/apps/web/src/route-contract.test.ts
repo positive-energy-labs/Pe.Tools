@@ -270,8 +270,8 @@ test("malformed runtime data refuses instead of throwing", () => {
 });
 
 const workSchema = z.object({
-  rules: z.record(z.string(), z.object({ suggestion: z.unknown() })).default({}),
-  scope: z.object({ suggestion: z.unknown() }).nullable(),
+  rules: z.record(z.string(), z.object({ edit: z.unknown() })).default({}),
+  scope: z.object({ edit: z.unknown() }).nullable(),
   note: z.string(),
 });
 type Work = z.infer<typeof workSchema>;
@@ -313,8 +313,8 @@ test("a cell segment must be in the Work schema, as a record unless it is a root
 });
 
 test("kernel cell verb ids are reserved and a family may be declared once", () => {
-  const id = cellVerbId(rules, "take");
-  expect(id).toBe("cell:rules.take");
+  const id = cellVerbId(rules, "clear");
+  expect(id).toBe("cell:rules.clear");
   const collided = { ...withCells(rules), verbs: { [id]: verb("Take") } };
   expect(validateRouteGraph(collided)).toEqual([
     { code: "reserved-verb", path: `verbs.${id}`, message: `'${id}' is a kernel cell verb id` },

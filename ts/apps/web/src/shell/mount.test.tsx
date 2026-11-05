@@ -155,7 +155,7 @@ async function fixture(cells = false) {
     revision: 0,
     doc: {
       rows: { slot: { id: "row-a", n: 1 } },
-      ...(cells ? { rules: { a: { suggestion: { value: "one" } } } } : {}),
+      ...(cells ? { rules: { a: { edit: { value: "one" } } } } : {}),
     },
   };
   const stored = new Map<string, unknown>([[workKey(key), initial]]);
@@ -188,7 +188,9 @@ async function fixture(cells = false) {
   let subscriptions = 0;
   let deltaSubscriptions = 0;
   let documentChange: ((ref: { session: string; openId: string }) => void) | undefined;
-  let late: ((receipt: ActionReceipt | ActionStatus, key: WorkKey | null, press?: string) => void) | undefined;
+  let late:
+    | ((receipt: ActionReceipt | ActionStatus, key: WorkKey | null, press?: string) => void)
+    | undefined;
   const graph: RouteGraph<Page, Doc> = {
     ...testSubject,
     key: "mount-proof",
@@ -423,7 +425,9 @@ test("refused mounts never enroll their subject in discovery", async () => {
   render(<Component />);
   // A registered subject would diagnose this malformed value; an unregistered one has no policy.
   expect(subjectState(key, { [f.graph.subjectField!.field]: {} })).toEqual({
-    ready: false, refusal: null, label: "",
+    ready: false,
+    refusal: null,
+    label: "",
   });
   expect(f.subscriptions()).toEqual({ subscriptions: 0, deltaSubscriptions: 0 });
 });
@@ -672,7 +676,9 @@ test('shown review keeps its control armed: "unconsumed edits remain undoable; a
       .map((e) => e.kind),
   ).toEqual(["invocation", "invocation", "receipt"]);
   expect(f.owner().timeline.read().at(-1)?.basis).toEqual({
-    workKey: workKey(key), receipt: receipt(), receiptId: "native-1",
+    workKey: workKey(key),
+    receipt: receipt(),
+    receiptId: "native-1",
   });
   expect(f.owner().journal(key).read().undo).toMatchObject([
     { transitions: [{ revision: 1 }], barrier: { receiptId: "native-1" } },
@@ -685,9 +691,14 @@ test('shown review keeps its control armed: "unconsumed edits remain undoable; a
   await act(async () => {});
   expect(f.writes).toHaveLength(before + 1);
   expect(f.writes.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2, expectedRevision: 2 });
-  expect(f.scope().work).toMatchObject({ handle: { revision: 3 }, doc: { rows: { slot: { n: 2 } }, writeIntent: {} } });
+  expect(f.scope().work).toMatchObject({
+    handle: { revision: 3 },
+    doc: { rows: { slot: { n: 2 } }, writeIntent: {} },
+  });
   expect(await f.owner().restore("undo")).toMatchObject({
-    ok: false, code: "barrier", barrier: { receiptId: "native-1" },
+    ok: false,
+    code: "barrier",
+    barrier: { receiptId: "native-1" },
   });
   expect(f.writes).toHaveLength(before + 1);
   expect(transport.run.mock.calls[0]![5]).toBe(f.owner().timeline.read()[1]!.press);
@@ -773,22 +784,30 @@ test('late receipt stays on dispatch Work: "unconsumed edits remain undoable; an
   resolve(receipt());
   await pending;
   expect(owner.timeline.read().at(-1)?.basis).toEqual({
-    workKey: workKey(key), receipt: receipt(), receiptId: "native-1",
+    workKey: workKey(key),
+    receipt: receipt(),
+    receiptId: "native-1",
   });
   expect(owner.journal(key).read().undo).toMatchObject([
     { transitions: [{ revision: 1 }], barrier: { receiptId: "native-1" } },
     { transitions: [{ revision: 2, forward: [{ path: ["writeIntent", "takeoffs.initialize"] }] }] },
   ]);
   expect(await owner.journal(key).undo((write) => f.adapters.write(key, write))).toMatchObject({
-    ok: true, revision: 3,
+    ok: true,
+    revision: 3,
   });
   expect(f.writes.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2, expectedRevision: 2 });
   const before = f.writes.length;
   expect(await owner.journal(key).undo((write) => f.adapters.write(key, write))).toMatchObject({
-    ok: false, code: "barrier", barrier: { receiptId: "native-1" },
+    ok: false,
+    code: "barrier",
+    barrier: { receiptId: "native-1" },
   });
   expect(f.writes).toHaveLength(before);
-  expect((await f.workspace.read(key, key.route))!.doc).toMatchObject({ rows: { slot: { n: 2 } }, writeIntent: {} });
+  expect((await f.workspace.read(key, key.route))!.doc).toMatchObject({
+    rows: { slot: { n: 2 } },
+    writeIntent: {},
+  });
   // The fixture writer refreshes its written Work; return to the second Work for its own edit.
   await f.refresh(second);
   await owner.control("edit").run();
@@ -976,24 +995,35 @@ test('detached receipt stays on frozen Work: "unconsumed edits remain undoable; 
   await owner.control("edit").run();
   f.late()!(receipt(), second);
   expect(owner.timeline.read().at(-1)?.basis).toEqual({
-    workKey: workKey(key), receipt: receipt(), receiptId: "native-1",
+    workKey: workKey(key),
+    receipt: receipt(),
+    receiptId: "native-1",
   });
   expect(owner.journal(key).read().undo).toMatchObject([
     { transitions: [{ revision: 1 }], barrier: { receiptId: "native-1" } },
     { transitions: [{ revision: 2, forward: [{ path: ["writeIntent", "takeoffs.initialize"] }] }] },
   ]);
   expect(await owner.restore("undo")).toMatchObject({ ok: true, revision: 2 });
-  expect(f.scope().work).toMatchObject({ handle: { key: second }, doc: { rows: { slot: { n: 1 } } } });
+  expect(f.scope().work).toMatchObject({
+    handle: { key: second },
+    doc: { rows: { slot: { n: 1 } } },
+  });
   expect(await owner.journal(key).undo((request) => f.adapters.write(key, request))).toMatchObject({
-    ok: true, revision: 3,
+    ok: true,
+    revision: 3,
   });
   expect(f.writes.at(-1)).toMatchObject({ kind: "restore", restoreOf: 2, expectedRevision: 2 });
   const before = f.writes.length;
   expect(await owner.journal(key).undo((request) => f.adapters.write(key, request))).toMatchObject({
-    ok: false, code: "barrier", barrier: { receiptId: "native-1" },
+    ok: false,
+    code: "barrier",
+    barrier: { receiptId: "native-1" },
   });
   expect(f.writes).toHaveLength(before);
-  expect((await f.workspace.read(key, key.route))!.doc).toMatchObject({ rows: { slot: { n: 2 } }, writeIntent: {} });
+  expect((await f.workspace.read(key, key.route))!.doc).toMatchObject({
+    rows: { slot: { n: 2 } },
+    writeIntent: {},
+  });
 });
 
 test("graph field policies project Page to URL and Back restores its stage without replaying Work", async () => {
@@ -1318,19 +1348,33 @@ test.each(["shown"] as const)(
   },
 );
 
-
-test.each(["succeeded", "failed", "cancelled"] as const)("Pea's compact %s receipt closes its route Timeline and a second write is recorded", async (state) => {
-  const f = await fixture(), owner = createGraphMount(f.graph, f.adapters);
-  owner.connect();
-  cleanups.push(() => owner.dispose());
-  const base = actionStatusSchema.parse({ ...receipt(), caller: { kind: "pea", context: "minted", thread: "t" } });
-  const row = (id: string, status: string) => actionStatusSchema.parse({
-    ...base, id, state: status, ...(status === "failed" || status === "cancelled" ? { error: status === "cancelled" ? "rejected by you" : "write failed", status: 499 } : {}),
-  });
-  f.late()!(row("first", "running"), key);
-  f.late()!(row("first", state), key);
-  f.late()!(row("second", "succeeded"), key);
-  const entries = owner.timeline.read().filter((entry) => entry.kind === "receipt");
-  expect(entries.findLast((entry) => entry.outcome?.id === "first")?.outcome?.state).toBe(state);
-  expect(entries.find((entry) => entry.outcome?.id === "second")?.outcome?.state).toBe("succeeded");
-});
+test.each(["succeeded", "failed", "cancelled"] as const)(
+  "Pea's compact %s receipt closes its route Timeline and a second write is recorded",
+  async (state) => {
+    const f = await fixture(),
+      owner = createGraphMount(f.graph, f.adapters);
+    owner.connect();
+    cleanups.push(() => owner.dispose());
+    const base = actionStatusSchema.parse({
+      ...receipt(),
+      caller: { kind: "pea", context: "minted", thread: "t" },
+    });
+    const row = (id: string, status: string) =>
+      actionStatusSchema.parse({
+        ...base,
+        id,
+        state: status,
+        ...(status === "failed" || status === "cancelled"
+          ? { error: status === "cancelled" ? "rejected by you" : "write failed", status: 499 }
+          : {}),
+      });
+    f.late()!(row("first", "running"), key);
+    f.late()!(row("first", state), key);
+    f.late()!(row("second", "succeeded"), key);
+    const entries = owner.timeline.read().filter((entry) => entry.kind === "receipt");
+    expect(entries.findLast((entry) => entry.outcome?.id === "first")?.outcome?.state).toBe(state);
+    expect(entries.find((entry) => entry.outcome?.id === "second")?.outcome?.state).toBe(
+      "succeeded",
+    );
+  },
+);

@@ -1,5 +1,4 @@
-import type { Caller } from "@pe/agent-contracts";
-import type { Pointer, Pointers } from "../../../packages/agent-contracts/src/pointers.ts";
+import type { Caller, Pointer, Pointers } from "@pe/agent-contracts";
 
 /**
  * The thread service's pointer surface (ADR 0030 rule 10), injected into the call route. Thread

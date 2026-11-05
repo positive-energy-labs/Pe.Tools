@@ -42,13 +42,13 @@ const HOW = {
 
 /** A cell the native patch writes: drawn in place, read-only; accept and deny sit on the patch's review row. */
 function ProjectedCell({ cell, current }: { cell: OverlayCell; current: string }) {
-  const shown = (cell.edit ?? cell.suggestion)!;
+  const shown = cell.edit!;
   const rung = cell.edit ? "edit" : "proposed";
   return (
     <StateCell
       {...cellFromDraft(cell, {
         value: shown.value,
-        currentValue: current || "(blank)",
+        modelValue: current || "(blank)",
         note: `The native patch (${rung}) writes ${current || "(blank)"} → ${shown.value} by ${HOW[shown.how]}. Review it on the patch row; nothing has reached Revit.`,
         scale: "row",
       })}

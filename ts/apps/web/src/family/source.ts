@@ -96,7 +96,7 @@ function addProposedStructure(
       world.constituents.push({
         slug,
         kind: CONSTITUENT_KIND[section],
-        text: constituentText(section, fields[suggestion.id]?.suggestion?.value),
+        text: constituentText(section, fields[suggestion.id]?.edit?.value),
         params: [],
         proposed: suggestion.id,
       });
@@ -106,7 +106,7 @@ function addProposedStructure(
     // A property of a parameter the reading lacks rides the row its spec suggestion creates.
     if ((root !== "parameters" && root !== "types") || known.has(suggestion.param)) continue;
     known.add(suggestion.param);
-    const named = fields[settingsFieldPointer(["parameters", suggestion.param])]?.suggestion?.value;
+    const named = fields[settingsFieldPointer(["parameters", suggestion.param])]?.edit?.value;
     const spec =
       named != null && typeof named === "object" ? (named as Record<string, unknown>) : {};
     world.paramRows.push({
@@ -187,11 +187,12 @@ export function familySource(
   world.spec = spec ?? null;
   const reading = model ?? capturedModel;
   world.proposals = Object.entries(fields).flatMap(([pointer, field]): ProtoProposal[] => {
-    if (!field.suggestion) return [];
+    if (!field.edit) return [];
     const parts = settingsFieldSegments(pointer);
-    const suggestion = field.suggestion;
+    const suggestion = field.edit;
     const shared = {
       id: pointer,
+      by: field.edit.by ?? "unknown",
       current: heldAt(reading, parts),
       proposed:
         typeof suggestion.value === "string"

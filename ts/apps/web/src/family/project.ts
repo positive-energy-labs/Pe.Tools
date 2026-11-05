@@ -21,7 +21,7 @@
  * commands, and a projection that invented them from the fixture would be the one lie these
  * surfaces may not tell.
  */
-import { settingsFieldPointer, transitionPatches } from "@pe/agent-contracts";
+import { settingsFieldPointer, cellPatches } from "@pe/agent-contracts";
 
 import type { RouteStatePatch } from "@pe/agent-contracts";
 import type { ConnectorSpec, FamilyModel, FormSpec, ParamSpec } from "#/family/family-model";
@@ -435,7 +435,7 @@ export const FAMILY_CELLS = "cells";
  * from writing an empty string and the settings schema keeps them apart. */
 /** A typed edit, as the shared cell machine stages it. The draft diff is this route's baseline. */
 function stage(segments: string[], value: AuthoredValue | undefined): RouteStatePatch {
-  return transitionPatches(
+  return cellPatches(
     [FAMILY_CELLS],
     settingsFieldPointer(segments),
     {},
@@ -470,7 +470,7 @@ export function draftToPatches(
     if (promoted.has(name) && !(name in savedDraft.authored)) {
       const seed = draft.newParams.find((param) => param.name === name);
       patches.push(
-        ...transitionPatches(
+        ...cellPatches(
           [FAMILY_CELLS],
           settingsFieldPointer(["parameters", name]),
           {},

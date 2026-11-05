@@ -359,12 +359,6 @@ export const schemas = {
             value: scheduleGridCellSchema.shape.edit,
           })
           .transform((p) => ({ path: p.path, value: p.value })),
-        z
-          .object({
-            path: z.tuple([z.literal("cells"), z.string(), z.literal("suggestion")]),
-            value: scheduleGridCellSchema.shape.suggestion,
-          })
-          .transform((p) => ({ path: p.path, value: p.value })),
       ]),
     ),
   }),
@@ -414,7 +408,10 @@ export const entries = {
     axes: { ...axes, subject: "Elements", cost: "Mutation" },
   },
 } as const;
-export const neutralBodies: Omit<BodyBindings<typeof schedulesData, typeof schemas, typeof entries>, "grid"> = {
+export const neutralBodies: Omit<
+  BodyBindings<typeof schedulesData, typeof schemas, typeof entries>,
+  "grid"
+> = {
   savedArgs: {
     slot: "readings.saved.args",
     kind: "args",

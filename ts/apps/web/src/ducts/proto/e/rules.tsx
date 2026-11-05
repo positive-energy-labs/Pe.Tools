@@ -3,15 +3,11 @@
  * rule and its stated-drop cell are unexported there, so the minimum is copied here unchanged;
  * `StagedRules` is a reduced copy of `StagedLosses` that needs no ASHRAE grids.
  */
-import {
-transitionPatches,
-type DuctsDesign,
-type RouteStatePatch,
-} from "@pe/agent-contracts";
-import { LOSS_RULES,ruleByKey } from "@pe/ducts-domain/loss-rules";
-import { tableOf,type Priced } from "@pe/ducts-domain/pricing";
+import { cellPatches, type DuctsDesign, type RouteStatePatch } from "@pe/agent-contracts";
+import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
+import { tableOf, type Priced } from "@pe/ducts-domain/pricing";
 import { Button } from "@pe/kit/lang/button";
-import { cellFromDraft,StateCell } from "@pe/kit/lang/cell";
+import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 import { ValueDiff } from "@pe/kit/lang/value-diff";
 import type { LossesWork } from "../../work";
 import { PressureEquivalent } from "./pressure-equivalent";
@@ -19,15 +15,11 @@ import { PressureEquivalent } from "./pressure-equivalent";
 // proto: copied from losses-view.tsx
 const fmt = (n: number | null | undefined) => (n == null ? "" : n.toFixed(4));
 /** Stage a rule's table; staging the table already edit takes it back. */
-const tablePatches = (
-  doc: DuctsDesign | null,
-  key: string,
-  table: string,
-): RouteStatePatch[] => {
+const tablePatches = (doc: DuctsDesign | null, key: string, table: string): RouteStatePatch[] => {
   const cell = doc?.rules[key] ?? {};
   return cell.edit?.value.table === table
-    ? transitionPatches(["rules"], key, cell, { kind: "clear" })
-    : transitionPatches(["rules"], key, cell, { kind: "set", rung: { value: { table } } });
+    ? cellPatches(["rules"], key, cell, { kind: "clear" })
+    : cellPatches(["rules"], key, cell, { kind: "set", rung: { value: { table } } });
 };
 export function DropCell({
   segment,
@@ -46,7 +38,7 @@ export function DropCell({
 }) {
   const key = String(id);
   const cell = work.doc?.[segment][key] ?? {};
-  const authored = (cell.edit ?? cell.suggestion)?.value;
+  const authored = cell.edit?.value;
   return (
     <span
       className="inline-flex items-baseline gap-1 whitespace-nowrap"
@@ -56,7 +48,8 @@ export function DropCell({
       <StateCell
         {...cellFromDraft(cell, {
           value: authored ? String(authored.inWg) : held == null ? "" : String(held),
-          cap: "locked", capReason: "Fan inputs are unavailable",
+          cap: "locked",
+          capReason: "Fan inputs are unavailable",
           note: authored && held != null ? `Revit holds ${held}` : undefined,
         })}
         scale="row"
@@ -163,7 +156,7 @@ export function StagedRules({
         ] as const
       ).flatMap((segment) =>
         Object.entries(doc[segment] ?? {}).flatMap(([key, cell]) =>
-          cell?.edit ? transitionPatches([segment], key, cell, { kind: "clear" }) : [],
+          cell?.edit ? cellPatches([segment], key, cell, { kind: "clear" }) : [],
         ),
       ),
     );

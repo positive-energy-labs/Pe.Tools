@@ -7,7 +7,7 @@ import {
 } from "../../../../packages/agent-contracts/src/route-kernel-work-patches.fixtures";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 import { createAdmittedCells, admittedWorkPatches } from "./admitted-cells";
-test("cell display validates shapes and caches bodies; takes validate Work patches", () => {
+test("cell display validates shapes and caches bodies; clears validate Work patches", () => {
   const data = {
     work: { schema: "work" },
     cells: {
@@ -19,7 +19,6 @@ test("cell display validates shapes and caches bodies; takes validate Work patch
         show: "show",
         label: "label",
         focus: "focus",
-        take: "take",
         deps: { page: [], work: [], readings: [] },
       },
     },
@@ -31,12 +30,6 @@ test("cell display validates shapes and caches bodies; takes validate Work patch
     show: { run: String },
     label: { run: (s: string) => s.toUpperCase() },
     focus: { run: (key: string) => ({ query: key }) },
-    take: {
-      run: (ctx: unknown, key: string) => {
-        expect(ctx).toEqual({ page: {}, work: {}, readings: {} });
-        return [{ path: ["edits"], value: { [key]: "taken" } }];
-      },
-    },
   };
   const cells = createAdmittedCells(data, schemas, bodies);
   cells.update({ edits: { a: "one" } });
@@ -44,9 +37,6 @@ test("cell display validates shapes and caches bodies; takes validate Work patch
   cells.rows();
   expect(group).toHaveBeenCalledOnce();
   expect(cells.focus("edits", "a")).toEqual({ query: "a" });
-  expect(cells.transition("take", "edits", "a", { page: {}, work: {}, readings: {} }, {})).toEqual([
-    { path: ["edits"], value: { a: "taken" } },
-  ]);
   expect(() => admittedWorkPatches(data, schemas, [{ path: ["secret"], value: 1 }])).toThrow(
     "Undeclared Work field",
   );

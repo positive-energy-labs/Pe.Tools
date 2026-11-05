@@ -1,20 +1,15 @@
-/** The composer's Work rows: one line per Work the thread's document holds, counts only; `review ▾`
- *  expands it into at most five groups whose accept and deny are `fanOut`s of the route's own cell
- *  transitions. Every exit opens the route in Chat's plugin pane; it never lists cells. */
 import { useMemo, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
-import { fanOut, type CellGroup, type CellLike } from "@pe/agent-contracts";
+import { type CellGroup, type CellLike } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import {
-  fanOutWord,
-  runFanOut,
+  clearWord,
   tally,
   UnstageAll,
   workSummary,
   type CellWire,
-  type FanOutOutcome,
+  type ClearOutcome,
 } from "#/components/work/band";
-import { Verdict } from "@pe/kit/lang/verdict";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 export interface HeadWork {
   id: string;
@@ -54,45 +49,22 @@ const GROUP_ROWS = 5;
 const EXAMPLES = 2;
 const COMMIT_REASON =
   "Open the plan in the pane — staging is not applying; the confirmation lists every change before Revit changes";
-const pending = (cell: CellLike) => cell.suggestion != null || cell.edit != null;
+const pending = (cell: CellLike) => cell.edit != null;
 const showDefault = (value: unknown) => (typeof value === "string" ? value : JSON.stringify(value));
-/** Full group paths, contested first, then by pending size, then label. */
+
 function headGroups(work: Pick<HeadWork, "cells" | "groupOf" | "wire">): CellGroup[] {
   const { groups } = workSummary(work.cells, {
     ...work.wire,
     groupOf: work.groupOf,
   });
   return groups.sort(
-    (a, b) =>
-      Number(b.contested > 0) - Number(a.contested > 0) ||
-      b.proposed + b.staged - (a.proposed + a.staged) ||
-      JSON.stringify(a.path).localeCompare(JSON.stringify(b.path)),
+    (a, b) => b.staged - a.staged || JSON.stringify(a.path).localeCompare(JSON.stringify(b.path)),
   );
 }
-/** `{P} proposed · {S} edit · {C} contested`, zeros omitted. */
-function Counts({ proposed, edit, contested }: ReturnType<typeof tally>) {
-  const parts: ReactNode[] = [];
-  if (proposed)
-    parts.push(
-      <span key="p" data-tone="pea">
-        {proposed} proposed
-      </span>,
-    );
-  if (edit) parts.push(<span key="s">{edit} edit</span>);
-  if (contested)
-    parts.push(
-      <span key="c" data-tone="caution">
-        {contested} contested
-      </span>,
-    );
+function Counts({ staged, byPea }: ReturnType<typeof tally>) {
   return (
     <span>
-      {parts.map((part, i) => (
-        <span key={i}>
-          {i ? " · " : null}
-          {part}
-        </span>
-      ))}
+      {staged} staged · {byPea} by Pea
     </span>
   );
 }
@@ -113,7 +85,7 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
     if (parts[0]!.refusal) refusals.set(parts[0]!.route, parts[0]!.refusal);
   return (
     <div
-      aria-label="Pea proposals"
+      aria-label="Staged cells"
       className="hairline-b-faint flex flex-col gap-1 px-(--gutter) py-1.5"
     >
       {asks.length > 0 && <div className="hairline-b-faint mb-1 pb-1">{asks}</div>}
@@ -129,7 +101,7 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
         <Button kind="framed" label="Show the remaining routes" onClick={() => setAll(true)}>
           {[
             `+${rest.length} more route${rest.length === 1 ? "" : "s"} with changes`,
-            ...(["proposed", "edit"] as const).flatMap((field) => {
+            ...(["staged", "byPea"] as const).flatMap((field) => {
               const n = rest.reduce((total, counts) => total + counts[field], 0);
               return n ? [`${n} ${field}`] : [];
             }),
@@ -208,7 +180,7 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
             kind="framed"
             label={work.commit.word}
             reason={COMMIT_REASON}
-            refusal={work.refusal ?? (counts.edit ? null : "nothing edit")}
+            refusal={work.refusal ?? (counts.staged ? null : "nothing edit")}
             onClick={work.commit.run}
           >
             {work.commit.word}
@@ -222,7 +194,7 @@ function WorkLine({ parts }: { parts: HeadWork[] }) {
   );
 }
 function Groups({ work, groups }: { work: HeadWork; groups: CellGroup[] }) {
-  const [outcomes, setOutcomes] = useState<ReadonlyMap<string, FanOutOutcome>>(new Map());
+  const [outcomes, setOutcomes] = useState<ReadonlyMap<string, ClearOutcome>>(new Map());
   const more = groups.length - GROUP_ROWS;
   // One pass over the Work's pending cells per change, not one per group per render.
   const keysOf = useMemo(() => {
@@ -273,71 +245,25 @@ function GroupRow({
   work: HeadWork;
   group: CellGroup;
   keys: string[];
-  outcome: FanOutOutcome | undefined;
-  done: (outcome: FanOutOutcome) => void;
+  outcome: ClearOutcome | undefined;
+  done: (outcome: ClearOutcome) => void;
 }) {
   const show = work.show ?? showDefault;
   const label = JSON.stringify(group.path);
   const words = group.path.map((part) => work.label?.(part) ?? part).join(" · ");
-  // `{k}` is what the press would cover over these cells, bound to this revision. The dry runs
-  // are memoized: they rerun only when the cells, the group's keys or the locks move.
-  const { segment, lockOf } = work.wire;
-  const { acceptK, denyK } = useMemo(() => {
-    const ctx = {
-      cellsPath: segment === null ? [] : [segment],
-
-      lockOf,
-    };
-    return {
-      acceptK: fanOut(work.cells, keys, "take", ctx).covered.length,
-      denyK: fanOut(work.cells, keys, "unsuggest", ctx).covered.length,
-    };
-  }, [work.cells, keys, segment, lockOf]);
-  const to = (value: unknown) => (value === null ? "delete" : show(value));
   const digest = group.digest;
-  // `summarize` dedupes whole values, and a families value carries its familyName: "J1 hold2" on
-  // three families is three values there. The person reads what `show` draws, so the head counts
-  // distinct values by that, over the same cells the digest tallies (open, unstaged, unlocked).
-  // ponytail: a recount over the group's keys; move into `summarize` if it takes a value projection.
-  const shown = useMemo(() => {
-    const seen = new Set<string>();
-    for (const key of keys) {
-      const cell = work.cells[key];
-      if (!cell?.suggestion || cell.edit != null || lockOf?.(key)) continue;
-      seen.add(to(cell.suggestion.delete === true ? null : cell.suggestion.value));
-    }
-    return [...seen];
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- `to` is `show`, the Work's own formatter
-  }, [work.cells, keys, lockOf, show]);
+  const to = (value: unknown) => (value === null ? "delete" : show(value));
   const body =
     digest && "single" in digest
-      ? `${digest.single.from !== undefined ? `${show(digest.single.from)} ` : ""}→ ${to(digest.single.to)}`
-      : digest && shown.length === 1
-        ? `→ ${shown[0]}`
-        : digest
-          ? `${shown.length} values (e.g. ${shown.slice(0, EXAMPLES).join(", ")})`
-          : group.proposed
-            ? null
-            : group.contested
-              ? `${group.contested} contested — resolve in ${work.route}`
-              : [
-                  ...new Set(
-                    keys.flatMap((key) => {
-                      const edit = work.cells[key]?.edit;
-                      return edit ? [to(edit.delete === true ? null : edit.value)] : [];
-                    }),
-                  ),
-                ]
-                  .slice(0, EXAMPLES)
-                  .join(" · ");
+      ? `${digest.single.from !== undefined ? `${show(digest.single.from)} → ` : ""}${to(digest.single.to)}`
+      : digest
+        ? `${digest.many.count} values (e.g. ${digest.many.examples.slice(0, EXAMPLES).map(to).join(", ")})`
+        : "";
   const facts = [
-    group.proposed ? `${group.span} cells` : null,
-    group.proposed && group.contested ? `${group.contested} contested` : null,
-    group.locked ? `${group.locked} locked` : null,
-  ].filter(Boolean);
-  const verbs = group.proposed > 0;
-  const act = (kind: "take" | "unsuggest") =>
-    void runFanOut(work.wire, work.cells, keys, kind).then(done);
+    `${group.staged} staged`,
+    `${group.byPea} by Pea`,
+    ...(group.locked ? [`${group.locked} locked`] : []),
+  ];
   return (
     <div className="flex flex-col" data-group={label}>
       <div className="grid h-(--item-h) grid-cols-[minmax(6rem,12rem)_minmax(0,1fr)_auto] items-center gap-2">
@@ -356,26 +282,6 @@ function GroupRow({
           </span>
         </TooltipHint>
         <span className="flex items-center gap-1">
-          {verbs && acceptK ? (
-            <TooltipHint
-              content={`Stage Pea's suggestion on ${acceptK} cells in one write; contested and locked cells are skipped`}
-            >
-              <Verdict kind="take" aria-label={`accept ${acceptK}`} onClick={() => act("take")}>
-                {acceptK}
-              </Verdict>
-            </TooltipHint>
-          ) : null}
-          {verbs && denyK ? (
-            <TooltipHint content={`Clear Pea's suggestion on ${denyK} cells in one write`}>
-              <Verdict
-                kind="unsuggest"
-                aria-label={`deny ${denyK}`}
-                onClick={() => act("unsuggest")}
-              >
-                {denyK}
-              </Verdict>
-            </TooltipHint>
-          ) : null}
           <UnstageAll wire={work.wire} cells={work.cells} keys={keys} done={done} compact />
           <Button
             kind="nav"
@@ -391,7 +297,7 @@ function GroupRow({
       {outcome ? (
         <TooltipHint content={outcome.refusal ? "nothing was written" : undefined}>
           <span className="truncate pl-2" data-tone={outcome.refusal ? "caution" : "done"}>
-            {fanOutWord(outcome)}
+            {clearWord(outcome)}
           </span>
         </TooltipHint>
       ) : null}

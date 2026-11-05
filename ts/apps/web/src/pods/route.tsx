@@ -292,8 +292,7 @@ function Spec(body: Body) {
         .filter(([key]) => key !== "")
         .map(([key, cell]) => (
           <div key={key} role="group" aria-label={`Field ${key}`}>
-            <span className="face-mono">{key}</span>{" "}
-            <output>{JSON.stringify(cell.edit ?? cell.suggestion)}</output>
+            <span className="face-mono">{key}</span> <output>{JSON.stringify(cell.edit)}</output>
             {body.verbs({ key })}
           </div>
         ))}

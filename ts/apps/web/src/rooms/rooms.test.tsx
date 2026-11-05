@@ -8,20 +8,21 @@ import { RoomsPlan } from "./plan";
 import { Pane } from "@pe/kit/lang/pane";
 import { RoomsTable, roomRows } from "./table";
 
-test("stagedRoomWrites sends edit values per guid and never a suggestion", () => {
+test("stagedRoomWrites sends both authors staged values per guid", () => {
   const doc = roomsRouteState.schema.parse({
     edits: {
       [roomEditKey("a", "name")]: { edit: { value: "Pantry" } },
       [roomEditKey("a", "people")]: { edit: { value: 2 } },
       [roomEditKey("b", "type")]: { edit: { value: "kitchen" } },
       [roomEditKey("b", "role")]: { edit: { value: "zone" } },
-      [roomEditKey("b", "ceilingFt")]: { suggestion: { value: 9 } },
-      [roomEditKey("c", "name")]: { suggestion: { value: "Pea's idea" } },
+      [roomEditKey("b", "ceilingFt")]: { edit: { value: 9 } },
+      [roomEditKey("c", "name")]: { edit: { value: "Pea's idea" } },
     },
   });
   expect(stagedRoomWrites(doc)).toEqual([
     { guid: "a", name: "Pantry", people: 2 },
-    { guid: "b", type: "kitchen", role: "zone" },
+    { guid: "b", type: "kitchen", role: "zone", ceilingFt: 9 },
+    { guid: "c", name: "Pea's idea" },
   ]);
   expect(
     roomsRouteState.schema.safeParse({

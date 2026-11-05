@@ -201,7 +201,7 @@ export function RoomsSketch({
               fill="none"
               stroke={color}
               strokeWidth={c.id === pinned ? 3 : 2}
-              className={c.state === "proposed" ? "dash-reference" : undefined}
+              className={c.state === "accepted" ? "dash-reference" : undefined}
             />
           ) : (
             <text key={c.id} x={px[0]![0]} y={px[0]![1]} fill={color} textAnchor="middle">

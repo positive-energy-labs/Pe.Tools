@@ -42,8 +42,7 @@ const keyOf = (
 ): WorkKey | null =>
   address || document ? bindWork(manifest.route, address, undefined, document ?? undefined) : null;
 
-const pending = (cell: CellLike | undefined) =>
-  cell != null && (cell.suggestion != null || cell.edit != null);
+const pending = (cell: CellLike | undefined) => cell != null && cell.edit != null;
 
 export function useHeadWorks(
   address: Address | null,
@@ -58,22 +57,20 @@ export function useHeadWorks(
   );
   const headed = useMemo(
     () =>
-      publicRoutes
-        .entries()
-        .flatMap(({ manifest, work }) =>
-          manifest.needs && work?.cells.length
-            ? [
-                {
-                  route: manifest.key,
-                  manifest: work,
-                  work,
-                  cells: work.cells,
-                  key: keyOf(work, address, document),
-                  closed: document === null,
-                },
-              ]
-            : [],
-        ),
+      publicRoutes.entries().flatMap(({ manifest, work }) =>
+        manifest.needs && work?.cells.length
+          ? [
+              {
+                route: manifest.key,
+                manifest: work,
+                work,
+                cells: work.cells,
+                key: keyOf(work, address, document),
+                closed: document === null,
+              },
+            ]
+          : [],
+      ),
     [revision, address, document?.session, document?.openId],
   );
   const summaries = useWorkHandles(headed);

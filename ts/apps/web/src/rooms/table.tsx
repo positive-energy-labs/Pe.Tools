@@ -1,7 +1,7 @@
 import { useContext } from "react";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 /**
- * The rooms table: one row per zone, room and held region. Every edit stages a Work cell (`transitionPatches`)
+ * The rooms table: one row per zone, room and held region. Every edit stages a Work cell (`cellPatches`)
  * against what the region holds in Revit; nothing is written until `apply`.
  */
 import { useMemo, useState } from "react";
@@ -11,7 +11,7 @@ import { TableFrame } from "#/components/master-table/table-frame";
 import {
   roomEditKey,
   roomEditSchema,
-  transitionPatches,
+  cellPatches,
   type RoomEditField,
   type RoomsRouteDocument,
   type RouteStatePatch,
@@ -89,7 +89,7 @@ const stagePatches = (
   const key = roomEditKey(region.guid, field);
   // A designation no person chose has no baseline: staging the same role confirms it as a person's.
   const held = field === "role" && region.designation !== "person" ? undefined : region[field];
-  return transitionPatches(["edits"], key, cells[key] ?? {}, {
+  return cellPatches(["edits"], key, cells[key] ?? {}, {
     kind: "set",
     rung: { value },
     ...(held === null || held === undefined || held === "" ? {} : { baseline: { value: held } }),
@@ -150,11 +150,11 @@ export function RoomsTable({
       const key = roomEditKey(row.region.guid, field);
       const cell = cells[key] ?? {};
       const held = shown(row.region[field]);
-      const authored = cell.edit ?? cell.suggestion;
+      const authored = cell.edit;
       return {
         ...cellFromDraft(cell, {
           value: authored ? shown(authored.value) : held,
-          currentValue: held || "(blank)",
+          modelValue: held || "(blank)",
           cap: "editable",
           note:
             authored && shown(authored.value) !== held

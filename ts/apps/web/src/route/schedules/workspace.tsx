@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import {
   scheduleCellKey,
   splitScheduleCellKey,
-  transitionPatches,
+  cellPatches,
   type RouteStatePatch,
   type ScheduleCatalog,
   type ScheduleGridDocument,
@@ -122,12 +122,7 @@ export function useScheduleCellWrites({
   const stageEdit = async (key: string, value: string | MeasuredValue): Promise<string | void> => {
     const cell = cells[key] ?? {};
     const refusal = await apply(
-      [
-        ...transitionPatches(["cells"], key, cell, { kind: "set", rung: { value } }),
-        ...(cell.suggestion != null
-          ? transitionPatches(["cells"], key, cell, { kind: "unsuggest" })
-          : []),
-      ],
+      [...cellPatches(["cells"], key, cell, { kind: "set", rung: { value } })],
       revision ?? undefined,
     );
     return refusal?.message;
@@ -249,12 +244,7 @@ export function ScheduleGridWorkspace({
             }
           }
           const cell = cells[key] ?? {};
-          patches.push(
-            ...transitionPatches(["cells"], key, cell, { kind: "set", rung: { value } }),
-            ...(cell.suggestion != null
-              ? transitionPatches(["cells"], key, cell, { kind: "unsuggest" })
-              : []),
-          );
+          patches.push(...cellPatches(["cells"], key, cell, { kind: "set", rung: { value } }));
         }
         const refusal = await apply(patches, revision ?? undefined);
         if (refusal) onRefused(refusal.message);
@@ -343,14 +333,13 @@ export function ScheduleGridWorkspace({
                   gutter={(row) => {
                     const owed = snapshot.columns.filter(
                       (column) =>
-                        cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.suggestion !=
-                        null,
+                        cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.edit != null,
                     ).length;
                     return owed > 0
                       ? {
                           count: owed,
                           tone: "caution" as const,
-                          title: `${owed} pea suggestion${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
+                          title: `${owed} staged cell${owed === 1 ? "" : "s"} on this row`,
                         }
                       : null;
                   }}

@@ -226,9 +226,7 @@ export function Inbox({
             ),
           );
         case "stage":
-          return verb.move === "take" ? (
-            <span key={`s${i}`}>{cells({ segment: verb.segment, key: verb.key })}</span>
-          ) : null;
+          return <span key={`s${i}`}>{cells({ segment: verb.segment, key: verb.key })}</span>;
         case "select": {
           const target = observedElements(observation, verb.ids);
           const prepared = prepareElements(target, true);
@@ -305,7 +303,7 @@ export function Inbox({
         statusText: item.status,
         label: <SubjectText document={heading} owner={item.key} />,
         title,
-        stage: item.kind === "suggestion" ? "proposed" : undefined,
+        stage: item.kind === "suggestion" ? "edit" : undefined,
         author: item.kind === "suggestion" ? "pea" : undefined,
         // The closed row gives the label the width: the status in its compact words.
         damage,

@@ -23,7 +23,7 @@ function seed(name: keyof typeof fixtures) {
   const fixture = fixtures[name];
   const work = ductsRouteState.schema.parse({
     claims: Object.fromEntries(
-      Object.entries(fixture.claims).map(([id, value]) => [id, { suggestion: { value } }]),
+      Object.entries(fixture.claims).map(([id, value]) => [id, { edit: { value } }]),
     ),
   });
   const fans = ductsRosterResponseSchema.parse(

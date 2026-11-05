@@ -6,13 +6,6 @@ import { staleAnswer } from "./columns";
 
 const values = (n: number) => `${n} changed value${n === 1 ? "" : "s"}`;
 
-/**
- * Ask A: the aggregate over the edit cells Revit moved under (each cell answers on its own row
- * in the review list's "changed in Revit" tab). "Overwrite N changed values" writes every cell's accept
- * in one Work write, then pushes; "Keep Revit's N values" writes every deny. A cell with a Pea
- * suggestion beside it is contested: skipped and counted. The same node draws on the band and on the
- * push verb's refusal flag.
- */
 export function StaleResolve({
   doc,
   write,
@@ -48,13 +41,12 @@ export function StaleResolve({
         </Button>
       </div>
     ) : null;
-  const contested = stale.filter((s) => cells[s.key]!.suggestion != null);
-  const ready = stale.filter((s) => cells[s.key]!.suggestion == null);
+  const ready = stale;
   const edit = Object.values(cells).filter((c) => c.edit != null).length;
   // ponytail: push has no per-cell subset (NEEDS-CONTRACT), so the overwrite pushes exactly the
   // stale cells only while nothing else is edit; otherwise it says so and waits.
   const others = edit - stale.length;
-  const answer = (kind: "take" | "unsuggest") =>
+  const answer = (kind: "set" | "clear") =>
     write(
       ready.flatMap((s): RouteStatePatch[] => staleAnswer(s.key, cells[s.key]!, kind)),
       revision ?? undefined,
@@ -62,7 +54,7 @@ export function StaleResolve({
   // The push admits the Work revision the page holds, so it waits for the re-stage's revision.
   const overwrite = async () => {
     const from = revision;
-    if (!(await answer("take"))) setArmed(from);
+    if (!(await answer("set"))) setArmed(from);
   };
   const n = ready.length;
   return (
@@ -90,17 +82,12 @@ export function StaleResolve({
             kind="framed"
             label={`Keep Revit's ${n} value${n === 1 ? "" : "s"}`}
             reason="Unstage each; Revit's value stands. Nothing is pushed."
-            onClick={() => void answer("unsuggest")}
+            onClick={() => void answer("clear")}
           >
             Keep Revit's {n} value{n === 1 ? "" : "s"}
           </Button>
-          {contested.length ? (
-            <span className="text-ink-2">skipped {contested.length} (Pea proposed)</span>
-          ) : null}
         </span>
-      ) : (
-        <span className="text-ink-2">skipped {contested.length} (Pea proposed)</span>
-      )}
+      ) : null}
     </div>
   );
 }

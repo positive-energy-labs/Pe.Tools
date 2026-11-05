@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import {
   scheduleCellKey,
   showCellValue,
-  transitionPatches,
+  cellPatches,
   type MeasuredValue,
 } from "@pe/agent-contracts";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
@@ -30,7 +30,7 @@ export function scheduleShownText(
   cells: ScheduleGridDocument["cells"],
 ): string {
   const cell = cells[scheduleCellKey(row.rowNumber, columnNumber)];
-  const authored = cell?.edit ?? cell?.suggestion;
+  const authored = cell?.edit;
   return authored
     ? showCellValue(authored.value)
     : (row.bindings.find((binding) => binding.columnNumber === columnNumber)?.displayValue ??
@@ -49,30 +49,21 @@ export const scheduleLock = (binding: Binding | undefined): string | null =>
         : "read-only — this parameter cannot be written from a schedule";
 
 /** A stale key's note (`basis.stale`), in the grid and the pending strip alike. */
-export const STALE_NOTE = "stale: Revit changed under your edit value · accept to stage it again";
+export const STALE_NOTE = "stale: Revit changed under the staged value; review before overwriting";
 
 type GridCell = NonNullable<ScheduleGridDocument["cells"][string]>;
 
 /** A edit key a re-read moved under, with A, the value the person reviewed against. */
 export type StaleCell = NonNullable<NonNullable<ScheduleGridDocument["basis"]>["stale"]>[number];
 
-/**
- * A stale key's two answers as patches: accept re-stages B over what Revit holds now ("keep
- * mine"); deny unstages ("take Revit's"). Neither pushes. The cell's verbs and the aggregate
- * (`StaleResolve`) both write these, through the same wire.
- */
-export const staleAnswer = (key: string, cell: GridCell, kind: "take" | "unsuggest") =>
-  transitionPatches(
+export const staleAnswer = (key: string, cell: GridCell, kind: "set" | "clear") =>
+  cellPatches(
     ["cells"],
     key,
     cell,
-    kind === "take" ? { kind: "set", rung: cell.edit! } : { kind: "clear" },
+    kind === "set" ? { kind: "set", rung: cell.edit! } : { kind: "clear" },
   );
 
-/**
- * A schedule cell's own verbs. A stale key is answered by accept (the contract's `stage`, again)
- * or deny (`unstage`); the wire's write drops the key from `basis.stale` in the same write.
- */
 function scheduleTransitions(
   wire: CellWire,
   key: string,
@@ -81,18 +72,13 @@ function scheduleTransitions(
 ): CellTransition[] {
   if (cell.edit == null || !stale.some((s) => s.key === key))
     return reviewTransitions(wire, key, cell);
-  const run = (kind: "take" | "unsuggest") => () =>
+  const run = (kind: "clear") => () =>
     wire.write(staleAnswer(key, cell, kind), wire.revision ?? undefined);
   return [
     {
-      kind: "unsuggest",
+      kind: "clear",
       reason: "Drop your stale value; the Revit value stands.",
-      run: run("unsuggest"),
-    },
-    {
-      kind: "take",
-      reason: "Accept to stage it again over what Revit holds now.",
-      run: run("take"),
+      run: run("clear"),
     },
   ];
 }
@@ -123,26 +109,16 @@ function scheduleCellState(
   const binding = row.bindings.find((candidate) => candidate.columnNumber === columnNumber);
   const cell = cells[key] ?? {};
   const isStaged = cell.edit != null;
-  const isProposal = !isStaged && cell.suggestion != null;
   // Staged over a value a re-read moved (`basis.stale`): drift against what Revit holds now.
   const staleAt = isStaged ? stale.find((s) => s.key === key) : undefined;
   const isStale = staleAt != null;
   const current = binding?.displayValue ?? row.values[columnIndex] ?? "";
-  const shown = isStaged
-    ? showCellValue(cell.edit?.value)
-    : isProposal
-      ? showCellValue(cell.suggestion?.value)
-      : current;
+  const shown = isStaged ? showCellValue(cell.edit?.value) : current;
   const lock = scheduleLock(binding);
   const note =
     [
       isStale ? STALE_NOTE : null,
-      !isStale && (isStaged || isProposal) && shown !== current ? `was ${current || "—"}` : null,
-      isProposal
-        ? cell.suggestion?.note
-          ? `pea: ${cell.suggestion.note}`
-          : "pea proposed this"
-        : null,
+      !isStale && isStaged && shown !== current ? `was ${current || "—"}` : null,
       binding?.isTypeParameter ? "type parameter — shared across every row of this type" : null,
       binding?.hasMixedValues ? "mixed values across targets" : null,
       binding
@@ -154,7 +130,7 @@ function scheduleCellState(
   return {
     ...cellFromDraft(cell, {
       value: shown,
-      currentValue: current || "(blank)",
+      modelValue: current || "(blank)",
       ...(isStale ? { agree: "drift" as const, modelValue: current, reviewed: staleAt.was } : {}),
       cap: binding == null ? "nohome" : lock ? "locked" : "editable",
       capReason: lock ?? undefined,

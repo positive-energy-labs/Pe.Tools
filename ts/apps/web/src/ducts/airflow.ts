@@ -7,11 +7,7 @@
  * it in the model's store. A unit's design flow is the same step over equipment (2026-10-21):
  * `fanFlowCandidates`, the `parameters.fanFlow` slot, coverage counted over the system's units.
  */
-import {
-  transitionPatches,
-  type DuctsDesign,
-  type RouteStatePatch,
-} from "@pe/agent-contracts";
+import { cellPatches, type DuctsDesign, type RouteStatePatch } from "@pe/agent-contracts";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
@@ -96,7 +92,7 @@ export const airflowPatches = (
   of: AirflowOf = "terminal",
 ): RouteStatePatch[] => {
   const key = of === "unit" ? "fanFlow" : "terminalFlow";
-  return transitionPatches(["parameters"], key, doc?.parameters?.[key] ?? {}, {
+  return cellPatches(["parameters"], key, doc?.parameters?.[key] ?? {}, {
     kind: "set",
     rung: { value: slot },
   });
