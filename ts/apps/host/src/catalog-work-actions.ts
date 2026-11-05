@@ -12,7 +12,6 @@ import {
   catalogWorks,
   type CatalogWork,
   type Command,
-  type DocumentRef,
 } from "@pe/agent-contracts";
 import { invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
 import { command, refused, type CommandExecutor } from "./command-executor.ts";
