@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vite-plus/test";
-import { actionReceiptSchema, type WorkWriteAck } from "@pe/agent-contracts";
+import { actionReceiptSchema, actionStatusSchema, type WorkWriteAck } from "@pe/agent-contracts";
 import type {
   WorkJournalDoor,
   ReceiptFeedState,
@@ -25,8 +25,9 @@ const state = {
   snapshot: { handle: { key, revision: 2 }, revision: 2, value: { a: 1, b: 2 } },
   history: { from: 1, acks: [ack(1, "a"), ack(2, "b")] },
 };
+// The feed carries the compact status the host projects, never the full durable receipt.
 const receipt = (state: "succeeded" | "cancelled") =>
-  actionReceiptSchema.parse({
+  actionStatusSchema.parse(actionReceiptSchema.parse({
     id: "native",
     key: "test.write",
     state,
@@ -46,7 +47,7 @@ const receipt = (state: "succeeded" | "cancelled") =>
         expected: { a: 1, b: 2 },
       },
     ],
-  });
+  }));
 function fixture(initial = state) {
   const registry = createApplicationWorkRegistry();
   let deliver!: (state: ReceiptFeedState) => void;
@@ -105,6 +106,26 @@ test("ready receipts restore native undo barriers after reload, irrespective of 
     const write = vi.fn();
     expect(await f.lease.entry.journal.undo(write)).toMatchObject({ ok: false, code: "barrier" });
     expect(write).not.toHaveBeenCalled();
+    f.lease.release();
+  }
+});
+
+test("T1: a trimmed ready window blocks undo with a typed barrier; a complete one does not", async () => {
+  for (const from of [5, 1]) {
+    const f = fixture();
+    f.emit({ kind: "ready", receipts: { rows: [], from, through: 9 } });
+    const write = vi.fn(async () => {
+      throw Error("written");
+    });
+    const undo = await f.lease.entry.journal.undo(write).catch((error: Error) => error.message);
+    if (from === 5) {
+      expect(undo).toMatchObject({
+        ok: false,
+        code: "barrier",
+        barrier: { receiptId: "receipts:trimmed-below:5" },
+      });
+      expect(write).not.toHaveBeenCalled();
+    } else expect(write).toHaveBeenCalled();
     f.lease.release();
   }
 });
