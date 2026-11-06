@@ -164,6 +164,8 @@ export interface Command<I = unknown, R = unknown> {
     preview?(request: unknown): unknown;
   };
   announce?: true;
+  /** Trusted semantic eligibility for once-per-Work automatic baseline adoption. */
+  autoAdopt?: true;
   /** Native implementation keys hidden when the semantic command owns the callable path. */
   native?: readonly string[];
   target?(input: I): ExecutionTarget;

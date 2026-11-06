@@ -1,5 +1,7 @@
 import {
   commands,
+  busyForWork,
+  workKey,
   workHandleSchema,
   writePreviewSchema,
   type SemanticActionKey,
@@ -58,6 +60,9 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     ports,
   } = context;
   const work = context.work();
+  // One once-control per canonical Work and verb, retained only for this mount lifetime.
+  const adopted = new Set<string>();
+  let stopped = false;
   const { snapshots, beginQuery, workHandles } = context.readings();
   const localPending = new Set<{
     invocation: InvocationToken;
@@ -175,7 +180,12 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     entries: 128,
     bytes: 1024 * 1024,
   });
-  const invoke = (id: string, input: unknown, basis?: InvocationToken) => {
+  const invoke = (
+    id: string,
+    input: unknown,
+    basis?: InvocationToken,
+    dispatching?: () => void,
+  ) => {
     action();
     resolve();
     reviewRefusals.delete(id);
@@ -352,24 +362,29 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       const command = Object.hasOwn(commands, declaration.entry)
         ? commands[declaration.entry as SemanticActionKey]
         : undefined;
+      const binding: import("@pe/agent-contracts").Command["work"] =
+        command && "work" in command ? command.work : undefined;
+      const requiredWork = !!binding && !("optional" in binding && binding.optional);
       const handles = workHandles(declaration.deps.readings);
       if (accepted.work && accepted.scope.identity.work && work.ready())
         handles[accepted.work.handle.key.route] = accepted.work.handle;
-      const workRoute =
-        command && "writeBoundary" in command
+      const workRoute = binding
+        ? binding.route
+        : command && "writeBoundary" in command
           ? command.writeBoundary.route
           : accepted.scope.identity.work?.route;
       const primaryWork = workRoute ? handles[workRoute] : undefined;
-      if (modelWrite && !primaryWork) throw Error("Accepted owner Work unavailable");
+      if ((modelWrite || requiredWork) && !primaryWork)
+        throw Error("Accepted owner Work unavailable");
       // ModelWrite has one input authority: its accepted owner's handle, never draft intent.
       const declaredIntent = z
         .record(z.string(), z.unknown())
         .parse(bindings.bodies[declaration.intent]!.run(context(), parsed));
       if (
-        modelWrite &&
+        (modelWrite || requiredWork) &&
         (Object.hasOwn(declaredIntent, "work") || Object.hasOwn(declaredIntent, "readWorks"))
       )
-        throw Error("ModelWrite intent cannot supply Work identity");
+        throw Error("Owner command intent cannot supply Work identity");
       const readWorks = Object.fromEntries(
         Object.entries(handles).filter(([route]) => route !== workRoute),
       );
@@ -378,17 +393,22 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
           entry.input.parse(
             modelWrite
               ? {
-                  ...declaredIntent,
+                  ...z
+                    .record(z.string(), z.unknown())
+                    .parse(binding ? binding.bind(declaredIntent, primaryWork!) : declaredIntent),
                   ...(Object.keys(readWorks).length ? { readWorks } : {}),
                   work: primaryWork,
                 }
-              : declaredIntent,
+              : requiredWork
+                ? binding!.bind(declaredIntent, primaryWork!)
+                : declaredIntent,
           ),
         ),
       );
       preview = freezePage({ work: accepted.work, input: intent });
       // ActionJournal owns the existing Reject? consent window after this admission.
       send = () => {
+        dispatching?.();
         // A press is visible before ActionJournal delivers its receipt. Keep identity, not a label.
         const key = accepted.scope.identity.work;
         const timelineOwner = key ? entryFor(key) : owner;
@@ -552,17 +572,23 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     return dispatch();
   };
 
+  const suspend = () => {
+    for (const pending of localPending) retireLocal(pending, "Mount closed");
+    notify();
+  };
   return {
-    invoke,
+    invoke: (id: string, input: unknown, basis?: InvocationToken) => invoke(id, input, basis),
     place,
     workBasis,
     present,
     reviews,
     presenting: () => presenting,
     close() {
-      for (const pending of localPending) retireLocal(pending, "Mount closed");
-      notify();
+      stopped = true;
+      adopted.clear();
+      suspend();
     },
+    suspend,
     sync() {
       for (const pending of localPending)
         if (!owner.current(pending.invocation) || !available())
@@ -597,6 +623,32 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
           preview: result.value,
           send: () => pending.send(),
         });
+      }
+      const id = route.data.work?.adopt;
+      const accepted = owner.read();
+      const key = accepted?.scope.identity.work;
+      if (
+        stopped ||
+        !id ||
+        !key ||
+        !accepted.work ||
+        !work.ready() ||
+        !available() ||
+        target === null ||
+        reviews.size ||
+        preparing.entries().length ||
+        localPending.size ||
+        busyForWork(entryFor(key).activity(), key).length
+      )
+        return;
+      const once = JSON.stringify([workKey(key), id]);
+      if (adopted.has(once)) return;
+      try {
+        // invoke performs pure readiness/dependency/schema checks before entering send.
+        // Latch at dispatch, before submit or its reentrant notification, never at readiness.
+        invoke(id, {}, undefined, () => adopted.add(once));
+      } catch {
+        // Before dispatch this remains eligible; a dispatched failure stays latched.
       }
     },
     landings: () => [...landings.values()],
