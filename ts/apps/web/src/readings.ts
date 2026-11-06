@@ -13,7 +13,6 @@ import { hostFetch, runtimeStreamUrl } from "#/host/runtime";
 import {
   READING_MAX_FRAME_BYTES,
   READING_MAX_KEYS,
-  READING_MAX_REQUEST_BYTES,
   readingFrameSchema,
   readingKey,
   readingRequestSchema,
@@ -26,9 +25,6 @@ import { useEffect, useRef } from "react";
 import { reportFault } from "#/host/diagnostics";
 import { resolveWorkbenchConfig } from "#/workbench/config.ts";
 import { deepEqual } from "@tanstack/react-router";
-import { decodeRecordingAcknowledgements, type AcceptedReading, type RecordingAcknowledgements } from "../../../packages/agent-contracts/src/recording-points";
-const consumerKey = (value: AcceptedReading["consumer"]) => JSON.stringify([value.instance, value.reading, value.argsHash]);
-
 /* -- The one wire ------------------------------------------------------------------------- */
 
 type Frame = (ReadingFrame & { stale?: boolean }) | { kind: "stale"; key: string };
@@ -61,32 +57,6 @@ export class PeReadings {
   private connection = "";
   private sent = new Map<string, ReadingRequest>();
   private updating = false;
-  private readonly accepted = new Map<string, AcceptedReading>();
-  private readonly acknowledged = new Map<string, AcceptedReading>();
-  private ackFailed = false;
-  private ackStatus: "idle" | "available" | "unavailable" = "idle";
-  get acceptanceStatus() { return this.ackStatus; }
-
-  /** Final admitted publications only; each mount replaces its exact currently accepted slots. */
-  acceptReadings(instance: string, readings: readonly AcceptedReading[]) {
-    if (this.closed || currentFixture() !== null) return;
-    const before = [...this.accepted];
-    for (const [key, value] of this.accepted)
-      if (value.consumer.instance === instance) this.accepted.delete(key);
-    for (const reading of readings) {
-      const decoded = decodeRecordingAcknowledgements({ accepted: [reading] });
-      if ("error" in decoded || reading.consumer.instance !== instance) {
-        this.ackStatus = "unavailable";
-        continue;
-      }
-      const value = decoded.accepted[0]!;
-      this.accepted.set(consumerKey(value.consumer), value);
-    }
-    if (!deepEqual(before, [...this.accepted])) {
-      this.ackStatus = this.ackFailed ? "unavailable" : "idle";
-      this.schedule(false);
-    }
-  }
   /** A replacement cannot retire the active stream until it has opened. */
   private opening?: Source;
   private generation = 0;
@@ -121,8 +91,7 @@ export class PeReadings {
       connection: string,
       add: ReadingRequest[],
       remove: string[],
-      acknowledgements?: RecordingAcknowledgements,
-    ) => Promise<void> = async (connection, add, remove, acknowledgements) => {
+    ) => Promise<void> = async (connection, add, remove) => {
       const url = new URL(
         peRouteUrl("resources.subscriptions", {}, resolveWorkbenchConfig().origin),
       );
@@ -130,7 +99,7 @@ export class PeReadings {
       const response = await hostFetch(url.href, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ add, remove, ...acknowledgements }),
+        body: JSON.stringify({ add, remove }),
       });
       if (!response.ok) throw Error(`Reading subscriptions: ${response.status}`);
     },
@@ -139,7 +108,6 @@ export class PeReadings {
   /** Retire this owner's transport. Idempotent, and one-way: no further request is ever issued. */
   close() {
     this.closed = true;
-    this.ackStatus = "unavailable";
     this.cancelDelivery?.();
     this.cancelDelivery = undefined;
     this.pending.clear();
@@ -153,8 +121,6 @@ export class PeReadings {
     this.source = undefined;
     this.opening?.close();
     this.opening = undefined;
-    this.accepted.clear();
-    this.acknowledged.clear();
     this.entries.clear();
     this.retained.clear();
     this.resyncs.clear();
@@ -181,7 +147,7 @@ export class PeReadings {
     if (this.closed) return;
     this.faulted = true;
     this.attempts = 0;
-    if (this.entries.size === 0 && this.accepted.size === 0) return this.recovered();
+    if (this.entries.size === 0) return this.recovered();
     this.schedule(true);
   }
 
@@ -288,7 +254,6 @@ export class PeReadings {
   }
 
   private lose() {
-    this.ackStatus = "unavailable";
     this.cancelDelivery?.();
     this.cancelDelivery = undefined;
     this.pending.clear();
@@ -357,36 +322,7 @@ export class PeReadings {
           for (const [key, entry] of add) this.sent.set(key, entry.request);
           continue;
         }
-        if (this.ackFailed) break;
-        const ack: { accepted: AcceptedReading[]; unmounted: AcceptedReading["consumer"][] } = { accepted: [], unmounted: [] };
-        const fits = () => new TextEncoder().encode(JSON.stringify({ add: [], remove: [], ...ack })).byteLength <= READING_MAX_REQUEST_BYTES;
-        const append = <T,>(items: T[], value: T) => {
-          items.push(value);
-          if (items.length <= 32 && fits()) return true;
-          items.pop(); return false;
-        };
-        for (const [key, value] of this.acknowledged)
-          if (!this.accepted.has(key) && !append(ack.unmounted, value.consumer)) break;
-        for (const [key, value] of this.accepted)
-          if (!deepEqual(this.acknowledged.get(key), value) && !append(ack.accepted, value)) break;
-        if (!ack.accepted.length && !ack.unmounted.length) {
-          if ([...this.accepted].some(([key, value]) => !deepEqual(this.acknowledged.get(key), value))) {
-            this.ackFailed = true; this.ackStatus = "unavailable";
-          } else this.ackStatus = this.acknowledged.size ? "available" : "idle";
-          break;
-        }
-        try {
-          await this.update(connection, [], [], ack);
-          if (this.closed || this.connection !== connection || this.generation !== generation) break;
-          for (const consumer of ack.unmounted) this.acknowledged.delete(consumerKey(consumer));
-          for (const value of ack.accepted) this.acknowledged.set(consumerKey(value.consumer), value);
-        } catch {
-          // Ancillary capture acceptance cannot invalidate live evidence or retry native bodies.
-          if (!this.closed && this.connection === connection && this.generation === generation) {
-            this.ackFailed = true; this.ackStatus = "unavailable";
-          }
-          break;
-        }
+        break;
       }
     } catch {
       if (!this.closed && this.connection === connection && this.generation === generation) this.fault();
@@ -399,7 +335,7 @@ export class PeReadings {
   private open() {
     // Prerender and SSR have no window and no EventSource; the client subscribes again on hydration.
     if (typeof window === "undefined" || this.closed) return;
-    if (this.entries.size === 0 && this.accepted.size === 0) {
+    if (this.entries.size === 0) {
       this.source?.close();
       this.source = undefined;
       this.opening?.close();
@@ -417,9 +353,6 @@ export class PeReadings {
     this.connection = crypto.randomUUID();
     url.searchParams.set("connection", this.connection);
     this.sent = new Map();
-    this.acknowledged.clear();
-    this.ackFailed = false;
-    this.ackStatus = "idle";
     // Topology changes can overtake a still-opening replacement. Retire that candidate, not the
     // active stream: commands remain live while the newest connection acquires its keys.
     this.opening?.close();

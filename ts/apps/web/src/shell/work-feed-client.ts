@@ -303,7 +303,7 @@ export function createWorkFeedClient(
                   acquiring = false;
                   emit({
                     kind: "ready",
-                    snapshot: Object.assign({ handle: parsed.data.handle, revision, value: parsed.data.doc }, { bodyReceipts: frame.changed ? undefined : frame.bodyReceipts }),
+                    snapshot: { handle: parsed.data.handle, revision, value: parsed.data.doc },
                     history: parsed.data.history,
                   });
                   drain();
@@ -339,7 +339,7 @@ export function createWorkFeedClient(
               acquiring = false;
               emit({
                 kind: "ready",
-                snapshot: Object.assign({ handle: parsed.data.handle, revision, value: parsed.data.doc }, { bodyReceipts: frame.changed ? undefined : frame.bodyReceipts }),
+                snapshot: { handle: parsed.data.handle, revision, value: parsed.data.doc },
                 history: parsed.data.history,
               });
               drain();

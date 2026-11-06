@@ -19,10 +19,6 @@ import { createRouteShell, PlaceWriteRefusal } from "./admitted-mount";
 import { createAdmittedWork } from "./admitted-work";
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
 import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
-import { PeReadings, peReadings } from "../readings";
-import * as hostRuntime from "../host/runtime";
-import { address } from "@pe/agent-contracts";
-import { contentHash, type ReadingContext, type ReadingDelivery } from "./readings";
 import { admittedRouterAddress } from "./admitted-pane";
 import { AdmittedPane } from "./admitted-place.test-fixture";
 const data = {
@@ -350,90 +346,6 @@ afterEach(() => {
     .reverse()
     .forEach((close) => close());
 });
-test("only the final admitted body is acknowledged; retained publication reuses its receipt", async () => {
-  const nativeDispatch = vi.spyOn(hostRuntime, "hostFetch");
-  const attempts: { context: ReadingContext; deliver: ReadingDelivery }[] = [];
-  const update = vi.fn(async () => {});
-  const sockets: { onopen: (() => void) | null; onmessage: ((event: { data: string }) => void) | null; onerror: (() => void) | null; close(): void }[] = [];
-  const transport = new PeReadings(() => "http://127.0.0.1/pe/resources", () => {
-    const socket = { onopen: null, onmessage: null, onerror: null, close: vi.fn() };
-    sockets.push(socket); return socket;
-  }, undefined, update);
-  const ack = vi.spyOn(peReadings, "acceptReadings").mockImplementation((...args) => transport.acceptReadings(...args));
-  const services = sourceRouteServices({ "notes.read": { kind: "use", open(context, deliver) { attempts.push({ context, deliver }); } } });
-  const location = locationPort("?query=A");
-  const mount = createRouteShell(services).mount(await admitted(), placeInput(location.address, {
-    target: { kind: "document", ref: { session: "saved", openId: "open" } },
-    work: { address: address("C:/Models/A.rvt"), open: null },
-  }));
-  const document = identityCodecs.document.encode({ document: address("C:/Models/A.rvt") });
-  if (!document.ok) throw Error(document.reason);
-  const published: unknown[] = [];
-  const stop = mount.subscribe(() => published.push(mount.readingStatus("notes").snapshot));
-  try {
-    expect(attempts).toHaveLength(1);
-    mount.controls.query("query", "B");
-    expect(attempts).toHaveLength(2);
-    attempts[1]!.deliver({ kind: "complete", value: "B", revision: 1, bodyReceipts: ["body-B"] });
-    const acceptedSnapshot = mount.readingStatus("notes").snapshot;
-    expect(published.at(-1)).toBe(acceptedSnapshot);
-    attempts[0]!.deliver({ kind: "complete", value: "late-A", revision: 1, bodyReceipts: ["body-A"] });
-    await vi.waitFor(() => expect(sockets).toHaveLength(1)); sockets[0]!.onopen!();
-    await vi.waitFor(() => expect(update).toHaveBeenCalledOnce());
-    expect(update).toHaveBeenLastCalledWith(expect.any(String), [], [], {
-      accepted: [expect.objectContaining({ document: document.value, consumer: expect.objectContaining({ reading: "notes" }), bodyReceipts: ["body-B"] })], unmounted: [],
-    });
-    mount.release();
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(2));
-    expect(update).toHaveBeenLastCalledWith(expect.any(String), [], [], { accepted: [], unmounted: [expect.objectContaining({ reading: "notes" })] });
-    const resume = mount.subscribe(() => {});
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(3));
-    expect(mount.readingStatus("notes").snapshot).toBe(acceptedSnapshot);
-    expect(attempts).toHaveLength(2);
-    resume();
-    mount.refresh("notes");
-    const pending = attempts.at(-1)!;
-    pending.deliver({ kind: "part", value: "partial", revision: 2, bodyReceipts: ["not-final"] });
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(4));
-    pending.deliver({ kind: "complete", value: "live without capture", revision: 3 });
-    expect(mount.readingStatus("notes").snapshot).toMatchObject({ current: true, value: "live without capture" });
-    pending.deliver({ kind: "complete", value: 42, revision: 4, bodyReceipts: ["invalid-value"] });
-    expect(mount.readingStatus("notes").snapshot.current).toBe(false);
-    await Promise.resolve(); expect(update).toHaveBeenCalledTimes(4);
-    mount.close();
-    pending.deliver({ kind: "complete", value: "closed", revision: 3, bodyReceipts: ["closed"] });
-    await Promise.resolve(); expect(update).toHaveBeenCalledTimes(4);
-    expect(nativeDispatch).not.toHaveBeenCalled();
-  } finally { stop(); mount.close(); transport.close(); ack.mockRestore(); nativeDispatch.mockRestore(); }
-});
-
-test("admitted Work body claims name the accepted key and revoke on pending", async () => {
-  const accepted = vi.spyOn(peReadings, "acceptReadings").mockImplementation(() => {});
-  const store = createFixtureWorkDoor({ route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) }, { amount: 1 }, { noteWork: z.object({ amount: z.number().default(1) }) });
-  let readKey: Parameters<typeof store.open>[0]["key"] | undefined;
-  let pending!: () => void;
-  const services = sourceRouteServices({ "notes.read": { kind: "use", open(_context, deliver) { deliver({ kind: "complete", value: "note", revision: 0 }); } } });
-  const work = { ...store, open: (scope: Parameters<typeof store.open>[0]) => ({ subscribe(deliver: Parameters<ReturnType<typeof store.open>["subscribe"]>[0], end: () => void) {
-    if (scope.reading === "noteWork") { readKey = scope.key; pending = () => deliver({ kind: "pending" }); }
-    return store.open(scope).subscribe(state => deliver(state.kind === "ready" ? { ...state, snapshot: Object.assign({}, state.snapshot, { bodyReceipts: ["work-body"] }) } : state), end);
-  } }) };
-  const route = await admitted(false, false, { schemas: { work: z.object({ amount: z.number() }) }, data: {
-    capabilities: ["work"], needs: "document", work: { route: "note", schema: "work", version: 1, migrations: {} }, workFields: { amount: { label: "Amount", internal: false } },
-    readings: { ...data.readings, noteWork: { kind: "work", route: "note", output: "work", demand: "visible", retain: { evidence: "scope", resource: "scope" }, refresh: "dependencies", deps: { page: [], work: [], readings: [] } } },
-    panes: { main: { ...data.panes.main, draws: [...data.panes.main.draws, "noteWork"] } },
-  } });
-  const mount = createRouteShell({ ...services, work }).mount(route, placeInput(locationPort().address, { target: { kind: "document", ref: { session: "s", openId: "d" } }, work: { address: address("C:/Models/A.rvt"), open: null } }));
-  try {
-    await vi.waitFor(() => expect(mount.readingStatus("noteWork").snapshot).toMatchObject({ current: true, bodyReceipts: ["work-body"] }));
-    expect(accepted).toHaveBeenLastCalledWith(expect.any(String), [expect.objectContaining({ consumer: expect.objectContaining({ reading: "noteWork" }), bodyReceipts: ["work-body"] })]);
-    const initial = accepted.mock.calls.at(-1)![1][0]!.consumer.argsHash;
-    pending();
-    expect(accepted).toHaveBeenLastCalledWith(expect.any(String), []);
-    expect(mount.readingStatus("noteWork").snapshot.current).toBe(false);
-    expect(initial).toBe(contentHash(readKey));
-  } finally { mount.close(); accepted.mockRestore(); }
-});
-
 test("composition rejects stale refresh/page frames and disposes all delivery", async () => {
   const t = transports();
   const location = locationPort("?query=restored");

@@ -70,20 +70,6 @@ function harness(replay: Frame[] = []) {
     emit: (kind: string, frame: Frame) => listeners.get(kind)!(frame),
   };
 }
-test("Work body claims travel with the decoded snapshot, never an ack-derived value", () => {
-  const h = harness();
-  h.emit("work", { ...snapshot(0), bodyReceipts: ["producing-work-body"] } as Frame);
-  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { value: { amount: 0 }, bodyReceipts: ["producing-work-body"] } });
-  h.emit("work-acks", ack(1));
-  expect(h.values.at(-1)).toMatchObject({ kind: "ack" });
-  expect(h.values.at(-1)).not.toHaveProperty("snapshot.bodyReceipts");
-  h.emit("work", { kind: "stale", key: "work" });
-  expect(h.values.at(-1)).toEqual({ kind: "pending" });
-  h.emit("work", { ...snapshot(1), bodyReceipts: ["reacquired-body"] } as Frame);
-  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { bodyReceipts: ["reacquired-body"] } });
-  h.unsubscribe(); expect(h.stops.every(stop => stop.mock.calls.length === 1)).toBe(true);
-});
-
 test("subscribe before snapshot, buffer and sort acks, drop revisions covered by snapshot", () => {
   const h = harness([ack(3), ack(1), ack(2)]);
   expect(h.order).toEqual(["work-acks", "work"]);

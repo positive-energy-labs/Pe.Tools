@@ -11,6 +11,8 @@ import type {
 import type { Caller } from "@pe/agent-contracts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 
+export class ResourceConnectionOwner extends Context.Service<ResourceConnectionOwner, string | null>()("pe/ResourceConnectionOwner") {}
+
 export const RequestIdentity = Context.Service<IdentityKey, RequestIdentityData>("RequestIdentity");
 
 function freeze<T>(value: T): T {

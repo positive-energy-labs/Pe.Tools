@@ -35,8 +35,6 @@ type Fake = {
 };
 
 const head = { kind: "thread-head", thread: "t1" } as const;
-import { identityCodecs } from "../../../packages/agent-contracts/src/route-kernel-codecs";
-import type { AcceptedReading } from "../../../packages/agent-contracts/src/recording-points";
 const snapshot = (value: unknown) => ({
   data: JSON.stringify(
     readingFrameSchema.parse({ kind: "snapshot", key: readingKey(head), value }),
@@ -132,110 +130,6 @@ test.each(["ECONNREFUSED", "Reading subscriptions: 403"])("a failed POST (%s) fe
     expect(sources).toHaveLength(1);
     expect(update).toHaveBeenCalledTimes(1);
   } finally { readings.close(); vi.useRealTimers(); }
-});
-
-test("accepted bodies diff on the existing wire; an ACK refusal never faults its readings", async () => {
-  const { readings, sources, update } = owner();
-  const frames: unknown[] = [];
-  const document = identityCodecs.document.encode({ document: "c:\\models\\a.rvt" });
-  if (!document.ok) throw Error(document.reason);
-  const accepted: AcceptedReading = { document: document.value,
-    consumer: { instance: "mount", reading: "sheet", argsHash: "args" }, bodyReceipts: ["original-body"] };
-  try {
-    readings.subscribe(head, frame => frames.push(frame));
-    await Promise.resolve(); sources[0]!.onopen!();
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    sources[0]!.onmessage!(snapshot({ revision: 1 }));
-    readings.acceptReadings("mount", [accepted]);
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(2));
-    expect(update).toHaveBeenLastCalledWith(expect.any(String), [], [], { accepted: [accepted], unmounted: [] });
-    readings.acceptReadings("mount", []);
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(3));
-    expect(update).toHaveBeenLastCalledWith(expect.any(String), [], [], { accepted: [], unmounted: [accepted.consumer] });
-    update.mockRejectedValueOnce(Error("Reading subscriptions: 400"));
-    readings.acceptReadings("mount", [accepted]);
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(4));
-    expect(readings.acceptanceStatus).toBe("unavailable");
-    expect(sources[0]!.closed).toBe(false);
-    expect(frames.at(-1)).toMatchObject({ kind: "snapshot", value: { revision: 1 } });
-    sources[0]!.onmessage!(snapshot({ revision: 2 }));
-    expect(frames.at(-1)).toMatchObject({ kind: "snapshot", value: { revision: 2 } });
-    readings.acceptReadings("mount", [accepted]);
-    await Promise.resolve();
-    expect(update).toHaveBeenCalledTimes(4);
-    expect(sources).toHaveLength(1);
-  } finally { readings.close(); }
-});
-
-test.each(["replace", "close", "lost"])("an in-flight body acknowledgement cannot cross %s ownership", async (mode) => {
-  const { readings, sources, update } = owner();
-  const document = identityCodecs.document.encode({ document: "C:/Models/A.rvt" });
-  if (!document.ok) throw Error(document.reason);
-  const body = (argsHash: string): AcceptedReading => ({ document: document.value, consumer: { instance: "mount", reading: "sheet", argsHash }, bodyReceipts: [argsHash] });
-  let finish!: () => void;
-  try {
-    readings.subscribe(head, () => {}); await Promise.resolve(); sources[0]!.onopen!();
-    await vi.waitFor(() => expect(update).toHaveBeenCalledOnce());
-    update.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
-    readings.acceptReadings("mount", [body("old")]);
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(2));
-    if (mode === "close") readings.close();
-    else if (mode === "lost") sources[0]!.onerror!();
-    else {
-      readings.acceptReadings("mount", []); readings.dirty(head);
-      await vi.waitFor(() => expect(sources).toHaveLength(2)); sources[1]!.onopen!();
-      readings.acceptReadings("mount", [body("new")]);
-    }
-    finish();
-    if (mode === "replace") {
-      await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(4));
-      expect(update).toHaveBeenLastCalledWith(new URL(sources[1]!.url).searchParams.get("connection"), [], [], { accepted: [body("new")], unmounted: [] });
-    } else {
-      await Promise.resolve(); await Promise.resolve(); expect(update).toHaveBeenCalledTimes(2);
-      if (mode === "lost") expect(readings.acceptanceStatus).toBe("unavailable");
-    }
-    expect(sources[0]!.closed).toBe(true);
-  } finally { finish?.(); readings.close(); }
-});
-
-test("a body-only mounted consumer re-ACKs its original claim on a replacement connection", async () => {
-  const { readings, sources, update } = owner();
-  const document = identityCodecs.document.encode({ document: "C:/Models/A.rvt" });
-  if (!document.ok) throw Error(document.reason);
-  const body: AcceptedReading = { document: document.value, consumer: { instance: "mount", reading: "sheet", argsHash: "args" }, bodyReceipts: ["original-body"] };
-  try {
-    readings.acceptReadings("mount", [body]);
-    await Promise.resolve(); sources[0]!.onopen!();
-    await vi.waitFor(() => expect(update).toHaveBeenCalledOnce());
-    readings.resync();
-    await vi.waitFor(() => expect(sources).toHaveLength(2)); sources[1]!.onopen!();
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(2));
-    expect(update).toHaveBeenLastCalledWith(new URL(sources[1]!.url).searchParams.get("connection"), [], [], { accepted: [body], unmounted: [] });
-    expect(update.mock.calls[0]![0]).not.toBe(update.mock.calls[1]![0]);
-  } finally { readings.close(); }
-});
-
-test("body acknowledgement batches honor both wire bounds without truncating mounted slots", async () => {
-  const { readings, sources, update } = owner();
-  const document = identityCodecs.document.encode({ document: "C:/Models/A.rvt" });
-  if (!document.ok) throw Error(document.reason);
-  const bodies: AcceptedReading[] = Array.from({ length: 65 }, (_, id) => ({ document: document.value, consumer: { instance: "mount", reading: `reading-${id}`, argsHash: "args" }, bodyReceipts: ["x".repeat(1000)] }));
-  try {
-    readings.subscribe(head, () => {}); await Promise.resolve(); sources[0]!.onopen!();
-    await vi.waitFor(() => expect(update).toHaveBeenCalledOnce());
-    readings.acceptReadings("mount", bodies);
-    await vi.waitFor(() => expect(readings.acceptanceStatus).toBe("available"));
-    const batches = (update.mock.calls as unknown[][]).slice(1).map(call => call[3] as { accepted: AcceptedReading[]; unmounted: unknown[] });
-    expect(batches.flatMap(batch => batch.accepted)).toEqual(bodies);
-    for (const batch of batches) {
-      expect(batch.accepted.length).toBeLessThanOrEqual(32);
-      expect(new TextEncoder().encode(JSON.stringify({ add: [], remove: [], ...batch })).byteLength).toBeLessThanOrEqual(16 * 1024);
-    }
-    const before = update.mock.calls.length;
-    readings.acceptReadings("bad", [{ ...bodies[0]!, consumer: { ...bodies[0]!.consumer, instance: "bad" }, bodyReceipts: [] }]);
-    await Promise.resolve(); expect(update).toHaveBeenCalledTimes(before);
-    expect(readings.acceptanceStatus).toBe("unavailable"); expect(sources[0]!.closed).toBe(false);
-  } finally { readings.close(); }
 });
 
 test("an old bootstrap completion cannot mark a replacement's subscriptions sent", async () => {

@@ -98,7 +98,6 @@ export function openSourceReading<T>(
                   current: true,
                   value: sent,
                   hash: z.string().parse(contentHash(sent)),
-                  bodyReceipts: frame.bodyReceipts,
                 },
           );
         case "pending":
@@ -203,7 +202,6 @@ export function subscriptionSource<T>(options: {
               value,
               revision: ++revision,
               fresh,
-              bodyReceipts: fresh ? frame.bodyReceipts : undefined,
             });
           } catch (error) {
             deliver({ kind: "failure", error });

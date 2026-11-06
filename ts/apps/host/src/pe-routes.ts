@@ -204,8 +204,7 @@ export interface PeRouteInvocation {
   readonly document?: (ref: DocumentRef) => Promise<DocumentRow>;
   readonly observe?: ResourceObserver;
   readonly closeResources?: () => void;
-  readonly resourceAcceptance?: import("@pe/runtime/resource-stream").ResourceAcceptance;
-  readonly resourceAudience?: string | null;
+  readonly resourceOwner?: string | null;
   readonly work?: import("@pe/runtime").WorkReadContext;
   readonly finish?: (result: { response: Response } | { error: unknown }) => Promise<void>;
 }
@@ -610,9 +609,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
       }
     }
     if (method === "POST" && declared.id === "resources.subscriptions")
-      return updateResourceSubscriptions(request, observe, invocation.resourceAudience);
+      return updateResourceSubscriptions(request, observe, invocation.resourceOwner);
     if (method === "GET" && declared.id === "resources.stream")
-      return resourceResponse(request, invocation.observe ?? observe, undefined, observe, invocation.closeResources, invocation.resourceAcceptance);
+      return resourceResponse(request, invocation.observe ?? observe, undefined, observe, invocation.closeResources, invocation.resourceOwner);
     // Agent feedback (owner ruling 2026-10-14): any admitted caller may file; the host stamps it.
     if (method === "POST" && declared.id === "agent-feedback.submit") {
       const parsed = agentFeedbackSchema.safeParse(await body());
