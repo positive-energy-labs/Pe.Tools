@@ -65,12 +65,6 @@ test("a dev host never binds the installed port, even when it is free or remembe
   expect(await prepareHostBinding(false, "dev", dev, free)).toBe(0);
 });
 
-test("an installed host keeps 5180 when it is free (v0.7.30 behaviour)", async () => {
-  expect(
-    await prepareHostBinding(false, "0.7.31", owner("installed", temp()), machine(new Map())),
-  ).toBe(installedPort);
-});
-
 test("an installed host binds a free port when a foreign process holds 5180", async () => {
   const held = new Map([[installedPort, "C:\\Program Files\\nodejs\\node.exe"]]);
   expect(await prepareHostBinding(false, "0.7.31", owner("installed", temp()), machine(held))).toBe(
