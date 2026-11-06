@@ -31,13 +31,23 @@ export function useEnvironmentReadingSlice<T, S>(
     let active = true;
     let close = () => {};
     void (async () => {
-      const owner =
-        slot === "machine"
-          ? await createFixtureMount((await import("../open/graph")).openGraph, name)
-          : await createFixtureMount(
-              (await import("../chat/graph")).chatGraph(() => ({ thread: "" })),
-              name,
-            );
+      if (slot !== "machine") {
+        const { createChatFixture } = await import("../chat/admission");
+        const { chatReading } = await import("../chat/graph");
+        const owner = await createChatFixture(name);
+        if (!active) return owner.dispose();
+        const publish = () => {
+          if (active) setSaved({ key: identity, reading: chatReading<T>(owner, slot) });
+        };
+        const release = owner.subscribe(publish);
+        close = () => {
+          release();
+          owner.dispose();
+        };
+        publish();
+        return;
+      }
+      const owner = await createFixtureMount((await import("../open/graph")).openGraph, name);
       if (!active) {
         owner.dispose();
         return;

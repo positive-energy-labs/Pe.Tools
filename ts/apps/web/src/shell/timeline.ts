@@ -74,7 +74,14 @@ export function activityTime(at: TimelineEntry["at"], startedAt?: TimelineEntry[
 
 /** Declaration identity is retained at invocation start; presentation always derives here. */
 export type TimelineVerbs = Readonly<
-  Record<string, Partial<Pick<VerbDecl, "kind" | "does">> & { label: string; entry?: string }>
+  Record<
+    string,
+    Partial<Pick<VerbDecl, "does">> & {
+      kind?: VerbDecl["kind"] | "local";
+      label: string;
+      entry?: string;
+    }
+  >
 >;
 type Journal = ReturnType<WorkJournal["read"]>;
 export interface TimelineRow {

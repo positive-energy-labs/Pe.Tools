@@ -24,9 +24,9 @@ import { Ladder } from "#/route/ladder";
 import { useDocumentLadder } from "#/route/situation-ladder";
 import { parseTarget } from "#/route/route-target";
 import type { RouteHandle } from "#/route/handle";
-import { chatReading, type ChatHandle } from "./graph";
+import { chatData, chatReading, runChatCommand, type ChatHandle } from "./graph";
 export type { ChatHandle } from "./graph";
-import { GraphHistory } from "#/shell/mount";
+import { GraphHistory } from "#/shell/mount-timeline";
 import { TimelineHead } from "#/shell/situation-band";
 import { SituationBand } from "#/shell/situation-band";
 import { PrimaryRouteControls } from "#/navigation/route-controls";
@@ -57,19 +57,19 @@ import { TooltipHint } from "@pe/kit/lang/tooltip";
  * textarea. The route declares it once (`chat/graph.ts`); this only names its input.
  */
 export function useSend(handle: ChatHandle, draft: ChatDraft, onSent?: (sent: ChatDraft) => void) {
-  const send = handle.control("send", {
+  const input = {
     text: draft.text.trim(),
     attachments: draft.attachments.length ? draft.attachments : undefined,
     mentions: draft.mentions.length ? draft.mentions : undefined,
-  });
+  };
   return {
-    label: handle.verbs.send!.label,
-    says: handle.verbs.send!.says,
-    refusal: send.refusal ?? emptyPrompt(draft),
+    label: chatData.verbs.send.label,
+    says: undefined,
+    refusal: handle.localReadiness("send", input) ?? emptyPrompt(draft),
     run: async () => {
-      const result = await send.run();
-      if (result.state === "done") onSent?.(draft);
-      return "refusal" in result ? result.refusal : null;
+      const reason = await runChatCommand(handle, "send", input);
+      if (!reason) onSent?.(draft);
+      return reason ? { code: "not-ready" as const, message: reason } : null;
     },
   };
 }
@@ -278,7 +278,10 @@ export function ChatCluster({ handle }: { handle: ChatHandle; situation: ChatSit
         {/* The one Timeline head, in a popover: an inline disclosure in this header slot spilled its
             rows over the thread header (Manual D). The thread and target already lead the Situation;
             the target's own "r0" read as the Work revision, so it is not repeated here. */}
-        <TimelineHead owner={handle} history={<GraphHistory owner={handle} />} />
+        <TimelineHead
+          owner={handle}
+          history={<GraphHistory owner={handle} verbs={chatData.verbs} />}
+        />
       </PrimaryRouteControls>
       <PrimaryRouteControls route="chat">
         <RouteHelpButton

@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { createGraphMount, GraphRouteView } from "#/shell/mount";
+import { GraphLayoutView } from "../../../../packages/kit/src/components/lang/graph-layout";
 import type { GraphLayoutState } from "../../../../packages/kit/src/components/lang/graph-layout";
 import { RouterContextProvider, createRouter, createMemoryHistory } from "@tanstack/react-router";
 import { Route as rootRoute } from "../routes/__root";
-import { chatGraph } from "./graph";
-const owners: { dispose(): void }[] = [];
+import { chatData } from "./graph";
 vi.mock("../routes/__root", async () => {
   const { createRootRoute } = await import("@tanstack/react-router");
   return { Route: createRootRoute() };
@@ -28,61 +27,30 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
-  for (const owner of owners.splice(0)) owner.dispose();
   vi.restoreAllMocks();
 });
 
 function Dock() {
   const [panes, onChange] = useState<GraphLayoutState>({});
-  const graph = useMemo(() => chatGraph(() => ({ thread: "t" }), 643), []);
-  const adapters = useMemo(
-    () => ({
-      sources: Object.fromEntries(
-        Object.keys(graph.readings).map((id) => [id, { kind: "use" as const, open: () => {} }]),
-      ),
-      bodies: {
-        threads: () => (
-          <nav aria-label="Threads">
-            <div role="option" aria-selected={false} onClick={() => onChange({})}>
-              Office model
-            </div>
-          </nav>
-        ),
-        chat: () => <input aria-label="draft" defaultValue="kept" />,
-      },
-    }),
-    [graph],
-  );
-  const owner = useMemo(() => {
-    const owner = createGraphMount(graph, {
-      ...adapters,
-      getSnapshot: () => ({ target: { kind: "host" }, work: null }),
-      subscribe: () => () => {},
-      subscribeAcceptedDeltas: () => () => {},
-      write: async () => {
-        throw Error("No Work");
-      },
-    });
-    owners.push(owner);
-    return owner;
-  }, [graph, adapters]);
   return (
-    <GraphRouteView
-      graph={graph}
-      adapters={adapters}
-      owner={owner}
-      hidden={false}
-      current={() => true}
-      hosted
-      situation={null}
-      device={{ panes, onChange }}
-      status={{
-        resolution: { kind: "resolved", target: { kind: "host" } },
-        bindingLost: null,
-        targetProvenance: { source: "none" },
-        closed: false,
-        unreadable: false,
-        failure: null,
+    <GraphLayoutView
+      layout={{ ...chatData.layout, minOtherSize: 643 }}
+      panes={{
+        threads: { ...chatData.panes.threads, verbs: [], draws: [] },
+        chat: { ...chatData.panes.chat, verbs: [], draws: [] },
+      }}
+      active={() => true}
+      state={{ panes, onChange }}
+      bodies={{
+        threads: (pane) =>
+          pane(
+            <nav aria-label="Threads">
+              <div role="option" aria-selected={false} onClick={() => onChange({})}>
+                Office model
+              </div>
+            </nav>,
+          ),
+        chat: (pane) => pane(<input aria-label="draft" defaultValue="kept" />),
       }}
     />
   );

@@ -1,4 +1,8 @@
-import { identityCodecs, identityPartSchema, decodeFailure } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
+import {
+  identityCodecs,
+  identityPartSchema,
+  decodeFailure,
+} from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
 export { identityCodecs } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
 import { z } from "zod";
 import { deepEqual } from "@tanstack/react-router";
@@ -26,10 +30,11 @@ const selectionShape = z.array(selectionItem);
 type Item = z.output<typeof selectionItem>;
 
 /** Fixed shape and kind-specific identity validation; membership is evidence, not syntax. */
-export function selectionCodec<G extends RouteGraphJson, const K extends readonly string[]>(
-  graph: G,
-  kinds: K,
-) {
+export function selectionCodec<
+  G extends RouteGraphJson,
+  const K extends readonly string[],
+  All extends boolean = false,
+>(graph: G, kinds: K, allowAll: All = false as All) {
   type Selected = Extract<SelectionItem<G>, { kind: K[number] }>;
   const isSelected = (item: Item): item is Selected => {
     const identity = Object.hasOwn(graph.identities, item.kind)
@@ -39,7 +44,9 @@ export function selectionCodec<G extends RouteGraphJson, const K extends readonl
       !!identity && kinds.includes(item.kind) && identityCodecs[identity.kind].decode(item.id).ok
     );
   };
-  const normalize = (value: unknown): DecodeResult<readonly Selected[]> => {
+  type Value = readonly Selected[] | (All extends true ? "all" : never);
+  const normalize = (value: unknown): DecodeResult<Value> => {
+    if (allowAll && value === "all") return { ok: true, value: "all" as Value };
     const parsed = selectionShape.safeParse(value);
     if (!parsed.success) return decodeFailure("Selection must be an array of {kind,id}");
     const seen = new Set<string>();
@@ -56,11 +63,13 @@ export function selectionCodec<G extends RouteGraphJson, const K extends readonl
     normalize,
     encode(value: unknown): DecodeResult<string> {
       const result = normalize(value);
-      return result.ok ? { ok: true, value: JSON.stringify(result.value) } : result;
+      return result.ok
+        ? { ok: true, value: result.value === "all" ? "all" : JSON.stringify(result.value) }
+        : result;
     },
-    decode(text: string): DecodeResult<readonly Selected[]> {
+    decode(text: string): DecodeResult<Value> {
       try {
-        return normalize(JSON.parse(text));
+        return normalize(text === "all" ? text : JSON.parse(text));
       } catch {
         return decodeFailure("Invalid selection JSON");
       }
@@ -154,7 +163,8 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
   const decodeField = (key: string, value: unknown): DecodeResult<unknown> => {
     const field = graph.fields[key];
     if (!field) return decodeFailure(`Unknown Page field: ${key}`);
-    if (field.role === "selection") return selectionCodec(graph, field.kinds).normalize(value);
+    if (field.role === "selection")
+      return selectionCodec(graph, field.kinds, field.allowAll === true).normalize(value);
     const parsed = schemas[field.schema]?.safeParse(value);
     if (!parsed?.success) return decodeFailure(`Invalid Page field: ${key}`);
     if (field.role === "subject") {
@@ -231,7 +241,8 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
     origin: MoveOrigin,
     runTransition = true,
   ): PagePreparation<G, S> => {
-    if (!originSchema.safeParse(origin).success) return decodeFailure("Missing or invalid move origin");
+    if (!originSchema.safeParse(origin).success)
+      return decodeFailure("Missing or invalid move origin");
     const parsed = record.safeParse(patch);
     if (!parsed.success) return decodeFailure("Invalid Page patch");
     const entries = Object.entries(parsed.data);

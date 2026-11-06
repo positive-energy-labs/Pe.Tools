@@ -7,7 +7,6 @@ import { roomsGraph } from "../rooms/graph";
 import { familyGraph } from "../family/graph";
 import { takeoffGraph } from "../takeoff/graph";
 import { settingsGraph } from "../settings/graph";
-import { chatGraph } from "../chat/graph";
 import { designSystemGraph } from "../design-system/graph";
 import { ductLossGraph } from "../duct-loss/graph";
 import { opsGraph } from "../ops/graph";
@@ -44,7 +43,6 @@ const routes = [
   familyGraph,
   takeoffGraph,
   settingsGraph,
-  chatGraph(() => ({ thread: "" })),
 ] as unknown as RouteGraph<any, any>[];
 
 test.each(routes.map((graph) => [graph.address, graph] as const))(

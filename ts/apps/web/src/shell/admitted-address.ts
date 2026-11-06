@@ -78,7 +78,7 @@ export function createAdmittedAddress<G extends RouteGraphJson, S extends Schema
         const text = search.get(key)!;
         const result =
           field.role === "selection"
-            ? selectionCodec(route.data, field.kinds).decode(text)
+            ? selectionCodec(route.data, field.kinds, field.allowAll === true).decode(text)
             : decodedValue.parse(codecs[field.codec]!.decode(text));
         if (!result.ok) return refused(`Invalid address field ${key}: ${result.reason}`);
         url[key] = result.value;
@@ -107,7 +107,9 @@ export function createAdmittedAddress<G extends RouteGraphJson, S extends Schema
       if (share && field.role !== "selection" && !("share" in field && field.share)) continue;
       const text =
         field.role === "selection"
-          ? selectionCodec(route.data, field.kinds).encode(snapshot.page[key])
+          ? selectionCodec(route.data, field.kinds, field.allowAll === true).encode(
+              snapshot.page[key],
+            )
           : {
               ok: true as const,
               value: z.string().parse(codecs[field.codec]!.encode(snapshot.page[key])),
@@ -134,10 +136,11 @@ export function createAdmittedAddress<G extends RouteGraphJson, S extends Schema
         : origin?.kind === "pea"
           ? "push"
           : changed.some(
-              ([, field]) => field.role === "selection" || ("url" in field && field.url === "push"),
-            )
-          ? "push"
-          : "replace";
+                ([, field]) =>
+                  field.role === "selection" || ("url" in field && field.url === "push"),
+              )
+            ? "push"
+            : "replace";
     writing = true;
     try {
       address.write(search, history);

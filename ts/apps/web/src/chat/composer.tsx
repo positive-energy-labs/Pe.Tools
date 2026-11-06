@@ -24,7 +24,7 @@ import {
 import { composerAnswer } from "./question-form";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
-import { chatReading } from "./graph";
+import { chatReading, chatOutcome, runChatCommand } from "./graph";
 import { Composer, ComposerFrame } from "#/components/lang/conversation";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
@@ -103,8 +103,11 @@ export function ThreadComposer({
     setDraft((current) => (current === sent ? EMPTY_CHAT_DRAFT : current));
   });
   const files = useAttachments(draft, setDraft);
-  const sendResult = handle.results.get("send");
-  const refusedSend = sendResult && "refusal" in sendResult ? sendResult.refusal.message : null;
+  const sendResult = chatOutcome(handle, "send");
+  const refusedSend =
+    sendResult && ["failed", "refused", "stale"].includes(sendResult.state)
+      ? sendResult.reason
+      : null;
   const slash = useSlashMenu(draft.text, commands);
   const [area, setArea] = useState<HTMLTextAreaElement | null>(null);
   const form = area?.form ?? null;
@@ -276,8 +279,8 @@ export function ThreadComposer({
             <Button
               label="fork"
               icon={GitFork}
-              refusal={handle.control("fork").refusal}
-              onClick={() => void handle.control("fork").run()}
+              refusal={handle.localReadiness("fork", {})}
+              onClick={() => void runChatCommand(handle, "fork")}
             />
           }
           attach={
@@ -296,8 +299,8 @@ export function ThreadComposer({
                 <Button
                   label="stop"
                   icon={Square}
-                  refusal={handle.control("stop").refusal}
-                  onClick={() => void handle.control("stop").run()}
+                  refusal={handle.localReadiness("stop", {})}
+                  onClick={() => void runChatCommand(handle, "stop")}
                 />
                 <Button
                   kind="commit"
@@ -317,8 +320,8 @@ export function ThreadComposer({
               <Button
                 label="stop"
                 icon={Square}
-                refusal={handle.control("stop").refusal}
-                onClick={() => void handle.control("stop").run()}
+                refusal={handle.localReadiness("stop", {})}
+                onClick={() => void runChatCommand(handle, "stop")}
               />
             ) : (
               <TooltipHint content={refusedSend ?? send.refusal ?? send.says}>
@@ -326,7 +329,7 @@ export function ThreadComposer({
                   kind="commit"
                   label={send.label}
                   icon={ArrowUp}
-                  busy={handle.busy()?.key === "send"}
+                  busy={chatOutcome(handle, "send")?.state === "running"}
                   data-tone={refusedSend ? "caution" : undefined}
                   aria-disabled={Boolean(send.refusal) || undefined}
                   onClick={sendCurrent}

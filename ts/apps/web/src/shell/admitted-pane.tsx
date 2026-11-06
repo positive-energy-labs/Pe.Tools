@@ -48,7 +48,7 @@ export function admittedRouterAddress(history: {
 }
 
 /** Opt-in attention (ADR 0030 rule 10): the lease transport carries the admission's own codec. */
-function AdmittedAttention({
+export function AdmittedAttention({
   mount,
   route,
   codec,
@@ -251,7 +251,11 @@ export function AdmittedPlacePane({
         Fragment,
         null,
         mounted.mount.attention &&
-          createElement(AdmittedAttention, { mount: mounted.mount, route, codec: mounted.mount.attention }),
+          createElement(AdmittedAttention, {
+            mount: mounted.mount,
+            route,
+            codec: mounted.mount.attention,
+          }),
         createElement(Pane, { mount: mounted.mount, route }),
       )
     : null;
@@ -261,7 +265,9 @@ export function AdmittedPlacePane({
 export function admittedRouteSearch<
   G extends import("../../../../packages/agent-contracts/src/route-kernel-data").RouteGraphJson,
 >(_data: G) {
-  return (search: Record<string, unknown>): { [K in keyof G["fields"]]?: unknown } & { fixture?: unknown } => search;
+  return (
+    search: Record<string, unknown>,
+  ): { [K in keyof G["fields"]]?: unknown } & { fixture?: unknown } => search;
 }
 
 /** Shared async admission/router boundary. Domain routes supply only a loader. */

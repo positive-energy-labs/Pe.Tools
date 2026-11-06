@@ -488,6 +488,11 @@ export function linkRouteBodies(
       }
   }
   const chords = new Set<string>();
+  for (const [id, entry] of Object.entries(data.local ?? {})) {
+    requireCapability("local", `local.${id}`);
+    schemaRef(entry.input, `local.${id}.input`);
+    schemaRef(entry.output, `local.${id}.output`);
+  }
   for (const [key, verb] of Object.entries(data.verbs)) {
     const path = `verbs.${key}`;
     if (key === "work.start-fresh" || key === "work.salvage")
@@ -503,6 +508,13 @@ export function linkRouteBodies(
       chords.add(verb.chord);
     }
     switch (verb.kind) {
+      case "local": {
+        requireCapability("local", path);
+        const entry = data.local?.[verb.entry];
+        if (!entry) fail(`${path}.entry`, verb.entry, "local entry", "Local entry is not declared");
+        body(verb.intent, `${path}.intent`, "intent");
+        break;
+      }
       case "work":
         // ADR 0030 rule 9: a targeted verb edits the named reading's owner Work, not its own.
         if (verb.target === undefined && !data.work)

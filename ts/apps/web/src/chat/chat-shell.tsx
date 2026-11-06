@@ -12,7 +12,8 @@ import {
   useContext,
   type CSSProperties,
 } from "react";
-import { useRouteSearchSlice } from "#/route/activity";
+import { RouteVisibility, useRouteSearchSlice } from "#/route/activity";
+import { KeyScope, ScopeKeys, actionScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import { useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { NewThreadButton, ThreadsSidebar, ThreadPane } from "#/chat/thread-palette";
 import { useTranscript, useTranscriptAtom, useWorkbench } from "#/workbench/provider";
@@ -37,14 +38,15 @@ import {
   ComposerWork,
   useChatSituation,
 } from "#/chat/composer-head";
-import { useGraphRoute, GraphRouteView } from "#/shell/mount";
+import { GraphLayoutView } from "../../../../packages/kit/src/components/lang/graph-layout";
+import { ChatOwner } from "./owner";
 import { appAtomRegistry } from "#/shell/owner";
 import { PagePaletteButton } from "#/route/situation-marks";
 import { PrimaryRouteControls, usePublishPagePalette } from "#/navigation/route-controls";
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { Ledger } from "#/navigation/ledger";
 import { LEDGER_PRESENTATIONS } from "#/navigation/ledger-model";
-import { chatGraph, chatAdapters, type ChatRouteDeps } from "./graph";
+import { chatData, selectedThreads, threadIdentity, threadName, type ChatHandle } from "./graph";
 import { readThreadTarget } from "#/chat/thread-navigation";
 import "#/workbench/lens.css";
 import "./chat-shell.css";
@@ -88,12 +90,15 @@ function CurrentThreadChatSurface(props: ChatShellProps) {
   const { currentThreadId, turn } = useWorkbench();
   return (
     <CurrentThreadViewOwner threadKey={currentThreadId} registry={appAtomRegistry} turn={turn}>
-      <ChatSurface {...props} />
+      <ChatOwner docked={props.docked ?? false}>
+        {(handle) => <ChatSurface {...props} handle={handle} />}
+      </ChatOwner>
     </CurrentThreadViewOwner>
   );
 }
 
-function ChatSurface({ target, docked = false }: ChatShellProps) {
+function ChatSurface({ target, docked = false, handle }: ChatShellProps & { handle: ChatHandle }) {
+  const visible = useContext(RouteVisibility);
   const columnRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -138,15 +143,10 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     currentThreadId,
     prompt,
     turnFailure,
-    isRunning,
     operationError,
-    sendPrompt,
-    cancel,
     newThread: startThread,
     forkThread,
-    sendRefusal,
     missingThread,
-    draftTarget,
     openThread,
     renameThread,
     deleteThread,
@@ -195,37 +195,13 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
       });
     },
   };
-  const liveDeps = useRef<ChatRouteDeps>({ thread: currentThreadId });
-  liveDeps.current = {
-    thread: currentThreadId,
-    ready: !loading,
-    running: isRunning,
-    send: sendPrompt,
-    cancel,
-    newThread: () => newThread(),
-    forkThread: () => forkThread(),
-    sendRefusal,
-    promptCapabilities: chat.promptCapabilities,
-    providerName: chat.providerName,
-    draftTarget,
-  };
-  const navigator = useRef<() => void>(() => {});
-  const graph = useMemo(() => chatGraph(() => liveDeps.current, peaFloor()), []);
-  const adapters = useMemo(
-    () => ({
-      ...chatAdapters(() => navigator.current()),
-      initialPage: { thread: liveDeps.current.thread },
-    }),
-    [],
-  );
-  const mount = useGraphRoute(graph, adapters, { thread: currentThreadId, url: !docked });
-  const handle = mount.owner;
   useEffect(() => {
-    handle.view.setPage({ thread: currentThreadId });
+    if (threadName(handle.page.read().thread) !== currentThreadId)
+      handle.controls.subject(threadIdentity(currentThreadId));
   }, [handle, currentThreadId]);
-  const mode = handle.view.read().page.mode;
+  const mode = handle.page.read().mode as Mode;
   const setMode = (mode: Mode) => {
-    handle.view.setPage({ mode });
+    handle.controls.query("mode", mode);
   };
   const [layoutSizes, setLayoutSizes] = useState<GraphLayoutState>({});
   const situation = useChatSituation(handle);
@@ -247,8 +223,7 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
     store.actions.revealThreads();
     setSearchSerial((serial) => serial + 1);
   };
-  navigator.current = findThread;
-  usePublishPagePalette(graph.key, false, (open) => open && findThread());
+  usePublishPagePalette(chatData.key, false, (open) => open && findThread());
 
   // N6: a thread switch keeps the last read transcript, inert and dimmed under a progress mark,
   // until the next body reads. The boundary turns over with the body it shows, so an old failure
@@ -357,10 +332,12 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
       {mode === "threads" ? (
         <ThreadsSidebar
           selected={(() => {
-            const value = handle.view.read().page.selected;
-            return value === "all" ? threads.map((thread) => thread.id) : value;
+            const value = handle.page.read().selected as "all" | readonly { id: string }[];
+            return selectedThreads(value, threads);
           })()}
-          onSelection={(selected) => handle.view.setPage({ selected })}
+          onSelection={(selected) =>
+            handle.page.select(selected.map((id) => ({ kind: "thread", id: threadIdentity(id)! })))
+          }
           primary
           reading={!rosterRead}
           searchSerial={searchSerial}
@@ -392,63 +369,80 @@ function ChatSurface({ target, docked = false }: ChatShellProps) {
   );
 
   return (
-    <main
-      data-chat="surface"
-      data-mode={mode}
-      className="size-full min-h-0 min-w-0 font-sans text-ink"
-    >
-      {!docked && (
-        <PrimaryRouteControls route="chat" slot="palette">
-          <PagePaletteButton open={findThread} />
-        </PrimaryRouteControls>
-      )}
-      {!docked && (
-        <PrimaryRouteControls route="chat" slot="situation">
-          <ChatSituationHead handle={handle} situation={situation} status={status} />
-        </PrimaryRouteControls>
-      )}
-      <SidebarShown.Provider value={threadFold !== "start"}>
-        <GraphRouteView
-          graph={graph}
-          {...mount}
-          situation={null}
-          device={{
-            panes: {
-              ...layoutSizes,
-              threads: { ...layoutSizes.threads, folded: threadFold === "start" },
-              chat: { ...layoutSizes.chat, folded: threadFold === "end" },
+    <KeyScope id="chat" hidden={!visible}>
+      <ScopeKeys
+        keys={actionScopeKeys(
+          (["threads", "world"] as const).map((id) => ({
+            id: `chat.${id}`,
+            label: chatData.verbs[id].label,
+            bindings: [chatData.verbs[id].chord as ScopeKey["hotkey"]],
+            invoke: () => {
+              handle.invoke(id, {});
             },
-            onChange: (next) => {
-              setLayoutSizes(next);
-              store.actions.setThreadFold(
-                next.threads?.folded ? "start" : next.chat?.folded ? "end" : null,
-              );
-            },
-          }}
-          adapters={{
-            ...adapters,
-            bodies: {
-              threads: () => threadPane,
-              chat: () =>
-                activity ? (
-                  <Ledger
-                    presentation={LEDGER_PRESENTATIONS.tray}
-                    head={
-                      <p className="m-0 flex justify-end px-2 py-1 hairline-b">
-                        <Button label="Start a new Pea thread" onClick={() => void newThread()}>
-                          New thread
-                        </Button>
-                      </p>
-                    }
-                  />
-                ) : (
-                  chatColumn
+          })),
+        )}
+      />
+      <main
+        data-chat="surface"
+        data-route-mount="chat"
+        data-mode={mode}
+        className="size-full min-h-0 min-w-0 font-sans text-ink"
+      >
+        {!docked && (
+          <PrimaryRouteControls route="chat" slot="palette">
+            <PagePaletteButton open={findThread} />
+          </PrimaryRouteControls>
+        )}
+        {!docked && (
+          <PrimaryRouteControls route="chat" slot="situation">
+            <ChatSituationHead handle={handle} situation={situation} status={status} />
+          </PrimaryRouteControls>
+        )}
+        <SidebarShown.Provider value={threadFold !== "start"}>
+          <GraphLayoutView
+            layout={{ ...chatData.layout, minOtherSize: peaFloor() }}
+            panes={{
+              threads: { ...chatData.panes.threads, draws: [], verbs: [] },
+              chat: { ...chatData.panes.chat, draws: [], verbs: [] },
+            }}
+            active={() => true}
+            state={{
+              panes: {
+                ...layoutSizes,
+                threads: { ...layoutSizes.threads, folded: threadFold === "start" },
+                chat: { ...layoutSizes.chat, folded: threadFold === "end" },
+              },
+              onChange: (next) => {
+                setLayoutSizes(next);
+                store.actions.setThreadFold(
+                  next.threads?.folded ? "start" : next.chat?.folded ? "end" : null,
+                );
+              },
+            }}
+            bodies={{
+              threads: (pane) => pane(threadPane),
+              chat: (pane) =>
+                pane(
+                  activity ? (
+                    <Ledger
+                      presentation={LEDGER_PRESENTATIONS.tray}
+                      head={
+                        <p className="m-0 flex justify-end px-2 py-1 hairline-b">
+                          <Button label="Start a new Pea thread" onClick={() => void newThread()}>
+                            New thread
+                          </Button>
+                        </p>
+                      }
+                    />
+                  ) : (
+                    chatColumn
+                  ),
                 ),
-            },
-          }}
-        />
-      </SidebarShown.Provider>
-    </main>
+            }}
+          />
+        </SidebarShown.Provider>
+      </main>
+    </KeyScope>
   );
 }
 

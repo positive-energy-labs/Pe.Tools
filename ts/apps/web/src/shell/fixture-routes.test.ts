@@ -13,12 +13,43 @@ import { publicRoutes } from "../route/builtin-routes";
 import { podsGraph } from "../pods/graph";
 import { podsBinding } from "../pods/actions";
 import { ductLossGraph } from "../duct-loss/graph";
-import { chatGraph } from "../chat/graph";
+import { admitChat, createChatFixture } from "../chat/admission";
 
 afterEach(() => vi.unstubAllGlobals());
 test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as const))(
   "%s mounts every declared seed through the kernel without host reads",
   async (_, key) => {
+    if (key === "chat") {
+      const route = await admitChat(() => ({ thread: "" }));
+      const open = vi.fn(() => {
+        throw Error("Real host called");
+      });
+      for (const fixture of Object.keys(route.data.seeds)) {
+        const mount = createRouteShell(
+          sourceRouteServices(
+            Object.fromEntries(
+              Object.keys(route.data.readings).map((id) => [id, { kind: "use", open }]),
+            ),
+          ),
+        ).mount(
+          route,
+          placeInput({
+            read: () => new URLSearchParams({ fixture }),
+            write() {},
+            subscribe: () => () => {},
+          }),
+        );
+        try {
+          for (const id of Object.keys(route.data.readings))
+            expect(mount.readingStatus(id).snapshot.current, `${fixture}/${id}`).toBe(true);
+          mount.refresh();
+          expect(open).not.toHaveBeenCalled();
+        } finally {
+          mount.dispose();
+        }
+      }
+      return;
+    }
     if (key === "captures") {
       const route = await admitCaptures();
       const open = vi.fn(() => {
@@ -251,12 +282,9 @@ test("calculator fixtures recalculate with Page edits rather than freezing an ex
 
 test("companion chat stays idle and mounts its own seed beside another route", async () => {
   vi.stubGlobal("location", { pathname: "/parameter-links" });
-  const owner = await createFixtureMount(
-    chatGraph(() => ({ thread: "" })),
-    "links",
-  );
+  const owner = await createChatFixture("links");
   try {
-    expect(owner.snapshot().failure).toBeNull();
+    expect(owner.readingStatus("transcript").snapshot.current).toBe(true);
   } finally {
     owner.dispose();
   }

@@ -131,27 +131,27 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
   {
     "key": "chat",
     "directory": {
-      "path": "/pea",
-      "title": "Pea",
       "label": "Workbench",
-      "exposure": "Main",
-      "runtimeNeed": "Host for conversation; Revit depends on the requested capability",
       "icon": "MessageSquare",
-      "category": "Ask / automate",
-      "blurb": "The Pea agent workbench — chat and the context world inspector.",
+      "exposure": "Main",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": "compact"
+      },
       "aliases": [
         "chat",
         "agent",
         "assistant",
         "threads"
       ],
+      "runtimeNeed": "Host for conversation; Revit depends on the requested capability",
       "listed": true,
       "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": "compact"
-      }
+      "path": "/pea",
+      "title": "Pea",
+      "category": "Ask / automate",
+      "blurb": "The Pea agent workbench and context world inspector."
     }
   },
   {
