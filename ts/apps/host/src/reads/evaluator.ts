@@ -33,18 +33,24 @@ const schemaIds = new WeakMap<z.ZodType, string>();
 const schemaId = (schema: z.ZodType) => {
   let id = schemaIds.get(schema);
   if (!id) {
-    id = fingerprint(z.toJSONSchema(schema, {
-      unrepresentable: "any",
-      override({ zodSchema, jsonSchema }) {
-        const def = zodSchema._zod.def;
-        // Undefined can occur inside generated optional DTO fields. Preserve its schema identity;
-        // wireValue still rejects every non-JSON runtime value before it can become data.
-        jsonSchema["x-pe-zod-type"] = def.type;
-        const functions = (value: object) => Object.values(value).filter(value => typeof value === "function").map(String);
-        jsonSchema["x-pe-functions"] = functions(def);
-        if ("checks" in def && def.checks) jsonSchema["x-pe-checks"] = def.checks.map(check => functions(check._zod.def));
-      },
-    }));
+    id = fingerprint(
+      z.toJSONSchema(schema, {
+        unrepresentable: "any",
+        override({ zodSchema, jsonSchema }) {
+          const def = zodSchema._zod.def;
+          // Undefined can occur inside generated optional DTO fields. Preserve its schema identity;
+          // wireValue still rejects every non-JSON runtime value before it can become data.
+          jsonSchema["x-pe-zod-type"] = def.type;
+          const functions = (value: object) =>
+            Object.values(value)
+              .filter((value) => typeof value === "function")
+              .map(String);
+          jsonSchema["x-pe-functions"] = functions(def);
+          if ("checks" in def && def.checks)
+            jsonSchema["x-pe-checks"] = def.checks.map((check) => functions(check._zod.def));
+        },
+      }),
+    );
     schemaIds.set(schema, id);
   }
   return id;
@@ -300,9 +306,11 @@ export class Publications {
   private readonly slots = new Map<string, Slot>();
   private readonly retainedBytes = new Map<string, number>();
   private bytes = 0;
-  private readonly versions = new Map<string, number>();
+  private readonly keys = new Map<
+    string,
+    { version: number; flights: Map<string, Promise<Publication<unknown>>> }
+  >();
   private readonly listeners = new Map<string, Set<() => void>>();
-  private readonly active = new Map<string, Promise<Publication<unknown>>>();
   constructor(
     private readonly capacity = 128,
     private readonly byteLimit = 128 * 1024 * 1024,
@@ -379,8 +387,12 @@ export class Publications {
     port: InputPort,
   ): Promise<Publication<O>> {
     const key = fingerprint([definition.name, definition.input.parse(args)]);
-    if (!this.versions.has(key) && this.versions.size >= 512)
-      throw Error("Read key capacity reached");
+    let owner = this.keys.get(key);
+    if (!owner) {
+      if (this.keys.size >= 512) throw Error("Read key capacity reached");
+      owner = { version: 0, flights: new Map() };
+      this.keys.set(key, owner);
+    }
     let slot = this.slots.get(id);
     const obsolete = (): Publication<O> =>
       immutable({ key, generation, version: 0, value: null, state: "superseded" });
@@ -407,17 +419,16 @@ export class Publications {
       schemaId(definition.input),
       schemaId(definition.output),
     ]);
-    let flight = this.active.get(flightKey) as Promise<Publication<O>> | undefined;
+    let flight = owner.flights.get(flightKey) as Promise<Publication<O>> | undefined;
     if (!flight) {
       flight = evaluate(definition, args, port).then((value) => {
-        const version = (this.versions.get(key) ?? 0) + 1;
-        this.versions.set(key, version);
+        const version = ++owner.version;
         return immutable({ key, generation, version, value, state: "current" as const });
       });
-      this.active.set(flightKey, flight);
+      owner.flights.set(flightKey, flight);
       void flight
         .finally(() => {
-          if (this.active.get(flightKey) === flight) this.active.delete(flightKey);
+          if (owner.flights.get(flightKey) === flight) owner.flights.delete(flightKey);
         })
         .catch(() => {});
     }
