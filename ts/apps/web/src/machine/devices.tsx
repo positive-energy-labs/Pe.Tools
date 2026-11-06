@@ -13,7 +13,6 @@ import {
   sourceProvenanceSchema,
   type SourceProvenance,
 } from "@pe/agent-contracts";
-import { hostFetch } from "#/host/runtime";
 import { Input } from "@pe/kit/lang/input";
 import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
@@ -464,7 +463,7 @@ function HostDeviceGate({ name, guidance, children }: DeviceGateProps) {
     signal.addEventListener("abort", aborted, { once: true });
     // One bounded attempt observes source before asking a live-only device door.
     void (async (): Promise<Access> => {
-      const response = await hostFetch(peClient.url("features.get", {}), { signal });
+      const response = await peClient.response("features.get", {}, { signal });
       if (response.ok) {
         hostDescriptorSchema.parse(await response.json());
         const header = response.headers.get("x-pe-source");

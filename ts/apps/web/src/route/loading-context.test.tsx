@@ -19,7 +19,10 @@ import { useLocalDevice, RemoteDeviceGate, RecordedSourceChip } from "#/machine/
 const host = vi.hoisted(() => ({ call: vi.fn(), fetch: vi.fn() }));
 vi.mock("#/host/runtime", () => ({ hostFetch: host.fetch }));
 host.fetch.mockImplementation(async () => new Response(null, { status: 403 }));
-vi.mock("#/host/pe-client", () => ({ peClient: { ...host, url: () => "/pe/features" } }));
+vi.mock("#/host/pe-client", async () => {
+  const { createPeClient } = await import("@pe/agent-contracts/pe-api");
+  return { peClient: { ...createPeClient("", host.fetch), call: host.call } };
+});
 
 afterEach(() => {
   cleanup();
