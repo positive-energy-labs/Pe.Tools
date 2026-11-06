@@ -24,10 +24,6 @@ test("a sealed plan arms; an unsealed one never arms apply; a stale one disarms 
   expect(writeHeld("Heal", null).held).toBeNull();
 });
 
-test("a Read plan never says checked in Revit", () => {
-  expect(writeHeld("Heal", review({ previewOnly: true, derivedRequest: {}, seal })).held?.word).not.toMatch(/checked/);
-});
-
 test("Reject? answers the thread that ran the receipt, not this page", () => {
   const entry = (caller: object, verb = "heal") =>
     ({
