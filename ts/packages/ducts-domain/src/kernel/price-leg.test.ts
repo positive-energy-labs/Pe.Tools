@@ -4,59 +4,18 @@
  * -> transition 5 -> grille 6 (200 cfm, 0.05); tap 4 -> duct 7 -> terminal 8 (100 cfm, 0.08).
  * Expected values were computed independently in Python from the same grids (handcalc.py).
  */
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { expect, it } from "vite-plus/test";
 
-import type { Grid, Grids } from "../loss-grid.ts";
+import type { Grids } from "../loss-grid.ts";
+import { grids as tableGrids } from "../sheet/tables.fixture.ts";
 import type { DuctSnapshot } from "../types.ts";
 import { fittingFacts, splitTappedDuct, tapDistance } from "./fitting-facts.ts";
 import { equivalentFeet, priceLeg, type PricedLeg } from "./price-leg.ts";
 
-// ---- test-only .tbl reader (ctable.py parse), as in losses.test.ts ----------------------------
-function parseTbl(name: string): Record<string, Grid> {
-  const text = readFileSync(
-    join(__dirname, "../../../../apps/web/src/ducts/fixtures/ashrae", `${name}.tbl`),
-    "latin1",
-  );
-  const out: Record<string, Grid> = {};
-  for (const block of text.split(/\r?\n=+\r?\n/)) {
-    if (!block.trim() || block.trim().startsWith("'")) continue;
-    const lines = block.split(/\r?\n/).filter((l) => l.trim() && !/^[#\s]+$/.test(l));
-    const title = lines[0]!.trim();
-    const rest = lines.slice(1);
-    const head = rest.findIndex((l) => l.includes("->"));
-    if (head >= 0) {
-      const res = rest.find((l) => /^\s*C\w*\s*$/.test(l))?.trim() ?? "Co";
-      const [xLabel, xs] = rest[head]!.split("->");
-      const y: number[] = [];
-      const grid: number[][] = [];
-      for (const l of rest.slice(head + 1).filter((l) => /^\s*[-\d.]/.test(l))) {
-        const v = l.trim().split(/\s+/).map(Number);
-        y.push(v[0]!);
-        grid.push(v.slice(1));
-      }
-      out[res] = {
-        title,
-        xLabel: xLabel!.trim(),
-        x: xs!.trim().split(/\s+/).map(Number),
-        yLabel: rest[head + 1]!.trim(),
-        y,
-        grid,
-      };
-    } else {
-      const header = rest.find((l) => /\d+\(\d+\)/.test(l))!;
-      const x = [...header.matchAll(/(\d+(?:\.\d+)?)\(\d+\)/g)].map((m) => Number(m[1]));
-      const co = rest.find((l) => l.trim().startsWith("Co"))!;
-      out.Co = { title, xLabel: "D", x, grid: co.trim().split(/\s+/).slice(1).map(Number) };
-    }
-  }
-  return out;
-}
 const grids: Grids = {
-  "CD3-2": parseTbl("Cd3-2"),
-  "SD5-9": parseTbl("Sd5-9"),
-  "SR4-3": parseTbl("Sr4-3"),
+  "CD3-2": tableGrids["CD3-2"]!,
+  "SD5-9": tableGrids["SD5-9"]!,
+  "SR4-3": tableGrids["SR4-3"]!,
 };
 
 type Node = DuctSnapshot["nodes"][number];
