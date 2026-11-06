@@ -722,10 +722,6 @@ export function listWordMatches(searchable: ListSearchable, word: string): boole
   );
 }
 
-/** Temporary draft consumers use this same matcher until they adopt useList. */
-export const matchesListQuery = (query: string, searchable: ListSearchable) =>
-  passes(searchable, readQuery(query), new Map(), listWordMatches);
-
 const wordsOf = (keywords: string) => keywords.toLowerCase().match(/\S+/g) ?? [];
 
 /** Typed conditions share the table evaluator, but literal keywords never pass through its parser. */
