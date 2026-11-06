@@ -1143,6 +1143,7 @@ const localEntries = {
       Effect.map(bridge.list, (sessions) => ({ connected: sessions.some((s) => s.connected) })),
       (snapshot) => getHostStatus(snapshot),
     );
+    // TODO: migrate live-only topology inventory to HostSessionInventory; historical mount omits localEntries.
     const sessions = yield* listBridgeSessions(bridge.list);
     return {
       observedAtUtc: new Date().toISOString(),
@@ -1154,6 +1155,7 @@ const localEntries = {
     return yield* Effect.flatMap(sdkSession(bridge, scope), getBridgeSessionSummary);
   }),
   "bridge.sessions.list": Effect.fnUntraced(function* ({ bridge }: LocalCall) {
+    // TODO: migrate this live-only caller to HostSessionInventory; historical /call never dispatches localEntries.
     return yield* listBridgeSessions(bridge.list);
   }),
   "logs.tail": Effect.fnUntraced(function* ({ request }: LocalCall) {

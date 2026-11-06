@@ -21,14 +21,21 @@ import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { FIRM_SEED } from "../src/ducts-inputs.ts";
 import { admitNativeCaller } from "../src/native-read-policy.ts";
 import { nativeCatalogIdentity, openRecordingWriter, openRecordingReader,
-  type ConsumerRecipe } from "../src/native-recording.ts";
+  type ConsumerRecipe, type RecordingReader } from "../src/native-recording.ts";
 import type { ReadSetId } from "../src/input-occurrence.ts";
 import { builtinEnrollments } from "../src/builtin-enrollment.ts";
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
-import { settle } from "./effect-test.ts";
+import { settle, detachedBridge, sessionView } from "./effect-test.ts";
+import { SdkSession } from "../src/sdk-session.ts";
+import { HostInputReadSets, defaultReadSetLimits } from "../src/input-occurrence.ts";
+import { DuctsReadings } from "../src/ducts-readings.ts";
+import { bridgeSessionsListSchema } from "@pe/host-contracts/operation-types";
+import { listBridgeSessions } from "../src/local-ops.ts";
+import { InvalidRead } from "../src/native-reads.ts";
+import * as machine from "../src/machine.ts";
 import { bootHost } from "./real-server.ts";
 import { ductsExecutors } from "../src/ducts-actions.ts";
-import type { RevitBridge, HostBridgeEvent } from "../src/bridge.ts";
+import { RevitBridge, type HostBridgeEvent } from "../src/bridge.ts";
 import type { CommandContext } from "../src/command-executor.ts";
 import type { ActionExecution } from "../src/action-journal.ts";
 import { mintBrowserContext, mintContext } from "../src/control.ts";
@@ -156,7 +163,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(proc
   const livePorts = {
     native, files: HostFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
     marks: Layer.succeed(HostDocumentMarks, hostMarks({ observedSince: 100, changedAt: () => changedAt, subscribe: (notify) => { markListeners.add(notify); return () => { markListeners.delete(notify); }; } })),
-    inventory: Layer.succeed(HostSessionInventory, { document: () => Effect.succeed(row),
+    inventory: Layer.succeed(HostSessionInventory, { list: () => Effect.die("inventory not requested"), subscribe: () => () => {}, document: () => Effect.succeed(row),
       session: () => Effect.succeed({ sessionId: ref.session }), attachment: () => Effect.succeed({ sessionId: ref.session }) }),
   };
   const liveHost = await bootHost({ inputs, clock: 200, fans: { live: livePorts, store: fileRouteDocumentStore(join(dir, "work")),
@@ -618,3 +625,97 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(proc
 // The production listener, full native schema decoding and each independent cold owner run here.
 // The 180 s boundary completed live acquisition but expired during progressing cold consumers.
 }, 300000);
+
+
+test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async (mode) => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-inventory-consumers-"));
+  const writer = await run(openRecordingWriter(dir, identity, { ...bounds, maxTakings: mode === "full" ? 1 : 2000 }));
+  const old = await run(openRecordingReader(dir, identity, bounds));
+  const listeners = new Set<(event: HostBridgeEvent) => void>();
+  let title = "initial", reads = 0, poison = 0, workspace: RouteWorkspace;
+  const bridge = detachedBridge({ list: Effect.sync(() => { reads++; return [sessionView({ connected: true, sessionId: ref.session, processId: 42,
+    state: { activeDocumentTitle: title, openDocuments: [{ openId: ref.openId, title, address: path }] } }),
+    sessionView({ connected: false, sessionId: "disconnected" })]; }),
+    subscribe: (notify) => { listeners.add(notify); return () => { listeners.delete(notify); }; } });
+  const expected = async () => Schema.decodeUnknownSync(bridgeSessionsListSchema)(await run(listBridgeSessions(bridge.list)));
+  const sdk = Layer.succeed(SdkSession, { resolve: () => Effect.die("unexpected SDK"), resolveAttachment: () => Effect.die("unexpected SDK") });
+  const inventory = HostSessionInventory.layer.pipe(Layer.provide(Layer.succeed(RevitBridge, bridge)), Layer.provide(sdk));
+  const inputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", ...(mode === "off" ? {} : { captureStore: writer }) }))));
+  const lowCap = HostInputReadSets.layer;
+  vi.spyOn(HostInputReadSets, "layer").mockImplementation((lane) => lowCap(lane, { ...defaultReadSetLimits, childrenPerRoot: 3, openRoots: 4 }));
+  const web = HttpRouter.toWebHandler(fansInputRoutes(inputs, { live: { inventory, owner: new DuctsReadings(),
+    native: Layer.succeed(HostNativeRead, { resolve: () => Effect.die("unexpected native"), read: () => Effect.die("unexpected native") }),
+    files: Layer.succeed(HostFiles, { firm: Effect.die("unexpected files"), ductCatalogs: Effect.die("unexpected files") }),
+    marks: Layer.succeed(HostDocumentMarks, hostMarks({ changedAt: () => null, subscribe: () => () => {} })) },
+    store: fileRouteDocumentStore(join(dir, "work")), initialize: async (owner) => { workspace = owner; } }), { disableLogger: true });
+  const send = (owner: typeof web, url: string, body?: unknown) => withInvocationContext({ caller, hostBaseUrl: "http://host" }, () => owner.handler(
+    new Request(`http://host${url}`, { method: body === undefined ? "GET" : "POST", ...(body === undefined ? {} : { body: JSON.stringify(body) }) }),
+    Context.make(RequestIdentity, admittedRequestIdentity(caller, {}))));
+  const inventoryReading: ReadingRequest = { kind: "inventory" };
+  const fans = builtinEnrollments.find((entry) => entry.routeKey === "fans")!;
+  const work: ReadingRequest = { ...key("fans"), kind: "work", admission: { routeKey: "fans", fingerprint: workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`) } };
+  const firstId = crypto.randomUUID();
+  const url = (id: string, keys: ReadingRequest[]) => `/pe/resources?connection=${id}&keys=${encodeURIComponent(JSON.stringify(keys))}`;
+  let first: ReturnType<typeof resourceFrames> | undefined, second: ReturnType<typeof resourceFrames> | undefined, replay: typeof web | undefined;
+  try {
+    first = resourceFrames(await send(web, url(firstId, [inventoryReading, work])));
+    const initial = [await first.next(), await first.next()];
+    const initialValue = await expected();
+    expect(initial.find((frame) => frame.key === readingKey(inventoryReading))).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: initialValue });
+    const unique = await run(openRecordingReader(dir, identity, bounds));
+    second = resourceFrames(await send(web, url(crypto.randomUUID(), [inventoryReading])));
+    expect(await second.next()).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: await expected() });
+    expect(listeners.size).toBe(2);
+    if (mode === "io") vi.spyOn(writer, "append").mockImplementation(() => Effect.fail(new InvalidRead({ message: "I/O loss", status: 409, problem: "recording.io" })));
+    for (let update = 0; update < 5; update++) {
+      title = `update-${update}`; const before = reads;
+      for (let burst = 0; burst < 3; burst++) for (const notify of listeners) notify({ kind: "state-sync", sessionId: ref.session });
+      const values = [await first.next(), await second.next()];
+      expect(reads - before).toBe(2);
+      for (const value of values) expect(value).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: await expected() });
+    }
+    expect((await send(web, `/pe/resource-subscriptions?connection=${firstId}`, { add: [], remove: [readingKey(inventoryReading)] })).status).toBe(200);
+    expect(listeners.size).toBe(1);
+    title = "survivor"; for (const notify of listeners) notify({ kind: "state-sync", sessionId: ref.session });
+    expect(await second.next()).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: await expected() });
+    expect(await workspace!.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm: 400 } } }], 0)).toMatchObject({ ok: true });
+    expect(await first.next()).toMatchObject({ kind: "snapshot", key: readingKey(work), value: { revision: 1 } });
+    await first.close(); first = undefined; await second.close(); second = undefined;
+    expect(listeners.size).toBe(0);
+    if (mode === "on") {
+      expect(writer.capture.truncated()).toBeNull();
+      const records = await Promise.all(writer.readSets.ids().map((id) => run(writer.readSets.get(id))));
+      const frames = records.filter((record) => record.recipe.key === "resource.frame" && (record.recipe.input as {kind?:string}).kind === "inventory");
+      expect(frames).toHaveLength(13);
+      expect(frames.every((frame) => frame.state === "complete" && frame.inputs.length === 1)).toBe(true);
+      expect(new Set(frames.map((frame) => frame.inputs[0]!.takingId)).size).toBe(13);
+      const subscriptions = frames.filter((frame) => !frame.dependencies.subscription);
+      expect(subscriptions).toHaveLength(2);
+      expect(frames.filter((frame) => frame.dependencies.subscription)).toHaveLength(11);
+      expect(frames.every((frame) => !frame.dependencies.subscription || subscriptions.some((initial) => initial.id === frame.dependencies.subscription))).toBe(true);
+      const original = await Promise.all(subscriptions.map((frame) => run(writer.observation(writer.taking(frame.inputs[0]!.takingId)!))));
+      expect(original[0]).toEqual(original[1]);
+    } else if (mode !== "off") expect(writer.capture.truncated()?.reason).toBe(mode === "full" ? "full" : "io");
+    await web.dispose(); liveFactories.recorded = true;
+    const custody = vi.spyOn(machine, "processCustody").mockImplementation(() => { poison++; throw Error("live custody on replay"); });
+    const corpora: (readonly [RecordingReader, string | undefined])[] = [[old, "recording.miss"]];
+    if (mode !== "full") corpora.push([unique, mode === "off" ? "recording.miss" : undefined]);
+    if (mode === "on") corpora.push([await run(openRecordingReader(dir, identity, bounds)), "recording.ambiguous"]);
+    for (const [saved, problem] of corpora) {
+      const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: saved, at: null }))));
+      replay = HttpRouter.toWebHandler(fansInputRoutes(context, { get live(): never { poison++; throw Error("live factory"); } }), { disableLogger: true });
+      const frame = await firstFrame(await send(replay, url(crypto.randomUUID(), [inventoryReading])));
+      if (problem) { expect(frame).toMatchObject({ kind: "failure", failure: { code: problem } }); expect(frame).not.toHaveProperty("value.sessions"); }
+      else expect(frame).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: initialValue });
+      await replay.dispose(); replay = undefined;
+    }
+    expect(poison).toBe(0);
+    expect(liveFactories).toMatchObject({ sdk: 0, bridge: 0, work: 0 });
+    custody.mockRestore();
+    await writeFile(join(import.meta.dirname, `../../../../.artifacts/runs/kernel-crusade-20261104/step-7/inventory-${mode}-receipt.json`),
+      JSON.stringify({ mode, producer: "listBridgeSessions", schema: "bridgeSessionsListSchema", initial: initialValue,
+        coalescedBursts: 5, notificationsPerBurst: 3, consumers: 2, capturedInventoryFrames: mode === "on" ? 13 : null,
+        limits: { childrenPerRoot: 3, openRoots: 4 }, truncation: writer.capture.truncated(), activeTaps: listeners.size,
+        poison, liveFactories: { sdk: liveFactories.sdk, bridge: liveFactories.bridge, work: liveFactories.work } }, null, 2));
+  } finally { await first?.close(); await second?.close(); await replay?.dispose(); await web.dispose(); vi.restoreAllMocks(); liveFactories.recorded = false; await rm(dir, { recursive: true, force: true }); }
+}, 120000);

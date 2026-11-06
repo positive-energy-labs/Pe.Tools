@@ -10,7 +10,7 @@ import { DuctsReadings, ductsReadings } from "./ducts-readings.ts";
 import { createPeRoutes, peCoreRoutes, type PeInvocationFactory } from "./pe-routes.ts";
 import { runPods } from "./family-actions.ts";
 import { bindWork, readingKey, type DuctsReadingEnvelope } from "@pe/agent-contracts";
-import { observeResources, resourceSnapshot, WorkCarriage, type ResourceObserver, type WorkReadContext } from "@pe/runtime";
+import { observeResources, resourceSnapshot, WorkCarriage, OwnerReads, type ResourceObserver, type WorkReadContext } from "@pe/runtime";
 import { markReadings } from "./resource-adapters.ts";
 import { retainedDuctsRead } from "./call-route.ts";
 import { HttpServerResponse } from "effect/http";
@@ -352,7 +352,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
     };
     const observeFrame = (reading: Parameters<ResourceObserver>[0], publish: Parameters<ResourceObserver>[1],
       after: Parameters<ResourceObserver>[2], recordedFrame?: InputConsumption) => {
-      if (!recorded && !["work", "work-acks", "ducts-snapshot", "ducts-tables"].includes(reading.kind)) return fallback(reading, publish, after);
+      if (!recorded && !["work", "work-acks", "ducts-snapshot", "ducts-tables", "inventory"].includes(reading.kind)) return fallback(reading, publish, after);
       class FrameCarriage extends WorkCarriage {
         constructor(readonly subscription?: ReadSetId, readonly envelope?: DuctsReadingEnvelope) { super(); }
       }
@@ -382,6 +382,33 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
       const retainedResource: ResourceObserver = (reading, publish) => {
       let closed = false, release = () => {};
       const key = readingKey(reading);
+      if (reading.kind === "inventory") {
+        let subscription: ReadSetId | undefined;
+        const read = async () => {
+          const current = subscription ? await invoke(readSets.open(frameRecipe, null)) : frame();
+          activeFrames.set(current, frameOwner);
+          try {
+            if (subscription) await scoped(current)(current.linkReadSet("subscription", subscription));
+            const result = await scoped(current)(Effect.provideService(Effect.result(inventory.list()), RequestIdentity, identity));
+            if (!released) { await complete(current); subscription ??= current.id; }
+            return result;
+          } finally { await finishFrame(current); }
+        };
+        const fail = (error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!released) publish({ kind: "failure", key, error: message,
+            failure: { kind: "failed", code: isDoorFailure(error) ? error.problem : "ReadingFailed", message } });
+        };
+        const accept = (result: import("@pe/runtime").OwnerValue<Awaited<ReturnType<typeof read>>>) => {
+          if (released) return;
+          if ("error" in result) { fail(Error(result.error)); return; }
+          if (Result.isFailure(result.value)) fail(result.value.failure);
+          else publish(resourceSnapshot(key, { value: result.value.success }));
+        };
+        if (recorded) { void read().then((value) => accept({ value })).catch(fail); return () => {}; }
+        // ADR0029 shared native dispatch does not share metadata consumers: each keeps its own context.
+        return new OwnerReads().observe(key, read, inventory.subscribe, accept);
+      }
       if (reading.kind !== "ducts-snapshot" && reading.kind !== "ducts-tables") {
         publish({ kind: "failure", key, error: "Recording does not cover this reading owner",
           failure: { kind: "failed", code: "recording.coverage", message: "Recording does not cover this reading owner" } });

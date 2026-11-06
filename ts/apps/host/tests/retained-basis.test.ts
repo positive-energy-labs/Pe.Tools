@@ -37,6 +37,7 @@ const producer = (counts: { reads: number }) => Layer.succeed(HostNativeRead, {
     actualTarget, freshness: { freshnessGeneration: "g1" }, cost: {}, outcome: "committed" as const }))),
 });
 const inventory = Layer.succeed(HostSessionInventory, {
+  list: () => Effect.die("inventory not requested"), subscribe: () => () => {},
   attachment: () => Effect.succeed({ sessionId: ref.session }), session: () => Effect.succeed({ sessionId: ref.session }),
   document: () => Effect.succeed(row),
 });
