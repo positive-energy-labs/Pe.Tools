@@ -238,10 +238,44 @@ const compositionRoots = new Set([
   `${WEB}shell/mount-work.tsx`,
   `${WEB}shell/fixture-lane.ts`,
   `${WEB}chat/owner.tsx`,
+  `${WEB}shell/admitted-scope.ts`,
+  `${WEB}shell/admitted-body.ts`,
+  `${WEB}shell/admitted-readings.ts`,
 ]);
 // Admitted Place composition may bind app capabilities and fixture inputs. Its implementation
 // is private like the shell; direct private-owner imports and re-exports still cross the fence.
-const admittedPlaceRoots = new Set([`${WEB}chat/owner.tsx`, `${WEB}route/builtin-routes.tsx`]);
+const admittedPlaceRoots = new Set([`${WEB}chat/owner.tsx`, `${WEB}route/builtin-routes.tsx`, `${WEB}pods/route.tsx`, `${WEB}router.tsx`]);
+/** A declared pane may display its public provenance; this grants no legacy-owner access. */
+function paneFixture(source: ts.SourceFile, node: ts.Node): boolean {
+  if (!ts.isPropertyAccessExpression(node) || !ts.isIdentifier(node.expression)) return false;
+  const imports = new Set<string>();
+  const aliases = new Map<string, ts.TypeNode>();
+  for (const statement of source.statements) {
+    if (ts.isTypeAliasDeclaration(statement)) aliases.set(statement.name.text, statement.type);
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const module = statement.moduleSpecifier.text;
+    if (module !== "@pe/agent-contracts" && !/\/route-kernel-bodies(?:\.ts)?$/.test(module)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings && ts.isNamedImports(bindings))
+      for (const name of bindings.elements)
+        if ((name.propertyName ?? name.name).text === "PaneContext") imports.add(name.name.text);
+  }
+  const pane = (type: ts.TypeNode | undefined, seen = new Set<string>()): boolean => {
+    if (!type || !ts.isTypeReferenceNode(type) || !ts.isIdentifier(type.typeName)) return false;
+    const name = type.typeName.text;
+    if (imports.has(name)) return true;
+    if (name === "Pick" && type.typeArguments?.[1]?.getText(source) === '"fixture"') return pane(type.typeArguments[0], seen);
+    if (seen.has(name)) return false;
+    seen.add(name);
+    return pane(aliases.get(name), seen);
+  };
+  for (let parent = node.parent; parent; parent = parent.parent)
+    if (ts.isFunctionLike(parent)) {
+      const parameter = parent.parameters.find((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === node.expression.getText(source));
+      if (parameter) return pane(parameter.type);
+    }
+  return false;
+}
 /** Temporary legacy inventory. Source exports follow the same graph.ts convention as
  * codegen:routes; executable declarations, mount calls and registrations share one ratchet. */
 export function legacyInventory(input?: Record<string, string>) {
@@ -419,6 +453,7 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
       if (
         file.startsWith(WEB) &&
         !compositionRoots.has(file) &&
+        !paneFixture(source, node) &&
         ((ts.isPropertyAccessExpression(node) && node.name.text === "fixture") ||
           (ts.isElementAccessExpression(node) &&
             node.argumentExpression &&
