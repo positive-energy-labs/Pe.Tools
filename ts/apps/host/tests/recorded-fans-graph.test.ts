@@ -109,7 +109,7 @@ async function firstFrame(response: Response) {
   try { return await frames.next(); } finally { await frames.close(); }
 }
 
-test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "tamper", ...(process.env.PE_FANS_COLD_NETWORK ? ["cold-off", "cold-on"] as const : [])] as const)("real Fans graph %s", async (mode) => {
+test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(process.env.PE_FANS_COLD_NETWORK ? ["cold-off", "cold-on"] as const : [])] as const)("real Fans graph %s", async (mode) => {
   const isCold = mode.startsWith("cold-");
   const driverSource = process.env.PE_FANS_COLD_NETWORK;
   if (isCold && (!driverSource || !existsSync(driverSource))) throw Error("Cold shell proof requires the captured Driver network asset");
@@ -125,6 +125,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
   let workspace: RouteWorkspace, holdHuman = false, holdMark = false;
   const markEntered = Promise.withResolvers<void>(), releaseMark = Promise.withResolvers<void>();
   const entered = Promise.withResolvers<void>(), releaseHuman = Promise.withResolvers<void>();
+  const nativeEntered = Promise.withResolvers<void>(), releaseNative = Promise.withResolvers<void>();
   const raw = JSON.parse(readFileSync(source, "utf8").replace(/^\uFEFF/, ""));
   const snapshot = Schema.decodeUnknownSync(Schema.Json)(raw.result ?? raw);
   const snapshotContract = isCold ? await run(readSchemas("ducts.snapshot.walk")) : undefined;
@@ -136,7 +137,8 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     resolve: (input) => admitNativeCaller(input.key).pipe(Effect.as({ operationKey: input.key,
       ...actualTarget, ...(input.key === "ducts.tables" ? { openDocumentLifetime: { kind: "session-only" as const } } : {}),
       normalizedInput: canonicalJson(JSON.parse(JSON.stringify(input.input))), freshnessGeneration: "captured:g1", representation: "overview" as const })),
-    read: (input) => admitNativeCaller(input.key).pipe(Effect.map(() => ({
+    read: (input) => admitNativeCaller(input.key).pipe(Effect.tap(() => mode === "truncated" && input.key === "ducts.snapshot.roster"
+      ? Effect.promise(() => { nativeEntered.resolve(); return releaseNative.promise; }) : Effect.void), Effect.map(() => ({
       value: input.key === "ducts.tables" ? { folder: "captured-native", tables: {}, missing: (input.input as {ids:string[]}).ids, unsupported: {} } : snapshot,
       nativeRequestId: `native-${++nativeCalls}`, actualTarget: input.key === "ducts.tables" ?
         { ...actualTarget, openDocumentLifetime: { kind: "session-only" as const } } : actualTarget,
@@ -285,6 +287,22 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     } finally { await frames.close(); }
   };
   try {
+    if (mode === "truncated") {
+      const tables: ReadingRequest = { kind: "ducts-tables", session: ref.session, ids: [] };
+      const roster: ReadingRequest = { kind: "ducts-snapshot", target: ref, selector: { kind: "roster" } };
+      const connection = crypto.randomUUID();
+      const frames = resourceFrames(await send(live, `/pe/resources?connection=${connection}&keys=${encodeURIComponent(JSON.stringify([tables, roster]))}`));
+      try {
+        await nativeEntered.promise;
+        expect(await frames.next()).toMatchObject({ kind: "snapshot", key: readingKey(tables), value: { state: "ready" } });
+        await run(writer.capture.stop(writer.capture.begin()!, "full"));
+        expect((await send(live, `/pe/resource-subscriptions?connection=${connection}`, { add: [], remove: [readingKey(tables)] })).status).toBe(200);
+        releaseNative.resolve();
+        expect(await frames.next()).toMatchObject({ kind: "snapshot", key: readingKey(roster), value: { state: "ready" } });
+        expect(writer.capture.truncated()).toMatchObject({ reason: "full" });
+      } finally { releaseNative.resolve(); await frames.close(); }
+      return;
+    }
     if (isCold) {
       const fans = builtinEnrollments.find((entry) => entry.routeKey === "fans")!;
       const fingerprint = workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`);
@@ -547,7 +565,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     expect(poisoned).toBe(0); expect(nativeCalls).toBe(calls);
     expect(liveFactories).toMatchObject({ sdk: 0, bridge: 0, work: 0 });
     liveFiles.mockRestore();
-  } finally { releaseMark.resolve(); releaseHuman.resolve(); vi.restoreAllMocks(); await historical?.dispose(); await live.dispose(); await rm(dir, { recursive: true, force: true }); }
+  } finally { releaseNative.resolve(); releaseMark.resolve(); releaseHuman.resolve(); vi.restoreAllMocks(); await historical?.dispose(); await live.dispose(); await rm(dir, { recursive: true, force: true }); }
 // The production listener, full native schema decoding and each independent cold owner run here.
 // The 180 s boundary completed live acquisition but expired during progressing cold consumers.
 }, 300000);

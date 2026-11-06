@@ -323,7 +323,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
     const scoped = (current: InputConsumption): WorkInputRunner => (effect) =>
       runPods({}, Effect.provide(effect, Context.add(admitted, CurrentInputConsumption, current)));
     const complete = (current: InputConsumption) => scoped(current)(sealed(current));
-    const activeFrames = new Set<InputConsumption>();
+    const activeFrames = new Map<InputConsumption, symbol>();
     let closingResources = false;
     const closeResources = () => { if (closingResources && !activeFrames.size) void invoke(consumption.close); };
     const finishFrame = async (current: InputConsumption) => {
@@ -370,11 +370,12 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
       }
       const frameRuns = new WeakMap<WorkCarriage, WorkInputRunner>();
       const readyFrames = new Set<InputConsumption>();
+      const frameOwner = Symbol();
       let released = false;
       const frameRecipe: ConsumerRecipe = { key: "resource.frame", input: json(reading), scope: recipe.scope };
       const frame = (recipe = frameRecipe) => {
         const current = recorded ? consumption : child(consumption, recipe);
-        activeFrames.add(current);
+        activeFrames.set(current, frameOwner);
         return current;
       };
       const work: WorkReadContext = { begin: (read) => {
@@ -448,7 +449,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
           const current = independent ? yield* readSets.open(carriage instanceof FrameCarriage && carriage.envelope
             ? { ...frameRecipe, key: "resource.notification", input: json({ reading, envelope: carriage.envelope }) }
             : previous.recipe, null) : previous;
-          if (independent) activeFrames.add(current);
+          if (independent) activeFrames.set(current, frameOwner);
           readyFrames.delete(current);
           if (!update && carriage) frameRuns.set(carriage, scoped(current));
           return yield* Effect.tryPromise({ try: async () => {
@@ -468,7 +469,8 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
         released = true; release();
         for (const current of readyFrames) void finishFrame(current);
         readyFrames.clear();
-        if (writer?.capture.truncated()) for (const current of activeFrames) void finishFrame(current);
+        if (writer?.capture.truncated()) for (const [current, owner] of activeFrames)
+          if (owner === frameOwner) void finishFrame(current);
       };
     };
     const source = sources(consumption);

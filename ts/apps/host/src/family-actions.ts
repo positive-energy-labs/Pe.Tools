@@ -2,7 +2,7 @@ import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { createHash } from "node:crypto";
 import { join, resolve, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
-import { NodeServices } from "@effect/platform-node";
+import { NodeFileSystem } from "@effect/platform-node";
 import {
   commands,
   familyActions,
@@ -201,7 +201,7 @@ export const runPods = <A, E>(
   deps.runPods
     ? deps.runPods(effect)
     : // effect-edge: island, phase 5
-      Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+      Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)));
 
 /** Pod context whose composition runs in the exact admitted session and document lifetime. */
 export const podContext = (
