@@ -2,6 +2,7 @@ import type { DuctsDesign, DuctsSheetEdits, Resolved } from "@pe/agent-contracts
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button } from "@pe/kit/lang/button";
 import { SubjectText } from "@pe/kit/lang/subject-text";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Redo2, Undo2 } from "lucide-react";
 import { useState, type JSX, type ReactNode } from "react";
 import { airflowOptions, type AirflowOption } from "../airflow";
@@ -285,9 +286,9 @@ function FittingGroupRows({
       data-fitting-group={group.key}
       data-fitting-source={group.source}
     >
-      <span className="min-w-0 truncate" title={group.title}>
-        {group.title}
-      </span>
+      <TooltipHint content={group.title}>
+        <span className="min-w-0 truncate">{group.title}</span>
+      </TooltipHint>
       <ChoiceCell
         label={`${group.title} table`}
         options={group.choices.map((choice) => ({
@@ -315,13 +316,12 @@ function FittingGroupRows({
         label={group.title}
         was={`${group.title} ${group.table ?? "unpriced"} (${group.source})`}
       />
-      <span
-        className="col-span-3 min-w-0 truncate t-small text-ink-2"
-        title={`${group.tableMeaning ?? ""} / ${group.reach}`}
-      >
-        {group.source}
-        {FROM_DUCTS} / {group.tableMeaning ?? group.reach}
-      </span>
+      <TooltipHint content={`${group.tableMeaning ?? ""} / ${group.reach}`}>
+        <span className="col-span-3 min-w-0 truncate t-small text-ink-2">
+          {group.source}
+          {FROM_DUCTS} / {group.tableMeaning ?? group.reach}
+        </span>
+      </TooltipHint>
       <span className="col-span-3 flex min-w-0 items-center gap-2 t-small">
         <Button
           label={`${open ? "Hide" : "Show"} the ${group.members.length} fittings`}
@@ -339,9 +339,9 @@ function FittingGroupRows({
               <SubjectText text={m.subject} revit={m.ids} owner={`fitting:${m.key}`} />
             </span>
             <span className="face-mono text-right">{inWg(m.lossInWg)}</span>
-            <span className="t-small min-w-0 truncate text-ink-2" title={m.note ?? undefined}>
-              {m.note ?? ""}
-            </span>
+            <TooltipHint content={m.note}>
+              <span className="t-small min-w-0 truncate text-ink-2">{m.note ?? ""}</span>
+            </TooltipHint>
           </div>
         ))}
     </div>
