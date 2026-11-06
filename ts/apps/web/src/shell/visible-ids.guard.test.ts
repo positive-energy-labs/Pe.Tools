@@ -2,7 +2,6 @@ import { sessionsGraph } from "../sessions/graph";
 import { indexGraph } from "../index/graph";
 import type { RouteGraph } from "@pe/agent-contracts";
 import { openGraph } from "../open/graph";
-import { podsGraph } from "../pods/graph";
 import { roomsGraph } from "../rooms/graph";
 import { familyGraph } from "../family/graph";
 import { takeoffGraph } from "../takeoff/graph";
@@ -40,7 +39,6 @@ const routes = [
   opsGraph,
   bindGraph,
   openGraph,
-  podsGraph,
   roomsGraph,
   familyGraph,
   takeoffGraph,

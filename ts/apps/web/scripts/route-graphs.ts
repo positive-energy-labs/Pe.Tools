@@ -18,10 +18,14 @@ import {
 } from "../route-source-hash.ts";
 import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { familyFixturesDir } from "../checkout-paths.ts";
 const jiti = createJiti(import.meta.url, {
   fsCache: false,
   jsx: { runtime: "automatic" },
   alias: {
+    "#/family/authored-families": fileURLToPath(
+      new URL("./route-projection-fixtures.ts", import.meta.url),
+    ),
     "./generated/route-directory.ts": fileURLToPath(
       new URL("./route-projection-runtime.ts", import.meta.url),
     ),
@@ -83,7 +87,13 @@ for (const key of admittedBuiltinKeys) {
       client,
       entry,
     })),
-    config: { resolve: { tsconfigPaths: true, dedupe: ["react", "react-dom"] } },
+    config: {
+      resolve: {
+        tsconfigPaths: true,
+        dedupe: ["react", "react-dom"],
+        alias: { "@family-fixtures": familyFixturesDir },
+      },
+    },
   });
 }
 const closures = await buildBuiltinClosures(builtinOptions);

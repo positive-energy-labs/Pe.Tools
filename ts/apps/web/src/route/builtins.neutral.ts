@@ -8,6 +8,8 @@ import type { HostRouteModule } from "../../../../packages/agent-contracts/src/h
 import { ductsHostModule } from "../ducts/neutral.ts";
 import { fansHostModule } from "../fans/neutral.ts";
 import { familiesHostModule } from "../families/neutral.ts";
+import { podsHostModule } from "../pods/neutral.ts";
+import podsGenerated from "../pods/source-closure.generated.json" with { type: "json" };
 import { schedulesHostModule } from "../schedules/neutral.ts";
 import capturesGenerated from "../captures/source-closure.generated.json" with { type: "json" };
 import schedulesGenerated from "../schedules/source-closure.generated.json" with { type: "json" };
@@ -37,9 +39,10 @@ interface Builtin {
   host: HostRouteModule;
 }
 export const builtins: Record<
-  "captures" | "schedules" | "families" | "ducts" | "fans" | "chat",
+  "captures" | "schedules" | "families" | "ducts" | "fans" | "chat" | "pods",
   Builtin
 > = {
+  pods: { closure: closureSchema.parse(podsGenerated), host: podsHostModule },
   captures: { closure: captures, host: { data: captures.envelope.data, schemas: {}, bodies: {} } },
   schedules: { closure: closureSchema.parse(schedulesGenerated), host: schedulesHostModule },
   families: { closure: closureSchema.parse(familiesGenerated), host: familiesHostModule },

@@ -1,22 +1,25 @@
-import { memberWork, parseContributionKey, type SettingsRouteDocument } from "@pe/agent-contracts";
-import type { BindingScope } from "#/shell/mount-owner";
-import type { PodsPage } from "./page";
+import { memberWork, type SettingsRouteDocument, type WorkKey } from "@pe/agent-contracts";
+import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
+import type { PodsPage } from "./page.ts";
 import {
   draftOf,
   readingValue,
   sameMember,
   selectedMember,
-  siblingPath,
-  workSubject,
   type MemberRead,
   type CompositionRead,
-} from "./model";
+} from "./model.ts";
 
-export type PodsScope = BindingScope<PodsPage, SettingsRouteDocument>;
+export interface PodsScope {
+  page: Readonly<Pick<PodsPage, "pod" | "path"> & Partial<Pick<PodsPage, "pendingDraft">>>;
+  work: SettingsRouteDocument | null;
+  workKey: WorkKey | null;
+  readings: Readonly<Record<string, ReadingSnapshot<unknown>>>;
+}
 export function memberWorkRefusal(scope: PodsScope) {
   const ref = selectedMember(scope.page);
   if (!ref || !ref.path.endsWith(".json")) return "Pick a JSON member first.";
-  return !scope.work || scope.work.handle.key.work !== memberWork(ref)
+  return !scope.work || scope.workKey?.work !== memberWork(ref)
     ? "Select this member's Work first."
     : null;
 }
@@ -24,7 +27,7 @@ export function editRefusal(scope: PodsScope) {
   const blocked = memberWorkRefusal(scope);
   if (blocked) return blocked;
   const read = readingValue<MemberRead>(scope.readings.member);
-  const basis = scope.work?.doc.basis;
+  const basis = scope.work?.basis;
   return !basis || !sameMember(basis.member, selectedMember(scope.page))
     ? "Open the saved member's bytes first."
     : !scope.readings.member?.current || !sameMember(read?.member, basis.member)
@@ -39,14 +42,13 @@ export function saveRefusal(scope: PodsScope) {
   if (scope.page.pendingDraft) return "The draft is still being edited on the member.";
   try {
     const draft = draftOf(
-      { page: scope.page, work: scope.work!.doc },
+      { page: scope.page, work: scope.work },
       readingValue<MemberRead>(scope.readings.member),
     );
     const value: unknown = JSON.parse(draft);
     if (!value || typeof value !== "object" || Array.isArray(value))
       return "A spec is a JSON object.";
-    if (!Object.values(scope.work!.doc.fields).some((field) => field.edit))
-      return "Nothing to save.";
+    if (!Object.values(scope.work!.fields).some((field) => field.edit)) return "Nothing to save.";
     const composed = readingValue<CompositionRead>(scope.readings.composition);
     if (
       !scope.readings.composition?.current ||
@@ -62,70 +64,16 @@ export function saveRefusal(scope: PodsScope) {
     return `The draft is not valid JSON: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
-export function podsBinding(id: string, row: unknown, scope: PodsScope) {
-  const args = (row ?? {}) as Record<string, unknown>;
-  const ref = selectedMember(scope.page);
-  if (id === "select") return { subject: null, args: ref && !row ? ref : args };
-  if (id === "open" || id === "adopt") {
-    const read = readingValue<MemberRead>(scope.readings.member);
-    return {
-      subject: null,
-      args: {
-        member: ref,
-        sha256: read?.sha256,
-        refusal:
-          memberWorkRefusal(scope) ??
-          (!scope.readings.member?.current || !sameMember(read?.member, ref)
-            ? "Wait for the current saved member bytes."
-            : id === "open" && scope.work?.doc.basis
-              ? "This member already has a Work basis."
-              : id === "adopt" &&
-                  (!scope.work?.doc.basis || scope.work.doc.basis.sha256 === read?.sha256)
-                ? "These are already the adopted bytes."
-                : null),
-      },
-    };
-  }
-  if (id === "edit") return { subject: null, args: { ...args, refusal: editRefusal(scope) } };
-  if (id === "save" || id === "save-new")
-    return {
-      subject: null,
-      args: {
-        ...(id === "save-new" &&
-          ref && { destination: { pod: ref.pod, path: siblingPath(ref.path) } }),
-        refusal: saveRefusal(scope),
-      },
-    };
-
-  return { subject: null, args };
-}
-
-export function podsCell(row: unknown, scope: PodsScope) {
-  const key = (row as { key?: string } | undefined)?.key;
-  return key !== undefined && scope.work && !editRefusal(scope)
-    ? {
-        type: "cell:fields",
-        id: key,
-        work: scope.work.handle.key,
-        path: ["fields", key],
-      }
-    : null;
-}
-
-/** One coupled Page move selects the member and its kernel-owned Work. */
-export function podsTransition(current: Readonly<PodsPage>, patch: Readonly<Partial<PodsPage>>) {
-  const subject = patch.member ? parseContributionKey(patch.member) : null;
-  const selection =
-    subject?.kind === "member" ? { pod: subject.packageId, path: subject.path } : {};
-  const next = { ...patch, ...selection };
-  const changed =
-    (next.pod !== undefined && next.pod !== current.pod) ||
-    (next.path !== undefined && next.path !== current.path);
-  return {
-    patch: {
-      ...next,
-      member: workSubject({ ...current, ...next }),
-      ...(changed && { pendingDraft: false }),
-    },
-  };
+export function openRefusal(scope: PodsScope, replaceEdits: boolean) {
+  const read = readingValue<MemberRead>(scope.readings.member);
+  return (
+    memberWorkRefusal(scope) ??
+    (!scope.readings.member?.current || !sameMember(read?.member, selectedMember(scope.page))
+      ? "Wait for the current saved member bytes."
+      : !replaceEdits && scope.work?.basis
+        ? "This member already has a Work basis."
+        : replaceEdits && (!scope.work?.basis || scope.work?.basis.sha256 === read?.sha256)
+          ? "These are already the adopted bytes."
+          : null)
+  );
 }

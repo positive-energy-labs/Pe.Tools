@@ -313,6 +313,8 @@ export type PaneContext<
     : never;
   readonly readCosts?: Readonly<Record<string, import("./native-read-door.ts").ReadCost>>;
   readonly visible: boolean;
+  /** Presentational Place provenance only; never Target, Work or dispatch authority. */
+  readonly fixture: string | null;
   readonly verbs: {
     readonly [V in Extract<Allowed<G["panes"][P]["verbs"]>, keyof G["verbs"]>]: (
       input: VerbInput<G, S, V>,

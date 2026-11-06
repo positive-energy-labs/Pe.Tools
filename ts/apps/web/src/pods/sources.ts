@@ -1,14 +1,10 @@
-import type { SettingsRouteDocument } from "@pe/agent-contracts";
-import { compositionInput, memberReadInput, runsReadInput } from "./inputs";
+import { compositionReadInput, memberReadInput, runsReadInput } from "./inputs.ts";
 
 import { callOp } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
-import type { ReadingContext, ReadingSource, ReadingScope } from "#/shell/readings";
-import type { PodsPage } from "./page";
-import { readingValue, type CompositionRead, type MemberRead } from "./model";
+import type { ReadingSource } from "#/shell/readings";
+import { type CompositionRead, type MemberRead } from "./model.ts";
 
-const page = (ctx: ReadingContext) => ctx.page as PodsPage;
-const work = (ctx: ReadingContext) => ctx.work as SettingsRouteDocument | null;
 export function podsSources(): Readonly<Record<string, ReadingSource>> {
   return {
     "pods.status": {
@@ -40,7 +36,6 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
       kind: "use",
       effects: () => [],
       dirties: ["pods"],
-      key: (scope) => (scope.work as SettingsRouteDocument | null)?.basis?.sha256,
       async open(ctx, deliver) {
         const ref = memberReadInput.parse(ctx.args);
         if (!ref || !ref.path.endsWith(".json"))
@@ -61,10 +56,8 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
     "pods.composition": {
       kind: "use",
       dirties: ["pods"],
-      key: (scope) => (scope as ReadingScope<PodsPage, SettingsRouteDocument>).work?.fields,
       async open(ctx, deliver) {
-        const member = readingValue<MemberRead>(ctx.inputs.member);
-        const input = compositionInput({ page: page(ctx), work: work(ctx) }, member);
+        const input = compositionReadInput.parse(ctx.args);
         if (!input) return deliver({ kind: "complete", value: null, revision: 0 });
         const { content: draft, ...ref } = input;
         try {

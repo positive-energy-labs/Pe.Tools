@@ -1,5 +1,5 @@
 import { memberWork, settingsRouteState } from "@pe/agent-contracts";
-import { DEMO_BROWSE, DEMO_MEMBER_SPECS } from "./seeds";
+import { DEMO_BROWSE, DEMO_MEMBER_SPECS } from "./seeds.ts";
 import { DEMO_PODS, DEMO_SPEC_PATH, DEMO_RUN } from "#/route/seeds";
 const values = Object.fromEntries(
   [...DEMO_MEMBER_SPECS].map(([key, spec]) => {

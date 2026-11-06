@@ -1,921 +1,561 @@
 {
-  "address": "pods",
-  "cells": [
-    {
-      "groupOf": {
-        "runtime": true
-      },
-      "noun": "member",
-      "nouns": [
-        "field"
-      ],
-      "segment": "fields"
-    }
+  "version": 1,
+  "capabilities": [
+    "work",
+    "native-write"
   ],
+  "key": "pods",
+  "address": "/pods",
+  "name": "Pods",
   "directory": {
+    "group": "Ask / automate",
+    "summary": "Author a Pod member and inspect its runs.",
+    "label": "Pods",
+    "icon": "Settings2",
+    "exposure": "Preview",
+    "surfaces": {
+      "web": "full",
+      "pwa": "full",
+      "tray": false
+    },
     "aliases": [
       "Pods"
     ],
-    "blurb": "Author a Pod member and inspect its runs.",
-    "category": "Ask / automate",
-    "exposure": "Preview",
-    "icon": "Settings2",
-    "label": "Pods",
-    "listed": true,
-    "path": "/pods",
     "runtimeNeed": "Host catalogue; Revit depends on the pod",
-    "satellites": [],
-    "surfaces": {
-      "pwa": "full",
-      "tray": false,
-      "web": "full"
-    },
-    "title": "Pods"
+    "listed": true,
+    "satellites": []
   },
   "fields": {
-    "member": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "selection",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "type": "string"
-      },
-      "share": true,
-      "url": false
-    },
-    "mode": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "device",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "form",
-        "enum": [
-          "form",
-          "raw"
-        ],
-        "type": "string"
-      },
-      "share": false,
-      "url": false
-    },
-    "path": {
-      "agent": "read",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "subject",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 1024,
-        "type": "string"
-      },
-      "share": true,
-      "url": "push"
-    },
-    "pendingDraft": {
-      "agent": false,
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "transient",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": false,
-        "type": "boolean"
-      },
-      "share": false,
-      "url": false
-    },
-    "pod": {
-      "agent": "read",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "maxLength": 200,
-        "type": "string"
-      },
-      "share": true,
-      "url": "push"
-    },
-    "runs": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
-      "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "member",
-        "enum": [
-          "member",
-          "pod"
-        ],
-        "type": "string"
-      },
-      "share": true,
-      "url": "replace"
-    },
     "threadSearch": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
       "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": {
-          "keywords": "",
-          "pills": [
-            {
-              "field": "scope",
-              "op": "=",
-              "value": "all"
-            }
-          ],
-          "v": 1
-        },
-        "description": "JSON {v:1,keywords:string,pills:[{field,op:'=',value}]}. Literal keywords and equality pills. Fields: target, provider, state, unread, scope. Scope values: attention, all, archived.",
-        "properties": {
-          "keywords": {
-            "maxLength": 4000,
-            "type": "string"
-          },
-          "pills": {
-            "items": {
-              "properties": {
-                "field": {
-                  "type": "string"
-                },
-                "op": {
-                  "type": "string"
-                },
-                "value": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "field",
-                "op",
-                "value"
-              ],
-              "type": "object"
-            },
-            "maxItems": 32,
-            "type": "array"
-          },
-          "v": {
-            "maximum": 9007199254740991,
-            "minimum": -9007199254740991,
-            "type": "integer"
+      "schema": "threadSearch",
+      "codec": "threadSearch",
+      "initial": {
+        "v": 1,
+        "keywords": "",
+        "pills": [
+          {
+            "field": "scope",
+            "op": "=",
+            "value": "all"
           }
-        },
-        "required": [
-          "v",
-          "keywords",
-          "pills"
-        ],
-        "type": "object"
+        ]
       },
+      "url": "replace",
       "share": true,
-      "url": "replace"
+      "agent": "set"
     },
     "threadSort": {
-      "agent": "set",
-      "codec": {
-        "decode": {
-          "runtime": true
-        },
-        "encode": {
-          "runtime": true
-        }
-      },
       "role": "query",
-      "schema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "default": "",
-        "enum": [
-          "",
-          "recent",
-          "title"
-        ],
-        "type": "string"
-      },
+      "schema": "threadSort",
+      "codec": "threadSort",
+      "initial": "",
+      "url": "replace",
       "share": true,
-      "url": "replace"
+      "agent": "set"
+    },
+    "pod": {
+      "role": "query",
+      "schema": "pod",
+      "codec": "pod",
+      "initial": "",
+      "url": "push",
+      "share": true,
+      "agent": "read"
+    },
+    "path": {
+      "role": "query",
+      "schema": "path",
+      "codec": "path",
+      "initial": "",
+      "url": "push",
+      "share": true,
+      "agent": "read"
+    },
+    "member": {
+      "role": "subject",
+      "schema": "member",
+      "codec": "member",
+      "initial": null,
+      "url": false,
+      "share": false,
+      "agent": "read",
+      "cardinality": "one",
+      "identity": "member",
+      "picker": {
+        "reading": "pods",
+        "options": "membersPick"
+      }
+    },
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "member"
+      ]
+    },
+    "runs": {
+      "role": "query",
+      "schema": "runs",
+      "codec": "runs",
+      "initial": "member",
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "mode": {
+      "role": "device",
+      "schema": "mode",
+      "codec": "mode",
+      "initial": "form",
+      "url": false,
+      "share": false,
+      "agent": "none"
+    },
+    "pendingDraft": {
+      "role": "transient",
+      "schema": "pendingDraft",
+      "codec": "pendingDraft",
+      "initial": false,
+      "url": false,
+      "share": false,
+      "agent": "none"
     }
   },
-  "key": "pods",
-  "layout": {
-    "axis": "h",
-    "children": [
-      {
-        "id": "members",
-        "kind": "pane"
-      },
-      {
-        "axis": "h",
-        "children": [
-          {
-            "id": "spec",
-            "kind": "pane"
-          },
-          {
-            "axis": "v",
-            "children": [
-              {
-                "id": "runs",
-                "kind": "pane"
-              },
-              {
-                "id": "history",
-                "kind": "pane"
-              }
-            ],
-            "id": "history",
-            "kind": "split",
-            "size": 180,
-            "sized": "end"
-          }
-        ],
-        "id": "runs",
-        "kind": "split",
-        "minSize": 220,
-        "persist": "pods:runs",
-        "size": 300,
-        "sized": "end"
-      }
-    ],
-    "id": "members",
-    "kind": "split",
-    "minSize": 220,
-    "persist": "pods:members",
-    "size": 300,
-    "sized": "start"
+  "identities": {
+    "member": {
+      "kind": "local",
+      "codec": "local"
+    }
   },
-  "moduleHash": "0af8c753d84cbbccee0aa77707b00217a774e7f069abb6efdc700fd9b1b44eb3",
-  "name": "Pods",
-  "observe": [
-    "open"
-  ],
-  "optionalTarget": "document",
-  "panes": {
-    "history": {
-      "draws": [],
-      "history": {},
-      "label": "History",
-      "purpose": "Inspect this Work's verb timeline",
-      "verbs": []
+  "subject": {
+    "field": "member",
+    "noun": "member",
+    "roster": "pods",
+    "detail": "member",
+    "pane": "members",
+    "show": "memberShow"
+  },
+  "work": {
+    "schema": "work",
+    "route": "pods",
+    "version": 1,
+    "migrations": {},
+    "adopt": "open"
+  },
+  "readings": {
+    "pods": {
+      "kind": "use",
+      "entry": "pods.list",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
     },
+    "member": {
+      "kind": "use",
+      "entry": "pods.member",
+      "args": "memberArgs",
+      "deps": {
+        "page": [
+          "pod",
+          "path"
+        ],
+        "work": [
+          "basis"
+        ],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    },
+    "status": {
+      "kind": "use",
+      "entry": "pods.status",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    },
+    "composition": {
+      "kind": "use",
+      "entry": "pods.composition",
+      "args": "compositionArgs",
+      "deps": {
+        "page": [
+          "pod",
+          "path"
+        ],
+        "work": [
+          "basis",
+          "fields"
+        ],
+        "readings": [
+          "member",
+          "status"
+        ]
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    },
+    "runs": {
+      "kind": "use",
+      "entry": "pods.runs",
+      "args": "runsArgs",
+      "deps": {
+        "page": [
+          "pod",
+          "path",
+          "runs"
+        ],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    }
+  },
+  "verbs": {
+    "select": {
+      "kind": "page",
+      "input": "memberRef",
+      "label": "Select member Work",
+      "review": "none",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "captures": [],
+      "patch": "selectMember",
+      "fields": [
+        "pod",
+        "path"
+      ]
+    },
+    "mode": {
+      "kind": "page",
+      "input": "modeInput",
+      "label": "Editor mode",
+      "review": "none",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "captures": [],
+      "patch": "modePatch",
+      "fields": [
+        "mode"
+      ]
+    },
+    "runs": {
+      "kind": "page",
+      "input": "runsInput",
+      "label": "Change run scope",
+      "review": "none",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      },
+      "captures": [],
+      "patch": "runsPatch",
+      "fields": [
+        "runs"
+      ]
+    },
+    "open": {
+      "kind": "command",
+      "input": "empty",
+      "label": "open",
+      "review": "none",
+      "deps": {
+        "page": [
+          "pod",
+          "path"
+        ],
+        "work": [
+          "basis",
+          "fields"
+        ],
+        "readings": [
+          "member"
+        ]
+      },
+      "captures": [],
+      "ready": "openReady",
+      "entry": "settings.observe",
+      "intent": "openIntent",
+      "lands": "openLands"
+    },
+    "adopt": {
+      "kind": "command",
+      "input": "empty",
+      "label": "adopt disk bytes",
+      "review": "shown",
+      "deps": {
+        "page": [
+          "pod",
+          "path"
+        ],
+        "work": [
+          "basis",
+          "fields"
+        ],
+        "readings": [
+          "member"
+        ]
+      },
+      "captures": [],
+      "ready": "adoptReady",
+      "entry": "settings.observe",
+      "intent": "adoptIntent",
+      "lands": "adoptLands"
+    },
+    "save": {
+      "kind": "command",
+      "input": "empty",
+      "label": "save",
+      "review": "none",
+      "deps": {
+        "page": [
+          "pod",
+          "path",
+          "pendingDraft"
+        ],
+        "work": [
+          "basis",
+          "fields"
+        ],
+        "readings": [
+          "member",
+          "composition"
+        ]
+      },
+      "captures": [],
+      "ready": "saveReady",
+      "entry": "settings.write",
+      "intent": "saveIntent"
+    },
+    "save-new": {
+      "kind": "command",
+      "input": "empty",
+      "label": "save as new",
+      "review": "none",
+      "deps": {
+        "page": [
+          "pod",
+          "path",
+          "pendingDraft"
+        ],
+        "work": [
+          "basis",
+          "fields"
+        ],
+        "readings": [
+          "member",
+          "composition"
+        ]
+      },
+      "captures": [],
+      "ready": "saveNewReady",
+      "entry": "settings.write",
+      "intent": "saveNewIntent",
+      "lands": "saveNewLands"
+    },
+    "edit": {
+      "kind": "work",
+      "input": "edit",
+      "label": "Edit member",
+      "review": "none",
+      "deps": {
+        "page": [
+          "pod",
+          "path",
+          "pendingDraft"
+        ],
+        "work": [
+          "basis",
+          "fields"
+        ],
+        "readings": [
+          "member",
+          "composition"
+        ]
+      },
+      "captures": [],
+      "ready": "editReady",
+      "patches": "editPatches"
+    }
+  },
+  "panes": {
     "members": {
+      "label": "members",
+      "purpose": "Browse installed Pod members",
       "draws": [
         "pods"
       ],
-      "label": "members",
-      "purpose": "Browse installed Pod members",
-      "verbs": []
+      "verbs": [
+        "select"
+      ],
+      "body": "membersBody"
+    },
+    "spec": {
+      "label": "spec",
+      "purpose": "Edit raw JSON or the schema form and review field proposals",
+      "draws": [
+        "pods",
+        "member",
+        "composition"
+      ],
+      "verbs": [
+        "mode",
+        "edit"
+      ],
+      "body": "specBody"
     },
     "runs": {
+      "label": "runs",
+      "purpose": "Inspect the member's receipts or every run in its Pod",
       "draws": [
         "runs",
         "pods"
       ],
-      "label": "runs",
-      "purpose": "Inspect the member's receipts or every run in its Pod",
-      "verbs": []
-    },
-    "spec": {
-      "draws": [
-        "member",
-        "composition"
+      "verbs": [
+        "runs"
       ],
-      "label": "spec",
-      "purpose": "Edit raw JSON or the schema form and review field proposals",
-      "verbs": []
+      "body": "runsBody"
+    },
+    "history": {
+      "label": "History",
+      "purpose": "Inspect this Work's verb timeline",
+      "draws": [],
+      "verbs": [],
+      "history": {}
     }
   },
-  "readings": {
-    "composition": {
-      "deps": [
-        "member",
-        "status"
-      ],
-      "kind": "use",
-      "retire": "target",
-      "source": "pods.composition"
-    },
-    "member": {
-      "args": {
-        "runtime": true
+  "layout": {
+    "kind": "split",
+    "id": "members",
+    "axis": "h",
+    "size": 300,
+    "children": [
+      {
+        "kind": "pane",
+        "id": "members"
       },
-      "kind": "use",
-      "retire": "page",
-      "source": "pods.member"
-    },
-    "pods": {
-      "args": {
-        "runtime": true
-      },
-      "kind": "use",
-      "retire": "page",
-      "source": "pods.list"
-    },
-    "runs": {
-      "args": {
-        "runtime": true
-      },
-      "kind": "use",
-      "retire": "page",
-      "source": "pods.runs"
-    },
-    "status": {
-      "args": {
-        "runtime": true
-      },
-      "kind": "use",
-      "retire": "page",
-      "source": "pods.status"
-    }
+      {
+        "kind": "split",
+        "id": "runs",
+        "axis": "h",
+        "size": 300,
+        "children": [
+          {
+            "kind": "pane",
+            "id": "spec"
+          },
+          {
+            "kind": "split",
+            "id": "history",
+            "axis": "v",
+            "size": 180,
+            "children": [
+              {
+                "kind": "pane",
+                "id": "runs"
+              },
+              {
+                "kind": "pane",
+                "id": "history"
+              }
+            ],
+            "sized": "end"
+          }
+        ],
+        "sized": "end",
+        "minSize": 220,
+        "persist": "pods:runs"
+      }
+    ],
+    "sized": "start",
+    "minSize": 220,
+    "persist": "pods:members"
   },
-  "seeds": {
-    "browse": {
-      "title": "Pods and family members"
-    }
-  },
-  "stageOrder": [
-    "browse"
-  ],
   "stages": {
     "browse": {
+      "word": "Browse",
       "panes": [
         "members",
         "spec",
         "runs",
         "history"
       ],
-      "teach": "Select a JSON member, open its Work, review edits and save; apply belongs to its product route.",
       "verbs": [
         "open",
         "adopt",
         "save",
         "save-new"
-      ],
-      "word": "Browse"
+      ]
     }
   },
-  "subjectField": {
-    "cardinality": "one",
-    "detail": "member",
-    "field": "path",
-    "keyKind": "name",
-    "noun": "member",
-    "pane": "members",
-    "roster": "pods",
-    "show": {
-      "runtime": true
-    }
-  },
-  "transition": {
-    "runtime": true
-  },
-  "verbs": {
-    "adopt": {
-      "does": "settings.observe",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "member": {
-            "anyOf": [
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "path": {
-                    "maxLength": 1024,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "pod": {
-                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "pod",
-                  "path"
-                ],
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "sha256": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "member"
-        ],
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "adopt disk bytes",
-      "review": "shown",
-      "says": "Discard proposals and edits and adopt the current saved bytes"
-    },
-    "edit": {
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "content": {
-            "type": "string"
-          },
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          }
-        },
-        "required": [
-          "content"
-        ],
-        "type": "object"
-      },
-      "kind": "work",
-      "label": "Edit member",
-      "review": "none"
-    },
-    "mode": {
-      "effect": "query",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "mode": {
-            "enum": [
-              "form",
-              "raw"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "mode"
-        ],
-        "type": "object"
-      },
-      "kind": "page",
-      "label": "Editor mode",
-      "review": "none"
-    },
-    "open": {
-      "does": "settings.observe",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "member": {
-            "anyOf": [
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "path": {
-                    "maxLength": 1024,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "pod": {
-                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "pod",
-                  "path"
-                ],
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "sha256": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "member"
-        ],
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "open",
-      "review": "none",
-      "says": "Adopt this member's saved bytes as the Work basis"
-    },
-    "runs": {
-      "effect": "query",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "runs": {
-            "enum": [
-              "member",
-              "pod"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "runs"
-        ],
-        "type": "object"
-      },
-      "kind": "page",
-      "label": "Change run scope",
-      "review": "none"
-    },
-    "save": {
-      "does": "settings.write",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "destination": {
-            "additionalProperties": false,
-            "properties": {
-              "path": {
-                "maxLength": 1024,
-                "minLength": 1,
-                "type": "string"
-              },
-              "pod": {
-                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-                "type": "string"
-              }
-            },
-            "required": [
-              "pod",
-              "path"
-            ],
-            "type": "object"
-          },
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          }
-        },
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "save",
-      "review": "none",
-      "says": "Save reviewed edits only while the member's saved hash still matches"
-    },
-    "save-new": {
-      "does": "settings.write",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "destination": {
-            "additionalProperties": false,
-            "properties": {
-              "path": {
-                "maxLength": 1024,
-                "minLength": 1,
-                "type": "string"
-              },
-              "pod": {
-                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-                "type": "string"
-              }
-            },
-            "required": [
-              "pod",
-              "path"
-            ],
-            "type": "object"
-          },
-          "refusal": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          }
-        },
-        "type": "object"
-      },
-      "kind": "command",
-      "label": "save as new",
-      "review": "none",
-      "says": "Create a sibling member from this reviewed Work; never overwrite a destination"
-    },
-    "select": {
-      "effect": "query",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "path": {
-            "maxLength": 1024,
-            "minLength": 1,
-            "type": "string"
-          },
-          "pod": {
-            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-            "type": "string"
-          }
-        },
-        "required": [
-          "pod",
-          "path"
-        ],
-        "type": "object"
-      },
-      "kind": "page",
-      "label": "Select member Work",
-      "review": "none"
-    },
-    "work.start-fresh": {
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "default": {},
-        "properties": {},
-        "type": "object"
-      },
-      "kind": "recovery",
-      "label": "Start fresh",
-      "review": "shown",
-      "says": "Set the unreadable Work aside and start it empty; its old bytes are kept beside it"
-    }
-  },
-  "work": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "properties": {
-      "basis": {
-        "anyOf": [
-          {
-            "properties": {
-              "member": {
-                "additionalProperties": false,
-                "properties": {
-                  "path": {
-                    "maxLength": 1024,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "pod": {
-                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "pod",
-                  "path"
-                ],
-                "type": "object"
-              },
-              "rawContent": {
-                "type": "string"
-              },
-              "sha256": {
-                "minLength": 1,
-                "type": "string"
-              }
-            },
-            "required": [
-              "member",
-              "rawContent",
-              "sha256"
-            ],
-            "type": "object"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "default": null
-      },
-      "fields": {
-        "additionalProperties": {
-          "additionalProperties": false,
-          "properties": {
-            "edit": {
-              "anyOf": [
-                {
-                  "additionalProperties": false,
-                  "properties": {
-                    "at": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "base": {
-                      "anyOf": [
-                        {
-                          "maximum": 9007199254740991,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "by": {
-                      "enum": [
-                        "human",
-                        "pea",
-                        "unknown"
-                      ],
-                      "type": "string"
-                    },
-                    "confidence": {
-                      "anyOf": [
-                        {
-                          "enum": [
-                            "high",
-                            "low"
-                          ],
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "delete": {
-                      "const": true,
-                      "type": "boolean"
-                    },
-                    "note": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "sources": {
-                      "anyOf": [
-                        {
-                          "items": {
-                            "properties": {
-                              "blockId": {
-                                "type": "string"
-                              },
-                              "colIdx": {
-                                "maximum": 9007199254740991,
-                                "minimum": 0,
-                                "type": "integer"
-                              },
-                              "note": {
-                                "anyOf": [
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
-                                ]
-                              },
-                              "rowIdx": {
-                                "maximum": 9007199254740991,
-                                "minimum": 0,
-                                "type": "integer"
-                              }
-                            },
-                            "required": [
-                              "blockId"
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "value": {}
-                  },
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "type": "object"
-        },
-        "default": {},
-        "propertyNames": {
-          "type": "string"
-        },
-        "type": "object"
+  "stageOrder": [
+    "browse"
+  ],
+  "predicates": {},
+  "transition": "memberTransition",
+  "cells": {
+    "fields": {
+      "segment": "fields",
+      "value": "field",
+      "groupOf": "fieldGroup",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
       }
-    },
-    "type": "object"
+    }
   },
   "workFields": {
     "basis": {
-      "internal": true,
-      "label": "read basis"
+      "label": "read basis",
+      "internal": true
     }
   },
-  "workSubject": "member"
+  "seeds": {
+    "browse": {
+      "title": "Pods and family members",
+      "load": "browseSeed"
+    }
+  },
+  "needs": "nothing",
+  "optionalTarget": "document",
+  "workSubject": "member",
+  "resetOnTarget": [],
+  "observe": []
 }

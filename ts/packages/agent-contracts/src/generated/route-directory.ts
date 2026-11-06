@@ -155,6 +155,29 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
+    "key": "pods",
+    "directory": {
+      "label": "Pods",
+      "icon": "Settings2",
+      "exposure": "Preview",
+      "surfaces": {
+        "web": "full",
+        "pwa": "full",
+        "tray": false
+      },
+      "aliases": [
+        "Pods"
+      ],
+      "runtimeNeed": "Host catalogue; Revit depends on the pod",
+      "listed": true,
+      "satellites": [],
+      "path": "/pods",
+      "title": "Pods",
+      "category": "Ask / automate",
+      "blurb": "Author a Pod member and inspect its runs."
+    }
+  },
+  {
     "key": "design-system",
     "directory": {
       "path": "/design-system",
@@ -349,29 +372,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
         "binding"
       ],
       "listed": false,
-      "satellites": [],
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      }
-    }
-  },
-  {
-    "key": "pods",
-    "directory": {
-      "path": "/pods",
-      "title": "Pods",
-      "label": "Pods",
-      "exposure": "Preview",
-      "runtimeNeed": "Host catalogue; Revit depends on the pod",
-      "icon": "Settings2",
-      "category": "Ask / automate",
-      "blurb": "Author a Pod member and inspect its runs.",
-      "aliases": [
-        "Pods"
-      ],
-      "listed": true,
       "satellites": [],
       "surfaces": {
         "web": "full",

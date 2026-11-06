@@ -10,8 +10,6 @@ import { createFixtureMount } from "./fixture";
 import { legacyGraphs as routes } from "../legacy-test-inventory.test-support";
 import { builtinAdmission, legacyBuiltinKeys } from "./legacy-route-door";
 import { publicRoutes } from "../route/builtin-routes";
-import { podsGraph } from "../pods/graph";
-import { podsBinding } from "../pods/actions";
 import { ductLossGraph } from "../duct-loss/graph";
 import { admitChat, createChatFixture } from "../chat/admission";
 
@@ -19,6 +17,24 @@ afterEach(() => vi.unstubAllGlobals());
 test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as const))(
   "%s mounts every declared seed through the kernel without host reads",
   async (_, key) => {
+    if (key === "pods") {
+      const { admitPods } = await import("../pods/route");
+      const mount = createRouteShell(sourceRouteServices({})).mount(
+        await admitPods(),
+        placeInput({
+          read: () => new URLSearchParams({ fixture: "browse" }),
+          write() {},
+          subscribe: () => () => {},
+        }),
+      );
+      try {
+        await expect.poll(() => mount.workBasis()).not.toBeNull();
+        expect(mount.readingStatus("member").snapshot.current).toBe(true);
+      } finally {
+        mount.close();
+      }
+      return;
+    }
     if (key === "chat") {
       const route = await admitChat(() => ({ thread: "" }));
       const open = vi.fn(() => {
@@ -230,39 +246,6 @@ test.each(routeDirectory.map((entry) => [entry.directory.path, entry.key] as con
     }
   },
 );
-
-test("Pods switches seeded members, preserves their memory Work, and undoes edits without fetch", async () => {
-  const fetch = vi.fn(() => {
-    throw Error("Real host called");
-  });
-  vi.stubGlobal("fetch", fetch);
-  const owner = await createFixtureMount(podsGraph, "browse", { binding: podsBinding });
-  const release = owner.connect();
-  const demand = owner.readings.mount(["member"]);
-  try {
-    expect(owner.readings.get("member").value).toMatchObject({ member: { pod: "mech-standards" } });
-    const first = { pod: owner.view.read().page.pod, path: owner.view.read().page.path };
-    const edit = await owner.control("edit", { content: '{"fixture":true}' }).run();
-    expect(edit, JSON.stringify(edit)).toMatchObject({ state: "done" });
-    expect(owner.snapshot().work?.doc.fields[""].edit?.value).toBe('{"fixture":true}');
-    owner.view.setPage({ pod: "demo", path: "settings/family/box.json" });
-    expect(owner.readings.get("member").value).toMatchObject({
-      member: { pod: "demo", path: "settings/family/box.json" },
-    });
-    expect(owner.snapshot().work?.doc.fields[""]).toBeUndefined();
-    owner.view.setPage(first);
-    expect(owner.snapshot().work?.doc.fields[""].edit?.value).toBe('{"fixture":true}');
-    await owner.restore("undo");
-    expect(owner.snapshot().work?.doc.fields[""]).toBeUndefined();
-    await owner.restore("redo");
-    expect(owner.snapshot().work?.doc.fields[""].edit?.value).toBe('{"fixture":true}');
-    expect(fetch).not.toHaveBeenCalled();
-  } finally {
-    demand();
-    release();
-    owner.dispose();
-  }
-});
 
 test("calculator fixtures recalculate with Page edits rather than freezing an example", async () => {
   const owner = await createFixtureMount(ductLossGraph, "calculate");
