@@ -244,14 +244,14 @@ test("historical entry serves real static files through identity and retains API
 
 
 test("recording process selection is strict and cannot enter the source live fallback", async () => {
-  expect(await Effect.runPromise(recordingInputSelection(["--open", "--no-revit"]))).toBeUndefined();
+  expect(await Effect.runPromise(recordingInputSelection(["--open", "--no-revit", "--take-over-host"]))).toBeUndefined();
   const { dir } = await bundle();
   const selected = await Effect.runPromise(recordingInputSelection(["host", "--open", "--recording", dir, "--no-revit"]));
   expect(selected).toEqual({ kind: "recording", directory: dir, at: null });
   expect(await Effect.runPromise(hostInputs(null, selected!).pipe(Effect.flip))).toMatchObject({ problem: "recording.identity" });
   let entered = 0;
   for (const argv of [["--recording"], ["--recording", ""], ["--recording", "  "], ["--recording", "--open"],
-    ["--recording=x"], ["--Recording", dir], ["--recordings", dir], ["--recording", dir, "--recording", dir], ["--recording", "\0"]]) {
+    ["--recording=x"], ["--recording", dir, "--take-over-host"], ["--Recording", dir], ["--recordings", dir], ["--recording", dir, "--recording", dir], ["--recording", "\0"]]) {
     const failed = await Effect.runPromise(recordingInputSelection(argv).pipe(Effect.tap(() => Effect.sync(() => { entered++; })), Effect.flip));
     expect(failed).toMatchObject({ problem: "recording.argument", status: 400 });
   }

@@ -34,6 +34,9 @@ export type HostInputSelection =
 export const recordingInputSelection = (argv: readonly string[]): Effect.Effect<HostInputSelection | undefined, InvalidRead> => {
   const flags = argv.filter((arg) => arg.toLowerCase().startsWith("--recording"));
   if (!flags.length) return Effect.succeed(undefined);
+  // Historical entry cannot inherit the live launcher's incumbent-eviction authority.
+  if (argv.includes("--take-over-host"))
+    return Effect.fail(new InvalidRead({ message: "Recording cannot take over another host", status: 400, problem: "recording.argument" }));
   const directory = argv[argv.indexOf("--recording") + 1];
   if (flags.length !== 1 || flags[0] !== "--recording" || !directory?.trim() || directory.startsWith("-") || directory.includes("\0"))
     return Effect.fail(new InvalidRead({ message: "Use --recording <directory> exactly once", status: 400, problem: "recording.argument" }));
