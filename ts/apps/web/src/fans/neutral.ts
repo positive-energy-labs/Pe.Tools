@@ -48,7 +48,7 @@ const pane = <const K extends string>(body: K, label: string, purpose: string) =
     body,
     label,
     purpose,
-    draws: ["fans", "sheet", "sheetSnapshot", "sheetView", "ductsWork"],
+    draws: ["value", "fans", "sheet", "sheetSnapshot", "sheetView", "ductsWork"],
     verbs: ["browse", "edit", "scope", "sheetEdit", "ductsEdit"],
   }) as const;
 

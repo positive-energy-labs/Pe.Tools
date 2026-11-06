@@ -1,4 +1,4 @@
-import { ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-contracts";
+import { ductsDesign, ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-contracts";
 import { fansSheetData, openFanSheetSchema } from "../../../../packages/agent-contracts/src/fans-read.ts";
 import { sheetState } from "../ducts/sheet/state.ts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
@@ -101,7 +101,7 @@ export async function createWitness(
       const open = openFanSheetSchema.parse({ overview: sheet.overview, inputs: sheet.inputs, elements: null, legs: null, worstLegs: [], worksheet: null });
       const data = fansSheetData.parse({ open, opened: [], rows: sheet.roster.rows, progress: null,
         fans: sheet.roster, sheetSnapshot: capture, sheetView: sheetState(open),
-        ductsWork: ductsDocumentSchema.parse({}), fansWork: fansDocumentSchema.parse({}) });
+        ductsWork: ductsDocumentSchema.parse({}), fansWork: fansDocumentSchema.parse({}), design: ductsDesign(ductsDocumentSchema.parse({}), fansDocumentSchema.parse({})) });
       deliver({ kind: "complete", revision: 1, value: { key: "fixture", generation: 0, version: 1, state: "current",
         value: { data, evaluation: "fixture", inputs: "fixture", origin: { kind: "fixture", name: "cutover" }, trace: [],
           coverage: { requested: [], covered: [], unknown: [], refused: [] }, freshness: "current" } } });

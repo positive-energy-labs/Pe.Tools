@@ -48,6 +48,7 @@ export const fansSheetData = fanSheetSchema.extend({
     inputs: detail[4].shape.inputs.nullable(),
     firm: detail[4].shape.firm.nullable(),
   }),
+  design: z.object({ ...fansDocumentSchema.shape, ...ductsDocumentSchema.shape }),
   fans: ductsRosterResponseSchema,
   ductsWork: ductsDocumentSchema,
   fansWork: fansDocumentSchema,

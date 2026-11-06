@@ -222,6 +222,7 @@ export const fansSheet = read("fans.sheet", {
         rows: data.rows,
         progress: null,
         sheetView: fansSheetData.shape.sheetView.parse(sheetState(data.opened[0] ?? null)),
+        design: fansSheetData.shape.design.parse(design),
         fans: { ...data.fans, rows: data.rows },
         ductsWork: ductsDoc,
         fansWork: fansDoc,

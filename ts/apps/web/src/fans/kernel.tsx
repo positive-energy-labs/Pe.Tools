@@ -1,4 +1,4 @@
-import { ductsDocumentSchema } from "@pe/agent-contracts";
+import { ductsDesign, ductsDocumentSchema } from "@pe/agent-contracts";
 import { fansSheetData, openFanSheetSchema } from "@pe/agent-contracts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { LAYOUT_FIXTURE } from "../ducts/layout.fixture.ts";
@@ -28,7 +28,7 @@ const seed = <const K extends string>(name: K, snapshot: DuctSnapshot) => ({
     const open = openFanSheetSchema.parse({ overview: sheetFixture.overview, inputs: sheetFixture.inputs, elements: sheetFixture.elements,
       legs: sheetFixture.legs, worstLegs: [], worksheet: null });
     const data = fansSheetData.parse({ open, opened: [], rows, progress: null, fans: { ...sheetFixture.roster, rows },
-      sheetSnapshot: snapshot, sheetView: sheetState(open), ductsWork: ductsDocumentSchema.parse({}), fansWork: fansDocumentSchema.parse({}) });
+      sheetSnapshot: snapshot, sheetView: sheetState(open), ductsWork: ductsDocumentSchema.parse({}), fansWork: fansDocumentSchema.parse({}), design: ductsDesign(ductsDocumentSchema.parse({}), fansDocumentSchema.parse({})) });
     return { work: data.fansWork, readings: {
       fans: data.fans, sheet: data, sheetSnapshot: data.sheetSnapshot, meshes: null,
       value: { key: `fixture:${name}`, generation: 0, version: 1, state: "current" as const,
