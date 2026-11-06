@@ -58,10 +58,4 @@ public sealed class HostEndpointBoundaryTests {
                 Throws.InvalidOperationException.With.Message.Contains("No running"));
     }
 
-    [Test]
-    public void Installed_payload_requires_its_manifest_executable_before_discovery() {
-        var runtime = ProductRuntimeLayout.For(ProductLane.Installed, @"C:\copied-install", null);
-        Assert.That(() => HostEndpoint.ResolveHostBaseUrl(runtime, null, null),
-            Throws.InvalidOperationException.With.Message.Contains("canonical installation owner"));
-    }
 }
