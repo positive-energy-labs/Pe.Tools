@@ -58,12 +58,14 @@ export type ReadingPublication<T = unknown> =
       revision: number;
       sourceVersion?: string;
       fresh?: boolean;
+      reason?: string;
     }
   | { kind: "pending" | "stale" }
   | { kind: "failure"; error: unknown }
   | { kind: "log"; value: unknown; id?: string };
 
 export interface ReadingContext extends ReadingScope {
+  readonly publication?: { readonly subscription: string; readonly generation: number };
   readonly attempt: ReadingAttempt;
   /** Sources subscribe on demand; an expensive capture starts only for an explicit invocation. */
   readonly trigger: { kind: "demand" } | { kind: "verb"; invocation: string };

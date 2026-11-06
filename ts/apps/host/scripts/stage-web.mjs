@@ -39,12 +39,12 @@ console.log(`staged page assets -> ${pages}`);
 process.env.PE_LANE ??= "dev";
 const { createJiti } = await import("jiti");
 const { exportPod } = await createJiti(import.meta.url).import("../src/pod-transfer.ts");
-const { CaptureStore } = await createJiti(import.meta.url).import("../src/captures-route.ts");
+const { PictureCaptures } = await createJiti(import.meta.url).import("../src/captures-route.ts");
 const { listPackages } = await createJiti(import.meta.url).import("../src/packages.ts");
 const examples = join(here, "..", "..", "..", "..", "examples", "pods");
 const shipped = join(here, "..", "dist-installed", "pods");
 rmSync(shipped, { recursive: true, force: true });
-const noCaptures = new CaptureStore(join(shipped, ".no-captures"));
+const noCaptures = new PictureCaptures(join(shipped, ".no-captures"), 0, () => 0);
 const listing = await listPackages(examples);
 if (listing.unreadable.length) {
   console.error(`unreadable example pods: ${JSON.stringify(listing.unreadable)}`);

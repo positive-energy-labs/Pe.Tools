@@ -16,14 +16,14 @@ import { picturePageMove } from "#/shell/picture-page";
 import { useAdmittedSubject } from "#/shell/subject";
 import { settleWork } from "#/shell/work-door-observation";
 import type { DuctsSheetEdits, PicturePage, RouteStatePatch } from "@pe/agent-contracts";
-import { ductsDesign, cellPatches } from "@pe/agent-contracts";
+import { cellPatches } from "@pe/agent-contracts";
 import { systemScope } from "@pe/ducts-domain/system-scope";
 import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import * as Atom from "effect/reactivity/Atom";
 import { useMemo, useRef } from "react";
-import type { PaneContext } from "../../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { PaneContext } from "@pe/agent-contracts";
 import { entries, fansData, schemas } from "../../fans/neutral";
 import { attentionSubjects } from "../cell-focus";
 import { localId, localSubject, namesOf } from "../neutral.ts";
@@ -32,7 +32,7 @@ import { subjectNamer } from "../subject-text";
 import { describeCloser, type Closer } from "./closer";
 import { editLabel, presentInputHistory, type EditMeta } from "./input-history.neutral";
 import { InputsSurface } from "./inputs-surface";
-import { rosterOrder, stableFanKey, withComputed, type FanPort } from "./model";
+import { rosterOrder, stableFanKey, type FanPort } from "./model";
 import { SheetPicture } from "./picture";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { sheetSystems } from "./scoped-snapshot.ts";
@@ -56,7 +56,7 @@ function useSheetData(
   const sheet = value?.open ?? null;
   const fans = ctx.readings.fans;
   const roster = rosterOrder(
-    withComputed(fans.value?.rows ?? value?.rows ?? [], value?.rows ?? []),
+    value?.rows ?? fans.value?.rows ?? [],
   );
   const nameOf = useMemo(() => subjectNamer(snapshot), [snapshot]);
   const selected = authored.selected.map(({ id }) => localSubject(id)).join(",");
@@ -200,7 +200,7 @@ export function RosterBody({
   const snapshot = sheetSnapshot(ctx.readings.sheetSnapshot);
   const fans = ctx.readings.fans;
   const roster = rosterOrder(
-    withComputed(fans.value?.rows ?? [], ctx.readings.sheet.value?.rows ?? []),
+    ctx.readings.sheet.value?.rows ?? fans.value?.rows ?? [],
   );
   const busy = ctx.readings.sheet.status === "pending";
   const nameOf = useMemo(
@@ -725,9 +725,7 @@ export function sheetSnapshot(reading: { value?: unknown }): unknown {
   return structuredClone(reading.value ?? { kind: "absent" });
 }
 function sheetWork(ctx: SheetContext) {
-  return ctx.work && ctx.readings.ductsWork.value
-    ? ductsDesign(ctx.readings.ductsWork.value, ctx.work)
-    : null;
+  return ctx.readings.value.value?.value?.data.design ?? null;
 }
 function SheetFrame({
   ctx,

@@ -241,6 +241,9 @@ async function witness(
   });
   const registration = ws.registerAdmitted(host.route);
   await registration.ready;
+  // ADR 0033 deletes undecodable Work on read; exercise explicit recovery before mounting it.
+  if (raw === unreadable)
+    expect(await ws.startFresh(bindWork("ducts", null, undefined, { session: "fixture", openId: "w1f" }), "ducts", "human")).toMatchObject({ ok: true });
   cleanup.push(() => registration.close());
   const observe = observeResources(ws, { observe: () => () => {} });
   let skipped = 0;
@@ -377,8 +380,8 @@ test("H7: canonical recovery presents named rows from captured evidence and acce
   vi.spyOn(peClient, "response").mockImplementation(async () =>
     Response.json(await f.ws.salvage(f.mount.workBasis()!.token.scope.identity.work!, "ducts")),
   );
-  await vi.waitFor(() => expect(f.mount.recovery().startFresh).toBe(true));
-  await f.mount.startFresh();
+  await vi.waitFor(() => expect(f.mount.recovery().carryOver).toBe(true));
+  await f.mount.salvage();
   expect(f.mount.review("work.salvage")).toMatchObject({
     sentence: "Carry over 1 recovered input",
     rows: ["FC-1 drop: 0.18 in-wg"],
@@ -397,8 +400,8 @@ test.each(["throw", "invalid"] as const)(
   async (failure) => {
     const f = await witness(unreadable, failure);
     recovery(f);
-    await vi.waitFor(() => expect(f.mount.recovery().startFresh).toBe(true));
-    await expect(f.mount.startFresh()).rejects.toThrow(
+    await vi.waitFor(() => expect(f.mount.recovery().carryOver).toBe(true));
+    await expect(f.mount.salvage()).rejects.toThrow(
       failure === "throw" ? /present-threw/ : /present-invalid/,
     );
     expect(f.mount.review("work.salvage")).toBeNull();
@@ -431,8 +434,8 @@ test("H8: real host history restores labels and undo across a remount", async ()
 test("H7: a later Work edit hides named recovery evidence and refuses stale confirmation", async () => {
   const f = await witness(unreadable);
   recovery(f);
-  await vi.waitFor(() => expect(f.mount.recovery().startFresh).toBe(true));
-  await f.mount.startFresh();
+  await vi.waitFor(() => expect(f.mount.recovery().carryOver).toBe(true));
+  await f.mount.salvage();
   await settle(f.mount.invoke("slot", "") as Observation<WorkWriteOutcome>);
   expect(f.mount.review("work.salvage")).toMatchObject({ sentence: null, rows: [], stale: true });
   expect(() => f.mount.confirm("work.salvage")).toThrow(/stale/);
@@ -534,8 +537,8 @@ test.each([true, false])(
   async (writable) => {
     const f = await witness(unreadable);
     recovery(f);
-    await vi.waitFor(() => expect(f.mount.recovery().startFresh).toBe(true));
-    await f.mount.startFresh();
+    await vi.waitFor(() => expect(f.mount.recovery().carryOver).toBe(true));
+    await f.mount.salvage();
     expect(f.mount.review("work.salvage")?.stale).toBe(false);
     const before = structuredClone(f.saved.get("ducts"));
     f.eligibility(writable ? "writable" : "read-only");
@@ -565,6 +568,7 @@ test.each([
     workOpen: { session: "fixture", openId: "w1f" },
     workAddress,
     resolvedAddress: null,
+    inventoryResult: { state: "absent" },
   } as ReturnType<typeof useRouteTarget>;
   const selected = vi.mocked(useRouteTarget);
   selected.mockReturnValue(
@@ -618,6 +622,7 @@ test("P02/P04: the application opens saved Ducts Work by document Address", asyn
     },
     workAddress,
     resolvedAddress: workAddress,
+    inventoryResult: { state: "absent" },
     workOpen: null,
   } as ReturnType<typeof useRouteTarget>);
   vi.spyOn(sourceServices, "sourceRouteServices").mockReturnValue(f.services);
@@ -679,6 +684,7 @@ test.each(["w1f", "other-document"])(
         resolution: { kind: "resolved", target: { kind: "document", ref: request.ref } },
         workAddress: null,
         resolvedAddress: null,
+    inventoryResult: { state: "absent" },
         workOpen: null,
       } as ReturnType<typeof useRouteTarget>;
     });
@@ -738,6 +744,7 @@ test.each(["current", "departed"] as const)(
       },
       workAddress: null,
       resolvedAddress: null,
+    inventoryResult: { state: "absent" },
       workOpen: null,
     } as ReturnType<typeof useRouteTarget>);
     vi.spyOn(sourceServices, "sourceRouteServices").mockImplementation((_sources, composition) => ({

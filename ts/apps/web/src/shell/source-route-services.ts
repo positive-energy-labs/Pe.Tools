@@ -11,9 +11,9 @@ import { createGeometryReadDoor } from "./geometry-read-door";
 import type {
   KernelServices,
   ResolvedRead,
-} from "../../../../packages/agent-contracts/src/route-kernel-environment";
+} from "@pe/agent-contracts";
 import type { AcceptanceToken } from "../../../../packages/agent-contracts/src/route-kernel-page";
-import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { ReadingSnapshot } from "@pe/agent-contracts";
 import type { ReadingSource, UseSource } from "./readings";
 import { demandContext, openSourceReading } from "./readings-use";
 import { contentHash } from "./readings";
@@ -51,6 +51,8 @@ export function sourceRouteServices(
   sources: Record<string, ReadingSource>,
   composition: Pick<KernelServices, "target" | "geometry"> = {},
 ): KernelServices {
+  const publicationOwner = crypto.randomUUID();
+  const publicationGenerations = new Map<string, number>();
   const queries = new Set(
     hostOpCatalog.filter((entry) => entry.effect === "Read").map((entry) => entry.key),
   );
@@ -145,7 +147,7 @@ export function sourceRouteServices(
                 status: "ready",
                 current: true,
                 value:
-                  value as import("../../../../packages/agent-contracts/src/route-kernel-data").Immutable<T>,
+                  value as import("@pe/agent-contracts").Immutable<T>,
                 hash: z.string().parse(contentHash(value)),
                 receipt: row,
               });
@@ -196,14 +198,16 @@ export function sourceRouteServices(
         }
         if (typeof request.key.freshnessGeneration !== "number")
           throw Error("Ordinary source requires its attempt generation");
+        const generation = (publicationGenerations.get(request.key.op) ?? 0) + 1;
+        publicationGenerations.set(request.key.op, generation);
         const close = openSourceReading(
           source,
-          demandContext(
+          { ...demandContext(
             state.target,
             request.key.freshnessGeneration,
             JSON.parse(request.key.sortedKeyInput),
             state.controller.signal,
-          ),
+          ), publication: { subscription: `${publicationOwner}:${request.key.op}`, generation } },
           (snapshot) => deliver((state.snapshot = snapshot as ReadingSnapshot<T>)),
           { observe: (value) => observers.get(request)?.(value) },
         );

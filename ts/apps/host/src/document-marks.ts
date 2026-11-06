@@ -32,6 +32,8 @@ export interface DocumentMarks {
   readonly observedSince?: number;
   /** When this exact open document last changed in Revit, or null while it never has. */
   readonly changedAt: (ref: DocumentRef) => number | null;
+  /** Host-observed event generation; two changes in one clock millisecond remain distinct. */
+  readonly generation?: (ref: DocumentRef) => number;
   /** Fires whenever any mark moves. */
   readonly subscribe: (listener: () => void) => () => void;
   /** Resolves once every event the host has received so far is reflected in the marks; a fake has none pending. */
@@ -40,10 +42,12 @@ export interface DocumentMarks {
 
 /** The marks one reading consumed for one document, exactly as the holder answered them. */
 export interface MarkSnapshot {
+  readonly generation?: number;
   readonly observedSince?: number;
   readonly changedAt: number | null;
 }
 const markSnapshot = Schema.Struct({
+  generation: Schema.optionalKey(Schema.Number),
   observedSince: Schema.optionalKey(Schema.Number),
   changedAt: Schema.NullOr(Schema.Number),
 });
@@ -75,6 +79,7 @@ export const hostMarks = (marks: DocumentMarks): HostMarks => {
       (): MarkSnapshot => ({
         ...(marks.observedSince === undefined ? {} : { observedSince: marks.observedSince }),
         changedAt: marks.changedAt(ref),
+        ...(marks.generation ? { generation: marks.generation(ref) } : {}),
       }),
     );
   return {
@@ -135,6 +140,8 @@ export class HostDocumentMarks extends Context.Service<HostDocumentMarks, HostMa
       const bridge = yield* RevitBridge;
       const clock = yield* Clock.Clock;
       const marks = new Map<string, Map<string, number>>();
+      const generations = new Map<string, number>();
+      let generation = 0;
       const listeners = new Set<() => void>();
       let tail = Promise.resolve();
       const unsubscribe = bridge.subscribe((event) => {
@@ -148,7 +155,10 @@ export class HostDocumentMarks extends Context.Service<HostDocumentMarks, HostMa
             const alive = new Set(sessions.flatMap(ids));
             let changed = false;
             for (const session of marks.keys())
-              if (!alive.has(session)) changed = marks.delete(session) || changed;
+              if (!alive.has(session)) {
+                changed = marks.delete(session) || changed;
+                for (const key of generations.keys()) if (JSON.parse(key)[0] === session) generations.delete(key);
+              }
             const current = sessions.find((session) => session.sessionId === event.sessionId);
             const openIds: unknown =
               event.kind === "disconnected"
@@ -159,9 +169,13 @@ export class HostDocumentMarks extends Context.Service<HostDocumentMarks, HostMa
                   ? (JSON.parse(event.payloadJson) as { changedOpenIds?: unknown }).changedOpenIds
                   : [];
             if (current && Array.isArray(openIds) && openIds.length) {
+              const next = ++generation;
               for (const session of ids(current)) {
                 const documents = marks.get(session) ?? new Map<string, number>();
-                for (const openId of openIds) documents.set(String(openId), atMs);
+                for (const openId of openIds) {
+                  documents.set(String(openId), atMs);
+                  generations.set(JSON.stringify([session, String(openId)]), next);
+                }
                 marks.set(session, documents);
               }
               changed = true;
@@ -181,6 +195,7 @@ export class HostDocumentMarks extends Context.Service<HostDocumentMarks, HostMa
             marks.get(ref.session)?.get(ref.openId) ?? 0,
             marks.get(ref.session)?.get("") ?? 0,
           ) || null,
+        generation: ref => Math.max(generations.get(JSON.stringify([ref.session, ref.openId])) ?? 0, generations.get(JSON.stringify([ref.session, ""])) ?? 0),
         subscribe: (listener) => {
           listeners.add(listener);
           return () => {
