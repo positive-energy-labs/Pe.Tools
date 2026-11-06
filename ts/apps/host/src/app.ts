@@ -458,13 +458,19 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
     const observe: ResourceObserver = (reading, publish, after) => {
       if (!recorded) return observeFrame(reading, publish, after);
       let released = false, release = () => {};
-      void invoke(readSets.open({ key: "resource.frame", input: json(reading), scope: recipe.scope }, null)).then((current) => {
-        if (released) { void invoke(current.close); return; }
-        const stop = observeFrame(reading, publish, after, current);
-        release = () => { stop(); void finishFrame(current); };
-      }).catch((error: InvalidRead) => {
-        if (!released) publish({ kind: "failure", key: readingKey(reading), error: error.message,
-          failure: { kind: "failed", code: error.problem, message: error.message } });
+      void invoke(readSets.open({ key: "resource.frame", input: json(reading), scope: recipe.scope }, null)).then(async (current) => {
+        if (released) { await invoke(current.close); return; }
+        try {
+          const stop = observeFrame(reading, (frame, carriage) => {
+            if (frame.kind !== "failure") { publish(frame, carriage); return; }
+            void finishFrame(current).then(() => { if (!released) publish(frame, carriage); });
+          }, after, current);
+          release = () => { stop(); void finishFrame(current); };
+        } catch (error) { await finishFrame(current); throw error; }
+      }).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!released) publish({ kind: "failure", key: readingKey(reading), error: message,
+          failure: { kind: "failed", code: isDoorFailure(error) ? error.problem : "ReadingFailed", message } });
       });
       return () => { released = true; release(); };
     };

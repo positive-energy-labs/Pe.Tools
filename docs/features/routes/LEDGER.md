@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
+- 2026-11-06, Driver and Governor: accepted main `aca90ffc` preserves driven `012df511` product inputs, plus four sealed test cuts. One UI Write/native readback, consumed refusal, same-page post-write and K5 recovery, and the representative pair passed on controlled ke277. Initial retained Refresh auto-navigated; it is not the same-page proof. Step 7 public recording, epochs and History remain incomplete; settings ADR 0032 is still unapproved.
+
 - 2026-11-05, kaitpw (intent for Step 8 Pods, not current scope): HTML pages open from the index at `/pages/<name>/`; targeting stays, and only `/bind` as a route retires. Page writes stay quick and dirty, with no plan or seal: a click in that page is the human's write and runs immediately; a write no click in that page caused gets the normal Reject countdown, including code that writes on load and events Pea appends through `page.append`. Promotion to a route is optional. This needs an ADR 0030 amendment scoped to HTML pages; the Pods muse writes it before any page-write code (Governor ruling; kaitpw may veto). Governor's counsel, **unruled**: keep the binding as a visible target chip, use one transaction per write, and show a Timeline row with the page as author.
 
 - 2026-11-05, kaitpw (Governor GAUGES): Step 8 migrates `/chat` first (stable; no feature loss), then `/pods` and `/settings` as kernel projections (Pods' schema and form remain unstable), then `/family` preserving the doc-lab flow where Pea proposes with a visible citation even though it is untested, then `/rooms`; `/family` acceptance uses a real PDF and real cells, with no mock witness, through the [five Driver cases](MAP.md#step-8-family-acceptance).
@@ -146,6 +148,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 - 2026-09-09, the claim that document keys and receipts alone prevent every stale read or duplicate mutation: keys separate open lifetimes; Effect refresh orders reads within one lifetime; host admission and request identity govern retries.
 
 ## Owed
+
+- 2026-11-06, recording entry: `HostInputReadSets.open(recipe, null)` admits only a unique recorded consumer; repeated roots and notification frames refuse as ambiguous. Explicit root bindings and epochs remain Owed; internal dependency selections stay exact. Finish historical inventory, SPA and provenance before claiming public `/fans` replay. Never select newest, complete or equal-valued candidates to hide ambiguity. See [ADR 0031](../../adr/0031-recording-at-host-input-services-history-in-the-shell.md) and [the admission owner](../../../ts/apps/host/src/input-occurrence.ts).
 
 - Step 5 presentation follow-on, Driver `drive/step-5/CASES.md`, explicitly non-blocking for main: refresh copied-Pod discovery without host restart; replace the dead `/pod-admin` link; investigate a second-turn Pod set-view rendered-ack refusal, absent Pea `pod.import` discovery, refusal text rendered with misleading fan chips, the initial missing Ducts handle, `sheetSnapshot` unavailable after Back, a route-open 403 and the legacy outcome-unknown chip. Preserve this classification unless a new write/data consequence is observed.
 
