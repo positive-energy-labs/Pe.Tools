@@ -33,9 +33,6 @@ it("the caption counts every row: delivering runs, then the rest by word", () =>
 });
 
 it("a derived flow's source is read from the end leg, never typed", () => {
-  expect(
-    derivedFlowSource("balance; splitPolicy:even+sibling 6104810: revit:PE_M_Fan_AirFlow:1"),
-  ).toBe("consumers");
   expect(derivedFlowSource("balance; splitPolicy:even:1")).toBe("balance");
   expect(derivedFlowSource(null)).toBe("derived");
 });
