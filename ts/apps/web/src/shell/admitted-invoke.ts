@@ -55,6 +55,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     now,
     local: localPort,
     available,
+    ports,
   } = context;
   const work = context.work();
   const { snapshots, beginQuery, workHandles } = context.readings();
@@ -471,9 +472,33 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
         return review ? { kind: "review", preview: review.preview } : { kind: "preview" };
       }
     } else if (declaration.kind === "page") {
-      const patch = bindings.bodies[declaration.patch]!.run(context(), parsed);
+      const patch = z
+        .record(z.string(), z.unknown())
+        .parse(bindings.bodies[declaration.patch]!.run(context(), parsed));
+      for (const [key, value] of Object.entries(patch)) {
+        if (!declaration.fields.includes(key)) throw Error("Page verb wrote an undeclared field");
+        const field = route.data.fields[key];
+        if (!field || !("schema" in field)) throw Error("Page verb field unavailable");
+        bindings.schemas[field.schema]!.parse(value);
+      }
+      const ephemeral = Object.keys(patch).filter((key) =>
+        ["device", "transient"].includes(route.data.fields[key]!.role),
+      );
+      if (ephemeral.length && Object.keys(patch).length !== 1)
+        throw Error("Device/transient Page verbs require one role field");
       preview = patch;
-      send = () => owner.acceptPage(invocation, patch as Parameters<typeof owner.acceptPage>[1]);
+      send = () => {
+        const key = ephemeral[0];
+        if (key)
+          return Reflect.apply(
+            route.data.fields[key]!.role === "device"
+              ? ports.controls.device
+              : ports.controls.transient,
+            ports.controls,
+            [key, patch[key]],
+          );
+        return owner.acceptPage(invocation, patch as Parameters<typeof owner.acceptPage>[1]);
+      };
     } else {
       const entry = bindings.entries[declaration.entry]!;
       const args = freezePage(

@@ -27,7 +27,15 @@ import {
 export interface RouteFixtureSeed {
   readonly readings: Readonly<Record<string, unknown>>;
   readonly work?: unknown;
+  readonly works?: Readonly<Record<string, unknown>>;
 }
+const fixtureSelector = z.strictObject({
+  fixtureSelect: z.strictObject({
+    fields: z.array(z.string().min(1)),
+    values: z.record(z.string(), z.unknown()),
+    fallback: z.unknown(),
+  }),
+});
 function freezeValue<T>(value: T): asserts value is T & Immutable<T> {
   if (value !== null && typeof value === "object") {
     Object.values(value).forEach(freezeValue);
@@ -57,7 +65,29 @@ export function createFixtureRouteEnvironment(
         current: false,
         reason: `Missing fixture seed: ${id ?? "unbound reading"}`,
       };
-    const parsed = request.output.safeParse(structuredClone(seed.readings[id]));
+    let selected = seed.readings[id];
+    if (
+      selected !== null &&
+      typeof selected === "object" &&
+      Object.hasOwn(selected, "fixtureSelect")
+    ) {
+      const selector = fixtureSelector.safeParse(selected);
+      if (!selector.success)
+        return { status: "failed", current: false, reason: selector.error.message };
+      const args = z
+        .record(z.string(), z.unknown())
+        .safeParse(JSON.parse(request.key.sortedKeyInput));
+      const { fields, values, fallback } = selector.data.fixtureSelect;
+      if (!args.success || fields.some((field) => !Object.hasOwn(args.data, field)))
+        return {
+          status: "unavailable",
+          current: false,
+          reason: "Fixture selector argument missing",
+        };
+      const key = JSON.stringify(fields.map((field) => args.data[field]));
+      selected = Object.hasOwn(values, key) ? values[key] : fallback;
+    }
+    const parsed = request.output.safeParse(structuredClone(selected));
     if (!parsed.success) return { status: "failed", current: false, reason: parsed.error.message };
     const value = structuredClone(parsed.data);
     freezeValue(value);
@@ -112,7 +142,12 @@ export function createFixtureRouteEnvironment(
       ...(declaresWork
         ? {
             work: (() => {
-              const door = createFixtureWorkDoor(options.workSpec!, capturedSeed?.work, options.plan.workSchemas());
+              const door = createFixtureWorkDoor(
+                options.workSpec!,
+                capturedSeed?.work,
+                options.plan.workSchemas(),
+                capturedSeed?.works,
+              );
               return { read: door, submit: door };
             })(),
           }
@@ -158,7 +193,11 @@ export function createNamedFixtureRouteEnvironment(
 ) {
   const seed = options.plan.seed(options.name);
   const parsed = z
-    .object({ readings: z.record(z.string(), z.unknown()), work: z.unknown().optional() })
+    .object({
+      readings: z.record(z.string(), z.unknown()),
+      work: z.unknown().optional(),
+      works: z.record(z.string(), z.unknown()).optional(),
+    })
     .safeParse(seed);
   return createFixtureRouteEnvironment({
     ...options,
