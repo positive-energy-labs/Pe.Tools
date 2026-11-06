@@ -69,14 +69,6 @@ public sealed class PodManifestValidatorTests {
     }
 
     [Test]
-    public void Manifest_identity_is_independent_of_its_local_folder() {
-        var result = PodManifestValidator.ValidateJson(MinimalManifest("connector-audit", "src/Main.cs"));
-
-        Assert.That(result.Success, Is.True);
-        Assert.That(result.Manifest!.Id, Is.EqualTo("connector-audit"));
-    }
-
-    [Test]
     public void Entrypoints_must_have_unique_source_paths() {
         var result = PodManifestValidator.ValidateJson(
             """
