@@ -43,7 +43,9 @@ function primitiveOf(e: Psc1Metadata["elements"][number]): ScenePrimitive | unde
       !b ||
       !Object.hasOwn(BOX_FRAMES, b.frame) ||
       ![b.center, b.axisX, b.axisY, b.axisZ, b.halfSize].every(vector) ||
-      b.halfSize.some((n) => n <= 0)
+      // Overview AABBs can be planar (Chadds insulation 14492245). Preserve their
+      // native bounds without inventing thickness; exact oriented boxes still require volume.
+      b.halfSize.some((n) => n < 0 || (n === 0 && b.frame !== "bounds"))
     )
       throw Error("Invalid oriented box dimensions");
     const axes = [b.axisX, b.axisY, b.axisZ];

@@ -1,0 +1,308 @@
+{
+  "sourceArtifact": "ef8c08ead6dee1e4a8256559748c25bc4fdaf72a0568a4e485f34a3c356f6b65",
+  "selection": "MUAS-1 focus 14577391 plus planar insulation context 14492245; box values unmodified",
+  "metadata": {
+    "format": "space-scene-v4",
+    "stamp": {
+      "hostDocumentKey": "project:path:C:\\Users\\kaitp\\AppData\\Local\\Positive Energy\\Pe.Tools-drives\\kernel-e277\\local\\Chadds-ke277.rvt",
+      "epoch": 0,
+      "frame": "host-internal-ft",
+      "builtUtc": "2026-11-06T00:42:21.0953299Z",
+      "sources": [
+        {
+          "source": 0,
+          "documentKey": "project:path:C:\\Users\\kaitp\\AppData\\Local\\Positive Energy\\Pe.Tools-drives\\kernel-e277\\local\\Chadds-ke277.rvt",
+          "linkInstanceId": null,
+          "kind": "Host",
+          "builtAtEpoch": 0,
+          "dirty": false,
+          "elements": 4159,
+          "triangles": 0,
+          "skipped": 0
+        }
+      ],
+      "fresh": true,
+      "resolved": {
+        "sources": ["Host"],
+        "categories": [
+          "Air Terminals",
+          "Duct Accessories",
+          "Duct Fittings",
+          "Duct Insulations",
+          "Ducts",
+          "Electrical Equipment",
+          "Electrical Fixtures",
+          "Flex Ducts",
+          "Mechanical Control Devices",
+          "Mechanical Equipment",
+          "Pipe Fittings",
+          "Pipe Insulations",
+          "Pipes",
+          "Plumbing Equipment",
+          "Plumbing Fixtures"
+        ],
+        "kinds": ["Solid", "Mesh"],
+        "layers": [],
+        "excludedElementIds": []
+      },
+      "geometryCost": {
+        "plannedCount": 4161,
+        "plannedCost": 0.0,
+        "perSource": [
+          {
+            "source": "Chadds-ke277",
+            "linkInstanceId": null,
+            "count": 4161,
+            "loadOnlyCount": 4161,
+            "cost": 0.0
+          }
+        ],
+        "newlyTessellatedCount": 0,
+        "cumulativeTessellatedCount": 0
+      }
+    },
+    "bounds": {
+      "minX": 430.7726135253906,
+      "minY": 662.619873046875,
+      "minZ": -9.709169387817383,
+      "maxX": 525.0025634765625,
+      "maxY": 763.9856567382812,
+      "maxZ": 39.2602424621582
+    },
+    "triangles": 0,
+    "completeness": {
+      "complete": true,
+      "deferredCandidates": 0,
+      "acquisitionLimitedElements": 0,
+      "limitReason": null
+    },
+    "levels": {
+      "sources": [
+        {
+          "source": 0,
+          "documentKey": "project:path:C:\\Users\\kaitp\\AppData\\Local\\Positive Energy\\Pe.Tools-drives\\kernel-e277\\local\\Chadds-ke277.rvt",
+          "linkInstanceId": null,
+          "name": "Chadds-ke277",
+          "status": "loaded",
+          "countedLevels": 7,
+          "unavailableLevelIds": [],
+          "reason": null
+        },
+        {
+          "source": 1,
+          "documentKey": null,
+          "linkInstanceId": 10797524,
+          "name": "JFS_Fairville.rvt : 28 : location <Not Shared>",
+          "status": "unloaded",
+          "countedLevels": null,
+          "unavailableLevelIds": [],
+          "reason": "Link document is Unloaded."
+        },
+        {
+          "source": 2,
+          "documentKey": null,
+          "linkInstanceId": 13969242,
+          "name": "N03_FF Level walls_2305_Siegfried.ifc : 40",
+          "status": "unloaded",
+          "countedLevels": null,
+          "unavailableLevelIds": [],
+          "reason": "Link document is Unloaded."
+        },
+        {
+          "source": 3,
+          "documentKey": null,
+          "linkInstanceId": 14677021,
+          "name": "2026.10.20 3D Global in progress.ifc : 42",
+          "status": "unloaded",
+          "countedLevels": null,
+          "unavailableLevelIds": [],
+          "reason": "Link document is Unloaded."
+        }
+      ],
+      "planes": [
+        {
+          "point": [0.0, 0.0, -16.75],
+          "normal": [0.0, 0.0, 1.0],
+          "members": [
+            {
+              "source": 0,
+              "elementId": 1311741,
+              "uniqueId": "51554980-4bf2-4495-a755-badfcfe3d554-001403fd",
+              "name": "Level 0/Theatre",
+              "projectElevationFt": -16.75,
+              "buildingStory": true,
+              "scope": null
+            }
+          ]
+        },
+        {
+          "point": [0.0, 0.0, -13.5],
+          "normal": [0.0, 0.0, 1.0],
+          "members": [
+            {
+              "source": 0,
+              "elementId": 7288514,
+              "uniqueId": "90aab3ef-c637-4817-aeac-e7c6e4b3d818-006f35c4",
+              "name": "Level 0/Lower Level",
+              "projectElevationFt": -13.5,
+              "buildingStory": true,
+              "scope": null
+            }
+          ]
+        },
+        {
+          "point": [0.0, 0.0, -12.0],
+          "normal": [0.0, 0.0, 1.0],
+          "members": [
+            {
+              "source": 0,
+              "elementId": 7288513,
+              "uniqueId": "90aab3ef-c637-4817-aeac-e7c6e4b3d818-006f3563",
+              "name": "Level 0/Landing Level",
+              "projectElevationFt": -12.0,
+              "buildingStory": true,
+              "scope": null
+            }
+          ]
+        },
+        {
+          "point": [0.0, 0.0, 0.0],
+          "normal": [0.0, 0.0, 1.0],
+          "members": [
+            {
+              "source": 0,
+              "elementId": 30,
+              "uniqueId": "933c4a06-93b8-11d3-80f8-00c04f8efc32-0000001e",
+              "name": "Level 1/Main Level",
+              "projectElevationFt": 0.0,
+              "buildingStory": true,
+              "scope": null
+            }
+          ]
+        },
+        {
+          "point": [0.0, 0.0, 12.499999999996332],
+          "normal": [0.0, 0.0, 1.0],
+          "members": [
+            {
+              "source": 0,
+              "elementId": 9946,
+              "uniqueId": "6341822b-d4f3-11d3-a039-0000863f1523-000026da",
+              "name": "Level 2/Upper Level",
+              "projectElevationFt": 12.499999999996332,
+              "buildingStory": true,
+              "scope": null
+            }
+          ]
+        },
+        {
+          "point": [0.0, 0.0, 24.083333333333314],
+          "normal": [0.0, 0.0, 1.0],
+          "members": [
+            {
+              "source": 0,
+              "elementId": 5765339,
+              "uniqueId": "590bf2fb-f4a9-494d-b191-039794aaf61d-0057f8db",
+              "name": "Level 3/Attic",
+              "projectElevationFt": 24.083333333333314,
+              "buildingStory": true,
+              "scope": null
+            }
+          ]
+        },
+        {
+          "point": [0.0, 0.0, 32.833333333333314],
+          "normal": [0.0, 0.0, 1.0],
+          "members": [
+            {
+              "source": 0,
+              "elementId": 1311523,
+              "uniqueId": "51554980-4bf2-4495-a755-badfcfe3d554-00140323",
+              "name": "Roof",
+              "projectElevationFt": 32.833333333333314,
+              "buildingStory": true,
+              "scope": null
+            }
+          ]
+        }
+      ],
+      "work": {
+        "nativeMilliseconds": 325.4865,
+        "startPrivateBytes": 2738638848,
+        "endPrivateBytes": 2738622464
+      }
+    },
+    "elements": [
+      {
+        "handle": {
+          "documentKey": "project:path:C:\\Users\\kaitp\\AppData\\Local\\Positive Energy\\Pe.Tools-drives\\kernel-e277\\local\\Chadds-ke277.rvt",
+          "elementId": 14577391,
+          "uniqueId": "78fb66ed-41aa-47c4-907e-6ccf601ad7b3-00de62f1",
+          "linkInstanceId": null,
+          "category": "Mechanical Equipment",
+          "kind": "Element",
+          "layer": null,
+          "extrusion": null,
+          "heightRole": "None"
+        },
+        "firstVertex": 0,
+        "vertexCount": 0,
+        "bounds": {
+          "minX": 474.8273620605469,
+          "minY": 674.8360595703125,
+          "minZ": 12.450459480285645,
+          "maxX": 478.10491943359375,
+          "maxY": 678.0106811523438,
+          "maxZ": 14.129534721374512
+        },
+        "focus": true,
+        "categoryId": -2001140,
+        "representation": "oriented-box",
+        "run": null,
+        "orientedBox": {
+          "center": [476.4661407470703, 676.4233703613281, 13.289997100830078],
+          "axisX": [1.0, 0.0, 0.0],
+          "axisY": [0.0, 1.0, 0.0],
+          "axisZ": [0.0, 0.0, 1.0],
+          "halfSize": [1.6387786865234375, 1.587310791015625, 0.8395376205444336],
+          "frame": "bounds"
+        }
+      },
+      {
+        "handle": {
+          "documentKey": "project:path:C:\\Users\\kaitp\\AppData\\Local\\Positive Energy\\Pe.Tools-drives\\kernel-e277\\local\\Chadds-ke277.rvt",
+          "elementId": 14492245,
+          "uniqueId": "67862d35-efee-427b-b1f5-f4ec1689d592-00dd2255",
+          "linkInstanceId": null,
+          "category": "Duct Insulations",
+          "kind": "Element",
+          "layer": null,
+          "extrusion": null,
+          "heightRole": "None"
+        },
+        "firstVertex": 0,
+        "vertexCount": 0,
+        "bounds": {
+          "minX": 504.44195556640625,
+          "minY": 676.9408569335938,
+          "minZ": 10.322918891906738,
+          "maxX": 505.3586120605469,
+          "maxY": 676.9408569335938,
+          "maxZ": 11.239585876464844
+        },
+        "focus": false,
+        "categoryId": -2008123,
+        "representation": "oriented-box",
+        "run": null,
+        "orientedBox": {
+          "center": [504.90028381347656, 676.9408569335938, 10.781252384185791],
+          "axisX": [1.0, 0.0, 0.0],
+          "axisY": [0.0, 1.0, 0.0],
+          "axisZ": [0.0, 0.0, 1.0],
+          "halfSize": [0.4583282470703125, 0.0, 0.45833349227905273],
+          "frame": "bounds"
+        }
+      }
+    ]
+  }
+}
