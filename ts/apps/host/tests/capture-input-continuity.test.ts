@@ -5,16 +5,11 @@ import { join } from "node:path";
 import { Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
-import { z } from "zod";
 import { HostNativeRead, canonicalJson } from "@pe/host-internal/native-read";
 import {
   DUCTS_BODY_VERSION_HEADER,
   address,
-  bindWork,
-  readingKey,
-  type ReadingRequest,
 } from "@pe/agent-contracts";
-import { identityCodecs } from "../../../packages/agent-contracts/src/route-kernel-codecs.ts";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
@@ -38,9 +33,6 @@ import { settle } from "./effect-test.ts";
 
 const ref = { session: "receipt-session", openId: "receipt-open" };
 const addressValue = address("C:/Models/receipt.rvt");
-const document = identityCodecs.document.encode({ document: addressValue });
-if (!document.ok) throw Error("bad document");
-const doc = document.value;
 const actualTarget = {
   processIncarnation: { pid: 42, startedAt: 1000 },
   openDocumentLifetime: { openId: ref.openId },
@@ -143,37 +135,11 @@ async function setup(mode = "normal") {
     fansInputRoutes(inputs, {
       live,
       store: fileRouteDocumentStore(join(dir, "work")),
-      initialize: async (workspace) => {
-        workspace.register({
-          spec: {
-            route: "receipt-test",
-            title: "Receipt",
-            description: "Receipt Work",
-            schema: z.object({ count: z.number().default(0) }).prefault({}),
-          },
-        });
-        await workspace.apply(
-          bindWork("receipt-test", addressValue, undefined, ref),
-          "receipt-test",
-          "human",
-          [],
-          0,
-        );
-        for (const route of ["fans", "ducts"])
-          await workspace.apply(
-            bindWork(route, addressValue, undefined, ref),
-            route,
-            "human",
-            [],
-            0,
-          );
-      },
     }).pipe(Layer.provide(admission)),
     { disableLogger: true },
   );
   const cookie = mintBrowserContext({ kind: "local" }).split(";")[0]!;
-  const otherCookie = mintBrowserContext({ kind: "local" }).split(";")[0]!;
-  const send = (path: string, body?: unknown, credential = cookie, extraHeaders: Record<string, string> = {}) =>
+  const send = (path: string, body?: unknown, extraHeaders: Record<string, string> = {}) =>
     web.handler(
       new Request(base + path, {
         method: body === undefined ? "GET" : "POST",
@@ -181,7 +147,7 @@ async function setup(mode = "normal") {
           host: "127.0.0.1:51519",
           origin: base,
           referer: `${base}/fans`,
-          cookie: credential,
+          cookie,
           [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
           [HOST_RPC_BRIDGE_SESSION_HEADER]: ref.session,
           [HOST_RPC_DOCUMENT_HEADER]: ref.openId,
@@ -195,7 +161,6 @@ async function setup(mode = "normal") {
     writer,
     dir,
     send,
-    otherCookie,
     close: async () => {
       await web.dispose();
       vi.restoreAllMocks();
@@ -213,7 +178,7 @@ test.each(["metadata", "full", "io"])(
       expect(response.status, await response.clone().text()).toBe(200);
       expect(JSON.stringify(await response.json())).toBe(JSON.stringify(snapshot));
       expect(owner.writer.capture.truncated()).not.toBeNull();
-    const refused = await owner.send("/call", { key: "ducts.snapshot.roster", request: {} }, undefined, { [DUCTS_BODY_VERSION_HEADER]: "missing-version" });
+    const refused = await owner.send("/call", { key: "ducts.snapshot.roster", request: {} }, { [DUCTS_BODY_VERSION_HEADER]: "missing-version" });
     expect(refused.status, await refused.clone().text()).toBe(409);
     } finally {
       await owner.close();
