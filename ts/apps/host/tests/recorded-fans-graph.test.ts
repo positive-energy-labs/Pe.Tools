@@ -21,7 +21,7 @@ import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { FIRM_SEED } from "../src/ducts-inputs.ts";
 import { admitNativeCaller } from "../src/native-read-policy.ts";
 import { nativeCatalogIdentity, openRecordingWriter, openRecordingReader,
-  type HostInputLane, type ConsumerRecipe } from "../src/native-recording.ts";
+  type ConsumerRecipe } from "../src/native-recording.ts";
 import type { ReadSetId } from "../src/input-occurrence.ts";
 import { builtinEnrollments } from "../src/builtin-enrollment.ts";
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
@@ -109,7 +109,7 @@ async function firstFrame(response: Response) {
   try { return await frames.next(); } finally { await frames.close(); }
 }
 
-test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(process.env.PE_FANS_COLD_NETWORK ? ["cold-off", "cold-on"] as const : [])] as const)("real Fans graph %s", async (mode) => {
+test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(process.env.PE_FANS_COLD_NETWORK ? ["cold-off", "cold-on"] as const : [])] as const)("real Fans graph %s", async (mode) => {
   const isCold = mode.startsWith("cold-");
   const driverSource = process.env.PE_FANS_COLD_NETWORK;
   if (isCold && (!driverSource || !existsSync(driverSource))) throw Error("Cold shell proof requires the captured Driver network asset");
@@ -126,9 +126,10 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
   const markEntered = Promise.withResolvers<void>(), releaseMark = Promise.withResolvers<void>();
   const entered = Promise.withResolvers<void>(), releaseHuman = Promise.withResolvers<void>();
   const nativeEntered = Promise.withResolvers<void>(), releaseNative = Promise.withResolvers<void>();
+  expect(createHash("sha256").update(readFileSync(source)).digest("hex")).toBe("57b0034722af64d997f35f9301cbff51c3af4728b940a09b2ef3d8405c930c68");
   const raw = JSON.parse(readFileSync(source, "utf8").replace(/^\uFEFF/, ""));
   const snapshot = Schema.decodeUnknownSync(Schema.Json)(raw.result ?? raw);
-  const snapshotContract = isCold ? await run(readSchemas("ducts.snapshot.walk")) : undefined;
+  const snapshotContract = await run(readSchemas("ducts.snapshot.walk"));
   if (snapshotContract) Schema.decodeUnknownSync(snapshotContract.response)(snapshot);
   await mkdir(join(dir, "catalogs")); await writeFile(join(dir, "firm.json"), JSON.stringify(FIRM_SEED));
   const writer = await run(openRecordingWriter(join(dir, "bundle"), identity, bounds));
@@ -381,18 +382,19 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
       await persistentProof();
       if (mode === "endurance") return;
       await live.dispose(); liveFactories.recorded = true;
-      const selected = completed.find((entry) => entry.recipe.key === "resource.notification")!;
+      const selected = completed.find((entry) => entry.recipe.key === "resource.frame")!;
       const saved = await run(writer.readSets.get(selected.id));
-      for (const input of [null, { reading: saved.recipe.input, envelope: { state: "unknown" } }]) {
-        await run(writer.readSets.keep({ ...saved, recipe: { ...saved.recipe, input } }));
+      const url = cases.find((entry) => entry.readSet === selected.id)!.url;
+      for (const problem of ["recording.context", "recording.ambiguous"]) {
+        await run(writer.readSets.keep(problem === "recording.context" ? { ...saved, state: "incomplete" }
+          : { ...saved, id: crypto.randomUUID() }));
         const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
         const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
-        historical = HttpRouter.toWebHandler(fansInputRoutes(context, { readSet: selected.id }), { disableLogger: true });
-        const response = await send(historical, cases.find((entry) => entry.readSet === selected.id)!.url);
-        expect(response.status, await response.clone().text()).toBe(409);
-        expect(await response.json()).toMatchObject({ problem: "recording.mismatch" });
+        historical = HttpRouter.toWebHandler(fansInputRoutes(context), { disableLogger: true });
+        expect(await firstFrame(await send(historical, url))).toMatchObject({ kind: "failure", failure: { code: problem } });
         await historical.dispose(); historical = undefined;
       }
+      expect([liveFactories.sdk, liveFactories.bridge, liveFactories.work]).toEqual([0, 0, 0]);
       return;
     }
     if (!capturing) {
@@ -430,7 +432,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     expect(hitOnly).toHaveLength(1);
     const prefix = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
     const prefixInputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: prefix, at: null }))));
-    historical = HttpRouter.toWebHandler(fansInputRoutes(prefixInputs, { readSet: hitOnly[0]!.readSet,
+    historical = HttpRouter.toWebHandler(fansInputRoutes(prefixInputs, {
       get live(): never { poisoned++; throw Error("cold hit constructed live inputs"); },
       get store(): never { poisoned++; throw Error("cold hit constructed a Work store"); },
     }), { disableLogger: true });
@@ -470,16 +472,15 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
       await live.dispose(); liveFactories.recorded = true;
       const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
       const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
-      let selected = cases.find((entry) => entry.value.kind === "overview")!;
-      historical = HttpRouter.toWebHandler(fansInputRoutes(context, { get readSet() { return selected.readSet; },
+      const selected = cases.find((entry) => entry.value.kind === "overview")!;
+      historical = HttpRouter.toWebHandler(fansInputRoutes(context, {
         get live(): never { poisoned++; throw Error("Recovery constructed live inputs"); },
         get store(): never { poisoned++; throw Error("Recovery constructed Work store"); },
       }), { disableLogger: true });
       for (const entry of [selected, recovered]) {
-        selected = entry;
         const response = await send(historical, entry.url, entry.body);
-        expect(response.status, await response.clone().text()).toBe(200);
-        expect(await response.json()).toEqual(entry.value);
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({ problem: "recording.ambiguous" });
       }
       expect([liveFactories.sdk, liveFactories.bridge, liveFactories.work, poisoned]).toEqual([0, 0, 0, 0]);
       return;
@@ -506,6 +507,11 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     const liveFiles = vi.spyOn(HostFiles, "layer").mockImplementation(() => { poisoned++; throw Error("Live file readers constructed"); });
     const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
     expect(reader.truncation).toBeNull();
+    const inventory = await Promise.all(reader.readSets.ids().map((id) => run(reader.readSets.get(id))));
+    const groups = Map.groupBy(inventory, (entry) => canonicalJson(entry.recipe));
+    await writeFile(join(import.meta.dirname, "../../../../.artifacts/runs/kernel-crusade-20261104/step-7/fill1b-census.json"), JSON.stringify({ snapshot: { path: source, sha256: createHash("sha256").update(readFileSync(source)).digest("hex"), schema: "readSchemas(ducts.snapshot.walk).response", version: snapshotContract.version }, records: inventory.length, incomplete: inventory.filter((entry) => entry.state !== "complete").length,
+      recipes: [...groups.values()].map((entries) => ({ key: entries[0]!.recipe.key, input: entries[0]!.recipe.input, scope: entries[0]!.recipe.scope, count: entries.length,
+        incomplete: entries.filter((entry) => entry.state !== "complete").length })) }, null, 2));
     const publications = cases.filter((entry) => entry.stream && entry.value.value?.state);
     expect(new Set(publications.map((entry) => entry.readSet)).size).toBe(publications.length);
     const acquisitionFrame = publications[0]!;
@@ -546,36 +552,52 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     expect(basis(original)).toHaveLength(1); expect(basis(current)).toHaveLength(1);
     expect(basis(original)[0]!.takingId).not.toBe(basis(current)[0]!.takingId);
     const calls = nativeCalls;
-    for (const recorded of cases) {
-      if (recorded.url === "/call") continue; // the hit-only set was already replayed cold above
-      console.info("cold recorded consumer", recorded.readSet, recorded.url, recorded.body?.detail?.kind ?? recorded.value.kind);
-      const lane: HostInputLane = { kind: "recording", recordingStore: reader, at: null };
-      const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer(lane))));
-      // Each request has an explicit trusted read set; repeated occurrences have no guessed binding.
-      historical = HttpRouter.toWebHandler(Layer.unwrap(Effect.gen(function* () {
-        yield* TestClock.setTime(10000);
-        return fansInputRoutes(context, { readSet: recorded.readSet, get live(): never { poisoned++; throw Error("live inputs constructed"); },
-          get store(): never { poisoned++; throw Error("live Work store constructed"); }, initialize: async () => { poisoned++; throw Error("live initializer called"); } });
-      })).pipe(Layer.provide(TestClock.layer())), { disableLogger: true });
+    const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
+    historical = HttpRouter.toWebHandler(Layer.unwrap(Effect.gen(function* () {
+      yield* TestClock.setTime(10000);
+      return fansInputRoutes(context, {
+        get live(): never { poisoned++; throw Error("live inputs constructed"); },
+        get store(): never { poisoned++; throw Error("live Work store constructed"); },
+        initialize: async () => { poisoned++; throw Error("live initializer called"); },
+      });
+    })).pipe(Layer.provide(TestClock.layer())), { disableLogger: true });
+    for (const recorded of cases.filter((entry) => !entry.stream)) {
+      const saved = await run(reader.readSets.get(recorded.readSet));
+      const matches = groups.get(canonicalJson(saved.recipe))!;
       const response = await send(historical, recorded.url, recorded.body, admitted(recorded.caller));
-      {
-        expect(response.status, recorded.stream ? "resource stream" : await response.clone().text()).toBe(200);
-        const provenance = JSON.parse(response.headers.get("x-pe-source")!);
-        expect(provenance).toMatchObject({ kind: "recording", at: null, ...identity,
+      if (matches.length > 1) {
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({ problem: "recording.ambiguous" });
+      } else {
+        expect(response.status, await response.clone().text()).toBe(200);
+        expect(JSON.parse(response.headers.get("x-pe-source")!)).toMatchObject({ kind: "recording", at: null, ...identity,
           coverage: expect.arrayContaining(["native", "document", "work", "files", "marks"]) });
-        expect(JSON.stringify(provenance)).not.toContain(dir);
-        const replay = recorded.stream ? await firstFrame(response) : recorded.url === "/call" ? await nativeValue(response) : await response.json();
-        if (recorded.url === "/call") expect(response.headers.get("x-pe-ducts-reused")).toBe("false");
-        expect(replay).toEqual(recorded.value);
+        expect(response.headers.get("x-pe-source")).not.toContain(dir);
+        expect(recorded.url === "/call" ? await nativeValue(response) : await response.json()).toEqual(recorded.value);
       }
-      const refused = await send(historical, "/pe/route-state/fans/apply?open=captured-chadds/chadds-open", { patches: [], expectedRevision: 2, press: crypto.randomUUID() });
-      expect(refused.status).toBe(409);
-      expect(await refused.json()).toMatchObject({ problem: "recording.historical" });
-      const missing = await send(historical, "/pe/ducts/roster", { target: { ...ref, openId: "unrecorded-open" } });
-      expect(missing.status).toBe(409);
-      expect(await missing.json()).toMatchObject({ problem: expect.stringMatching(/^recording\.(miss|mismatch)$/) });
-      await historical.dispose(); historical = undefined;
     }
+    const feeds = cases.filter((entry) => entry.stream && entry.value.value?.handle);
+    const healthy = JSON.parse(new URL(feeds[0]!.url, "http://host").searchParams.get("keys")!)[0];
+    const absent: ReadingRequest = { kind: "ducts-tables", session: "missing-session", ids: ["missing-table"] };
+    const connection = crypto.randomUUID();
+    const frames = resourceFrames(await send(historical, `/pe/resources?connection=${connection}&keys=${encodeURIComponent(JSON.stringify([resource, healthy, absent]))}`));
+    try {
+      const batch = [await frames.next(), await frames.next(), await frames.next()];
+      expect(batch.find((frame) => frame.key === readingKey(healthy))).toEqual(feeds[0]!.value);
+      expect(batch.find((frame) => frame.key === readingKey(resource))).toMatchObject({ kind: "failure", failure: { code: "recording.ambiguous" } });
+      expect(batch.find((frame) => frame.key === readingKey(absent))).toMatchObject({ kind: "failure", failure: { code: "recording.miss" } });
+      const sibling = JSON.parse(new URL(feeds[1]!.url, "http://host").searchParams.get("keys")!)[0];
+      const changed = await send(historical, `/pe/resource-subscriptions?connection=${connection}`,
+        { add: [sibling], remove: [readingKey(absent), readingKey(resource)] });
+      expect(changed.status).toBe(200);
+      expect(await frames.next()).toEqual(feeds[1]!.value);
+    } finally { await frames.close(); }
+    const refused = await send(historical, "/pe/route-state/fans/apply?open=captured-chadds/chadds-open", { patches: [], expectedRevision: 2, press: crypto.randomUUID() });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ problem: "recording.historical" });
+    const missing = await send(historical, "/pe/ducts/roster", { target: { ...ref, openId: "unrecorded-open" } });
+    expect(missing.status).toBe(409);
+    expect(await missing.json()).toMatchObject({ problem: "recording.miss" });
     expect(poisoned).toBe(0); expect(nativeCalls).toBe(calls);
     expect(liveFactories).toMatchObject({ sdk: 0, bridge: 0, work: 0 });
     liveFiles.mockRestore();
