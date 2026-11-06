@@ -1,8 +1,5 @@
 import { z } from "zod";
 import { routeAddress } from "@pe/agent-contracts";
-import { field } from "../../../../packages/agent-contracts/src/route-field";
-import { podsAddress } from "../../../../packages/agent-contracts/src/routes/pods";
-import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 
 export const podsPageSchema = routeAddress("pods").schema.extend({
   member: z.string().default(""),
@@ -10,26 +7,3 @@ export const podsPageSchema = routeAddress("pods").schema.extend({
   pendingDraft: z.boolean().default(false),
 });
 export type PodsPage = z.output<typeof podsPageSchema>;
-export const podsFields = {
-  threadSearch: { ...threadListFields.threadSearch, role: "query" as const },
-  threadSort: { ...threadListFields.threadSort, role: "query" as const },
-  pod: { ...podsAddress.fields.pod, role: "query" as const },
-  path: { ...podsAddress.fields.path, role: "subject" as const },
-  runs: { ...podsAddress.fields.runs, role: "query" as const },
-  member: {
-    ...field(podsPageSchema.shape.member, {}),
-    role: "transient" as const,
-    url: false as const,
-  },
-  mode: {
-    ...field(podsPageSchema.shape.mode, {}),
-    role: "device" as const,
-    url: false as const,
-    agent: false as const,
-  },
-  pendingDraft: {
-    ...field(podsPageSchema.shape.pendingDraft, {}),
-    role: "transient" as const,
-    url: false as const,
-  },
-};

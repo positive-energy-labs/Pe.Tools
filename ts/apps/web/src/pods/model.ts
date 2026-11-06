@@ -1,13 +1,11 @@
 import {
-  memberWork,
   podMemberSchema,
   settingsCandidate,
   type PodMember,
   type SettingsRouteDocument,
 } from "@pe/agent-contracts";
-import type { Composed, PodRow } from "#/route/pods";
-import type { ReadingState } from "#/shell/readings";
-import type { PodsPage } from "./page";
+import type { Composed, PodRow } from "../route/pods.ts";
+import type { PodsPage } from "./page.ts";
 
 export interface MemberRead {
   member: PodMember;
@@ -20,8 +18,9 @@ export interface CompositionRead {
   draft: string;
   result: Composed;
 }
-export const readingValue = <T>(state: ReadingState | undefined): T | null =>
-  (state?.value ?? state?.previous ?? null) as T | null;
+export const readingValue = <T>(
+  state: { value?: unknown; previous?: unknown } | undefined,
+): T | null => (state?.value ?? state?.previous ?? null) as T | null;
 export function selectedMember(page: Readonly<Pick<PodsPage, "pod" | "path">>): PodMember | null {
   const selected = { pod: page.pod, path: page.path };
   const parsed = podMemberSchema.safeParse(selected);
@@ -29,7 +28,7 @@ export function selectedMember(page: Readonly<Pick<PodsPage, "pod" | "path">>): 
 }
 export const sameMember = (a: PodMember | null | undefined, b: PodMember | null | undefined) =>
   !!a && !!b && a.pod === b.pod && a.path === b.path;
-export const selectedRow = (page: PodsPage, pods: readonly PodRow[]) => {
+export const selectedRow = (page: Pick<PodsPage, "pod" | "path">, pods: readonly PodRow[]) => {
   const ref = selectedMember(page);
   const pod = pods.find((row) => row.id === ref?.pod);
   const member = pod?.members.find((row) => row.path === ref?.path);
@@ -50,9 +49,6 @@ export function draftOf(
       ? read!.content
       : "";
 }
-export const workSubject = (page: Readonly<PodsPage>) => {
-  const member = selectedMember(page);
-  return member && member.path.endsWith(".json") ? memberWork(member) : "";
-};
-export const siblingPath = (path: string, at = new Date()) =>
-  path.replace(/(\.json)?$/, `.${at.toISOString().replace(/[:.]/g, "-")}.json`);
+// Pure intents use the mount-issued press instead of sampling time; the host still refuses overwrite.
+export const siblingPath = (path: string, press: string) =>
+  path.replace(/(\.json)?$/, `.${press}.json`);

@@ -8,10 +8,11 @@ import { module as schedules } from "../schedules/kernel";
 import { module as families } from "../families/kernel";
 import { module as ducts } from "../ducts/kernel";
 import { module as fans } from "../fans/kernel";
+import { module as pods } from "../pods/kernel";
 import { module as chat } from "../chat/kernel";
 import { builtins, type BuiltinKey } from "./builtins.neutral";
 
-const modules = { captures, schedules, families, ducts, fans, chat } satisfies Record<
+const modules = { captures, schedules, families, ducts, fans, chat, pods } satisfies Record<
   BuiltinKey,
   unknown
 >;

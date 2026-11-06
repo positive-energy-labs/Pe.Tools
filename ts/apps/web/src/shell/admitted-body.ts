@@ -38,6 +38,7 @@ export function createAdmittedBody<W extends Record<string, unknown>>(context: M
         ),
         readCosts: Object.freeze({ ...geometry.costs }),
         visible: true,
+        fixture: context.input.fixture,
         verbs: Object.fromEntries(
           ("allowed" in declaration.verbs ? declaration.verbs.allowed : declaration.verbs).map(
             (id: string) => [

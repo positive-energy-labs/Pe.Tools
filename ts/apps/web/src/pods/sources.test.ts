@@ -1,10 +1,22 @@
 import { beforeEach, expect, test, vi } from "vite-plus/test";
 import { podsSources } from "./sources";
 import { demandContext } from "#/shell/readings-use";
-import { podsReadings } from "./declarations";
+import { podsNeutralBodies } from "./neutral";
+const podsReadings = {
+  member: {
+    args: (page: ReturnType<typeof podsPageSchema.parse>) =>
+      podsNeutralBodies.memberArgs.run({ page, work: { basis: null }, readings: {} }),
+  },
+  runs: {
+    args: (page: ReturnType<typeof podsPageSchema.parse>) =>
+      podsNeutralBodies.runsArgs.run({ page, work: {}, readings: {} }),
+  },
+};
 import { podsSeeds } from "./graph-seeds";
 import { podsPageSchema } from "./page";
 import { callOp } from "#/shell/readings-api";
+import { memberWork, settingsRouteState } from "@pe/agent-contracts";
+import { memberReadSchema } from "./schemas";
 vi.mock("#/shell/readings-api", () => ({ callOp: vi.fn() }));
 beforeEach(() => vi.mocked(callOp).mockReset());
 
@@ -76,4 +88,36 @@ test("empty member and Pod selections acquire no file or run authority", async (
     });
   }
   expect(callOp).not.toHaveBeenCalled();
+});
+
+test("composition sends exact staged Work bytes through its declared args, without ambient Page or Work", async () => {
+  const page = podsPageSchema.parse(podsSeeds.browse.page);
+  const member = memberReadSchema.parse(
+    podsSeeds.browse.readings.member.fixtureSelect.values[JSON.stringify([page.pod, page.path])],
+  );
+  const content = ' { "name" : "staged bytes" }\n';
+  const work = settingsRouteState.schema.parse({
+    ...podsSeeds.browse.works[memberWork(page)],
+    fields: { "": { edit: { value: content } } },
+  });
+  const args = podsNeutralBodies.compositionArgs.run({
+    page,
+    work,
+    readings: {
+      member: { status: "ready", current: true, value: member, hash: "fixture" },
+      status: { status: "ready", current: true, value: null, hash: "fixture" },
+    },
+  });
+  vi.mocked(callOp).mockResolvedValueOnce({ diagnostics: [] } as never);
+  const source = podsSources()["pods.composition"]!;
+  if (source.kind !== "use") throw Error("Not a composition loader");
+  await source.open(
+    demandContext({ kind: "host" }, 1, args, new AbortController().signal),
+    vi.fn(),
+  );
+  expect(callOp).toHaveBeenCalledWith(expect.anything(), "pod.member.compose", {
+    pod: page.pod,
+    path: page.path,
+    content,
+  });
 });

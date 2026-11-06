@@ -1,7 +1,7 @@
 import { podMemberSchema } from "@pe/agent-contracts";
 import { z } from "zod";
-import { draftOf, selectedMember, type MemberRead } from "./model";
-import type { PodsPage } from "./page";
+import { draftOf, selectedMember, type MemberRead } from "./model.ts";
+import type { PodsPage } from "./page.ts";
 
 export const memberReadInput = podMemberSchema.nullable();
 export const runsReadInput = podMemberSchema.partial({ path: true }).nullable();

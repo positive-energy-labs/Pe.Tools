@@ -2,17 +2,11 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import type { RouteGraph } from "@pe/agent-contracts";
 import { familyGraph } from "../family/graph";
-import { podsGraph } from "../pods/graph";
 import { roomsGraph } from "../rooms/graph";
 import { takeoffGraph } from "../takeoff/graph";
 import { workPathName } from "./work-writes";
 
-const graphs = [
-  familyGraph,
-  podsGraph,
-  roomsGraph,
-  takeoffGraph,
-] as RouteGraph<unknown, unknown>[];
+const graphs = [familyGraph, roomsGraph, takeoffGraph] as RouteGraph<unknown, unknown>[];
 
 test("every Work field a route can write has a declared name for History and Inputs", () => {
   const unnamed: string[] = [];
