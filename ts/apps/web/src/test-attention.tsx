@@ -8,15 +8,13 @@ const empty = Atom.make<ReadonlySet<SubjectKey>>(new Set<SubjectKey>());
 export function TestAttention({
   registry,
   children,
-  doc = "test",
 }: {
   registry: AtomRegistry.AtomRegistry;
   children: ReactNode;
-  doc?: string;
 }) {
   return (
     <RegistryContext value={registry}>
-      <AttentionScope doc={doc} selected={empty}>
+      <AttentionScope doc="test" selected={empty}>
         {children}
       </AttentionScope>
     </RegistryContext>
