@@ -52,7 +52,7 @@ if (
   hostOwnership.lane === "installed" &&
   relaunchOutOfGuard({
     trust,
-    args: process.argv.slice(1),
+    argv: process.argv,
     exe: hostOwnership.executablePath,
     marker: join(hostOwnership.rootPath, "guard-relaunch.stamp"),
   })

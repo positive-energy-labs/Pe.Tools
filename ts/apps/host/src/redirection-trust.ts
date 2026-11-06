@@ -48,13 +48,14 @@ const RELAUNCH_WINDOW_MS = 120_000;
  */
 export function relaunchOutOfGuard(o: {
   trust: RedirectionTrust | null;
-  args: readonly string[];
+  argv: readonly string[];
   exe: string;
   marker: string;
   log?: (line: string) => void;
   launch?: (exe: string) => void;
 }): boolean {
-  if (o.trust !== "enforced" || o.args.length) return false;
+  // Node and SEA reserve argv[0..1]; user arguments start at 2 (nodejs.org/api/single-executable-applications.html#execution-arguments).
+  if (o.trust !== "enforced" || o.argv.slice(2).length) return false;
   const log = o.log ?? console.log;
   try {
     if (Date.now() - statSync(o.marker).mtimeMs < RELAUNCH_WINDOW_MS) {

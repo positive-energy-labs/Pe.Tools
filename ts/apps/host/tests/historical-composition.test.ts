@@ -249,26 +249,29 @@ test("historical entry serves real static files through identity and retains API
 test("recording process selection is strict and cannot enter the source live fallback", async () => {
   expect(await Effect.runPromise(recordingInputSelection(["--open", "--no-revit", "--take-over-host"]))).toBeUndefined();
   const { dir } = await bundle();
-  const launch = vi.fn();
-  for (const [index, args] of [["--recording", dir], ["--recording"], ["--open"]].entries()) {
-    const request = { trust: "enforced" as const, args, exe: "Pe.Host.exe",
-      marker: join(dir, `guard-${index}.stamp`), launch, log: () => {} };
-    expect(relaunchOutOfGuard(request)).toBe(false);
-  }
-  expect(launch).not.toHaveBeenCalled();
-  const startup = { trust: "enforced" as const, args: [], exe: "Pe.Host.exe",
-    marker: join(dir, "guard-default.stamp"), launch, log: () => {} };
-  expect(relaunchOutOfGuard(startup)).toBe(true);
-  expect(relaunchOutOfGuard(startup)).toBe(false);
-  expect(launch).toHaveBeenCalledTimes(1);
-  const selected = await Effect.runPromise(recordingInputSelection(["host", "--open", "--recording", dir, "--no-revit"]));
-  expect(selected).toEqual({ kind: "recording", directory: dir, at: null });
-  expect(await Effect.runPromise(hostInputs(null, selected!).pipe(Effect.flip))).toMatchObject({ problem: "recording.identity" });
   let entered = 0;
-  for (const argv of [["--recording"], ["--recording", ""], ["--recording", "  "], ["--recording", "--open"],
-    ["--recording=x"], ["--recording", dir, "--take-over-host"], ["--Recording", dir], ["--recordings", dir], ["--recording", dir, "--recording", dir], ["--recording", "\0"]]) {
-    const failed = await Effect.runPromise(recordingInputSelection(argv).pipe(Effect.tap(() => Effect.sync(() => { entered++; })), Effect.flip));
-    expect(failed).toMatchObject({ problem: "recording.argument", status: 400 });
+  for (const [runtime, prefix] of [["node", [process.execPath, "host/index.js"]], ["sea", ["Pe.Host.exe", "Pe.Host.exe"]]] as const) {
+    const launch = vi.fn();
+    for (const [index, args] of [["--recording", dir], ["--recording"], ["--open"]].entries()) {
+      const request = { trust: "enforced" as const, argv: [...prefix, ...args], exe: prefix[0],
+        marker: join(dir, `guard-${runtime}-${index}.stamp`), launch, log: () => {} };
+      expect(relaunchOutOfGuard(request)).toBe(false);
+    }
+    expect(launch).not.toHaveBeenCalled();
+    const startup = { trust: "enforced" as const, argv: prefix, exe: prefix[0],
+      marker: join(dir, `guard-${runtime}-default.stamp`), launch, log: () => {} };
+    expect(relaunchOutOfGuard(startup)).toBe(true);
+    expect(relaunchOutOfGuard(startup)).toBe(false);
+    expect(launch).toHaveBeenCalledExactlyOnceWith(prefix[0]);
+    expect(await Effect.runPromise(recordingInputSelection(prefix))).toBeUndefined();
+    const selected = await Effect.runPromise(recordingInputSelection([...prefix, "--open", "--recording", dir, "--no-revit"]));
+    expect(selected).toEqual({ kind: "recording", directory: dir, at: null });
+    expect(await Effect.runPromise(hostInputs(null, selected!).pipe(Effect.flip))).toMatchObject({ problem: "recording.identity" });
+    for (const args of [["--recording"], ["--recording", ""], ["--recording", "  "], ["--recording", "--open"],
+      ["--recording=x"], ["--recording", dir, "--take-over-host"], ["--Recording", dir], ["--recordings", dir], ["--recording", dir, "--recording", dir], ["--recording", "\0"]]) {
+      const failed = await Effect.runPromise(recordingInputSelection([...prefix, ...args]).pipe(Effect.tap(() => Effect.sync(() => { entered++; })), Effect.flip));
+      expect(failed).toMatchObject({ problem: "recording.argument", status: 400 });
+    }
   }
   expect(entered).toBe(0);
 });
