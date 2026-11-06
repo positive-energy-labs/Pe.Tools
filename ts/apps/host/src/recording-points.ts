@@ -292,7 +292,8 @@ export const acceptedPointPolicy = Effect.fn("RecordingPoints.acceptedPolicy")(f
               yield* root.linkReadSet("documentAuthority", authority as ReadSetId);
             yield* root.seal;
             yield* references(writer, document, root.id);
-            if (!active()) return yield* refuse("context", "Accepted connection retired");
+            // A normal unmount retires this acceptance, not the ancillary capture writer.
+            if (!active()) return;
             const receipt = yield* receipts.mint(
               root.id,
               createHashForVersions(claims.map((claim) => claim.v)),

@@ -437,6 +437,7 @@ test("unmount fences in-flight sealing while a later mounted acceptance can retu
     release.resolve();
     expect((await pending).status).toBe(400);
     expect(owner.writer.points.ids()).toHaveLength(0);
+    expect(owner.writer.capture.truncated()).toBeNull();
     expect(
       (
         await owner.send("/pe/resource-subscriptions?connection=receipt-race", {
