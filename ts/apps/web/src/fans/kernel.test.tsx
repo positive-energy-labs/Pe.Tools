@@ -10,11 +10,13 @@ import { selectedFans, stableFanKey } from "../ducts/sheet/model.ts";
 import sheet from "../ducts/sheet/sheet.fixture.json";
 
 test("fans admits its own schema and fingerprint independently of ducts", async () => {
-  const { owner, presenter, hostPresenter } = await admit();
+  const { owner, presenter, hostOwner, hostPresenter } = await admit();
+  expect(owner.data.work).toHaveProperty("schema", "work");
   expect(presenter.data.work).toEqual({ route: "fans", schema: "work", version: 1, migrations: {} });
   expect(presenter.workFingerprint).not.toBe(owner.workFingerprint);
   expect(presenter.resolvedWork?.schema.parse({})).toEqual(fansDocumentSchema.parse({}));
   expect(hostPresenter.resolvedWork?.spec.route).toBe("fans");
+  expect(hostOwner.resolvedWork?.spec.route).toBe("ducts");
 });
 
 test("nominal Work schema boundary refuses unknown keys and mismatched schema objects", async () => {

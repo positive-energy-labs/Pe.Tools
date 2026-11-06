@@ -6,7 +6,6 @@ import type {
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { presentInputHistory } from "../ducts/sheet/input-history.neutral";
 import { createWitness } from "./cutover.test-support";
-import { admit } from "./admission.fixture";
 const closes: (() => void)[] = [];
 afterEach(() =>
   closes
@@ -24,14 +23,6 @@ const settle = (write: Observation<WorkWriteOutcome>) =>
     ),
   );
 const witness = () => createWitness(closes);
-test("exclusive admission has independent Ducts and Fans Work", async () => {
-  const { owner, presenter, hostOwner, hostPresenter } = await admit();
-  expect(owner.data.work).toHaveProperty("schema", "work");
-  expect(presenter.data.work).toEqual({ route: "fans", schema: "work", version: 1, migrations: {} });
-  expect(presenter.workFingerprint).not.toBe(owner.workFingerprint);
-  expect(hostPresenter.resolvedWork!.spec.route).toBe("fans");
-  expect(hostOwner.resolvedWork!.spec.route).toBe("ducts");
-});
 test("human slot/drop/flow edits stay in Fans Work, preserve siblings and restore named history after a cold shell reload", async () => {
   const f = await witness();
   await vi.waitFor(() => {
