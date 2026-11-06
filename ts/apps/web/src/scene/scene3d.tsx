@@ -261,6 +261,12 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     (focusCurrent ? core.current : null)?.paint(selected, props.hidden, props.isolated, lit);
   }, [selected, props.hidden, props.isolated, lit, meshes, commitVersion]);
   useEffect(() => {
+    const key = hovered == null
+      ? null
+      : (props.meshes?.instances.find((i) => i.revitId === hovered)?.key ?? null);
+    (focusCurrent ? core.current : null)?.hoverElement(key);
+  }, [hovered, props.meshes, meshes, commitVersion]);
+  useEffect(() => {
     (focusCurrent ? core.current : null)?.setLayers(props.layers);
   }, [props.layers, meshes, commitVersion]);
   useEffect(() => {

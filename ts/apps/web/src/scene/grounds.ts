@@ -98,12 +98,6 @@ export const LOOK = defineKnobs("scene", "ts/apps/web/src/scene/grounds.ts", {
     wiggleMs: num("Wiggle loop", 1200, [500, 3000, 50], "live", "ms"),
     wiggleLoops: num("Wiggle loops", 2, [1, 4, 1]),
   },
-  // 2026-10-26 rung rule: a mark keeps the hue and lifts OKLCH lightness by this much.
-  lift: {
-    hover: num("Hover lightness lift", 0.04, [0, 0.3, 0.01]),
-    lit: num("Lit lightness lift", 0.06, [0, 0.3, 0.01]),
-    selected: num("Selected lightness lift", 0.1, [0, 0.3, 0.01]),
-  },
   veil: {
     colour: colour("Context ink", "theme"),
     nearFt: num("Full within", 0, [0, 20, 0.25], "live", "ft"),

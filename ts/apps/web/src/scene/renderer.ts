@@ -17,7 +17,7 @@ import { createGlow, GLOW_LAYER, OCCLUDER_LAYER } from "./glow";
 import { createDamageBatch } from "./damage-batch";
 import { createMarkBatch } from "./mark-batch";
 import { createOutline, OUTLINE_LAYER, veilOutline } from "./outline";
-import { liftLightness } from "./oklch";
+import { attentionColours, attentionMark, type AttentionMark } from "./attention";
 import {
   CONTEXT_CREASE_DEG,
   GROUND_MATERIAL,
@@ -194,8 +194,7 @@ const BOX_EDGES = [
   [2, 6],
   [3, 7],
 ] as const;
-/** Selection, hover and lighting lift the base system hue in OKLCH lightness (`LOOK.lift`). */
-type Mark = "hover" | "lit" | "selected";
+type Mark = AttentionMark;
 
 /** Keep only edge storage after upload; the completed async preparation must not own face arrays. */
 function preparedEdges(
@@ -220,6 +219,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   let look: Look = LOOK.read();
   let grounds = sceneGrounds(mount, look);
+  let attention = attentionColours(mount);
   // Shared by reference with the outline pass and the fog: re-tinted in place, never replaced.
   const { ground, ink } = grounds;
   const isDark = () => ground.getHSL({ h: 0, s: 0, l: 0 }).l < 0.5;
@@ -232,7 +232,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
   canvas.tabIndex = 0;
   canvas.className = "block size-full";
   mount.prepend(canvas);
-  const outline = createOutline(renderer, ink, ground);
+  const outline = createOutline(renderer, attention, ground);
 
   let bounds = meshes.bounds;
   const origin = new THREE.Vector3(...center(bounds));
@@ -430,6 +430,8 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     veil.stubContext.value.copy(grounds.context);
     contextMaterial.color.copy(ink);
     contextMaterial.opacity = look.veil.lineAlpha;
+    attention = attentionColours(mount);
+    outline.setColours(attention);
     outline.setWidths(look.outline);
     outline.setOccluded(look.depth.occludedAlpha, look.depth.occludedWidth);
     occluded.value = look.depth.occludedAlpha;
@@ -461,8 +463,8 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       tier === "subject" || tier === "stub" ? subjectL(paint) : undefined,
     );
     if (tier === "stub") color.lerp(ground, look.subject.stubGroundMix);
-    // The rung rule: emphasis keeps the hue and lifts OKLCH lightness; the outline carries the rest.
-    if (mark) color.copy(liftLightness(color, look.lift[mark]));
+    // F10 supersedes the hue-preserving lift for attention only; rest and alarm keep their meaning.
+    if (mark) color.copy(attention[mark]);
     const alpha = surfaceAlpha(paint, look);
     batch.setColorAt(id, new THREE.Vector4(color.r, color.g, color.b, alpha));
     const cap = caps.get(id);
@@ -1160,13 +1162,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
       if (cap) cap.visible = shown && !clipVolume?.preview;
       const mark: Mark | null = !shown
         ? null
-        : selected?.has(key)
-          ? "selected"
-          : lit?.has(key)
-            ? "lit"
-            : key === hoveredElement
-              ? "hover"
-              : null;
+        : attentionMark(!!selected?.has(key), key === hoveredElement, !!lit?.has(key));
       if (mark) next.set(id, mark);
       if (mark !== (marked.get(id) ?? null)) tint(id, mark);
     });
