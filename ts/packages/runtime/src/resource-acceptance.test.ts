@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import type { AcceptedReading, RecordingAcknowledgements } from "@pe/agent-contracts";
+import { READING_MAX_KEYS, type AcceptedReading, type RecordingAcknowledgements } from "@pe/agent-contracts";
 import { identityCodecs } from "../../agent-contracts/src/route-kernel-codecs.ts";
 import { resourceResponse, updateResourceSubscriptions, type ResourceObserver, type ResourceAcceptance } from "./resource-stream.ts";
 
@@ -18,6 +18,9 @@ async function connection(accept: ResourceAcceptance["accept"]) {
   await stream.read();
   return {
     close: () => stream.cancel(),
+    subscribe: () => updateResourceSubscriptions(new Request("http://host/pe/resource-subscriptions?connection=mounted", {
+      method: "POST", body: JSON.stringify({ add: [{ kind: "machine" }], remove: [] }),
+    }), observe, "browser"),
     ack: (ack: Partial<RecordingAcknowledgements>) => updateResourceSubscriptions(
       new Request("http://host/pe/resource-subscriptions?connection=mounted", {
         method: "POST", body: JSON.stringify({ add: [], remove: [], ...ack }),
@@ -33,6 +36,19 @@ test("a mounted reading can return with the same args and retained body after un
     expect((await owner.ack({ unmounted: [reading.consumer] })).status).toBe(200);
     expect((await owner.ack({ accepted: [reading] })).status).toBe(200);
     expect(accepted).toBe(2);
+  } finally { await owner.close(); }
+});
+
+test("acceptance slot overflow refuses without retiring live subscription admission", async () => {
+  const owner = await connection(async () => {});
+  try {
+    for (let i = 0; i < READING_MAX_KEYS; i++) {
+      const slot = { ...reading, consumer: { ...reading.consumer, instance: `pane-${i}` } };
+      expect((await owner.ack({ accepted: [slot] })).status).toBe(200);
+    }
+    const extra = { ...reading, consumer: { ...reading.consumer, instance: "overflow" } };
+    expect((await owner.ack({ accepted: [extra] })).status).toBe(400);
+    expect((await owner.subscribe()).status).toBe(200);
   } finally { await owner.close(); }
 });
 

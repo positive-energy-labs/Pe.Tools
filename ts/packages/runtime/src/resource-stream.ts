@@ -415,7 +415,7 @@ export function resourceResponse(
               next.set(key, reading);
             }
             if (next.size > READING_MAX_KEYS) {
-              abort(); throw Error("Accepted reading slots are full; reconnect");
+              throw Error("Accepted reading slots are full");
             }
             if (ack.accepted.length) {
               if (!acceptance || !audience) throw Error("Body receipt acceptance is unavailable");
