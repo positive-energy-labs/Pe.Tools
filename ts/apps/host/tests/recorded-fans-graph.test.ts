@@ -109,12 +109,13 @@ async function firstFrame(response: Response) {
   try { return await frames.next(); } finally { await frames.close(); }
 }
 
-test.skipIf(!existsSync(source)).each([
-  { capturing: false, recovery: false }, { capturing: true, recovery: false }, { capturing: true, recovery: true },
-])("real Fans graph persistent SSE and cold replay (capture=$capturing recovery=$recovery)", async ({ capturing, recovery }) => {
+test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "tamper"] as const)("real Fans graph %s", async (mode) => {
+  const capturing = mode !== "off", recovery = mode === "recovery";
+  liveFactories.recorded = false;
   const dir = await mkdtemp(join(tmpdir(), "pe-fans-graph-"));
   const completed: { recipe: ConsumerRecipe; id: ReadSetId; requestId?: string; caller?: Caller }[] = []; let nativeCalls = 0, poisoned = 0;
-  let workspace: RouteWorkspace, holdHuman = false;
+  let workspace: RouteWorkspace, holdHuman = false, holdMark = false;
+  const markEntered = Promise.withResolvers<void>(), releaseMark = Promise.withResolvers<void>();
   const entered = Promise.withResolvers<void>(), releaseHuman = Promise.withResolvers<void>();
   const raw = JSON.parse(readFileSync(source, "utf8").replace(/^\uFEFF/, ""));
   const snapshot = Schema.decodeUnknownSync(Schema.Json)(raw.result ?? raw);
@@ -144,6 +145,9 @@ test.skipIf(!existsSync(source)).each([
   const liveHost = await bootHost({ inputs, clock: 200, fans: { live: livePorts, store: fileRouteDocumentStore(join(dir, "work")),
       observedReadSet: (recipe, id, requestId, caller) => { completed.push({ recipe, id, requestId, caller }); },
       observed: (taking) => Effect.gen(function* () {
+        if (holdMark && taking.input.kind === "marks") {
+          holdMark = false; markEntered.resolve(); yield* Effect.promise(() => releaseMark.promise);
+        }
         const identity = yield* Effect.serviceOption(RequestIdentity);
         if (holdHuman && taking.input.kind === "work" && taking.input.view === "view" &&
             Option.isSome(identity) && identity.value.caller.kind === "human") {
@@ -240,6 +244,23 @@ test.skipIf(!existsSync(source)).each([
       await next("loading");
       const refreshedFrame = await next("ready");
       if (!recovery) expect(refreshedFrame.value.version).toBe(refreshed.headers.get(DUCTS_BODY_VERSION_HEADER));
+      if (mode === "endurance") for (let i = 0; i < 140; i++) {
+        changedAt = i % 2 ? 300 : 0; for (const notify of markListeners) notify();
+        await next("ready");
+        expect(writer.capture.truncated(), `Long stream publication ${i}`).toBeNull();
+      }
+      if (mode === "endurance") {
+        const sealedFrames = completed.filter((entry) => entry.recipe.key.startsWith("resource.")).length;
+        holdMark = true; changedAt = 0; for (const notify of markListeners) notify();
+        await markEntered.promise;
+        await frames.close();
+        await vi.waitFor(() => expect(markListeners.size).toBe(0));
+        releaseMark.resolve();
+        const afterClose = await send(live, "/pe/ducts/roster", { target: ref });
+        expect(afterClose.status, await afterClose.clone().text()).toBe(200);
+        expect(completed.filter((entry) => entry.recipe.key.startsWith("resource.")).length).toBe(sealedFrames);
+        expect(writer.capture.truncated()).toBeNull();
+      }
       if (retiredWalk) {
         expect(writer.capture.truncated()).toBeNull();
         const beforeRefusal = nativeCalls;
@@ -253,6 +274,24 @@ test.skipIf(!existsSync(source)).each([
     } finally { await frames.close(); }
   };
   try {
+    if (mode === "endurance" || mode === "tamper") {
+      await persistentProof();
+      if (mode === "endurance") return;
+      await live.dispose(); liveFactories.recorded = true;
+      const selected = completed.find((entry) => entry.recipe.key === "resource.notification")!;
+      const saved = await run(writer.readSets.get(selected.id));
+      for (const input of [null, { reading: saved.recipe.input, envelope: { state: "unknown" } }]) {
+        await run(writer.readSets.keep({ ...saved, recipe: { ...saved.recipe, input } }));
+        const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
+        const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
+        historical = HttpRouter.toWebHandler(fansInputRoutes(context, { readSet: selected.id }), { disableLogger: true });
+        const response = await send(historical, cases.find((entry) => entry.readSet === selected.id)!.url);
+        expect(response.status, await response.clone().text()).toBe(409);
+        expect(await response.json()).toMatchObject({ problem: "recording.mismatch" });
+        await historical.dispose(); historical = undefined;
+      }
+      return;
+    }
     if (!capturing) {
       const warm = await send(live, "/pe/ducts/roster", { target: ref });
       expect(warm.status, await warm.clone().text()).toBe(200);
@@ -423,7 +462,7 @@ test.skipIf(!existsSync(source)).each([
     expect(poisoned).toBe(0); expect(nativeCalls).toBe(calls);
     expect(liveFactories).toMatchObject({ sdk: 0, bridge: 0, work: 0 });
     liveFiles.mockRestore();
-  } finally { releaseHuman.resolve(); vi.restoreAllMocks(); await historical?.dispose(); await live.dispose(); await rm(dir, { recursive: true, force: true }); }
+  } finally { releaseMark.resolve(); releaseHuman.resolve(); vi.restoreAllMocks(); await historical?.dispose(); await live.dispose(); await rm(dir, { recursive: true, force: true }); }
 // The production listener, full native schema decoding and each independent cold owner run here.
 // The 180 s boundary completed live acquisition but expired during progressing cold consumers.
 }, 300000);

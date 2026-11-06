@@ -309,10 +309,15 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
     const input = stream && recorded ? reading[0] : declared.route.input.parse({ params: declared.params,
       query: Object.fromEntries(url.searchParams), body: web.method === "GET" ? undefined : await web.clone().json() });
     const selected = recorded && stream && options.readSet ? await invoke(lane.recordingStore.readSets.get(options.readSet)) : undefined;
-    const notification = selected?.recipe.key === "resource.notification"
-      ? Schema.decodeUnknownSync(Schema.Struct({ reading: Schema.Json, envelope: Schema.Json }))(selected.recipe.input) : undefined;
+    const notification = selected?.recipe.key === "resource.notification" ? await invoke(Effect.try({
+      try: () => {
+        const saved = Schema.decodeUnknownSync(Schema.Struct({ reading: Schema.Json, envelope: Schema.Json }))(selected.recipe.input);
+        return { ...saved, envelope: ductsReadingEnvelopeSchema.parse(saved.envelope) };
+      },
+      catch: () => new InvalidRead({ message: "Recorded resource notification is malformed", status: 409, problem: "recording.mismatch" }),
+    })) : undefined;
     const recipe: ConsumerRecipe = { key: notification ? "resource.notification" : stream && recorded ? "resource.frame" : declared.id,
-      input: notification ? json({ reading: input, envelope: ductsReadingEnvelopeSchema.parse(notification.envelope) }) : json(input),
+      input: notification ? json({ reading: input, envelope: notification.envelope }) : json(input),
       scope: canonicalJson(json(identity.scope)) };
     const consumption = await invoke(readSets.open(recipe, options.readSet ?? null));
     const scoped = (current: InputConsumption): WorkInputRunner => (effect) =>
@@ -357,6 +362,8 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
         constructor(readonly subscription?: ReadSetId, readonly envelope?: DuctsReadingEnvelope) { super(); }
       }
       const frameRuns = new WeakMap<WorkCarriage, WorkInputRunner>();
+      const activeFrames = new Set<InputConsumption>();
+      let released = false;
       const frameRecipe: ConsumerRecipe = { key: "resource.frame", input: json(reading), scope: recipe.scope };
       const frame = (recipe = frameRecipe) => recorded ? consumption : child(consumption, recipe);
       const work: WorkReadContext = { begin: (read) => {
@@ -381,7 +388,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
       const current = frame();
       if (notification) {
         const carriage = new FrameCarriage(); frameRuns.set(carriage, scoped(current));
-        publish(resourceSnapshot(key, { value: ductsReadingEnvelopeSchema.parse(notification.envelope) }), carriage);
+        publish(resourceSnapshot(key, { value: notification.envelope }), carriage);
         return () => {};
       }
       void invoke(retained(current, input, {}, "acquire", inventory.document)).then(async (response) => {
@@ -390,9 +397,8 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
         if (!closed) release = owner.observe(reading, (value) => {
           try {
             // A notification observes an envelope, not another taking of the acquired native body.
-            const next = first ? current : frame({ ...frameRecipe, key: "resource.notification", input: json({ reading, envelope: value }) });
             const carriage = new FrameCarriage(first ? undefined : current.id, value);
-            first = false; frameRuns.set(carriage, scoped(next));
+            first = false; frameRuns.set(carriage, scoped(current));
             publish(resourceSnapshot(key, { value }), carriage);
           } catch (error) {
             const failure = error as InvalidRead;
@@ -416,19 +422,27 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
           const active = yield* Effect.serviceOption(CurrentInputConsumption);
           if (Option.isNone(active)) return yield* new InvalidRead({ message: "Frame runner has no consumption", status: 409, problem: "recording.context" });
           const previous = active.value;
-          const current = update ? frame(carriage instanceof FrameCarriage && carriage.envelope
+          const independent = !recorded && (update || (carriage instanceof FrameCarriage && !!carriage.subscription));
+          const current = independent ? yield* readSets.open(carriage instanceof FrameCarriage && carriage.envelope
             ? { ...frameRecipe, key: "resource.notification", input: json({ reading, envelope: carriage.envelope }) }
-            : previous.recipe) : previous;
-          if (update) yield* current.linkReadSet("value", previous.id);
-          else if (carriage instanceof FrameCarriage && carriage.subscription)
-            yield* current.linkReadSet("subscription", carriage.subscription);
+            : previous.recipe, null) : previous;
+          if (independent) activeFrames.add(current);
+          if (!update && carriage) frameRuns.set(carriage, scoped(current));
           return yield* Effect.tryPromise({ try: async () => {
-            try { const value = await scoped(current)(marks.readFrame(ref, key, at)); await complete(current); return value; }
-            finally { await scoped(current)(current.close); }
+            try {
+              if (released) throw new InvalidRead({ message: "Resource subscription is closed", status: 409, problem: "recording.context" });
+              if (update) await scoped(current)(current.linkReadSet("value", previous.id));
+              else if (carriage instanceof FrameCarriage && carriage.subscription)
+                await scoped(current)(current.linkReadSet("subscription", carriage.subscription));
+              const value = await scoped(current)(marks.readFrame(ref, key, at)); await complete(current); return value;
+            } finally { await scoped(current)(current.close); activeFrames.delete(current); }
           }, catch: (error) => isDoorFailure(error) ? error : new InvalidRead({ message: String(error), status: 409, problem: "recording.context" }) });
         }));
       })(observeResources(workspace, undefined, retainedResource, work))(reading, publish, after);
-      return () => { release(); void invoke(consumption.close); };
+      return () => {
+        released = true; release();
+        void invoke(Effect.forEach([...activeFrames, consumption], (current) => current.close, { discard: true }));
+      };
     };
     const source = sources(consumption);
     return { sheets: source, work: source.inputs!.work,
