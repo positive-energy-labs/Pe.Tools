@@ -5,6 +5,9 @@ import {
   READING_MAX_REQUEST_BYTES,
   readingKey,
   readingRequestsSchema,
+  decodeRecordingAcknowledgements,
+  type AcceptedReading,
+  type RecordingAcknowledgements,
   type ReadingFrame,
   type ReadingRequest,
   type ThreadHead,
@@ -129,10 +132,15 @@ export function observeResources(
 // Subscription ownership is host-local and scoped to the same observer as the stream.
 const connections = new WeakMap<
   ResourceObserver,
-  Map<string, (add: ReadingRequest[], remove: string[]) => void>
+  Map<string, { update: (add: ReadingRequest[], remove: string[], ack: RecordingAcknowledgements, audience: string | null) => Promise<void> }>
 >();
+export interface ResourceAcceptance {
+  readonly audience: string | null;
+  /** Host authenticates ALL claims before any acceptance slot is stored. */
+  readonly accept: (readings: readonly AcceptedReading[], active: () => boolean) => Promise<void>;
+}
 /** The host and its borrowed-read proxy admit the same bounded subscription body. */
-export function decodeResourceSubscriptionUpdate(raw: string): { add: ReadingRequest[]; remove: string[] } | { error: string } {
+export function decodeResourceSubscriptionUpdate(raw: string): { add: ReadingRequest[]; remove: string[] } & RecordingAcknowledgements | { error: string } {
   if (new TextEncoder().encode(raw).byteLength > READING_MAX_REQUEST_BYTES)
     return { error: "Resource request is too large" };
   try {
@@ -144,19 +152,21 @@ export function decodeResourceSubscriptionUpdate(raw: string): { add: ReadingReq
       value.remove.some((key: unknown) => typeof key !== "string")
     )
       throw Error("Invalid removals");
-    return { add, remove: value.remove as string[] };
+    const ack = decodeRecordingAcknowledgements(value);
+    if ("error" in ack) return ack;
+    return { add, remove: value.remove as string[], ...ack };
   } catch {
     return { error: "Invalid resource keys" };
   }
 }
-export async function updateResourceSubscriptions(request: Request, observe: ResourceObserver): Promise<Response> {
+export async function updateResourceSubscriptions(request: Request, observe: ResourceObserver, audience: string | null = null): Promise<Response> {
   const id = new URL(request.url).searchParams.get("connection") ?? "";
   const update = connections.get(observe)?.get(id);
   if (!update) return Response.json({ error: "Reading connection retired" }, { status: 409 });
   const value = decodeResourceSubscriptionUpdate(await request.text());
   if ("error" in value) return Response.json({ error: value.error }, { status: 400 });
   try {
-    update(value.add, value.remove);
+    await update.update(value.add, value.remove, value, audience);
     return Response.json({ ok: true });
   } catch {
     return Response.json({ error: "Invalid resource keys" }, { status: 400 });
@@ -185,6 +195,7 @@ export function resourceResponse(
   },
   registryOwner: ResourceObserver = observe,
   onClose?: () => void,
+  acceptance?: ResourceAcceptance,
 ): Response {
   const url = new URL(request.url);
   const raw = url.searchParams.get("keys") ?? "";
@@ -215,6 +226,10 @@ export function resourceResponse(
   let demand: (() => void) | undefined;
   let stalled: ReturnType<typeof setTimeout> | undefined;
   const releases = new Map<string, () => void>();
+  const accepted = new Map<string, AcceptedReading>();
+  let updating = false;
+  let acceptanceEpoch = 0;
+  const consumerKey = (value: RecordingAcknowledgements["unmounted"][number]) => JSON.stringify([value.instance, value.reading, value.argsHash]);
   const connection = url.searchParams.get("connection");
   let registry = connections.get(registryOwner);
   if (!registry) connections.set(registryOwner, (registry = new Map()));
@@ -249,6 +264,8 @@ export function resourceResponse(
     for (const release of releases.values()) release();
     onClose?.();
     releases.clear();
+    accepted.clear();
+    acceptanceEpoch++;
     pending.clear();
     ready.clear();
     tails.clear();
@@ -372,7 +389,43 @@ export function resourceResponse(
             }
           }
         };
-        if (connection) registry!.set(connection, update);
+        if (connection) registry!.set(connection, { update: async (add, remove, ack, audience) => {
+          if (closed) throw Error("Connection is closed");
+          // Ownership covers add/remove too: another browser cannot drive this connection id.
+          if (acceptance?.audience && audience !== acceptance.audience) throw Error("Foreign reading connection");
+          if (updating) {
+            if (ack.accepted.length || add.length || remove.length || !ack.unmounted.length) throw Error("Connection is updating");
+            for (const consumer of ack.unmounted) accepted.delete(consumerKey(consumer));
+            // Fence the pending batch, not this consumer's future mounted acceptances.
+            acceptanceEpoch++;
+            return;
+          }
+          updating = true;
+          const epoch = acceptanceEpoch;
+          try {
+            const next = new Map(accepted);
+            for (const consumer of ack.unmounted) next.delete(consumerKey(consumer));
+            for (const reading of ack.accepted) {
+              const key = consumerKey(reading.consumer);
+              for (const [priorKey, prior] of next) {
+                if (prior.consumer.instance === reading.consumer.instance && prior.consumer.reading === reading.consumer.reading && priorKey !== key) {
+                  next.delete(priorKey);
+                }
+              }
+              next.set(key, reading);
+            }
+            if (next.size > READING_MAX_KEYS) {
+              abort(); throw Error("Accepted reading slots are full; reconnect");
+            }
+            if (ack.accepted.length) {
+              if (!acceptance || !audience) throw Error("Body receipt acceptance is unavailable");
+              await acceptance.accept([...next.values()], () => !closed && acceptanceEpoch === epoch);
+              if (closed || acceptanceEpoch !== epoch) throw Error("Reading connection retired during acceptance");
+            }
+            accepted.clear(); next.forEach((value, key) => accepted.set(key, value));
+            update(add, remove);
+          } finally { updating = false; }
+        } });
         update([...requested.values()], []);
       },
       pull() {

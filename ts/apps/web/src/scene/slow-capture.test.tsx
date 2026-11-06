@@ -7,8 +7,8 @@
  * gate drops the capture's document (`ducts/route.tsx` `captureSource`), the capture aborts, and
  * the reconnect re-issues the identical read, once per deadline, forever.
  *
- * Real `PeReadings` over a stand-in EventSource and real `useCapture`; only the host RPC is
- * stubbed, and it never answers the capture during the test.
+ * Real `PeReadings` over stand-in EventSource and subscription updater, and real `useCapture`;
+ * the host RPC is stubbed and never answers the capture during the test.
  */
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { useEffect, useState } from "react";
@@ -87,6 +87,7 @@ it("a native capture slower than the reading deadline is asked once and never ab
       deliver();
       return () => {};
     },
+    async () => {},
   );
   // Stand-ins: the document snapshot the capture is gated on, and a reading whose owner waits on
   // Revit's queue behind the capture (the snapshot and catalog readings of the observation).

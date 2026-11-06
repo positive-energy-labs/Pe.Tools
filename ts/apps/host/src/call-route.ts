@@ -18,6 +18,7 @@ import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
 import {
   DUCTS_BODY_VERSION_HEADER,
   DUCTS_REFRESH_HEADER,
+  BODY_RECEIPT_HEADER,
 } from "@pe/agent-contracts";
 import { sdkSession, SdkSession } from "./sdk-session.ts";
 import { readSchedule } from "./schedule-actions.ts";
@@ -156,6 +157,9 @@ export function makeCallRoute(
     readonly pointers?: ThreadPointers;
     readonly retainedBasis?: DuctsBodyBasisSource;
     readonly retainedRead?: (input: NativeReadInput, options: { version?: string; refresh?: string }) => ReturnType<typeof retainedDuctsRead>;
+    readonly nativeBody?: (input: NativeReadInput, read: ReturnType<typeof readNativeCall>) => Effect.Effect<{
+      answer: Effect.Success<ReturnType<typeof readNativeCall>>; bodyReceipt?: string;
+    }, Effect.Error<ReturnType<typeof readNativeCall>>, Effect.Services<ReturnType<typeof readNativeCall>>>;
   },
 ) {
   const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
@@ -195,6 +199,7 @@ export function makeCallRoute(
   const callDoor = peRoutes["operation.call"];
   const post = HttpRouter.add(callDoor.method, callDoor.path, (req) => {
     let captureId: string | undefined;
+    let bodyReceipt: string | undefined;
     let admissionRequestId: string = randomUUID();
     // Set once dispatch begins so the catch below can attribute failures to the op.
     let op:
@@ -456,7 +461,11 @@ export function makeCallRoute(
                     status: 409,
                     problem: "read.target",
                   });
-                const answer = yield* readNativeCall(key, request ?? {}, { ...scope, bridgeSessionId, openDocumentId: openDocumentId ?? undefined });
+                const input = { key, input: request ?? {}, scope: { ...scope, bridgeSessionId, openDocumentId: openDocumentId ?? undefined } };
+                const read = readNativeCall(key, input.input, input.scope);
+                const captured = composition?.nativeBody ? yield* composition.nativeBody(input, read) : { answer: yield* read };
+                const answer = captured.answer;
+                bodyReceipt = "bodyReceipt" in captured ? captured.bodyReceipt : undefined;
                 if (answer.actualTarget.processIncarnation.pid !== resolvedSession.processId ||
                     answer.actualTarget.processIncarnation.startedAt !== resolvedSession.processStartUtcUnixMs)
                   return yield* new InvalidRead({ message: "Native read incarnation changed during admission", status: 409, problem: "read.target" });
@@ -500,6 +509,7 @@ export function makeCallRoute(
       const headers = result.target ? resolvedTargetHeaders(result.target) : {};
       if (!op.tsOnly && !entry.cancel) headers["x-pe-native-request-id"] = nativeRequestId;
       if (captureId) headers["x-pe-takeoff-capture-id"] = captureId;
+      if (bodyReceipt) headers[BODY_RECEIPT_HEADER] = bodyReceipt;
       if (kept)
         Object.assign(headers, { "x-pe-capture-id": kept.id, "x-pe-capture-url": kept.url });
       return Response.jsonUnsafe(result.value ?? null, { headers });
@@ -1485,6 +1495,7 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
   const target = { processIncarnation: admitted.processIncarnation, openDocumentLifetime: admitted.openDocumentLifetime };
   const services = yield* Effect.context<RequestIdentityKey>();
   // Existing phase-5 owner Promise boundary; the same captured caller runs acquisition and metadata.
+  // effect-edge: island, phase 5
   const run = Effect.runPromiseWith(services);
   let acquired = false;
   const shared = yield* Effect.tryPromise({ try: () => owner.read(subject, async () => {
@@ -1523,7 +1534,8 @@ const retainedReadFailure = (error: unknown) => isDoorFailure(error) ? error : n
 });
 
 /** The same native door without live target/cache acquisition. Unsupported sources refuse first. */
-export const nativeCallRouteFor = (retained?: (input: NativeReadInput, options: {version?:string;refresh?:string}) => ReturnType<typeof retainedDuctsRead>) => HttpRouter.add("POST", peRoutes["operation.call"].path, (req) =>
+export const nativeCallRouteFor = (retained?: (input: NativeReadInput, options: {version?:string;refresh?:string}) => ReturnType<typeof retainedDuctsRead>,
+  normal?: (input: NativeReadInput) => ReturnType<typeof retainedDuctsRead>) => HttpRouter.add("POST", peRoutes["operation.call"].path, (req) =>
   Effect.gen(function* () {
     const identity = yield* RequestIdentity;
     const body = yield* nativeCallBody(req);
@@ -1537,6 +1549,7 @@ export const nativeCallRouteFor = (retained?: (input: NativeReadInput, options: 
       const missing = inputs.check({ kind: "input", input: "document" });
       if (missing) return yield* missing;
     }
+    if (normal) return yield* normal({ key: body.key, input: body.request ?? {}, scope: identity.scope });
     const answer = yield* readNativeCall(body.key, body.request ?? {}, identity.scope);
     return Response.jsonUnsafe(answer.value, { headers: { "x-pe-native-request-id": answer.nativeRequestId } });
   }).pipe(Effect.catch((error) => {
