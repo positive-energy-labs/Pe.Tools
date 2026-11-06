@@ -28,4 +28,9 @@ test("heal retires its consumed intent only after every requested item is receip
   expect(healedCellPaths(input, { ...result, groups: [] })).toEqual([]);
   expect(healedCellPaths(input, { ...result, groups: [{ ...result.groups[0]!, items: [] }] })).toEqual([]);
   expect(healedCellPaths(input, { ...result, groups: [{ ...result.groups[0]!, outcome: "refused" }] })).toEqual([]);
+  for (const outcome of ["refused", "failed", "partial"])
+    expect(healedCellPaths(input, {
+      ...result,
+      groups: [{ group: "g10", outcome, items: [{ key: "cap:10:0", outcome }] }],
+    } as DuctsHeal.Res.Response)).toEqual([]);
 });
