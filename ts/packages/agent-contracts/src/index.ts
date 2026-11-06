@@ -23,3 +23,4 @@ export {
 
 export * from "./duct-catalog.ts";
 export * from "./input-lane.ts";
+export * from "./recording-points.ts";
