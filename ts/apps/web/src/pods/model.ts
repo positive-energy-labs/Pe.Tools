@@ -6,7 +6,7 @@ import {
   type SettingsRouteDocument,
 } from "@pe/agent-contracts";
 import type { Composed, PodRow } from "#/route/pods";
-import type { ReadingScope, ReadingState } from "#/shell/readings";
+import type { ReadingState } from "#/shell/readings";
 import type { PodsPage } from "./page";
 
 export interface MemberRead {
@@ -22,7 +22,7 @@ export interface CompositionRead {
 }
 export const readingValue = <T>(state: ReadingState | undefined): T | null =>
   (state?.value ?? state?.previous ?? null) as T | null;
-export function selectedMember(page: Readonly<PodsPage>): PodMember | null {
+export function selectedMember(page: Readonly<Pick<PodsPage, "pod" | "path">>): PodMember | null {
   const selected = { pod: page.pod, path: page.path };
   const parsed = podMemberSchema.safeParse(selected);
   return parsed.success ? parsed.data : null;
@@ -36,7 +36,10 @@ export const selectedRow = (page: PodsPage, pods: readonly PodRow[]) => {
   return { pod, member, ref };
 };
 export function draftOf(
-  scope: Pick<ReadingScope<PodsPage, SettingsRouteDocument>, "page" | "work">,
+  scope: {
+    page: Readonly<Pick<PodsPage, "pod" | "path">>;
+    work: Readonly<SettingsRouteDocument> | null;
+  },
   read: MemberRead | null,
 ) {
   const ref = selectedMember(scope.page);
