@@ -1,4 +1,5 @@
-import { isWritePreviewKey } from "./semantic-actions.ts";
+import { commands, isWritePreviewKey } from "./semantic-actions.ts";
+import type { Command } from "./command.ts";
 import { routeWorkSubject } from "./route-work-subject.ts";
 import { z } from "zod";
 import type { SchemaTable } from "./route-kernel-page.ts";
@@ -555,6 +556,42 @@ export function linkRouteBodies(
         body(verb.lands, `${path}.lands`, "lands");
         break;
     }
+  }
+  if (data.work?.adopt) {
+    const id = data.work.adopt;
+    const verb = data.verbs[id];
+    const command: Command | undefined =
+      verb?.kind === "command" && Object.hasOwn(commands, verb.entry)
+        ? commands[verb.entry as keyof typeof commands]
+        : undefined;
+    const reachesModelWrite = (key: string, seen = new Set<string>()): boolean => {
+      if (seen.has(key)) return false;
+      seen.add(key);
+      const entry = linked.get(key);
+      return (
+        entry?.effect === "ModelWrite" ||
+        !!entry?.uses.some((child) =>
+          reachesModelWrite(typeof child === "string" ? child : child.key, seen),
+        )
+      );
+    };
+    if (
+      verb?.kind !== "command" ||
+      verb.review !== "none" ||
+      !bindings.schemas[verb.input]?.safeParse({}).success ||
+      command?.autoAdopt !== true ||
+      !command.work ||
+      command.work.optional ||
+      command.work.route !== data.work.route ||
+      reachesModelWrite(verb.entry)
+    )
+      fail(
+        "work.adopt",
+        id,
+        "eligible automatic Work command",
+        "Automatic adoption requires a trusted required owner Work command, empty input, no review and no ModelWrite",
+        "policy",
+      );
   }
   for (const [key, pane] of Object.entries(data.panes)) {
     const path = `panes.${key}`;
