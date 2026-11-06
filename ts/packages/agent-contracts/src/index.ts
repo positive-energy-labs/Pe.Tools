@@ -8,7 +8,6 @@ export * from "./catalog-work.ts";
 
 export * from "./work-value.ts";
 
-export * from "./pod-module.ts";
 export type { PodRouteAuthoring } from "./pod-authoring.ts";
 export {
   field,
