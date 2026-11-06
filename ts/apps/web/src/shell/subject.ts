@@ -19,7 +19,7 @@ const readers = new Map<string, Set<SubjectReader>>();
 const listeners = new Set<() => void>();
 let revision = 0;
 export const subjectScopeKey = (search: Record<string, unknown>) =>
-  canonicalRouteInput([search.target ?? null, search.work ?? null, search.fixture ?? null]);
+  canonicalRouteInput(["target", "work", "fixture"].map((key) => search[key] ?? null));
 function changed() {
   revision++;
   for (const notify of listeners) notify();

@@ -1,6 +1,8 @@
 import { useCallback, useContext, useEffect, useSyncExternalStore } from "react";
 import { RegistryContext } from "@effect/atom-react";
 import { Button } from "@pe/kit/lang/button";
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList } from "@pe/kit/lang/list-view";
 import { cite, clearCitation, type SubjectReference } from "@pe/kit/lang/attention";
 import type { Pointer } from "../../../../packages/agent-contracts/src/pointers.ts";
 import { WorkbenchContext } from "#/workbench/provider/thread-summary";
@@ -18,7 +20,10 @@ const POLL_MS = 2000;
  * One read of the host's list per thread, shared by the chrome list and every body's highlight so a
  * dismissal clears both at once. The host thread meta stays the only owner; this is its last answer.
  */
-const reads = new Map<string, { pointers: readonly Pointer[]; listeners: Set<() => void>; stop: () => void }>();
+const reads = new Map<
+  string,
+  { pointers: readonly Pointer[]; listeners: Set<() => void>; stop: () => void }
+>();
 const EMPTY: readonly Pointer[] = [];
 function publish(thread: string, pointers: readonly Pointer[]) {
   const read = reads.get(thread);
@@ -36,7 +41,11 @@ function subscribe(thread: string, notify: () => void) {
         () => {},
       );
     const timer = setInterval(fetch, POLL_MS);
-    read = { pointers: EMPTY, listeners: new Set(), stop: () => (control.abort(), clearInterval(timer)) };
+    read = {
+      pointers: EMPTY,
+      listeners: new Set(),
+      stop: () => (control.abort(), clearInterval(timer)),
+    };
     reads.set(thread, read);
     fetch();
   }
@@ -88,7 +97,11 @@ export function PointerCite({
   const key = JSON.stringify(cited.map((ref) => [ref.doc, ref.key]));
   useEffect(() => {
     if (cited.length)
-      cite(registry, { owner, focus: null, refs: cited.map((ref, i) => ({ ...ref, number: i + 1 })) });
+      cite(registry, {
+        owner,
+        focus: null,
+        refs: cited.map((ref, i) => ({ ...ref, number: i + 1 })),
+      });
     else clearCitation(registry, owner);
     return () => clearCitation(registry, owner);
     // `key` is the cited refs' identity; the array itself is rebuilt every render.
@@ -99,28 +112,34 @@ export function PointerCite({
 
 export function PointerList({ route }: { route: string }) {
   const { thread, pointers: here, setPointers } = usePointers(route);
+  const list = useList({
+    items: here,
+    keyOf: (pointer) => pointer.id,
+    search: (pointer) => ({ text: [pointer.label] }),
+    select: "none",
+  });
   if (!here.length) return null;
   return (
-    <ul aria-label="Pea is pointing at" data-slot="pointers" className="m-0 flex list-none gap-2 p-0">
-      {here.map((pointer) => (
-        <li key={pointer.id} data-pointer={pointer.id} className="inline-flex items-center gap-1">
-          <span>Pea is pointing at {pointer.label}</span>
+    <PlainList
+      list={list}
+      aria-label="Pea is pointing at"
+      empty={{ message: "No pointers", exit: "Ask Pea to point at a subject" }}
+      row={(pointer) => ({
+        label: `Pea is pointing at ${pointer.label}`,
+        meta: (
           <Button
             label={`Dismiss ${pointer.label}`}
             onClick={() =>
-              void callOp(
-                { signal: new AbortController().signal },
-                "pointers.dismiss",
-                { thread, id: pointer.id },
-              ).then((list) =>
-                setPointers(list.pointers),
-              )
+              void callOp({ signal: new AbortController().signal }, "pointers.dismiss", {
+                thread,
+                id: pointer.id,
+              }).then((list) => setPointers(list.pointers))
             }
           >
             Dismiss
           </Button>
-        </li>
-      ))}
-    </ul>
+        ),
+      })}
+    />
   );
 }

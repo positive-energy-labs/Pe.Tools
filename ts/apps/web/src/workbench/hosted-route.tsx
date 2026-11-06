@@ -5,7 +5,7 @@ import {
 } from "../../../../packages/agent-contracts/src/route-module";
 import { routeWorkSubject } from "../../../../packages/agent-contracts/src/route-work-subject";
 import { useMemo, useSyncExternalStore } from "react";
-import { publicRoutes } from "../route/builtin-routes";
+import { publicRoutes } from "../route/route-discovery";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
 import type { AdmittedAddressPort } from "../shell/admitted-address";
 import { applicationRouteShell as ApplicationRouteShell } from "../shell/application-route-shell";

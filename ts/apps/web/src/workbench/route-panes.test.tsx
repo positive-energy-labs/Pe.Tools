@@ -822,7 +822,7 @@ test("a delivered route-view-open for a trusted Pod creates its Place at the reg
   const { resolve } = await import("node:path");
   const { podRouteDescriptorSchema } = await import("@pe/agent-contracts");
   const { admitPodArtifact } = await import("#/route/pod-artifact");
-  const { registerRoute } = await import("#/route/builtin-routes");
+  const { registerRoute } = await import("#/shell/route-registration");
   const pods = resolve(process.cwd(), "../../../examples/pods/snowdon-circuits");
   const member = JSON.parse(await readFile(resolve(pods, "pod.json"), "utf8")).routes[0];
   const row = podRouteDescriptorSchema.parse({
