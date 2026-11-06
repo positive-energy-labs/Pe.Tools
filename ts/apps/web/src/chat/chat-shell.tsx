@@ -46,7 +46,8 @@ import { PrimaryRouteControls, usePublishPagePalette } from "#/navigation/route-
 import { useSurfaceHost } from "#/navigation/surface-host";
 import { Ledger } from "#/navigation/ledger";
 import { LEDGER_PRESENTATIONS } from "#/navigation/ledger-model";
-import { chatData, selectedThreads, threadIdentity, threadName, type ChatHandle } from "./graph";
+import { chatData, selectedThreads, threadIdentity, threadName } from "./graph";
+import type { ChatHandle } from "./owner-ports";
 import { readThreadTarget } from "#/chat/thread-navigation";
 import "#/workbench/lens.css";
 import "./chat-shell.css";

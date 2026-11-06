@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { promptRequestSchema } from "@pe/agent-contracts";
-import type { LocalCommandPort } from "../../../../packages/agent-contracts/src/route-kernel-environment";
-import type { ChatRouteDeps } from "./graph";
+import type { LocalCommandPort } from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
+import type { ChatRouteDeps } from "./graph.ts";
 
 const { id: _id, ...promptFields } = promptRequestSchema.shape;
 export const chatLocalSchemas = {

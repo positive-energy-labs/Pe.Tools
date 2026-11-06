@@ -13,7 +13,7 @@ import { sourceRouteServices } from "../shell/source-route-services";
 import { placeInput } from "../shell/admitted-place.test-fixture";
 import { chatLocalPort, chatLocalSchemas } from "./local";
 import type { ChatRouteDeps } from "./graph";
-import { chatOutcome, runChatCommand } from "./graph";
+import { chatOutcome, runChatCommand } from "./owner-ports";
 
 const closes: (() => void)[] = [];
 afterEach(() => {
