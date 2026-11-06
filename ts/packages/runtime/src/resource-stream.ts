@@ -107,7 +107,7 @@ export function observeResources(
       publish({ kind: "failure", key, error: failure.message, failure });
       return () => {};
     }
-    if (request.kind === "work") return work.observe(request, request.route, accept);
+    if (request.kind === "work") return work.observe(request, request.route, accept, false, false, context);
     if (request.kind === "thread-head" && heads) return heads.observe(request.thread, accept);
     if (request.kind === "work-acks")
       return work.observeAccepted(

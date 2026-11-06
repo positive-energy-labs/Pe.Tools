@@ -7,6 +7,7 @@ import { Context, Effect, Layer, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
+import { z } from "zod";
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
 import { bindWork, address, DUCTS_BODY_VERSION_HEADER, readingKey, readingRequestsSchema, type Caller, type ReadingRequest } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
@@ -120,7 +121,7 @@ async function firstFrame(response: Response) {
   try { return await frames.next(); } finally { await frames.close(); }
 }
 
-test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(process.env.PE_FANS_COLD_NETWORK ? ["cold-off", "cold-on"] as const : [])] as const)("real Fans graph %s", async (mode) => {
+test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy", "legacy-full", "legacy-io", ...(process.env.PE_FANS_COLD_NETWORK ? ["cold-off", "cold-on"] as const : [])] as const)("real Fans graph %s", async (mode) => {
   const isCold = mode.startsWith("cold-");
   const driverSource = process.env.PE_FANS_COLD_NETWORK;
   if (isCold && (!driverSource || !existsSync(driverSource))) throw Error("Cold shell proof requires the captured Driver network asset");
@@ -173,13 +174,15 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(proc
           holdMark = false; markEntered.resolve(); yield* Effect.promise(() => releaseMark.promise);
         }
         const identity = yield* Effect.serviceOption(RequestIdentity);
-        if (holdHuman && taking.input.kind === "work" && taking.input.view === "view" &&
+        if (holdHuman && taking.input.kind === "work" && taking.input.view === (mode.startsWith("legacy") ? "read" : "view") &&
             Option.isSome(identity) && identity.value.caller.kind === "human") {
           holdHuman = false; entered.resolve(); yield* Effect.promise(() => releaseHuman.promise);
         }
       }),
       initialize: async (owner) => {
         workspace = owner;
+        if (mode.startsWith("legacy")) owner.register({ spec: { route: "legacy", title: "Legacy", description: "Legacy Work carriage witness",
+          schema: z.object({ count: z.number().default(0) }).prefault({}) } });
         if (isCold) return;
         for (const [revision, cfm] of [[0, 250], [1, 300]] as const)
           expect(await owner.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm } } }], revision)).toMatchObject({ ok: true });
@@ -199,7 +202,12 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(proc
         headers.set("origin", liveHost.base); headers.set(HOST_RUNTIME_SERVICE_HEADER, hostOwnership.serviceName);
         headers.set("referer", `${liveHost.base}/fans`);
       }
-      return fetch(new URL(new URL(request.url).pathname + new URL(request.url).search, liveHost.base), {
+      const url = new URL(new URL(request.url).pathname + new URL(request.url).search, liveHost.base);
+      if (mode.startsWith("legacy") && url.pathname === "/pe/resources") {
+        headers.delete(HOST_RUNTIME_SERVICE_HEADER); headers.delete("origin");
+        headers.set("sec-fetch-site", "same-origin"); url.searchParams.set("peRuntimeService", hostOwnership.serviceName);
+      }
+      return fetch(url, {
         method: request.method, headers, ...(request.method === "GET" ? {} : { body: await request.text() }),
       });
     }, dispose: liveHost.close,
@@ -299,6 +307,59 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(proc
     } finally { await frames.close(); }
   };
   try {
+    if (mode.startsWith("legacy")) {
+      const work: ReadingRequest = { ...key("legacy"), kind: "work" };
+      const acks: ReadingRequest = { kind: "work-acks", work: key("legacy") };
+      const tables: ReadingRequest = { kind: "ducts-tables", session: ref.session, ids: [] };
+      const connection = crypto.randomUUID();
+      const first = resourceFrames(await send(live, `/pe/resources?connection=${connection}`));
+      const second = resourceFrames(await send(live, `/pe/resources?keys=${encodeURIComponent(JSON.stringify([work]))}`));
+      try {
+        await first.opening();
+        expect((await send(live, `/pe/resource-subscriptions?connection=${connection}`, { add: [work, acks, tables], remove: [] })).status).toBe(200);
+        const initial = [await first.next(), await first.next()];
+        expect(initial.find((frame) => frame.key === readingKey(work))).toMatchObject({ kind: "snapshot", value: null });
+        expect(initial.find((frame) => frame.key === readingKey(tables))).toMatchObject({ kind: "snapshot", value: { state: "ready" } });
+        expect(await second.next()).toMatchObject({ kind: "snapshot", key: readingKey(work), value: null });
+        if (mode === "legacy-full") await run(writer.capture.stop(writer.capture.begin()!, "full"));
+        if (mode === "legacy-io") vi.spyOn(writer, "append").mockImplementation(() => Effect.fail(new InvalidRead({ message: "I/O loss", status: 409, problem: "recording.io" })));
+        expect(await workspace!.apply(key("legacy"), "legacy", "human", [{ path: ["count"], value: 1 }], 0)).toMatchObject({ ok: true });
+        const frames = [await first.next(true), await first.next(true), await second.next()];
+        expect(frames.filter((frame) => frame.kind === "snapshot")).toEqual([
+          expect.objectContaining({ key: readingKey(work), value: expect.objectContaining({ revision: 1, doc: { count: 1 } }) }),
+          expect.objectContaining({ key: readingKey(work), value: expect.objectContaining({ revision: 1, doc: { count: 1 } }) }),
+        ]);
+        expect(frames.find((frame) => frame.kind === "event")).toMatchObject({ key: readingKey(acks), value: { revision: 1 } });
+        await first.close();
+        await vi.waitFor(() => expect(markListeners.size).toBe(1));
+        if (mode === "legacy") {
+          changedAt = 0; for (const notify of markListeners) notify();
+          expect(await second.next()).toMatchObject({ kind: "snapshot", value: { revision: 1 }, changed: false });
+          const records = await Promise.all(writer.readSets.ids().map((id) => run(writer.readSets.get(id))));
+          const deliveries = records.filter((record) => record.recipe.key === "resource.frame" && (record.recipe.input as { route?: string }).route === "legacy" && record.inputs.some((input) => input.input.kind === "work"));
+          expect(deliveries).toHaveLength(4);
+          expect(deliveries.every((record) => record.state === "complete" && record.inputs.some((input) => input.input.kind === "marks"))).toBe(true);
+          expect(new Set(deliveries.flatMap((record) => record.inputs.map((input) => input.takingId))).size).toBe(8);
+          expect(writer.capture.truncated()).toBeNull();
+        } else expect(writer.capture.truncated()?.reason).toBe(mode === "legacy-full" ? "full" : "io");
+        expect(await workspace!.apply(key("legacy"), "legacy", "human", [{ path: ["count"], value: 2 }], 1)).toMatchObject({ ok: true });
+        expect(await second.next()).toMatchObject({ kind: "snapshot", value: { revision: 2, doc: { count: 2 } } });
+        expect(nativeCalls).toBe(1); // The real native policy admitted the query-owned stream as human.
+        if (mode === "legacy") {
+          const resourceCompletions = () => completed.filter((entry) => entry.recipe.key.startsWith("resource.")).length;
+          const sealed = resourceCompletions();
+          holdHuman = true;
+          expect(await workspace!.apply(key("legacy"), "legacy", "human", [{ path: ["count"], value: 3 }], 2)).toMatchObject({ ok: true });
+          await entered.promise; await second.close(); releaseHuman.resolve();
+          await vi.waitFor(() => expect(markListeners.size).toBe(0));
+          const afterClose = await send(live, "/pe/route-state/legacy?binding=address&target=C%3A%2FModels%2FChadds.rvt");
+          expect(afterClose.status).toBe(200); await afterClose.body?.cancel();
+          expect(resourceCompletions()).toBe(sealed); // Closing a held capture never publishes its frame.
+        }
+      } finally { await first.close(); await second.close(); }
+      await vi.waitFor(() => expect(markListeners.size).toBe(0));
+      return;
+    }
     if (mode === "truncated") {
       const tables: ReadingRequest = { kind: "ducts-tables", session: ref.session, ids: [] };
       const roster: ReadingRequest = { kind: "ducts-snapshot", target: ref, selector: { kind: "roster" } };
