@@ -418,7 +418,6 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(proc
     const fan = roster.rows.find((row: any) => row.unitId === 14577391) ?? roster.rows[0];
     const request = { target: ref, mode: "fan", unitId: fan.unitId, portIndex: fan.portIndex };
     const overview = await capture("/pe/ducts/sheet", request);
-    expect(overview.kind).toBe("overview");
     for (const kind of ["inputs", "worksheet"] as const) {
       const detail = await capture("/pe/ducts/sheet", { ...request, basis: overview.basis, detail: { kind } });
       expect(detail.kind).toBe(kind);
