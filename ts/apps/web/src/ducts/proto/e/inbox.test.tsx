@@ -199,11 +199,6 @@ test("taking back a stored ignore stages a delete over it", () => {
   ]);
 });
 
-// The chat head's "→ review" on a edit cell: the cell family's `focus` writes `issue`, the screen
-// resolves it with `focusRow` against the inbox's rows, and the Inbox opens and selects that row.
-const reviewPage = (segment: string, key: string) => {
-  return { selected: cellFocus(segment, key) };
-};
 const rowKeysOf = (over: NonNullable<Parameters<typeof mount>[0]>) =>
   new Set([
     "heal:g1",
@@ -215,7 +210,7 @@ const rowKeysOf = (over: NonNullable<Parameters<typeof mount>[0]>) =>
   ]);
 
 test("review on a edit rule with no row of its own lands on the Write row", () => {
-  const { selected: issue } = reviewPage("rules", "elbow-1d-le10") as { selected: string };
+  const issue = cellFocus("rules", "elbow-1d-le10");
   const focused = focusRow(issue, rowKeysOf({}));
   expect(focused).toBe("write");
   const { container } = mount({ focused });
@@ -234,7 +229,7 @@ test("review on a proposed rule lands on that cell's own row, opened", async () 
       verbs: [],
     }),
   ];
-  const { selected: issue } = reviewPage("rules", "elbow-1d-le10") as { selected: string };
+  const issue = cellFocus("rules", "elbow-1d-le10");
   const focused = focusRow(issue, rowKeysOf({ check }));
   expect(focused).toBe("rules:elbow-1d-le10");
   const { container } = mount({ focused, check });
