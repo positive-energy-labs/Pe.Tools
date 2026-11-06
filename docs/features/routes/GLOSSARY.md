@@ -99,6 +99,18 @@ _Avoid_: lease, control
 One consumed input recorded at the host's input services: content hash, time, coverage and an outcome kind (answered, refused, unknown). Repeated identical reads are distinct takings.
 _Avoid_: observation (that is the stored bytes), sample
 
+**Read set (`ReadSetId`, `ConsumerRecipe`)**:
+Private host metadata naming one consumer's exact reads. The recipe contains its operation, actual input and scope; the stored id binds its occurrences, child consumers and explicit dependencies to actual takings. A cold detail follows its originating overview's read-set id and recomputes that dependency. Equal values, append order and the newest taking cannot select a read set.
+_Avoid_: Work, Epoch, worksheet, session registry
+
+**Occurrence (`InputOccurrence`, `InputAttempt`)**:
+One input start within a read set, identified by input identity, exact scope and a per-input ordinal reserved synchronously before an await. The attempt binds that start to its actual taking or failure. A retained body's basis links its original native taking; validation starts a distinct occurrence. Missing or ambiguous historical metadata refuses rather than choosing a candidate.
+_Avoid_: completion order, cache version, taking id
+
+**Host consumption context (`InputConsumption`, `HostInputReadSets`)**:
+The bounded host lifetime that acquires a read set, reserves input attempts, links dependencies, seals metadata and closes the consumer. Effect services or an explicitly bound runner carry the actual request and attempt through Promise queues and resource frames. Closing a child retires that child; closing its root retires its tree. This context is private recording metadata, not editable Work or a user-visible Epoch.
+_Avoid_: ambient global, selected document, second Work owner
+
 **Epoch**:
 A named point per document (after write, synced, captured) over a range of takings and the bindings that say what each pane showed.
 _Avoid_: snapshot (ADR 0028's reference triple), frame, version

@@ -25,20 +25,27 @@ import { nativeCatalogIdentity, openRecordingWriter, openRecordingReader,
 import type { ReadSetId } from "../src/input-occurrence.ts";
 import { builtinEnrollments } from "../src/builtin-enrollment.ts";
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
+import { bootHost } from "./real-server.ts";
+import { mintBrowserContext, mintContext } from "../src/control.ts";
+import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
+import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
+import { hostOwnership } from "../src/host-ownership.ts";
 
 const liveFactories = vi.hoisted(() => ({ sdk: 0, bridge: 0, work: 0, recorded: false }));
 vi.mock("../src/sdk-session.ts", async (original) => {
   const actual = await original<typeof import("../src/sdk-session.ts")>();
   const { Effect, Layer } = await import("effect");
-  return { ...actual, SdkDriverLive: Layer.effect(actual.SdkDriver, Effect.sync(() => {
-    liveFactories.sdk++; throw Error("Live SDK acquired by a recorded graph");
+  return { ...actual, SdkDriverLive: Layer.unwrap(Effect.sync(() => {
+    if (liveFactories.recorded) { liveFactories.sdk++; throw Error("Live SDK acquired by a recorded graph"); }
+    return actual.SdkDriverLive;
   })) };
 });
 vi.mock("../src/bridge.ts", async (original) => {
   const actual = await original<typeof import("../src/bridge.ts")>();
   const { Effect, Layer } = await import("effect");
-  return { ...actual, RevitBridgeLive: Layer.effect(actual.RevitBridge, Effect.sync(() => {
-    liveFactories.bridge++; throw Error("Live bridge acquired by a recorded graph");
+  return { ...actual, RevitBridgeLive: Layer.unwrap(Effect.sync(() => {
+    if (liveFactories.recorded) { liveFactories.bridge++; throw Error("Live bridge acquired by a recorded graph"); }
+    return actual.RevitBridgeLive;
   })) };
 });
 vi.mock("../src/route-document-store.ts", async (original) => {
@@ -80,7 +87,7 @@ async function firstFrame(response: Response) {
 
 test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and admitted Work resources replay without live inputs", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-fans-graph-"));
-  const completed: { recipe: ConsumerRecipe; id: ReadSetId; requestId?: string }[] = []; let nativeCalls = 0, poisoned = 0;
+  const completed: { recipe: ConsumerRecipe; id: ReadSetId; requestId?: string; caller?: Caller }[] = []; let nativeCalls = 0, poisoned = 0;
   let workspace: RouteWorkspace, holdHuman = false;
   const entered = Promise.withResolvers<void>(), releaseHuman = Promise.withResolvers<void>();
   const raw = JSON.parse(readFileSync(source, "utf8").replace(/^\uFEFF/, ""));
@@ -106,10 +113,8 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
     inventory: Layer.succeed(HostSessionInventory, { document: () => Effect.succeed(row),
       session: () => Effect.succeed({ sessionId: ref.session }), attachment: () => Effect.succeed({ sessionId: ref.session }) }),
   };
-  const live = HttpRouter.toWebHandler(Layer.unwrap(Effect.gen(function* () {
-    yield* TestClock.setTime(200);
-    return fansInputRoutes(inputs, { live: livePorts, store: fileRouteDocumentStore(join(dir, "work")),
-      observedReadSet: (recipe, id, requestId) => { completed.push({ recipe, id, requestId }); },
+  const liveHost = await bootHost({ inputs, clock: 200, fans: { live: livePorts, store: fileRouteDocumentStore(join(dir, "work")),
+      observedReadSet: (recipe, id, requestId, caller) => { completed.push({ recipe, id, requestId, caller }); },
       observed: (taking) => Effect.gen(function* () {
         const identity = yield* Effect.serviceOption(RequestIdentity);
         if (holdHuman && taking.input.kind === "work" && taking.input.view === "view" &&
@@ -123,13 +128,31 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
           expect(await owner.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm } } }], revision)).toMatchObject({ ok: true });
         expect(await owner.apply(key("ducts"), "ducts", "human", [], 0)).toMatchObject({ ok: true });
       },
-    });
-  })).pipe(Layer.provide(TestClock.layer())), { disableLogger: true });
+    } });
+  type Web = { handler: (request: Request, context: Context.Context<import("@pe/host-internal/request-contracts").RequestIdentity>) => Promise<Response>; dispose: () => Promise<void> };
+  const live: Web = {
+    handler: async (request, context) => {
+      const who = Context.get(context, RequestIdentity).caller;
+      const headers = new Headers(request.headers);
+      headers.set(HOST_RPC_BRIDGE_SESSION_HEADER, ref.session);
+      headers.set(HOST_RPC_DOCUMENT_HEADER, ref.openId);
+      if (who.kind === "pea") headers.set(HOST_CONTEXT_HEADER, mintContext({ kind: "pea", thread: who.thread!, run: who.run, root: who.root }));
+      else {
+        headers.set("cookie", mintBrowserContext({ kind: "local" }).split(";")[0]!);
+        headers.set("origin", liveHost.base); headers.set(HOST_RUNTIME_SERVICE_HEADER, hostOwnership.serviceName);
+        headers.set("referer", `${liveHost.base}/fans`);
+      }
+      return fetch(new URL(new URL(request.url).pathname + new URL(request.url).search, liveHost.base), {
+        method: request.method, headers, ...(request.method === "GET" ? {} : { body: await request.text() }),
+      });
+    }, dispose: liveHost.close,
+  };
   const admitted = (who: Caller = caller) => admittedRequestIdentity(who, { bridgeSessionId: ref.session, openDocumentId: ref.openId });
   const send = (web: typeof live, url: string, body?: unknown, identity = admitted()) => withInvocationContext({ caller: identity.caller, hostBaseUrl: "http://host" }, () => web.handler(new Request(`http://host${url}`, {
     method: body === undefined ? "GET" : "POST", headers: { "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }), Context.make(RequestIdentity, identity)));
   const cases: { url: string; body?: any; value: any; readSet: ReadSetId; stream?: boolean; caller: Caller }[] = [];
+  const claimed = new Set<ReadSetId>();
   const capture = async (url: string, body?: unknown, stream = false, who: Caller = caller) => {
     const identity = admitted(who); const response = await send(live, url, body, identity);
     if (!stream) expect(response.status, await response.clone().text()).toBe(200);
@@ -137,8 +160,9 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
     if (stream) expect(value.kind, JSON.stringify(value)).toBe("snapshot");
     if (url === "/call") { expect(response.headers.get("x-pe-ducts-reused")).toBe("true"); expect(value.nativeRequestId).not.toBe(identity.requestId); }
     const key = stream ? "resource.frame" : url === "/call" ? "native.call" : url.endsWith("/sheet") ? "ducts.sheet" : url.includes("route-state") ? "work.get" : "ducts.roster";
-    const roots = completed.filter((entry) => entry.requestId === identity.requestId && entry.recipe.key === key);
+    const roots = completed.filter((entry) => !claimed.has(entry.id) && entry.caller?.kind === who.kind && entry.recipe.key === key);
     expect(roots, "The actual consumer must complete exactly one stored read set").toHaveLength(1);
+    claimed.add(roots[0]!.id);
     cases.push({ url, body, value, readSet: roots[0]!.id, stream, caller: who }); return value;
   };
   let historical: typeof live | undefined;

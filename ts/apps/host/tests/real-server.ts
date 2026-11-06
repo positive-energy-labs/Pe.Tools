@@ -15,6 +15,7 @@ import { nativeReadRoot, makeHttpLive } from "../src/app.ts";
 import { RevitBridge } from "../src/bridge.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
+import { TestClock } from "effect/testing";
 
 /**
  * Doors driven the way a caller reaches them: a real Node server behind the real identity
@@ -72,7 +73,7 @@ export async function serveRoutes<E, R>(
  * The whole host (`makeHttpLive`) on isolated state and product homes. `terminal` is the human/cli
  * context the host writes beside its receipt, as the owner's own `pea` reads it.
  */
-export async function bootHost() {
+export async function bootHost(options: Pick<Partial<import("../src/app.ts").HttpLiveOptions>, "inputs" | "fans"> & { clock?: number } = {}) {
   const base = process.env.PE_TEST_HOME_ROOT ?? tmpdir();
   const localAppData = mkdtempSync(join(base, "pe-host-real-"));
   const home = mkdtempSync(join(base, "pe-host-real-home-"));
@@ -97,12 +98,15 @@ export async function bootHost() {
       Effect.gen(function* () {
         const handle = yield* Deferred.make<ServiceHostHandle>();
         const HttpLive = makeHttpLive({
-          inputs: testInputContext(),
+          inputs: options.inputs ?? testInputContext(),
+          fans: options.fans,
           capabilities: { revit: true },
           port: 0,
           lifecycle: { latch, handle },
           webRoot: webDir,
-        }).pipe(Layer.provide(HostReceipts.layer(null)));
+        }).pipe(Layer.provide(HostReceipts.layer(null)),
+          Layer.provide(options.clock === undefined ? Layer.empty :
+            Layer.effectDiscard(TestClock.setTime(options.clock)).pipe(Layer.provideMerge(TestClock.layer()))));
         yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));
       }),
     ),

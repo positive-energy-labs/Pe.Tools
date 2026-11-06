@@ -1,5 +1,5 @@
 /**
- * Host input occurrences (OCCURRENCE-CONTEXT-FREEZE): which exact taking each consumer read. An
+ * Host input occurrences (docs/features/routes/GLOSSARY.md): which exact taking each consumer read. An
  * admitted consumer opens one context; every input it starts reserves its occurrence synchronously,
  * before any await, per (input identity, scope) within that context. Capture binds the reservation
  * to the actual durable taking; replay selects by stored read-set id + input + scope + start, never

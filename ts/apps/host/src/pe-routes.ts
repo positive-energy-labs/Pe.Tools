@@ -7,7 +7,7 @@ import type { DocumentRef } from "@pe/agent-contracts";
 import { createScheduledTasks } from "./scheduled-tasks.ts";
 import { createRouteSettings } from "./route-settings.ts";
 import { productRouteSettingsPath } from "./product-paths.ts";
-import { createDuctsSheets, sheetNativeRead, type DuctsSheetSources } from "./ducts-sheet.ts";
+import { createDuctsSheets, type DuctsSheetSources } from "./ducts-sheet.ts";
 import { eligibleThreads, threadHistory } from "./thread-history.ts";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
@@ -206,6 +206,7 @@ export interface PeRouteInvocation {
   readonly work?: import("@pe/runtime").WorkReadContext;
   readonly finish?: (result: { response: Response } | { error: unknown }) => Promise<void>;
 }
+export type PeInvocationFactory = (context: Context.Context<RequestIdentityKey>, request: Request, fallback: ResourceObserver) => Promise<PeRouteInvocation>;
 
 const feedbackSchema = peRoutes["feedback.submit"].body;
 const diagnosticsSchema = peRoutes["diagnostics.submit"].body;
@@ -215,6 +216,16 @@ const historyBody = peRoutes["work.history"].body;
 
 const json = (value: unknown, status = 200) => Response.json(value, { status });
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+const historicalPeRefusal = (inputs: HostInputContext["Service"] | undefined, method: string, id: string) => {
+  if (inputs?.lane.kind !== "recording") return null;
+  if (!["ducts.sheet", "ducts.roster", "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get"].includes(id))
+    return method === "GET" ? new InvalidRead({ message: "Recording does not cover this route owner", status: 409, problem: "recording.coverage" })
+      : inputs.check({ kind: "work", verb: "edit" });
+  const needs = id.startsWith("work.") ? ["work" as const] : id.startsWith("ducts.") ? ["document" as const, "files" as const, "marks" as const, "work" as const] : [];
+  for (const input of needs) { const refusal = inputs.check({ kind: "input", input }); if (refusal) return refusal; }
+  return null;
+};
 
 /** The route-document, Reading, capability and Families-view surface, host-owned. */
 export function createPeRoutes(options: PeRoutesOptions) {
@@ -398,13 +409,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
     const method = request.method;
     const declared = matchPeRoute(method, url.pathname);
     if (!declared || declared.route.owner !== "pe") return json({ error: "Unknown Pe route" }, 404);
-    if (options.inputs?.lane.kind === "recording" && ![
-      "ducts.sheet", "ducts.roster", "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get",
-    ].includes(declared.id)) {
-      const denied = method === "GET" ? new InvalidRead({ message: "Recording does not cover this route owner", status: 409, problem: "recording.coverage" })
-        : options.inputs.check({ kind: "work", verb: "edit" });
-      throw denied;
-    }
+    const denied = historicalPeRefusal(options.inputs, method, declared.id);
+    if (denied) throw denied;
     if (declared.id === "route-settings.get" || declared.id === "route-settings.set") {
       try {
         const route = declared.params.route!;
@@ -850,6 +856,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
 
   return {
     workspace: work,
+    observe,
     fetch: handle,
     completedWork: async (threadId: string) => {
       const snapshot = await readThreadWork(work, options.navigation);
@@ -1327,7 +1334,6 @@ function* hostPeRoutes(
     inputs: inputContext._tag === "Some" ? inputContext.value : undefined,
     workspace: hostWork?.workspace,
     registrations,
-    ductsSheets: { call: sheetNativeRead(hostBaseUrl), firm: () => runPods({}, files.firm), catalogs: () => runPods({}, files.ductCatalogs) },
     ductsAnalysis: {
       root: productDuctsAnalysesPath(),
       producer: { version: resolveHostVersion(), ...hostOwnership },
@@ -1359,7 +1365,7 @@ function* hostPeRoutes(
       },
       call: ductsNativeRead(hostBaseUrl),
     },
-    store: fileRouteDocumentStore(productRouteWorkPath()),
+    ...(hostWork ? {} : { store: fileRouteDocumentStore(productRouteWorkPath()) }),
     heads: threads.heads,
     turnElementNames: (request) =>
       threads.readTurnElementNames(request, (operation, input, ref) => {
@@ -1423,14 +1429,14 @@ function* hostPeRoutes(
   });
   const podRoutes = createPodRoutes(content.lifecycle, { workspace: routes.workspace, bridge });
   const fetchRoute = routes.fetch;
-  routes.fetch = async (request) => {
+  routes.fetch = async (request, invocation) => {
     const declared = matchPeRoute(request.method, new URL(request.url).pathname);
     if (declared?.id === "notices.presence") {
       notices.beat(declared.params.caller!, await request.json());
       return Response.json({ ok: true });
     }
     if (declared?.params.route?.startsWith("pod.")) await podRoutes.list();
-    return fetchRoute(request);
+    return fetchRoute(request, invocation);
   };
   const plugins = {
     close: async () => {
@@ -1460,6 +1466,9 @@ const addPeHttpRoutes = (router: HttpRouter.HttpRouter,
     if (!handle) continue;
     yield* router.add(route.method, route.path, (request) => Effect.gen(function* () {
       const context = yield* Effect.context<RequestIdentityKey>();
+      const declared = matchPeRoute(request.method, new URL(request.originalUrl, "http://host").pathname)!;
+      const denied = historicalPeRefusal(inputs, request.method, declared.id);
+      if (denied) return yield* denied;
       let failure: import("@pe/host-internal/request-contracts").DoorFailure | undefined;
       const response = yield* HttpEffect.fromWebHandler((web) => servePeRoute(web, (req) => handle(req, context).catch((error) => {
         if (!isDoorFailure(error)) throw error;
@@ -1477,18 +1486,21 @@ const addPeHttpRoutes = (router: HttpRouter.HttpRouter,
   }
 });
 
-export const peCoreRoutes = (routes: ReturnType<typeof createPeRoutes>,
-  invocation: (context: Context.Context<RequestIdentityKey>, request: Request) => Promise<PeRouteInvocation>,
-  inputs?: HostInputContext["Service"]) => HttpRouter.use((router) =>
-    addPeHttpRoutes(router, { pe: async (request, context) => {
-      const ports = await invocation(context, request);
+const peOwnerHandler = (routes: ReturnType<typeof createPeRoutes>, invocation?: PeInvocationFactory) =>
+    async (request: Request, context: Context.Context<RequestIdentityKey>) => {
+      const ports = await invocation?.(context, request, routes.observe);
       let result: { response: Response } | { error: unknown };
       try { result = { response: await routes.fetch(request, ports) }; }
       catch (error) { result = { error }; }
-      await ports.finish?.(result);
+      await ports?.finish?.(result);
       if ("error" in result) throw result.error;
       return result.response;
-    } }, inputs),
+    };
+
+export const peCoreRoutes = (routes: ReturnType<typeof createPeRoutes>,
+  invocation: PeInvocationFactory,
+  inputs?: HostInputContext["Service"]) => HttpRouter.use((router) =>
+    addPeHttpRoutes(router, { pe: peOwnerHandler(routes, invocation) }, inputs),
   ).pipe(Layer.provide(httpProblems));
 
 /** {@link makeHostPeRoutes} on the host's router. Harness children die when the launch scope closes. */
@@ -1496,6 +1508,7 @@ export const peRoutesLayer = (
   registrationsFactory?: typeof createRouteRegistrations,
   share?: MachineShareAdapter,
   hostWork?: HostWork,
+  invocation?: PeInvocationFactory,
 ) =>
   HttpRouter.use((router) =>
     Effect.gen(function* () {
@@ -1566,11 +1579,11 @@ export const peRoutesLayer = (
       const handlers = {
         tasks: tasks.fetch,
         threads: threads.fetch,
-        pe: (request: Request) => routes.fetch(request),
+        pe: peOwnerHandler(routes, invocation),
         providers: providers.fetch,
         plugins: plugins.fetch,
       };
-      yield* addPeHttpRoutes(router, handlers);
+      yield* addPeHttpRoutes(router, handlers, Option.getOrUndefined(yield* Effect.serviceOption(HostInputContext)));
     }),
   ).pipe(Layer.provide(httpProblems));
 

@@ -154,6 +154,7 @@ export function makeCallRoute(
     /** Thread meta's pointer surface; pointer ops refuse without it. */
     readonly pointers?: ThreadPointers;
     readonly retainedBasis?: DuctsBodyBasisSource;
+    readonly retainedRead?: (input: NativeReadInput, options: { version?: string; refresh?: string }) => ReturnType<typeof retainedDuctsRead>;
   },
 ) {
   const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
@@ -248,7 +249,7 @@ export function makeCallRoute(
       yield* Effect.try({ try: () => admitAnonymousCall(caller, key), catch: (error) => error });
       const request = "request" in body ? body.request : undefined;
       let scope: HostSessionScope = identity.scope;
-      if (entry.canonicalSession && scope.bridgeSessionId) {
+      if (entry.canonicalSession && scope.bridgeSessionId && !(entry.reading && composition?.retainedRead)) {
         const bridgeForScope = yield* RevitBridge;
         const canonicalSession = yield* Effect.tryPromise({
           try: () => canonicalDuctsSession(bridgeForScope, scope.bridgeSessionId!),
@@ -266,6 +267,12 @@ export function makeCallRoute(
         return Response.jsonUnsafe(value);
       }
 
+      if (entry.reading && composition?.retainedRead) {
+        const response = yield* composition.retainedRead({ key, input: request ?? {}, scope },
+          { version: req.headers[DUCTS_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] });
+        recordOperation({ key, tsOnly: false, startedAt: Date.now(), origin, originClass, requestId }, { ok: true });
+        return response;
+      }
       if (entry.hostOnly) openDocumentId = null;
       const bridge = yield* RevitBridge;
       const resolvedSession =
