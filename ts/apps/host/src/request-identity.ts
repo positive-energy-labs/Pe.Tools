@@ -1,4 +1,5 @@
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
+import { BodyReceiptAudience, admittedBodyAudience } from "./body-receipts.ts";
 import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
 import { RequestIdentity, admittedRequestIdentity } from "./request-services.ts";
 import { readSessionScope } from "./sdk-session.ts";
@@ -463,7 +464,9 @@ export const requestIdentityLayer = (options: IdentityLayerOptions) =>
             typeof call.key === "string" &&
             !isTsOnlyOperationKey(call.key));
         const services = yield* Effect.context<never>();
-        const run = Effect.provideService(handler, RequestIdentity, admitted);
+        const run = Effect.provideService(handler, RequestIdentity, admitted).pipe(
+          Effect.provideService(BodyReceiptAudience, admittedBodyAudience(identity.principal, identity.headers)),
+        );
         const exit = native
           ? yield* Effect.exit(run)
           : yield* Effect.promise((signal) =>

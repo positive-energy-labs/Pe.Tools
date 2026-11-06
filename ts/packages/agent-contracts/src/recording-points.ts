@@ -29,6 +29,41 @@ export const recordingPointBindingSchema = Schema.Struct({
 });
 export type RecordingPointBinding = typeof recordingPointBindingSchema.Type;
 export type RecordingConsumer = Omit<RecordingPointBinding, "readSetId">;
+export const BODY_RECEIPT_HEADER = "x-pe-body-receipt";
+export const recordingConsumerSchema = Schema.Struct({
+  instance: Schema.NonEmptyString,
+  reading: Schema.NonEmptyString,
+  argsHash: Schema.NonEmptyString,
+});
+const batch = <A extends Schema.Top>(schema: A) =>
+  Schema.Array(schema).check(Schema.makeFilter((values) => values.length <= 32));
+export const acceptedReadingSchema = Schema.Struct({
+  document,
+  consumer: recordingConsumerSchema,
+  bodyReceipts: batch(Schema.NonEmptyString).check(
+    Schema.makeFilter((values) => values.length > 0),
+  ),
+});
+export type AcceptedReading = typeof acceptedReadingSchema.Type;
+export const recordingAcknowledgementsSchema = Schema.Struct({
+  accepted: Schema.optionalKey(batch(acceptedReadingSchema)),
+  unmounted: Schema.optionalKey(batch(recordingConsumerSchema)),
+});
+export interface RecordingAcknowledgements {
+  readonly accepted: readonly AcceptedReading[];
+  readonly unmounted: readonly RecordingConsumer[];
+}
+/** Canonical boundary adapter for the Effect-free resource transport. */
+export function decodeRecordingAcknowledgements(
+  value: unknown,
+): RecordingAcknowledgements | { error: string } {
+  try {
+    const decoded = Schema.decodeUnknownSync(recordingAcknowledgementsSchema)(value);
+    return { accepted: decoded.accepted ?? [], unmounted: decoded.unmounted ?? [] };
+  } catch {
+    return { error: "Invalid accepted reading acknowledgements" };
+  }
+}
 /** Metadata only. The range is half-open in durable taking append order, never clock order. */
 export const recordingPointSchema = Schema.Struct({
   version: Schema.Literal(1),

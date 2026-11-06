@@ -1,5 +1,9 @@
 import { HostInputContext } from "./input-context.ts";
 import type { TakingObserver } from "./native-recording.ts";
+import { BodyReceiptAudience, bodyReceipts } from "./body-receipts.ts";
+import { acceptedPointPolicy } from "./recording-points.ts";
+import { BODY_RECEIPT_HEADER } from "@pe/agent-contracts";
+import { createHash } from "node:crypto";
 import { recordedWorkSource, capturedWorkReads, workReadContext, type WorkInputRunner } from "./work-inputs.ts";
 import { CurrentInputConsumption, HostInputReadSets, type InputConsumption, type ReadSetId, type ConsumerRecipe } from "./input-occurrence.ts";
 import type { DuctsSheetSources } from "./ducts-sheet.ts";
@@ -178,12 +182,12 @@ function makeRevitComposition(
       Layer.unwrap(
         Effect.gen(function* () {
           const families = yield* FamiliesReader;
-          const { work, retainedCall } = yield* FansOwner;
+          const { work, retainedCall, nativeBody } = yield* FansOwner;
           return makeCallRoute(
             (yield* HostReceipts).journal,
             undefined,
             { workspace: work.workspace },
-            { origin, families, pointers: work.pointers, retainedRead: retainedCall },
+            { origin, families, pointers: work.pointers, retainedRead: retainedCall, nativeBody },
           );
         }),
       ),
@@ -272,6 +276,8 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
   const owner = recorded ? new DuctsReadings() : live!.owner;
   const files = Context.get(services, HostFiles), marks = Context.get(services, HostDocumentMarks);
   const readSets = Context.get(services, HostInputReadSets);
+  const receipts = writer ? bodyReceipts(writer) : undefined;
+  const acceptPoints = writer && receipts ? yield* acceptedPointPolicy(writer, receipts) : undefined;
   const json = (value: unknown) => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));
   const child = (parent: InputConsumption, recipe: ConsumerRecipe) => {
     const next = parent.child(recipe);
@@ -299,9 +305,11 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
     });
   const invocation: PeInvocationFactory = async (request, web, fallback) => {
     const identity = Context.get(request, RequestIdentity);
+    const audience = Option.getOrNull(Context.getOption(request, BodyReceiptAudience));
     const admitted = Context.add(provided, RequestIdentity, identity);
     const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) => runPods({}, Effect.provide(effect, admitted));
     const url = new URL(web.url), declared = matchPeRoute(web.method, url.pathname)!;
+    if (declared.id === "resources.subscriptions") return { resourceAudience: audience };
     if (!["ducts.roster", "ducts.sheet", "work.get", "resources.stream"].includes(declared.id)) return {};
     const stream = declared.id === "resources.stream";
     const input = declared.route.input.parse({ params: declared.params,
@@ -359,6 +367,8 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
         constructor(readonly subscription?: ReadSetId, readonly envelope?: DuctsReadingEnvelope) { super(); }
       }
       const frameRuns = new WeakMap<WorkCarriage, WorkInputRunner>();
+      const frameVersions = new WeakMap<WorkCarriage, string>();
+      let frameReceipt: string | undefined;
       const readyFrames = new Set<InputConsumption>();
       const frameOwner = Symbol();
       let released = false;
@@ -446,6 +456,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
       return () => { closed = true; release(); };
       };
       const release = markReadings(marks, async (ref, key, at, carriage, update) => {
+        frameReceipt = undefined;
         const runFrame = carriage ? frameRuns.get(carriage) : undefined;
         if (!runFrame) {
           if (!ref) return null;
@@ -469,13 +480,27 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
               if (update) await scoped(current)(current.linkReadSet("value", previous.id));
               else if (carriage instanceof FrameCarriage && carriage.subscription)
                 await scoped(current)(current.linkReadSet("subscription", carriage.subscription));
+              if (ref && writer && !writer.capture.truncated()) await scoped(current)(inventory.document(ref).pipe(
+                Effect.provideService(RequestIdentity, identity), Effect.catch(() => {
+                  const at = writer.capture.begin(); return at === null ? Effect.void : writer.capture.stop(at, "unsupported");
+                })));
               const value = ref ? await scoped(current)(marks.readFrame(ref, key, at)) : null;
               if (!released) await complete(current);
+              const version = carriage ? frameVersions.get(carriage) : undefined;
+              if (!released && version && receipts && (reading.kind === "work" || reading.kind === "work-acks"))
+                frameReceipt = await scoped(current)(receipts.mint(current.id, version, audience));
               return value;
             } finally { await finishFrame(current); }
           }, catch: (error) => isDoorFailure(error) ? error : new InvalidRead({ message: String(error), status: 409, problem: "recording.context" }) });
         }));
-      })(observeResources(workspace, undefined, retainedResource, work))(reading, publish, after);
+      })((request, emit, after) => observeResources(workspace, undefined, retainedResource, work)(request, (frame, carriage) => {
+        if (frame.kind === "snapshot" && carriage && (reading.kind === "work" || reading.kind === "work-acks")) {
+          try { frameVersions.set(carriage, createHash("sha256").update(canonicalJson(json(frame.value))).digest("hex")); }
+          catch { const at = writer?.capture.begin(); if (at != null) void invoke(writer!.capture.stop(at, "encoding")); }
+        }
+        emit(frame, carriage);
+      }, after))(reading, (frame, carriage) => publish(frame.kind === "snapshot" && frameReceipt
+        ? { ...frame, bodyReceipts: [frameReceipt] } : frame, carriage), after);
       return () => {
         released = true; release();
         for (const current of readyFrames) void finishFrame(current);
@@ -507,12 +532,25 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
     return { ...(source && { sheets: source, work: source.inputs!.work,
       document: (ref: import("@pe/agent-contracts").DocumentRef) => runPods({}, Effect.provide(inventory.document(ref), Context.add(admitted, CurrentInputConsumption, consumption!))) }), observe,
       closeResources: () => { closingResources = true; closeResources(); },
+      resourceAudience: audience,
+      ...(stream && acceptPoints ? { resourceAcceptance: { audience,
+        accept: (readings: readonly import("@pe/agent-contracts").AcceptedReading[], active: () => boolean) => invoke(acceptPoints(readings, audience, active)) } } : {}),
       finish: async (result) => {
         if (stream) {
           if (consumption && ("error" in result || !result.response.ok)) await invoke(consumption.close);
           return;
         }
-        try { if ("response" in result && result.response.ok) await complete(consumption!); }
+        try { if ("response" in result && result.response.ok) {
+          await complete(consumption!);
+          if (receipts && audience && !writer!.capture.truncated()) {
+            const text = await result.response.clone().text();
+            const receipt = await invoke(receipts.mint(consumption!.id, createHash("sha256").update(text).digest("hex"), audience));
+            if (receipt) result.response.headers.set(BODY_RECEIPT_HEADER, receipt);
+          }
+        } } catch {
+          const at = writer?.capture.begin();
+          if (at != null) await invoke(writer!.capture.stop(at, "io"));
+        }
         finally { if (consumption) await invoke(consumption.close); }
       },
     };
@@ -529,13 +567,46 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
           bridgeSessionId: (yield* inventory.attachment(raw.scope.bridgeSessionId)).sessionId } : raw.scope;
         const session = yield* inventory.session(selected);
         const { openDocumentId, ...scope } = selected;
-        return yield* retained(root, { ...raw, scope: { ...scope, bridgeSessionId: session.sessionId,
+        const response = yield* retained(root, { ...raw, scope: { ...scope, bridgeSessionId: session.sessionId,
           ...(raw.key === 'ducts.tables' ? {} : { openDocumentId }) } }, readOptions, "acquire", inventory.document);
-      }).pipe(Effect.tap(() => sealed(root)), Effect.ensuring(root.close), Effect.provideService(CurrentInputConsumption, root),
+        if (writer && !writer.capture.truncated() && openDocumentId && raw.key !== "ducts.tables")
+          yield* inventory.document({ session: session.sessionId, openId: openDocumentId }).pipe(Effect.catch(() => {
+            const at = writer.capture.begin(); return at === null ? Effect.void : writer.capture.stop(at, "unsupported");
+          }));
+        return response;
+      }).pipe(Effect.tap(() => sealed(root)), Effect.flatMap((response) => Effect.gen(function* () {
+        const audience = yield* Effect.serviceOption(BodyReceiptAudience);
+        return receipts ? yield* receipts.attach(response, root.id, Option.getOrNull(audience)) : response;
+      })), Effect.ensuring(root.close), Effect.provideService(CurrentInputConsumption, root),
         Effect.provideService(HostNativeRead, Context.get(services, HostNativeRead)));
     });
   const work = { workspace, registrations, pointers: options.pointers };
-  return { work, invocation, retainedCall, services };
+  const nativeCall = Effect.fn("Fans.nativeBody")(function* (raw: NativeReadInput) {
+    const { answer, bodyReceipt } = yield* nativeBody(raw, Context.get(services, HostNativeRead).read(raw));
+    return HttpServerResponse.jsonUnsafe(answer.value, { headers: { "x-pe-native-request-id": answer.nativeRequestId,
+      ...(bodyReceipt ? { [BODY_RECEIPT_HEADER]: bodyReceipt } : {}) } });
+  });
+  const nativeBody = Effect.fn("Fans.nativeBodyCapture")(function* (raw: NativeReadInput, read: Effect.Effect<import("@pe/host-internal/request-contracts").NativeAnswer<Schema.Json>, import("@pe/host-internal/request-contracts").DoorFailure, RequestIdentityKey | HostNativeRead>) {
+    const root = yield* readSets.open({ key: "native.call", input: json(raw), scope: canonicalJson(raw.scope) }, null);
+    return yield* Effect.gen(function* () {
+      const answer = yield* read;
+      if (writer && "openId" in answer.actualTarget.openDocumentLifetime) {
+        const inventory = Context.get(services, HostSessionInventory);
+        const openId = answer.actualTarget.openDocumentLifetime.openId;
+        yield* Effect.gen(function* () {
+          const session = yield* inventory.session(raw.scope);
+          yield* inventory.document({ session: session.sessionId, openId });
+        }).pipe(Effect.catch(() => {
+          const at = writer.capture.begin(); return at === null ? Effect.void : writer.capture.stop(at, "unsupported");
+        }));
+      }
+      yield* sealed(root);
+      const audience = yield* Effect.serviceOption(BodyReceiptAudience);
+      const bodyReceipt = receipts ? yield* receipts.mint(root.id, createHash("sha256").update(JSON.stringify(answer.value ?? null)).digest("hex"), Option.getOrNull(audience)) : undefined;
+      return { answer, ...(bodyReceipt ? { bodyReceipt } : {}) };
+    }).pipe(Effect.provideService(CurrentInputConsumption, root), Effect.provideService(HostNativeRead, Context.get(services, HostNativeRead)), Effect.ensuring(root.close));
+  });
+  return { work, invocation, retainedCall, nativeCall, nativeBody, services };
 });
 
 type FansOwnerOptions = NonNullable<Parameters<typeof makeFansOwner>[1]>;
@@ -547,7 +618,7 @@ const fansCoreRoutes = (inputs: HostInputContext["Service"], options: Parameters
     const fans = yield* makeFansOwner(inputs, options);
     const routes = createPeRoutes({ inputs, workspace: fans.work.workspace, registrations: fans.work.registrations });
     return Layer.mergeAll(peCoreRoutes(routes, fans.invocation, inputs), nativeReadResolveRoute,
-      nativeCallRouteFor(fans.retainedCall),
+      nativeCallRouteFor(fans.retainedCall, fans.nativeCall),
     ).pipe(HttpRouter.provideRequest(Layer.succeedContext(Context.add(fans.services, HostInputContext, inputs))),
       Layer.provide(Layer.succeedContext(Context.add(fans.services, HostInputContext, inputs))));
   }));
@@ -708,12 +779,12 @@ function liveHttpLive(options: HttpLiveOptions) {
           noRevitBoundary(),
           Layer.unwrap(
             Effect.gen(function* () {
-              const { work, retainedCall } = yield* FansOwner;
+              const { work, retainedCall, nativeBody } = yield* FansOwner;
               return makeCallRoute(
                 (yield* HostReceipts).journal,
                 undefined,
                 { workspace: work.workspace },
-                { origin: () => `http://127.0.0.1:${port()}`, pointers: work.pointers, retainedRead: retainedCall },
+                { origin: () => `http://127.0.0.1:${port()}`, pointers: work.pointers, retainedRead: retainedCall, nativeBody },
               );
             }),
           ),
