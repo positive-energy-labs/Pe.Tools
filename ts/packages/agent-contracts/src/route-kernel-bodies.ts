@@ -98,6 +98,7 @@ export type ReadingSnapshot<T> = ReadingEvidence &
         readonly current: true;
         readonly value: Immutable<T>;
         readonly hash: string;
+        readonly bodyReceipts?: readonly string[];
       }
     | {
         readonly status: "pending" | "unavailable" | "failed";
