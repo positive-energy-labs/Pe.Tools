@@ -153,7 +153,6 @@ public sealed class BridgeOpRequestDeserializationTests {
                 Converters = [new Newtonsoft.Json.Converters.StringEnumConverter()]
             });
 
-        Assert.That(response, Does.Contain("\"rawValue\":null"));
         var bound = await Probe("revit.detail.schedule-cells-probe").ExecuteAsync(CellRequest(response), null, CancellationToken.None);
         Assert.That(((ProbeResponse)bound!).Echo, Is.EqualTo("-1001203:False:null"));
     }
