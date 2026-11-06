@@ -3,7 +3,7 @@ import { HostNativeRead } from "@pe/host-internal/native-read";
 import { NativeReads } from "../src/native-reads.ts";
 import type { RequestIdentityData } from "@pe/host-internal/request-contracts";
 import { testHostInputs } from "./effect-test.ts";
-import { testHostFiles } from "./effect-test.ts";
+import { testDuctFiles } from "./effect-test.ts";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -30,7 +30,11 @@ import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
 import { RunConsents, runConsentsPromise, type ConsentEvent } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
-import type { DuctsSheetSources } from "../src/ducts-sheet.ts";
+import type { DuctsReadSources } from "../src/reads/ducts-inputs.ts";
+import { evaluate } from "../src/reads/evaluator.ts";
+import { ductSheet, fanRoster } from "../src/reads/fan-sheet.ts";
+import { sheetPort } from "./ducts-read.fixture.ts";
+import { ductsSheetRequestSchema, ductsRosterRequestSchema } from "@pe/agent-contracts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { CaptureStore } from "../src/takeoff-captures.ts";
@@ -326,7 +330,7 @@ export async function nativeFixture(
           ),
         ),
     );
-    const readDucts: DuctsSheetSources["call"] = (op, input, ref, version) =>
+    const readDucts: DuctsReadSources["call"] = (op, input, ref, version) =>
       request(
         new Request("http://fixture/call", {
           method: "POST",
@@ -348,7 +352,13 @@ export async function nativeFixture(
         threads: async () => [],
         documents: async () => [{ ...target.ref, address }],
       },
-      ductsSheets: { firm: () => settle(testHostFiles().firm), catalogs: () => settle(testHostFiles().ductCatalogs), call: readDucts },
+      sheetRead: async raw => {
+        const port = sheetPort({ firm: () => settle(testDuctFiles().firm), catalogs: () => settle(testDuctFiles().ductCatalogs), call: readDucts,
+          workKey: async ref => bindWork("ducts", address, undefined, ref) }, saved);
+        return "mode" in (raw as object)
+          ? (await evaluate(ductSheet, ductsSheetRequestSchema.parse(raw), port)).data
+          : (await evaluate(fanRoster, ductsRosterRequestSchema.parse(raw), port)).data;
+      },
       observeHostResource,
     });
     return {

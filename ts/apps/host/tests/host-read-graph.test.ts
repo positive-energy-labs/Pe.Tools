@@ -12,11 +12,11 @@ import type { RouteWorkspace } from "@pe/runtime";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import rosterCapture from "../../../packages/host-contracts/src/fixtures/k2-roster.json" with { type: "json" };
 import fanCapture from "../../../packages/host-contracts/src/fixtures/k2-four-fan-walk.json" with { type: "json" };
-import { fansInputRoutes } from "../src/app.ts";
+import { readInputRoutes } from "../src/app.ts";
 import { Publications, read, leaf, RefusedPartition } from "../src/reads/evaluator.ts";
 import { fansReadResponse } from "../../../packages/agent-contracts/src/fans-read.ts";
 import { HostInputContext } from "../src/input-context.ts";
-import { HostFiles } from "../src/host-files.ts";
+import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 import { FIRM_SEED } from "../src/ducts-inputs.ts";
@@ -81,14 +81,14 @@ async function fixture() {
     HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live" }))),
   );
   const web = HttpRouter.toWebHandler(
-    fansInputRoutes(inputs, {
+    readInputRoutes(inputs, {
       store: fileRouteDocumentStore(join(dir, "work")),
       initialize: async (current) => {
         workspace = current;
       },
       live: {
         owner,
-        files: HostFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
+        files: DuctFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
         marks: Layer.succeed(HostDocumentMarks, {
           ...marks,
           snapshot: (doc) =>

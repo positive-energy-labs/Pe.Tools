@@ -1,8 +1,8 @@
 import { readInvalidations } from "./reads/invalidations.ts";
 import { readEvents } from "./reads/events.ts";
-import { Publications } from "./reads/evaluator.ts";
-import { fansSheet, fansInputPort } from "./reads/fans.ts";
-import { fansReadRequest } from "@pe/agent-contracts";
+import { Publications, evaluate } from "./reads/evaluator.ts";
+import { graphRoute, graphRouteIds } from "./reads/routes.ts";
+import { ductsInputPort, type DuctsReadSources } from "./reads/ducts-inputs.ts";
 import { HostInputContext } from "./input-context.ts";
 import type { TakingObserver } from "./native-recording.ts";
 import { BodyReceiptAudience, bodyReceipts } from "./body-receipts.ts";
@@ -11,7 +11,7 @@ import { BODY_RECEIPT_HEADER } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
 import { recordedWorkSource, capturedWorkReads, workReadContext, type WorkInputRunner } from "./work-inputs.ts";
 import { CurrentInputConsumption, HostInputReadSets, type InputConsumption, type ReadSetId, type ConsumerRecipe } from "./input-occurrence.ts";
-import type { DuctsSheetSources } from "./ducts-sheet.ts";
+
 import { matchPeRoute, peRoutes } from "@pe/agent-contracts/pe-api";
 import { HostSessionInventory } from "./session-inventory.ts";
 import { createDuctsBodyBasis } from "./ducts-body-basis.ts";
@@ -86,7 +86,7 @@ import { staticSpaLayer } from "./static-spa.ts";
 import { peRoutesLayer, peApiErrorsLayer, type HostWork } from "./pe-routes.ts";
 import { threadPointerPort } from "./thread-pointers.ts";
 import { capturesRoute } from "./captures-route.ts";
-import { ductCatalogsRoute, HostFiles } from "./host-files.ts";
+import { ductCatalogsRoute, DuctFiles } from "./ducts-files.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
 import { PictureCaptureStore } from "./captures-route.ts";
 import { pagesRoute } from "./pages-route.ts";
@@ -187,7 +187,7 @@ function makeRevitComposition(
       Layer.unwrap(
         Effect.gen(function* () {
           const families = yield* FamiliesReader;
-          const { work, retainedCall, nativeBody } = yield* FansOwner;
+          const { work, retainedCall, nativeBody } = yield* ReadOwner;
           return makeCallRoute(
             (yield* HostReceipts).journal,
             undefined,
@@ -240,11 +240,11 @@ const liveNativeRecipe = HostNativeReadLive.pipe(
 
 const recordingCoverage = Effect.fail(new InvalidRead({ message: "Recording does not cover this owner", status: 409, problem: "recording.coverage" }));
 export const historicalRoutes = (inputs: HostInputContext["Service"], webRoot: string | null) =>
-  Layer.mergeAll(fansCoreRoutes(inputs), staticSpaLayer(webRoot, recordingCoverage)).pipe(Layer.provide(httpProblems));
+  Layer.mergeAll(readCoreRoutes(inputs), staticSpaLayer(webRoot, recordingCoverage)).pipe(Layer.provide(httpProblems));
 
-/** One Fans HTTP/Work graph; live uses the bridge-subscribed retained owner, replay builds no live port. */
-export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostInputContext["Service"], options: {
-  readonly live?: { owner: DuctsReadings; native: Layer.Layer<HostNativeRead>; files: Layer.Layer<HostFiles>;
+/** One host input HTTP/Work graph; live uses the bridge-subscribed retained owner, replay builds no live port. */
+export const makeReadOwner = Effect.fn("Reads.compose")(function* (inputs: HostInputContext["Service"], options: {
+  readonly live?: { owner: DuctsReadings; native: Layer.Layer<HostNativeRead>; files: Layer.Layer<DuctFiles>;
     marks: Layer.Layer<HostDocumentMarks>; inventory: Layer.Layer<HostSessionInventory> };
   readonly store?: import("@pe/runtime").RouteDocumentStore;
   readonly observed?: TakingObserver;
@@ -255,16 +255,16 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
 } = {}) {
   const runtime = yield* Effect.context<never>();
   const lane = inputs.lane;
-  if (lane.kind === "fixture") return yield* Effect.die(Error("A fixture has no Fans input graph"));
+  if (lane.kind === "fixture") return yield* Effect.die(Error("A fixture has no host input graph"));
   const basis = createDuctsBodyBasis(lane, options.observed);
   const recorded = lane.kind === "recording";
   const live = recorded ? undefined : options.live;
-  if (!recorded && (!live || !options.store)) return yield* Effect.die(Error("Live Fans graph needs its real live inputs and Work store"));
+  if (!recorded && (!live || !options.store)) return yield* Effect.die(Error("Live input graph needs its real live inputs and Work store"));
   const writer = lane.kind === "live" ? lane.captureStore : undefined;
   const services = yield* Layer.build(Layer.mergeAll(
     HostInputReadSets.layer(lane),
     guardedNativeRead().pipe(Layer.provide(hostNativeReadFor(lane, recorded ? liveNativeRecipe : live!.native, basis?.observed)), Layer.provide(Layer.succeed(HostInputContext, inputs))),
-    recorded ? HostFiles.recorded(lane.recordingStore) : writer ? HostFiles.capturing(writer, options.observed).pipe(Layer.provide(live!.files)) : live!.files,
+    recorded ? DuctFiles.recorded(lane.recordingStore) : writer ? DuctFiles.capturing(writer, options.observed).pipe(Layer.provide(live!.files)) : live!.files,
     recorded ? HostDocumentMarks.recorded(lane.recordingStore) : writer ? HostDocumentMarks.capturing(writer, options.observed).pipe(Layer.provide(live!.marks)) : live!.marks,
     recorded ? HostSessionInventory.recorded(lane.recordingStore) : writer ? HostSessionInventory.capturing(writer, options.observed).pipe(Layer.provide(live!.inventory)) : live!.inventory,
   ));
@@ -279,10 +279,10 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
   yield* Layer.build(admittedBuiltinsLayer(workspace, undefined, registrations));
   if (!recorded && options.initialize) yield* Effect.promise(() => options.initialize!(workspace));
   const owner = recorded ? new DuctsReadings() : live!.owner;
-  const files = Context.get(services, HostFiles), marks = Context.get(services, HostDocumentMarks);
+  const files = Context.get(services, DuctFiles), marks = Context.get(services, HostDocumentMarks);
   const readSets = Context.get(services, HostInputReadSets);
   const publications = new Publications();
-  const invalidations = readInvalidations(workspace, marks, recorded, publications);
+  const invalidations = readInvalidations(workspace, marks, recorded, publications, files.subscribe);
   yield* Effect.addFinalizer(() => Effect.sync(invalidations.close));
   const receipts = writer ? bodyReceipts(writer) : undefined;
   const acceptPoints = writer && receipts ? yield* acceptedPointPolicy(writer, receipts) : undefined;
@@ -319,18 +319,19 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
     const url = new URL(web.url), declared = matchPeRoute(web.method, url.pathname)!;
     if (declared.id === "reads.events") return { readEvents: readEvents(publications, identity.caller, web) };
     if (declared.id === "resources.subscriptions") return { resourceAudience: audience };
-    if (!["fans.sheet", "ducts.roster", "ducts.sheet", "work.get", "resources.stream"].includes(declared.id)) return {};
+    if (![...graphRouteIds, "work.get", "resources.stream"].includes(declared.id)) return {};
     const stream = declared.id === "resources.stream";
     const input = declared.route.input.parse({ params: declared.params,
       query: Object.fromEntries(url.searchParams), body: web.method === "GET" ? undefined : await web.clone().json() });
-    const graphRequest = declared.id === "fans.sheet" ? fansReadRequest.parse(input.body) : null;
+    const graph = graphRouteIds.includes(declared.id) ? graphRoute(declared.id, input.body) : null;
+    const graphRequest = graph?.publication;
     if (graphRequest?.release) return { readGraph: async () => {
       publications.release(canonicalJson([identity.caller, graphRequest.subscription]), graphRequest.generation);
       return { key: "", generation: graphRequest.generation, version: 0, value: null, state: "superseded" };
     } };
-    const recipe: ConsumerRecipe = { key: declared.id, input: json(declared.id === "fans.sheet" ? { body: { args: fansReadRequest.parse(input.body).args } } : input), scope: canonicalJson(json(identity.scope)) };
+    const recipe: ConsumerRecipe = { key: declared.id, input: json(graph ? { body: { read: graph.definition.name, args: graph.args } } : input), scope: canonicalJson(json(identity.scope)) };
     // Transport registration consumes no recording; POST-added keys admit their own frames.
-    const consumption = recorded && stream ? undefined : await invoke(readSets.open(recipe, declared.id === "fans.sheet" ? fansReadRequest.parse(input.body).readSet as ReadSetId ?? null : null));
+    const consumption = recorded && stream ? undefined : await invoke(readSets.open(recipe, graph?.readSet as ReadSetId ?? null));
     const scoped = (current: InputConsumption): WorkInputRunner => (effect) =>
       runPods({}, Effect.provide(effect, Context.add(admitted, CurrentInputConsumption, current)));
     const complete = (current: InputConsumption) => scoped(current)(sealed(current));
@@ -342,7 +343,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
       finally { activeFrames.delete(current); closeResources(); }
     };
     const inventory = Context.get(services, HostSessionInventory);
-    const sources = (current: InputConsumption): DuctsSheetSources => {
+    const sources = (current: InputConsumption): DuctsReadSources => {
       const context = Context.add(admitted, CurrentInputConsumption, current);
       const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) => runPods({}, Effect.provide(effect, context));
       const documents = new Map<string, ReturnType<typeof inventory.document>>();
@@ -355,19 +356,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
       const document = (ref: import("@pe/agent-contracts").DocumentRef) => invoke(documentRead(ref));
       return { firm: () => invoke(files.firm), catalogs: () => invoke(files.ductCatalogs),
         workKey: async (ref) => bindWork("ducts", (await document(ref)).address, undefined, ref),
-        inputs: { consumption: current, run: scoped(current), work: workReadContext(current, scoped(current)),
-          overview: async (basis, recompute) => {
-            if (lane.kind !== "recording") throw new InvalidRead({ message: "Original overview is no longer retained", status: 409, problem: "read.retained" });
-            const id = await invoke(current.dependency("overview"));
-            const saved = await invoke(lane.recordingStore.readSets.get(id));
-            if (saved.recipe.key !== "ducts.sheet" || !saved.exports.some((value) => value.kind === "ducts.sheet" && value.basis === basis))
-              throw new InvalidRead({ message: "Overview dependency does not export this sheet basis", status: 409, problem: "recording.mismatch" });
-            const original = peRoutes["ducts.sheet"].input.parse(saved.recipe.input).body;
-            const opened = await invoke(readSets.open(saved.recipe, id));
-            try { await recompute(original, sources(opened)); await complete(opened); }
-            finally { await invoke(opened.close); }
-          },
-        },
+        inputs: { consumption: current, run: scoped(current), work: workReadContext(current, scoped(current)) },
         call: async (key, input, ref, version, role) => {
           const scope = { bridgeSessionId: ref.session, ...(key === "ducts.tables" ? {} : { openDocumentId: ref.openId }) };
           return HttpServerResponse.toWeb(await invoke(retained(current, { key, input, scope }, { version }, role, documentRead)));
@@ -543,13 +532,13 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
       return () => { released = true; release(); };
     };
     const source = consumption ? sources(consumption) : undefined;
-    return { ...(declared.id === "fans.sheet" && source ? { readGraph: async (raw: unknown) => {
-      const request = fansReadRequest.parse(raw);
-      const id = canonicalJson([identity.caller, request.subscription]);
-      return publications.publish(id, request.generation, fansSheet, request.args, fansInputPort({
-        source, workspace, marks, run: scoped(consumption!), evaluation: consumption!.id, origin: () => inputs.source, revision: invalidations.revision,
-      }));
-    } } : {}), ...(source && { sheets: source, work: source.inputs!.work,
+    return { ...(graph && source ? { readGraph: async () => {
+      const port = ductsInputPort({ source, workspace, marks, run: scoped(consumption!),
+        evaluation: consumption!.id, origin: () => inputs.source, revision: invalidations.revision });
+      return graph.publication
+        ? publications.publish(canonicalJson([identity.caller, graph.publication.subscription]), graph.publication.generation, graph.definition, graph.args, port)
+        : (await evaluate(graph.definition, graph.args, port)).data;
+    } } : {}), ...(source && { work: source.inputs!.work,
       document: (ref: import("@pe/agent-contracts").DocumentRef) => runPods({}, Effect.provide(inventory.document(ref), Context.add(admitted, CurrentInputConsumption, consumption!))) }), observe,
       closeResources: () => { closingResources = true; closeResources(); },
       resourceAudience: audience,
@@ -562,7 +551,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
         }
         try { if ("response" in result && result.response.ok) {
           await complete(consumption!);
-          if (declared.id !== "fans.sheet" && receipts && audience && !writer!.capture.truncated()) {
+          if (!graph?.publication && receipts && audience && !writer!.capture.truncated()) {
             const text = await result.response.clone().text();
             const receipt = await invoke(receipts.mint(consumption!.id, createHash("sha256").update(text).digest("hex"), audience));
             if (receipt) result.response.headers.set(BODY_RECEIPT_HEADER, receipt);
@@ -601,12 +590,12 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
         Effect.provideService(HostNativeRead, Context.get(services, HostNativeRead)));
     });
   const work = { workspace, registrations, pointers: options.pointers };
-  const nativeCall = Effect.fn("Fans.nativeBody")(function* (raw: NativeReadInput) {
+  const nativeCall = Effect.fn("Reads.nativeBody")(function* (raw: NativeReadInput) {
     const { answer, bodyReceipt } = yield* nativeBody(raw, Context.get(services, HostNativeRead).read(raw));
     return HttpServerResponse.jsonUnsafe(answer.value, { headers: { "x-pe-native-request-id": answer.nativeRequestId,
       ...(bodyReceipt ? { [BODY_RECEIPT_HEADER]: bodyReceipt } : {}) } });
   });
-  const nativeBody = Effect.fn("Fans.nativeBodyCapture")(function* (raw: NativeReadInput, read: Effect.Effect<import("@pe/host-internal/request-contracts").NativeAnswer<Schema.Json>, import("@pe/host-internal/request-contracts").DoorFailure, RequestIdentityKey | HostNativeRead>) {
+  const nativeBody = Effect.fn("Reads.nativeBodyCapture")(function* (raw: NativeReadInput, read: Effect.Effect<import("@pe/host-internal/request-contracts").NativeAnswer<Schema.Json>, import("@pe/host-internal/request-contracts").DoorFailure, RequestIdentityKey | HostNativeRead>) {
     const root = yield* readSets.open({ key: "native.call", input: json(raw), scope: canonicalJson(raw.scope) }, null);
     return yield* Effect.gen(function* () {
       const answer = yield* read;
@@ -629,22 +618,22 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
   return { work, invocation, retainedCall, nativeCall, nativeBody, services, publications };
 });
 
-type FansOwnerOptions = NonNullable<Parameters<typeof makeFansOwner>[1]>;
+type ReadOwnerOptions = NonNullable<Parameters<typeof makeReadOwner>[1]>;
 
-class FansOwner extends Context.Service<FansOwner, Effect.Success<ReturnType<typeof makeFansOwner>>>()("pe/FansOwner") {}
+class ReadOwner extends Context.Service<ReadOwner, Effect.Success<ReturnType<typeof makeReadOwner>>>()("pe/ReadOwner") {}
 
-const fansCoreRoutes = (inputs: HostInputContext["Service"], options: Parameters<typeof makeFansOwner>[1] = {}) =>
+const readCoreRoutes = (inputs: HostInputContext["Service"], options: Parameters<typeof makeReadOwner>[1] = {}) =>
   Layer.unwrap(Effect.gen(function* () {
-    const fans = yield* makeFansOwner(inputs, options);
-    const routes = createPeRoutes({ inputs, workspace: fans.work.workspace, registrations: fans.work.registrations });
-    return Layer.mergeAll(peCoreRoutes(routes, fans.invocation, inputs), nativeReadResolveRoute,
-      nativeCallRouteFor(fans.retainedCall, fans.nativeCall),
-    ).pipe(HttpRouter.provideRequest(Layer.succeedContext(Context.add(fans.services, HostInputContext, inputs))),
-      Layer.provide(Layer.succeedContext(Context.add(fans.services, HostInputContext, inputs))));
+    const reads = yield* makeReadOwner(inputs, options);
+    const routes = createPeRoutes({ inputs, workspace: reads.work.workspace, registrations: reads.work.registrations });
+    return Layer.mergeAll(peCoreRoutes(routes, reads.invocation, inputs), nativeReadResolveRoute,
+      nativeCallRouteFor(reads.retainedCall, reads.nativeCall),
+    ).pipe(HttpRouter.provideRequest(Layer.succeedContext(Context.add(reads.services, HostInputContext, inputs))),
+      Layer.provide(Layer.succeedContext(Context.add(reads.services, HostInputContext, inputs))));
   }));
 
-export const fansInputRoutes = (inputs: HostInputContext["Service"], options: Parameters<typeof makeFansOwner>[1] = {}) =>
-  Layer.mergeAll(fansCoreRoutes(inputs, options), HttpRouter.add("*", "/*", () => recordingCoverage)).pipe(Layer.provide(httpProblems));
+export const readInputRoutes = (inputs: HostInputContext["Service"], options: Parameters<typeof makeReadOwner>[1] = {}) =>
+  Layer.mergeAll(readCoreRoutes(inputs, options), HttpRouter.add("*", "/*", () => recordingCoverage)).pipe(Layer.provide(httpProblems));
 
 /** Root-fixed selection: the live factory is not even called on a historical/fixture lane. */
 export const hostInputGraph = <A, E, R, B, F, S>(inputs: HostInputContext["Service"], live: () => Layer.Layer<A, E, R>, recording: () => Layer.Layer<B, F, S>): Layer.Layer<A & B, E | F, R | S> =>
@@ -700,8 +689,8 @@ export interface HttpLiveOptions {
   /** Test sentinel for the complete Revit/SDK/proxy composition. */
   readonly revitCompositionFactory?: typeof makeRevitComposition;
   /** Explicit primitive input ports; the HTTP, Work and retained owners remain the production graph. */
-  readonly fans?: Omit<FansOwnerOptions, "live"> & {
-    readonly live?: Omit<NonNullable<FansOwnerOptions["live"]>, "owner">;
+  readonly reads?: Omit<ReadOwnerOptions, "live"> & {
+    readonly live?: Omit<NonNullable<ReadOwnerOptions["live"]>, "owner">;
   };
 }
 
@@ -799,7 +788,7 @@ function liveHttpLive(options: HttpLiveOptions) {
           noRevitBoundary(),
           Layer.unwrap(
             Effect.gen(function* () {
-              const { work, retainedCall, nativeBody } = yield* FansOwner;
+              const { work, retainedCall, nativeBody } = yield* ReadOwner;
               return makeCallRoute(
                 (yield* HostReceipts).journal,
                 undefined,
@@ -813,15 +802,15 @@ function liveHttpLive(options: HttpLiveOptions) {
         ),
       };
   const AppRoutes = Layer.unwrap(Effect.gen(function* () {
-    const live = options.fans?.live ?? {
+    const live = options.reads?.live ?? {
       native: Layer.succeed(HostNativeRead, yield* HostNativeRead),
-      files: Layer.succeed(HostFiles, yield* HostFiles), marks: Layer.succeed(HostDocumentMarks, yield* HostDocumentMarks),
+      files: Layer.succeed(DuctFiles, yield* DuctFiles), marks: Layer.succeed(HostDocumentMarks, yield* HostDocumentMarks),
       inventory: Layer.succeed(HostSessionInventory, yield* HostSessionInventory.pipe(Effect.provide(HostSessionInventory.layer))),
     };
-    const fans = yield* makeFansOwner(options.inputs, { registrations, pointers: threadPointerPort(options.inputs),
-      ...options.fans, store: options.fans?.store ?? fileRouteDocumentStore(productRouteWorkPath()),
+    const reads = yield* makeReadOwner(options.inputs, { registrations, pointers: threadPointerPort(options.inputs),
+      ...options.reads, store: options.reads?.store ?? fileRouteDocumentStore(productRouteWorkPath()),
       live: { ...live, owner: ductsReadings(yield* RevitBridge) } });
-    const work = fans.work;
+    const work = reads.work;
     const CommonAppLive = Layer.mergeAll(
       RemoteLive,
       shareRoute(share),
@@ -833,14 +822,14 @@ function liveHttpLive(options: HttpLiveOptions) {
       adminShutdownRoute,
       adminWindowRoute,
       updateRoutes,
-      peRoutesLayer(options.routeRegistrations, share, work, fans.invocation),
+      peRoutesLayer(options.routeRegistrations, share, work, reads.invocation),
       demoRoutes(),
       webUrl
         ? HttpRouter.add("GET", "/*", (req) => (isNavigation(req) ? spa(req) : emptyNotFound))
         : staticSpaLayer(options.webRoot),
     );
 
-    const context = Context.add(Context.add(fans.services, FansOwner, fans), HostInputContext, options.inputs);
+    const context = Context.add(Context.add(reads.services, ReadOwner, reads), HostInputContext, options.inputs);
     return Layer.mergeAll(composition.routes, CommonAppLive).pipe(
       HttpRouter.provideRequest(Layer.succeedContext(context)), Layer.provide(Layer.succeedContext(context)));
   }));
@@ -863,7 +852,7 @@ function liveHttpLive(options: HttpLiveOptions) {
     Layer.provide(RunConsents.layer),
     Layer.provide(Spawner.live),
     Layer.provide(CaptureStore.layer()),
-    Layer.provide(HostFiles.layer()),
+    Layer.provide(DuctFiles.layer()),
     Layer.provide(PictureCaptureStore.layer()),
     Layer.provide(ReceiptsLive),
     Layer.provide(NodeServices.layer),

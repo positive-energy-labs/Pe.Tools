@@ -7,6 +7,8 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { z } from "zod";
+import { existsSync, watch } from "node:fs";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { catalogTableSchema, ductsFirmSchema } from "@pe/agent-contracts";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { readDuctCatalogs, productCatalogsRootPath, type CatalogReading } from "./duct-catalogs.ts";
@@ -21,13 +23,13 @@ import {
 } from "./native-recording.ts";
 
 // The readings' own contracts: a recorded firm or catalog decodes only if it is still that reading.
-const firmReading = z.strictObject({
+export const firmReading = z.strictObject({
   firm: ductsFirmSchema,
   path: z.string(),
   present: z.boolean(),
   error: z.string().optional(),
 });
-const catalogReading = z.strictObject({
+export const catalogReading = z.strictObject({
   tables: z.record(z.string(), catalogTableSchema),
   findings: z.array(z.string()),
 });
@@ -40,28 +42,47 @@ const CATALOGS = { kind: "files", file: "duct-catalogs" } as const;
 // A file input has no document: its one scope is the host's product root.
 const SCOPE = "{}";
 
-export class HostFiles extends Context.Service<
-  HostFiles,
+export class DuctFiles extends Context.Service<
+  DuctFiles,
   {
     readonly firm: Effect.Effect<FirmReading, DoorFailure>;
     readonly ductCatalogs: Effect.Effect<CatalogReading, DoorFailure>;
+    readonly subscribe?: (changed: (name: string) => void) => () => void;
   }
->()("pe/HostFiles") {
+>()("pe/DuctFiles") {
   static readonly layer = (
     roots: { readonly firm: string; readonly catalogs: string } = {
       firm: firmFilePath(),
       catalogs: productCatalogsRootPath(),
     },
   ) =>
-    Layer.succeed(HostFiles, {
+    Layer.succeed(DuctFiles, {
       firm: Effect.promise(() => readFirm(roots.firm)),
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
+      subscribe: (changed) => {
+        const stops = Object.entries({ firm: roots.firm, catalogs: roots.catalogs }).map(([name, path]) => {
+          // Watch an existing ancestor: absence, directory creation and atomic replacement still notify.
+          let base = dirname(resolve(path));
+          while (!existsSync(base) && dirname(base) !== base) base = dirname(base);
+          const watcher = watch(base, { recursive: true, persistent: false }, (_event, file) => {
+            const changedPath = file === null ? null : resolve(base, file.toString());
+            const child = changedPath === null ? "" : relative(resolve(path), changedPath);
+            const ancestor = changedPath === null ? "" : relative(changedPath, resolve(path));
+            if (changedPath === null || child === "" || (!child.startsWith(`..${sep}`) && child !== "..") ||
+                (!ancestor.startsWith(`..${sep}`) && ancestor !== "..")) changed(name);
+          });
+          watcher.on("error", () => changed(name));
+          return () => watcher.close();
+        });
+        return () => stops.forEach(stop => stop());
+      },
     });
   /** The live files, each read kept as a taking: absence, fallback and findings included. */
   static readonly capturing = (writer: RecordingWriter, observed?: TakingObserver) =>
     Layer.effect(
-      HostFiles,
-      Effect.map(Effect.service(HostFiles), (live) => ({
+      DuctFiles,
+      Effect.map(Effect.service(DuctFiles), (live) => ({
+        subscribe: live.subscribe,
         firm: captureInput(writer, FIRM, SCOPE, firmCodec, live.firm, observed),
         ductCatalogs: captureInput(
           writer,
@@ -78,7 +99,7 @@ export class HostFiles extends Context.Service<
     reader: RecordingReader,
     bindings: ReadonlyMap<string, string> = new Map(),
   ) =>
-    Layer.succeed(HostFiles, {
+    Layer.succeed(DuctFiles, {
       firm: replayInput(reader, FIRM, SCOPE, firmCodec, bindings.get(inputBindingKey(FIRM, SCOPE))),
       ductCatalogs: replayInput(
         reader,
@@ -95,7 +116,7 @@ export const ductCatalogsRoute = HttpRouter.add(
   "GET",
   "/pe/ducts/catalogs",
   Effect.gen(function* () {
-    const files = yield* HostFiles;
+    const files = yield* DuctFiles;
     return HttpServerResponse.jsonUnsafe(yield* files.ductCatalogs);
   }),
 );

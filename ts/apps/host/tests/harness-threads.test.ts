@@ -4,7 +4,7 @@ import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { RevitBridge } from "../src/bridge.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
-import { HostFiles } from "../src/host-files.ts";
+import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
 import { afterAll, afterEach, beforeAll, expect, onTestFinished, test, vi } from "vite-plus/test";
@@ -273,7 +273,7 @@ test.each(["claude", "codex"] as const)(
         Layer.provide(Layer.succeed(RevitBridge, bridge)),
       ), readScope,
     ));
-    const deps = { sdk: sdkSessions, nativeRead: Context.get(readContext, HostNativeRead), files: Context.get(readContext, HostFiles), marks: Context.get(readContext, HostDocumentMarks) };
+    const deps = { sdk: sdkSessions, nativeRead: Context.get(readContext, HostNativeRead), files: Context.get(readContext, DuctFiles), marks: Context.get(readContext, HostDocumentMarks) };
     const resolve = commandRegistry(bridge, captureStore("harness-threads"), deps, async () => {
       throw Error("No local command in this journey");
     });

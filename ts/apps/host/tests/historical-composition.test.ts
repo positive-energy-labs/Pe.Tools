@@ -9,7 +9,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { sourceProvenanceSchema, type Caller, type WorkKey } from "@pe/agent-contracts";
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
 import { RouteWorkspace } from "@pe/runtime";
-import { fansInputRoutes, hostInputGraph } from "../src/app.ts";
+import { readInputRoutes, hostInputGraph } from "../src/app.ts";
 import { hostInputs, recordingInputSelection } from "../src/host-program.ts";
 import { relaunchOutOfGuard } from "../src/redirection-trust.ts";
 import { admitBuild } from "../src/receipt-export.ts";
@@ -19,7 +19,7 @@ import { ActionJournal } from "../src/action-journal.ts";
 import { bootHost } from "./real-server.ts";
 import { HOST_RUNTIME_SERVICE_HEADER, HOST_RUNTIME_SERVICE_QUERY } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { HostFiles } from "../src/host-files.ts";
+import { DuctFiles } from "../src/ducts-files.ts";
 import { threadPointerPort } from "../src/thread-pointers.ts";
 
 const dirs: string[] = [];
@@ -45,7 +45,7 @@ const bundle = async () => {
 const router = async (dir: string, bindings?: ReadonlyMap<string, string>) => {
   const inputs = await Effect.runPromise(hostInputs(stamp, { kind: "recording", directory: dir, at: null, bindings }));
   let liveFactories = 0;
-  const graph = hostInputGraph(inputs, () => { liveFactories++; return Layer.effectDiscard(Effect.die("Live graph was constructed")); }, () => fansInputRoutes(inputs));
+  const graph = hostInputGraph(inputs, () => { liveFactories++; return Layer.effectDiscard(Effect.die("Live graph was constructed")); }, () => readInputRoutes(inputs));
   const web = HttpRouter.toWebHandler(graph, { disableLogger: true });
   const send = (path: string, body?: unknown, caller: Caller = human, selectedScope = scope) => web.handler(new Request(`http://host${path}`, {
     method: body === undefined ? "GET" : "POST", headers: { "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -181,7 +181,7 @@ test("historical entry serves real static files through identity and retains API
   const selection = await Effect.runPromise(recordingInputSelection(["--recording", dir]));
   const inputs = await Effect.runPromise(hostInputs(stamp, selection!));
   let live = 0;
-  const files = vi.spyOn(HostFiles, "layer").mockImplementation(() => { live++; throw Error("live files"); });
+  const files = vi.spyOn(DuctFiles, "layer").mockImplementation(() => { live++; throw Error("live files"); });
 
   const host = await bootHost({ inputs, webRoot, revitCompositionFactory: () => { live++; throw Error("live composition"); } });
   const navigation = { accept: "text/html", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document", "sec-fetch-site": "none" };

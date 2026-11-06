@@ -1,6 +1,6 @@
 import { HostInputContext } from "../src/input-context.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
-import { HostFiles } from "../src/host-files.ts";
+import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { HostReceipts } from "../src/gateway-owner.ts";
 import * as adapter from "../src/harness/adapter.ts";
@@ -272,9 +272,9 @@ export const testDocumentMarks = (bridge: RevitBridge["Service"]) =>
 export const testReceipts = () => Context.get(testScoped(HostReceipts.layer(null)), HostReceipts);
 
 export const pictureCaptures = (root: string) => Context.get(testScoped(PictureCaptureStore.layer(root)), PictureCaptureStore);
-export const testHostFiles = () => Context.get(testScoped(HostFiles.layer()), HostFiles);
+export const testDuctFiles = () => Context.get(testScoped(DuctFiles.layer()), DuctFiles);
 
-export const testHostInputs = Layer.mergeAll(HostFiles.layer(), PictureCaptureStore.layer(), HostDocumentMarks.layer);
+export const testHostInputs = Layer.mergeAll(DuctFiles.layer(), PictureCaptureStore.layer(), HostDocumentMarks.layer);
 
 /** Immediate native acknowledgements for read payload fixtures. Barrier tests supply their own handles. */
 export const acknowledgedReadBridge = (bridge: RevitBridge["Service"]): RevitBridge["Service"] => ({

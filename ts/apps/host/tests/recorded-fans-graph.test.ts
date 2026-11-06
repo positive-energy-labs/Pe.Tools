@@ -12,9 +12,9 @@ import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
 import { bindWork, address, DUCTS_BODY_VERSION_HEADER, readingKey, readingRequestsSchema, type Caller, type ReadingRequest } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
-import { fansInputRoutes } from "../src/app.ts";
+import { readInputRoutes } from "../src/app.ts";
 import { HostInputContext } from "../src/input-context.ts";
-import { HostFiles } from "../src/host-files.ts";
+import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 import { admittedRequestIdentity, RequestIdentity, readSchemas } from "../src/request-services.ts";
@@ -171,12 +171,12 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
   let changedAt = 300;
   const markListeners = new Set<() => void>();
   const livePorts = {
-    native, files: HostFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
+    native, files: DuctFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
     marks: Layer.succeed(HostDocumentMarks, hostMarks({ observedSince: 100, changedAt: () => changedAt, subscribe: (notify) => { markListeners.add(notify); return () => { markListeners.delete(notify); }; } })),
     inventory: Layer.succeed(HostSessionInventory, { list: () => Effect.die("inventory not requested"), subscribe: () => () => {}, document: () => Effect.succeed(row),
       session: () => Effect.succeed({ sessionId: ref.session }), attachment: () => Effect.succeed({ sessionId: ref.session }) }),
   };
-  const liveHost = await bootHost({ inputs, clock: 200, fans: { live: livePorts, store: fileRouteDocumentStore(join(dir, "work")),
+  const liveHost = await bootHost({ inputs, clock: 200, reads: { live: livePorts, store: fileRouteDocumentStore(join(dir, "work")),
       observedReadSet: (recipe, id, requestId, caller) => { completed.push({ recipe, id, requestId, caller }); },
       observed: (taking) => Effect.gen(function* () {
         if (holdMark && taking.input.kind === "marks") {
@@ -471,7 +471,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
           : { ...saved, id: crypto.randomUUID() }));
         const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
         const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
-        historical = HttpRouter.toWebHandler(fansInputRoutes(context), { disableLogger: true });
+        historical = HttpRouter.toWebHandler(readInputRoutes(context), { disableLogger: true });
         expect(await firstFrame(await send(historical, url))).toMatchObject({ kind: "failure", failure: { code: problem } });
         await historical.dispose(); historical = undefined;
       }
@@ -512,7 +512,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     expect(hitOnly).toHaveLength(1);
     const prefix = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
     const prefixInputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: prefix, at: null }))));
-    historical = HttpRouter.toWebHandler(fansInputRoutes(prefixInputs, {
+    historical = HttpRouter.toWebHandler(readInputRoutes(prefixInputs, {
       get live(): never { poisoned++; throw Error("cold hit constructed live inputs"); },
       get store(): never { poisoned++; throw Error("cold hit constructed a Work store"); },
     }), { disableLogger: true });
@@ -557,7 +557,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
       const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
       const selected = cases.find((entry) => entry.value.kind === "overview")!;
-      historical = HttpRouter.toWebHandler(fansInputRoutes(context, {
+      historical = HttpRouter.toWebHandler(readInputRoutes(context, {
         get live(): never { poisoned++; throw Error("Recovery constructed live inputs"); },
         get store(): never { poisoned++; throw Error("Recovery constructed Work store"); },
       }), { disableLogger: true });
@@ -588,7 +588,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     await reread();
     await live.dispose();
     liveFactories.recorded = true;
-    const liveFiles = vi.spyOn(HostFiles, "layer").mockImplementation(() => { poisoned++; throw Error("Live file readers constructed"); });
+    const liveFiles = vi.spyOn(DuctFiles, "layer").mockImplementation(() => { poisoned++; throw Error("Live file readers constructed"); });
     const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
     expect(reader.truncation).toBeNull();
     const inventory = await Promise.all(reader.readSets.ids().map((id) => run(reader.readSets.get(id))));
@@ -640,7 +640,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
     const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
     historical = HttpRouter.toWebHandler(Layer.unwrap(Effect.gen(function* () {
       yield* TestClock.setTime(10000);
-      return fansInputRoutes(context, {
+      return readInputRoutes(context, {
         get live(): never { poisoned++; throw Error("live inputs constructed"); },
         get store(): never { poisoned++; throw Error("live Work store constructed"); },
         initialize: async () => { poisoned++; throw Error("live initializer called"); },
@@ -717,9 +717,9 @@ test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async 
   const inputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", ...(mode === "off" ? {} : { captureStore: writer }) }))));
   const lowCap = HostInputReadSets.layer;
   vi.spyOn(HostInputReadSets, "layer").mockImplementation((lane) => lowCap(lane, { ...defaultReadSetLimits, childrenPerRoot: 3, openRoots: 4 }));
-  const web = HttpRouter.toWebHandler(fansInputRoutes(inputs, { live: { inventory, owner: new DuctsReadings(),
+  const web = HttpRouter.toWebHandler(readInputRoutes(inputs, { live: { inventory, owner: new DuctsReadings(),
     native: Layer.succeed(HostNativeRead, { resolve: () => Effect.die("unexpected native"), read: () => Effect.die("unexpected native") }),
-    files: Layer.succeed(HostFiles, { firm: Effect.die("unexpected files"), ductCatalogs: Effect.die("unexpected files") }),
+    files: Layer.succeed(DuctFiles, { firm: Effect.die("unexpected files"), ductCatalogs: Effect.die("unexpected files") }),
     marks: Layer.succeed(HostDocumentMarks, hostMarks({ changedAt: () => null, subscribe: () => () => {} })) },
     store: fileRouteDocumentStore(join(dir, "work")), initialize: async (owner) => { workspace = owner; } }), { disableLogger: true });
   const send = (owner: typeof web, url: string, body?: unknown) => withInvocationContext({ caller, hostBaseUrl: "http://host" }, () => owner.handler(
@@ -777,7 +777,7 @@ test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async 
     if (mode === "on") corpora.push([await run(openRecordingReader(dir, identity, bounds)), "recording.ambiguous"]);
     for (const [saved, problem] of corpora) {
       const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: saved, at: null }))));
-      replay = HttpRouter.toWebHandler(fansInputRoutes(context, { get live(): never { poison++; throw Error("live factory"); } }), { disableLogger: true });
+      replay = HttpRouter.toWebHandler(readInputRoutes(context, { get live(): never { poison++; throw Error("live factory"); } }), { disableLogger: true });
       const frame = await firstFrame(await send(replay, url(crypto.randomUUID(), [inventoryReading])));
       if (problem) { expect(frame).toMatchObject({ kind: "failure", failure: { code: problem } }); expect(frame).not.toHaveProperty("value.sessions"); }
       else expect(frame).toEqual({ kind: "snapshot", key: readingKey(inventoryReading), value: initialValue });

@@ -11,7 +11,7 @@ import { TestClock } from "effect/testing";
 import { expect } from "vite-plus/test";
 import type { Caller } from "@pe/agent-contracts";
 import { effectTest } from "./effect-test.ts";
-import { HostFiles } from "../src/host-files.ts";
+import { DuctFiles } from "../src/ducts-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { FIRM_SEED } from "../src/ducts-inputs.ts";
 import { InvalidRead } from "../src/native-reads.ts";
@@ -51,7 +51,7 @@ const catalogs = {
   tables: {},
   findings: ["Duplicate catalog table t1; no table with this id is admitted"],
 };
-const liveFiles = Layer.succeed(HostFiles, {
+const liveFiles = Layer.succeed(DuctFiles, {
   firm: Effect.succeed(firm),
   ductCatalogs: Effect.succeed(catalogs),
 });
@@ -76,16 +76,16 @@ effectTest(
       const dir = yield* bundle;
       const writer = yield* openRecordingWriter(dir, identity, bounds);
       const files = yield* service(
-        HostFiles,
-        HostFiles.capturing(writer).pipe(Layer.provide(liveFiles)),
+        DuctFiles,
+        DuctFiles.capturing(writer).pipe(Layer.provide(liveFiles)),
       );
       expect(yield* files.ductCatalogs).toEqual(catalogs);
       expect(writer.coverage()).toEqual(["files"]);
-      const recorded = yield* service(HostFiles, HostFiles.recorded(yield* reader(dir)));
+      const recorded = yield* service(DuctFiles, DuctFiles.recorded(yield* reader(dir)));
       expect(yield* recorded.ductCatalogs).toEqual(catalogs);
       expect(yield* problem(recorded.firm)).toBe("recording.miss");
       yield* files.firm;
-      const again = yield* service(HostFiles, HostFiles.recorded(yield* reader(dir)));
+      const again = yield* service(DuctFiles, DuctFiles.recorded(yield* reader(dir)));
       expect(yield* again.firm).toEqual(firm);
     }),
 );
@@ -181,13 +181,13 @@ effectTest("an unrebuildable failure or a full bundle stops capture, keeps no ta
       maxBytes: 1_000_000,
       maxTakings: 1,
     });
-    const broken = Layer.succeed(HostFiles, {
+    const broken = Layer.succeed(DuctFiles, {
       firm: Effect.fail(new Error("disk") as never),
       ductCatalogs: Effect.succeed(catalogs),
     });
     const files = yield* service(
-      HostFiles,
-      HostFiles.capturing(writer).pipe(Layer.provide(broken)),
+      DuctFiles,
+      DuctFiles.capturing(writer).pipe(Layer.provide(broken)),
     );
     // K4: the live failure is returned as it was; capture stops instead of failing the read.
     expect((yield* Effect.flip(files.firm)) as unknown).toEqual(new Error("disk"));
@@ -195,7 +195,7 @@ effectTest("an unrebuildable failure or a full bundle stops capture, keeps no ta
     expect(writer.coverage()).toEqual([]);
     const fullDir = yield* bundle;
     const full = yield* openRecordingWriter(fullDir, identity, { maxBytes: 1_000_000, maxTakings: 1 });
-    const kept = yield* service(HostFiles, HostFiles.capturing(full).pipe(Layer.provide(liveFiles)));
+    const kept = yield* service(DuctFiles, DuctFiles.capturing(full).pipe(Layer.provide(liveFiles)));
     yield* kept.ductCatalogs;
     expect(yield* kept.ductCatalogs).toEqual(catalogs);
     expect(full.capture.truncated()).toEqual({ at: 2, reason: "full" });
@@ -213,8 +213,8 @@ effectTest(
       const writer = yield* openRecordingWriter(dir, identity, bounds);
       const seen: Taking[] = [];
       const files = yield* service(
-        HostFiles,
-        HostFiles.capturing(writer, (taking) => Effect.sync(() => void seen.push(taking))).pipe(
+        DuctFiles,
+        DuctFiles.capturing(writer, (taking) => Effect.sync(() => void seen.push(taking))).pipe(
           Layer.provide(liveFiles),
         ),
       );
@@ -225,7 +225,7 @@ effectTest(
       expect(first!.id).not.toBe(second!.id);
       const open = yield* reader(dir);
       const recorded = (bindings: ReadonlyMap<string, string>) =>
-        service(HostFiles, HostFiles.recorded(open, bindings));
+        service(DuctFiles, DuctFiles.recorded(open, bindings));
       expect(yield* problem((yield* recorded(new Map())).firm)).toBe("recording.ambiguous");
       const key = inputBindingKey(FIRM, "{}");
       expect(yield* (yield* recorded(new Map([[key, second!.id]]))).firm).toEqual(firm);
@@ -257,8 +257,8 @@ effectTest(
       });
       const seen: string[] = [];
       const files = yield* service(
-        HostFiles,
-        HostFiles.capturing(writer, (taking) => Effect.sync(() => void seen.push(taking.id))).pipe(
+        DuctFiles,
+        DuctFiles.capturing(writer, (taking) => Effect.sync(() => void seen.push(taking.id))).pipe(
           Layer.provide(liveFiles),
         ),
       );
@@ -273,8 +273,8 @@ effectTest(
       });
       const other = yield* openRecordingWriter(yield* bundle, identity, bounds);
       const refusing = yield* service(
-        HostFiles,
-        HostFiles.capturing(other, () => Effect.fail(broken)).pipe(Layer.provide(liveFiles)),
+        DuctFiles,
+        DuctFiles.capturing(other, () => Effect.fail(broken)).pipe(Layer.provide(liveFiles)),
       );
       expect(yield* refusing.firm).toEqual(firm);
       expect(other.capture.truncated()).toEqual({ at: 1, reason: "observer" });

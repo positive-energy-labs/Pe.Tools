@@ -8,6 +8,7 @@ export function readInvalidations(
   marks: HostMarks,
   recorded: boolean,
   publications: Publications,
+  subscribeFiles?: (changed: (name: string) => void) => () => void,
 ) {
   const revisions = new Map<string, number>();
   const revision = (name: string, args: unknown) =>
@@ -48,7 +49,7 @@ export function readInvalidations(
     }
   };
   const readRevision = (name: string, args: unknown) => {
-    if (name !== "work" && name !== "document-mark") return 0;
+    
     if (name === "work" && !watchingWork) {
       watchingWork = true;
       stopWork = workspace.subscribe((event) =>
@@ -72,9 +73,11 @@ export function readInvalidations(
     }
     return revision(name, args);
   };
+  const stopFiles = recorded ? undefined : subscribeFiles?.(name => changed(input => input === name));
   return {
     revision: readRevision,
     close: () => {
+      stopFiles?.();
       stopWork();
       stopMarks();
     },
