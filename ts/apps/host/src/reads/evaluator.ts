@@ -374,7 +374,13 @@ export class Publications {
   }
   release(id: string, generation: number) {
     const slot = this.slots.get(id);
-    if (slot && generation >= slot.generation) {
+    if (!slot) {
+      // Release may overtake admission while its input read set is opening.
+      if (this.slots.size < this.capacity)
+        this.slots.set(id, { generation: generation + 1, key: "", attempt: 0 });
+      return;
+    }
+    if (generation >= slot.generation) {
       slot.generation = generation + 1;
       slot.attempt++;
     }

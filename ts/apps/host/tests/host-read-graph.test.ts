@@ -159,6 +159,7 @@ async function fixture() {
     fan: string[],
     hold?: ReturnType<typeof gate>,
     subscription = "sheet",
+    release = false,
   ) => {
     const admitted = admittedRequestIdentity(who, scope);
     if (hold) holds.set(admitted.requestId, hold);
@@ -169,6 +170,7 @@ async function fixture() {
           body: JSON.stringify({
             subscription,
             generation,
+            release,
             args: { target: ref, fan, sheetPath: "" },
           }),
         }),
@@ -228,6 +230,10 @@ test("F1 MUAS-1 -> FC-23 -> MUAS-1 never publishes an old generation, including 
     a.release.resolve();
     expect((await first).state).toBe("superseded");
     expect((await f.send(4, [fan("MUAS-1")])).version).toBeGreaterThan(current.version);
+    await f.send(1, [fan("MUAS-1")], undefined, "released-before-admission", true);
+    expect((await f.send(1, [fan("MUAS-1")], undefined, "released-before-admission")).state).toBe(
+      "superseded",
+    );
     // Equal recipe and generation cannot make another subscription consume this one's input set.
     const other = gate();
     const held = f.send(1, [fan("MUAS-1")], other, "left");
