@@ -230,6 +230,8 @@ export interface RecordingReader {
   /** Sealed consumption metadata, by host-minted id; every input and link names a real taking. */
   readonly readSets: {
     readonly get: (id: string) => Effect.Effect<InputReadSetRecord, InvalidRead>;
+    /** Loaded (or durably kept) host-minted names; no order or recency meaning. */
+    readonly ids: () => readonly string[];
   };
 }
 /**
@@ -325,10 +327,20 @@ const loadBundle = Effect.fn("Recording.load")(function* (
       used += (yield* io(() => stat(join(observations, `${sha}.json`)))).size;
     }
   }
-  const sets = yield* io(() =>
+  const names = yield* io(() =>
     readdir(join(dir, READ_SETS)).catch((error: unknown) => (missing(error) ? [] : Promise.reject(error))),
   );
-  for (const name of sets) used += (yield* io(() => stat(join(dir, READ_SETS, name)))).size;
+  const sets: string[] = [];
+  for (const name of names) {
+    // A crashed atomic save may leave its uncommitted temp; charge its bytes, never publish it.
+    const pending = name.endsWith(".json.tmp");
+    const suffix = pending ? ".json.tmp" : ".json";
+    const id = yield* Schema.decodeUnknownEffect(readSetIdName)(
+      name.endsWith(suffix) ? name.slice(0, -suffix.length) : null,
+    ).pipe(Effect.mapError(() => refuse("tamper", `Read-set filename ${name} is not host minted`)));
+    used += (yield* io(() => stat(join(dir, READ_SETS, name)))).size;
+    if (!pending) sets.push(id);
+  }
   if (used > bounds.maxBytes || takings.length > bounds.maxTakings)
     return yield* refuse("full", "Recording exceeds its bounds", 507);
   const marker = yield* bounded(join(dir, TRUNCATION), null);
@@ -357,6 +369,7 @@ const loadBundle = Effect.fn("Recording.load")(function* (
     coverage: () => [...new Set(takings.map((taking) => taking.input.kind))],
     truncation,
     readSets: {
+      ids: () => sets.slice(),
       get: Effect.fn("Recording.readSet")(function* (id: string) {
         const name = yield* Schema.decodeUnknownEffect(readSetIdName)(id).pipe(
           Effect.mapError(() => refuse("context", "Read-set id is not host minted")),
@@ -385,7 +398,7 @@ const loadBundle = Effect.fn("Recording.load")(function* (
       }),
     },
   };
-  return { reader, takings, stored, used, takingsPath, observations };
+  return { reader, takings, stored, sets, used, takingsPath, observations };
 });
 
 /** Opens an existing bundle for replay. A missing, damaged, foreign or oversized bundle refuses. */
@@ -452,10 +465,11 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
       used -= size;
       return yield* Effect.failCause(kept.cause);
     }
+    if (!loaded.sets.includes(record.id)) loaded.sets.push(record.id);
   });
   return {
     ...reader,
-    readSets: { get: reader.readSets.get, keep: keepReadSet },
+    readSets: { ...reader.readSets, keep: keepReadSet },
     get truncation() {
       return truncated;
     },
