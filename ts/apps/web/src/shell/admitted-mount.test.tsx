@@ -395,6 +395,11 @@ test("only the final admitted body is acknowledged; retained publication reuses 
     const pending = attempts.at(-1)!;
     pending.deliver({ kind: "part", value: "partial", revision: 2, bodyReceipts: ["not-final"] });
     await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(4));
+    pending.deliver({ kind: "complete", value: "live without capture", revision: 3 });
+    expect(mount.readingStatus("notes").snapshot).toMatchObject({ current: true, value: "live without capture" });
+    pending.deliver({ kind: "complete", value: 42, revision: 4, bodyReceipts: ["invalid-value"] });
+    expect(mount.readingStatus("notes").snapshot.current).toBe(false);
+    await Promise.resolve(); expect(update).toHaveBeenCalledTimes(4);
     mount.close();
     pending.deliver({ kind: "complete", value: "closed", revision: 3, bodyReceipts: ["closed"] });
     await Promise.resolve(); expect(update).toHaveBeenCalledTimes(4);
