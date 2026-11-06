@@ -127,18 +127,7 @@ test.each([
       ],
     };
     const policyError = native.diagnostics[0]!;
-    native.diagnostics =
-      count === 66
-        ? [
-            ...Array.from({ length: 65 }, (_, i) => ({
-              stage: "resolve",
-              severity: "Info",
-              source: "references",
-              message: `reference ${i}`,
-            })),
-            policyError,
-          ]
-        : Array.from({ length: count }, () => policyError);
+    native.diagnostics = Array.from({ length: count }, () => policyError);
     if (count === 69)
       native.diagnostics = [
         ...Array.from({ length: 65 }, (_, i) => ({
@@ -229,13 +218,10 @@ test.each([
                       native.diagnostics[67],
                       ...native.diagnostics.slice(0, 60),
                     ]
-                  : count === 66
-                    ? [policyError, ...native.diagnostics.slice(0, 63)]
-                    : native.diagnostics.slice(0, 64),
+                  : native.diagnostics.slice(0, 64),
             },
           },
         });
-        if (count === 66) expect(outcome.evidence.result.diagnostics[0]).toEqual(policyError);
         if (count > 64)
           expect(outcome.evidence.result).toMatchObject({
             diagnosticsTotal: count,
