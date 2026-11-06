@@ -1,18 +1,17 @@
 import { neutralFansWork } from "@pe/agent-contracts";
 /**
  * /ducts loss solver, deterministic. Interpolation is checked on three real ASHRAE grids shipped
- * with Revit (copied to fixtures/ashrae, parsed here by a test-only reader) against the values
+ * with Revit (copied to fixtures/ashrae, loaded by the shared test fixture) against the values
  * `.artifacts/pdrop/sa26/ctable.md` lists; friction against handcalc.json; the pipeline on a small
  * synthetic network whose totals were computed independently in Python from the same grids.
  */
 import { designOf } from "@pe/ducts-domain/test-design";
 import { stagedDucts } from "@pe/agent-contracts";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { expect, it } from "vite-plus/test";
 
 import { bin } from "@pe/ducts-domain/bins";
-import { type Grid, type Grids } from "@pe/ducts-domain/loss-grid";
+import type { Grids } from "@pe/ducts-domain/loss-grid";
+import { grids as tableGrids } from "@pe/ducts-domain/sheet/tables.fixture";
 import { sectionOf } from "@pe/ducts-domain/loss-physics";
 import { computeLosses, systemFor } from "@pe/ducts-domain/losses";
 import { price } from "@pe/ducts-domain/pricing";
@@ -22,49 +21,12 @@ import physicalTransitions from "./fixtures/physical-transitions.json";
 import rootAttached from "./fixtures/root-attached-fittings.json";
 import synthetic from "./fixtures/synthetic-snapshot.json";
 
-// ---- test-only .tbl reader (ctable.py parse) ------------------------------------------------
-function parseTbl(name: string): Record<string, Grid> {
-  const text = readFileSync(join(__dirname, "fixtures", "ashrae", `${name}.tbl`), "latin1");
-  const out: Record<string, Grid> = {};
-  for (const block of text.split(/\r?\n=+\r?\n/)) {
-    if (!block.trim() || block.trim().startsWith("'")) continue;
-    const lines = block.split(/\r?\n/).filter((l) => l.trim() && !/^[#\s]+$/.test(l));
-    const title = lines[0]!.trim();
-    const rest = lines.slice(1);
-    const head = rest.findIndex((l) => l.includes("->"));
-    if (head >= 0) {
-      const res = rest.find((l) => /^\s*C\w*\s*$/.test(l))?.trim() ?? "Co";
-      const [xLabel, xs] = rest[head]!.split("->");
-      const y: number[] = [];
-      const grid: number[][] = [];
-      for (const l of rest.slice(head + 1).filter((l) => /^\s*[-\d.]/.test(l))) {
-        const v = l.trim().split(/\s+/).map(Number);
-        y.push(v[0]!);
-        grid.push(v.slice(1));
-      }
-      out[res] = {
-        title,
-        xLabel: xLabel!.trim(),
-        x: xs!.trim().split(/\s+/).map(Number),
-        yLabel: rest[head + 1]!.trim(),
-        y,
-        grid,
-      };
-    } else {
-      const header = rest.find((l) => /\d+\(\d+\)/.test(l))!;
-      const x = [...header.matchAll(/(\d+(?:\.\d+)?)\(\d+\)/g)].map((m) => Number(m[1]));
-      const co = rest.find((l) => l.trim().startsWith("Co"))!;
-      out.Co = { title, xLabel: "D", x, grid: co.trim().split(/\s+/).slice(1).map(Number) };
-    }
-  }
-  return out;
-}
 const grids: Grids = {
-  "CD3-2": parseTbl("Cd3-2"),
-  "CD3-21": parseTbl("Cd3-21"),
-  "SD5-9": parseTbl("Sd5-9"),
-  "SR4-3": parseTbl("Sr4-3"),
-  "SD4-2": parseTbl("Sd4-2"),
+  "CD3-2": tableGrids["CD3-2"]!,
+  "CD3-21": tableGrids["CD3-21"]!,
+  "SD5-9": tableGrids["SD5-9"]!,
+  "SR4-3": tableGrids["SR4-3"]!,
+  "SD4-2": tableGrids["SD4-2"]!,
 };
 
 // ---- synthetic network: unit 100 -> duct 1 -> elbow 2 -> duct 3 (tap 4 at 5 ft) -> transition 5

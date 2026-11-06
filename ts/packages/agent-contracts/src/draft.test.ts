@@ -30,9 +30,6 @@ describe("one staged value per cell", () => {
   it("the schema has no suggestion lane", () => {
     expect(cellSchema.safeParse({ suggestion: { value: "x" } }).success).toBe(false);
     expect(cellSchema.safeParse({ edit: { value: "x", by: "pea" } }).success).toBe(true);
-    expect(() =>
-      applyPatches(spec, envelope({}), "pea", [{ path: ["cells", "k", "suggestion"], value: { value: "x" } }], 3),
-    ).not.toThrow();
     expect(
       applyPatches(spec, envelope({}), "pea", [{ path: ["cells", "k", "suggestion"], value: { value: "x" } }], 3),
     ).toMatchObject({ ok: false });
