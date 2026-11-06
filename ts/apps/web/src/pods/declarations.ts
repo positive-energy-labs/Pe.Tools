@@ -1,6 +1,7 @@
 import { pane, split, type RouteGraph } from "@pe/agent-contracts";
 import { selectedMember } from "./model";
 import type { PodsPage } from "./page";
+import { runsInput } from "./inputs";
 
 export const podsReadings = {
   pods: { kind: "use", source: "pods.list", retire: "page", args: () => [] },
@@ -8,7 +9,7 @@ export const podsReadings = {
     kind: "use",
     source: "pods.member",
     retire: "page",
-    args: (p) => [selectedMember(p)],
+    args: (p) => selectedMember(p),
   },
   status: { kind: "use", source: "pods.status", retire: "page", args: () => [] },
   composition: {
@@ -21,7 +22,7 @@ export const podsReadings = {
     kind: "use",
     source: "pods.runs",
     retire: "page",
-    args: (p) => [selectedMember(p), p.pod, p.runs],
+    args: runsInput,
   },
 } satisfies RouteGraph<PodsPage>["readings"];
 

@@ -1,4 +1,5 @@
 import type { SettingsRouteDocument } from "@pe/agent-contracts";
+import { memberReadInput, runsReadInput } from "./inputs";
 
 import { callOp } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
@@ -47,7 +48,7 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
       dirties: ["pods"],
       key: (scope) => (scope.work as SettingsRouteDocument | null)?.basis?.sha256,
       async open(ctx, deliver) {
-        const ref = selectedMember(page(ctx));
+        const ref = memberReadInput.parse(ctx.args);
         if (!ref || !ref.path.endsWith(".json"))
           return deliver({ kind: "complete", value: null, revision: 0 });
         try {
@@ -99,15 +100,10 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
       effects: () => [],
       dirties: ["pods"],
       async open(ctx, deliver) {
-        const ref = selectedMember(page(ctx));
-        const pod = ref?.pod || page(ctx).pod;
-        const path = page(ctx).runs === "pod" || !ref ? undefined : ref.path;
-        if (!pod) return deliver({ kind: "complete", value: [], revision: 0 });
+        const input = runsReadInput.parse(ctx.args);
+        if (!input) return deliver({ kind: "complete", value: [], revision: 0 });
         try {
-          const result = await callOp({ signal: ctx.signal }, "pod.runs", {
-            pod,
-            ...(path !== undefined && { path }),
-          });
+          const result = await callOp({ signal: ctx.signal }, "pod.runs", input);
           deliver({ kind: "complete", value: result.runs, revision: 1 });
         } catch (error) {
           if (!ctx.signal.aborted) deliver({ kind: "failure", error });

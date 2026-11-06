@@ -22,7 +22,7 @@ export interface CompositionRead {
 }
 export const readingValue = <T>(state: ReadingState | undefined): T | null =>
   (state?.value ?? state?.previous ?? null) as T | null;
-export function selectedMember(page: Readonly<PodsPage>): PodMember | null {
+export function selectedMember(page: Readonly<Pick<PodsPage, "pod" | "path">>): PodMember | null {
   const selected = { pod: page.pod, path: page.path };
   const parsed = podMemberSchema.safeParse(selected);
   return parsed.success ? parsed.data : null;
