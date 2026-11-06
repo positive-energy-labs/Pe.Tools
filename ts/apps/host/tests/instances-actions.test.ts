@@ -590,7 +590,7 @@ test.each(["resolved-pid", "resolved-start", "session-start", "receipt"])(
   },
 );
 /** An SDK that starts, opens the copy it is given, saves create-only, closes and stops. */
-async function acquisitionSetup(detached = false) {
+async function acquisitionSetup() {
   const row = controlledRow({ shape: shape("background") });
   const f = await setup(
     async (args) => {
@@ -625,11 +625,8 @@ async function acquisitionSetup(detached = false) {
     },
     [row],
   );
-  f.census.facts = { isWorkshared: detached, isDetached: detached };
-  const source = await f.file(
-    "Tower.rvt",
-    detached ? "Worksharing: Enabled" : "Worksharing: Not enabled",
-  );
+  f.census.facts = { isWorkshared: false, isDetached: false };
+  const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
   const acquired = await f.admit(
     "instances.open",
     { source, into: newRevit({ owner: "pea" }) },

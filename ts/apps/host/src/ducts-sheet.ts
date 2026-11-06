@@ -458,7 +458,7 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
             await readNative(
               reads,
               "ducts.snapshot.walk",
-              { slots, selector: { kind: "from", unitId, ...tolerances } },
+              { ...(slots ? { slots } : {}), selector: { kind: "from", unitId, ...tolerances } },
               request.target,
               undefined,
               "join",
