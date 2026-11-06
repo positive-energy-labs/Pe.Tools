@@ -1,5 +1,7 @@
 using Pe.Revit.Global.Services.Document;
-using Pe.Revit.Global.Services.Storage;
+using Newtonsoft.Json;
+using Pe.Revit.Global.Lib;
+using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.Loader.Documents;
 using Pe.Revit.SettingsRuntime.Modules.AutoTag;
 using Serilog;
@@ -16,7 +18,10 @@ public class AutoTagService {
     private static AutoTagService? _instance;
     private AddInId? _addInId;
     private IDocumentTracker? _documents;
-    private DocumentSettingsStorage<AutoTagSettings>? _documentStorage;
+    // ponytail: the extensible-storage DataStorage store was deleted without migration (kaitpw, 2026-11-06, greenfield);
+    // a document saved by the old store reads as "no settings" and the user re-enters them once.
+    private static readonly ProjectInfoText Store = new(new Guid("a89b3d96-72ad-4972-a532-81676635755b"), "_PE_AutoTag", "Pe.Tools AutoTag settings (JSON).");
+    private static readonly JsonSerializerSettings JsonSettings = RevitJsonFormatting.CreateRevitIndentedSettings();
     private AutoTagUpdater? _updater;
 
     public static AutoTagService Instance {
@@ -30,10 +35,11 @@ public class AutoTagService {
         this._documents?.Find(doc)?.State(_ => new DocState()).Settings;
 
     public void SaveSettingsForDocument(Document doc, AutoTagSettings settings) {
-        if (this._documentStorage == null)
-            throw new InvalidOperationException("AutoTag service not initialized");
-
-        this._documentStorage.Write(doc, settings);
+        using (var transaction = new Transaction(doc, "Save AutoTag Settings")) {
+            _ = transaction.Start();
+            _ = Store.Write(doc, JsonConvert.SerializeObject(settings, JsonSettings));
+            _ = transaction.Commit();
+        }
         var tracked = this._documents?.Find(doc);
         if (tracked != null)
             tracked.State(_ => new DocState()).Settings = settings;
@@ -44,21 +50,27 @@ public class AutoTagService {
         Log.Information("AutoTag: Settings saved and reloaded for '{Title}'", doc.Title);
     }
 
-    public bool HasSettingsInDocument(Document doc) {
-        if (this._documentStorage == null)
-            return false;
+    /// <summary>Null when the document holds no AutoTag settings or the stored JSON is invalid (logged).</summary>
+    private static AutoTagSettings? ReadSettings(Document doc) {
+        if (Store.Read(doc) is not { } json)
+            return null;
+        try {
+            return JsonConvert.DeserializeObject<AutoTagSettings>(json, JsonSettings);
+        } catch (JsonException ex) {
+            Log.Error(ex, "AutoTag: Stored settings in '{Title}' are invalid; AutoTag stays off", doc.Title);
+            return null;
+        }
+    }
 
-        return this._documentStorage.Exists(doc);
+    public bool HasSettingsInDocument(Document doc) {
+        return Store.Read(doc) != null;
     }
 
     public void Initialize(AddInId addInId, IDocumentTracker documents) {
         try {
             this._addInId = addInId;
             this._documents = documents;
-            this._documentStorage = new DocumentSettingsStorage<AutoTagSettings>(
-                new Guid("B9F3E5A7-2C4D-6B8F-0E1A-3D5C7F9B1E2A"),
-                "PeAutoTagSettings"
-            );
+
             this._updater = new AutoTagUpdater(addInId);
             UpdaterRegistry.RegisterUpdater(this._updater, true);
             // Opened replays already-open documents, so a hot-reloaded payload picks up settings
@@ -102,11 +114,11 @@ public class AutoTagService {
 
     private void OnDocumentOpened(TrackedDocument tracked) {
         try {
-            if (this._updater == null || this._documentStorage == null)
+            if (this._updater == null)
                 return;
 
             var doc = tracked.Resolve();
-            var settings = this._documentStorage.Read(doc);
+            var settings = ReadSettings(doc);
             tracked.State(_ => new DocState()).Settings = settings;
 
             if (settings == null) {

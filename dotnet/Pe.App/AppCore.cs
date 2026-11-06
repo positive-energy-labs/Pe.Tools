@@ -64,7 +64,6 @@ public sealed class AppCore : IPePayload {
             RevitTabColorizer.EnsureStarted();
         };
         documents.Closed += key => MruViewBuffer.Instance.RemoveDocumentViews(key);
-        documents.Changed += OnDocumentChanged;
 
         var revitTaskQueue = new RevitTaskQueue(app);
         this._revitTaskQueue = revitTaskQueue;
@@ -146,27 +145,6 @@ public sealed class AppCore : IPePayload {
         var id = e.Item?.Id;
         if (id == null || !id.Contains("Pe.App.Commands")) return;
         RevitReceipts.RibbonClick(id);
-    }
-
-    private static void OnDocumentChanged(TrackedDocument tracked, DocumentChangedEventArgs e) {
-        try {
-            var doc = tracked.Resolve();
-
-            // Check if any DataStorage elements with AutoTag settings were modified
-            var autoTagStorageChanged = e.GetModifiedElementIds()
-                .Select(id => doc.GetElement(id))
-                .OfType<DataStorage>()
-                .Any(ds => ds.Name.StartsWith("PE_Settings_AutoTagSettings"));
-
-            if (autoTagStorageChanged) {
-                Log.Information(
-                    "AutoTag: Settings changed in document '{Title}'. Changes will apply on next document open.",
-                    tracked.Title);
-            }
-        } catch (Exception ex) {
-            // Don't crash on notification failure
-            Log.Debug(ex, "AutoTag: Failed to process document changed event");
-        }
     }
 
     private static void CreateLogger() {
