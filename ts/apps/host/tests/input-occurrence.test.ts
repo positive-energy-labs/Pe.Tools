@@ -235,6 +235,23 @@ const record = (
   ...fields,
 });
 
+effectTest("an interrupted read-set save preserves committed ids and still consumes its byte budget", () =>
+  Effect.gen(function* () {
+    const dir = yield* bundle;
+    const writer = yield* openRecordingWriter(dir, identity, bounds);
+    const committed = record({ id: randomUUID(), recipe });
+    yield* writer.readSets.keep(committed);
+    const pending = join(dir, "read-sets", `${randomUUID()}.json.tmp`);
+    yield* Effect.promise(() => writeFile(pending, "unfinished{"));
+    const reader = yield* openRecordingReader(dir, identity, bounds);
+    expect(reader.readSets.ids()).toEqual([committed.id]);
+    const reopened = yield* openRecordingWriter(dir, identity, bounds);
+    expect(reopened.readSets.ids()).toEqual([committed.id]);
+    yield* Effect.promise(() => writeFile(pending, "x".repeat(bounds.maxBytes)));
+    expect(yield* problem(openRecordingReader(dir, identity, bounds))).toBe("recording.full");
+  }),
+);
+
 effectTest("unbound admission counts incomplete matches, validates every record and writes nothing", () =>
   Effect.gen(function* () {
     const dir = yield* bundle;

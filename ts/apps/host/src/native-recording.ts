@@ -327,14 +327,19 @@ const loadBundle = Effect.fn("Recording.load")(function* (
       used += (yield* io(() => stat(join(observations, `${sha}.json`)))).size;
     }
   }
-  const sets: string[] = yield* io(() =>
+  const names = yield* io(() =>
     readdir(join(dir, READ_SETS)).catch((error: unknown) => (missing(error) ? [] : Promise.reject(error))),
   );
-  for (const [index, name] of sets.entries()) {
-    sets[index] = yield* Schema.decodeUnknownEffect(readSetIdName)(
-      name.endsWith(".json") ? name.slice(0, -5) : null,
+  const sets: string[] = [];
+  for (const name of names) {
+    // A crashed atomic save may leave its uncommitted temp; charge its bytes, never publish it.
+    const pending = name.endsWith(".json.tmp");
+    const suffix = pending ? ".json.tmp" : ".json";
+    const id = yield* Schema.decodeUnknownEffect(readSetIdName)(
+      name.endsWith(suffix) ? name.slice(0, -suffix.length) : null,
     ).pipe(Effect.mapError(() => refuse("tamper", `Read-set filename ${name} is not host minted`)));
     used += (yield* io(() => stat(join(dir, READ_SETS, name)))).size;
+    if (!pending) sets.push(id);
   }
   if (used > bounds.maxBytes || takings.length > bounds.maxTakings)
     return yield* refuse("full", "Recording exceeds its bounds", 507);
