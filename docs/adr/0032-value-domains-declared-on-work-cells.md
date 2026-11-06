@@ -1,6 +1,6 @@
 # 0032: Value domains are declared on Work cells and served by the one field-options door
 
-Date: 2026-11-06. Status: **accepted** by kaitpw on 2026-11-06. The kaitpw rulings are recorded at the end. The storage questions under "Decisions still open" belong to the model-storage muse, and its ruling amends this ADR. Source: the governor's muse request on declared option and slot sources, after feedback F5, F15 and F33 (`.artifacts/runs/kernel-crusade-20261104/meta/FEEDBACK.md:12,35,65`). Census read on the `kernel/pea-first` working tree, 2026-11-06.
+Date: 2026-11-06. Status: **accepted** by kaitpw on 2026-11-06. The kaitpw rulings are recorded at the end. The storage amendment records the model-storage muse rulings. Source: the governor's muse request on declared option and slot sources, after feedback F5, F15 and F33 (`.artifacts/runs/kernel-crusade-20261104/meta/FEEDBACK.md:12,35,65`). Census read on the `kernel/pea-first` working tree, 2026-11-06.
 
 ## Context
 
@@ -119,12 +119,35 @@ Not closed here:
 The muse is recorded in `.artifacts/runs/value-domains-muse-20261106/SYNTHESIS.md`.
 
 - **Scopes and layering.** All six specs converged on firm and document only, over a schema default. Values replace whole, and a broken override blocks. This maps onto the existing `resolveValue` tiers (`ts/packages/agent-contracts/src/work-value.ts:7`), so there is no new engine.
-- **Document settings persist in the model, through plan and apply.** kaitpw: "make sure this storage thread doesnt become another subsystem." Extensible storage is banned, because it crashes Revit when it is wrong. The model store is therefore the existing `ProjectInfoText` pattern (`dotnet/Pe.Revit.Global/Lib/ProjectInfoText.cs:9`). Family documents and worksharing contention are still open, for a separate storage muse.
+- **Document settings persist in the model, through plan and apply.** kaitpw: "make sure this storage thread doesnt become another subsystem." Extensible storage that Pe chooses and builds itself is banned, because it crashes Revit when it is wrong. Extensible storage that a Revit API contract requires is allowed (see the storage amendment). The model store is therefore the existing `ProjectInfoText` pattern (`dotnet/Pe.Revit.Global/Lib/ProjectInfoText.cs:9`). Family documents and worksharing contention are still open, for a separate storage muse.
 - **Firm revisions follow the live file** and show "firm changed" ("yes a, occam").
 - **Placement is derived from what a cell is keyed to, never declared per field.** kaitpw: "per field is the exact lack of structure that I desperately want to make impossible."
 - **Each owner gets its own model blob.** Each owner writes its own hidden `ProjectInfoText` parameter. One shared blob would make every writer borrow and rewrite the same value. kaitpw: "single owner shape is just an artifact of it never having real traffic."
 - **The stored value is a name, and identity is plan evidence.** The plan seal records which parameter identity the stored name resolved to. Apply refuses when the name now resolves to none, to two or more, or to a different identity. No identity key is stored anywhere (kaitpw: "agree").
 - **A Pod is not a scope.** A Pod supplies a schema default or the adopted firm standard. Three tiers cover every case: default, firm and document (kaitpw: "agree").
+
+## Storage amendment (kaitpw, 2026-11-06)
+
+The model-storage muse is recorded in `.artifacts/runs/model-storage-muse-20261106/SYNTHESIS.md` and `GRADES.md`. kaitpw agreed to all of the following.
+
+1. **Projects.** Each owner has one hidden, non-user-modifiable shared Text parameter on Project Information, written through `ProjectInfoText` (`dotnet/Pe.Revit.Global/Lib/ProjectInfoText.cs`). Takeoff (`dotnet/Pe.Revit.Takeoff/TakeoffCarriers.cs:50`) and Partition (`dotnet/Pe.Revit.Partition/Declaration.cs:23`) move onto the helper.
+2. **The blob envelope** is `{owner, version, data}`.
+   - The reader decodes it strictly. It refuses duplicate keys and nesting past a depth bound.
+   - The reader keeps unknown keys, or the write is refused.
+   - The reader distinguishes an absent blob from an invalid one.
+3. **Writes** use the existing plan and apply.
+   - The plan seals the raw text of every owner blob that it read, and apply refuses when that text changed.
+   - Apply reads the written value back exactly, and an unchanged value is a no-op.
+   - A per-owner cap refuses writes over 256 KiB. The cap is provisional until it is measured on real models.
+4. **Worksharing.** Revit borrows the whole Project Information element, so separate owner parameters do not give separate locks. The plan checks the element with `WorksharingUtils.GetCheckoutStatus`. It refuses and names the other user when that user owns the element, and it asks for a reload when the model is out of date with central. There is no automatic retry.
+5. **Families have no document tier.** Family values come from the firm tier and the default. Family Foundry forbids hidden metadata in families (`dotnet/Pe.Shared.RevitData/Families/FamilyModelContracts.cs:74`). A family tier is added only when a route needs one, after a proof on a real family.
+6. **AutoTag** stores its settings in its own `ProjectInfoText` parameter. The `DataStorage` store is deleted with no migration, so users enter AutoTag settings once more. This also removes edge case D7.
+7. **Extensible storage required by the Revit API is allowed.** Pe's duct pressure-loss server keeps per-fitting results in an entity under its own schema (`dotnet/Pe.Revit.Global/Lib/Mep/PeLossServer.cs:34`). It gets a version integer inside its JSON text. The schema itself does not change, because a schema GUID cannot gain fields.
+8. **One new noun:** the owner descriptor, which holds the GUID, name and version, and lives beside each owner's DTO. No registry, service or subsystem is added.
+
+Accepted risk:
+- Transfer Project Standards or Copy/Paste can overwrite or duplicate a blob. The next plan detects the change through its sealed text, but nothing repairs it.
+- A hidden parameter can leak through IFC or DWG export, so owner data never holds secrets.
 
 ## Decisions still open for kaitpw
 
@@ -132,10 +155,6 @@ Settled since round 2:
 - Layering is firm → document over the default, through the existing resolver.
 - Pea learns a cell's domain when it reads that Work (kaitpw: "b").
 
-These go to a separate storage muse, because the project answer is `ProjectInfoText`:
-1. Where a family document (`.rfa`) holds its blob, since a family has no Project Information.
-2. Worksharing: a document-settings write borrows Project Information. Decide what one parameter per owner leaves contended.
-3. Text-size limits, and the cost of rewriting a whole blob on each write.
-4. Migrating AutoTag off extensible storage (`dotnet/Pe.App/Services/AutoTag/AutoTagService.cs:58`).
+The storage questions that were open here are settled by the storage amendment above.
 
-Not covered by any spec: recovering from a migration that is interrupted across several homes (edge case D7).
+Edge case D7, an interrupted migration across several homes, is removed: AutoTag is deleted rather than migrated.

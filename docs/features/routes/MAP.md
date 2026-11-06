@@ -50,6 +50,37 @@ Kit has one owner thread per wave; route threads add red `kernel gap:` tests, ne
 - Sheet reads no longer apply edits or proposals. Data Tables Open is an explicit Work verb. Schedule binding is an explicit ActionJournal command. Pod inventory reads no longer reconcile setup or cleanup.
 - Owed: migrate the remaining family, schedule, data-table and takeoff ModelWrite contracts to Work-only inputs and plan seals; replace legacy caller-payload forwarding tests. Browser and Revit behavior of the seal remain UNPROVEN (ledger Owed `s3-native-seal`).
 
+## Exemplar lane: /ducts and /fans (kaitpw, 2026-11-06)
+
+kaitpw: "The map is not complete until both fans and ducts are the exemplars." The goal is that both routes use every kernel pattern and primitive, and that the kernel makes a bypass impossible to write. This lane runs in parallel with step 8. Everything in it is canon.
+
+Exit condition:
+1. No item in `.artifacts/runs/kernel-crusade-20261104/meta/BORROWED-BODIES.md` is open.
+2. A route body imports only `ts/apps/web/src/shell/admitted-body.ts`. The narrowest rung that holds enforces this: stop exporting the reading hooks first, and add an import rule only if that refuses.
+3. ADR 0032 is landed for the cells of both routes, including its storage amendment.
+4. No prototype names remain: `proto/e`, `proto/b`, the `e-*` pane ids, `data-e-coverage`.
+5. A fresh agent re-audits both routes against the kernel's duties, without seeing BORROWED-BODIES, and finds nothing new.
+6. The Driver drives both routes GREEN on Chadds after the last landing.
+
+| Step | Rule it enforces | Content | Depends on |
+|---|---|---|---|
+| E0 | names say what survives | Rename only, in one commit. | nothing |
+| E1 | one status source (`shell/admitted-chrome.tsx:621`); transitions through the cell door (`shell/admitted-cells.ts:197`) | Bodies stop writing their own status text. Clear uses the kernel clear. Selections are arrays. Delete the old page shape at `fans/kernel.tsx:58`. | E0 |
+| E2 | a body reaches the kernel only through the body contract | Close the door (exit 2). | E1 |
+| E3 | every value Pea can touch is a StateCell, and the field owns its domain (ADR 0030, ADR 0032) | Change these into domain cells: ESP, the flow slots, the free-text slots, unit kinds, roles and fitting tables. One fill-count domain replaces three counters. "Stub reach" and "Equipment hop" become declared route-wide cells. Placement is derived, so the pane gear is deleted. | the kernel routes option reads through the recorded door (`ts/apps/host/src/resource-adapters.ts:327`, ADR 0031 rule 1) |
+| E4 | document settings travel in the model through plan and apply (ADR 0032 storage amendment) | The owners of both routes persist their document tier. Takeoff and Partition move onto `ProjectInfoText`. The duct-loss entity gets its version. | E3 |
+| E5 | an edit across owners is one kernel verb (ADR 0030 rule 9) | Delete the split at `ducts/sheet/mount.tsx:67-85`. | kernel design |
+| E6 | proof is a drive | Run a Driver drive after each landing, then the fresh re-audit and the final drive. | E0–E5 |
+
+Already landed on `settings/adr-0032`:
+- ADR 0032 is accepted.
+- The field-options throttle key includes the document (`dotnet/Pe.Revit.Global/Services/Host/RequestService.cs:42`).
+- AutoTag no longer uses extensible storage.
+
+Owed after E5:
+- F25 in the reverse direction: setting fan inputs from /ducts without a route switch.
+- F31 and F32 are kernel chrome.
+
 ## Open questions for kaitpw
 
 - Remaining split details after the archive ruling: /open (session administration), /pods (Pod administration), /schedules (definition authoring).
