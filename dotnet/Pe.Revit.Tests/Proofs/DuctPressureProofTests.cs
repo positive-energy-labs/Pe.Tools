@@ -19,7 +19,6 @@ namespace Pe.Revit.Tests.Proofs;
 [TestFixture]
 public sealed class DuctPressureProofTests {
     private const string FixtureVariable = "PE_PDROP_FIXTURE";
-    private const string OutDir = @"C:\Users\kaitp\source\repos\Pe.Tools-pdrop\.artifacts\runs\pdrop-proofs-20261004";
     private const long TargetTerminal = 5873746;
 
     private static readonly Guid NotDefined = new("76eff5da-2e71-45f7-b940-cc5716328ba0");
@@ -255,6 +254,7 @@ public sealed class DuctPressureProofTests {
                     write["parameterNull"] = p is null;
                     write["isReadOnly"] = p?.IsReadOnly;
                     try {
+                        // Known discrepancy, kept for the later native oracle: the label and comment say 77, but this writes 78.
                         write["setReturned"] = p?.Set(UnitUtils.ConvertToInternalUnits(78.0, UnitTypeId.CubicFeetPerMinute));
                     } catch (Exception ex) {
                         write["setThrew"] = ex.GetType().FullName + ": " + ex.Message;
@@ -325,8 +325,14 @@ public sealed class DuctPressureProofTests {
             facts["closeError"] = ex.Message;
             Log.Error(ex, "pdrop {Test} close", name);
         }
-        _ = Directory.CreateDirectory(OutDir);
-        File.WriteAllText(Path.Combine(OutDir, name + ".json"), JsonConvert.SerializeObject(facts, Formatting.Indented));
+        // Facts go to the shared per-run test output folder, so any checkout can record them.
+        // A failed write is logged, never thrown: this runs in finally and must not replace the test's own failure.
+        try {
+            var dir = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory(name);
+            File.WriteAllText(Path.Combine(dir, name + ".json"), JsonConvert.SerializeObject(facts, Formatting.Indented));
+        } catch (Exception ex) {
+            Log.Error(ex, "pdrop {Test} facts write", name);
+        }
     }
 
     /// <summary>One committed transaction with a regenerate; the enclosing TransactionGroup is what gets rolled back.</summary>
