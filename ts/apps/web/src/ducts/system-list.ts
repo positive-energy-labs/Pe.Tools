@@ -4,6 +4,7 @@ import { systemsOf, systemScope } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { TreeNode } from "./proto/b/model";
 import { splitOf } from "./loss-split";
+import { markOf } from "@pe/ducts-domain/terminal-flows";
 
 /**
  * The system list: one childless row per Revit system (no run tree is built, so 350 systems stay
@@ -24,7 +25,18 @@ export function systemList(
 })[] {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
-  return systemsOf(snapshot).map((system) => {
+  const systems = systemsOf(snapshot);
+  // The metadata roster has no network groups. Keep those systems navigable before pricing.
+  for (const system of snapshot.systems ?? []) {
+    if (systems.some((row) => row.name === system.name)) continue;
+    const unit = system.baseEquipmentId == null ? null : nodes.get(system.baseEquipmentId);
+    const name = markOf(unit) ?? unit?.family;
+    systems.push({ name: system.name, classification: system.classification, groups: [],
+      units: name ? [name] : [],
+      terminals: snapshot.nodes.filter((node) => node.kind === "terminal" && node.systemName === system.name).length,
+    });
+  }
+  return systems.map((system) => {
     const solved = system.groups.flatMap((g) => priced?.next.byGroup[g] ?? []);
     // The minibar's breakdown: the system's worst group's critical run, as its tree would split it.
     // A group with an implausible row has no price: the system reads needs a fix, never a partial number.

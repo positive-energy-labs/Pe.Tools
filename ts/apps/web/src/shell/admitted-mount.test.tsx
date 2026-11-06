@@ -2619,7 +2619,7 @@ test("AdmittedPane subject picker goes through transition and reloads its accept
   if (!identity.ok) throw Error(identity.reason);
   const transition = vi.fn((_ctx: unknown, patch: unknown) => ({ ok: true, value: patch }));
   const route = await admitted(false, false, {
-    data: { transition: "transition" },
+    data: { transition: "transition", panes: { main: { ...data.panes.main, draws: ["label"] } } },
     bodies: {
       pick: { ...bodies.pick, run: () => [{ id: identity.value, label: "Picked note" }] },
       transition: { slot: "transition", kind: "transition", source, run: transition },
@@ -3136,4 +3136,38 @@ test("oversized command landings report a gap while the durable receipt and Page
   expect(f.door.accepted(f.submission.handle.id)).toEqual(outcome);
   expect(f.land).toHaveBeenCalledTimes(1);
   expect(f.mount.page.read().query).toBe(outcome.result.name);
+});
+
+test("a released feed resumes after custody returns through its address notification", async () => {
+  const { args: _args, ...policy } = data.readings.notes;
+  const route = await admitted(false, false, {
+    data: { readings: { notes: { ...policy, kind: "feed", adapter: "args" } } },
+    bodies: { args: { ...bodies.args, kind: "adapter", slot: "readings.notes.adapter" } },
+  });
+  let current = true;
+  const location = locationPort();
+  const t = transports();
+  const m = createRouteShell(t.services).mount(route, placeInput(location.address, { custody: { current: () => current } }));
+  closes.push(m.close);
+  t.frames[0]!(ready("before hide"));
+  m.release();
+  current = false;
+  const stop = m.subscribe(() => {});
+  current = true;
+  location.listeners.forEach((notify) => notify());
+  expect(t.keys).toEqual([0, 0]);
+  t.frames[1]!(ready("after reveal"));
+  expect(m.readingStatus("notes").snapshot).toMatchObject({ current: true, value: "after reveal" });
+  stop();
+});
+
+test("a malformed source reading refuses with a human message instead of schema diagnostics", async () => {
+  const t = transports();
+  const m = createRouteShell(t.services).mount(await admitted(), placeInput(locationPort().address));
+  closes.push(m.close);
+  t.frames[0]!({ status: "ready", current: true, value: null, hash: "null" });
+  expect(m.readingStatus("notes").snapshot).toMatchObject({
+    status: "failed", current: false,
+    reason: "This reading could not be decoded. Refresh the pane to try again.",
+  });
 });

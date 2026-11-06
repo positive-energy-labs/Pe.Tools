@@ -3,6 +3,9 @@ import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   admittedJournalKeys,
+  admittedSubjectDoor,
+  routeHasSubjectList,
+  PaneStatus,
   AdmittedSubjectPicker,
   subjectOf,
 } from "./admitted-chrome";
@@ -174,4 +177,36 @@ test("the subject door adds beside what is open, and never narrows all to explic
     [{ kind: "ids", ids: ["a", "b"] }],
     [{ kind: "ids", ids: [] }],
   ]);
+});
+
+ test("all and clear each send one generated subject transition, without enumerating the roster", () => {
+  const subject = vi.fn();
+  const mount = { controls: { subject } } as unknown as AdmittedMount;
+  const data = { subject: { field: "system" }, fields: { system: { role: "subject", cardinality: "many" } } } as unknown as RouteGraphJson;
+  const door = admittedSubjectDoor(mount, data);
+  door.all();
+  expect(subject.mock.calls).toEqual([[{ kind: "all" }]]);
+  subject.mockClear();
+  door.clear();
+  expect(subject.mock.calls).toEqual([[{ kind: "ids", ids: [] }]]);
+ });
+
+test("a route with a subject-list pane suppresses chrome's picker even on another pane", () => {
+  const data = { subject: { field: "system", pane: "detail" }, fields: { system: { role: "subject", picker: { reading: "roster" } } }, panes: { list: { draws: ["roster"] }, detail: { draws: ["detail"] } } } as unknown as RouteGraphJson;
+  expect(routeHasSubjectList(data)).toBe(true);
+});
+
+test("a route without a subject-list pane keeps chrome's picker", () => {
+  const data = { subject: { field: "system", pane: "detail" }, fields: { system: { role: "subject", picker: { reading: "roster" } } }, panes: { detail: { draws: ["detail"] } } } as unknown as RouteGraphJson;
+  expect(routeHasSubjectList(data)).toBe(false);
+});
+
+test("idle explicit readings draw no explanation while real failures remain visible", () => {
+  let reason = "Explicit demand required";
+  const mount = { readingStatus: () => ({ snapshot: { status: "unavailable", current: false, reason } }) } as unknown as AdmittedMount;
+  const view = render(<PaneStatus mount={mount} draws={["detail"]} />);
+  expect(view.container.textContent).toBe("");
+  reason = "Document closed";
+  view.rerender(<PaneStatus mount={mount} draws={["detail"]} />);
+  expect(screen.getByRole("status").textContent).toBe("Document closed");
 });

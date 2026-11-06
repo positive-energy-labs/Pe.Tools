@@ -1,3 +1,4 @@
+import { useAdmittedSubject } from "#/shell/subject";
 /**
  * The fan sheet view of /ducts (`?stage=sheet`, the head's "Pricing fans" stage; protoui rounds 1 to 3, 2026-10-28, variant A "Ledger"
  * promoted): pane bodies for the kernel's graph layout, using the house `ListView`. The
@@ -38,6 +39,7 @@ const rosterSearch = (row: FanPort) => ({
 });
 
 export function Roster({ props }: { props: RosterProps }) {
+  const subject = useAdmittedSubject();
   const wait = props.busy || props.loading ? "Wait for the current read" : null;
   const [listState, setListState] = useState<ListState<"name">>(emptyListState<"name">());
   const list = useList({
@@ -82,6 +84,22 @@ export function Roster({ props }: { props: RosterProps }) {
     <Scroll className="min-h-0 flex-1">
       <ListView
         aria-label="fans"
+        search="always"
+        header={
+          <div className="flex flex-wrap items-center justify-between gap-2 p-1">
+            <span className="t-small">
+              {props.roster.length} fan ports / {props.picked?.length ?? 0} open
+            </span>
+            <span className="flex gap-1">
+              <Button label="All fans" onPress={() => subject?.all()}>
+                All
+              </Button>
+              <Button label="Clear fans" onPress={() => subject?.clear()}>
+                Clear
+              </Button>
+            </span>
+          </div>
+        }
         list={list}
         row={row}
         projection={(fan) => ({ weight: fan.blockerCount ?? 0 })}
@@ -174,7 +192,11 @@ function TierGroup({
   });
   const count = tier === "taken" ? props.taken.length : blockers.length;
   return (
-    <section aria-label={`${tier} tier`} data-tier-group={tier} className="flex flex-col gap-1">
+    <section
+      aria-label={`${tier} tier`}
+      data-tier-group={tier}
+      className={tier === "taken" ? "col-span-full flex flex-col gap-1" : "flex flex-col gap-1"}
+    >
       <header className="flex items-baseline gap-3">
         <h3 className="t-head" data-tone={tierTone(tier)}>
           {tier} · {count}
@@ -251,16 +273,19 @@ export function Ledger({ props }: { props: LedgerProps }) {
           editing={{ inputs: props.inputs, changeInputs: props.changeInputs, busy: props.busy }}
         />
       )}
-      {props.sheet &&
-        TIERS.map((tier) => (
-          <TierGroup
-            key={tier}
-            tier={tier}
-            blockers={causes.filter((b) => tierOf(b) === tier)}
-            consequencesOf={consequencesOf}
-            props={props}
-          />
-        ))}
+      {props.sheet && (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,24rem),1fr))] items-start gap-3">
+          {TIERS.map((tier) => (
+            <TierGroup
+              key={tier}
+              tier={tier}
+              blockers={causes.filter((b) => tierOf(b) === tier)}
+              consequencesOf={consequencesOf}
+              props={props}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

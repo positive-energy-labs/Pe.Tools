@@ -1,5 +1,6 @@
+import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { HostedChrome } from "../route/hosted-chrome";
-import { useMemo, useRef, useState, useEffect, useContext, type ReactNode } from "react";
+import { useMemo, useRef, useState, useEffect, useContext, createContext, type ReactNode } from "react";
 import { z } from "zod";
 import { Button } from "@pe/kit/lang/button";
 import { NarrowChip } from "@pe/kit/lang/chip";
@@ -44,6 +45,8 @@ import { SubjectDoor, type AdmittedSubject } from "./subject";
 import { PaneActionSlots, usePaneActionSlot } from "./pane-actions";
 import { openSet, type OpenSet } from "./open-set.neutral";
 
+export const RouteDocument = createContext<ReactNode>(null);
+
 const catalogSnapshot = z.object({ doc: z.unknown(), handle: workHandleSchema });
 const catalogClient: CatalogWorkClient = {
   watch: (key, receive, fail) => peReadings.subscribe({ ...key, kind: "work" }, (frame) => {
@@ -52,7 +55,7 @@ const catalogClient: CatalogWorkClient = {
     if (frame.kind !== "snapshot") return;
     const parsed = catalogSnapshot.safeParse(frame.value);
     if (parsed.success) receive(parsed.data);
-    else fail(parsed.error.message);
+    else fail("Work could not be read. Refresh this page to reconnect.");
   }),
   write: async (handle, patches, label) => {
     const result = await browserWorkPorts.write(handle.key, {
@@ -77,8 +80,9 @@ function CatalogWorkReviews({ mount }: { mount: AdmittedMount }) {
     ? (Object.keys(catalogWorks) as (keyof typeof catalogWorks)[]).map((owner) => ({ owner, at: { ...key, route: owner } }))
     : [], [identity]);
   if (!visible || !key || target?.kind !== "document") return null;
-  return <details>
-    <summary>Work</summary>
+  return <Popover>
+    <PopoverTrigger aria-label="Open Work">Work</PopoverTrigger>
+    <SubjectPopoverContent aria-label="Work" className="max-h-(--available-height) overflow-y-auto p-(--gutter)">
     {owners.map(({ owner, at }) => {
       const apply = Object.entries(catalogWorkCommands).find(([, command]) =>
         command.work.route === owner && command.writeBoundary.phase === "apply")![0];
@@ -87,7 +91,8 @@ function CatalogWorkReviews({ mount }: { mount: AdmittedMount }) {
           void harnessClient(resolveWorkbenchConfig().origin).permission(thread, requestId, "stop_writes"),
           typeof mount.page.read().thread === "string" ? String(mount.page.read().thread) : undefined)} />;
     })}
-  </details>;
+    </SubjectPopoverContent>
+  </Popover>;
 }
 
 /** K4 owns reading state and deduplicated pane closure refresh. */
@@ -170,6 +175,11 @@ export function subjectOf(mount: AdmittedMount, data: RouteGraphJson) {
     setActive: (id: unknown) => (many ? move(set.setActive(open, id)) : one(id)),
   };
 }
+export function routeHasSubjectList(data: RouteGraphJson) {
+  const field = data.fields[data.subject.field];
+  return field?.role === "subject" && Object.values(data.panes).some((pane) => pane.draws.includes(field.picker.reading));
+}
+
 export function AdmittedSubjectPicker({
   mount,
   data,
@@ -424,6 +434,7 @@ function Chrome({
   const element = useRef<HTMLDivElement>(null);
   const visible = useContext(RouteVisibility);
   const slot = usePaneActionSlot();
+  const document = useContext(RouteDocument);
   const storage = `pe.route.${data.key}.layout`;
   const [panes, setPanes] = useState<GraphLayoutState>(() => readLayoutState(storage));
   const layout = admittedLayout(data, mount);
@@ -483,6 +494,7 @@ function Chrome({
             name={data.name}
             context={
               <>
+                {document}
                 {data.stageOrder.length > 1 && (
                   <ListPopup
                     anchor="trigger"
@@ -559,7 +571,7 @@ function Chrome({
                       fit: id === data.subject.pane ? "wrap" : undefined,
                       actions: (
                         <>
-                          {id === data.subject.pane && (
+                          {id === data.subject.pane && !routeHasSubjectList(data) && (
                             <AdmittedSubjectPicker mount={mount} data={data} />
                           )}
                           {/* Pane-owned controls only: route verbs render once, in the situation band
@@ -606,8 +618,10 @@ function Chrome({
   );
 }
 
-function PaneStatus({ mount, draws }: { mount: AdmittedMount; draws: readonly string[] }) {
-  const readings = draws.map((id) => mount.readingStatus(id));
+export function PaneStatus({ mount, draws }: { mount: AdmittedMount; draws: readonly string[] }) {
+  const readings = draws.map((id) => mount.readingStatus(id)).filter((reading) =>
+    reading.snapshot.current || !["Explicit demand required", "Explicit detail refresh required", "Pane hidden"].includes(reading.snapshot.reason),
+  );
   const problem = readings.find(
     (r) => r.snapshot.status === "unavailable" || r.snapshot.status === "failed",
   );
@@ -621,6 +635,18 @@ function PaneStatus({ mount, draws }: { mount: AdmittedMount; draws: readonly st
   return readings.some((r) => !r.snapshot.current) ? <span role="status">Reading...</span> : null;
 }
 
+export function admittedSubjectDoor(mount: AdmittedMount, data: RouteGraphJson): AdmittedSubject {
+  const field = data.fields[data.subject.field];
+  return {
+    toggle: (id) => subjectOf(mount, data)?.toggle(id),
+    add: (ids) => subjectOf(mount, data)?.add(ids),
+    remove: (id) => subjectOf(mount, data)?.remove(id),
+    setActive: (id) => subjectOf(mount, data)?.setActive(id),
+    all: () => { mount.controls.subject({ kind: "all" }); },
+    clear: () => { mount.controls.subject(field?.role === "subject" && field.cardinality === "many" ? { kind: "ids", ids: [] } : null); },
+  };
+}
+
 export function AdmittedChrome(props: {
   mount: AdmittedMount;
   data: RouteGraphJson;
@@ -631,12 +657,7 @@ export function AdmittedChrome(props: {
   const { mount, data } = props;
   // Read at call time, so the door never holds a stale subject.
   const door = useMemo<AdmittedSubject>(
-    () => ({
-      toggle: (id) => subjectOf(mount, data)?.toggle(id),
-      add: (ids) => subjectOf(mount, data)?.add(ids),
-      remove: (id) => subjectOf(mount, data)?.remove(id),
-      setActive: (id) => subjectOf(mount, data)?.setActive(id),
-    }),
+    () => admittedSubjectDoor(mount, data),
     [mount, data],
   );
   return (

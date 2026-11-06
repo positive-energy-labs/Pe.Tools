@@ -22,9 +22,7 @@ import { ButtonGroup } from "./button-group";
 
 import { Floater, type FloaterSpec } from "./floater";
 import { PaneStrip, type PaneStripProps } from "./pane-strip";
-import { KeyScope, useDeclaredGestures } from "../../keys";
-import { KeyLegend } from "./key-hint";
-import { POINTER_WORD } from "./gesture-glyph";
+import { KeyScope } from "../../keys";
 import { Button } from "./button";
 import { tv, type VariantProps } from "../../lib/tv";
 
@@ -84,39 +82,6 @@ const hasContent = (node: ReactNode): boolean =>
       ? hasContent(child.props.children)
       : child !== "",
   );
-
-function PaneGestureLegend({
-  host,
-  children,
-}: {
-  host: React.RefObject<HTMLElement | null>;
-  children?: ReactNode;
-}) {
-  const gestures = useDeclaredGestures().filter(
-    (gesture) =>
-      gesture.host &&
-      host.current?.contains(gesture.host) &&
-      gesture.host.closest("[data-slot='pane']") === host.current,
-  );
-  if (!gestures.length && children == null) return null;
-  return (
-    <PaneOverlay label="picture legend" place="bl">
-      <div data-slot="pane-legend" className="flex flex-col items-start gap-1">
-        {children}
-        {gestures.length ? (
-          <KeyLegend
-            lead={0}
-            keys={gestures.map(({ keys, pointer, label }) => ({
-              keys,
-              pointer: pointer && POINTER_WORD[pointer],
-              does: label,
-            }))}
-          />
-        ) : null}
-      </div>
-    </PaneOverlay>
-  );
-}
 
 // A pane is a header, a scrolling body and an error boundary; it is also a key scope, so a child's
 // `useScopeKeys` binds while focus is inside it. Empty chrome draws no header.
@@ -218,7 +183,8 @@ export function PaneLoading({ what = "pane" }: { what?: ReactNode }) {
     const timer = setTimeout(() => setExpired(true), 15_000);
     return () => clearTimeout(timer);
   }, []);
-  if (expired) throw Error("The page module or data did not load after 15s. Retry to load it again.");
+  if (expired)
+    throw Error("The page module or data did not load after 15s. Retry to load it again.");
   return <Work label={typeof what === "string" ? `loading ${what}…` : "loading…"} />;
 }
 
@@ -326,11 +292,7 @@ export function Pane({
   );
   const guarded = (
     <PaneErrorBoundary key={boundaryKey} what={title} onRetry={onRetry}>
-      <Suspense
-        fallback={<PaneLoading what={title} />}
-      >
-        {children}
-      </Suspense>
+      <Suspense fallback={<PaneLoading what={title} />}>{children}</Suspense>
     </PaneErrorBoundary>
   );
   const paneBody =
@@ -412,7 +374,11 @@ export function Pane({
                       {floaters?.map((spec) =>
                         spec.open ? <Floater key={spec.key} spec={spec} /> : null,
                       )}
-                      <PaneGestureLegend host={rootRef}>{legend}</PaneGestureLegend>
+                      {hasContent(legend) ? (
+                        <PaneOverlay label="picture legend" place="bl">
+                          <div data-slot="pane-legend">{legend}</div>
+                        </PaneOverlay>
+                      ) : null}
                       {work.length > 0 && (
                         <div data-slot="pane-work" role="status" className="t-small">
                           {work.join(" · ")}

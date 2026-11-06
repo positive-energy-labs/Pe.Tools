@@ -144,6 +144,8 @@ export function admittedSubject(
  * route-kernel-page.ts): kaitpw 2026-11-03 ruled a subject's list rows and go-to open subjects.
  * The boundary that holds: no pane keeps its own selection; every move lands in the subject field. */
 export interface AdmittedSubject {
+  all(): void;
+  clear(): void;
   toggle(id: unknown): void;
   add(ids: readonly unknown[]): void;
   remove(id: unknown): void;

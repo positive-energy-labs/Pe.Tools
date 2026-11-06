@@ -9,6 +9,19 @@ import { systemList } from "./system-list";
 import { fanFacts } from "./proto/e/fan-sections";
 import { buildTree } from "./proto/b/model";
 
+test("F16 metadata-only roster exposes system information before network pricing", () => {
+  const snapshot = structuredClone(saved) as DuctSnapshot;
+  snapshot.groups = [];
+  snapshot.segments = [];
+  snapshot.systems[0]!.baseEquipmentId = snapshot.nodes.find((node) => node.kind === "equipment")!.id;
+  const rows = systemList(snapshot, null);
+  expect(rows).toHaveLength(snapshot.systems.length);
+  expect(rows[0]).toMatchObject({ name: snapshot.systems[0]!.name, total: null, rating: null, groups: [] });
+  expect(rows[0]!.sub).toMatch(/Supply/);
+  expect(rows[0]!.sub).toMatch(/terminal/);
+  expect(rows[0]!.sub).not.toContain("no fan");
+});
+
 test("two systems sharing a fan retain their own pressure and breakdown terminal", () => {
   const snapshot = structuredClone(saved) as DuctSnapshot;
   snapshot.groups[0]!.systemNames.push("SA 2");

@@ -1,3 +1,5 @@
+import { Settings } from "lucide-react";
+import { Popover, PopoverTrigger, SubjectPopoverContent as PopoverContent } from "@pe/kit/lang/popover";
 import { useRouteSearchSlice } from "#/route/activity";
 import { fansLink } from "../../../fans/neutral.ts";
 import { AttentionRoot, useHoveredIssue } from "#/attention";
@@ -80,7 +82,7 @@ import { DUCTS_MULTI } from "../../selection";
 import type { EditMeta } from "../../sheet/input-history.neutral";
 import { EMPTY_SNAPSHOT } from "../../sheet/scoped-snapshot";
 import { noRunParts, subjectNamer } from "../../subject-text";
-import type { systemList } from "../../system-list";
+import { systemList } from "../../system-list";
 import type { SystemNote } from "../../system-list-search";
 import { systemReadCoverage } from "../../system-reads";
 import { buildTree, type TreeNode } from "../b/model";
@@ -385,7 +387,12 @@ export function SystemsPane({ ctx }: { ctx: OwnContext<"e-systems"> }) {
   const data = useNetworkData(ctx);
   const { snapshot, priced, page, systems, active, work, analysis, captureSource, coverage } = data;
   const { drawn, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
-  const systemRows = analysis?.systems ?? NO_SYSTEMS;
+  const roster = ctx.readings.roster.value;
+  const systemRows = useMemo(() => {
+    const rows = roster ? systemList(roster as DuctSnapshot, null) : NO_SYSTEMS;
+    const priced = new Map((analysis?.systems ?? []).map((row) => [row.key, row]));
+    return rows.length ? rows.map((row) => priced.get(row.key) ?? row) : analysis?.systems ?? NO_SYSTEMS;
+  }, [roster, analysis]);
   const notes = analysis?.notes ?? NO_NOTES;
   const { systemSearch, systemSort } = page;
   const system = systems;
@@ -404,8 +411,7 @@ export function SystemsPane({ ctx }: { ctx: OwnContext<"e-systems"> }) {
   const systemsPane = (
     <>
       <ReadCoverage coverage={coverage} />
-      <a href={fansLink([], search)}>Fan inputs</a>
-      <SystemColours work={work} />
+
       {(ctx.readings.roster.status === "failed" ? ctx.readings.roster.reason : null) ? (
         <p role="alert" data-tone="alarm">
           {ctx.readings.roster.status === "failed" ? ctx.readings.roster.reason : null}
@@ -413,6 +419,20 @@ export function SystemsPane({ ctx }: { ctx: OwnContext<"e-systems"> }) {
       ) : null}
       <Scroll className="min-h-0 flex-1">
         <SystemsList
+          header={
+            <div className="flex flex-wrap items-center justify-between gap-2 p-1">
+              <span className="t-small">
+                {systemRows.length} systems / {systems.length} open
+              </span>
+              <Popover>
+                <PopoverTrigger render={<Button icon={Settings} label="Duct settings" />} />
+                <PopoverContent className="w-80 p-2">
+                  <a href={fansLink([], search)}>Fan inputs</a>
+                  <SystemColours work={work} />
+                </PopoverContent>
+              </Popover>
+            </div>
+          }
           systems={systemRows}
           fansOf={fansOf}
           nameOf={nameOf}
@@ -811,6 +831,7 @@ const SYSTEM_SORTS = {
 /** Keep query renders below the model, drawing and ruling builders. */
 // Memoized on the Page keys it reads: a selection or a camera move never re-renders 355 rows.
 const SystemsList = memo(function SystemsList({
+  header,
   systems,
   fansOf,
   nameOf,
@@ -820,6 +841,7 @@ const SystemsList = memo(function SystemsList({
   onQuery,
   coverage,
 }: {
+  header: ReactNode;
   systems: ReturnType<typeof systemList>;
   /** The system's fans: its hover hint and the head of its breakdown popover. */
   fansOf: (system: ReturnType<typeof systemList>[number]) => FanFact[];
@@ -921,6 +943,20 @@ const SystemsList = memo(function SystemsList({
   return (
     <ListView
       aria-label="systems"
+      search="always"
+      header={
+        <>
+          {header}
+          <div className="flex gap-1 px-1">
+            <Button label="All systems" onPress={() => door?.all()}>
+              All
+            </Button>
+            <Button label="Clear systems" onPress={() => door?.clear()}>
+              Clear
+            </Button>
+          </div>
+        </>
+      }
       list={systemListView}
       row={(system) => {
         const fans = fansOf(system);
