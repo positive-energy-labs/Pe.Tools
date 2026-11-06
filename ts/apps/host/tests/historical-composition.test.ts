@@ -1,19 +1,24 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
-import { afterEach, expect, test } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { sourceProvenanceSchema, type Caller, type WorkKey } from "@pe/agent-contracts";
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
 import { RouteWorkspace } from "@pe/runtime";
-import { historicalRoutes, hostInputGraph } from "../src/app.ts";
-import { hostInputs } from "../src/host-program.ts";
+import { fansInputRoutes, hostInputGraph } from "../src/app.ts";
+import { hostInputs, recordingInputSelection } from "../src/host-program.ts";
 import { admitBuild } from "../src/receipt-export.ts";
 import { nativeCatalogIdentity, nativeInputIdentity, openRecordingWriter } from "../src/native-recording.ts";
 import { admittedRequestIdentity, readSchemas, RequestIdentity } from "../src/request-services.ts";
 import { ActionJournal } from "../src/action-journal.ts";
+import { bootHost } from "./real-server.ts";
+import { HOST_RUNTIME_SERVICE_HEADER, HOST_RUNTIME_SERVICE_QUERY } from "@pe/host-contracts/contracts";
+import { hostOwnership } from "../src/host-ownership.ts";
+import { HostFiles } from "../src/host-files.ts";
 import { threadPointerPort } from "../src/thread-pointers.ts";
 
 const dirs: string[] = [];
@@ -39,7 +44,7 @@ const bundle = async () => {
 const router = async (dir: string, bindings?: ReadonlyMap<string, string>) => {
   const inputs = await Effect.runPromise(hostInputs(stamp, { kind: "recording", directory: dir, at: null, bindings }));
   let liveFactories = 0;
-  const graph = hostInputGraph(inputs, () => { liveFactories++; return Layer.effectDiscard(Effect.die("Live graph was constructed")); }, () => historicalRoutes(inputs));
+  const graph = hostInputGraph(inputs, () => { liveFactories++; return Layer.effectDiscard(Effect.die("Live graph was constructed")); }, () => fansInputRoutes(inputs));
   const web = HttpRouter.toWebHandler(graph, { disableLogger: true });
   const send = (path: string, body?: unknown, caller: Caller = human, selectedScope = scope) => web.handler(new Request(`http://host${path}`, {
     method: body === undefined ? "GET" : "POST", headers: { "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -163,4 +168,92 @@ test("historical open creates nothing; identity and point gaps refuse; unrecorde
   expect(live.source).toEqual({ kind: "live", capturing: false });
   let built = 0; hostInputGraph(live, () => { built++; return Layer.empty; }, () => { throw Error("historical graph selected"); });
   expect(built).toBe(1);
+});
+
+
+test("historical entry serves real static files through identity and retains API refusals", async () => {
+  const { dir } = await bundle();
+  const webRoot = join(dir, "web"); await mkdir(join(webRoot, "assets"), { recursive: true });
+  const html = '<!doctype html><title>recorded host</title><script src="/assets/app.js"></script>';
+  await writeFile(join(webRoot, "index.html"), html); await writeFile(join(webRoot, "assets/app.js"), "export const recorded = true;");
+  await writeFile(join(webRoot, "assets/app.css"), "body { color: navy; }");
+  const selection = await Effect.runPromise(recordingInputSelection(["--recording", dir]));
+  const inputs = await Effect.runPromise(hostInputs(stamp, selection!));
+  let live = 0;
+  const files = vi.spyOn(HostFiles, "layer").mockImplementation(() => { live++; throw Error("live files"); });
+
+  const host = await bootHost({ inputs, webRoot, revitCompositionFactory: () => { live++; throw Error("live composition"); } });
+  const navigation = { accept: "text/html", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document", "sec-fetch-site": "none" };
+  try {
+    const page = await fetch(`${host.base}/fans`, { headers: navigation });
+    expect(page.status, await page.clone().text()).toBe(200);
+    expect(page.headers.get("content-type")).toContain("text/html"); expect(await page.text()).toBe(html);
+    const cookie = page.headers.get("set-cookie")!; expect(cookie).toContain("HttpOnly"); expect(cookie).toContain("SameSite=Strict");
+    const headers = { cookie: cookie.split(";")[0]!, referer: `${host.base}/fans`, origin: host.base, "sec-fetch-site": "same-origin",
+      [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName };
+    for (const [asset, body, type] of [["app.js", "export const recorded = true;", "javascript"], ["app.css", "body { color: navy; }", "text/css"]]) {
+      const response = await fetch(`${host.base}/assets/${asset}`, { headers: { ...headers, "sec-fetch-dest": asset.endsWith("css") ? "style" : "script" } });
+      expect(response.status).toBe(200); expect(response.headers.get("content-type")).toContain(type); expect(await response.text()).toBe(body);
+    }
+    expect((await fetch(`${host.base}/pe/features`, { headers })).status).toBe(200);
+    for (const path of ["/pe/unknown", "/pe/unknown.js", "/assets/x%2f..%2f..%2fpe%2funknown", "/pe/environment", "/admin/unknown", "/host/status", "/unknown"]) {
+      const response = await fetch(host.base + path, { headers: { ...headers, accept: "text/html" } });
+      expect(response.status, path).toBe(409); expect(response.headers.get("content-type")).not.toContain("text/html");
+      expect(await response.text()).toContain("recording.coverage");
+    }
+    const mutation = await fetch(`${host.base}/actions`, { method: "POST", headers, body: "{}" });
+    expect(mutation.status).toBe(409); expect(mutation.headers.get("content-type")).not.toContain("text/html");
+    expect((await fetch(`${host.base}/assets/app.js`, { method: "POST", headers, body: "{}" })).status).toBe(409);
+    expect((await fetch(`${host.base}/pe/threads`, { method: "POST", headers, body: "{}" })).status).toBe(409);
+    const { cookie: omitted, ...anonymous } = headers;
+    expect((await fetch(`${host.base}/pe/threads`, { method: "POST", headers: anonymous, body: "{}" })).status).toBe(403);
+    const noncanonical = await new Promise<number>((resolve, reject) => {
+      const request = httpRequest(`${host.base}/pe/features`, { headers: { ...headers, host: "noncanonical.example" } }, (response) => {
+        response.resume(); response.on("end", () => resolve(response.statusCode!));
+      });
+      request.on("error", reject); request.end();
+    });
+    expect(noncanonical).toBeGreaterThanOrEqual(400);
+    expect((await fetch(`${host.base}/pe/features`, { headers: { ...headers, [HOST_RUNTIME_SERVICE_HEADER]: "wrong-owner" } })).status).toBe(403);
+    expect((await fetch(`${host.base}/pe/features`, { headers: { ...headers, origin: "https://wrong.example" } })).status).toBe(403);
+    const connection = randomUUID(); const abort = new AbortController();
+    const stream = await fetch(`${host.base}/pe/resources?connection=${connection}&${HOST_RUNTIME_SERVICE_QUERY}=${hostOwnership.serviceName}`, { headers, signal: abort.signal });
+    expect(stream.status).toBe(200); const read = stream.body!.getReader();
+    try {
+      expect(new TextDecoder().decode((await read.read()).value)).toBe(": open\n\n");
+      const update = await fetch(`${host.base}/pe/resource-subscriptions?connection=${connection}`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ add: [{ kind: "inventory" }], remove: [] }) });
+      expect(update.status).toBe(200);
+      expect(new TextDecoder().decode((await read.read()).value)).toContain("recording.miss");
+    } finally { await read.cancel(); abort.abort(); }
+    expect(live).toBe(0);
+    await writeFile(join(import.meta.dirname, "../../../../.artifacts/runs/kernel-crusade-20261104/step-7/host-entry-http-receipt.json"), JSON.stringify({
+      selection, stampOrigin: "existing historical-composition TEST fixture; no baked artifact/process claim", identity,
+      navigation: { status: page.status, contentType: page.headers.get("content-type"), httpOnly: cookie.includes("HttpOnly"), sameSiteStrict: cookie.includes("SameSite=Strict") },
+      assets: ["app.js", "app.css"], noncanonicalStatus: noncanonical, liveFactories: live, ordinaryProcessLaunch: "UNPROVEN", webGate: "unimplemented; /pe/environment still409",
+    }, null, 2));
+  } finally { await host.close(); files.mockRestore(); }
+  for (const missingRoot of [null, join(dir, "missing-web")]) {
+    const absent = await bootHost({ inputs, webRoot: missingRoot });
+    try {
+      const response = await fetch(`${absent.base}/fans`, { headers: navigation });
+      expect(response.status).toBe(503); expect(await response.text()).toContain("unavailable");
+      expect((await fetch(`${absent.base}/pe/features`)).status).toBe(200);
+    } finally { await absent.close(); }
+  }
+}, 60000);
+
+
+test("recording process selection is strict and cannot enter the source live fallback", async () => {
+  expect(await Effect.runPromise(recordingInputSelection(["--open", "--no-revit"]))).toBeUndefined();
+  const { dir } = await bundle();
+  const selected = await Effect.runPromise(recordingInputSelection(["host", "--open", "--recording", dir, "--no-revit"]));
+  expect(selected).toEqual({ kind: "recording", directory: dir, at: null });
+  expect(await Effect.runPromise(hostInputs(null, selected!).pipe(Effect.flip))).toMatchObject({ problem: "recording.identity" });
+  let entered = 0;
+  for (const argv of [["--recording"], ["--recording", ""], ["--recording", "  "], ["--recording", "--open"],
+    ["--recording=x"], ["--Recording", dir], ["--recordings", dir], ["--recording", dir, "--recording", dir], ["--recording", "\0"]]) {
+    const failed = await Effect.runPromise(recordingInputSelection(argv).pipe(Effect.tap(() => Effect.sync(() => { entered++; })), Effect.flip));
+    expect(failed).toMatchObject({ problem: "recording.argument", status: 400 });
+  }
+  expect(entered).toBe(0);
 });
