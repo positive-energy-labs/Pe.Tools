@@ -1,4 +1,3 @@
-import "./device-test-home.ts";
 import { expect, test } from "vite-plus/test";
 import {
   readRequestIdentity,
