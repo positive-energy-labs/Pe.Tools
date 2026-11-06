@@ -322,6 +322,8 @@ export const readingFrameSchema = z.discriminatedUnion("kind", [
     kind: z.literal("snapshot"),
     key: z.string(),
     value: z.unknown(),
+    /** Signed claims for actual accepted bodies; an envelope alone has none. */
+    bodyReceipts: z.array(z.string().min(1)).max(READING_MAX_KEYS).optional(),
     /**
      * Document-bound Readings only: Revit changed this Reading's document after the host served
      * it. The host owns the mark and the comparison; a surface draws what the envelope says.
