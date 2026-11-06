@@ -443,21 +443,32 @@ export class HostInputReadSets extends Context.Service<
         Effect.suspend(() => {
           if (lane.kind === "fixture")
             return Effect.fail(refuse("fixture", "A fixture has no input source"));
-          if (lane.kind === "recording") {
-            if (selected === null)
-              return Effect.fail(
-                refuse("context", "A recording serves only an explicitly selected read set"),
+          if (lane.kind === "recording")
+            return Effect.gen(function* () {
+              let id = selected;
+              if (id === null) {
+                // ponytail: O(read sets) admission; memoize recipeKey→ids only if measured slow.
+                const matches: string[] = [];
+                for (const id of lane.recordingStore.readSets.ids()) {
+                  const record = yield* lane.recordingStore.readSets.get(id);
+                  if (recipeKey(record.recipe) === recipeKey(recipe)) matches.push(id);
+                }
+                if (matches.length === 0)
+                  return yield* refuse("miss", "No recorded consumer matches this recipe");
+                if (matches.length > 1)
+                  return yield* refuse("ambiguous", `${matches.length} recorded consumers match; bind one`);
+                id = matches[0] as ReadSetId;
+              }
+              return yield* load(lane.recordingStore, id, limits).pipe(
+                Effect.flatMap((loaded) =>
+                  recipeKey(loaded.record.recipe) === recipeKey(recipe)
+                    ? Effect.succeed(recordedContext(loaded))
+                    : Effect.fail(
+                        refuse("mismatch", `Read set ${id} was taken by another consumer`),
+                      ),
+                ),
               );
-            return load(lane.recordingStore, selected, limits).pipe(
-              Effect.flatMap((loaded) =>
-                recipeKey(loaded.record.recipe) === recipeKey(recipe)
-                  ? Effect.succeed(recordedContext(loaded))
-                  : Effect.fail(
-                      refuse("mismatch", `Read set ${selected} was taken by another consumer`),
-                    ),
-              ),
-            );
-          }
+            });
           if (selected !== null)
             return Effect.fail(refuse("context", "Live input selects no recorded read set"));
           // Past the cap, a live read still computes, in a detached context, while capture stops (K4).
