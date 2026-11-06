@@ -26,7 +26,15 @@ import { leaf, read, RefusedPartition, type InputPort, type ReadContext } from "
 import { sheetSnapshot } from "@pe/ducts-domain/sheet/scoped-snapshot";
 
 export const documentMark = {
-  ...leaf("document-mark", fansReadArgs.shape.target, z.unknown()),
+  ...leaf(
+    "document-mark",
+    fansReadArgs.shape.target,
+    z.object({
+      observedSince: z.number(),
+      changedAt: z.number().nullable(),
+      generation: z.number().int().nonnegative(),
+    }),
+  ),
   fence: true,
 };
 const firm = leaf("firm", z.null(), z.unknown());

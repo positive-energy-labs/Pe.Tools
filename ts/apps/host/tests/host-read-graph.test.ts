@@ -417,6 +417,7 @@ test("F3 three native batches retain the middle refusal on offline replay; no li
     live = make({ kind: "live", captureStore: writer });
     const before = await send(live, null);
     expect(before.state, before.reason).toBe("current");
+    expect(before.value.evaluation).not.toBe(before.value.inputs);
     expect(before.value.coverage).toEqual({
       requested: ["1", "2", "3"],
       covered: ["1", "3"],
@@ -428,8 +429,9 @@ test("F3 three native batches retain the middle refusal on offline replay; no li
     live = undefined;
     const reader = await settle(openRecordingReader(join(dir, "recording"), identity, bounds));
     replay = make({ kind: "recording", recordingStore: reader, at: null });
-    const after = await send(replay, before.value.evaluation);
+    const after = await send(replay, before.value.inputs);
     expect(after.state, after.reason).toBe("current");
+    expect(after.value.evaluation).toBe(before.value.evaluation);
     expect(after.value.data).toEqual(before.value.data);
     expect(after.value.coverage).toEqual(before.value.coverage);
     expect(after.value.trace).toEqual(before.value.trace);

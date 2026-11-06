@@ -29,6 +29,26 @@ const wireValue = <T>(value: T): T => {
   check(value);
   return JSON.parse(JSON.stringify(value));
 };
+const schemaIds = new WeakMap<z.ZodType, string>();
+const schemaId = (schema: z.ZodType) => {
+  let id = schemaIds.get(schema);
+  if (!id) {
+    id = fingerprint(z.toJSONSchema(schema, {
+      unrepresentable: "any",
+      override({ zodSchema, jsonSchema }) {
+        const def = zodSchema._zod.def;
+        // Undefined can occur inside generated optional DTO fields. Preserve its schema identity;
+        // wireValue still rejects every non-JSON runtime value before it can become data.
+        jsonSchema["x-pe-zod-type"] = def.type;
+        const functions = (value: object) => Object.values(value).filter(value => typeof value === "function").map(String);
+        jsonSchema["x-pe-functions"] = functions(def);
+        if ("checks" in def && def.checks) jsonSchema["x-pe-checks"] = def.checks.map(check => functions(check._zod.def));
+      },
+    }));
+    schemaIds.set(schema, id);
+  }
+  return id;
+};
 export const immutable = <T>(value: T): T => {
   if (value && typeof value === "object") {
     for (const child of Object.values(value)) immutable(child);
@@ -76,6 +96,7 @@ export interface Coverage {
 export interface Value<T> {
   readonly data: T;
   readonly evaluation: string;
+  readonly inputs: string;
   readonly trace: readonly Trace[];
   readonly coverage: Coverage;
   readonly origin: unknown;
@@ -136,6 +157,8 @@ export async function evaluate<I, O>(
         definition.name,
         args,
         "leaf" in definition ? "input" : definition.run.toString(),
+        schemaId(definition.input),
+        schemaId(definition.output),
       ]);
       const previous = memo.get(recipe);
       if (previous) return previous as Promise<B>;
@@ -196,7 +219,7 @@ export async function evaluate<I, O>(
     },
     compute: (schema, inputs, pure) => {
       if (closed) throw Error("This evaluation is closed");
-      const recipe = fingerprint(["compute", pure.toString(), inputs]);
+      const recipe = fingerprint(["compute", schemaId(schema), pure.toString(), inputs]);
       const data = immutable(wireValue(schema.parse(pure(immutable(inputs)))));
       trace.push({
         recipe,
@@ -239,12 +262,14 @@ export async function evaluate<I, O>(
   for (const check of checks.values())
     if (port.revision(check.definition.name, check.args) !== check.revision)
       throw new RefreshNeeded(`${check.definition.name} invalidated before publication`);
+  const dependencies = trace.sort(
+    (a, b) => a.recipe.localeCompare(b.recipe) || a.outcome.localeCompare(b.outcome),
+  );
   const value: Value<O> = {
     data,
-    evaluation: port.evaluation,
-    trace: trace.sort(
-      (a, b) => a.recipe.localeCompare(b.recipe) || a.outcome.localeCompare(b.outcome),
-    ),
+    evaluation: fingerprint([port.evaluation, dependencies, data]),
+    inputs: port.evaluation,
+    trace: dependencies,
     coverage: {
       requested: [...requested].sort(),
       covered: [...covered].sort(),
@@ -375,18 +400,24 @@ export class Publications {
     const mine = () =>
       slot.generation === generation && slot.key === key && slot.attempt === attempt;
     // Concurrent equal keys share evaluation, but each subscription still owns its publication fence.
-    let flight = this.active.get(`${key}:${generation}`) as Promise<Publication<O>> | undefined;
+    const flightKey = fingerprint([
+      key,
+      generation,
+      definition.run.toString(),
+      schemaId(definition.input),
+      schemaId(definition.output),
+    ]);
+    let flight = this.active.get(flightKey) as Promise<Publication<O>> | undefined;
     if (!flight) {
       flight = evaluate(definition, args, port).then((value) => {
         const version = (this.versions.get(key) ?? 0) + 1;
         this.versions.set(key, version);
         return immutable({ key, generation, version, value, state: "current" as const });
       });
-      this.active.set(`${key}:${generation}`, flight);
+      this.active.set(flightKey, flight);
       void flight
         .finally(() => {
-          if (this.active.get(`${key}:${generation}`) === flight)
-            this.active.delete(`${key}:${generation}`);
+          if (this.active.get(flightKey) === flight) this.active.delete(flightKey);
         })
         .catch(() => {});
     }

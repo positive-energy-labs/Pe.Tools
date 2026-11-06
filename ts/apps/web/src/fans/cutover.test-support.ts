@@ -103,7 +103,7 @@ export async function createWitness(
         fans: sheet.roster, sheetSnapshot: capture, sheetView: sheetState(open),
         ductsWork: ductsDocumentSchema.parse({}), fansWork: fansDocumentSchema.parse({}) });
       deliver({ kind: "complete", revision: 1, value: { key: "fixture", generation: 0, version: 1, state: "current",
-        value: { data, evaluation: "fixture", origin: { kind: "fixture", name: "cutover" }, trace: [],
+        value: { data, evaluation: "fixture", inputs: "fixture", origin: { kind: "fixture", name: "cutover" }, trace: [],
           coverage: { requested: [], covered: [], unknown: [], refused: [] }, freshness: "current" } } });
     };
     const capture = overrides["ducts.sheet-snapshot"];

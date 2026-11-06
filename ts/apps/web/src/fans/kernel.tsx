@@ -32,7 +32,7 @@ const seed = <const K extends string>(name: K, snapshot: DuctSnapshot) => ({
     return { work: data.fansWork, readings: {
       fans: data.fans, sheet: data, sheetSnapshot: data.sheetSnapshot, meshes: null,
       value: { key: `fixture:${name}`, generation: 0, version: 1, state: "current" as const,
-        value: { data, evaluation: `fixture:${name}`, origin: { kind: "fixture", name }, trace: [],
+        value: { data, evaluation: `fixture:${name}`, inputs: `fixture:${name}`, origin: { kind: "fixture", name }, trace: [],
           coverage: { requested: [], covered: [], unknown: [], refused: [] }, freshness: "current" as const } },
     } };
   },

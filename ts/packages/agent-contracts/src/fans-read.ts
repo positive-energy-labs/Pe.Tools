@@ -68,6 +68,7 @@ export const fansReadResponse = z.object({
     .object({
       data: fansSheetData,
       evaluation: z.string(),
+      inputs: z.string(),
       trace: z.array(z.unknown()),
       coverage: z.object({
         requested: z.array(z.string()),
