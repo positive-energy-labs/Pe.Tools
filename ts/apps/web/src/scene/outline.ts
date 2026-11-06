@@ -4,10 +4,11 @@
  * findable. Translucent context owns no depth here: behind context counts as visible (the
  * renderer composites this after the context pass; see its `drawScene` exception note).
  * The ink and dark casing keep the outline visible on light meshes and ground alike. The element
- * itself keeps its hue and lifts OKLCH lightness (`LOOK.lift`); there is no grey fill. */
+ * itself and its outline read the kit's F10 attention colours. */
 import * as THREE from "three";
 import { FullScreenQuad } from "three/addons/postprocessing/Pass.js";
 import { BLACK } from "./grounds";
+import type { attentionColours } from "./attention";
 import { veilMaterial, type VeilUniforms } from "./veil";
 
 export const OUTLINE_LAYER = 2;
@@ -28,7 +29,7 @@ void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 const fragmentShader = /* glsl */ `
 uniform sampler2D mask;
 uniform vec2 texel;
-uniform vec3 ink;
+uniform vec3 selectedInk, hoverInk, indirectInk;
 uniform vec3 casing;
 // Widths in device px per channel (selected, lit, hover); the casing adds casingPx outside.
 uniform vec3 width;
@@ -66,11 +67,11 @@ void main() {
       texture2D(mask, vUv + d * (w.y + c)).g,
       texture2D(mask, vUv + d * (w.z + c)).b));
   }
-  vec3 weight = vec3(1.0, 0.9, 0.6), darkWeight = vec3(0.6, 0.5, 0.3);
-  vec3 line = max(max(ring - inside, 0.0), max(hidRing - inside, 0.0) * occludedAlpha) * weight;
+  vec3 line = max(max(ring - inside, 0.0), max(hidRing - inside, 0.0) * occludedAlpha);
   vec3 dark = max(
     max(outer - max(ring, inside), 0.0),
-    max(hidOuter - max(hidRing, inside), 0.0) * occludedAlpha) * darkWeight;
+    max(hidOuter - max(hidRing, inside), 0.0) * occludedAlpha);
+  vec3 ink = line.r > 0.0 ? selectedInk : line.b > 0.0 ? hoverInk : indirectInk;
   float l = max(line.r, max(line.g, line.b));
   float k = max(dark.r, max(dark.g, dark.b));
   float alpha = l + k * (1.0 - l);
@@ -98,7 +99,7 @@ const WHOLE = {
 
 export function createOutline(
   renderer: THREE.WebGLRenderer,
-  ink: THREE.Color,
+  colours: ReturnType<typeof attentionColours>,
   casing: THREE.Color,
 ) {
   const mask = new THREE.WebGLRenderTarget(1, 1, { samples: 4, depthBuffer: true });
@@ -106,7 +107,9 @@ export function createOutline(
     uniforms: {
       mask: { value: mask.texture },
       texel: { value: new THREE.Vector2() },
-      ink: { value: ink },
+      selectedInk: { value: colours.selected.clone() },
+      hoverInk: { value: colours.hover.clone() },
+      indirectInk: { value: colours.lit.clone() },
       casing: { value: casing },
       width: { value: new THREE.Vector3() },
       casingPx: { value: 0 },
@@ -126,6 +129,11 @@ export function createOutline(
       if (object instanceof THREE.Mesh) Object.assign(object.material as THREE.Material, how);
     });
   return {
+    setColours(colours: ReturnType<typeof attentionColours>) {
+      material.uniforms.selectedInk!.value.copy(colours.selected);
+      material.uniforms.hoverInk!.value.copy(colours.hover);
+      material.uniforms.indirectInk!.value.copy(colours.lit);
+    },
     /** Device px per channel and the dark casing outside them (`LOOK.outline`). */
     setWidths(w: { selected: number; lit: number; hover: number; casing: number }) {
       material.uniforms.width!.value.set(w.selected, w.lit, w.hover);
