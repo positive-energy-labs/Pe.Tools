@@ -224,17 +224,17 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
         eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
       await next("stale");
       const beforeReacquire = nativeCalls;
-      const roster = recovery ? await send(live, "/pe/ducts/roster", { target: ref })
+      const roster = recovery ? (await capture("/pe/ducts/roster", { target: ref }), undefined)
         : await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
-      expect(roster.status, await roster.clone().text()).toBe(200);
+      if (roster) expect(roster.status, await roster.clone().text()).toBe(200);
       if (recovery) {
         expect(nativeCalls).toBe(beforeReacquire + 1);
         const prior = cases.find((entry) => entry.value.kind === "overview")!.value;
-        expect((await roster.json()).rows.find((row: any) => row.unitId === prior.fan.unitId && row.portIndex === prior.fan.portIndex)).not.toHaveProperty("blockerCount");
+        expect(cases.at(-1)!.value.rows.find((row: any) => row.unitId === prior.fan.unitId && row.portIndex === prior.fan.portIndex)).not.toHaveProperty("blockerCount");
       }
       await next("loading"); const fresh = await next("ready");
       expect(fresh.value.version).not.toBe(original.value.version);
-      if (!recovery) expect(fresh.value.version).toBe(roster.headers.get(DUCTS_BODY_VERSION_HEADER));
+      if (roster) expect(fresh.value.version).toBe(roster.headers.get(DUCTS_BODY_VERSION_HEADER));
       const refresh = ductsExecutors(liveFactories.service!)["ducts.refresh"]!;
       await refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution);
       await next("stale");
@@ -361,10 +361,24 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
       const fresh = await send(live, "/pe/ducts/sheet", request);
       expect(fresh.status, await fresh.clone().text()).toBe(200);
       expect((await fresh.json()).basis).not.toBe(overview.basis);
-      const roots = completed.filter((entry) => entry.recipe.key === "ducts.roster");
-      await writeFile(join(import.meta.dirname, "../../../../.artifacts/runs/kernel-crusade-20261104/step-7/version-records.json"), JSON.stringify({
-        truncated: writer.capture.truncated(), roots: await Promise.all(roots.map(async (entry) => ({ id: entry.id, state: (await run(writer.readSets.get(entry.id))).state }))),
-      }, null, 2));
+      const recovered = cases.filter((entry) => entry.url === "/pe/ducts/roster").at(-1)!;
+      const saved = await run(writer.readSets.get(recovered.readSet));
+      expect(saved.state).toBe("complete");
+      await live.dispose(); liveFactories.recorded = true;
+      const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
+      const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
+      let selected = cases.find((entry) => entry.value.kind === "overview")!;
+      historical = HttpRouter.toWebHandler(fansInputRoutes(context, { get readSet() { return selected.readSet; },
+        get live(): never { poisoned++; throw Error("Recovery constructed live inputs"); },
+        get store(): never { poisoned++; throw Error("Recovery constructed Work store"); },
+      }), { disableLogger: true });
+      for (const entry of [selected, recovered]) {
+        selected = entry;
+        const response = await send(historical, entry.url, entry.body);
+        expect(response.status, await response.clone().text()).toBe(200);
+        expect(await response.json()).toEqual(entry.value);
+      }
+      expect([liveFactories.sdk, liveFactories.bridge, liveFactories.work, poisoned]).toEqual([0, 0, 0, 0]);
       return;
     }
     // K5: the production Fans sheet and /call must share the bridge-subscribed refresh owner.

@@ -4,6 +4,7 @@ import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { InvalidRead } from "./native-reads.ts";
 import { ReadFreshness, RequestIdentity } from "./request-services.ts";
+import { admitNativeCaller } from "./native-read-policy.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import type { NativeReadInput } from "@pe/host-internal/native-read";
 import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
@@ -1471,11 +1472,14 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
 ) {
   const native = yield* HostNativeRead;
   const input: NativeReadInput = { ...rawInput, scope: JSON.parse(JSON.stringify(rawInput.scope)) };
-  // Every caller is admitted, including one that will receive already-retained bytes.
-  const admitted = yield* native.resolve(input);
+  // Replay admits the caller before reading a failed basis; it has no native acquisition to resolve.
+  const replaying = source.basis?.replaying;
+  if (replaying) yield* admitNativeCaller(input.key);
+  const resolved = !replaying ? yield* native.resolve(input) : undefined;
   const subject = yield* Effect.try({ try: () => ductBodySubject(input), catch: (error) =>
     isDoorFailure(error) ? error : new InvalidRead({ message: said(error), status: 400, problem: "read.input" }) });
   const basis = source.basis ? yield* source.basis.prepare(input, subject) : undefined;
+  const admitted = resolved ?? (yield* native.resolve(input));
   const target = { processIncarnation: admitted.processIncarnation, openDocumentLifetime: admitted.openDocumentLifetime };
   const services = yield* Effect.context<RequestIdentityKey>();
   // Existing phase-5 owner Promise boundary; the same captured caller runs acquisition and metadata.
@@ -1499,7 +1503,10 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
   }, { ...options, ...(basis ? { source: {
     revision: basis.recorded?.version,
     beforeReady: (body) => run(basis.consume(body, target)),
-  } } : {}) }), catch: retainedReadFailure });
+  } } : {}) }), catch: retainedReadFailure }).pipe(Effect.catch((error) =>
+    basis && options.version && !acquired && error._tag === "InvalidRequest" &&
+      error.status === 409 && error.problem === "read.retained"
+      ? basis.refuse(error) : Effect.fail(error)));
   // Joiners/hits consume the retained dependency; they never invent another native acquisition.
   if (basis && !acquired) yield* basis.consume(shared, target);
   yield* Effect.try({ try: () => owner.assertCurrent(subject, shared.version), catch: retainedReadFailure });
