@@ -166,9 +166,15 @@ effectTest("closing a sealed root releases its slot exactly once", () =>
     yield* root.close;
     yield* root.close;
     const next = yield* live.open(recipe, null);
-    expect(yield* problem(live.open(recipe, null))).toBe("recording.full");
+    expect(failed(next.start(FIRM, "{}"))).toBe("ok");
+    // Past the cap a live open still answers (K4), detached: its starts refuse `full`.
+    expect(failed((yield* live.open(recipe, null)).start(FIRM, "{}"))).toBe("recording.full");
     yield* next.close;
-    yield* (yield* live.open(recipe, null)).close;
+    // The one slot came back exactly once: a counted context again, then the cap again.
+    const reopened = yield* live.open(recipe, null);
+    expect(failed(reopened.start(FIRM, "{}"))).toBe("ok");
+    expect(failed((yield* live.open(recipe, null)).start(FIRM, "{}"))).toBe("recording.full");
+    yield* reopened.close;
   }),
 );
 
@@ -275,3 +281,37 @@ const limits: InputReadSetLimits = {
   metadataBytesPerRoot: 65_536,
   dependencyDepth: 4,
 };
+
+effectTest("a live root or child over its capture budget truncates capture and the live read still answers", () =>
+  Effect.gen(function* () {
+    const dir = yield* bundle;
+    const writer = yield* openRecordingWriter(dir, identity, bounds);
+    const capped = { ...limits, openRoots: 1, childrenPerRoot: 1 };
+    const live = yield* readSets({ kind: "live", captureStore: writer }, capped);
+    const first = yield* live.open(recipe, null); // stays open
+    const second = yield* live.open(recipe, null);
+    expect(writer.capture.truncated()).toMatchObject({ reason: "full" });
+    const read = (consumption: typeof first, value: string) =>
+      captureInput(writer, FIRM, "{}", codec, Effect.succeed(value)).pipe(
+        Effect.provideService(CurrentInputConsumption, consumption),
+      );
+    expect(yield* read(second, "second")).toBe("second");
+    ok(first.child(child("ducts.retained")));
+    const over = ok(first.child(child("ducts.retained")));
+    expect(yield* read(over, "child")).toBe("child");
+    yield* second.seal;
+    yield* first.seal;
+    // A truncated capture publishes no read set at all, complete or otherwise.
+    const reader = yield* openRecordingReader(dir, identity, bounds);
+    expect(yield* problem(reader.readSets.get(second.id))).toBe("recording.context");
+    expect(yield* problem(reader.readSets.get(first.id))).toBe("recording.context");
+    // A closed context stays fenced; capture-off live never fails on the budget.
+    yield* first.close;
+    expect(failed(first.child(child("ducts.retained")))).toBe("recording.context");
+    const off = yield* readSets({ kind: "live" }, capped);
+    yield* off.open(recipe, null);
+    const again = yield* off.open(recipe, null);
+    ok(again.child(child("ducts.retained")));
+    expect(failed(again.child(child("ducts.retained")))).toBe("ok");
+  }),
+);

@@ -92,6 +92,8 @@ const mint = () => randomUUID() as ReadSetId;
 interface Budget {
   children: number;
   starts: number;
+  /** A child past its cap was detached: this tree can never publish a complete read set. */
+  lost?: boolean;
 }
 type Life = "open" | "sealed" | "closed";
 /** A node accepts starts and mutations only while it and every ancestor are open. */
@@ -187,8 +189,11 @@ function liveContext(
     childNodes: () => children.map((child) => child.node),
     child: (childRecipe) => {
       if (!life.open()) return Result.fail(closed());
-      if (budget.children + 1 > limits.childrenPerRoot)
-        return Result.fail(refuse("full", "This consumption has too many child contexts"));
+      // Past the cap, live computation continues in a detached child; capture is what is lost (K4).
+      if (budget.children + 1 > limits.childrenPerRoot) {
+        budget.lost = true;
+        return Result.succeed(detachedContext(childRecipe, life.open));
+      }
       budget.children++;
       const node = liveContext(writer, childRecipe, budget, limits, life.open, () => {});
       children.push({ recipe: childRecipe, start: next(recipeKey(childRecipe)), node });
@@ -255,6 +260,10 @@ function liveContext(
       life.end("sealed");
       // A truncated capture never publishes a complete read set.
       if (!writer || writer.capture.truncated()) return Effect.void;
+      if (budget.lost) {
+        const at = writer.capture.begin();
+        return at === null ? Effect.void : writer.capture.stop(at, "full");
+      }
       const records: InputReadSetRecord[] = [];
       const walk = (node: LiveNode) => {
         const value = node.record();
@@ -285,6 +294,31 @@ function liveContext(
     }),
   };
   return self;
+}
+
+/**
+ * A live context beyond its capture budget: it keeps lifetime fences but records nothing. Its
+ * starts refuse `full`, which the capture boundary turns into a capture stop with the live answer
+ * kept; it never publishes a read set.
+ */
+function detachedContext(recipe: ConsumerRecipe, parentOpen: () => boolean): InputConsumption {
+  const life = lifetime(parentOpen);
+  const lost = () => refuse("full", "This consumption is past its capture budget");
+  const ignored = () => whileOpen(life.open, () => Effect.void);
+  return {
+    id: mint(),
+    recipe,
+    child: (childRecipe) =>
+      life.open() ? Result.succeed(detachedContext(childRecipe, life.open)) : Result.fail(closed()),
+    start: () => Result.fail(life.open() ? lost() : closed()),
+    linkTaking: ignored,
+    taking: () => Effect.fail(lost()),
+    linkReadSet: ignored,
+    dependency: () => Effect.fail(lost()),
+    exportBasis: ignored,
+    seal: Effect.suspend(() => (life.end("sealed") ? Effect.void : Effect.fail(closed()))),
+    close: Effect.sync(() => void life.end("closed")),
+  };
 }
 
 /** A stored read-set tree, preloaded at open so every start/child selects synchronously. */
@@ -426,8 +460,15 @@ export class HostInputReadSets extends Context.Service<
           }
           if (selected !== null)
             return Effect.fail(refuse("context", "Live input selects no recorded read set"));
-          if (open + 1 > limits.openRoots)
-            return Effect.fail(refuse("full", "Too many open input consumptions"));
+          // Past the cap, a live read still computes, in a detached context, while capture stops (K4).
+          if (open + 1 > limits.openRoots) {
+            const at = lane.captureStore?.capture.begin() ?? null;
+            const stopped = at === null ? Effect.void : lane.captureStore!.capture.stop(at, "full");
+            return Effect.as(
+              stopped,
+              detachedContext(recipe, () => true),
+            );
+          }
           open++;
           return Effect.succeed(
             liveContext(
