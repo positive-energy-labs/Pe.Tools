@@ -23,6 +23,7 @@ import { elementLabeler } from "@pe/ducts-domain/element-label";
 import type { FanPort } from "@pe/ducts-domain/roster";
 import { buildSheet, type SheetSnapshot } from "@pe/ducts-domain/sheet/index";
 import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
+import { admit } from "../fans/admission.fixture.ts";
 
 /**
  * Manual D re-drive #4, defect 7: internal keys rendered as text. Every fixture route's visible
@@ -196,7 +197,6 @@ test("a duplicate fan mark is told apart by level, then system, then order; neve
 });
 
 test("admitted ducts and fans render declared subject and pane words without internal ids", async () => {
-  const { admit } = await import("../fans/admission.fixture.ts");
   const { owner, presenter } = await admit();
   for (const route of [owner, presenter]) {
     const words = [
