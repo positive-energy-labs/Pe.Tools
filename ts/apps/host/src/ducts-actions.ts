@@ -98,6 +98,17 @@ export function unwrittenCells(
   return cells.filter(([segment, key]) => written[segment] && !written[segment]!.some((row) => String(row.id) === key));
 }
 
+/**
+ * Why one requested cell derived no write. A cell whose Work edit is empty (published, restored or
+ * never staged) is not a staged value: the scope naming it is no authority to write it.
+ */
+export function unwrittenReason(staged: ReturnType<typeof stagedDucts>, [segment, key]: readonly [string, string]) {
+  const cells = staged[segment as keyof typeof staged] as Record<string, unknown> | undefined;
+  return cells && key in cells
+    ? "staged, but this scope derives no write for it"
+    : "no staged edit: its Work cell is empty (published, restored or never staged); stage it again to write it";
+}
+
 /** Only a fully confirmed heal consumes its intent; partial/refused/preview results remain editable. */
 export function healedCellPaths(
   input: Record<string, unknown>,
@@ -262,7 +273,9 @@ export function ductsExecutors(
             const unwritten = unwrittenCells(scoped, intent?.cells ?? []);
             if (unwritten.length)
               throw refused(
-                `These requested cells derive no write in this scope: ${unwritten.map((cell) => cell.join("/")).join(", ")}`,
+                `These requested cells derive no write in this scope: ${unwritten
+                  .map((cell) => `${cell.join("/")} (${unwrittenReason(stagedDucts(doc, fans), cell)})`)
+                  .join("; ")}`,
               );
             return {
               input: scoped as unknown as Record<string, unknown>,

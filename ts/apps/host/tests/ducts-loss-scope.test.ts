@@ -2,13 +2,13 @@
 import { neutralFansWork } from "@pe/agent-contracts";
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vite-plus/test";
-import { lossSnapshot, unwrittenCells } from "../src/ducts-actions.ts";
+import { lossSnapshot, unwrittenCells, unwrittenReason } from "../src/ducts-actions.ts";
 import { scopeApplyRequest } from "@pe/ducts-domain/staged";
 import { mergeSnapshots } from "../src/ducts-walk.ts";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { writeSeal } from "../src/work-write-boundary.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { ductsDesign, fansDocumentSchema } from "@pe/agent-contracts";
+import { ductsDesign, fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
 import { price, applyRequest } from "@pe/ducts-domain/pricing";
 import { EMPTY_CATALOGS } from "@pe/ducts-domain/catalog";
 
@@ -166,4 +166,15 @@ test("a requested write cell that derives no write is refused, never planned as 
   const empty = { fittings: [], terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [] } as never;
   expect(unwrittenCells(empty, [["flows", "1380293"], ["rules", "elbow"], ["calculation", "x"]])).toEqual([["flows", "1380293"]]);
   expect(unwrittenCells({ ...(empty as object), terminalFlows: [{ id: 1380293, cfm: 123 }] } as never, [["flows", "1380293"]])).toEqual([]);
+});
+
+test("an unwritten cell names why: an empty or consumed Work cell is not a staged value", () => {
+  // The preserved r82 shape: writeIntent still names both ESP cells after r67 published both edits.
+  const fans = fansDocumentSchema.parse({
+    esp: { "14577391": { edit: null }, "10016301": { edit: { value: { inWg: 2.7 } } } },
+  });
+  const staged = stagedDucts(null, fans);
+  expect(unwrittenReason(staged, ["esp", "14577391"])).toMatch(/no staged edit/);
+  // A staged cell that still derives nothing is a different case; it is never called empty.
+  expect(unwrittenReason(staged, ["esp", "10016301"])).toMatch(/^staged/);
 });
