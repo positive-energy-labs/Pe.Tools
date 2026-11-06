@@ -101,6 +101,9 @@ export async function readRequestIdentity(
         detail: `Caller requires '${expectedService ?? queryServices.join(",")}', but this host is '${hostOwnership.serviceName}'.`,
       },
     };
+  // EventSource cannot set headers: caller admission consumes the same owner evidence, validated above.
+  if (expectedService === undefined && queryServices.length)
+    headers = { ...headers, [HOST_RUNTIME_SERVICE_HEADER]: queryServices[0] };
   let pathname: string;
   try {
     pathname =

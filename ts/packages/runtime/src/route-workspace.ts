@@ -198,7 +198,7 @@ export class RouteWorkspace {
     const source = this.options.recorded!;
     const begun = source.begin({ kind: "read", key: scope, view }, context);
     if (!begun.ok) throw begun.error;
-    return this.#requested(scope, await source.read(scope, view, begun.carriage));
+    return { value: this.#requested(scope, await source.read(scope, view, begun.carriage)), carriage: begun.carriage };
   }
   #requested<A>(scope: WorkKey, value: A): A {
     const handle = (value as { handle?: { key?: WorkKey } } | null)?.handle;
@@ -486,7 +486,7 @@ export class RouteWorkspace {
 
   /** The route's Work at the scope; null when the route is unregistered or no Work exists yet. */
   async read(scope: WorkKey, route: string, context?: WorkReadContext) {
-    return this.#captured(scope, "read", context, () => this.#read(scope, route, false, false, context));
+    return (await this.#captured(scope, "read", context, () => this.#read(scope, route, false, false, context))).value;
   }
   /**
    * Live capture records exactly the value delivered, a null "no Work" included, before it is
@@ -497,9 +497,11 @@ export class RouteWorkspace {
     view: WorkReadView,
     context: WorkReadContext | undefined,
     live: () => Promise<A>,
-  ): Promise<A> {
+  ): Promise<{ value: A; carriage: WorkCarriage | undefined }> {
+    if (this.options.recorded)
+      return this.#recorded(scope, view, context) as Promise<{ value: A; carriage: WorkCarriage | undefined }>;
     const capture = this.options.capture;
-    if (!capture) return live();
+    if (!capture) return { value: await live(), carriage: undefined };
     // Begun at read start, before the live thunk is queued; a failed begin reads uncaptured.
     const begun = capture.begin({ kind: "read", key: scope, view }, context);
     const carriage = begun.ok ? begun.carriage : undefined;
@@ -512,7 +514,7 @@ export class RouteWorkspace {
       throw error;
     }
     await capture.read(scope, view, value, carriage);
-    return value;
+    return { value, carriage };
   }
 
   /**
@@ -526,15 +528,13 @@ export class RouteWorkspace {
     context?: WorkReadContext,
   ): Promise<{ doc: unknown; revision: number; handle: WorkHandle } | null> {
     if (!this.#registry.has(route)) return null;
-    if (this.options.recorded)
-      return (await this.#recorded(scope, "raw", context)) as { doc: unknown; revision: number; handle: WorkHandle } | null;
-    return this.#captured(scope, "raw", context, async () => {
+    return (await this.#captured(scope, "raw", context, async () => {
       const raw = await this.#serialized(() => this.#carryOver(scope, route));
       if (raw == null) return null;
       const envelope = envelopeSchema.safeParse(raw);
       const revision = envelope.success ? envelope.data.revision : 0;
       return { doc: envelope.success ? envelope.data.doc : null, revision, handle: workHandle(scope, revision) };
-    });
+    })).value;
   }
 
   /**
@@ -542,7 +542,7 @@ export class RouteWorkspace {
    * starts from. Null only for an unregistered route, so a registered route never reads unknown.
    */
   async view(scope: WorkKey, route: string, context?: WorkReadContext) {
-    return this.#captured(scope, "view", context, () => this.#read(scope, route, true, false, context));
+    return (await this.#captured(scope, "view", context, () => this.#read(scope, route, true, false, context))).value;
   }
 
   async #read(
@@ -558,7 +558,7 @@ export class RouteWorkspace {
     if (this.options.recorded) {
       // A recorded history is the admitted feed's, bound with its admission; never a view plus guesses.
       if (withHistory) throw Error("A recorded Work feed is served only through observeAdmittedFeed");
-      return (await this.#recorded(scope, orEmpty ? "view" : "read", context)) as Awaited<ReturnType<typeof live>>;
+      return (await this.#recorded(scope, orEmpty ? "view" : "read", context)).value as Awaited<ReturnType<typeof live>>;
     }
     const live = () => this.#serialized(async () => {
       const envelope = await this.#load(scope, spec, orEmpty);
@@ -972,20 +972,21 @@ export class RouteWorkspace {
   observe(
     scope: WorkKey,
     route: string,
-    listener: (value: OwnerValue<Awaited<ReturnType<RouteWorkspace["read"]>>>) => void,
+    listener: (value: OwnerValue<Awaited<ReturnType<RouteWorkspace["read"]>>>, carriage?: WorkCarriage) => void,
     orEmpty = false,
     withHistory = false,
+    context?: WorkReadContext,
   ): () => void {
     const key = `${workKey(scope)}\0${route}\0${orEmpty}\0${withHistory}`;
-    return this.#reads.observe(
-      key,
-      () => this.#read(scope, route, orEmpty, withHistory),
-      (notify) =>
-        this.subscribe((event) => {
-          if (event.route === route && workKey(event.scope) === workKey(scope)) notify();
-        }),
-      listener,
-    );
+    const read = () => this.#read(scope, route, orEmpty, withHistory, context);
+    const subscribe = (notify: () => void) => this.subscribe((event) => {
+      if (event.route === route && workKey(event.scope) === workKey(scope)) notify();
+    });
+    if (!context || withHistory) return this.#reads.observe(key, read, subscribe, listener);
+    // A consumer's acquisition carries its own attempt through capture and mark publication.
+    return new OwnerReads().observe(key,
+      () => this.#captured(scope, orEmpty ? "view" : "read", context, read), subscribe,
+      (result) => "error" in result ? listener(result) : listener({ value: result.value.value }, result.value.carriage));
   }
 
   subscribe(listener: (event: RouteWorkspaceEvent) => void): () => void {
