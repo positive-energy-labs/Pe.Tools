@@ -1,3 +1,6 @@
+import { ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-contracts";
+import { fansSheetData, openFanSheetSchema } from "../../../../packages/agent-contracts/src/fans-read.ts";
+import { sheetState } from "../ducts/sheet/state.ts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import type { EntryTable } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
@@ -93,6 +96,20 @@ export async function createWitness(
         deliver({ kind: "complete", value, revision: 1 });
       },
     };
+  native["fans.sheet"] = { kind: "use", open(ctx, deliver) {
+    const send = (capture: unknown) => {
+      const open = openFanSheetSchema.parse({ overview: sheet.overview, inputs: sheet.inputs, elements: null, legs: null, worstLegs: [], worksheet: null });
+      const data = fansSheetData.parse({ open, opened: [], rows: sheet.roster.rows, progress: null,
+        fans: sheet.roster, sheetSnapshot: capture, sheetView: sheetState(open),
+        ductsWork: ductsDocumentSchema.parse({}), fansWork: fansDocumentSchema.parse({}) });
+      deliver({ kind: "complete", revision: 1, value: { key: "fixture", generation: 0, version: 1, state: "current",
+        value: { data, evaluation: "fixture", origin: { kind: "fixture", name: "cutover" }, trace: [],
+          coverage: { requested: [], covered: [], unknown: [], refused: [] }, freshness: "current" } } });
+    };
+    const capture = overrides["ducts.sheet-snapshot"];
+    if (capture?.kind === "use" || capture?.kind === "feed") return capture.open(ctx, frame => { if (frame.kind === "complete" || frame.kind === "part") send(frame.value); });
+    send(snapshot);
+  } };
   const baseServices = sourceRouteServices({ ...native, ...overrides });
   const services: typeof baseServices = { ...baseServices, work: feed, reads: {
     ...baseServices.reads,

@@ -30,7 +30,7 @@ const settle = (write: Observation<WorkWriteOutcome>) =>
 
 // These assignments are compiled by the web/host gate, without executing a write.
 function readOnly(
-  ctx: Parameters<BodyBindings<typeof fansData, typeof schemas, typeof entries>["price"]["run"]>[0],
+  ctx: Parameters<BodyBindings<typeof fansData, typeof schemas, typeof entries>["ductsEdit"]["run"]>[0],
 ) {
   if (!ctx.readings.ductsWork.current) return;
   // @ts-expect-error A cross-route Work reading is immutable, with no mutation capability.
@@ -46,8 +46,6 @@ void readOnly;
 test("the host refuses cross-route patches and the declared Work reading observes the real owner", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.current).toBe(true));
-  f.fans.refresh("pricing");
-  expect(f.fans.readingStatus("pricing").snapshot.current).toBe(true);
   const fanCalls = () => [...f.calls].filter(([key]) => key.startsWith("fans:"));
   const calls = fanCalls();
   expect(calls.length).toBeGreaterThan(0);
@@ -91,12 +89,6 @@ test("the host refuses cross-route patches and the declared Work reading observe
   expect(after.current && before.current && after.hash !== before.hash).toBe(true);
   expect(f.fans.work()?.revision).toBe(0);
   // Only readings declaring ductsWork (sheet, and sheetSnapshot through it) re-read; nothing else.
-  const reread = new Set(["fans:ducts.sheet", "fans:ducts.sheet-snapshot"]);
+  const reread = new Set(["fans:fans.sheet"]);
   expect(fanCalls()).toEqual(calls.map(([key, n]) => [key, reread.has(key) ? n + 1 : n]));
-  expect(f.fans.readingStatus("pricing").snapshot.current).toBe(false);
-  f.fans.refresh("pricing");
-  expect(f.fans.readingStatus("pricing").snapshot).toMatchObject({
-    current: true,
-    value: { priced: { edit: { rules: { elbow: { table: "CD3-1" } } } } },
-  });
 });

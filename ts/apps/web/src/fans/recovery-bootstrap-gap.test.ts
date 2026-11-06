@@ -565,6 +565,7 @@ test.each([
     workOpen: { session: "fixture", openId: "w1f" },
     workAddress,
     resolvedAddress: null,
+    inventoryResult: { state: "absent" },
   } as ReturnType<typeof useRouteTarget>;
   const selected = vi.mocked(useRouteTarget);
   selected.mockReturnValue(
@@ -618,6 +619,7 @@ test("P02/P04: the application opens saved Ducts Work by document Address", asyn
     },
     workAddress,
     resolvedAddress: workAddress,
+    inventoryResult: { state: "absent" },
     workOpen: null,
   } as ReturnType<typeof useRouteTarget>);
   vi.spyOn(sourceServices, "sourceRouteServices").mockReturnValue(f.services);
@@ -679,6 +681,7 @@ test.each(["w1f", "other-document"])(
         resolution: { kind: "resolved", target: { kind: "document", ref: request.ref } },
         workAddress: null,
         resolvedAddress: null,
+    inventoryResult: { state: "absent" },
         workOpen: null,
       } as ReturnType<typeof useRouteTarget>;
     });
@@ -738,6 +741,7 @@ test.each(["current", "departed"] as const)(
       },
       workAddress: null,
       resolvedAddress: null,
+    inventoryResult: { state: "absent" },
       workOpen: null,
     } as ReturnType<typeof useRouteTarget>);
     vi.spyOn(sourceServices, "sourceRouteServices").mockImplementation((_sources, composition) => ({
