@@ -26,12 +26,16 @@ import type { ReadSetId } from "../src/input-occurrence.ts";
 import { builtinEnrollments } from "../src/builtin-enrollment.ts";
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
 import { bootHost } from "./real-server.ts";
+import { ductsExecutors } from "../src/ducts-actions.ts";
+import type { RevitBridge, HostBridgeEvent } from "../src/bridge.ts";
+import type { CommandContext } from "../src/command-executor.ts";
+import type { ActionExecution } from "../src/action-journal.ts";
 import { mintBrowserContext, mintContext } from "../src/control.ts";
 import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
 import { hostOwnership } from "../src/host-ownership.ts";
 
-const liveFactories = vi.hoisted(() => ({ sdk: 0, bridge: 0, work: 0, recorded: false }));
+const liveFactories = vi.hoisted(() => ({ sdk: 0, bridge: 0, work: 0, recorded: false, service: null as RevitBridge["Service"] | null, listeners: new Set<(event: HostBridgeEvent) => void>() }));
 vi.mock("../src/sdk-session.ts", async (original) => {
   const actual = await original<typeof import("../src/sdk-session.ts")>();
   const { Effect, Layer } = await import("effect");
@@ -45,7 +49,16 @@ vi.mock("../src/bridge.ts", async (original) => {
   const { Effect, Layer } = await import("effect");
   return { ...actual, RevitBridgeLive: Layer.unwrap(Effect.sync(() => {
     if (liveFactories.recorded) { liveFactories.bridge++; throw Error("Live bridge acquired by a recorded graph"); }
-    return actual.RevitBridgeLive;
+    return Layer.effect(actual.RevitBridge, Effect.gen(function* () {
+      const bridge = yield* actual.RevitBridge;
+      const subscribed = { ...bridge, subscribe: (listener: (event: HostBridgeEvent) => void) => {
+        liveFactories.listeners.add(listener);
+        const close = bridge.subscribe(listener);
+        return () => { liveFactories.listeners.delete(listener); close(); };
+      } };
+      liveFactories.service = subscribed;
+      return subscribed;
+    })).pipe(Layer.provide(actual.RevitBridgeLive));
   })) };
 });
 vi.mock("../src/route-document-store.ts", async (original) => {
@@ -225,6 +238,23 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
     releaseHuman.resolve();
     const humanView = await humanRead;
     expect([humanView.revision, peaView.revision]).toEqual([2, 3]);
+    // K5: the production Fans sheet and /call must share the bridge-subscribed refresh owner.
+    const reread = async () => {
+      const calls = nativeCalls;
+      const response = await send(live, "/call", { key: "ducts.snapshot.walk", request: acquisition.request });
+      expect(response.status, await response.clone().text()).toBe(200);
+      await response.json();
+      expect(nativeCalls, "A model change must retire the exact /call retained body").toBeGreaterThan(calls);
+      const sheet = await send(live, "/pe/ducts/sheet", request);
+      expect(sheet.status, await sheet.clone().text()).toBe(200);
+      expect((await sheet.json()).basis).not.toBe(overview.basis);
+    };
+    for (const listener of liveFactories.listeners) listener({ sessionId: ref.session, kind: "event",
+      eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
+    await reread();
+    const refresh = ductsExecutors(liveFactories.service!)["ducts.refresh"]!;
+    await refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution);
+    await reread();
     await live.dispose();
     liveFactories.recorded = true;
     const liveFiles = vi.spyOn(HostFiles, "layer").mockImplementation(() => { poisoned++; throw Error("Live file readers constructed"); });

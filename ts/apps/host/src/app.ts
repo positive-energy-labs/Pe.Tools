@@ -6,7 +6,7 @@ import type { DuctsSheetSources } from "./ducts-sheet.ts";
 import { matchPeRoute, peRoutes } from "@pe/agent-contracts/pe-api";
 import { HostSessionInventory } from "./session-inventory.ts";
 import { createDuctsBodyBasis } from "./ducts-body-basis.ts";
-import { DuctsReadings } from "./ducts-readings.ts";
+import { DuctsReadings, ductsReadings } from "./ducts-readings.ts";
 import { createPeRoutes, peCoreRoutes, type PeInvocationFactory } from "./pe-routes.ts";
 import { runPods } from "./family-actions.ts";
 import { bindWork, readingKey, readingRequestsSchema } from "@pe/agent-contracts";
@@ -231,9 +231,9 @@ const liveNativeRecipe = HostNativeReadLive.pipe(
 
 export const historicalRoutes = (inputs: HostInputContext["Service"]) => fansInputRoutes(inputs);
 
-/** One Fans HTTP/Work owner graph. Only primitive inputs and the lane vary; replay builds no live port. */
+/** One Fans HTTP/Work graph; live uses the bridge-subscribed retained owner, replay builds no live port. */
 export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostInputContext["Service"], options: {
-  readonly live?: { native: Layer.Layer<HostNativeRead>; files: Layer.Layer<HostFiles>;
+  readonly live?: { owner: DuctsReadings; native: Layer.Layer<HostNativeRead>; files: Layer.Layer<HostFiles>;
     marks: Layer.Layer<HostDocumentMarks>; inventory: Layer.Layer<HostSessionInventory> };
   readonly store?: import("@pe/runtime").RouteDocumentStore;
   readonly observed?: TakingObserver;
@@ -268,7 +268,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
   });
   yield* Layer.build(admittedBuiltinsLayer(workspace, undefined, registrations));
   if (!recorded && options.initialize) yield* Effect.promise(() => options.initialize!(workspace));
-  const owner = new DuctsReadings();
+  const owner = recorded ? new DuctsReadings() : live!.owner;
   const files = Context.get(services, HostFiles), marks = Context.get(services, HostDocumentMarks);
   const readSets = Context.get(services, HostInputReadSets);
   const json = (value: unknown) => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));
@@ -438,6 +438,8 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
   return { work, invocation, retainedCall, services };
 });
 
+type FansOwnerOptions = NonNullable<Parameters<typeof makeFansOwner>[1]>;
+
 class FansOwner extends Context.Service<FansOwner, Effect.Success<ReturnType<typeof makeFansOwner>>>()("pe/FansOwner") {}
 
 export const fansInputRoutes = (inputs: HostInputContext["Service"], options: Parameters<typeof makeFansOwner>[1] = {}) =>
@@ -504,7 +506,9 @@ export interface HttpLiveOptions {
   /** Test sentinel for the complete Revit/SDK/proxy composition. */
   readonly revitCompositionFactory?: typeof makeRevitComposition;
   /** Explicit primitive input ports; the HTTP, Work and retained owners remain the production graph. */
-  readonly fans?: Parameters<typeof makeFansOwner>[1];
+  readonly fans?: Omit<FansOwnerOptions, "live"> & {
+    readonly live?: Omit<NonNullable<FansOwnerOptions["live"]>, "owner">;
+  };
 }
 
 /**
@@ -621,7 +625,8 @@ function liveHttpLive(options: HttpLiveOptions) {
       inventory: Layer.succeed(HostSessionInventory, yield* HostSessionInventory.pipe(Effect.provide(HostSessionInventory.layer))),
     };
     const fans = yield* makeFansOwner(options.inputs, { registrations, pointers: threadPointerPort(options.inputs),
-      ...options.fans, store: options.fans?.store ?? fileRouteDocumentStore(productRouteWorkPath()), live });
+      ...options.fans, store: options.fans?.store ?? fileRouteDocumentStore(productRouteWorkPath()),
+      live: { ...live, owner: ductsReadings(yield* RevitBridge) } });
     const work = fans.work;
     const CommonAppLive = Layer.mergeAll(
       RemoteLive,
