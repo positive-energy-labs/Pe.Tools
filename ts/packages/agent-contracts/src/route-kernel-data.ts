@@ -243,6 +243,7 @@ export const RouteGraphJson = z.strictObject({
       route: ref,
       version: z.number().int().positive(),
       migrations: z.record(z.string().regex(/^[1-9][0-9]*$/), ref),
+      adopt: ref.optional(),
     })
     .optional(),
   readings: z.record(ref, routeReadingJsonSchema),

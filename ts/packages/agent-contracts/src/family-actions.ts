@@ -157,6 +157,7 @@ export const familyActions = {
       }),
   },
   "settings.observe": {
+    autoAdopt: true,
     says: "Adopt verified saved member bytes as the shared Work baseline; replacing pending edits requires explicit intent.",
     needs: "nothing",
     effect: "command",

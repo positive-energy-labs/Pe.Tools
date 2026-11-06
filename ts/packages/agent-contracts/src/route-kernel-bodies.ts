@@ -520,7 +520,17 @@ export interface RouteSeed<G extends RouteGraphJson, S extends SchemaTable, E ex
   readonly work?: WorkOf<G, S>;
   readonly works?: Readonly<Record<string, WorkOf<G, S>>>;
   readonly target?: Immutable<ExecutionTarget>;
-  readonly readings: { readonly [K in keyof G["readings"]]?: ReadingValue<G, S, E, K> };
+  readonly readings: {
+    readonly [K in keyof G["readings"]]?:
+      | ReadingValue<G, S, E, K>
+      | {
+          readonly fixtureSelect: {
+            readonly fields: readonly string[];
+            readonly values: Readonly<Record<string, ReadingValue<G, S, E, K>>>;
+            readonly fallback: ReadingValue<G, S, E, K>;
+          };
+        };
+  };
   readonly queries?: {
     readonly [K in keyof G["verbs"] as G["verbs"][K] extends { kind: "query" }
       ? K

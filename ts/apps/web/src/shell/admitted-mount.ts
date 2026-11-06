@@ -350,7 +350,7 @@ export function createRouteShell(
         revision: () => revision,
         release() {
           if (closed) return;
-          invocation.close();
+          invocation.suspend();
           resources = "released";
           readings.suspend();
           for (const id of Object.keys(route.data.readings)) geometry.suspend(id);
