@@ -106,6 +106,32 @@ function owner(
   return { readings, sources, subscriptions, update };
 }
 
+test.each(["ECONNREFUSED", "Reading subscriptions: 403"])("a failed POST (%s) fences even a delivered snapshot", async (failure) => {
+  vi.useFakeTimers();
+  const { readings, sources, update } = owner();
+  const frames: unknown[] = [];
+  let reject!: (error: Error) => void;
+  update.mockImplementationOnce(() => new Promise<void>((_resolve, fail) => { reject = fail; }));
+  try {
+    readings.subscribe(head, (frame) => frames.push(frame));
+    readings.subscribe({ kind: "machine" }, () => {});
+    await vi.advanceTimersByTimeAsync(0);
+    sources[0]!.onopen!();
+    expect(update.mock.calls[0]![1]).toEqual([head, { kind: "machine" }]);
+    sources[0]!.onmessage!(snapshot({ revision: 1 }));
+    expect(frames.at(-1)).toMatchObject({ kind: "snapshot", value: { revision: 1 } });
+    reject(Error(failure));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sources[0]!.closed).toBe(true);
+    expect(frames.at(-1)).toEqual({ kind: "stale", key: readingKey(head) });
+    expect(update).toHaveBeenCalledTimes(1);
+    readings.close();
+    await vi.advanceTimersByTimeAsync(31_001);
+    expect(sources).toHaveLength(1);
+    expect(update).toHaveBeenCalledTimes(1);
+  } finally { readings.close(); vi.useRealTimers(); }
+});
+
 test("an old bootstrap completion cannot mark a replacement's subscriptions sent", async () => {
   const { readings, sources, update } = owner();
   let finish!: () => void;
