@@ -337,6 +337,38 @@ export const acceptedPointPolicy = Effect.fn("RecordingPoints.acceptedPolicy")(f
 });
 const references = recordingReadSetReferences;
 
+const boundBodies = Effect.fn("RecordingPoints.boundBodies")(function* (
+  reader: RecordingReader,
+  document: Document,
+  binding: RecordingPoint["bindings"][number],
+) {
+  const root = yield* reader.readSets.get(binding.readSetId);
+  // Direct bindings predate authenticated mounted-body aggregation. Refuse rather than invent
+  // their missing consumer/body correspondence or silently migrate them by scanning the store.
+  if (root.recipe.key !== "accepted.reading" || root.recipe.scope !== document)
+    return yield* refuse(
+      "mismatch",
+      "Point binding is not an accepted reading; capture a new point",
+    );
+  const input = yield* Schema.decodeUnknownEffect(acceptedRecipe)(root.recipe.input).pipe(
+    Effect.mapError(() => refuse("mismatch", "Accepted reading metadata is invalid")),
+  );
+  const bodies = input.bodyVersions.map((_, index) => root.dependencies[`body:${index}`]);
+  if (
+    input.document !== document ||
+    bindingKey(input.consumer) !== bindingKey(binding) ||
+    !bodies.length ||
+    bodies.some((id) => !id) ||
+    input.bodyVersions.some((version) => !version) ||
+    Object.keys(root.dependencies).filter((key) => key.startsWith("body:")).length !== bodies.length
+  )
+    return yield* refuse(
+      "mismatch",
+      "Accepted reading consumer, body versions or links differ from its binding",
+    );
+  return bodies;
+});
+
 /** Read-only port. No caller can turn a read-set name into a point. */
 export function recordingPoints(reader: RecordingReader, readSets: ReadSets): RecordingPoints {
   const get = Effect.fn("RecordingPoints.get")(function* (
@@ -368,6 +400,7 @@ export function recordingPoints(reader: RecordingReader, readSets: ReadSets): Re
       if (seen.has(key))
         return yield* refuse("ambiguous", "Point binds one mounted consumer twice");
       seen.add(key);
+      yield* boundBodies(reader, document, binding);
       const refs = yield* references(reader, document, binding.readSetId);
       bytes += refs.metadata;
       if (bytes > defaultReadSetLimits.metadataBytesPerRoot)
@@ -396,23 +429,37 @@ export function recordingPoints(reader: RecordingReader, readSets: ReadSets): Re
     open: Effect.fn("RecordingPoints.open")(function* (document, id, consumer, recipe) {
       const point = yield* get(document, id);
       const binding = point.bindings.find((bound) => bindingKey(bound) === bindingKey(consumer));
-      // Preserve the existing strict unique/ambiguous policy. Never prefer complete or latest.
-      const opened = yield* readSets.open(
-        recipe,
-        binding ? (binding.readSetId as ReadSetId) : null,
+      if (!binding)
+        return yield* refuse("miss", "Point holds no binding for this mounted consumer");
+      const bodies = yield* boundBodies(reader, document, binding);
+      const graph = new Map(
+        (yield* readSetRecords(reader, binding.readSetId)).map((record) => [record.id, record]),
       );
-      const checked = references(reader, document, opened.id).pipe(
-        Effect.flatMap((refs) => {
-          const allowed = new Set<string>();
-          for (let at = point.takingRange.start; at < point.takingRange.end; at++)
-            allowed.add(reader.takingAt(at)!.id);
-          return [...refs.ids].every((id) => allowed.has(id))
-            ? Effect.void
-            : Effect.fail(refuse("mismatch", "Selected consumer is outside this point"));
-        }),
-      );
-      yield* checked.pipe(Effect.onError(() => opened.close));
-      return opened;
+      const visited = new Set<string>(),
+        matches: ReadSetId[] = [];
+      const recipeKey = (recipe: ConsumerRecipe) =>
+        canonicalJson([recipe.key, recipe.input, recipe.scope]);
+      const visit = (id: string) => {
+        if (visited.has(id)) return;
+        visited.add(id);
+        const record = graph.get(id)!;
+        if (recipeKey(record.recipe) === recipeKey(recipe)) matches.push(record.id as ReadSetId);
+        record.children.forEach((child) => visit(child.readSetId));
+        // Authority proves scope for the entire graph, but never supplies a displayed body.
+        Object.entries(record.dependencies).forEach(([name, id]) => {
+          if (name !== "documentAuthority") visit(id);
+        });
+      };
+      bodies.forEach(visit);
+      if (!matches.length)
+        return yield* refuse("miss", "Accepted bodies hold no matching consumer recipe");
+      if (matches.length > 1)
+        return yield* refuse(
+          "ambiguous",
+          "Distinct accepted bodies match this recipe; an exact body binding is required",
+        );
+      // All graph/range refusals precede opening. The existing loader allocates only on success.
+      return yield* readSets.open(recipe, matches[0]!);
     }),
   };
 }
