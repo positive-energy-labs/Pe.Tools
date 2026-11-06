@@ -172,50 +172,44 @@ test("a stalled observed-document leg publishes unknown at the Machine deadline"
 });
 
 /** A Pea acquisition receipt as instances-actions records it: intent first, then its steps. */
-function acquiring(
-  verb: "start" | "open",
-  state: ActionReceipt["state"],
-  process: { pid: number; processStartUtc: string },
-  stepState: "succeeded" | "running" = "succeeded",
-  openId = "product-id",
-): ActionReceipt {
+function acquiring(process: { pid: number; processStartUtc: string }): ActionReceipt {
   const start = { year: "2025", owner: "pea", addins: "on" } as const;
   const intent = planAcquisition(
     "launch",
     "C:/pea-work",
     { kind: "create", year: "2025" },
-    verb === "open" ? { source: "C:/Tower.rvt", into: { start } } : null,
+    { source: "C:/Tower.rvt", into: { start } },
     false,
   );
-  const work = verb === "open" ? (intent.document!.origin as { work: string }).work : null;
-  const step = (key: string, result: unknown) =>
-    stepState === "succeeded"
-      ? { id: key, kind: "native", key, input: {}, state: "succeeded", result }
-      : { id: key, kind: "native", key, input: {}, state: "running" };
+  const work = (intent.document!.origin as { work: string }).work;
+  const step = (key: string, result: unknown) => ({
+    id: key,
+    kind: "native",
+    key,
+    input: {},
+    state: "succeeded",
+    result,
+  });
   return {
     id: "launch",
-    key: `instances.${verb}`,
+    key: "instances.open",
     caller: { kind: "human", via: "local" },
     basis: { kind: "human" },
     effects: [],
     consumes: [],
     claims: [],
     consent: { by: "press" },
-    state,
+    state: "succeeded",
     target: { kind: "host" },
-    input: verb === "start" ? start : { source: "C:/Tower.rvt", into: { start } },
-    steps:
-      verb === "start"
-        ? [step("instances.start", { session: { process } })]
-        : [
-            step("instances.open.start", { session: { process } }),
-            step("instances.open", { document: { openId, path: work } }),
-          ],
+    input: { source: "C:/Tower.rvt", into: { start } },
+    steps: [
+      step("instances.open.start", { session: { process } }),
+      step("instances.open", { document: { openId: "product-id", path: work } }),
+    ],
     prepared: { state: "ready", value: { target: null, acquisition: intent } },
     recovery: [],
     startedAt: row.observedAtUtc,
-    ...(state === "succeeded" ? { result: null } : {}),
-    ...(state === "failed" ? { error: "failed", status: 409 } : {}),
+    result: null,
   } as ActionReceipt;
 }
 
@@ -440,7 +434,7 @@ const accessesAt = async (
   vi.mocked(f.sources.targets.targets).mockReturnValue(targets);
   vi.mocked(f.sources.attachments).mockResolvedValue([{ ...attached, documentIdentity }]);
   if (acquired) {
-    vi.mocked(f.sources.actions).mockResolvedValue([acquiring("open", "succeeded", row.process)]);
+    vi.mocked(f.sources.actions).mockResolvedValue([acquiring(row.process)]);
     vi.mocked(f.sources.sessions).mockResolvedValue([controlled(acquired.sdk)]);
     vi.mocked(f.sources.attachments).mockResolvedValue([
       {
