@@ -97,8 +97,6 @@ function owner(
         closed: false,
         close: () => void (source.closed = true),
       };
-      for (const request of JSON.parse(new URL(url).searchParams.get("keys")!))
-        subscriptions.add(readingKey(request));
       sources.push(source);
       return source as unknown as EventSource;
     },
@@ -107,6 +105,38 @@ function owner(
   );
   return { readings, sources, subscriptions, update };
 }
+
+test("an old bootstrap completion cannot mark a replacement's subscriptions sent", async () => {
+  const { readings, sources, update } = owner();
+  let finish!: () => void;
+  update.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+  try {
+    readings.subscribe(head, () => {});
+    await Promise.resolve();
+    expect(new URL(sources[0]!.url).searchParams.has("keys")).toBe(false);
+    sources[0]!.onopen!();
+    expect(update).toHaveBeenCalledTimes(1);
+    readings.dirty(head);
+    await Promise.resolve();
+    sources[1]!.onopen!();
+    finish();
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+    expect(update.mock.calls.map(([id]) => id)).toEqual(sources.map(source => new URL(source.url).searchParams.get("connection")));
+    expect(update.mock.calls.map(([, add]) => add)).toEqual([[head], [head]]);
+    readings.close();
+    expect(sources.every(source => source.closed)).toBe(true);
+    sources[1]!.onopen!();
+    await Promise.resolve();
+    expect(update).toHaveBeenCalledTimes(2);
+  } finally { readings.close(); }
+  const unopened = owner();
+  unopened.readings.subscribe(head, () => {});
+  await Promise.resolve();
+  unopened.readings.close();
+  unopened.sources[0]!.onopen!();
+  await Promise.resolve();
+  expect(unopened.update).not.toHaveBeenCalled();
+});
 
 test("a 33-second hide keeps evidence and the stream; explicit refresh replaces changed revisions", async () => {
   const { readings, sources } = owner();

@@ -1,4 +1,4 @@
-import { observeResources, resourceResponse } from "../src/resource-stream.ts";
+import { observeResources, resourceResponse, updateResourceSubscriptions } from "../src/resource-stream.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { address, routeBindingsSchema, workKey } from "@pe/agent-contracts";
@@ -280,14 +280,17 @@ test("resource stream publishes absent Work, an applied revision, and ends on ab
   const module = workspace(memoryStore().store);
   const scopes = { observe: () => () => {} };
   const abort = new AbortController();
+  const observe = observeResources(module, scopes);
+  const url = "http://host/pe/resources?connection=work-bootstrap";
   const response = resourceResponse(
-    new Request(
-      `http://host/pe/resources?${new URLSearchParams({ keys: JSON.stringify([{ kind: "work", ...documentA }]) }).toString()}`,
-      { signal: abort.signal },
-    ),
-    observeResources(module, scopes),
+    new Request(url, { signal: abort.signal }), observe,
   );
   const reader = response.body!.getReader();
+  expect(new TextDecoder().decode((await reader.read()).value)).toBe(": open\n\n");
+  const add = () => updateResourceSubscriptions(new Request(url, {
+    method: "POST", body: JSON.stringify({ add: [{ kind: "work", ...documentA }], remove: [] }),
+  }), observe);
+  expect((await add()).status).toBe(200);
   expect(await readSse(reader)).toMatchObject({ kind: "snapshot", value: null });
   await bind(module).apply("human", [{ path: ["values", "sse"], value: "landed" }], 0);
   expect(await readSse(reader)).toMatchObject({
@@ -296,6 +299,7 @@ test("resource stream publishes absent Work, an applied revision, and ends on ab
   });
   abort.abort();
   await expect(reader.read()).rejects.toThrow("closed");
+  expect((await add()).status).toBe(409);
 });
 
 function acksStream(module: RouteWorkspace, signal?: AbortSignal) {

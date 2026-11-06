@@ -3,7 +3,8 @@ import { pipeline } from "node:stream/promises";
 import { resolve } from "node:path";
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { hostOpSafety } from "@pe/host-contracts/generated";
-import { familyReads, scheduleReads, readingRequestsSchema } from "@pe/agent-contracts";
+import { familyReads, scheduleReads, readingRequestsSchema, type ReadingRequest } from "@pe/agent-contracts";
+import { decodeResourceSubscriptionUpdate } from "../../packages/runtime/src/resource-stream.ts";
 import type { Plugin, ProxyOptions } from "vite-plus";
 import {
   HOST_RUNTIME_SERVICE_HEADER,
@@ -53,17 +54,16 @@ export function readHostRequest(method: string, url: string, body?: unknown): bo
       Object.hasOwn(path === "/family/readings" ? familyReads : scheduleReads, key)
     );
   }
+  if (method === "POST" && path === "/pe/resource-subscriptions") {
+    const decoded = decodeResourceSubscriptionUpdate(typeof body === "string" ? body : JSON.stringify(body) ?? "");
+    return !("error" in decoded) && readsOnly(decoded.add);
+  }
   if (method !== "GET") return false;
   if (path === "/pe/resources") {
     try {
-      const requests = readingRequestsSchema.parse(
-        JSON.parse(new URL(url, "http://127.0.0.1").searchParams.get("keys") ?? "null"),
-      );
-      // This read adapter performs temporary family placement; GET is not a safety signal.
-      return requests.every(
-        (request) =>
-          request.kind !== "families-matrix" ||
-          readHostRequest("POST", "/call", { key: "revit.matrix.loaded-families" }),
+      const query = new URL(url, "http://127.0.0.1").searchParams;
+      return !query.has("keys") && !!query.get("connection") || readsOnly(
+        readingRequestsSchema.parse(JSON.parse(query.get("keys") ?? "null")),
       );
     } catch {
       return false;
@@ -83,6 +83,10 @@ export function readHostRequest(method: string, url: string, body?: unknown): bo
     /^\/captures\/[0-9a-f]{64}\.png$/.test(path)
   );
 }
+
+// This read adapter performs temporary family placement; neither GET nor POST is a safety signal.
+const readsOnly = (requests: ReadingRequest[]) => requests.every(request =>
+  request.kind !== "families-matrix" || readHostRequest("POST", "/call", { key: "revit.matrix.loaded-families" }));
 
 export function checkoutServiceName(): string {
   const base = sourceHostServiceName(readHostCheckout() ?? checkoutRoot);
@@ -161,7 +165,7 @@ async function checkoutMiddleware(
       let body: string | undefined;
       if (
         req.method === "POST" &&
-        ["/call", "/family/readings", "/schedules/readings"].includes(
+        ["/call", "/family/readings", "/schedules/readings", "/pe/resource-subscriptions"].includes(
           new URL(req.url!, target).pathname,
         )
       ) {
@@ -176,7 +180,8 @@ async function checkoutMiddleware(
         }
         body = Buffer.concat(chunks).toString("utf8");
       }
-      if (!readHostRequest(req.method ?? "GET", req.url!, body ? JSON.parse(body) : undefined)) {
+      if (!readHostRequest(req.method ?? "GET", req.url!,
+        new URL(req.url!, target).pathname === "/pe/resource-subscriptions" ? body : body ? JSON.parse(body) : undefined)) {
         res.statusCode = 403;
         res.setHeader("content-type", "application/json");
         res.end(

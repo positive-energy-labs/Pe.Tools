@@ -303,7 +303,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
     const url = new URL(web.url), declared = matchPeRoute(web.method, url.pathname)!;
     if (!["ducts.roster", "ducts.sheet", "work.get", "resources.stream"].includes(declared.id)) return {};
     const stream = declared.id === "resources.stream";
-    const reading = stream ? readingRequestsSchema.parse(JSON.parse(url.searchParams.get("keys") ?? "[]")) : [];
+    const reading = recorded && stream ? readingRequestsSchema.parse(JSON.parse(url.searchParams.get("keys") ?? "[]")) : [];
     if (recorded && stream && reading.length !== 1)
       throw new InvalidRead({ message: "A recorded resource request needs one exact frame read set", status: 409, problem: "recording.context" });
     const input = stream && recorded ? reading[0] : declared.route.input.parse({ params: declared.params,

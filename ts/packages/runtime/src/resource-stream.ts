@@ -131,16 +131,10 @@ const connections = new WeakMap<
   ResourceObserver,
   Map<string, (add: ReadingRequest[], remove: string[]) => void>
 >();
-export async function updateResourceSubscriptions(
-  request: Request,
-  observe: ResourceObserver,
-): Promise<Response> {
-  const id = new URL(request.url).searchParams.get("connection") ?? "";
-  const update = connections.get(observe)?.get(id);
-  if (!update) return Response.json({ error: "Reading connection retired" }, { status: 409 });
-  const raw = await request.text();
+/** The host and its borrowed-read proxy admit the same bounded subscription body. */
+export function decodeResourceSubscriptionUpdate(raw: string): { add: ReadingRequest[]; remove: string[] } | { error: string } {
   if (new TextEncoder().encode(raw).byteLength > READING_MAX_REQUEST_BYTES)
-    return Response.json({ error: "Resource request is too large" }, { status: 400 });
+    return { error: "Resource request is too large" };
   try {
     const value = JSON.parse(raw);
     const add = readingRequestSchema.array().max(READING_MAX_KEYS).parse(value.add);
@@ -150,7 +144,19 @@ export async function updateResourceSubscriptions(
       value.remove.some((key: unknown) => typeof key !== "string")
     )
       throw Error("Invalid removals");
-    update(add, value.remove);
+    return { add, remove: value.remove as string[] };
+  } catch {
+    return { error: "Invalid resource keys" };
+  }
+}
+export async function updateResourceSubscriptions(request: Request, observe: ResourceObserver): Promise<Response> {
+  const id = new URL(request.url).searchParams.get("connection") ?? "";
+  const update = connections.get(observe)?.get(id);
+  if (!update) return Response.json({ error: "Reading connection retired" }, { status: 409 });
+  const value = decodeResourceSubscriptionUpdate(await request.text());
+  if ("error" in value) return Response.json({ error: value.error }, { status: 400 });
+  try {
+    update(value.add, value.remove);
     return Response.json({ ok: true });
   } catch {
     return Response.json({ error: "Invalid resource keys" }, { status: 400 });
@@ -190,7 +196,8 @@ export function resourceResponse(
     return Response.json({ error: "Resource request is too large" }, { status: 400 });
   let requests: ReadingRequest[];
   try {
-    requests = readingRequestsSchema.parse(JSON.parse(raw));
+    requests = !url.searchParams.has("keys") && url.searchParams.get("connection")
+      ? [] : readingRequestsSchema.parse(JSON.parse(raw));
   } catch {
     return Response.json({ error: "Invalid resource keys" }, { status: 400 });
   }
@@ -326,6 +333,7 @@ export function resourceResponse(
     {
       start(ctl) {
         controller = ctl;
+        if (!requests.length) controller.enqueue(encoder.encode(": open\n\n"));
         request.signal.addEventListener("abort", abort, { once: true });
         if (request.signal.aborted) {
           abort();
