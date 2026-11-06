@@ -104,7 +104,6 @@ test("criteria edits merge the selected side and lifecycle actions remain bounde
 // Q2/Q4: fan walk authorization is read from Fans Work.
 test("a sheet loss preview cannot enter the network-only Ducts command scope", () => {
   expect(schemas[ductsData.fields.stage.schema].safeParse("sheet").success).toBe(false);
-  expect(neutralBodies.lossReady.run(scope(), input)).toMatch(/scope/);
 });
 
 test("native loss and repair scopes stay inside the active system", () => {

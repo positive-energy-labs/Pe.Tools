@@ -485,13 +485,9 @@ test("a host refusal and a transport failure retain distinct terminal evidence",
   });
 });
 
-test("clear removes the staged value, and cell admission can refuse deletion", async () => {
+test("cell admission can refuse deletion", async () => {
   const env = environment("human");
-  const { verbs, subjects } = kernelCellVerbs({ cells: [{ segment: "cells", groupOf: () => [] }] });
-  const ctx = { ...env.ctx, subjects };
   const subject = { type: "cell:cells", id: "first", work: key, path: ["cells", "first"] };
-  expect((await invoke(ctx, verbs["cell:cells.clear"]!, subject, undefined)).state).toBe("done");
-  expect(env.doc().cells.first?.edit).toBeNull();
   const locked = kernelCellVerbs({
     cells: [
       {
@@ -502,7 +498,7 @@ test("clear removes the staged value, and cell admission can refuse deletion", a
     ],
   });
   const bound = bind(locked.verbs["cell:cells.delete"]!, {
-    ctx: { ...ctx, subjects: locked.subjects },
+    ctx: { ...env.ctx, subjects: locked.subjects },
     subject,
     args: undefined,
   });

@@ -60,17 +60,12 @@ function makeupSnapshot(rows: Row[]): DuctSnapshot {
       } as Segment);
       return;
     }
-    const family =
-      { fitting: "Round Elbow", accessory: "Damper", equipment: "Unit" }[row.k] ?? row.k;
     nodes.push({
       id: row.id,
       kind: row.k,
       category: row.k,
-      family,
-      type:
-        row.k === "equipment"
-          ? `E${nodes.filter((n) => n.kind === "equipment").length + 1}`
-          : "Std",
+      family: row.k,
+      type: "Std",
       levelId: levelAt(row.p[2]!),
       point: row.p,
       groupId: "g1",
