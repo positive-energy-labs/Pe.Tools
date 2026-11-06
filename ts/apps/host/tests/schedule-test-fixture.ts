@@ -74,7 +74,7 @@ export async function setup() {
     heads: { observe: () => () => {} },
     observeHostResource: (request, publish) => observeHost(request, publish),
     // As the host boots: one mark holder per bridge, shared by every Reading and every push.
-    markReadings: (observe) => (request, publish) => markReadings(marks, (ref, key, at) => Effect.runPromise(marks.readFrame(ref, key, at)))(observe)(request, publish),
+    markReadings: (observe) => (request, publish) => markReadings(marks, (ref, key, at) => ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null))(observe)(request, publish),
     registrations: [
       {
         spec: scheduleGridRouteState,

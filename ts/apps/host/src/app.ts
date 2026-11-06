@@ -323,6 +323,13 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
     const scoped = (current: InputConsumption): WorkInputRunner => (effect) =>
       runPods({}, Effect.provide(effect, Context.add(admitted, CurrentInputConsumption, current)));
     const complete = (current: InputConsumption) => scoped(current)(sealed(current));
+    const activeFrames = new Set<InputConsumption>();
+    let closingResources = false;
+    const closeResources = () => { if (closingResources && !activeFrames.size) void invoke(consumption.close); };
+    const finishFrame = async (current: InputConsumption) => {
+      try { await invoke(current.close); }
+      finally { activeFrames.delete(current); closeResources(); }
+    };
     const inventory = Context.get(services, HostSessionInventory);
     const sources = (current: InputConsumption): DuctsSheetSources => {
       const context = Context.add(admitted, CurrentInputConsumption, current);
@@ -362,14 +369,24 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
         constructor(readonly subscription?: ReadSetId, readonly envelope?: DuctsReadingEnvelope) { super(); }
       }
       const frameRuns = new WeakMap<WorkCarriage, WorkInputRunner>();
-      const activeFrames = new Set<InputConsumption>();
+      const readyFrames = new Set<InputConsumption>();
       let released = false;
       const frameRecipe: ConsumerRecipe = { key: "resource.frame", input: json(reading), scope: recipe.scope };
-      const frame = (recipe = frameRecipe) => recorded ? consumption : child(consumption, recipe);
+      const frame = (recipe = frameRecipe) => {
+        const current = recorded ? consumption : child(consumption, recipe);
+        activeFrames.add(current);
+        return current;
+      };
       const work: WorkReadContext = { begin: (read) => {
         try {
-          const current = frame(), begun = workReadContext(current, scoped(current)).begin(read);
+          const current = frame();
+          const run: WorkInputRunner = (effect) => scoped(current)(effect).finally(() => {
+            if (released) return finishFrame(current);
+            readyFrames.add(current);
+          });
+          const begun = workReadContext(current, run).begin(read);
           if (begun.ok && begun.carriage) frameRuns.set(begun.carriage, scoped(current));
+          else void finishFrame(current);
           return begun;
         } catch (error) { return { ok: false, error }; }
       } };
@@ -387,12 +404,15 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
         : (() => { const { kind, session, ...args } = reading; return { key: "ducts.tables", input: args, scope: { bridgeSessionId: session } }; })();
       const current = frame();
       if (notification) {
+        readyFrames.add(current);
         const carriage = new FrameCarriage(); frameRuns.set(carriage, scoped(current));
         publish(resourceSnapshot(key, { value: notification.envelope }), carriage);
         return () => {};
       }
       void invoke(retained(current, input, {}, "acquire", inventory.document)).then(async (response) => {
         await HttpServerResponse.toWeb(response).body?.cancel();
+        if (closed) { await finishFrame(current); return; }
+        readyFrames.add(current);
         let first = true;
         if (!closed) release = owner.observe(reading, (value) => {
           try {
@@ -406,7 +426,8 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
               failure: { kind: "failed", code: failure.problem ?? "ReadingFailed", message: failure.message } });
           }
         });
-      }).catch((error) => {
+      }).catch(async (error) => {
+        await finishFrame(current);
         if (!closed) publish({ kind: "failure", key, error: error.message,
           failure: { kind: "failed", code: error.problem ?? "ReadingFailed", message: error.message } });
       });
@@ -415,6 +436,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
       const release = markReadings(marks, async (ref, key, at, carriage, update) => {
         const runFrame = carriage ? frameRuns.get(carriage) : undefined;
         if (!runFrame) {
+          if (!ref) return null;
           if (!recorded && (!writer || writer.capture.truncated())) return invoke(marks.readFrame(ref, key, at));
           throw new InvalidRead({ message: "Resource frame lost its consumption context", status: 409, problem: "recording.context" });
         }
@@ -427,6 +449,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
             ? { ...frameRecipe, key: "resource.notification", input: json({ reading, envelope: carriage.envelope }) }
             : previous.recipe, null) : previous;
           if (independent) activeFrames.add(current);
+          readyFrames.delete(current);
           if (!update && carriage) frameRuns.set(carriage, scoped(current));
           return yield* Effect.tryPromise({ try: async () => {
             try {
@@ -434,18 +457,23 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
               if (update) await scoped(current)(current.linkReadSet("value", previous.id));
               else if (carriage instanceof FrameCarriage && carriage.subscription)
                 await scoped(current)(current.linkReadSet("subscription", carriage.subscription));
-              const value = await scoped(current)(marks.readFrame(ref, key, at)); await complete(current); return value;
-            } finally { await scoped(current)(current.close); activeFrames.delete(current); }
+              const value = ref ? await scoped(current)(marks.readFrame(ref, key, at)) : null;
+              if (!released) await complete(current);
+              return value;
+            } finally { await finishFrame(current); }
           }, catch: (error) => isDoorFailure(error) ? error : new InvalidRead({ message: String(error), status: 409, problem: "recording.context" }) });
         }));
       })(observeResources(workspace, undefined, retainedResource, work))(reading, publish, after);
       return () => {
         released = true; release();
-        void invoke(Effect.forEach([...activeFrames, consumption], (current) => current.close, { discard: true }));
+        for (const current of readyFrames) void finishFrame(current);
+        readyFrames.clear();
+        if (writer?.capture.truncated()) for (const current of activeFrames) void finishFrame(current);
       };
     };
     const source = sources(consumption);
     return { sheets: source, work: source.inputs!.work,
+      closeResources: () => { closingResources = true; closeResources(); },
       document: (ref) => runPods({}, Effect.provide(inventory.document(ref), Context.add(admitted, CurrentInputConsumption, consumption))), observe,
       finish: async (result) => {
         if (stream) {

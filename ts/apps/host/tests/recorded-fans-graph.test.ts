@@ -8,7 +8,7 @@ import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
-import { bindWork, address, DUCTS_BODY_VERSION_HEADER, type Caller, type ReadingRequest } from "@pe/agent-contracts";
+import { bindWork, address, DUCTS_BODY_VERSION_HEADER, readingKey, readingRequestsSchema, type Caller, type ReadingRequest } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
 import { fansInputRoutes } from "../src/app.ts";
@@ -16,7 +16,7 @@ import { HostInputContext } from "../src/input-context.ts";
 import { HostFiles } from "../src/host-files.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
-import { admittedRequestIdentity, RequestIdentity } from "../src/request-services.ts";
+import { admittedRequestIdentity, RequestIdentity, readSchemas } from "../src/request-services.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { FIRM_SEED } from "../src/ducts-inputs.ts";
 import { admitNativeCaller } from "../src/native-read-policy.ts";
@@ -87,14 +87,14 @@ const nativeValue = async (response: Response) => ({
 function resourceFrames(response: Response) {
   expect(response.status).toBe(200);
   const reader = response.body!.getReader(); let text = "";
-  return { close: () => reader.cancel(), next: async () => {
+  return { close: () => reader.cancel(), next: async (events = false) => {
     while (true) {
       const end = text.indexOf("\n");
       if (end >= 0) {
         const line = text.slice(0, end); text = text.slice(end + 1);
         if (line.startsWith("data:")) {
           const frame = JSON.parse(line.slice(5));
-          if (frame.kind === "snapshot" || frame.kind === "failure") return frame;
+          if (frame.kind === "snapshot" || frame.kind === "failure" || (events && frame.kind === "event")) return frame;
         }
       } else {
         let timer: ReturnType<typeof setTimeout>;
@@ -109,8 +109,16 @@ async function firstFrame(response: Response) {
   try { return await frames.next(); } finally { await frames.close(); }
 }
 
-test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "tamper"] as const)("real Fans graph %s", async (mode) => {
-  const capturing = mode !== "off", recovery = mode === "recovery";
+test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "tamper", ...(process.env.PE_FANS_COLD_NETWORK ? ["cold-off", "cold-on"] as const : [])] as const)("real Fans graph %s", async (mode) => {
+  const isCold = mode.startsWith("cold-");
+  const driverSource = process.env.PE_FANS_COLD_NETWORK;
+  if (isCold && (!driverSource || !existsSync(driverSource))) throw Error("Cold shell proof requires the captured Driver network asset");
+  const driver = isCold ? JSON.parse(readFileSync(driverSource!, "utf8").replace(/^\uFEFF/, "")) : undefined;
+  const batches: { add: ReadingRequest[]; remove: string[] }[] = driver?.entries.filter((entry: any) => entry.url.includes("/pe/resource-subscriptions")).map((entry: any) => JSON.parse(entry.init.body)) ?? [];
+  const coldKeys = isCold ? readingRequestsSchema.parse(batches[0]!.remove.map((key) => JSON.parse(key))) : [];
+  const ref = isCold ? (coldKeys.find((key) => key.kind === "ducts-snapshot") as Extract<ReadingRequest, { kind: "ducts-snapshot" }>).target : { session: "captured-chadds", openId: "chadds-open" };
+  const actualTarget = { processIncarnation: { pid: 42, startedAt: 1000 }, openDocumentLifetime: { openId: ref.openId } };
+  const capturing = mode !== "off" && mode !== "cold-off", recovery = mode === "recovery";
   liveFactories.recorded = false;
   const dir = await mkdtemp(join(tmpdir(), "pe-fans-graph-"));
   const completed: { recipe: ConsumerRecipe; id: ReadSetId; requestId?: string; caller?: Caller }[] = []; let nativeCalls = 0, poisoned = 0;
@@ -119,6 +127,8 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
   const entered = Promise.withResolvers<void>(), releaseHuman = Promise.withResolvers<void>();
   const raw = JSON.parse(readFileSync(source, "utf8").replace(/^\uFEFF/, ""));
   const snapshot = Schema.decodeUnknownSync(Schema.Json)(raw.result ?? raw);
+  const snapshotContract = isCold ? await run(readSchemas("ducts.snapshot.walk")) : undefined;
+  if (snapshotContract) Schema.decodeUnknownSync(snapshotContract.response)(snapshot);
   await mkdir(join(dir, "catalogs")); await writeFile(join(dir, "firm.json"), JSON.stringify(FIRM_SEED));
   const writer = await run(openRecordingWriter(join(dir, "bundle"), identity, bounds));
   const inputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", ...(capturing ? { captureStore: writer } : {}) }))));
@@ -156,6 +166,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
       }),
       initialize: async (owner) => {
         workspace = owner;
+        if (isCold) return;
         for (const [revision, cfm] of [[0, 250], [1, 300]] as const)
           expect(await owner.apply(key("fans"), "fans", "human", [{ path: ["flows", "4", "edit"], value: { value: { cfm } } }], revision)).toMatchObject({ ok: true });
         expect(await owner.apply(key("ducts"), "ducts", "human", [], 0)).toMatchObject({ ok: true });
@@ -274,6 +285,80 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
     } finally { await frames.close(); }
   };
   try {
+    if (isCold) {
+      const fans = builtinEnrollments.find((entry) => entry.routeKey === "fans")!;
+      const fingerprint = workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`);
+      const scope = bindWork("fans", null, undefined, ref);
+      const admission = { routeKey: "fans", fingerprint };
+      const works: ReadingRequest[] = [{ ...scope, kind: "work", admission },
+        { ...scope, route: "ducts", kind: "work", admission: { ...admission, reading: "ductsWork" } },
+        { kind: "work-acks", work: scope, admission }];
+      const all = [...works, ...coldKeys];
+      const connection = crypto.randomUUID();
+      expect(nativeCalls).toBe(0); expect(completed).toEqual([]);
+      const streamResponse = await send(live, `/pe/resources?connection=${connection}&keys=${encodeURIComponent(JSON.stringify(all))}`);
+      if (!streamResponse.ok) throw Error(await streamResponse.text());
+      let frames = resourceFrames(streamResponse);
+      const seen: any[] = [];
+      const ready = async (keys: ReadingRequest[]) => {
+        const pending = new Set(keys.map(readingKey));
+        while (pending.size) {
+          const frame = await frames.next(true); seen.push(frame);
+          if (frame.kind === "snapshot" && frame.value?.state && frame.value.state !== "ready") continue;
+          pending.delete(frame.key);
+        }
+      };
+      try {
+        await ready(all); expect(writer.capture.truncated(), "initial coexistence").toBeNull();
+        for (const batch of batches) {
+          const response = await send(live, `/pe/resource-subscriptions?connection=${connection}`, batch);
+          expect(response.status, await response.clone().text()).toBe(200);
+          if (batch.add.length) await ready(batch.add);
+          expect(writer.capture.truncated(), "captured subscription batch").toBeNull();
+        }
+        const removeAll = await send(live, `/pe/resource-subscriptions?connection=${connection}`, { add: [], remove: all.map(readingKey) });
+        expect(removeAll.status).toBe(200);
+        const addAll = await send(live, `/pe/resource-subscriptions?connection=${connection}`, { add: all, remove: [] });
+        expect(addAll.status).toBe(200); await ready(all);
+        const beforeEdit = seen.length;
+        expect(await workspace!.apply(scope, "fans", "human", [{ path: ["parameters", "fanFlow", "edit"], value: { value: "PE_M_Fan_AirFlow" } }], 0)).toMatchObject({ ok: true });
+        await ready([works[0]!, works[2]!]); expect(writer.capture.truncated(), "changed Work and ack after slot edit").toBeNull();
+        const edits = seen.slice(beforeEdit);
+        expect(edits.find((frame) => frame.key === readingKey(works[0]!))?.value).toMatchObject({ revision: 1, doc: { parameters: { fanFlow: { edit: { value: "PE_M_Fan_AirFlow" } } } } });
+        expect(edits.find((frame) => frame.key === readingKey(works[2]!))).toMatchObject({ kind: "event", value: { revision: 1 } });
+        const previous = batches.flatMap((batch) => batch.add).find((key) => key.kind === "ducts-snapshot")! as Extract<ReadingRequest, { kind: "ducts-snapshot" }>;
+        const selected = { ...previous, slots: { ...previous.slots, fanFlow: "PE_M_Fan_AirFlow" } };
+        const beforeSelection = nativeCalls;
+        const changed = await send(live, `/pe/resource-subscriptions?connection=${connection}`, { remove: [readingKey(previous)], add: [selected] });
+        expect(changed.status, await changed.clone().text()).toBe(200); await ready([selected]);
+        expect(nativeCalls).toBe(beforeSelection + 1);
+        expect(writer.capture.truncated(), "slot reading replacement").toBeNull();
+        const reopened = [...works, coldKeys.find((key) => key.kind === "ducts-tables")!, selected];
+        for (let i = 0; i < 70; i++) {
+          await frames.close();
+          frames = resourceFrames(await send(live, `/pe/resources?keys=${encodeURIComponent(JSON.stringify(reopened))}`));
+          await ready(reopened);
+          expect(writer.capture.truncated(), `connection reopen ${i}`).toBeNull();
+        }
+        const failures = seen.filter((frame) => frame.kind === "failure");
+        expect(failures, JSON.stringify(failures)).toEqual([]);
+        expect(writer.capture.truncated()).toBeNull();
+        if (capturing) for (const entry of completed.filter((entry) => entry.recipe.key === "resource.frame")) {
+          const set = await run(writer.readSets.get(entry.id)); expect(set.state).toBe("complete");
+          const kind = (entry.recipe.input as { kind: string }).kind;
+          expect(set.inputs.filter((input) => input.input.kind === "marks")).toHaveLength(kind === "ducts-tables" || kind === "work-acks" ? 0 : 1);
+        }
+        await writeFile(join(import.meta.dirname, `../../../../.artifacts/runs/kernel-crusade-20261104/step-7/${mode}-receipt.json`), JSON.stringify({
+          mode, state: "passed", snapshot: { path: source, bytes: readFileSync(source).length, sha256: createHash("sha256").update(readFileSync(source)).digest("hex"), schema: "readSchemas(ducts.snapshot.walk).response", schemaVersion: snapshotContract!.version },
+          driver: { path: driverSource, sha256: createHash("sha256").update(readFileSync(driverSource!)).digest("hex") },
+          frames: seen.length, reopens: 70, nativeCalls, sourceHashes: Object.fromEntries(["ts/apps/host/src/app.ts", "ts/apps/host/src/resource-adapters.ts", "ts/apps/host/src/pe-routes.ts", "ts/packages/runtime/src/resource-stream.ts"].map((file) => [file, createHash("sha256").update(readFileSync(join(import.meta.dirname, "../../../..", file))).digest("hex")])),
+        }, null, 2));
+      } finally {
+        await frames.close();
+        await writeFile(join(import.meta.dirname, `../../../../.artifacts/runs/kernel-crusade-20261104/step-7/${mode}-frames.json`), JSON.stringify(seen, null, 2));
+      }
+      return;
+    }
     if (mode === "endurance" || mode === "tamper") {
       await persistentProof();
       if (mode === "endurance") return;

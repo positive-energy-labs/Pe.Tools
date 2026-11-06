@@ -116,7 +116,7 @@ const documentIn = (value: unknown): DocumentRef | null => {
  * against today's clock. No consumer compares clocks. Work uses this same envelope boundary.
  */
 export const markReadings =
-  (marks: DocumentMarks, readFrame: (ref: DocumentRef, key: string, at?: number, carriage?: WorkCarriage, update?: boolean) => Promise<import('./document-marks.ts').MarkFrame>) =>
+  (marks: DocumentMarks, readFrame: (ref: DocumentRef | null, key: string, at?: number, carriage?: WorkCarriage, update?: boolean) => Promise<import('./document-marks.ts').MarkFrame | null>) =>
   (observe: ResourceObserver): ResourceObserver =>
   (request, publish, after) => {
     let bound = documentOf(request as never);
@@ -149,9 +149,9 @@ export const markReadings =
         if (closed) return;
         if (frame.kind !== 'snapshot') { publish(frame); return; }
         bound ??= documentIn(frame.value);
-        if (!bound) { publish(frame); return; }
         const consumed = await readFrame(bound, readingKey(request), update ? servedAt : takenIn(frame.value) ?? undefined, carriage, update);
         if (closed) return;
+        if (!consumed) { publish(frame); return; }
         if (!update) servedAt = consumed.servedAt;
         const changed = (consumed.marks.observedSince ?? 0) > consumed.servedAt || (consumed.marks.changedAt ?? 0) > consumed.servedAt;
         if (update && changed === emittedChanged) return;
@@ -159,7 +159,7 @@ export const markReadings =
         publish({ ...frame, changed });
       }).catch(fail).finally(() => { queued--; });
     };
-    unwatch = marks.subscribe(() => { if (latest) enqueue(latest, true, latestCarriage); });
+    unwatch = marks.subscribe(() => { if (latest && bound) enqueue(latest, true, latestCarriage); });
     try { release = observe(request, (frame, carriage) => enqueue(frame, false, carriage), after); }
     catch (error) { fail(error); }
     if (closed) end();

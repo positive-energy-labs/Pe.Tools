@@ -133,7 +133,7 @@ test("the envelope carries the mark: served unchanged, republished changed, with
   const { marks } = await holdMarks(world.bridge);
   const frames: ReadingFrame[] = [];
   const capture = { id: "c1", target: A, capturedAt: new Date().toISOString() };
-  const observe = markReadings(marks, (ref, key, at) => Effect.runPromise(marks.readFrame(ref, key, at)))(
+  const observe = markReadings(marks, (ref, key, at) => ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null))(
     hostResourceObserver(
       world.bridge,
       undefined as never,
@@ -193,7 +193,7 @@ test("the families matrix Reading streams an envelope, never the body, and wears
     placementScope: "AllLoaded" as const,
   };
   const frames: ReadingFrame[] = [];
-  const release = markReadings(marks, (ref, key, at) => Effect.runPromise(marks.readFrame(ref, key, at)))(
+  const release = markReadings(marks, (ref, key, at) => ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null))(
     hostResourceObserver(world.bridge, undefined as never, () => captures),
   )({ kind: "families-matrix", target: A, filter }, (frame) => frames.push(frame));
   await vi.waitFor(() => expect(frames).toHaveLength(1));

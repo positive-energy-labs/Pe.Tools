@@ -178,6 +178,7 @@ export function resourceResponse(
     logFrames: 4096,
   },
   registryOwner: ResourceObserver = observe,
+  onClose?: () => void,
 ): Response {
   const url = new URL(request.url);
   const raw = url.searchParams.get("keys") ?? "";
@@ -239,6 +240,7 @@ export function resourceResponse(
     request.signal.removeEventListener("abort", abort);
     if (connection) registry!.delete(connection);
     for (const release of releases.values()) release();
+    onClose?.();
     releases.clear();
     pending.clear();
     ready.clear();

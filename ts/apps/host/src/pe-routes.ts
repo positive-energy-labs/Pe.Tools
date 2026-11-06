@@ -203,6 +203,7 @@ export interface PeRouteInvocation {
   readonly sheets?: DuctsSheetSources;
   readonly document?: (ref: DocumentRef) => Promise<DocumentRow>;
   readonly observe?: ResourceObserver;
+  readonly closeResources?: () => void;
   readonly work?: import("@pe/runtime").WorkReadContext;
   readonly finish?: (result: { response: Response } | { error: unknown }) => Promise<void>;
 }
@@ -609,7 +610,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
     if (method === "POST" && declared.id === "resources.subscriptions")
       return updateResourceSubscriptions(request, observe);
     if (method === "GET" && declared.id === "resources.stream")
-      return resourceResponse(request, invocation.observe ?? observe, undefined, observe);
+      return resourceResponse(request, invocation.observe ?? observe, undefined, observe, invocation.closeResources);
     // Agent feedback (owner ruling 2026-10-14): any admitted caller may file; the host stamps it.
     if (method === "POST" && declared.id === "agent-feedback.submit") {
       const parsed = agentFeedbackSchema.safeParse(await body());
@@ -1422,7 +1423,7 @@ function* hostPeRoutes(
       threads.observe(request, publish, after) ??
       notices.observe(request, publish, after) ??
       hostObserve(request, publish, after),
-    markReadings: markReadings(marks, (ref, key, at) => runPods({}, Effect.provide(marks.readFrame(ref, key, at), runtime))),
+    markReadings: markReadings(marks, (ref, key, at) => ref ? runPods({}, Effect.provide(marks.readFrame(ref, key, at), runtime)) : Promise.resolve(null)),
     telemetry,
     log: receipts.log,
     reportContext: threads.reportContext,
