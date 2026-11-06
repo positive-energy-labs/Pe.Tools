@@ -196,6 +196,8 @@ test("historical entry serves real static files through identity and retains API
       expect(response.status).toBe(200); expect(response.headers.get("content-type")).toContain(type); expect(await response.text()).toBe(body);
     }
     expect((await fetch(`${host.base}/pe/features`, { headers })).status).toBe(200);
+    const malformed = await fetch(`${host.base}/assets/%`, { headers: { ...headers, accept: "text/html" } });
+    expect(malformed.status).toBe(403); expect(await malformed.text()).toContain("identity.path");
     for (const path of ["/pe/unknown", "/pe/unknown.js", "/assets/x%2f..%2f..%2fpe%2funknown", "/pe/environment", "/admin/unknown", "/host/status", "/unknown"]) {
       const response = await fetch(host.base + path, { headers: { ...headers, accept: "text/html" } });
       expect(response.status, path).toBe(409); expect(response.headers.get("content-type")).not.toContain("text/html");

@@ -7,6 +7,9 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { DocumentPicker } from "#/shell/application-route-shell";
 import type { PanePlace } from "#/shell/admitted-pane";
 import { peReadings } from "#/readings";
+import { bindSources } from "#/pages-bind/sources";
+import { bindPageSchema } from "#/pages-bind/graph";
+import type { ReadingContext, ReadingPublication } from "#/shell/readings";
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
 import { HelpWorld } from "./help";
 import { STARTUP_TEACHING, referenceTeaching } from "./teaching";
@@ -242,10 +245,13 @@ test("the original wait bound fails bootstrap even when a response body stops an
 });
 test("the real inventory hook feeds picker labels without fabricated pid and retains them after bad input", async () => {
   const registry = AtomRegistry.make();
-  let send!: Parameters<typeof peReadings.subscribe>[1];
+  const listeners = new Set<Parameters<typeof peReadings.subscribe>[1]>();
+  const send: Parameters<typeof peReadings.subscribe>[1] = (frame) => {
+    for (const listener of listeners) listener(frame);
+  };
   vi.spyOn(peReadings, "subscribe").mockImplementation((_request, listener) => {
-    send = listener;
-    return () => {};
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
   });
   const write = vi.fn();
   const place = { address: { read: () => new URLSearchParams(), write } } as unknown as PanePlace;
@@ -253,6 +259,17 @@ test("the real inventory hook feeds picker labels without fabricated pid and ret
     <RegistryContext.Provider value={registry}>
       <DocumentPicker place={place} target={null} needs="project" enabled />
     </RegistryContext.Provider>,
+  );
+  const pageFrames: ReadingPublication[] = [];
+  const releasePage = await bindSources()["bind.inventory"]!.open(
+    {
+      page: bindPageSchema.parse({ page: "tour", view: false }),
+      target: { kind: "host" }, workKey: null, workRevision: null, work: null,
+      attempt: { target: { kind: "host" }, workKey: null, generation: 1 },
+      trigger: { kind: "demand" }, args: undefined, inputs: {},
+      signal: new AbortController().signal,
+    } satisfies ReadingContext,
+    (frame) => pageFrames.push(frame),
   );
   const value = {
     sessions: [
@@ -275,16 +292,19 @@ test("the real inventory hook feeds picker labels without fabricated pid and ret
     ],
   };
   act(() => send({ kind: "snapshot", key: "inventory", value }));
+  expect(pageFrames.at(-1)).toMatchObject({ kind: "complete", value });
   fireEvent.click(screen.getByRole("button", { name: "Choose a document" }));
   expect(await screen.findByText("Recorded project")).toBeTruthy();
   expect(screen.getByText("Revit")).toBeTruthy();
   expect(document.body.textContent).not.toMatch(/pid (null|0)|observed/);
   act(() => send({ kind: "snapshot", key: "inventory", value: { sessions: "bad" } }));
+  expect(pageFrames.at(-1)).toMatchObject({ kind: "failure" });
   fireEvent.click(screen.getByText("Recorded project"));
   expect(JSON.parse(write.mock.calls[0][0].get("target"))).toEqual({
     kind: "open",
     ref: { session: "recorded-session", openId: "recorded-document" },
   });
   view.unmount();
+  if (typeof releasePage === "function") releasePage();
   registry.dispose();
 });

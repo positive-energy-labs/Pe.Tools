@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { Schema } from "effect";
+import { bridgeSessionsListSchema } from "@pe/host-contracts/operation-types";
 import { harnessThreadSummarySchema } from "@pe/agent-contracts";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { UseSource } from "#/shell/readings";
@@ -12,7 +14,7 @@ export function bindSources(): Record<string, UseSource> {
   });
   const inventory = subscriptionSource({
     request: () => ({ kind: "inventory" }),
-    decode: (value) => value,
+    decode: Schema.decodeUnknownSync(bridgeSessionsListSchema),
   });
   const pickerOnly = (source: UseSource): UseSource => ({
     kind: "use",

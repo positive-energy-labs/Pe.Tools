@@ -12,7 +12,7 @@ import { hostDescriptorSchema } from "@pe/host-contracts/host-descriptor";
 import {
   sourceProvenanceSchema,
   type SourceProvenance,
-} from "../../../../packages/agent-contracts/src/input-lane";
+} from "@pe/agent-contracts";
 import { hostFetch } from "#/host/runtime";
 import { Input } from "@pe/kit/lang/input";
 import type { Column } from "@pe/kit/table/model";
@@ -469,6 +469,7 @@ function HostDeviceGate({ name, guidance, children }: DeviceGateProps) {
         hostDescriptorSchema.parse(await response.json());
         const header = response.headers.get("x-pe-source");
         if (header !== null) {
+          // ADR0029 rules7–8: consume the canonical, still-unconverted kernel schema.
           const parsed = sourceProvenanceSchema.safeParse(JSON.parse(header));
           if (!parsed.success || parsed.data.kind === "fixture")
             throw Error("Host source is unreadable.");
