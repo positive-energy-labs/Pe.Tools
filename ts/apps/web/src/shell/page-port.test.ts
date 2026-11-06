@@ -22,6 +22,20 @@ const graph = {
     ...builtinData.fields,
     stage: { ...builtinData.fields.search, role: "stage", initial: "pick" },
     draft: { ...builtinData.fields.search, role: "draft" },
+    editor: {
+      ...builtinData.fields.search,
+      role: "device",
+      url: false,
+      share: false,
+      agent: "none",
+    },
+    hover: {
+      ...builtinData.fields.search,
+      role: "transient",
+      url: false,
+      share: false,
+      agent: "none",
+    },
   },
 } as const;
 type Page = PageOf<typeof graph, typeof schemas>;
@@ -83,6 +97,41 @@ function fixture() {
     },
   };
 }
+
+test("device and transient use exact human role ports and reject schema, agent and restore writes", () => {
+  const f = fixture();
+  for (const [role, key] of [
+    ["device", "editor"],
+    ["transient", "hover"],
+  ] as const) {
+    const move = Reflect.get(f.page, role);
+    expect(move).toBeTypeOf("function");
+    expect(Reflect.apply(move, f.page, [key, "active"])).toMatchObject({ kind: "accepted" });
+    expect(f.read().page[key]).toBe("active");
+    expect(Reflect.apply(move, f.page, [key, 42])).toMatchObject({ kind: "refused" });
+    expect(Reflect.apply(move, f.page, ["search", "wrong role"])).toMatchObject({
+      kind: "refused",
+    });
+    expect(f.owner.acceptPage(f.lease, { [key]: "agent" })).toMatchObject({ kind: "refused" });
+    expect(
+      Reflect.apply(f.owner.restorePage, f.owner, [
+        { [key]: "restore" },
+        { kind: "restore", source: "url", token: f.restore },
+      ]),
+    ).toMatchObject({ kind: "refused" });
+    expect(f.policy.restoreState({ [key]: "url" }, {})).toMatchObject({ ok: false });
+  }
+  if (false) {
+    f.page.device("editor", "typed");
+    f.controls.transient("hover", "typed");
+    // @ts-expect-error A query key is not a device key.
+    f.page.device("search", "wrong");
+    // @ts-expect-error Device values come from the declared schema.
+    f.page.device("editor", 42);
+    // @ts-expect-error A device key is not a transient key.
+    f.controls.transient("editor", "wrong");
+  }
+});
 
 test("subject, selection and frame restore once; a subject move clears selection and frame atomically", () => {
   const f = fixture();
@@ -184,7 +233,14 @@ test("unresolved restore retains selection; contrary evidence refuses without dr
 
 test("the pane port has no raw writer and JS cannot write through the wrong role", () => {
   const f = fixture();
-  expect(Object.keys(f.page).sort()).toEqual(["pose", "read", "select", "set"]);
+  expect(Object.keys(f.page).sort()).toEqual([
+    "device",
+    "pose",
+    "read",
+    "select",
+    "set",
+    "transient",
+  ]);
   expect(Object.isFrozen(f.page)).toBe(true);
   for (const key of ["system", "selected", "stage", "search", "draft", "__proto__"]) {
     expect(Reflect.apply(f.page.set.bind(f.page), null, [key, "bad"])).toMatchObject({

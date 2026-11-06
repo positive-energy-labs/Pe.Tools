@@ -198,7 +198,7 @@ type TargetPatches<G extends RouteGraphJson, S extends SchemaTable, V> = V exten
 type PageVerbPatch<G extends RouteGraphJson, S extends SchemaTable, V> = V extends {
   fields: readonly (infer K)[];
 }
-  ? Partial<Pick<PageOf<G, S>, Extract<K, RoleKeys<G, "query" | "draft">>>>
+  ? Partial<Pick<PageOf<G, S>, Extract<K, RoleKeys<G, "query" | "draft" | "device" | "transient">>>>
   : never;
 type VerbInput<
   G extends RouteGraphJson,
