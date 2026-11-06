@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AdmittedRouteView, admittedRouteSearch } from "../shell/admitted-pane";
 import { applicationRouteShell } from "../shell/application-route-shell";
-import { fansData } from "../fans/neutral";
+import { fansData } from "../fans/route";
 import { builtinRouteStamp, loadBuiltinRoute } from "../route/builtin-inventory";
 export const admitFans = async () => {
   const admitted = await loadBuiltinRoute("fans", builtinRouteStamp("fans"));

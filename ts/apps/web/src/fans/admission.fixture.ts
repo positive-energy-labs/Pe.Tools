@@ -3,9 +3,9 @@ import {
   createBuiltinRouteInventory,
 } from "../../../../packages/agent-contracts/src/route-module";
 import { module as ducts } from "../ducts/kernel";
-import { module as fans } from "./kernel";
+import { module as fans } from "./route";
 import { ductsHostModule } from "../ducts/neutral";
-import { fansHostModule } from "./neutral";
+import { fansHostModule } from "./route";
 const catalog = Object.entries(ducts.entries).map(([key, entry]) => ({
   key,
   ...entry.axes,

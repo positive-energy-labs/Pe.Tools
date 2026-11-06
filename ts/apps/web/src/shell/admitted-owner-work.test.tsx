@@ -2,137 +2,38 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { JOIN_KEY } from "@pe/ducts-domain/sheet/inputs";
 import { isValidElement } from "react";
-import type { LedgerBody } from "../ducts/sheet/mount";
-import type {
-  Observation,
-  WorkWriteOutcome,
-} from "../../../../packages/agent-contracts/src/work-journal-door";
-import { createWitness } from "../fans/cutover.test-support";
+import type { FansDrawContext } from "../fans/route.ts";
+import { createWitness } from "../fans/cutover.test-support.ts";
 
 const closes: (() => void)[] = [];
-afterEach(() =>
-  closes
-    .splice(0)
-    .reverse()
-    .forEach((close) => close()),
-);
-const settle = (write: unknown) =>
-  new Promise<WorkWriteOutcome>((resolve) =>
-    (write as Observation<WorkWriteOutcome>).subscribe(
-      (outcome) => {
-        if (outcome.kind !== "pending") resolve(outcome);
-      },
-      () => {},
-    ),
-  );
+afterEach(() => closes.splice(0).reverse().forEach((close) => close()));
 
-// ADR 0030 rule 9: Fans stages a /ducts join cell through the ducts owner's handle and journal.
-test("a targeted Work verb lands in the owner's journal through the declared reading's handle", async () => {
+// The owner revision and inverse belong to the mount, independent of the pane or client.
+test("a rendered foreign cell keeps its owner, label and undo, and refuses a concurrent edit", async () => {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.current).toBe(true));
-  f.fans.refresh("sheet");
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.current).toBe(true));
-  f.fans.refresh("pricing");
-  expect(f.fans.readingStatus("pricing").snapshot.current).toBe(true);
-  const sheet = f.fans.readingStatus("sheet").snapshot;
-  const basis = sheet.current
-    ? (sheet.value as { open: { overview: { basis: string } } }).open.overview.basis
-    : null;
-  const before = f.fans.readingStatus("ductsWork").snapshot as unknown as {
-    handle: { revision: number };
+  await vi.waitFor(() => expect(f.fans.readingStatus("owner:ducts").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("value").snapshot.current).toBe(true));
+  const draw = () => {
+    const body = f.fans.read("sheet-ledger");
+    if (!isValidElement<{ ctx: FansDrawContext }>(body)) throw Error("Ledger did not render");
+    return body.props.ctx;
   };
-  const ownRevision = f.fans.work()?.revision;
-  const sheetReads = f.calls.get("fans:ducts.sheet") ?? 0;
-  const acks: { by: string; label?: string; route: string }[] = [];
-  closes.push(
-    f.ws.subscribe((event) => {
-      if (event.ok) acks.push({ by: event.by, label: event.label, route: event.route });
-    }),
-  );
+  const cells = draw().cells;
+  expect(cells.owner(["assumptions"])).toEqual({ route: "ducts", label: "from /ducts" });
   const pair: [string, string] = ["10:1", "30:1"];
-  const ledger = f.fans.read("sheet-ledger");
-  if (!isValidElement<Parameters<typeof LedgerBody>[0]>(ledger))
-    throw Error("Fans Ledger did not render");
-  const press = () =>
-    ledger.props.ctx.verbs.ductsEdit({
-      edits: { joins: [{ pair, verdict: "accept" }] },
-      history: { label: "accept join → 30x30 · from /ducts" },
-      basis,
-    });
-  // Both presses read the same owner handle; the owner revision admits one and fences the other.
-  const [first, replay] = await Promise.all([settle(press()), settle(press())]);
-  expect(first).toMatchObject({ kind: "accepted" });
-  expect(replay).toMatchObject({ kind: "refused", refusal: { code: "stale_revision" } });
-  await vi.waitFor(() =>
-    expect(f.owner.work()?.value).toMatchObject({
-      assumptions: {
-        [JOIN_KEY(pair)]: { edit: { value: { kind: "verdict", verdict: "connect" } } },
-      },
-    }),
-  );
-  expect(f.owner.work()?.revision).toBe(before.handle.revision + 1);
-  await vi.waitFor(() =>
-    expect(f.fans.readingStatus("ductsWork").snapshot).toMatchObject({
-      current: true,
-      handle: { revision: before.handle.revision + 1 },
-    }),
-  );
-  // The mounted sheet declares ductsWork: the owner's ack re-reads it, no refresh or reopen.
-  await vi.waitFor(() => {
-    expect(f.calls.get("fans:ducts.sheet")).toBeGreaterThan(sheetReads);
-    expect(f.fans.readingStatus("sheet").snapshot.current).toBe(true);
-  });
-  expect(f.fans.work()?.revision).toBe(ownRevision);
-  expect(acks.filter((ack) => ack.route === "ducts")).toEqual([
-    expect.objectContaining({ by: "human", label: "accept join → 30x30 · from /ducts" }),
+  const before = f.fans.work()?.revision;
+  const [first, late] = await Promise.all([
+    cells.edit({ joins: [{ pair, verdict: "accept" }] }, { label: "Accept join" }),
+    cells.edit({ joins: [{ pair, verdict: "accept" }] }, { label: "Accept join" }),
   ]);
-  expect(acks.filter((ack) => ack.route === "fans")).toEqual([]);
-  expect(f.fans.readingStatus("pricing").snapshot.current).toBe(false);
-});
-
-test("a targeted Work verb refuses when the declared owner reading is not current", async () => {
-  const f = await createWitness(closes);
-  expect(() =>
-    f.fans.invoke("ductsEdit", {
-      edits: { joins: [{ pair: ["1:1", "2:1"], verdict: "accept" }] },
-      basis: null,
-    }),
-  ).toThrow();
-});
-
-test("Fans stages caps and fitting prices in Ducts Work without editing its own Work", async () => {
-  const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.readingStatus("ductsWork").snapshot.current).toBe(true));
-  f.fans.refresh("sheet");
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.current).toBe(true));
-  const sheet = f.fans.readingStatus("sheet").snapshot.value as {
-    open: { overview: { basis: string } };
-  };
-  const ownRevision = f.fans.work()?.revision;
-  const result = await settle(
-    f.fans.invoke("ductsEdit", {
-      edits: {
-        ends: [{ end: { elementId: 10, connector: 1 }, verdict: "capped" }],
-        tables: { elbow: { table: "CD3-3" } },
-        assignments: { "Unpriced fitting": { rule: "elbow" } },
-        fittingDrops: { "proposed:10:1|30:1>straight": { inWg: 0.04 } },
-      },
-      history: { label: "Cap and price fittings · from /ducts" },
-      basis: sheet.open.overview.basis,
-    }),
-  );
-  expect(result).toMatchObject({ kind: "accepted" });
-  await vi.waitFor(() =>
-    expect(f.owner.work()?.value).toMatchObject({
-      assumptions: {
-        "open-end:10:1": { edit: { value: { kind: "verdict", verdict: "capped" }, by: "human" } },
-        "component-drop:proposed:10:1|30:1>straight": {
-          edit: { value: { kind: "component-drop", inWg: 0.04 }, by: "human" },
-        },
-      },
-      rules: { elbow: { edit: { value: { table: "CD3-3" }, by: "human" } } },
-      ruleAssignments: { "Unpriced fitting": { edit: { value: { rule: "elbow" }, by: "human" } } },
-    }),
-  );
-  expect(f.fans.work()?.revision).toBe(ownRevision);
+  expect(first).toBeNull();
+  expect(late).toMatchObject({ code: "refused" });
+  await vi.waitFor(() => expect(f.owner.work()?.value).toHaveProperty(["assumptions", JOIN_KEY(pair), "edit", "value", "verdict"], "connect"));
+  expect(f.fans.work()?.revision).toBe(before);
+  await vi.waitFor(() => expect(draw().cells.history.entries).toEqual(expect.arrayContaining([expect.objectContaining({ label: "Accept join � from /ducts" })])));
+  expect(await draw().cells.history.undo()).toMatchObject({ ok: true });
+  await vi.waitFor(() => expect(f.owner.work()?.value).toHaveProperty("assumptions", {}));
+  expect(await draw().cells.history.redo()).toMatchObject({ ok: true });
+  await vi.waitFor(() => expect(f.owner.work()?.value).toHaveProperty(["assumptions", JOIN_KEY(pair), "edit", "value", "verdict"], "connect"));
+  expect(await cells.edit({ joins: [{ pair, verdict: "accept" }] })).toMatchObject({ code: "refused" });
 });

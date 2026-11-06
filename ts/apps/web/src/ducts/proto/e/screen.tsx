@@ -1,7 +1,7 @@
 import { Settings } from "lucide-react";
 import { Popover, PopoverTrigger, SubjectPopoverContent as PopoverContent } from "@pe/kit/lang/popover";
 import { useRouteSearchSlice } from "#/route/activity";
-import { fansLink } from "../../../fans/neutral.ts";
+import { fansLink } from "../../../fans/route.ts";
 import { AttentionRoot, useHoveredIssue } from "#/attention";
 import { PointerCite } from "#/shell/pointer-list";
 import { pointerRefs } from "../../pointer-refs";

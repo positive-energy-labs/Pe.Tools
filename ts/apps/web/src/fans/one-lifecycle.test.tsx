@@ -33,7 +33,7 @@ const { readingAtom } = await import("../shell/readings-hooks");
 test("/fans route readings and a shell hook share one acquisition and release lifecycle", async () => {
   const closes: (() => void)[] = [];
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.current).toBe(true));
+  await vi.waitFor(() => expect(f.fans.readingStatus("value").snapshot.current).toBe(true));
   const routeAttempts = attempts.opened;
   expect(routeAttempts).toBeGreaterThan(0);
   const registry = AtomRegistry.make();

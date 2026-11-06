@@ -105,6 +105,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
               }
               value = decoded.data;
               handle = state.snapshot.handle;
+              entryFor(handle.key).restore(state);
             } else if (state.kind === "ack" && record.snapshot.current) {
               const ack = state.ack;
               if (ack.revision <= record.snapshot.handle.revision) return;
@@ -128,6 +129,7 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
               }
               value = result.envelope.doc;
               handle = { key: ack.key, revision: ack.revision };
+              entryFor(handle.key).journal.accept(ack);
             } else {
               record.snapshot = unavailable(
                 state.kind === "failed" ? "Work feed failed" : "Work pending",

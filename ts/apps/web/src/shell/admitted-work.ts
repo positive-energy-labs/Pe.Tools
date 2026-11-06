@@ -181,18 +181,19 @@ export function createAdmittedWork(
     return submitWork({ ...scope, reading, key: handle.key, subject: null }, request, invocation);
   };
   // Replay is never recomputed over a concurrent edit: return the door's stale refusal.
-  const submit = (
+  const submitTo = (
     request: import("@pe/agent-contracts").WorkWrite,
     invocation: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken,
+    foreign?: { handle: import("@pe/agent-contracts").WorkHandle; reading: string },
   ): Promise<import("@pe/agent-contracts").RouteStateWriteResult> => {
     if (!scope || !door || !ready || !owner.current(invocation)) throw Error("Work unavailable");
-    const original = scope;
+    const original = foreign ? { ...scope, key: foreign.handle.key, reading: foreign.reading, subject: null } : scope;
     return new Promise((resolve) => {
       submitWork(original, request, invocation).subscribe(
         (outcome) => {
           if (outcome.kind === "pending") return;
           if (outcome.kind === "accepted") {
-            owner.acceptWork(invocation, { kind: "ack", write: outcome.ack });
+            if (!foreign) owner.acceptWork(invocation, { kind: "ack", write: outcome.ack });
             resolve({
               ok: true,
               revision: outcome.ack.revision,
@@ -256,7 +257,7 @@ export function createAdmittedWork(
         row.basis,
       );
     },
-    submit,
+    submit: submitTo,
     reopen() {
       if (reloadRequired) return Promise.reject(Error(problem ?? "Reload this tab"));
       stop();

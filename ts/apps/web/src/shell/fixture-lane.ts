@@ -54,6 +54,7 @@ function freezeValue<T>(value: T): asserts value is T & Immutable<T> {
 export function createFixtureRouteEnvironment(
   options: Omit<EnvironmentOptions, "ports"> & {
     readonly seed: RouteFixtureSeed | undefined;
+    readonly name?: string;
     readonly plan: AdmittedReadingPlan;
     readonly workSpec?: RouteStateSpec<z.ZodType>;
     readonly now: () => number;
@@ -66,6 +67,15 @@ export function createFixtureRouteEnvironment(
   const snapshot = <T>(request: Pick<ResolvedRead<T>, "output" | "key">): ReadingSnapshot<T> => {
     const seed = capturedSeed;
     const id = options.plan.readingId(request);
+    const provider = options.plan.fixtureProvider(request.key.op);
+    if (provider) {
+      try {
+        const packet = request.output.parse(provider(options.name, JSON.parse(request.key.sortedKeyInput))) as any;
+        freezeValue(packet);
+        const reason = [...(packet.value?.coverage.unknown ?? []), ...(packet.value?.coverage.refused ?? []).map((part: any) => part.reason)].join("; ");
+        return reason ? { status: "unavailable", current: false, value: packet, reason } : { status: "ready", current: true, value: packet, hash: JSON.stringify(packet) };
+      } catch (error) { return { status: "failed", current: false, reason: String(error) }; }
+    }
     if (!seed || !id || !Object.hasOwn(seed.readings, id))
       return {
         status: "unavailable",
@@ -154,6 +164,7 @@ export function createFixtureRouteEnvironment(
                 capturedSeed?.work,
                 options.plan.workSchemas(),
                 capturedSeed?.works,
+                options.plan.workOwners(),
               );
               return { read: door, submit: door };
             })(),

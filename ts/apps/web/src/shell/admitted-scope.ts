@@ -123,22 +123,23 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
   const registryForWork = workRegistry;
   const leases = new Map<
     string,
-    ReturnType<typeof registryForWork.acquire> & { released?: boolean }
+    ReturnType<typeof registryForWork.acquire> & { released?: boolean; group: string }
   >();
   const entryFor = (key: import("@pe/agent-contracts").WorkKey) => {
     const id = workKey(key);
+    const group = canonicalEnvironmentInput({ ...key, route: "" });
     let lease = leases.get(id);
     const current = owner.read()?.scope.identity.work;
     const shown = current && workKey(current) === id;
     if (shown && !closed()) {
       for (const [other, held] of leases)
-        if (other !== id && !held.released) {
+        if (other !== id && held.group !== group && !held.released) {
           held.released = true;
           held.release();
         }
     }
     if (!lease || (lease.released && shown && !closed())) {
-      lease = registryForWork.acquire(key);
+      lease = { ...registryForWork.acquire(key), group };
       leases.set(id, lease);
       const unsubscribe = lease.entry.subscribe(() => {
         observeReceipts();

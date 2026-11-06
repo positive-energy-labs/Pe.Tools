@@ -25,14 +25,14 @@ test("every Work field a route can write has a declared name for History and Inp
 
 test("admitted ducts and fans name every Work field for history", async () => {
   const ducts = await import("../ducts/neutral.ts");
-  const fans = await import("../fans/neutral.ts");
+  const fans = await import("../fans/route.ts");
   for (const { data, schemas } of [
     { data: ducts.ductsData, schemas: ducts.schemas },
-    { data: fans.fansData, schemas: fans.schemas },
+    { data: fans.fansData, schemas: fans.module.schemas },
   ]) {
     const declared = new Set([...Object.keys(data.cells), ...Object.keys(data.workFields)]);
     expect(
-      Object.keys(schemas.work.shape).filter((key) => !declared.has(key)),
+      Object.keys((schemas.work as z.ZodObject).shape).filter((key) => !declared.has(key)),
       data.key,
     ).toEqual([]);
   }

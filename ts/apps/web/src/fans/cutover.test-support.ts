@@ -97,18 +97,22 @@ export async function createWitness(
       },
     };
   native["fans.sheet"] = { kind: "use", open(ctx, deliver) {
+    let version = 0;
     const send = (capture: unknown) => {
+      const ductsWork = ductsDocumentSchema.parse((saved.get("ducts") as { doc?: unknown })?.doc ?? {});
+      const fansWork = fansDocumentSchema.parse((saved.get("fans") as { doc?: unknown })?.doc ?? {});
       const open = openFanSheetSchema.parse({ overview: sheet.overview, inputs: sheet.inputs, elements: null, legs: null, worstLegs: [], worksheet: null });
       const data = fansSheetData.parse({ open, opened: [], rows: sheet.roster.rows, progress: null,
         fans: sheet.roster, sheetSnapshot: capture, sheetView: sheetState(open),
-        ductsWork: ductsDocumentSchema.parse({}), fansWork: fansDocumentSchema.parse({}), design: ductsDesign(ductsDocumentSchema.parse({}), fansDocumentSchema.parse({})) });
-      deliver({ kind: "complete", revision: 1, value: { key: "fixture", generation: 0, version: 1, state: "current",
-        value: { data, evaluation: "fixture", inputs: "fixture", origin: { kind: "fixture", name: "cutover" }, trace: [],
+        ductsWork, fansWork, design: ductsDesign(ductsWork, fansWork) });
+      deliver({ kind: "complete", revision: ++version, value: { key: "fixture", generation: 0, version, state: "current",
+        value: { data, evaluation: `fixture:${version}`, inputs: "fixture", origin: { kind: "fixture", name: "cutover" }, trace: [],
           coverage: { requested: [], covered: [], unknown: [], refused: [] }, freshness: "current" } } });
     };
     const capture = overrides["ducts.sheet-snapshot"];
     if (capture?.kind === "use" || capture?.kind === "feed") return capture.open(ctx, frame => { if (frame.kind === "complete" || frame.kind === "part") send(frame.value); });
     send(snapshot);
+    return ws.subscribe(() => { deliver({ kind: "stale" }); queueMicrotask(() => send(snapshot)); });
   } };
   const baseServices = sourceRouteServices({ ...native, ...overrides });
   const services: typeof baseServices = { ...baseServices, work: feed, reads: {

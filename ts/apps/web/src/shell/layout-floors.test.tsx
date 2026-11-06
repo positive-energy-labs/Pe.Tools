@@ -1,3 +1,4 @@
+import type { LayoutNode } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
@@ -6,7 +7,7 @@ import {
   type PaneApi,
 } from "../../../../packages/kit/src/components/lang/graph-layout";
 import { ductsData } from "#/ducts/neutral";
-import { fansData } from "#/fans/neutral";
+import { fansData } from "#/fans/route";
 const ductsGraph = ductsData;
 const layoutPanes = (panes: Readonly<Record<string, { label: string; purpose: string }>>) =>
   Object.fromEntries(
@@ -48,7 +49,7 @@ for (const width of [720, 1280, 1920]) {
       );
       const { container } = render(
         <GraphLayoutView
-          layout={ductsGraph.layout}
+          layout={ductsGraph.layout as LayoutNode}
           panes={layoutPanes(ductsGraph.panes)}
           active={(key) => key === stage || key === "system"}
           bodies={bodies}
@@ -95,7 +96,7 @@ test("persisted widths fit around the network drawing floors", () => {
   );
   const { container } = render(
     <GraphLayoutView
-      layout={ductsGraph.layout}
+      layout={ductsGraph.layout as LayoutNode}
       panes={layoutPanes(ductsGraph.panes)}
       active={(key) => key === "network" || key === "system"}
       bodies={bodies}
@@ -119,7 +120,7 @@ test("folding a leaf does not fold its containing support branch", () => {
   );
   const { container } = render(
     <GraphLayoutView
-      layout={ductsGraph.layout}
+      layout={ductsGraph.layout as LayoutNode}
       panes={layoutPanes(ductsGraph.panes)}
       active={(key) => key === "network" || key === "system"}
       bodies={Object.fromEntries(

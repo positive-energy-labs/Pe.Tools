@@ -30,6 +30,33 @@
     "resume": "document"
   },
   "fields": {
+    "fan": {
+      "role": "subject",
+      "schema": "fan",
+      "codec": "fan",
+      "initial": {
+        "kind": "ids",
+        "ids": []
+      },
+      "url": "push",
+      "share": true,
+      "agent": "set",
+      "cardinality": "many",
+      "identity": "subject",
+      "picker": {
+        "reading": "value",
+        "options": "pickSubject"
+      }
+    },
+    "stage": {
+      "role": "stage",
+      "schema": "stage",
+      "codec": "stage",
+      "initial": "sheet",
+      "url": "push",
+      "share": true,
+      "agent": "set"
+    },
     "inputSort": {
       "role": "query",
       "schema": "inputSort",
@@ -78,24 +105,6 @@
       "url": "push",
       "share": true,
       "agent": "set"
-    },
-    "fan": {
-      "role": "subject",
-      "schema": "fan",
-      "codec": "fan",
-      "initial": {
-        "ids": [],
-        "kind": "ids"
-      },
-      "url": "push",
-      "share": true,
-      "agent": "set",
-      "cardinality": "many",
-      "identity": "fan",
-      "picker": {
-        "reading": "fans",
-        "options": "pickFans"
-      }
     },
     "layers": {
       "role": "pose",
@@ -157,27 +166,12 @@
       "share": true,
       "agent": "set"
     },
-    "selected": {
-      "role": "selection",
-      "kinds": [
-        "focus"
-      ]
-    },
     "sheetPath": {
       "role": "query",
       "schema": "sheetPath",
       "codec": "sheetPath",
       "initial": "",
       "url": "replace",
-      "share": true,
-      "agent": "set"
-    },
-    "stage": {
-      "role": "stage",
-      "schema": "sheetStage",
-      "codec": "stage",
-      "initial": "sheet",
-      "url": "push",
       "share": true,
       "agent": "set"
     },
@@ -189,10 +183,16 @@
       "url": "replace",
       "share": true,
       "agent": "set"
+    },
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "focus"
+      ]
     }
   },
   "identities": {
-    "fan": {
+    "subject": {
       "kind": "local",
       "codec": "local"
     },
@@ -204,8 +204,8 @@
   "subject": {
     "field": "fan",
     "noun": "fan",
-    "roster": "fans",
-    "detail": "sheet",
+    "roster": "value",
+    "detail": "value",
     "pane": "sheet-roster"
   },
   "historyDetail": "historyDetail",
@@ -216,154 +216,30 @@
     "migrations": {}
   },
   "readings": {
-    "ductsWork": {
-      "kind": "work",
-      "route": "ducts",
-      "output": "ductsWork",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "tables": {
+    "value": {
       "kind": "use",
-      "entry": "ducts.tables",
-      "args": "tablesArgs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "catalogs": {
-      "kind": "use",
-      "entry": "ducts.catalogs",
-      "args": "catalogsArgs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "fans": {
-      "kind": "use",
-      "entry": "ducts.fans",
-      "args": "fansArgs",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "calculation",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "flows",
-          "parameters",
-          "designFriction"
-        ],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "meshes": {
-      "kind": "derive",
-      "output": "snapshot",
-      "derive": "meshes",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "pricing": {
-      "kind": "derive",
-      "output": "pricing",
-      "derive": "price",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "calculation",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "flows",
-          "parameters",
-          "designFriction"
-        ],
-        "readings": [
-          "sheetSnapshot",
-          "ductsWork",
-          "tables",
-          "catalogs"
-        ]
-      },
-      "demand": "explicit",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "explicit"
-    },
-    "sheet": {
-      "kind": "use",
-      "entry": "ducts.sheet",
-      "args": "sheetArgs",
+      "entry": "fans.sheet",
+      "args": "valueArgs",
       "deps": {
         "page": [
           "fan",
-          "sheetPath"
+          "stage",
+          "inputSort",
+          "inputSearch",
+          "contextRadiusFt",
+          "contextStyle",
+          "encoding",
+          "layers",
+          "picture",
+          "rosterSearch",
+          "rosterSort",
+          "sceneView",
+          "sheetPath",
+          "viewport",
+          "selected"
         ],
-        "work": [
-          "writeIntent",
-          "calculation",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "flows",
-          "parameters",
-          "designFriction"
-        ],
-        "readings": [
-          "fans",
-          "ductsWork"
-        ]
+        "work": [],
+        "readings": []
       },
       "demand": "visible",
       "retain": {
@@ -372,27 +248,14 @@
       },
       "refresh": "dependencies"
     },
-    "sheetSnapshot": {
-      "kind": "use",
-      "entry": "ducts.sheet-snapshot",
-      "args": "sheetSnapshotArgs",
+    "owner:ducts": {
+      "kind": "work",
+      "route": "ducts",
+      "output": "owner:ducts",
       "deps": {
         "page": [],
-        "work": [
-          "writeIntent",
-          "calculation",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "flows",
-          "parameters",
-          "designFriction"
-        ],
-        "readings": [
-          "sheet"
-        ]
+        "work": [],
+        "readings": []
       },
       "demand": "visible",
       "retain": {
@@ -401,10 +264,10 @@
       },
       "refresh": "dependencies"
     },
-    "lossPlan": {
+    "lossesPlan": {
       "kind": "use",
       "entry": "ducts.plan-losses",
-      "args": "lossPlanArgs",
+      "args": "lossesPlanArgs",
       "deps": {
         "page": [],
         "work": [],
@@ -416,50 +279,12 @@
         "resource": "scope"
       },
       "refresh": "explicit"
-    },
-    "sheetView": {
-      "kind": "derive",
-      "output": "sheetView",
-      "derive": "sheetView",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "sheet"
-        ]
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
     }
   },
   "verbs": {
-    "browse": {
-      "kind": "page",
-      "input": "browse",
-      "label": "Browse",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "captures": [],
-      "patch": "browse",
-      "fields": [
-        "sheetPath",
-        "rosterSearch",
-        "rosterSort",
-        "inputSearch",
-        "inputSort"
-      ]
-    },
     "edit": {
       "kind": "work",
-      "input": "edit",
+      "input": "patch",
       "label": "Edit",
       "review": "none",
       "deps": {
@@ -476,83 +301,33 @@
           "parameters",
           "designFriction"
         ],
-        "readings": []
-      },
-      "captures": [],
-      "patches": "edit",
-      "describe": "describeEdit"
-    },
-    "scope": {
-      "kind": "work",
-      "input": "scope",
-      "label": "Choose write scope",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "calculation",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "flows",
-          "parameters",
-          "designFriction"
-        ],
-        "readings": []
-      },
-      "captures": [],
-      "patches": "scope",
-      "describe": "describeScope"
-    },
-    "sheetEdit": {
-      "kind": "work",
-      "input": "sheetEdit",
-      "label": "Edit sheet inputs",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [
-          "writeIntent",
-          "calculation",
-          "terminalDrops",
-          "componentDrops",
-          "esp",
-          "equipmentFlows",
-          "roles",
-          "flows",
-          "parameters",
-          "designFriction"
-        ],
         "readings": [
-          "sheet"
+          "value"
         ]
       },
       "captures": [],
-      "ready": "sheetReady",
-      "patches": "sheetEdit",
-      "describe": "describeSheet"
+      "ready": "editReady",
+      "patches": "editPatches",
+      "describe": "editDescribe"
     },
-    "ductsEdit": {
+    "edit:ducts": {
       "kind": "work",
-      "input": "ductsEdit",
-      "label": "Edit duct rules",
+      "input": "patch",
+      "label": "Edit",
       "review": "none",
       "deps": {
         "page": [],
         "work": [],
         "readings": [
-          "sheet",
-          "ductsWork"
+          "value",
+          "owner:ducts"
         ]
       },
       "captures": [],
-      "ready": "ductsReady",
-      "patches": "ductsEdit",
-      "describe": "describeDucts",
-      "target": "ductsWork"
+      "ready": "edit:ductsReady",
+      "patches": "edit:ductsPatches",
+      "describe": "edit:ductsDescribe",
+      "target": "owner:ducts"
     },
     "losses": {
       "kind": "command",
@@ -576,101 +351,75 @@
           "designFriction"
         ],
         "readings": [
-          "sheetSnapshot",
-          "sheet",
-          "ductsWork"
+          "value",
+          "owner:ducts"
         ]
       },
       "captures": [
-        "sheetSnapshot",
-        "sheet"
+        "value"
       ],
-      "ready": "lossReady",
-      "present": "presentLosses",
+      "ready": "lossesReady",
+      "present": "lossesPresent",
       "entry": "ducts.apply-losses",
-      "intent": "losses"
+      "intent": "lossesIntent"
     }
   },
   "panes": {
+    "sheet-roster": {
+      "label": "Fans",
+      "purpose": "Open fan ports",
+      "draws": [
+        "value",
+        "owner:ducts"
+      ],
+      "verbs": [
+        "edit",
+        "edit:ducts",
+        "losses"
+      ],
+      "body": "sheet-roster"
+    },
     "sheet-inputs": {
       "label": "Inputs",
       "purpose": "Edit fan inputs",
       "draws": [
-        "fans",
-        "sheet",
-        "sheetSnapshot",
-        "sheetView",
-        "ductsWork",
-        "pricing"
+        "value",
+        "owner:ducts"
       ],
       "verbs": [
-        "browse",
         "edit",
-        "scope",
-        "sheetEdit",
-        "ductsEdit"
+        "edit:ducts",
+        "losses"
       ],
       "body": "sheet-inputs"
-    },
-    "sheet-ledger": {
-      "label": "Ledger",
-      "purpose": "Inspect ESP and provenance",
-      "draws": [
-        "fans",
-        "sheet",
-        "sheetSnapshot",
-        "sheetView",
-        "ductsWork",
-        "pricing"
-      ],
-      "verbs": [
-        "browse",
-        "edit",
-        "scope",
-        "sheetEdit",
-        "ductsEdit"
-      ],
-      "body": "sheet-ledger"
     },
     "sheet-picture": {
       "label": "Picture",
       "purpose": "Inspect fan paths",
       "draws": [
-        "fans",
-        "sheet",
-        "sheetSnapshot",
-        "sheetView",
-        "ductsWork",
-        "pricing"
+        "value",
+        "owner:ducts"
       ],
       "verbs": [
-        "browse",
         "edit",
-        "scope",
-        "sheetEdit",
-        "ductsEdit"
+        "edit:ducts",
+        "losses"
       ],
       "body": "sheet-picture"
     },
-    "sheet-roster": {
-      "label": "Fans",
-      "purpose": "Open fan ports",
+    "sheet-ledger": {
+      "label": "Ledger",
+      "purpose": "Inspect ESP and provenance",
       "draws": [
-        "fans",
-        "sheet",
-        "sheetSnapshot",
-        "sheetView",
-        "ductsWork",
-        "pricing"
+        "value",
+        "owner:ducts"
       ],
       "verbs": [
-        "browse",
         "edit",
-        "scope",
-        "sheetEdit",
-        "ductsEdit"
+        "edit:ducts",
+        "losses"
       ],
-      "body": "sheet-roster"
+      "body": "sheet-ledger"
     }
   },
   "layout": {
@@ -725,7 +474,7 @@
   },
   "stages": {
     "sheet": {
-      "word": "Pricing fans",
+      "word": "Fans",
       "panes": [
         "sheet-roster",
         "sheet-inputs",
@@ -742,6 +491,16 @@
   ],
   "predicates": {},
   "cells": {
+    "writeIntent": {
+      "segment": null,
+      "value": "writeIntentCell",
+      "groupOf": "groupwriteIntent",
+      "deps": {
+        "page": [],
+        "work": [],
+        "readings": []
+      }
+    },
     "calculation": {
       "segment": "calculation",
       "value": "calculationCell",
@@ -833,28 +592,23 @@
       }
     }
   },
-  "workFields": {
-    "writeIntent": {
-      "label": "write scope",
-      "internal": true
-    }
-  },
+  "workFields": {},
   "seeds": {
     "scene": {
       "title": "scene",
-      "load": "seedScene"
+      "load": "fixture:scene"
     },
     "layout": {
       "title": "layout",
-      "load": "seedLayout"
+      "load": "fixture:layout"
     },
     "colours": {
       "title": "colours",
-      "load": "seedColours"
+      "load": "fixture:colours"
     },
     "navigation": {
       "title": "navigation",
-      "load": "seedNavigation"
+      "load": "fixture:navigation"
     }
   },
   "needs": "project",

@@ -76,7 +76,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const builtinOptions = [];
 for (const key of admittedBuiltinKeys) {
   const files = await readdir(new URL(`../src/${key}/`, import.meta.url));
-  const kernel = files.includes("kernel.ts") ? "kernel.ts" : "kernel.tsx";
+  const kernel = files.includes("route.ts") ? "route.ts" : files.includes("kernel.ts") ? "kernel.ts" : "kernel.tsx";
   const entry = fileURLToPath(new URL(`../src/${key}/${kernel}`, import.meta.url));
   const { module } = await jiti.import<{ module: { data: unknown } }>(entry);
   builtinOptions.push({

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-router";
 import { expect, test } from "vite-plus/test";
-import { module as fans } from "../fans/kernel.tsx";
+import { module as fans } from "../fans/route.ts";
 import { module as ducts } from "../ducts/kernel.tsx";
-import { fansLink } from "../fans/neutral.ts";
+import { fansLink } from "../fans/route.ts";
 import { ductsLink, localId } from "../ducts/neutral.ts";
 import { admittedRouteSearch } from "./admitted-pane.tsx";
 

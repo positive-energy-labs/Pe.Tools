@@ -34,6 +34,7 @@ export const routeBindingSchema = z.object({
           effects: fn.optional(),
           dirties: z.array(z.string()).optional(),
           recovers: z.boolean().optional(),
+          provide: fn.optional(),
         })
         .refine((source) => (source.kind === "use" ? !!source.open : !!source.derive)),
     )

@@ -1,7 +1,7 @@
 import { useContext } from "react";
 import { DuctsOwner } from "../../pane-context";
 import { stableFanKey } from "../../sheet/model";
-import { fansLink } from "../../../fans/neutral.ts";
+import { fansLink } from "../../../fans/route.ts";
 import { useRouteSearchSlice } from "#/route/activity";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
