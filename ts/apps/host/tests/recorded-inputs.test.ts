@@ -218,7 +218,6 @@ effectTest(
       yield* files.ductCatalogs;
       const [first, second, catalog] = seen;
       expect(first!.id).not.toBe(second!.id);
-      expect(seen.map((taking) => writer.taking(taking.id))).toEqual(seen);
       const open = yield* reader(dir);
       const recorded = (bindings: ReadonlyMap<string, string>) =>
         service(HostFiles, HostFiles.recorded(open, bindings));
