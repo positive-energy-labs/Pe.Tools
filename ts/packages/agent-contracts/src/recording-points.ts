@@ -35,13 +35,14 @@ export const recordingConsumerSchema = Schema.Struct({
   reading: Schema.NonEmptyString,
   argsHash: Schema.NonEmptyString,
 });
-const batch = <A extends Schema.Top>(schema: A) => Schema.Array(schema).check(
-  Schema.makeFilter((values) => values.length <= 32),
-);
+const batch = <A extends Schema.Top>(schema: A) =>
+  Schema.Array(schema).check(Schema.makeFilter((values) => values.length <= 32));
 export const acceptedReadingSchema = Schema.Struct({
   document,
   consumer: recordingConsumerSchema,
-  bodyReceipts: batch(Schema.NonEmptyString).check(Schema.makeFilter((values) => values.length > 0)),
+  bodyReceipts: batch(Schema.NonEmptyString).check(
+    Schema.makeFilter((values) => values.length > 0),
+  ),
 });
 export type AcceptedReading = typeof acceptedReadingSchema.Type;
 export const recordingAcknowledgementsSchema = Schema.Struct({
@@ -53,7 +54,9 @@ export interface RecordingAcknowledgements {
   readonly unmounted: readonly RecordingConsumer[];
 }
 /** Canonical boundary adapter for the Effect-free resource transport. */
-export function decodeRecordingAcknowledgements(value: unknown): RecordingAcknowledgements | { error: string } {
+export function decodeRecordingAcknowledgements(
+  value: unknown,
+): RecordingAcknowledgements | { error: string } {
   try {
     const decoded = Schema.decodeUnknownSync(recordingAcknowledgementsSchema)(value);
     return { accepted: decoded.accepted ?? [], unmounted: decoded.unmounted ?? [] };

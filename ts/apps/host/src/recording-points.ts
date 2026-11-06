@@ -1,10 +1,15 @@
 /** ADR0031 epochs: metadata over the existing recording and consumption graph, never a journal. */
-import { randomUUID } from "node:crypto";
-import { Clock, Effect, Schema } from "effect";
+import { createHash, randomUUID } from "node:crypto";
+import { Clock, Context, Effect, Layer, Schema } from "effect";
 import {
   addressSchema,
   sameAddress,
   recordingPointSchema,
+  workHandleSchema,
+  workKey,
+  recordingConsumerSchema,
+  acceptedReadingSchema,
+  type AcceptedReading,
   type RecordingPoint,
   type RecordingPointId,
   type RecordingPointReason,
@@ -17,12 +22,13 @@ import { hostSessionScopeSchema } from "@pe/host-contracts/operation-types";
 import {
   defaultReadSetLimits,
   readSetRecords,
-  type HostInputReadSets,
+  HostInputReadSets,
   type InputConsumption,
   type ReadSetId,
 } from "./input-occurrence.ts";
 import type { ConsumerRecipe, RecordingReader, RecordingWriter } from "./native-recording.ts";
 import { InvalidRead } from "./native-reads.ts";
+import type { bodyReceipts } from "./body-receipts.ts";
 
 type Document = IdentityId<"document">;
 type ReadSets = HostInputReadSets["Service"];
@@ -30,6 +36,8 @@ const refuse = (problem: string, message: string) =>
   new InvalidRead({ message, status: 409, problem: `recording.${problem}` });
 const bindingKey = (binding: RecordingConsumer) =>
   canonicalJson([binding.instance, binding.reading, binding.argsHash]);
+const createHashForVersions = (versions: readonly string[]) =>
+  createHash("sha256").update(canonicalJson(versions)).digest("hex");
 
 export interface RecordingPoints {
   readonly list: (document: Document) => Effect.Effect<readonly RecordingPoint[], InvalidRead>;
@@ -69,7 +77,7 @@ const documentRow = Schema.Struct({
 
 /** Validate all transitive references through the SAME loader replay uses; prove the document
  * from its recorded inventory row, rather than trusting a request's claimed document. */
-const references = Effect.fn("RecordingPoints.references")(function* (
+export const recordingReadSetReferences = Effect.fn("RecordingPoints.references")(function* (
   reader: RecordingReader,
   document: Document,
   id: string,
@@ -81,6 +89,7 @@ const references = Effect.fn("RecordingPoints.references")(function* (
   const records = yield* readSetRecords(reader, id);
   const ids = new Set<string>();
   const documents = new Map<string, { session: string; openId: string }>();
+  let workAuthority = false;
   let metadata = 0;
   for (const record of records) {
     metadata += Buffer.byteLength(JSON.stringify(record));
@@ -93,6 +102,22 @@ const references = Effect.fn("RecordingPoints.references")(function* (
     // Verify observation bytes even for inputs the selected body might not read on this replay.
     if (taking.outcome.kind === "answered" || taking.outcome.kind === "observed") {
       const value = yield* reader.observation(taking);
+      if (
+        taking.input.kind === "work" &&
+        value &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        "handle" in value
+      ) {
+        const handle = workHandleSchema.safeParse(value.handle);
+        if (!handle.success || workKey(handle.data.key) !== taking.input.key)
+          return yield* refuse("scope", "Recorded Work handle differs from its taking");
+        if (handle.data.key.binding === "address") {
+          if (!sameAddress(wanted.data, handle.data.key.target))
+            return yield* refuse("scope", "Recorded Work belongs to another document");
+          workAuthority = true;
+        }
+      }
       if (taking.input.kind === "document" && taking.input.scope.startsWith('["document",')) {
         const row = yield* Schema.decodeUnknownEffect(documentRow)(value).pipe(
           Effect.mapError(() => refuse("scope", "Recorded document has no Address authority")),
@@ -110,10 +135,16 @@ const references = Effect.fn("RecordingPoints.references")(function* (
       }
     }
   }
-  if (!documents.size)
+  if (!documents.size && !workAuthority)
     return yield* refuse("scope", "Point consumption has no recorded document authority");
   for (const id of ids) {
     const taking = reader.taking(id)!;
+    if (
+      taking.input.kind === "marks" &&
+      (!documents.has(canonicalJson(taking.input.ref)) ||
+        taking.scope !== canonicalJson(taking.input.ref))
+    )
+      return yield* refuse("scope", "Recorded marks have no authority for their document lifetime");
     if (taking.input.kind === "native") {
       const scope = yield* Schema.decodeUnknownEffect(
         Schema.fromJsonString(hostSessionScopeSchema),
@@ -141,6 +172,155 @@ const references = Effect.fn("RecordingPoints.references")(function* (
   }
   return { ids, metadata };
 });
+
+const acceptedRecipe = Schema.Struct({
+  document: acceptedReadingSchema.fields.document,
+  consumer: recordingConsumerSchema,
+  bodyVersions: Schema.Array(Schema.String),
+});
+/** The subscription owner's kernel policy. All signed bodies are authenticated before writes.
+ * Each mounted reading gets one metadata-only dependency root, including document authority
+ * from this SAME accepted set when a body is session-scoped (for example native duct tables). */
+export const acceptedPointPolicy = Effect.fn("RecordingPoints.acceptedPolicy")(function* (
+  writer: RecordingWriter,
+  receipts: ReturnType<typeof bodyReceipts>,
+) {
+  const live = Context.get(
+    yield* Layer.build(HostInputReadSets.layer({ kind: "live", captureStore: writer })),
+    HostInputReadSets,
+  );
+  const replay = Context.get(
+    yield* Layer.build(
+      HostInputReadSets.layer({ kind: "recording", recordingStore: writer, at: null }),
+    ),
+    HostInputReadSets,
+  );
+  return Effect.fn("RecordingPoints.acceptedBatch")(function* (
+    readings: readonly AcceptedReading[],
+    audience: string | null,
+    active: () => boolean,
+  ) {
+    // Fail closed before storing either connection slots or read-set metadata.
+    const authenticated = yield* Effect.forEach(readings, (reading) =>
+      Effect.gen(function* () {
+        const claims = yield* Effect.forEach(reading.bodyReceipts, (receipt) =>
+          receipts.verify(receipt, audience),
+        );
+        return { reading, claims };
+      }),
+    );
+    for (const document of new Set(readings.map((reading) => reading.document))) {
+      const claims = authenticated
+        .filter(({ reading }) => reading.document === document)
+        .flatMap(({ claims }) => claims);
+      const id = randomUUID();
+      const record: import("./native-recording.ts").InputReadSetRecord = {
+        version: 1,
+        id,
+        identity: writer.identity,
+        state: "complete",
+        recipe: { key: "accepted.reading", input: null, scope: document },
+        inputs: [],
+        children: [],
+        takingLinks: {},
+        exports: [],
+        dependencies: Object.fromEntries(claims.map((claim, at) => [String(at), claim.r])),
+      };
+      yield* references(
+        {
+          ...writer,
+          readSets: {
+            ...writer.readSets,
+            get: (wanted) => (wanted === id ? Effect.succeed(record) : writer.readSets.get(wanted)),
+          },
+        },
+        document,
+        id,
+      );
+    }
+    if (!active()) return yield* refuse("context", "Accepted connection retired");
+    const at = writer.capture.begin();
+    if (at === null) return;
+    yield* Effect.gen(function* () {
+      const kernel = yield* recordingPointKernel(writer, replay, {
+        verify: (receipt) =>
+          Effect.gen(function* () {
+            const claim = yield* receipts.verify(receipt, audience);
+            const root = yield* writer.readSets.get(claim.r);
+            if (root.recipe.key !== "accepted.reading")
+              return yield* refuse("receipt", "Receipt is not an accepted reading");
+            const value = yield* Schema.decodeUnknownEffect(acceptedRecipe)(root.recipe.input).pipe(
+              Effect.mapError(() => refuse("receipt", "Accepted reading metadata is invalid")),
+            );
+            return {
+              document: value.document,
+              consumer: value.consumer,
+              readSetId: root.id as ReadSetId,
+              identity: writer.identity,
+              bodyVersion: claim.v,
+            };
+          }),
+      });
+      const documents = new Set(authenticated.map(({ reading }) => reading.document));
+      for (const document of documents) {
+        const group = authenticated.filter(({ reading }) => reading.document === document);
+        // Authenticate the entire set first, then find a provable authority without using live inputs.
+        let authority: string | undefined;
+        for (const { claims } of group)
+          for (const claim of claims) {
+            const proof = yield* Effect.result(references(writer, document, claim.r));
+            if (proof._tag === "Success" && !authority) authority = claim.r;
+          }
+        const caps: VerifiedAcceptedFrame[] = [];
+        for (const { reading, claims } of group) {
+          const root = yield* live.open(
+            {
+              key: "accepted.reading",
+              scope: document,
+              input: {
+                document,
+                consumer: { ...reading.consumer },
+                bodyVersions: claims.map((claim) => claim.v),
+              },
+            },
+            null,
+          );
+          try {
+            for (const [index, claim] of claims.entries())
+              yield* root.linkReadSet(`body:${index}`, claim.r as ReadSetId);
+            if (authority && !claims.some((claim) => claim.r === authority))
+              yield* root.linkReadSet("documentAuthority", authority as ReadSetId);
+            yield* root.seal;
+            yield* references(writer, document, root.id);
+            if (!active()) return yield* refuse("context", "Accepted connection retired");
+            const receipt = yield* receipts.mint(
+              root.id,
+              createHashForVersions(claims.map((claim) => claim.v)),
+              audience,
+            );
+            if (!receipt) return;
+            caps.push(yield* kernel.verifyAccepted(receipt));
+          } finally {
+            yield* root.close;
+          }
+        }
+        if (active()) yield* kernel.checkpoint(document, { kind: "captured" }, caps);
+      }
+    }).pipe(
+      Effect.catch((error) =>
+        writer.capture.stop(
+          at,
+          error.problem === "recording.full"
+            ? "full"
+            : error.problem === "recording.io"
+              ? "io"
+              : "unsupported",
+        ),
+      ),
+    );
+  });
+});
+const references = recordingReadSetReferences;
 
 /** Read-only port. No caller can turn a read-set name into a point. */
 export function recordingPoints(reader: RecordingReader, readSets: ReadSets): RecordingPoints {
