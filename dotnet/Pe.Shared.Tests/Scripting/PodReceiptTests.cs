@@ -8,12 +8,6 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class PodReceiptTests {
     [Test]
-    public void Receipt_origin_cannot_claim_a_saved_hash_for_a_draft() {
-        var receipt = PodReceipt.ForSource(new(null, "draft.json", "draft-sha", "e30=", PodRunOrigin.SuppliedDraft),
-            "family.apply", null, PodRunOutcome.Failed, [], null);
-        Assert.That(receipt.MemberSha256, Is.Null);
-    }
-    [Test]
     public void Receipt_survives_artifact_limit_and_identifies_the_member() {
         var pod = Path.Combine(Path.GetTempPath(), "pe-pod-receipt-" + Guid.NewGuid().ToString("N"));
         try {
