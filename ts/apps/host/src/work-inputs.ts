@@ -79,8 +79,8 @@ const contracts: { readonly [V in ReadView | WorkFeedShape]: z.ZodType } = {
   read: shaped.nullable(),
   view: shaped.nullable(),
   // The two feed shapes are different values: `work` is the view with history, `work-acks` the snapshot.
-  work: history(shaped),
-  "work-acks": history(raw),
+  work: history(shaped).nullable(),
+  "work-acks": history(raw).nullable(),
 };
 /** Recorded Work bytes must satisfy the existing Work handle and ack contracts; nothing is coerced. */
 const codec = <A>(contract: keyof typeof contracts) =>

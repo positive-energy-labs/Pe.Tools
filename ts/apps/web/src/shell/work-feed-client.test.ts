@@ -70,18 +70,18 @@ function harness(replay: Frame[] = []) {
     emit: (kind: string, frame: Frame) => listeners.get(kind)!(frame),
   };
 }
-test("Work body claims travel with the decoded snapshot, never an ack-derived value", () => {
+test("absent Work stays pending without failing or releasing feeds, then accepts current Work", () => {
   const h = harness();
-  h.emit("work", { ...snapshot(0), bodyReceipts: ["producing-work-body"] } as Frame);
-  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { value: { amount: 0 }, bodyReceipts: ["producing-work-body"] } });
-  h.emit("work-acks", ack(1));
-  expect(h.values.at(-1)).toMatchObject({ kind: "ack" });
-  expect(h.values.at(-1)).not.toHaveProperty("snapshot.bodyReceipts");
-  h.emit("work", { kind: "stale", key: "work" });
+  h.emit("work-acks", { kind: "snapshot", key: "acks", value: null });
+  h.emit("work", { kind: "snapshot", key: "work", value: null });
   expect(h.values.at(-1)).toEqual({ kind: "pending" });
-  h.emit("work", { ...snapshot(1), bodyReceipts: ["reacquired-body"] } as Frame);
-  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { bodyReceipts: ["reacquired-body"] } });
-  h.unsubscribe(); expect(h.stops.every(stop => stop.mock.calls.length === 1)).toBe(true);
+  expect(h.values.some((state) => state.kind === "failed")).toBe(false);
+  expect(h.end).not.toHaveBeenCalled();
+  expect(h.stops.every((stop) => stop.mock.calls.length === 0)).toBe(true);
+  h.emit("work", snapshot(0));
+  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { revision: 0, value: { amount: 0 } } });
+  h.unsubscribe();
+  expect(h.stops.every((stop) => stop.mock.calls.length === 1)).toBe(true);
 });
 
 test("subscribe before snapshot, buffer and sort acks, drop revisions covered by snapshot", () => {

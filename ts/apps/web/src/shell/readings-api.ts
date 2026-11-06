@@ -2,7 +2,6 @@ import { openEventSource } from "../readings";
 import { generatedJsonSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 import {
-  BODY_RECEIPT_HEADER,
   DUCTS_BODY_VERSION_HEADER,
   ductsReadingEnvelopeSchema,
   type DuctsReadingEnvelope,
@@ -23,7 +22,6 @@ import { hostFetch } from "../host/runtime";
 import type { ReadingContext, UseSource } from "./readings";
 import { subscriptionSource } from "./readings-use";
 
-type BodyReceiptContext = { onBodyReceipt?(receipt: string | null): void };
 
 /** A reading's host request; `headers` carry the exact document a route-scoped read needs. */
 interface JsonRequest {
@@ -36,7 +34,6 @@ async function requestJson<T>(
   request: JsonRequest,
   schema: z.ZodType<T>,
   signal: AbortSignal,
-  context: BodyReceiptContext,
 ): Promise<T> {
   const response = await hostFetch(request.path, {
     ...(request.body === undefined
@@ -59,7 +56,6 @@ async function requestJson<T>(
     );
   }
   const value = schema.parse(await response.json());
-  context.onBodyReceipt?.(response.headers.get(BODY_RECEIPT_HEADER));
   return value;
 }
 
@@ -93,7 +89,7 @@ export function opResponseSchema(key: string): Promise<z.ZodType> {
 
 /** One catalog op over `/call`, scoped to the attempt's document, decoded by its catalog schema. */
 export async function callOp<K extends OpKey>(
-  context: BodyReceiptContext & {
+  context: {
     target?: ReadingContext["target"];
     signal: AbortSignal;
     headers?: Readonly<Record<string, string>>;
@@ -115,7 +111,6 @@ export async function callOp<K extends OpKey>(
     { path: "/call", body: { key, request }, headers: { ...headers, ...context.headers } },
     z.unknown(),
     context.signal,
-    context,
   );
   return (await opResponseSchema(key)).parse(value) as OpResponseOf<K>;
 }
@@ -136,10 +131,9 @@ export function opSource<K extends OpKey, T = OpResponseOf<K>>(options: {
       if (request === null)
         return deliver({ kind: "complete", value: options.absent, revision: 0 });
       try {
-        let receipt: string | null = null;
-        const response = await callOp({ ...context, onBodyReceipt: value => { receipt = value; } }, options.key, request);
+        const response = await callOp(context, options.key, request);
         const value = options.map ? options.map(response) : (response as unknown as T);
-        deliver({ kind: "complete", value, revision: 1, bodyReceipts: receipt ? [receipt] : undefined });
+        deliver({ kind: "complete", value, revision: 1 });
       } catch (error) {
         if (!context.signal.aborted) deliver({ kind: "failure", error });
       }
@@ -153,18 +147,11 @@ type ComposeOutput<K extends PeRouteId> = Awaited<ReturnType<typeof pe.call<K>>>
 
 /** One host composition, named by its catalog route key and decoded by that route's own schema. */
 export const callCompose = async <K extends PeRouteId>(
-  context: { signal: AbortSignal; headers?: Readonly<Record<string, string>> } & BodyReceiptContext,
+  context: { signal: AbortSignal; headers?: Readonly<Record<string, string>> },
   key: K,
   input: ComposeInput<K>,
 ): Promise<ComposeOutput<K>> => {
-  let receipt: string | null = null;
-  const client = createPeClient(undefined, async (url, init) => {
-    const response = await hostFetch(url, init);
-    receipt = response.headers.get(BODY_RECEIPT_HEADER);
-    return response;
-  });
-  const value = await client.call(key, input, { signal: context.signal, headers: context.headers });
-  context.onBodyReceipt?.(receipt);
+  const value = await pe.call(key, input, { signal: context.signal, headers: context.headers });
   return value as ComposeOutput<K>;
 };
 
@@ -183,10 +170,9 @@ export function composeSource<K extends PeRouteId, T = ComposeOutput<K>>(options
       const input = options.input(context);
       if (input === null) return deliver({ kind: "complete", value: options.absent, revision: 0 });
       try {
-        let receipt: string | null = null;
-        const response = await callCompose({ ...context, onBodyReceipt: value => { receipt = value; } }, options.key, input);
+        const response = await callCompose(context, options.key, input);
         const value = options.map ? options.map(response) : (response as unknown as T);
-        deliver({ kind: "complete", value, revision: 1, bodyReceipts: receipt ? [receipt] : undefined });
+        deliver({ kind: "complete", value, revision: 1 });
       } catch (error) {
         if (!context.signal.aborted) deliver({ kind: "failure", error });
       }
@@ -203,7 +189,7 @@ async function readDuctsBody(
   request: DuctsReadingRequest,
   envelope: DuctsReadingEnvelope,
   signal: AbortSignal,
-): Promise<{ data: unknown; version: string; bodyReceipts?: readonly string[] }> {
+): Promise<{ data: unknown; version: string }> {
   const { version, session, target } = envelope;
   const headers: Record<string, string> = {
     [HOST_RPC_BRIDGE_SESSION_HEADER]: session,
@@ -264,7 +250,6 @@ async function readDuctsBody(
       )
     ).parse(await response.json()),
     version: bodyVersion,
-    bodyReceipts: response.headers.get(BODY_RECEIPT_HEADER) ? [response.headers.get(BODY_RECEIPT_HEADER)!] : undefined,
   };
 }
 
@@ -282,7 +267,7 @@ export function ductsBodySource<T>(options: {
       if (!request) return deliver({ kind: "complete", value: options.absent, revision: 0 });
       let latest = { revision: "", current: false };
       let serial = 0;
-      let retained: { version: string; value: T; bodyReceipts?: readonly string[] } | undefined;
+      let retained: { version: string; value: T } | undefined;
       const attempts = new Set<string>();
       return subscriptionSource({
         request: () => request,
@@ -308,7 +293,6 @@ export function ductsBodySource<T>(options: {
             value: retained.value,
             revision: ++serial,
             sourceVersion: retained.version,
-            bodyReceipts: retained.bodyReceipts,
           });
         if (attempts.has(envelope.revision)) return;
         attempts.add(envelope.revision);
@@ -319,7 +303,6 @@ export function ductsBodySource<T>(options: {
               retained = {
                 version: body.version,
                 value: options.decode(body.data),
-                bodyReceipts: body.bodyReceipts,
               };
               if (!latest.current) return;
               deliver({
@@ -327,7 +310,6 @@ export function ductsBodySource<T>(options: {
                 value: retained.value,
                 revision: ++serial,
                 sourceVersion: body.version,
-                bodyReceipts: retained.bodyReceipts,
               });
             } catch (error) {
               deliver({ kind: "failure", error });

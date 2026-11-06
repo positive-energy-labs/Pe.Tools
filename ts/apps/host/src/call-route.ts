@@ -18,7 +18,6 @@ import { canonicalDuctsSession, ductsReadings } from "./ducts-readings.ts";
 import {
   DUCTS_BODY_VERSION_HEADER,
   DUCTS_REFRESH_HEADER,
-  BODY_RECEIPT_HEADER,
 } from "@pe/agent-contracts";
 import { sdkSession, SdkSession } from "./sdk-session.ts";
 import { readSchedule } from "./schedule-actions.ts";
@@ -158,7 +157,7 @@ export function makeCallRoute(
     readonly retainedBasis?: DuctsBodyBasisSource;
     readonly retainedRead?: (input: NativeReadInput, options: { version?: string; refresh?: string }) => ReturnType<typeof retainedDuctsRead>;
     readonly nativeBody?: (input: NativeReadInput, read: ReturnType<typeof readNativeCall>) => Effect.Effect<{
-      answer: Effect.Success<ReturnType<typeof readNativeCall>>; bodyReceipt?: string;
+      answer: Effect.Success<ReturnType<typeof readNativeCall>>;
     }, Effect.Error<ReturnType<typeof readNativeCall>>, Effect.Services<ReturnType<typeof readNativeCall>>>;
   },
 ) {
@@ -199,7 +198,6 @@ export function makeCallRoute(
   const callDoor = peRoutes["operation.call"];
   const post = HttpRouter.add(callDoor.method, callDoor.path, (req) => {
     let captureId: string | undefined;
-    let bodyReceipt: string | undefined;
     let admissionRequestId: string = randomUUID();
     // Set once dispatch begins so the catch below can attribute failures to the op.
     let op:
@@ -465,7 +463,6 @@ export function makeCallRoute(
                 const read = readNativeCall(key, input.input, input.scope);
                 const captured = composition?.nativeBody ? yield* composition.nativeBody(input, read) : { answer: yield* read };
                 const answer = captured.answer;
-                bodyReceipt = "bodyReceipt" in captured ? captured.bodyReceipt : undefined;
                 if (answer.actualTarget.processIncarnation.pid !== resolvedSession.processId ||
                     answer.actualTarget.processIncarnation.startedAt !== resolvedSession.processStartUtcUnixMs)
                   return yield* new InvalidRead({ message: "Native read incarnation changed during admission", status: 409, problem: "read.target" });
@@ -509,7 +506,6 @@ export function makeCallRoute(
       const headers = result.target ? resolvedTargetHeaders(result.target) : {};
       if (!op.tsOnly && !entry.cancel) headers["x-pe-native-request-id"] = nativeRequestId;
       if (captureId) headers["x-pe-takeoff-capture-id"] = captureId;
-      if (bodyReceipt) headers[BODY_RECEIPT_HEADER] = bodyReceipt;
       if (kept)
         Object.assign(headers, { "x-pe-capture-id": kept.id, "x-pe-capture-url": kept.url });
       return Response.jsonUnsafe(result.value ?? null, { headers });

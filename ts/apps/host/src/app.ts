@@ -1,3 +1,4 @@
+import { ResourceConnectionOwner } from "./request-services.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
 import { readEvents } from "./reads/events.ts";
 import { Publications, evaluate } from "./reads/evaluator.ts";
@@ -5,10 +6,6 @@ import { graphRoute, graphRouteIds } from "./reads/routes.ts";
 import { ductsInputPort, type DuctsReadSources } from "./reads/ducts-inputs.ts";
 import { HostInputContext } from "./input-context.ts";
 import type { TakingObserver } from "./native-recording.ts";
-import { BodyReceiptAudience, bodyReceipts } from "./body-receipts.ts";
-import { acceptedPointPolicy } from "./recording-points.ts";
-import { BODY_RECEIPT_HEADER } from "@pe/agent-contracts";
-import { createHash } from "node:crypto";
 import { recordedWorkSource, capturedWorkReads, workReadContext, type WorkInputRunner } from "./work-inputs.ts";
 import { CurrentInputConsumption, HostInputReadSets, type InputConsumption, type ReadSetId, type ConsumerRecipe } from "./input-occurrence.ts";
 
@@ -284,8 +281,6 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (inputs: HostI
   const publications = new Publications();
   const invalidations = readInvalidations(workspace, marks, recorded, publications, files.subscribe);
   yield* Effect.addFinalizer(() => Effect.sync(invalidations.close));
-  const receipts = writer ? bodyReceipts(writer) : undefined;
-  const acceptPoints = writer && receipts ? yield* acceptedPointPolicy(writer, receipts) : undefined;
   const json = (value: unknown) => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));
   const child = (parent: InputConsumption, recipe: ConsumerRecipe) => {
     const next = parent.child(recipe);
@@ -313,12 +308,12 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (inputs: HostI
     });
   const invocation: PeInvocationFactory = async (request, web, fallback) => {
     const identity = Context.get(request, RequestIdentity);
-    const audience = Option.getOrNull(Context.getOption(request, BodyReceiptAudience));
+    const connectionOwner = Option.getOrNull(Context.getOption(request, ResourceConnectionOwner));
     const admitted = Context.add(provided, RequestIdentity, identity);
     const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) => runPods({}, Effect.provide(effect, admitted));
     const url = new URL(web.url), declared = matchPeRoute(web.method, url.pathname)!;
     if (declared.id === "reads.events") return { readEvents: readEvents(publications, identity.caller, web) };
-    if (declared.id === "resources.subscriptions") return { resourceAudience: audience };
+    if (declared.id === "resources.subscriptions") return { resourceOwner: connectionOwner };
     if (![...graphRouteIds, "work.get", "resources.stream"].includes(declared.id)) return {};
     const stream = declared.id === "resources.stream";
     const input = declared.route.input.parse({ params: declared.params,
@@ -370,8 +365,6 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (inputs: HostI
         constructor(readonly subscription?: ReadSetId, readonly envelope?: DuctsReadingEnvelope) { super(); }
       }
       const frameRuns = new WeakMap<WorkCarriage, WorkInputRunner>();
-      const frameVersions = new WeakMap<WorkCarriage, string>();
-      let frameReceipt: string | undefined;
       const readyFrames = new Set<InputConsumption>();
       const frameOwner = Symbol();
       let released = false;
@@ -459,7 +452,6 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (inputs: HostI
       return () => { closed = true; release(); };
       };
       const release = markReadings(marks, async (ref, key, at, carriage, update) => {
-        frameReceipt = undefined;
         const runFrame = carriage ? frameRuns.get(carriage) : undefined;
         if (!runFrame) {
           if (!ref) return null;
@@ -489,21 +481,11 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (inputs: HostI
                 })));
               const value = ref ? await scoped(current)(marks.readFrame(ref, key, at)) : null;
               if (!released) await complete(current);
-              const version = carriage ? frameVersions.get(carriage) : undefined;
-              if (!released && version && receipts && (reading.kind === "work" || reading.kind === "work-acks"))
-                frameReceipt = await scoped(current)(receipts.mint(current.id, version, audience));
               return value;
             } finally { await finishFrame(current); }
           }, catch: (error) => isDoorFailure(error) ? error : new InvalidRead({ message: String(error), status: 409, problem: "recording.context" }) });
         }));
-      })((request, emit, after) => observeResources(workspace, undefined, retainedResource, work)(request, (frame, carriage) => {
-        if (frame.kind === "snapshot" && carriage && (reading.kind === "work" || reading.kind === "work-acks")) {
-          try { frameVersions.set(carriage, createHash("sha256").update(canonicalJson(json(frame.value))).digest("hex")); }
-          catch { const at = writer?.capture.begin(); if (at != null) void invoke(writer!.capture.stop(at, "encoding")); }
-        }
-        emit(frame, carriage);
-      }, after))(reading, (frame, carriage) => publish(frame.kind === "snapshot" && frameReceipt
-        ? { ...frame, bodyReceipts: [frameReceipt] } : frame, carriage), after);
+      })(observeResources(workspace, undefined, retainedResource, work))(reading, publish, after);
       return () => {
         released = true; release();
         for (const current of readyFrames) void finishFrame(current);
@@ -541,9 +523,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (inputs: HostI
     } } : {}), ...(source && { work: source.inputs!.work,
       document: (ref: import("@pe/agent-contracts").DocumentRef) => runPods({}, Effect.provide(inventory.document(ref), Context.add(admitted, CurrentInputConsumption, consumption!))) }), observe,
       closeResources: () => { closingResources = true; closeResources(); },
-      resourceAudience: audience,
-      ...(stream && acceptPoints ? { resourceAcceptance: { audience,
-        accept: (readings: readonly import("@pe/agent-contracts").AcceptedReading[], active: () => boolean) => invoke(acceptPoints(readings, audience, active)) } } : {}),
+      resourceOwner: connectionOwner,
       finish: async (result) => {
         if (stream) {
           if (consumption && ("error" in result || !result.response.ok)) await invoke(consumption.close);
@@ -551,11 +531,6 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (inputs: HostI
         }
         try { if ("response" in result && result.response.ok) {
           await complete(consumption!);
-          if (!graph?.publication && receipts && audience && !writer!.capture.truncated()) {
-            const text = await result.response.clone().text();
-            const receipt = await invoke(receipts.mint(consumption!.id, createHash("sha256").update(text).digest("hex"), audience));
-            if (receipt) result.response.headers.set(BODY_RECEIPT_HEADER, receipt);
-          }
         } } catch {
           const at = writer?.capture.begin();
           if (at != null) await invoke(writer!.capture.stop(at, "io"));
@@ -583,17 +558,14 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (inputs: HostI
             const at = writer.capture.begin(); return at === null ? Effect.void : writer.capture.stop(at, "unsupported");
           }));
         return response;
-      }).pipe(Effect.tap(() => sealed(root)), Effect.flatMap((response) => Effect.gen(function* () {
-        const audience = yield* Effect.serviceOption(BodyReceiptAudience);
-        return receipts ? yield* receipts.attach(response, root.id, Option.getOrNull(audience)) : response;
-      })), Effect.ensuring(root.close), Effect.provideService(CurrentInputConsumption, root),
+      }).pipe(Effect.tap(() => sealed(root)), Effect.ensuring(root.close), Effect.provideService(CurrentInputConsumption, root),
         Effect.provideService(HostNativeRead, Context.get(services, HostNativeRead)));
     });
   const work = { workspace, registrations, pointers: options.pointers };
   const nativeCall = Effect.fn("Reads.nativeBody")(function* (raw: NativeReadInput) {
-    const { answer, bodyReceipt } = yield* nativeBody(raw, Context.get(services, HostNativeRead).read(raw));
+    const { answer } = yield* nativeBody(raw, Context.get(services, HostNativeRead).read(raw));
     return HttpServerResponse.jsonUnsafe(answer.value, { headers: { "x-pe-native-request-id": answer.nativeRequestId,
-      ...(bodyReceipt ? { [BODY_RECEIPT_HEADER]: bodyReceipt } : {}) } });
+      } });
   });
   const nativeBody = Effect.fn("Reads.nativeBodyCapture")(function* (raw: NativeReadInput, read: Effect.Effect<import("@pe/host-internal/request-contracts").NativeAnswer<Schema.Json>, import("@pe/host-internal/request-contracts").DoorFailure, RequestIdentityKey | HostNativeRead>) {
     const root = yield* readSets.open({ key: "native.call", input: json(raw), scope: canonicalJson(raw.scope) }, null);
@@ -610,9 +582,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (inputs: HostI
         }));
       }
       yield* sealed(root);
-      const audience = yield* Effect.serviceOption(BodyReceiptAudience);
-      const bodyReceipt = receipts ? yield* receipts.mint(root.id, createHash("sha256").update(JSON.stringify(answer.value ?? null)).digest("hex"), Option.getOrNull(audience)) : undefined;
-      return { answer, ...(bodyReceipt ? { bodyReceipt } : {}) };
+      return { answer };
     }).pipe(Effect.provideService(CurrentInputConsumption, root), Effect.provideService(HostNativeRead, Context.get(services, HostNativeRead)), Effect.ensuring(root.close));
   });
   return { work, invocation, retainedCall, nativeCall, nativeBody, services, publications };

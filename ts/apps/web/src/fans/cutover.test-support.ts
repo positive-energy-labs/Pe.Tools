@@ -30,8 +30,6 @@ export async function createWitness(
       setState: async ({ route, value }) => {
         saved.set(route, structuredClone(value));
       },
-      // Ducts Work declares a 1 -> 2 migration, so admission takes a census; every Work this
-      // witness saves is born at the current schema age, so none is older.
       listState: async () => ({ records: [], truncated: false, unreadable: 0, unindexed: 0 }),
     },
   });
