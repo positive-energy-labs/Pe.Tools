@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Reflection;
-using NUnit.Framework;
 using Pe.Revit.Space;
 
 namespace Pe.Partition.Tests;

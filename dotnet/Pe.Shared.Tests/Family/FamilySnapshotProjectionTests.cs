@@ -1,4 +1,3 @@
-using NUnit.Framework;
 using Pe.Revit.FamilyFoundry.Capture;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;

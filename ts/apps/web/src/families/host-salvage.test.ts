@@ -251,32 +251,8 @@ test("a route without salvage keeps recovery unavailable", async () => {
 
 // A complete neutral spec does not supply the missing admitted recovery lifecycle port.
 test("unreadable admitted Work starts fresh, preserves its aside and accepts carry-over", async () => {
-  const f = await witness(false);
-  vi.spyOn(workHost, "startFreshRouteWork").mockImplementation((key) =>
-    f.host.startFresh(key, "families", "human"),
-  );
-  vi.spyOn(workHost, "salvageRouteWork").mockImplementation(
-    (key) => f.host.salvage(key, "families") as ReturnType<typeof workHost.salvageRouteWork>,
-  );
-  const observe = observeResources(f.host, { observe: () => () => {} });
-  const work = createWorkFeedClient(
-    { subscribe: observe, dirty() {} },
-    {
-      write: (key, write) => f.host.write(key, "families", "human", write),
-      submit: async () => {
-        throw Error("Unexpected native dispatch");
-      },
-    },
-  );
-  const mount = createRouteShell({ ...sourceRouteServices({}), work }).mount(
-    f.route,
-    placeInput({
-      read: () => new URLSearchParams(),
-      write() {},
-      subscribe: () => () => {},
-    }),
-  );
-  closes.push(mount.close);
+  const f = await recoveryMount();
+  const { mount } = f;
   await vi.waitFor(() => expect(mount.workProblem()).not.toBeNull());
   expect(mount.work()).toBeNull();
   expect(await f.host.salvage(key, "families")).toEqual(carried);

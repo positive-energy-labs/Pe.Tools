@@ -1,4 +1,3 @@
-using NUnit.Framework;
 
 using Pe.Revit.Takeoff;
 using Pe.Shared.RevitData.Takeoffs;

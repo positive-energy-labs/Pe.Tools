@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.IO.Compression;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using NUnit.Framework;
 using Pe.Revit.Partition;
 using Pe.Revit.Space;
 
