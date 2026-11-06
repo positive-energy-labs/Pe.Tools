@@ -1,5 +1,4 @@
 using Newtonsoft.Json.Linq;
-using NUnit.Framework;
 using Pe.Revit.Partition;
 
 namespace Pe.Partition.Tests;

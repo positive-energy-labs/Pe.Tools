@@ -1,4 +1,3 @@
-using NUnit.Framework;
 using Pe.Revit.Partition;
 using Pe.Revit.Space;
 

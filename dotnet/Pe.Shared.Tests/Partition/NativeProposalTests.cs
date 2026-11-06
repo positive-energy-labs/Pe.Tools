@@ -3,7 +3,6 @@ using NetTopologySuite.Geometries;
 using NetTopologySuite.IO;
 using NetTopologySuite.Operation.Union;
 using Newtonsoft.Json.Linq;
-using NUnit.Framework;
 using Pe.Revit.Partition;
 using Pe.Revit.Space;
 
