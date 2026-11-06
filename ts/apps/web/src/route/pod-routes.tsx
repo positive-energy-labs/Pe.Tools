@@ -3,7 +3,7 @@ import { createContext, use, useEffect, useMemo, useState, type ReactNode } from
 import { message, type PodRouteDescriptor } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
-import { registerRoute } from "./builtin-routes";
+import { registerRoute } from "../shell/route-registration";
 import { admitPodArtifact } from "./pod-artifact";
 import { createPodRouteLoader } from "./pod-loader";
 

@@ -1,7 +1,7 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Button } from "@pe/kit/lang/button";
-import { publicRoutes } from "#/route/builtin-routes";
+import { publicRoutes } from "#/route/route-discovery";
 import { admittedRouterAddress } from "#/shell/admitted-pane";
 import { applicationRouteShell as ApplicationRouteShell } from "#/shell/application-route-shell";
 import { usePodRoutes } from "#/route/pod-routes";

@@ -66,7 +66,7 @@ function PlaceRouteShell({
     () => createRouteShell(sourceRouteServices(admittedSources(route))),
     [route],
   );
-  const document = createElement(DocumentPicker, { place, target: resolved, needs: route.data.needs });
+  const document = createElement(DocumentPicker, { place, target: resolved, needs: route.data.needs, enabled: fixture === null && route.data.needs !== "nothing" });
   if (!resolved && !input.work.address && !input.work.open)
     return createElement(Fragment, null, document, createElement(OutcomeLine, {
       kind: "error",
@@ -84,13 +84,14 @@ function PlaceRouteShell({
 export { ApplicationRouteShell as applicationRouteShell };
 
 /** A choice pins this Place to an exact open lifetime; it never changes the chat's targets. */
-export function DocumentPicker({ place, target, needs }: {
+export function DocumentPicker({ place, target, needs, enabled }: {
   place: PanePlace;
   target: PlaceInput["target"];
   needs: string;
+  enabled: boolean;
 }) {
-  const inventory = useInventory(place.fixture === null && needs !== "nothing");
-  if (place.fixture !== null || needs === "nothing") return null;
+  const inventory = useInventory(enabled);
+  if (!enabled) return null;
   const options = inventoryOf(previousOf(inventory)?.sessions ?? []).flatMap((session) =>
     (session.openDocuments ?? []).filter((doc) =>
       needs !== "project" && needs !== "family" || doc.isFamilyDocument === (needs === "family"),
