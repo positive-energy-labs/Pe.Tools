@@ -25,6 +25,7 @@ import { nativeCatalogIdentity, openRecordingWriter, openRecordingReader,
 import type { ReadSetId } from "../src/input-occurrence.ts";
 import { builtinEnrollments } from "../src/builtin-enrollment.ts";
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
+import { settle } from "./effect-test.ts";
 import { bootHost } from "./real-server.ts";
 import { ductsExecutors } from "../src/ducts-actions.ts";
 import type { RevitBridge, HostBridgeEvent } from "../src/bridge.ts";
@@ -75,7 +76,7 @@ const path = address("C:/Models/Chadds.rvt");
 const actualTarget = { processIncarnation: { pid: 42, startedAt: 1000 }, openDocumentLifetime: { openId: ref.openId } };
 const identity = { build: "recorded-fans-graph-witness", catalog: nativeCatalogIdentity() };
 const bounds = { maxBytes: 512 * 1024 * 1024, maxTakings: 2000 };
-const run = Effect.runPromise;
+const run = settle;
 const caller = { kind: "human" as const, via: "local" as const };
 const key = (route: string) => bindWork(route, path, undefined, ref);
 const nativeValue = async (response: Response) => ({
@@ -83,22 +84,32 @@ const nativeValue = async (response: Response) => ({
   nativeRequestId: response.headers.get("x-pe-native-request-id"), version: response.headers.get(DUCTS_BODY_VERSION_HEADER),
 });
 
-async function firstFrame(response: Response) {
+function resourceFrames(response: Response) {
   expect(response.status).toBe(200);
   const reader = response.body!.getReader(); let text = "";
-  try {
+  return { close: () => reader.cancel(), next: async () => {
     while (true) {
-      const read = await reader.read(); if (read.done) throw Error("Resource ended without its snapshot");
-      text += new TextDecoder().decode(read.value);
-      for (const line of text.split("\n")) if (line.startsWith("data:")) {
-        const frame = JSON.parse(line.slice(5));
-        if (frame.kind === "snapshot" || frame.kind === "failure") return frame;
+      const end = text.indexOf("\n");
+      if (end >= 0) {
+        const line = text.slice(0, end); text = text.slice(end + 1);
+        if (line.startsWith("data:")) {
+          const frame = JSON.parse(line.slice(5));
+          if (frame.kind === "snapshot" || frame.kind === "failure") return frame;
+        }
+      } else {
+        let timer: ReturnType<typeof setTimeout>;
+        const read = await Promise.race([reader.read(), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Error(`No SSE frame after 10s: ${text}`)), 10000); })]).finally(() => clearTimeout(timer)); if (read.done) throw Error("Resource ended without its snapshot");
+        text += new TextDecoder().decode(read.value);
       }
     }
-  } finally { await reader.cancel(); }
+  } };
+}
+async function firstFrame(response: Response) {
+  const frames = resourceFrames(response);
+  try { return await frames.next(); } finally { await frames.close(); }
 }
 
-test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and admitted Work resources replay without live inputs", async () => {
+test.skipIf(!existsSync(source)).each([false, true])("real Fans graph persistent SSE and cold replay (capture=%s)", async (capturing) => {
   const dir = await mkdtemp(join(tmpdir(), "pe-fans-graph-"));
   const completed: { recipe: ConsumerRecipe; id: ReadSetId; requestId?: string; caller?: Caller }[] = []; let nativeCalls = 0, poisoned = 0;
   let workspace: RouteWorkspace, holdHuman = false;
@@ -107,7 +118,7 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
   const snapshot = Schema.decodeUnknownSync(Schema.Json)(raw.result ?? raw);
   await mkdir(join(dir, "catalogs")); await writeFile(join(dir, "firm.json"), JSON.stringify(FIRM_SEED));
   const writer = await run(openRecordingWriter(join(dir, "bundle"), identity, bounds));
-  const inputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", captureStore: writer }))));
+  const inputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", ...(capturing ? { captureStore: writer } : {}) }))));
   const native = Layer.succeed(HostNativeRead, {
     resolve: (input) => admitNativeCaller(input.key).pipe(Effect.as({ operationKey: input.key,
       ...actualTarget, ...(input.key === "ducts.tables" ? { openDocumentLifetime: { kind: "session-only" as const } } : {}),
@@ -120,9 +131,11 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
     }))),
   });
   const row = { ...ref, address: path };
+  let changedAt = 300;
+  const markListeners = new Set<() => void>();
   const livePorts = {
     native, files: HostFiles.layer({ firm: join(dir, "firm.json"), catalogs: join(dir, "catalogs") }),
-    marks: Layer.succeed(HostDocumentMarks, hostMarks({ observedSince: 100, changedAt: () => 300, subscribe: () => () => {} })),
+    marks: Layer.succeed(HostDocumentMarks, hostMarks({ observedSince: 100, changedAt: () => changedAt, subscribe: (notify) => { markListeners.add(notify); return () => { markListeners.delete(notify); }; } })),
     inventory: Layer.succeed(HostSessionInventory, { document: () => Effect.succeed(row),
       session: () => Effect.succeed({ sessionId: ref.session }), attachment: () => Effect.succeed({ sessionId: ref.session }) }),
   };
@@ -167,19 +180,62 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
   const cases: { url: string; body?: any; value: any; readSet: ReadSetId; stream?: boolean; caller: Caller }[] = [];
   const claimed = new Set<ReadSetId>();
   const capture = async (url: string, body?: unknown, stream = false, who: Caller = caller) => {
+    const started = completed.length;
     const identity = admitted(who); const response = await send(live, url, body, identity);
     if (!stream) expect(response.status, await response.clone().text()).toBe(200);
     const value = stream ? await firstFrame(response) : url === "/call" ? await nativeValue(response) : await response.json();
     if (stream) expect(value.kind, JSON.stringify(value)).toBe("snapshot");
     if (url === "/call") { expect(response.headers.get("x-pe-ducts-reused")).toBe("true"); expect(value.nativeRequestId).not.toBe(identity.requestId); }
     const key = stream ? "resource.frame" : url === "/call" ? "native.call" : url.endsWith("/sheet") ? "ducts.sheet" : url.includes("route-state") ? "work.get" : "ducts.roster";
-    const roots = completed.filter((entry) => !claimed.has(entry.id) && entry.caller?.kind === who.kind && entry.recipe.key === key);
+    const roots = completed.slice(started).filter((entry) => !claimed.has(entry.id) && entry.caller?.kind === who.kind && entry.recipe.key === key);
     expect(roots, "The actual consumer must complete exactly one stored read set").toHaveLength(1);
     claimed.add(roots[0]!.id);
     cases.push({ url, body, value, readSet: roots[0]!.id, stream, caller: who }); return value;
   };
   let historical: typeof live | undefined;
+  const persistentProof = async () => {
+    const resource: ReadingRequest = { kind: "ducts-snapshot", target: ref, selector: { kind: "roster" } };
+    const url = `/pe/resources?keys=${encodeURIComponent(JSON.stringify([resource]))}`;
+    const frames = resourceFrames(await send(live, url));
+    const next = async (state: string) => {
+      const value = await frames.next();
+      expect(value, JSON.stringify(value)).toMatchObject({ kind: "snapshot", value: { state } });
+      if (capturing) {
+        const entry = completed.filter((entry) => !claimed.has(entry.id) && (entry.recipe.key === "resource.frame" || (entry.recipe.key === "resource.notification" && canonicalJson(entry.recipe.input) === canonicalJson({ reading: resource, envelope: value.value })))).at(-1)!;
+        claimed.add(entry.id); cases.push({ url, value, readSet: entry.id, stream: true, caller });
+      }
+      return value;
+    };
+    try {
+      const original = await next("ready");
+      changedAt = 0; for (const notify of markListeners) notify();
+      expect(await next("ready")).toMatchObject({ changed: false, value: original.value });
+      changedAt = 300; for (const notify of markListeners) notify();
+      expect(await next("ready")).toMatchObject({ changed: true, value: original.value });
+      for (const listener of liveFactories.listeners) listener({ sessionId: ref.session, kind: "event",
+        eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
+      await next("stale");
+      const roster = await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
+      expect(roster.status, await roster.clone().text()).toBe(200);
+      await next("loading"); const fresh = await next("ready");
+      expect(fresh.value.version).not.toBe(original.value.version);
+      expect(fresh.value.version).toBe(roster.headers.get(DUCTS_BODY_VERSION_HEADER));
+      const refresh = ductsExecutors(liveFactories.service!)["ducts.refresh"]!;
+      await refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution);
+      await next("stale");
+      const refreshed = await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
+      expect(refreshed.status, await refreshed.clone().text()).toBe(200);
+      await next("loading");
+      expect((await next("ready")).value.version).toBe(refreshed.headers.get(DUCTS_BODY_VERSION_HEADER));
+    } finally { await frames.close(); }
+  };
   try {
+    if (!capturing) {
+      const warm = await send(live, "/pe/ducts/roster", { target: ref });
+      expect(warm.status, await warm.clone().text()).toBe(200);
+      await persistentProof(); return;
+    }
+    await persistentProof();
     const roster = await capture("/pe/ducts/roster", { target: ref });
     expect(roster.rows.length).toBeGreaterThan(0);
     const rosterCalls = nativeCalls;
@@ -260,6 +316,20 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
     const liveFiles = vi.spyOn(HostFiles, "layer").mockImplementation(() => { poisoned++; throw Error("Live file readers constructed"); });
     const reader = await run(openRecordingReader(join(dir, "bundle"), identity, bounds));
     expect(reader.truncation).toBeNull();
+    const publications = cases.filter((entry) => entry.stream && entry.value.value?.state);
+    expect(new Set(publications.map((entry) => entry.readSet)).size).toBe(publications.length);
+    const acquisitionFrame = publications[0]!;
+    const acquisitionSet = await run(reader.readSets.get(acquisitionFrame.readSet));
+    const acquired = acquisitionSet.children.find((entry) => entry.recipe.key === "ducts.retained")!;
+    expect((await run(reader.readSets.get(acquired.readSetId))).takingLinks.native).toBeTruthy();
+    for (const publication of publications.slice(1).filter((entry) => entry.value !== envelope)) {
+      const set = await run(reader.readSets.get(publication.readSet));
+      expect(set.recipe.key).toBe("resource.notification");
+      expect(set.recipe.input).toMatchObject({ envelope: publication.value.value });
+      expect(set.children).toHaveLength(0); expect(set.takingLinks).toEqual({});
+      expect(set.dependencies.value ?? set.dependencies.subscription).toBe(acquisitionFrame.readSet);
+      expect(set.inputs.filter((entry) => entry.input.kind === "marks")).toHaveLength(1);
+    }
     const overviewCase = cases.filter((entry) => entry.value.kind === "overview");
     expect(overviewCase).toHaveLength(1);
     const overviewSet = await run(reader.readSets.get(overviewCase[0]!.readSet));

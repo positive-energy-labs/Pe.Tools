@@ -9,7 +9,7 @@ import { createDuctsBodyBasis } from "./ducts-body-basis.ts";
 import { DuctsReadings, ductsReadings } from "./ducts-readings.ts";
 import { createPeRoutes, peCoreRoutes, type PeInvocationFactory } from "./pe-routes.ts";
 import { runPods } from "./family-actions.ts";
-import { bindWork, readingKey, readingRequestsSchema } from "@pe/agent-contracts";
+import { bindWork, readingKey, readingRequestsSchema, ductsReadingEnvelopeSchema, type DuctsReadingEnvelope } from "@pe/agent-contracts";
 import { observeResources, resourceSnapshot, WorkCarriage, type ResourceObserver, type WorkReadContext } from "@pe/runtime";
 import { markReadings } from "./resource-adapters.ts";
 import { retainedDuctsRead } from "./call-route.ts";
@@ -308,8 +308,12 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
       throw new InvalidRead({ message: "A recorded resource request needs one exact frame read set", status: 409, problem: "recording.context" });
     const input = stream && recorded ? reading[0] : declared.route.input.parse({ params: declared.params,
       query: Object.fromEntries(url.searchParams), body: web.method === "GET" ? undefined : await web.clone().json() });
-    const recipe: ConsumerRecipe = { key: stream && recorded ? "resource.frame" : declared.id,
-      input: json(input), scope: canonicalJson(json(identity.scope)) };
+    const selected = recorded && stream && options.readSet ? await invoke(lane.recordingStore.readSets.get(options.readSet)) : undefined;
+    const notification = selected?.recipe.key === "resource.notification"
+      ? Schema.decodeUnknownSync(Schema.Struct({ reading: Schema.Json, envelope: Schema.Json }))(selected.recipe.input) : undefined;
+    const recipe: ConsumerRecipe = { key: notification ? "resource.notification" : stream && recorded ? "resource.frame" : declared.id,
+      input: notification ? json({ reading: input, envelope: ductsReadingEnvelopeSchema.parse(notification.envelope) }) : json(input),
+      scope: canonicalJson(json(identity.scope)) };
     const consumption = await invoke(readSets.open(recipe, options.readSet ?? null));
     const scoped = (current: InputConsumption): WorkInputRunner => (effect) =>
       runPods({}, Effect.provide(effect, Context.add(admitted, CurrentInputConsumption, current)));
@@ -349,10 +353,12 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
     };
     const observe: ResourceObserver = (reading, publish, after) => {
       if (!recorded && !["work", "work-acks", "ducts-snapshot", "ducts-tables"].includes(reading.kind)) return fallback(reading, publish, after);
-      class FrameCarriage extends WorkCarriage {}
+      class FrameCarriage extends WorkCarriage {
+        constructor(readonly subscription?: ReadSetId, readonly envelope?: DuctsReadingEnvelope) { super(); }
+      }
       const frameRuns = new WeakMap<WorkCarriage, WorkInputRunner>();
       const frameRecipe: ConsumerRecipe = { key: "resource.frame", input: json(reading), scope: recipe.scope };
-      const frame = () => recorded ? consumption : child(consumption, frameRecipe);
+      const frame = (recipe = frameRecipe) => recorded ? consumption : child(consumption, recipe);
       const work: WorkReadContext = { begin: (read) => {
         try {
           const current = frame(), begun = workReadContext(current, scoped(current)).begin(read);
@@ -373,11 +379,27 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
           scope: { bridgeSessionId: target.session, openDocumentId: target.openId } }; })()
         : (() => { const { kind, session, ...args } = reading; return { key: "ducts.tables", input: args, scope: { bridgeSessionId: session } }; })();
       const current = frame();
+      if (notification) {
+        const carriage = new FrameCarriage(); frameRuns.set(carriage, scoped(current));
+        publish(resourceSnapshot(key, { value: ductsReadingEnvelopeSchema.parse(notification.envelope) }), carriage);
+        return () => {};
+      }
       void invoke(retained(current, input, {}, "acquire", inventory.document)).then(async (response) => {
         await HttpServerResponse.toWeb(response).body?.cancel();
-        const carriage = new FrameCarriage();
-        frameRuns.set(carriage, scoped(current));
-        if (!closed) release = owner.observe(reading, (value) => publish(resourceSnapshot(key, { value }), carriage));
+        let first = true;
+        if (!closed) release = owner.observe(reading, (value) => {
+          try {
+            // A notification observes an envelope, not another taking of the acquired native body.
+            const next = first ? current : frame({ ...frameRecipe, key: "resource.notification", input: json({ reading, envelope: value }) });
+            const carriage = new FrameCarriage(first ? undefined : current.id, value);
+            first = false; frameRuns.set(carriage, scoped(next));
+            publish(resourceSnapshot(key, { value }), carriage);
+          } catch (error) {
+            const failure = error as InvalidRead;
+            publish({ kind: "failure", key, error: failure.message,
+              failure: { kind: "failed", code: failure.problem ?? "ReadingFailed", message: failure.message } });
+          }
+        });
       }).catch((error) => {
         if (!closed) publish({ kind: "failure", key, error: error.message,
           failure: { kind: "failed", code: error.problem ?? "ReadingFailed", message: error.message } });
@@ -394,8 +416,12 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
           const active = yield* Effect.serviceOption(CurrentInputConsumption);
           if (Option.isNone(active)) return yield* new InvalidRead({ message: "Frame runner has no consumption", status: 409, problem: "recording.context" });
           const previous = active.value;
-          const current = update ? frame() : previous;
+          const current = update ? frame(carriage instanceof FrameCarriage && carriage.envelope
+            ? { ...frameRecipe, key: "resource.notification", input: json({ reading, envelope: carriage.envelope }) }
+            : previous.recipe) : previous;
           if (update) yield* current.linkReadSet("value", previous.id);
+          else if (carriage instanceof FrameCarriage && carriage.subscription)
+            yield* current.linkReadSet("subscription", carriage.subscription);
           return yield* Effect.tryPromise({ try: async () => {
             try { const value = await scoped(current)(marks.readFrame(ref, key, at)); await complete(current); return value; }
             finally { await scoped(current)(current.close); }
