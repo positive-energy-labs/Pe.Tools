@@ -38,6 +38,10 @@ const bindingKey = (binding: RecordingConsumer) =>
   canonicalJson([binding.instance, binding.reading, binding.argsHash]);
 const createHashForVersions = (versions: readonly string[]) =>
   createHash("sha256").update(canonicalJson(versions)).digest("hex");
+/** One ACK's verified immutable bytes; no payload retention and no proof shared across ACKs. */
+class VerifiedObservations extends Context.Service<VerifiedObservations, Set<string>>()(
+  "pe/AcceptedObservationIntegrity",
+) {}
 
 export interface RecordingPoints {
   readonly list: (document: Document) => Effect.Effect<readonly RecordingPoint[], InvalidRead>;
@@ -87,6 +91,8 @@ export const recordingReadSetReferences = Effect.fn("RecordingPoints.references"
   const wanted = addressSchema.safeParse(identityCodecs.document.parts(decoded.value).document);
   if (!wanted.success) return yield* refuse("scope", "Document has no recorded Address authority");
   const records = yield* readSetRecords(reader, id);
+  const integrity = yield* Effect.serviceOption(VerifiedObservations);
+  const verified = integrity._tag === "Some" ? integrity.value : undefined;
   const ids = new Set<string>();
   const documents = new Map<string, { session: string; openId: string }>();
   let workAuthority = false;
@@ -101,7 +107,13 @@ export const recordingReadSetReferences = Effect.fn("RecordingPoints.references"
     if (!taking) return yield* refuse("miss", "Point references a missing taking");
     // Verify observation bytes even for inputs the selected body might not read on this replay.
     if (taking.outcome.kind === "answered" || taking.outcome.kind === "observed") {
+      const proof = canonicalJson([taking.input.kind, taking.outputVersion, taking.outcome.observation]);
+      // Document/Work values establish this graph's authority and must still be interpreted.
+      // All taking scopes and lifetimes are checked independently in the second loop below.
+      if (taking.input.kind !== "document" && taking.input.kind !== "work" && verified?.has(proof))
+        continue;
       const value = yield* reader.observation(taking);
+      verified?.add(proof);
       if (
         taking.input.kind === "work" &&
         value &&
@@ -195,7 +207,7 @@ export const acceptedPointPolicy = Effect.fn("RecordingPoints.acceptedPolicy")(f
     ),
     HostInputReadSets,
   );
-  return Effect.fn("RecordingPoints.acceptedBatch")(function* (
+  const accept = Effect.fn("RecordingPoints.acceptedBatch")(function* (
     readings: readonly AcceptedReading[],
     audience: string | null,
     active: () => boolean,
@@ -320,6 +332,8 @@ export const acceptedPointPolicy = Effect.fn("RecordingPoints.acceptedPolicy")(f
       ),
     );
   });
+  return (...args: Parameters<typeof accept>) =>
+    Effect.suspend(() => accept(...args).pipe(Effect.provideService(VerifiedObservations, new Set<string>())));
 });
 const references = recordingReadSetReferences;
 

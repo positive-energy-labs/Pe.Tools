@@ -194,6 +194,7 @@ async function setup(mode = "normal") {
     );
   return {
     writer,
+    dir,
     send,
     otherCookie,
     close: async () => {
@@ -383,6 +384,12 @@ test("actual HTTP bodies authenticate multi-body mounted ACKs into point-bound n
     expect(owner.writer.capture.truncated()).toBeNull();
     expect((await ack({ add: [], remove: [], unmounted: [consumer] })).status).toBe(200);
     expect((await ack({ add: [], remove: [], accepted })).status).toBe(200);
+    // Integrity proofs are operation-local: changed bytes must fail on a later ACK.
+    const nativeTaking = [...proof.ids].map((id) => owner.writer.taking(id)!)
+      .find((taking) => taking.input.kind === "native" && taking.outcome.kind === "answered");
+    if (!nativeTaking || nativeTaking.outcome.kind !== "answered") throw Error("Missing answered taking");
+    await writeFile(join(owner.dir, "bundle", "observations", `${nativeTaking.outcome.observation}.json`), "{}");
+    expect((await ack({ add: [], remove: [], accepted })).status).toBe(400);
     await stream.cancel();
     stream = undefined;
     expect((await ack({ add: [], remove: [], accepted })).status).toBe(409);
