@@ -159,6 +159,7 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
   schemas: S,
   membership: (page: PageOf<G, S>) => "verified" | "unresolved" | { readonly reason: string },
   transition?: (current: PageOf<G, S>, patch: unknown, origin: MoveOrigin) => DecodeResult<unknown>,
+  fixtureDefaults: unknown = {},
 ) {
   const fields = Object.entries(graph.fields);
   const subject = fields.filter(([, field]) => field.role === "subject");
@@ -234,10 +235,20 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
     }
     return isPage(out) ? { ok: true, value: freezePage(out) } : decodeFailure("Invalid Page");
   };
-  const defaults = () =>
-    Object.fromEntries(
+  const fixture = record.safeParse(structuredClone(fixtureDefaults));
+  const defaultFailure =
+    !fixture.success ||
+    Object.keys(fixture.data).some(
+      (key) => !role(key) || ["setting", "device", "transient"].includes(role(key)!),
+    )
+      ? "Invalid fixture Page defaults"
+      : null;
+  const defaults = () => ({
+    ...Object.fromEntries(
       fields.map(([key, field]) => [key, field.role === "selection" ? [] : field.initial]),
-    );
+    ),
+    ...(fixture.success ? fixture.data : {}),
+  });
   type RestoreState = Parameters<PageOwner<G, S>["restorePage"]>[0];
   const isRestoreState = (input: Record<string, unknown>): input is RestoreState =>
     Object.hasOwn(input, subjectKey) &&
@@ -318,9 +329,10 @@ export function createPagePolicy<G extends RouteGraphJson, S extends SchemaTable
   };
   return Object.freeze({
     decode,
-    initial: () => decode(defaults()),
+    initial: () => (defaultFailure ? decodeFailure(defaultFailure) : decode(defaults())),
     /** Inputs are decoded fields with presence retained. Empty values are never absence. */
     restoreState(url: unknown, memory: unknown): DecodeResult<RestoreState> {
+      if (defaultFailure) return decodeFailure(defaultFailure);
       const u = record.safeParse(url);
       const m = record.safeParse(memory);
       if (!u.success || !m.success) return decodeFailure("Invalid restore fields");

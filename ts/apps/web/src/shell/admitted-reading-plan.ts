@@ -8,6 +8,7 @@ import {
 } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
+import type { RouteBindings } from "../../../../packages/agent-contracts/src/route-bodies";
 import {
   createAdmittedRouteRegistry,
   resolveRouteBindings,
@@ -62,6 +63,15 @@ function freeze<T>(value: T): T {
   return value;
 }
 
+/** The same declared seed resolver serves Page initialization and the admitted reading plan. */
+export function admittedSeed(
+  route: AdmittedRoute,
+  bindings: Pick<RouteBindings, "bodies">,
+  name: string,
+) {
+  const seed = name && Object.hasOwn(route.data.seeds, name) && route.data.seeds[name];
+  return seed ? bindings.bodies[seed.load]!.run() : undefined;
+}
 /** One admitted plan serves fixture and live acquisition. Descriptor membership includes the
  * logical reading, even when two readings resolve the same operation and arguments. */
 export function createAdmittedReadingPlan(options: {
@@ -126,10 +136,7 @@ export function createAdmittedReadingPlan(options: {
       ),
     request,
     seed(name: string) {
-      const linked = bindings();
-      const seed =
-        name && Object.hasOwn(options.route.data.seeds, name) && options.route.data.seeds[name];
-      return seed ? linked.bodies[seed.load]!.run() : undefined;
+      return admittedSeed(options.route, bindings(), name);
     },
     /** Geometry issuance stays with the geometry owner; bind only its exact admitted output. */
     bind(
