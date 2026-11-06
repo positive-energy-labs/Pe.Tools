@@ -260,7 +260,16 @@ export type RouteTokenIssuer = ReturnType<typeof createRouteTokenIssuer>;
 export type MoveOrigin =
   | {
       readonly kind: "human";
-      readonly source: "subject" | "stage" | "selection" | "setting" | "pose" | "query" | "draft";
+      readonly source:
+        | "subject"
+        | "stage"
+        | "selection"
+        | "setting"
+        | "pose"
+        | "query"
+        | "draft"
+        | "device"
+        | "transient";
       readonly history: "push" | "replace";
     }
   | { readonly kind: "pea"; readonly lease: LeaseToken }
@@ -287,6 +296,8 @@ export interface PagePort<G extends RouteGraphJson, S extends SchemaTable> {
   read(): PageOf<G, S>;
   select(next: PageOf<G, S>[RoleKeys<G, "selection">]): MoveResult;
   set<K extends RoleKeys<G, "setting">>(key: K, value: PageOf<G, S>[K]): MoveResult;
+  device<K extends RoleKeys<G, "device">>(key: K, value: PageOf<G, S>[K]): MoveResult;
+  transient<K extends RoleKeys<G, "transient">>(key: K, value: PageOf<G, S>[K]): MoveResult;
   /** Runtime rejects keys outside the pose role, including wider objects and raw JS. */
   pose<P extends Partial<Pick<PageOf<G, S>, RoleKeys<G, "pose">>>>(
     patch: P & Record<Exclude<keyof P, RoleKeys<G, "pose">>, never>,
@@ -299,6 +310,8 @@ export interface FieldControls<G extends RouteGraphJson, S extends SchemaTable> 
   stage(value: PageOf<G, S>[RoleKeys<G, "stage">]): MoveResult;
   query<K extends RoleKeys<G, "query">>(key: K, value: PageOf<G, S>[K]): MoveResult;
   draft<K extends RoleKeys<G, "draft">>(key: K, value: PageOf<G, S>[K]): MoveResult;
+  device<K extends RoleKeys<G, "device">>(key: K, value: PageOf<G, S>[K]): MoveResult;
+  transient<K extends RoleKeys<G, "transient">>(key: K, value: PageOf<G, S>[K]): MoveResult;
 }
 export type PagePatch<G extends RouteGraphJson, S extends SchemaTable> = Partial<PageOf<G, S>>;
 /** Presence-aware restore: explicit empty/default wins over memory. Membership can remain

@@ -112,7 +112,17 @@ const record = z
 const originSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("human"),
-    source: z.enum(["subject", "stage", "selection", "setting", "pose", "query", "draft"]),
+    source: z.enum([
+      "subject",
+      "stage",
+      "selection",
+      "setting",
+      "pose",
+      "query",
+      "draft",
+      "device",
+      "transient",
+    ]),
     history: z.enum(["push", "replace"]),
   }),
   z.strictObject({
@@ -379,7 +389,11 @@ export function createRolePagePorts<P>(
       return refused("Invalid Page patch");
     }
   };
-  const field = (key: unknown, value: unknown, source: "setting" | "query" | "draft") =>
+  const field = (
+    key: unknown,
+    value: unknown,
+    source: "setting" | "query" | "draft" | "device" | "transient",
+  ) =>
     typeof key === "string"
       ? send({ [key]: value }, source, "replace")
       : refused("Invalid field key");
@@ -394,6 +408,8 @@ export function createRolePagePorts<P>(
       read: () => freezePage(owner.readPage()),
       select: (next: unknown) => one("selection", next),
       set: (key: keyof P, value: P[keyof P]) => field(key, value, "setting"),
+      device: (key: keyof P, value: P[keyof P]) => field(key, value, "device"),
+      transient: (key: keyof P, value: P[keyof P]) => field(key, value, "transient"),
       pose: (patch: unknown, intent: "gesture" | "named") =>
         intent === "gesture" || intent === "named"
           ? send(patch, "pose", intent === "gesture" ? "replace" : "push")
@@ -404,6 +420,8 @@ export function createRolePagePorts<P>(
       stage: (value: unknown) => one("stage", value),
       query: (key: keyof P, value: P[keyof P]) => field(key, value, "query"),
       draft: (key: keyof P, value: P[keyof P]) => field(key, value, "draft"),
+      device: (key: keyof P, value: P[keyof P]) => field(key, value, "device"),
+      transient: (key: keyof P, value: P[keyof P]) => field(key, value, "transient"),
     }),
   });
 }

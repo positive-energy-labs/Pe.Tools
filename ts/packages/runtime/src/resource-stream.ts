@@ -227,7 +227,6 @@ export function resourceResponse(
   let stalled: ReturnType<typeof setTimeout> | undefined;
   const releases = new Map<string, () => void>();
   const accepted = new Map<string, AcceptedReading>();
-  const retired = new Set<string>();
   let updating = false;
   let acceptanceEpoch = 0;
   const consumerKey = (value: RecordingAcknowledgements["unmounted"][number]) => JSON.stringify([value.instance, value.reading, value.argsHash]);
@@ -265,7 +264,7 @@ export function resourceResponse(
     for (const release of releases.values()) release();
     onClose?.();
     releases.clear();
-    accepted.clear(); retired.clear();
+    accepted.clear();
     acceptanceEpoch++;
     pending.clear();
     ready.clear();
@@ -396,29 +395,26 @@ export function resourceResponse(
           if (acceptance?.audience && audience !== acceptance.audience) throw Error("Foreign reading connection");
           if (updating) {
             if (ack.accepted.length || add.length || remove.length || !ack.unmounted.length) throw Error("Connection is updating");
-            if (new Set([...retired, ...ack.unmounted.map(consumerKey)]).size > READING_MAX_KEYS) {
-              abort(); throw Error("Retired reading slots are full; reconnect");
-            }
-            for (const consumer of ack.unmounted) { const key = consumerKey(consumer); accepted.delete(key); retired.add(key); }
+            for (const consumer of ack.unmounted) accepted.delete(consumerKey(consumer));
+            // Fence the pending batch, not this consumer's future mounted acceptances.
             acceptanceEpoch++;
             return;
           }
           updating = true;
           const epoch = acceptanceEpoch;
           try {
-            const next = new Map(accepted), tombstones = new Set(retired);
-            for (const consumer of ack.unmounted) { const key = consumerKey(consumer); next.delete(key); tombstones.add(key); }
+            const next = new Map(accepted);
+            for (const consumer of ack.unmounted) next.delete(consumerKey(consumer));
             for (const reading of ack.accepted) {
               const key = consumerKey(reading.consumer);
-              if (tombstones.has(key)) throw Error("Retired reading consumer");
               for (const [priorKey, prior] of next) {
                 if (prior.consumer.instance === reading.consumer.instance && prior.consumer.reading === reading.consumer.reading && priorKey !== key) {
-                  next.delete(priorKey); tombstones.add(priorKey);
+                  next.delete(priorKey);
                 }
               }
               next.set(key, reading);
             }
-            if (next.size > READING_MAX_KEYS || tombstones.size > READING_MAX_KEYS) {
+            if (next.size > READING_MAX_KEYS) {
               abort(); throw Error("Accepted reading slots are full; reconnect");
             }
             if (ack.accepted.length) {
@@ -427,7 +423,6 @@ export function resourceResponse(
               if (closed || acceptanceEpoch !== epoch) throw Error("Reading connection retired during acceptance");
             }
             accepted.clear(); next.forEach((value, key) => accepted.set(key, value));
-            retired.clear(); tombstones.forEach((key) => retired.add(key));
             update(add, remove);
           } finally { updating = false; }
         } });

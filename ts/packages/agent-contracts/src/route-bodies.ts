@@ -535,11 +535,11 @@ export function linkRouteBodies(
       case "page":
         body(verb.patch, `${path}.patch`, "page");
         for (const field of verb.fields)
-          if (!["query", "draft"].includes(data.fields[field]?.role ?? ""))
+          if (!["query", "draft", "device", "transient"].includes(data.fields[field]?.role ?? ""))
             fail(
               `${path}.fields`,
               field,
-              "query or draft",
+              "query, draft, device or transient",
               "Page verbs cannot write this role",
               "policy",
             );

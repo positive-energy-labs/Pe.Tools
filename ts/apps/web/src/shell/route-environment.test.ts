@@ -1,4 +1,11 @@
 import { createFixtureWorkDoor } from "./fixture-work-door";
+import { bindWork } from "../../../../packages/agent-contracts/src/route-state.ts";
+import { memberWork } from "../../../../packages/agent-contracts/src/settings.ts";
+import { settleWork } from "./work-door-observation.ts";
+import type {
+  WorkFeedState,
+  WorkScope,
+} from "../../../../packages/agent-contracts/src/work-journal-door.ts";
 const command = { id: "write", key: "write", target: { kind: "host" as const }, input: {} };
 import { createHash } from "node:crypto";
 import { expect, test, vi } from "vite-plus/test";
@@ -529,6 +536,131 @@ test("named fixtures refuse unknown and empty names before live factories; read-
   });
   expect(fixture.environment.work).toBeUndefined();
   fixture.close();
+  s.fixtureOptions.plan.close();
+  s.close();
+});
+
+test("fixture selectors decode exact resolved request args rather than Page field names", async () => {
+  const s = await setup();
+  const later = { id: unwrap(localCodec.encode({ namespace: "fixture", subject: "later" })), name: "Later" };
+  const fixture = createFixtureRouteEnvironment({
+    ...s.fixtureOptions,
+    seed: {
+      readings: {
+        roster: {
+          fixtureSelect: {
+            fields: ["filter"],
+            values: { [JSON.stringify([""])]: [], [JSON.stringify(["later"])]: [later] },
+            fallback: 42,
+          },
+        },
+      },
+    },
+  });
+  expect(fixture.read("roster", { page: { search: "" }, work: null }, s.token)).toMatchObject({
+    current: true,
+    value: [],
+  });
+  expect(fixture.read("roster", { page: { search: "later", filter: "wrong Page value" }, work: null }, s.token)).toMatchObject({ current: true, value: [later] });
+  const wrong = createFixtureRouteEnvironment({
+    ...s.fixtureOptions,
+    seed: {
+      readings: { roster: { fixtureSelect: { fields: ["search"], values: {}, fallback: [] } } },
+    },
+  });
+  expect(wrong.environment.reads.acquire(s.fixtureRead, s.token).read()).toMatchObject({
+    status: "unavailable",
+  });
+  fixture.close();
+  wrong.close();
+  s.fixtureOptions.plan.close();
+  s.close();
+});
+
+test("keyed fixture member Works preserve independent edits and undo across switches and environments", async () => {
+  const a = memberWork({ pod: "test-pod", path: "settings/a.json" });
+  const b = memberWork({ pod: "test-pod", path: "settings/b.json" });
+  const source = {
+    ...builtinModule,
+    data: { ...builtinModule.data, seeds: { example: { title: "Example", load: "exampleSeed" } } },
+    bodies: {
+      ...builtinModule.bodies,
+      exampleSeed: {
+        slot: "seeds.example.load",
+        kind: "seed",
+        source: builtinModule.bodies.rosterArgs.source,
+        run: () => ({
+          readings: { roster: [] },
+          work: { amount: 999 },
+          works: { [a]: { amount: 1 }, [b]: { amount: 2 } },
+        }),
+      },
+    },
+  };
+  const s = await setup(false, source);
+  const first = createNamedFixtureRouteEnvironment({ ...s.fixtureOptions, name: "example" });
+  const second = createNamedFixtureRouteEnvironment({ ...s.fixtureOptions, name: "example" });
+  const scope = (member: string): WorkScope => ({
+    route: s.route.data.key,
+    fingerprint: s.route.fingerprint,
+    key: bindWork(s.route.data.key, null, member),
+    target: null,
+    subject: null,
+  });
+  const open = async (env: typeof first, member: string) => {
+    let stop = () => {};
+    const state = await new Promise<Extract<WorkFeedState, { kind: "ready" | "failed" }>>(
+      (resolve) => {
+        stop = env.environment.work.read.open(scope(member)).subscribe(
+          (state) => {
+            if (state.kind === "ready" || state.kind === "failed") resolve(state);
+          },
+          () => {},
+        );
+      },
+    );
+    stop();
+    return state;
+  };
+  const door = (env: typeof first) => env.environment.work;
+  expect(await open(first, a)).toMatchObject({ kind: "ready", snapshot: { value: { amount: 1 } } });
+  expect(await open(first, b)).toMatchObject({ kind: "ready", snapshot: { value: { amount: 2 } } });
+  expect(
+    await settleWork(
+      door(first).submit.submitWork(
+        scope(a),
+        {
+          kind: "apply",
+          expectedRevision: 0,
+          patches: [{ path: ["amount"], value: 10 }],
+          press: "edit-a",
+        },
+        s.invocation,
+      ),
+    ),
+  ).toMatchObject({ kind: "accepted" });
+  expect(await open(first, b)).toMatchObject({ snapshot: { value: { amount: 2 }, revision: 0 } });
+  expect(await open(first, a)).toMatchObject({ snapshot: { value: { amount: 10 }, revision: 1 } });
+  expect(
+    await settleWork(
+      door(first).submit.submitWork(
+        scope(a),
+        {
+          kind: "restore",
+          expectedRevision: 1,
+          restoreOf: 1,
+          patches: [{ path: ["amount"], value: 1 }],
+          press: "undo-a",
+        },
+        s.invocation,
+      ),
+    ),
+  ).toMatchObject({ kind: "accepted" });
+  expect(await open(first, a)).toMatchObject({ snapshot: { value: { amount: 1 }, revision: 2 } });
+  expect(await open(second, a)).toMatchObject({ snapshot: { value: { amount: 1 }, revision: 0 } });
+  expect(await open(first, "missing")).toMatchObject({ kind: "failed" });
+  first.close();
+  second.close();
   s.fixtureOptions.plan.close();
   s.close();
 });

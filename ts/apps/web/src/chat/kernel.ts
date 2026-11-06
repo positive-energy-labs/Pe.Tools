@@ -1,9 +1,9 @@
 import { z } from "zod";
-import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import {
   identityCodecs,
   jsonCodec,
-} from "../../../../packages/agent-contracts/src/route-kernel-codecs";
+} from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
 import {
   chatData,
   chatSchemas as schemas,
@@ -12,9 +12,9 @@ import {
   threadIdentity,
   threadName,
   type ChatRouteDeps,
-} from "./graph";
-import { chatSeeds } from "./graph-seeds";
-import { chatSeedChoices } from "./seed-choices";
+} from "./graph.ts";
+import { chatSeeds } from "./graph-seeds.ts";
+import { chatSeedChoices } from "./seed-choices.ts";
 
 const axes = {
   subject: "None",
