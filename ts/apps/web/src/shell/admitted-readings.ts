@@ -16,10 +16,7 @@ import {
 } from "./admitted-reading-plan.ts";
 import { freezePage } from "./page-port.ts";
 import { contentHash } from "./readings.ts";
-import { peReadings } from "../readings";
 import { z } from "zod";
-import { identityCodecs } from "../../../../packages/agent-contracts/src/route-kernel-codecs";
-import type { AcceptedReading } from "../../../../packages/agent-contracts/src/recording-points";
 const unavailable = (reason: string): Extract<ReadingSnapshot<unknown>, { current: false }> => ({
   status: "unavailable",
   current: false,
@@ -57,12 +54,11 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
   } = context;
 
   const { target } = input;
-  const instance = crypto.randomUUID();
   type WorkReading =
     | (Extract<ReadingSnapshot<unknown>, { current: true }> & { readonly handle: WorkHandle })
     | Extract<ReadingSnapshot<unknown>, { current: false }>;
   // Bounded by declared edges. The environment owns the subscriptions' lifetime.
-  type WorkRead = { signature: string; argsHash: string; snapshot: WorkReading; stop(): void };
+  type WorkRead = { signature: string; snapshot: WorkReading; stop(): void };
   const workReads = new Map<string, WorkRead>();
   const syncWorkReadings = () => {
     const scope = read().scope;
@@ -75,7 +71,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
       workReads.get(id)?.stop();
       const record: WorkRead = {
         signature,
-        argsHash: z.string().parse(contentHash(foreignKey)),
         snapshot: unavailable("Work pending"),
         stop() {},
       };
@@ -144,8 +139,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
               value,
               handle,
               hash: z.string().parse(contentHash([handle.revision, value])),
-              bodyReceipts: state.kind === "ready"
-                ? (state.snapshot as typeof state.snapshot & { bodyReceipts?: readonly string[] }).bodyReceipts : undefined,
             });
             schedule();
           },
@@ -540,22 +533,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
       scheduling = false;
     }
     notify();
-    // Observers have received this exact parsed publication. Re-entrant observers may retire it.
-    const accepted: AcceptedReading[] = [];
-    const document = input.work.address && identityCodecs.document.encode({ document: input.work.address });
-    if (!closed() && available() && input.fixture === null && input.custody.current() && document && document.ok) {
-      const wanted = wantedReadings();
-      for (const [id, snapshot] of Object.entries(readings)) {
-        if (!wanted.has(id) || !snapshot.current || !snapshot.bodyReceipts?.length) continue;
-        const record = active.get(id);
-        const work = workReads.get(id);
-        const argsHash = record && record.snapshot === snapshot && owner.current(record.token)
-          ? contentHash(JSON.parse(record.key.sortedKeyInput))
-          : work?.snapshot === snapshot ? work.argsHash : undefined;
-        if (argsHash) accepted.push({ document: document.value, consumer: { instance, reading: id, argsHash }, bodyReceipts: [...snapshot.bodyReceipts] });
-      }
-    }
-    peReadings.acceptReadings(instance, accepted);
   };
   const refreshReadings = (roots: Iterable<string>) => {
     for (const id of readingClosure(route, roots)) {
@@ -604,7 +581,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
       schedule();
     },
     suspend() {
-      peReadings.acceptReadings(instance, []);
       for (const read of workReads.values()) read.stop();
       workReads.clear();
       for (const id of active.keys()) retire(id);

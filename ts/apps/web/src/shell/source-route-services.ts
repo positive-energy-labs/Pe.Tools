@@ -173,14 +173,13 @@ export function sourceRouteServices(
                   deliver: Parameters<UseSource["open"]>[1],
                 ) {
                   try {
-                    let receipt: string | null = null;
                     const result = await callOp(
-                      { ...context, onBodyReceipt: value => { receipt = value; } },
+                      context,
                       request.key.op as import("@pe/host-contracts/operation-types").OpKey,
                       context.args as never,
                     );
                     if (!context.signal.aborted)
-                      deliver({ kind: "complete", value: result, revision: 0, bodyReceipts: receipt ? [receipt] : undefined });
+                      deliver({ kind: "complete", value: result, revision: 0 });
                   } catch (error) {
                     if (!context.signal.aborted) deliver({ kind: "failure", error });
                   }

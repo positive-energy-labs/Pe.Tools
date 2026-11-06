@@ -11,8 +11,6 @@ import type {
   WorkAdmission,
   WorkFeedFailure,
 } from "../../agent-contracts/src/work-journal-door.ts";
-import { WorkMigrationFailure } from "./work-migration-failure.ts";
-import { retireSuggestionLane } from "./work-cutover.ts";
 import { createWorkJournal } from "./work-journal.ts";
 import {
   bindWork,
@@ -230,7 +228,7 @@ export class RouteWorkspace {
     };
   }
 
-  /** Host admission owns migration and recovery bodies. No browser body or schema crosses the wire. */
+  /** Host admission owns Work schemas and recovery bodies. No browser body or schema crosses the wire. */
   registerAdmitted(route: AdmittedRoute | HostAdmittedRoute): {
     ready: Promise<WorkFeedFailure | null>;
     close(): void;
@@ -242,7 +240,7 @@ export class RouteWorkspace {
       receipt.deactivate();
       throw Error("Route declares no Work");
     }
-    // Presenters never install a second registry or run the owner's migrations.
+    // Presenters never install a second registry.
     // Their feeds carry the fingerprint captured in their verified link evidence.
     if (work.route !== route.data.key) {
       receipt.deactivate();
@@ -255,13 +253,6 @@ export class RouteWorkspace {
       return { ready: prior.ready, close() {} };
     }
     prior?.close();
-    const migrations = Object.fromEntries(
-      Object.entries(work.migrations).map(([age, id]) => {
-        const body = bindings.bodies[id];
-        if (!body || body.kind !== "migration") throw Error(`Missing admitted migration: ${id}`);
-        return [Number(age), (doc: unknown) => body.run(doc)];
-      }),
-    );
     const spec: RouteStateSpec<z.ZodType> =
       "workState" in bindings && bindings.workState
         ? bindings.workState
@@ -271,7 +262,6 @@ export class RouteWorkspace {
             description: route.data.directory.summary,
             schema: bindings.schemas[work.schema]!,
             schemaVersion: work.version,
-            migrations,
             // A web salvage body consumes recovery data and must never read persisted Work here.
             salvage:
               route.data.salvage && bindings.bodies[route.data.salvage]?.kind === "recovery"
@@ -291,40 +281,7 @@ export class RouteWorkspace {
       receipt.deactivate();
       throw error;
     }
-    // Migrations run ONCE per admitted (route key, fingerprint), installed in this persistent
-    // RouteWorkspace before any feed opens, never per browser open. Persisted version prevents
-    // reapplication after host restart. The promise also retains a failed admission's outcome.
-    const ready = this.#serialized(async (): Promise<WorkFeedFailure | null> => {
-      try {
-        // A recording replays saved bytes; it never migrates or censuses a current store.
-        if (Object.keys(migrations).length && !this.options.recorded) {
-          if (!this.#store.listState)
-            throw Error("Migration requires an indexed Work store");
-          const saved = await this.#store.listState();
-          if (saved.truncated || saved.unreadable || saved.unindexed)
-            throw Error("Work census is incomplete; migration admission cannot open feeds");
-          // A replacement may arrive while the census awaits disk. Never execute newer
-          // bindings through the older admission's barrier, or migrate after retirement.
-          if (this.#admissions.get(route.data.key) !== record)
-            return {
-              kind: "failed",
-              code: "WorkRegistrationRetired",
-              message: "Host route admission retired",
-            };
-          for (const savedRecord of saved.records) {
-            if (savedRecord.route !== work.route) continue;
-            const key = storedWorkKey(savedRecord.targetKey, savedRecord.route);
-            if (!key) throw Error("Stored Work has an invalid identity");
-            await this.#load(key, spec, false);
-          }
-        }
-        return null;
-      } catch (error) {
-        if (error instanceof WorkMigrationFailure)
-          return { ...error.failure, routeKey: route.data.key };
-        return { kind: "failed", code: "WorkRegistrationFailed", message: String(error) };
-      }
-    });
+    const ready: Promise<WorkFeedFailure | null> = Promise.resolve(null);
     const record = {
       fingerprint: route.workFingerprint,
       workRoute: work.route,
@@ -430,7 +387,7 @@ export class RouteWorkspace {
         return { works: [], unindexed: 0, unreadable: 0, truncated: false, available: false };
       const census = await this.#store.listState();
       let invalidIdentities = 0;
-      const works = census.records.flatMap((record) => {
+      const works = (await Promise.all(census.records.map(async (record) => {
         if (
           record.route.includes(START_FRESH_ASIDE) ||
           (record.route === OPEN_REGISTER.route && record.targetKey === OPEN_REGISTER.targetKey)
@@ -448,18 +405,15 @@ export class RouteWorkspace {
         if (spec) {
           try {
             const envelope = parseEnvelope(
-              this.#retireSuggestions(record.targetKey, record.route, record.value),
+              record.value,
               spec,
             );
             revision = envelope.revision;
             ({ unfinished } = workCounts(envelope.doc, spec.editable ?? []));
             state = "ready";
-          } catch (error) {
-            console.warn(
-              "ts/packages/runtime/src/route-workspace.ts: fallback after failure",
-              error,
-            );
-            // Keep the address discoverable without exposing the unreadable document.
+          } catch {
+            await this.#store.setState({ targetKey: record.targetKey, route: record.route, value: null });
+            return [];
           }
         }
         return [
@@ -473,7 +427,7 @@ export class RouteWorkspace {
             unfinished,
           },
         ];
-      });
+      }))).flat();
       return {
         works,
         unindexed: census.unindexed,
@@ -866,8 +820,8 @@ export class RouteWorkspace {
     const { spec } = registration;
     const targetKey = workKey(scope);
     return this.#serialized(async () => {
-      const { original: raw, value } = await this.#raw(targetKey, route);
-      if (value == null || readable(value, spec))
+      const raw = await this.#store.getState({ targetKey, route });
+      if (raw == null || readable(raw, spec))
         return refuse("refused", "this route's Work is readable", "Nothing to set aside.");
       // Recovery also covers unreadable values at the current schema (U8rv). The
       // older-schema-only rule would strand these bytes; newer/unknown schemas stay closed.
@@ -879,7 +833,7 @@ export class RouteWorkspace {
           "Only a known current or older schema permits Start fresh.",
         );
       let slot = 1;
-      while ((await this.#raw(targetKey, aside(route, slot))).original != null) slot++;
+      while ((await this.#store.getState({ targetKey, route: aside(route, slot) })) != null) slot++;
       await this.#store.setState({ targetKey, route: aside(route, slot), value: raw });
       const fresh = emptyEnvelope(spec);
       const prior = envelopeSchema.safeParse(raw);
@@ -958,11 +912,11 @@ export class RouteWorkspace {
         );
       }
     };
-    const { value: raw } = await this.#raw(targetKey, route);
+    const raw = await this.#store.getState({ targetKey, route });
     if (raw != null && !readable(raw, spec)) return extract("unreadable", raw);
     let newest: { slot: number; raw: unknown } | null = null;
     for (let slot = 1; ; slot++) {
-      const { value: found } = await this.#raw(targetKey, aside(route, slot));
+      const found = await this.#store.getState({ targetKey, route: aside(route, slot) });
       if (found == null) break;
       newest = { slot, raw: found };
     }
@@ -1248,50 +1202,22 @@ export class RouteWorkspace {
     create = true,
   ): Promise<RouteEnvelope<unknown> | null> {
     const raw = await this.#carryOver(scope, spec.route);
-    if (raw == null) {
+    let envelope: RouteEnvelope<unknown> | null = null;
+    if (raw != null) {
+      try { envelope = parseEnvelope(raw, spec); }
+      catch {
+        // ADR 0033 rule 5: delete Work that does not decode; never convert it.
+        await this.#store.setState({ targetKey: workKey(scope), route: spec.route, value: null });
+      }
+    }
+    if (!envelope) {
       this.#inverses.delete(workKey(scope));
       return create ? emptyEnvelope(spec) : null;
     }
-    this.#inverses.set(
-      workKey(scope),
-      this.#retain(
-        this.#stored((raw as { history?: unknown }).history, scope),
-        (raw as { revision: number }).revision,
-      ),
-    );
-    let age = (raw as { schemaVersion?: number }).schemaVersion;
-    const current = spec.schemaVersion ?? 1;
-    if (age !== undefined && age < current && spec.migrations) {
-      const saved = envelopeSchema.parse(raw);
-      let doc = structuredClone(saved.doc);
-      const fromVersion = age;
-      let migrated: RouteEnvelope<unknown>;
-      try {
-        while (age < current) {
-          const migrate = spec.migrations[age];
-          if (!migrate) throw Error(OLDER_WORK);
-          doc = migrate(doc);
-          age++;
-        }
-        migrated = parseEnvelope(
-          { ...saved, doc, schemaVersion: age, revision: saved.revision + 1 },
-          spec,
-        );
-      } catch (error) {
-        throw new WorkMigrationFailure({
-          kind: "migration-failed",
-          routeKey: spec.route,
-          fromVersion,
-          toVersion: current,
-          step: Math.min(age, current - 1),
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
-      await this.#persist(scope, spec.route, migrated, []);
-      this.#inverses.set(workKey(scope), []);
-      return migrated;
-    }
-    return parseEnvelope(raw, spec);
+    this.#inverses.set(workKey(scope), this.#retain(
+      this.#stored((raw as { history?: unknown }).history, scope), envelope.revision,
+    ));
+    return envelope;
   }
 
   /**
@@ -1302,39 +1228,17 @@ export class RouteWorkspace {
   async #carryOver(scope: WorkKey, route: string): Promise<unknown> {
     const store = this.#store;
     const targetKey = workKey(scope);
-    const { value: raw } = await this.#raw(targetKey, route);
+    const raw = await this.#store.getState({ targetKey, route });
     const openWork =
       scope.binding === "address" && scope.from
         ? bindWork(scope.route, null, undefined, scope.from)
         : null;
     if (raw != null || !openWork) return raw;
-    const carried = await this.#raw(workKey(openWork), route);
-    if (carried.original == null) return null;
-    await store.setState({ targetKey, route, value: carried.original });
+    const carried = await store.getState({ targetKey: workKey(openWork), route });
+    if (carried == null) return null;
+    await store.setState({ targetKey, route, value: carried });
     await store.setState({ targetKey: workKey(openWork), route, value: null });
-    return carried.value;
-  }
-
-  /** Keep original bytes for recovery and Save As; all consumers see the retired cell shape. */
-  async #raw(targetKey: string, route: string) {
-    const original = await this.#store.getState({ targetKey, route });
-    return { original, value: this.#retireSuggestions(targetKey, route, original) };
-  }
-
-  /**
-   * The suggestion-lane retirement (ADR 0030 rule 8) on every raw read. A read never writes: the
-   * next accepted write persists the collapsed doc and history, so a dropped counter-proposal is
-   * logged on each read until then and its bytes survive until a write.
-   */
-  #retireSuggestions(targetKey: string, route: string, raw: unknown): unknown {
-    const retired = retireSuggestionLane(raw);
-    if (!retired) return raw;
-    if (retired.dropped.length)
-      console.warn(
-        `ts/packages/runtime/src/route-workspace.ts: ${route} Work ${targetKey} dropped ${retired.dropped.length} suggestion(s) that differed from the staged edit`,
-        retired.dropped,
-      );
-    return retired.value;
+    return carried;
   }
 
   async #persist(

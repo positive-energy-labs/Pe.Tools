@@ -878,9 +878,7 @@ function admitHostProjection(
         fail("work.schema", "Work needs a finite object schema");
       else
         resolvedWork = { spec: work as Extract<KernelGraph["work"], { schema: string }>, schema };
-      for (let age = 1; age < work.version; age++)
-        if (!Object.hasOwn(work.migrations, String(age)))
-          fail(`work.migrations.${age}`, "Incomplete migration chain");
+      // ADR 0033 rule 5: schema versions do not require legacy conversion bodies.
       for (const [age, id] of Object.entries(work.migrations)) {
         const body = module.bodies[id];
         if (Number(age) >= work.version)

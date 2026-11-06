@@ -5,7 +5,6 @@ import {
 applyPatches,
 canonicalRouteInput,
 commands,
-dropFanCells,
 ductCatalogReadingSchema,
 ductsDesign,
 ductsDocumentSchema,
@@ -567,7 +566,7 @@ export const ductsData = {
     route: "ducts",
     schema: "work",
     version: 2,
-    migrations: { "1": "dropFanCells" },
+    migrations: {},
   },
   salvage: "salvage",
   readings: {
@@ -1191,12 +1190,6 @@ export function authoredPatches(
     return value === undefined ? { path, op: "delete" } : { path, value };
   }) as unknown as readonly WorkPatch<typeof ductsDocumentSchema>[];
 }
-const dropFanCellsBody = {
-  slot: "work.migrations.1",
-  kind: "migration",
-  source,
-  run: dropFanCells,
-} as const;
 export const neutralBodies: Omit<
   BodyBindings<typeof ductsData, typeof schemas, typeof entries>,
   | "price"
@@ -1214,7 +1207,6 @@ export const neutralBodies: Omit<
   | "seedColours"
   | "seedNavigation"
 > = {
-  dropFanCells: dropFanCellsBody,
   browse: { slot: "verbs.browse.patch", kind: "page", source, run: (_ctx, input) => input },
   labelassumptions: {
     slot: "cells.assumptions.label",
@@ -1432,7 +1424,6 @@ export const ductsHostModule: HostRouteModule = {
   workState: ductsRouteState,
   bodies: {
     salvage: { slot: "salvage", kind: "recovery" as const, source, run: ductsRouteState.salvage },
-    dropFanCells: dropFanCellsBody,
   },
 };
 

@@ -2,22 +2,22 @@ import { expect, test, vi } from "vite-plus/test";
 import type { ReadingContext, ReadingDelivery } from "./readings";
 import { acquireSource, openSourceReading } from "./readings-use";
 
-test("only a current complete source publication carries body claims, and close fences late output", () => {
+test("only a fresh complete source publication is current, and close fences late output", () => {
   let publish!: ReadingDelivery;
   const delivered = vi.fn();
   const close = openSourceReading({ kind: "use", open(_ctx, accept) { publish = accept; } }, context(), delivered);
-  publish({ kind: "part", value: 1, revision: 1, bodyReceipts: ["partial"] });
-  expect(delivered.mock.calls.at(-1)![0]).not.toHaveProperty("bodyReceipts");
-  publish({ kind: "complete", value: 2, revision: 2, fresh: false, bodyReceipts: ["stale"] });
-  expect(delivered.mock.calls.at(-1)![0]).not.toHaveProperty("bodyReceipts");
-  publish({ kind: "complete", value: 3, revision: 3, bodyReceipts: ["body"] });
-  expect(delivered.mock.calls.at(-1)![0]).toMatchObject({ current: true, bodyReceipts: ["body"] });
+  publish({ kind: "part", value: 1, revision: 1 });
+  expect(delivered.mock.calls.at(-1)![0]).toMatchObject({ current: false });
+  publish({ kind: "complete", value: 2, revision: 2, fresh: false });
+  expect(delivered.mock.calls.at(-1)![0]).toMatchObject({ current: false });
+  publish({ kind: "complete", value: 3, revision: 3 });
+  expect(delivered.mock.calls.at(-1)![0]).toMatchObject({ current: true });
   publish({ kind: "stale" });
-  expect(delivered.mock.calls.at(-1)![0]).not.toHaveProperty("bodyReceipts");
+  expect(delivered.mock.calls.at(-1)![0]).toMatchObject({ current: false });
   publish({ kind: "failure", error: "failed" });
-  expect(delivered.mock.calls.at(-1)![0]).not.toHaveProperty("bodyReceipts");
+  expect(delivered.mock.calls.at(-1)![0]).toMatchObject({ current: false });
   const before = delivered.mock.calls.length;
-  close(); publish({ kind: "complete", value: 4, revision: 4, bodyReceipts: ["late"] });
+  close(); publish({ kind: "complete", value: 4, revision: 4 });
   expect(delivered).toHaveBeenCalledTimes(before);
 });
 
