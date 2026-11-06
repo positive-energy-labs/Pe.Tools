@@ -7,7 +7,6 @@ import {
 import {
   chatData,
   chatSchemas as schemas,
-  chatSources,
   sendReadiness,
   threadIdentity,
   threadName,
@@ -138,7 +137,6 @@ export function createChatModule(deps: () => ChatRouteDeps) {
     schemas,
     entries,
     bodies,
-    sources: chatSources(),
     identities: { local: identityCodecs.local },
     codecs: {
       thread: {

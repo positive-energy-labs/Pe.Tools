@@ -33,7 +33,7 @@ export function useEnvironmentReadingSlice<T, S>(
     void (async () => {
       if (slot !== "machine") {
         const { createChatFixture } = await import("../chat/admission");
-        const { chatReading } = await import("../chat/graph");
+        const { chatReading } = await import("../chat/owner-ports");
         const owner = await createChatFixture(name);
         if (!active) return owner.dispose();
         const publish = () => {

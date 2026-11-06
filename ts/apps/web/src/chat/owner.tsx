@@ -21,9 +21,9 @@ import { sourceRouteServices } from "#/shell/source-route-services";
 import { graphSettings } from "#/shell/settings";
 import { RouteVisibility } from "#/route/activity";
 import type { AdmittedRoute } from "../../../../packages/agent-contracts/src/route-kernel-admission";
-import { createChatModule } from "./kernel";
+import { chatSources, type ChatHandle } from "./owner-ports";
 import { chatLocalPort } from "./local";
-import { type ChatHandle, type ChatRouteDeps } from "./graph";
+import { type ChatRouteDeps } from "./graph";
 import { admitChat } from "./admission";
 
 const settingsDeclaration = { key: "chat", fields: peaSettingFields };
@@ -92,7 +92,7 @@ export function ChatOwner({
   const shell = useMemo(
     () =>
       createRouteShell(
-        { ...sourceRouteServices(createChatModule(() => deps.current).sources), local },
+        { ...sourceRouteServices(chatSources()), local },
         graphSettings(settingsDeclaration),
       ),
     [local],
