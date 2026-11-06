@@ -43,10 +43,11 @@ export const SdkCacheLimits = Context.Reference<{ entries: number; bytes: number
 
 export function readSessionScope(headers: Record<string, string | undefined>): HostSessionScope {
   const raw = headers[HOST_RPC_SDK_SESSION_HEADER];
+  // Absent selectors stay absent: this same scope is the native capture/replay JSON fence.
   return {
-    session: raw === undefined ? undefined : sdkSessionSelectionSchema.parse(JSON.parse(raw)),
-    bridgeSessionId: headers[HOST_RPC_BRIDGE_SESSION_HEADER],
-    openDocumentId: headers[HOST_RPC_DOCUMENT_HEADER],
+    ...(raw === undefined ? {} : { session: sdkSessionSelectionSchema.parse(JSON.parse(raw)) }),
+    ...(headers[HOST_RPC_BRIDGE_SESSION_HEADER] === undefined ? {} : { bridgeSessionId: headers[HOST_RPC_BRIDGE_SESSION_HEADER] }),
+    ...(headers[HOST_RPC_DOCUMENT_HEADER] === undefined ? {} : { openDocumentId: headers[HOST_RPC_DOCUMENT_HEADER] }),
   };
 }
 

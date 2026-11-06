@@ -31,7 +31,8 @@ import {
   ReadFreshness,
   RequestIdentity,
 } from "../src/request-services.ts";
-import { SdkSession } from "../src/sdk-session.ts";
+import { readSessionScope, SdkSession } from "../src/sdk-session.ts";
+import { HOST_RPC_SDK_SESSION_HEADER, HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
 
 const pea = { kind: "pea", thread: "t1" } as Caller;
 const identity = { build: "build-1", catalog: nativeCatalogIdentity() };
@@ -139,6 +140,31 @@ const outcome = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
 const bundle = Effect.acquireRelease(
   Effect.promise(() => mkdtemp(join(tmpdir(), "pe-recording-"))),
   (dir) => Effect.promise(() => rm(dir, { recursive: true, force: true })),
+);
+
+effectTest("absent transport selectors do not truncate the first catalog taking", () =>
+  Effect.gen(function* () {
+    const dir = yield* bundle;
+    const store = yield* openRecordingWriter(dir, identity, bounds);
+    const source = live();
+    // The retained browser's unscoped /ops uses this exact producer, then pins its resolved bridge.
+    const scope = { ...readSessionScope({}), bridgeSessionId: "bridge-1" };
+    const answered = yield* run({ kind: "live", captureStore: store }, source)(read("host.ops.catalog", {}, scope));
+    expect(answered.value).toEqual(catalogAnswer);
+    expect(store.capture.truncated()).toBeNull();
+    expect(store.candidates(yield* nativeInputIdentity({ key: "host.ops.catalog", input: {}, scope }))).toHaveLength(1);
+    const reader = yield* openRecordingReader(dir, identity, bounds);
+    const forbidden = live();
+    const lane = { kind: "recording", recordingStore: reader, at: null } as const;
+    expect(yield* run(lane, forbidden)(read("host.ops.catalog", {}, scope))).toEqual(answered);
+    expect(yield* outcome(run(lane, forbidden)(read("host.ops.catalog", {}, { ...scope, openDocumentId: "another-document" })))).toMatchObject({ problem: "recording.scope" });
+    expect(forbidden.counts).toEqual({ built: 0, joins: 0 });
+    expect(readSessionScope({
+      [HOST_RPC_SDK_SESSION_HEADER]: '{"pid":7}',
+      [HOST_RPC_BRIDGE_SESSION_HEADER]: "bridge-1",
+      [HOST_RPC_DOCUMENT_HEADER]: "doc-A",
+    })).toEqual({ session: { pid: 7 }, bridgeSessionId: "bridge-1", openDocumentId: "doc-A" });
+  }),
 );
 
 effectTest(
