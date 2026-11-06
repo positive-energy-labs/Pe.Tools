@@ -19,6 +19,7 @@ import { createRouteShell, PlaceWriteRefusal } from "./admitted-mount";
 import { createAdmittedWork } from "./admitted-work";
 import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
 import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
+import type { ReadingContext, ReadingDelivery } from "./readings";
 import { admittedRouterAddress } from "./admitted-pane";
 import { AdmittedPane } from "./admitted-place.test-fixture";
 const data = {
@@ -346,6 +347,42 @@ afterEach(() => {
     .reverse()
     .forEach((close) => close());
 });
+test("only the final admitted body publishes; retained publication survives release", async () => {
+  const attempts: { context: ReadingContext; deliver: ReadingDelivery }[] = [];
+  const services = sourceRouteServices({ "notes.read": { kind: "use", open(context, deliver) { attempts.push({ context, deliver }); } } });
+  const location = locationPort("?query=A");
+  const mount = createRouteShell(services).mount(await admitted(), placeInput(location.address));
+  const published: unknown[] = [];
+  const stop = mount.subscribe(() => published.push(mount.readingStatus("notes").snapshot));
+  try {
+    expect(attempts).toHaveLength(1);
+    mount.controls.query("query", "B");
+    expect(attempts).toHaveLength(2);
+    attempts[1]!.deliver({ kind: "complete", value: "B", revision: 1 });
+    const accepted = mount.readingStatus("notes").snapshot;
+    expect(published.at(-1)).toBe(accepted);
+    attempts[0]!.deliver({ kind: "complete", value: "late-A", revision: 1 });
+    expect(mount.readingStatus("notes").snapshot).toBe(accepted);
+    mount.release();
+    const resume = mount.subscribe(() => {});
+    expect(mount.readingStatus("notes").snapshot).toBe(accepted);
+    expect(attempts).toHaveLength(2);
+    resume();
+    mount.refresh("notes");
+    const pending = attempts.at(-1)!;
+    pending.deliver({ kind: "part", value: "partial", revision: 2 });
+    expect(mount.readingStatus("notes").snapshot.current).toBe(false);
+    pending.deliver({ kind: "complete", value: "current", revision: 3 });
+    expect(mount.readingStatus("notes").snapshot).toMatchObject({ current: true, value: "current" });
+    pending.deliver({ kind: "complete", value: 42, revision: 4 });
+    expect(mount.readingStatus("notes").snapshot.current).toBe(false);
+    mount.close();
+    const closed = mount.readingStatus("notes").snapshot;
+    pending.deliver({ kind: "complete", value: "closed", revision: 5 });
+    expect(mount.readingStatus("notes").snapshot).toBe(closed);
+  } finally { stop(); mount.close(); }
+});
+
 test("composition rejects stale refresh/page frames and disposes all delivery", async () => {
   const t = transports();
   const location = locationPort("?query=restored");
