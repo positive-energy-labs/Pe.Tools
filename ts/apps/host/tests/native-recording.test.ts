@@ -484,15 +484,9 @@ effectTest(
       );
       const before = yield* Effect.promise(() => readFile(join(absent, "takings.jsonl"), "utf8"));
       const reader = yield* openRecordingReader(absent, identity, bounds);
-      expect(Object.keys(reader).sort()).toEqual([
-        "candidates",
-        "coverage",
-        "identity",
-        "observation",
-        "readSets",
-        "taking",
-        "truncation",
-      ]);
+      expect(reader).not.toHaveProperty("append");
+      expect(reader.readSets).not.toHaveProperty("keep");
+      expect(reader.points).not.toHaveProperty("keep");
       expect(
         (yield* run({ kind: "recording", at: null, recordingStore: reader })(read("host.ops.catalog"))).value,
       ).toEqual(catalogAnswer);

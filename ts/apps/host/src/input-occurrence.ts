@@ -325,6 +325,7 @@ function detachedContext(recipe: ConsumerRecipe, parentOpen: () => boolean): Inp
 interface Loaded {
   readonly record: InputReadSetRecord;
   readonly children: ReadonlyMap<string, Loaded>;
+  readonly dependencies: readonly Loaded[];
 }
 /** The whole replay graph shares one budget: nodes beyond the root, bytes, and depth. */
 const load = (
@@ -357,10 +358,30 @@ const load = (
       children.set(key, loaded);
     }
     // Dependencies must resolve and stay acyclic; they are opened by their own consumer.
+    const dependencies: Loaded[] = [];
     for (const dependency of Object.values(record.dependencies))
-      yield* load(reader, dependency, limits, budget, [...path, id]);
-    return { record, children };
+      dependencies.push(yield* load(reader, dependency, limits, budget, [...path, id]));
+    return { record, children, dependencies };
   });
+
+/** The same bounded, complete graph admitted by replay, including retained dependencies. */
+export const readSetRecords = (
+  reader: RecordingReader,
+  id: string,
+  limits = defaultReadSetLimits,
+) =>
+  load(reader, id, limits).pipe(
+    Effect.map((root) => {
+      const records: InputReadSetRecord[] = [];
+      const walk = (node: Loaded) => {
+        records.push(node.record);
+        node.children.forEach(walk);
+        node.dependencies.forEach(walk);
+      };
+      walk(root);
+      return records;
+    }),
+  );
 
 /** Replay: every start and child resolves the stored occurrence, or refuses before any access. */
 function recordedContext(loaded: Loaded, parentOpen: () => boolean = () => true): InputConsumption {
@@ -456,7 +477,10 @@ export class HostInputReadSets extends Context.Service<
                 if (matches.length === 0)
                   return yield* refuse("miss", "No recorded consumer matches this recipe");
                 if (matches.length > 1)
-                  return yield* refuse("ambiguous", `${matches.length} recorded consumers match; bind one`);
+                  return yield* refuse(
+                    "ambiguous",
+                    `${matches.length} recorded consumers match; bind one`,
+                  );
                 id = matches[0] as ReadSetId;
               }
               return yield* load(lane.recordingStore, id, limits).pipe(
