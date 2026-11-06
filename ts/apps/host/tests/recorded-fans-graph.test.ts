@@ -36,6 +36,15 @@ import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contr
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
 import { hostOwnership } from "../src/host-ownership.ts";
 
+// Proof receipts are opt-in: a fresh checkout has no run folder, so receipts are written only where PE_FANS_PROOF_DIR names one.
+// The receipt text is still built either way, so skipping a write never skips a read the test performs.
+async function writeProof(name: string, text: string) {
+  const dir = process.env.PE_FANS_PROOF_DIR;
+  if (!dir) return;
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, name), text);
+}
+
 const liveFactories = vi.hoisted(() => ({ sdk: 0, bridge: 0, work: 0, recorded: false, service: null as RevitBridge["Service"] | null, listeners: new Set<(event: HostBridgeEvent) => void>() }));
 vi.mock("../src/sdk-session.ts", async (original) => {
   const actual = await original<typeof import("../src/sdk-session.ts")>();
@@ -366,14 +375,14 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
           const kind = (entry.recipe.input as { kind: string }).kind;
           expect(set.inputs.filter((input) => input.input.kind === "marks")).toHaveLength(kind === "ducts-tables" || kind === "work-acks" ? 0 : 1);
         }
-        await writeFile(join(import.meta.dirname, `../../../../.artifacts/runs/kernel-crusade-20261104/step-7/${mode}-receipt.json`), JSON.stringify({
+        await writeProof(`${mode}-receipt.json`, JSON.stringify({
           mode, state: "passed", snapshot: { path: source, bytes: readFileSync(source).length, sha256: createHash("sha256").update(readFileSync(source)).digest("hex"), schema: "readSchemas(ducts.snapshot.walk).response", schemaVersion: snapshotContract!.version },
           driver: { path: driverSource, sha256: createHash("sha256").update(readFileSync(driverSource!)).digest("hex") },
           frames: seen.length, reopens: 70, nativeCalls, sourceHashes: Object.fromEntries(["ts/apps/host/src/app.ts", "ts/apps/host/src/resource-adapters.ts", "ts/apps/host/src/pe-routes.ts", "ts/packages/runtime/src/resource-stream.ts"].map((file) => [file, createHash("sha256").update(readFileSync(join(import.meta.dirname, "../../../..", file))).digest("hex")])),
         }, null, 2));
       } finally {
         await frames.close();
-        await writeFile(join(import.meta.dirname, `../../../../.artifacts/runs/kernel-crusade-20261104/step-7/${mode}-frames.json`), JSON.stringify(seen, null, 2));
+        await writeProof(`${mode}-frames.json`, JSON.stringify(seen, null, 2));
       }
       return;
     }
@@ -464,7 +473,7 @@ test.skipIf(!existsSync(source)).each(["off", "on", "recovery", "endurance", "ta
       expect(fresh.status, await fresh.clone().text()).toBe(200);
       expect((await fresh.json()).basis).not.toBe(overview.basis);
       const roots = completed.filter((entry) => entry.recipe.key === "ducts.roster");
-      await writeFile(join(import.meta.dirname, "../../../../.artifacts/runs/kernel-crusade-20261104/step-7/version-records.json"), JSON.stringify({
+      await writeProof("version-records.json", JSON.stringify({
         truncated: writer.capture.truncated(), roots: await Promise.all(roots.map(async (entry) => ({ id: entry.id, state: (await run(writer.readSets.get(entry.id))).state }))),
       }, null, 2));
       return;
