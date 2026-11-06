@@ -3,6 +3,7 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 import { borrowWords, WorksharingNote } from "./mount-verbs";
 import { worksharingOf } from "./verbs";
+import { leaks } from "./visible-text";
 
 afterEach(cleanup);
 // The Manual D re-drive #4 commit: MUAS 10 and Project Information borrowed, _PE_DuctLosses created.
@@ -27,13 +28,14 @@ test("a workshared preview discloses every borrow, how long it lasts, and who bl
   expect(borrowWords(w)).toBe("borrows 3 elements");
   const { container } = render(<WorksharingNote worksharing={w} />);
   const text = container.textContent!;
+  expect(leaks(text)).toEqual([]);
   expect(text).toContain("commit borrows 3 elements from the cloud central");
   expect(text).toContain("until you sync with central or relinquish");
-  expect(text).toContain("borrows MUAS 10 [14577391]");
-  expect(text).toContain("borrows Project Information [76675]");
+  expect(text).toContain("borrows MUAS 10");
+  expect(text).toContain("borrows Project Information");
   expect(text).toContain("creates _PE_DuctLosses project parameter");
   expect(text).not.toContain("Damper");
-  expect(text).toContain("FC-23 [13760867] is borrowed by jdoe");
+  expect(text).toContain("FC-23 is borrowed by jdoe");
 });
 
 test("a non-workshared preview carries no disclosure and the commit says nothing extra", () => {

@@ -21,7 +21,7 @@ export function WorksharingNote({ worksharing: w }: { worksharing: Worksharing }
   const central = w.cloud ? "cloud central" : "central";
   const list = useList({
     items: [
-      ...borrows.map((e) => ({ key: `borrow:${e.id}`, label: `borrows ${e.name} [${e.id}]` })),
+      ...borrows.map((e) => ({ key: `borrow:${e.id}`, label: `borrows ${e.name}` })),
       ...w.creates.map((name) => ({ key: `create:${name}`, label: `creates ${name}` })),
     ],
     keyOf: (row) => row.key,
@@ -49,7 +49,7 @@ export function WorksharingNote({ worksharing: w }: { worksharing: Worksharing }
         <OutcomeLine
           key={e.id}
           kind="refused"
-          label={`${e.name} [${e.id}] is borrowed by ${e.owner ?? "another user"}`}
+          label={`${e.name} is borrowed by ${e.owner ?? "another user"}`}
           says="Revit refuses this write until they sync or relinquish"
         />
       ))}
