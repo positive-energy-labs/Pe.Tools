@@ -382,7 +382,7 @@ test("actual HTTP bodies authenticate multi-body mounted ACKs into point-bound n
     ).toBe(400);
     expect(owner.writer.capture.truncated()).toBeNull();
     expect((await ack({ add: [], remove: [], unmounted: [consumer] })).status).toBe(200);
-    expect((await ack({ add: [], remove: [], accepted })).status).toBe(400);
+    expect((await ack({ add: [], remove: [], accepted })).status).toBe(200);
     await stream.cancel();
     stream = undefined;
     expect((await ack({ add: [], remove: [], accepted })).status).toBe(409);
@@ -392,7 +392,7 @@ test("actual HTTP bodies authenticate multi-body mounted ACKs into point-bound n
   }
 }, 45000);
 
-test("unmount during authenticated metadata sealing cannot restore the consumer or mint its point", async () => {
+test("unmount fences in-flight sealing while a later mounted acceptance can return", async () => {
   const owner = await setup();
   let stream: ReadableStreamDefaultReader<Uint8Array> | undefined;
   const entered = Promise.withResolvers<void>(),
@@ -445,7 +445,8 @@ test("unmount during authenticated metadata sealing cannot restore the consumer 
           accepted,
         })
       ).status,
-    ).toBe(400);
+    ).toBe(200);
+    expect(owner.writer.points.ids()).toHaveLength(1);
   } finally {
     release.resolve();
     await stream?.cancel();
