@@ -4,7 +4,8 @@ import { resolve } from "node:path";
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { hostOpSafety } from "@pe/host-contracts/generated";
 import { familyReads, scheduleReads, readingRequestsSchema, type ReadingRequest } from "@pe/agent-contracts";
-import { decodeResourceSubscriptionUpdate } from "@pe/runtime";
+// Vite config loads this transport subpath with Node's TypeScript stripper.
+import { decodeResourceSubscriptionUpdate } from "@pe/runtime/resource-stream";
 import type { Plugin, ProxyOptions } from "vite-plus";
 import {
   HOST_RUNTIME_SERVICE_HEADER,
