@@ -92,6 +92,8 @@ export function createDuctsBodyBasis(lane: HostInputLane, observed: TakingObserv
     };
     const codec = Schema.declare(validate);
     // A consumer's basis occurrence is reserved ONCE, here at prepare; link and consume reuse it.
+    // TODO: Record retained validation refusals as terminal basis outcomes before recording closes.
+    // Falsifier: invalidate an optional sheet, recover its roster, then replay that read set without live inputs.
     const consumption = yield* Effect.serviceOption(CurrentInputConsumption);
     const reserved = yield* attemptFor(basisInput, scope);
     if (reserved && Result.isFailure(reserved)) {
