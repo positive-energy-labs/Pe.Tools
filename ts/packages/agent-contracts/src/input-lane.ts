@@ -33,6 +33,7 @@ export const truncationSchema = z.strictObject({
 export type Truncation = z.infer<typeof truncationSchema>;
 
 /** The lane as surfaces may show it. A recording names its build, catalog and partial coverage. */
+// TODO: Phase8 migrates this canonical schema and its header consumers together to native Effect.
 export const sourceProvenanceSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("live"),

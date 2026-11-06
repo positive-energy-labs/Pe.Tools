@@ -149,6 +149,8 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
+- Phase8: migrate the canonical source provenance schema and its header consumers together to native Effect; its [owning TODO](../../../ts/packages/agent-contracts/src/input-lane.ts) retains the boundary rather than adding a second decoder contract.
+
 - 2026-11-06, recording entry: `HostInputReadSets.open(recipe, null)` admits only a unique recorded consumer; repeated roots and notification frames refuse as ambiguous. Explicit root bindings and epochs remain Owed; internal dependency selections stay exact. Finish historical inventory, SPA and provenance before claiming public `/fans` replay. Never select newest, complete or equal-valued candidates to hide ambiguity. See [ADR 0031](../../adr/0031-recording-at-host-input-services-history-in-the-shell.md) and [the admission owner](../../../ts/apps/host/src/input-occurrence.ts).
 
 - Step 5 presentation follow-on, Driver `drive/step-5/CASES.md`, explicitly non-blocking for main: refresh copied-Pod discovery without host restart; replace the dead `/pod-admin` link; investigate a second-turn Pod set-view rendered-ack refusal, absent Pea `pod.import` discovery, refusal text rendered with misleading fan chips, the initial missing Ducts handle, `sheetSnapshot` unavailable after Back, a route-open 403 and the legacy outcome-unknown chip. Preserve this classification unless a new write/data consequence is observed.

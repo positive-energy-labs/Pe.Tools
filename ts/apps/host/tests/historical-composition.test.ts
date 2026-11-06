@@ -11,6 +11,7 @@ import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src
 import { RouteWorkspace } from "@pe/runtime";
 import { fansInputRoutes, hostInputGraph } from "../src/app.ts";
 import { hostInputs, recordingInputSelection } from "../src/host-program.ts";
+import { relaunchOutOfGuard } from "../src/redirection-trust.ts";
 import { admitBuild } from "../src/receipt-export.ts";
 import { nativeCatalogIdentity, nativeInputIdentity, openRecordingWriter } from "../src/native-recording.ts";
 import { admittedRequestIdentity, readSchemas, RequestIdentity } from "../src/request-services.ts";
@@ -248,6 +249,18 @@ test("historical entry serves real static files through identity and retains API
 test("recording process selection is strict and cannot enter the source live fallback", async () => {
   expect(await Effect.runPromise(recordingInputSelection(["--open", "--no-revit", "--take-over-host"]))).toBeUndefined();
   const { dir } = await bundle();
+  const launch = vi.fn();
+  for (const [index, args] of [["--recording", dir], ["--recording"], ["--open"]].entries()) {
+    const request = { trust: "enforced" as const, args, exe: "Pe.Host.exe",
+      marker: join(dir, `guard-${index}.stamp`), launch, log: () => {} };
+    expect(relaunchOutOfGuard(request)).toBe(false);
+  }
+  expect(launch).not.toHaveBeenCalled();
+  const startup = { trust: "enforced" as const, args: [], exe: "Pe.Host.exe",
+    marker: join(dir, "guard-default.stamp"), launch, log: () => {} };
+  expect(relaunchOutOfGuard(startup)).toBe(true);
+  expect(relaunchOutOfGuard(startup)).toBe(false);
+  expect(launch).toHaveBeenCalledTimes(1);
   const selected = await Effect.runPromise(recordingInputSelection(["host", "--open", "--recording", dir, "--no-revit"]));
   expect(selected).toEqual({ kind: "recording", directory: dir, at: null });
   expect(await Effect.runPromise(hostInputs(null, selected!).pipe(Effect.flip))).toMatchObject({ problem: "recording.identity" });
