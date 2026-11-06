@@ -110,10 +110,8 @@ for (const folder of (await readdir(new URL("../src/", import.meta.url), { withF
   if (closureOnly) continue;
   const module = await jiti.import<Record<string, unknown>>(`../src/${folder.name}/graph.ts`);
   const graphs = Object.entries(module).filter(([name]) => name.endsWith("Graph"));
-  for (const [name, exported] of graphs) {
-    const graph = (
-      name === "chatGraph" ? (exported as Function)(() => ({ thread: "" })) : exported
-    ) as Parameters<typeof projectRouteGraph>[0];
+  for (const [, exported] of graphs) {
+    const graph = exported as Parameters<typeof projectRouteGraph>[0];
     if (!graph || typeof graph !== "object" || !graph.key) continue;
     if (!graph.directory) throw Error(`${graph.key} has no directory declaration`);
     graph.moduleHash = routeSourceHash(

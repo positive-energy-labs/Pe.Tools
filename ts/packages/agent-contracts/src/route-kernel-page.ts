@@ -4,9 +4,13 @@ import type { WorkKey, WorkWriteAck } from "./route-state.ts";
 import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
 
 export type SchemaTable = Readonly<Record<string, z.ZodType>>;
-export type WorkSchema<G extends RouteGraphJson, S extends SchemaTable> =
-  G extends { work: { schema: infer K } } ? S[Extract<K, keyof S>]
-    : RouteGraphJson extends G ? S[keyof S] : never;
+export type WorkSchema<G extends RouteGraphJson, S extends SchemaTable> = G extends {
+  work: { schema: infer K };
+}
+  ? S[Extract<K, keyof S>]
+  : RouteGraphJson extends G
+    ? S[keyof S]
+    : never;
 export type SchemaValue<S extends SchemaTable, K> = K extends keyof S ? z.output<S[K]> : never;
 declare const identity: unique symbol;
 export type IdentityKind = "document" | "link" | "element" | "local";
@@ -51,9 +55,11 @@ export type SelectionItem<G extends RouteGraphJson> = {
     readonly id: IdentityId<G["identities"][K]["kind"]>;
   };
 }[keyof G["identities"] & string];
-/** Ordered unique (kind,id) pairs; duplicates collapse to their first occurrence. Never `all`.
+/** Ordered unique (kind,id) pairs; duplicates collapse to their first occurrence.
  * Focus and hover are ephemeral attention, not another selected domain object. */
-export type Selection<G extends RouteGraphJson> = readonly SelectionItem<G>[];
+export type Selection<G extends RouteGraphJson, All extends boolean = false> =
+  | readonly SelectionItem<G>[]
+  | (All extends true ? "all" : never);
 export type Many<T> =
   | { readonly kind: "ids"; readonly ids: readonly T[]; readonly active?: T }
   | { readonly kind: "all" };
@@ -61,7 +67,9 @@ type FieldValue<G extends RouteGraphJson, S extends SchemaTable, F> = F extends 
   role: "selection";
   kinds: readonly (infer K)[];
 }
-  ? readonly Extract<SelectionItem<G>, { kind: K }>[]
+  ?
+      | readonly Extract<SelectionItem<G>, { kind: K }>[]
+      | (F extends { allowAll: true } ? "all" : never)
   : F extends { role: "subject"; identity: readonly (infer K)[]; cardinality: infer C }
     ? C extends "many"
       ? Many<Extract<SelectionItem<G>, { kind: K }>>
@@ -341,7 +349,11 @@ export type WorkReduction =
       readonly kind: "refused";
       readonly reason: "foreign-token" | "wrong-work" | "retired" | "closed";
     };
-export interface AcceptanceSnapshot<G extends RouteGraphJson, S extends SchemaTable, W = Immutable<WorkOf<G, S>>> {
+export interface AcceptanceSnapshot<
+  G extends RouteGraphJson,
+  S extends SchemaTable,
+  W = Immutable<WorkOf<G, S>>,
+> {
   readonly scope: ScopeToken;
   readonly pageEpoch: PageEpoch;
   readonly pageRevision: number;
@@ -372,10 +384,11 @@ export interface AcceptanceSnapshot<G extends RouteGraphJson, S extends SchemaTa
  * acks still file to their ORIGINAL Work journal, including after close; late reads are refused.
  * close releases subscriptions and disables publication, not journal receipt delivery.
  */
-export interface AcceptanceOwner<G extends RouteGraphJson, S extends SchemaTable, W = Immutable<WorkOf<G, S>>> extends PageOwner<
-  G,
-  S
-> {
+export interface AcceptanceOwner<
+  G extends RouteGraphJson,
+  S extends SchemaTable,
+  W = Immutable<WorkOf<G, S>>,
+> extends PageOwner<G, S> {
   enter(identity: ScopeIdentity, page: PageOf<G, S>): ScopeToken;
   capture(channel: string): AcceptanceToken;
   retire(token: AcceptanceToken): void;

@@ -16,6 +16,7 @@ import { mountRoute, type MountRouteProps } from "#/shell/mount";
 const named = <K extends string, P>(load: () => Promise<Record<K, ComponentType<P>>>, name: K) =>
   lazy(() => load().then((module) => ({ default: module[name] })));
 const PodsRoute = named(() => import("#/pods/route"), "PodsRoute");
+const ChatRoute = named(() => import("#/chat/chat-shell"), "ChatShell");
 const TakeoffsPane = named(() => import("#/takeoff/pane"), "TakeoffsPane");
 const OpenPage = lazy(async () => ({
   default: mountRoute(openGraph, (await import("#/open/route")).openAdapters),
@@ -33,7 +34,13 @@ export const publicRoutesReady = Promise.all(
   builtinRouteKeys.map(async (key) => {
     const result = await loadBuiltinRoute(key, builtinRouteStamp(key));
     if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
-    registerRoute(result.route);
+    if (key === "chat")
+      publicRoutes.register({
+        manifest: result.route.data,
+        admitted: result.route,
+        hosted: ({ target }) => <ChatRoute target={target} docked />,
+      });
+    else registerRoute(result.route);
   }),
 );
 void publicRoutesReady.catch((error) => console.error("Builtin discovery refused", error));

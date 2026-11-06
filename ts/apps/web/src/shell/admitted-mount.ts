@@ -68,7 +68,10 @@ export class PlaceWriteRefusal extends Error {
   }
 }
 /** One shell composition owns its feed, journals and source timeline. */
-export function createRouteShell(services: Omit<KernelServices, "target">) {
+export function createRouteShell(
+  services: Omit<KernelServices, "target">,
+  settings?: import("./settings").SettingsOwner,
+) {
   const liveDoor = services.work ?? createWorkFeedClient();
   const workRegistry = createApplicationWorkRegistry();
   const sourceTimeline = new WeakMap<
@@ -84,6 +87,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       W extends Record<string, unknown>,
     >(admitted: AdmittedRoute<G, S, E, Render, W>, input: PlaceInput) {
       const { address, fixture, target, memory } = input;
+      const routeSettings = fixture === null ? settings : undefined;
       const route = admitted;
       const subjectScope = subjectScopeKey(Object.fromEntries(address.read()));
       const scope = createAdmittedScope({
@@ -104,7 +108,28 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         bindings.bodies,
         route.resolvedWork?.schema,
       );
-      const ports = createPagePorts(route.data, { ...owner, readPage: () => read().page });
+      const ports = createPagePorts(route.data, {
+        ...owner,
+        readPage: () => ({ ...read().page, ...routeSettings?.read().values }),
+        movePage(patch, origin) {
+          if (origin.kind === "human" && origin.source === "setting" && routeSettings) {
+            if (routeSettings.read().revision < 0 || routeSettings.read().pending)
+              return {
+                kind: "refused",
+                code: "settings",
+                message: "Wait for settings to finish loading or saving",
+              };
+            void routeSettings.set(patch).catch(() => notify());
+            return {
+              kind: "accepted",
+              revision: routeSettings.read().revision,
+              changed: false,
+              membership: "unresolved",
+            };
+          }
+          return owner.movePage(patch, origin);
+        },
+      });
       const environmentIssuer = createRouteEnvironmentIssuer();
       let closed = false;
       let resources: "held" | "released" = "held";
@@ -164,6 +189,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           observe: fixture === null ? evidence?.observe.bind(evidence) : undefined,
         },
         submitNative,
+        local: fixture === null ? services.local : undefined,
         sourceTimeline,
         now: services.clock.now.bind(services.clock),
       };
@@ -230,11 +256,14 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
       let unsubscribeOwner = () => {};
       let stopSubject = () => {};
       let stopCustody = () => {};
+      let stopSettings = () => {};
       const close = () => {
         if (closed) return;
+        invocation.close();
         closed = true;
         stopSubject();
         stopCustody();
+        stopSettings();
         owner.close();
         unsubscribeOwner();
         transport?.close();
@@ -248,6 +277,14 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         listeners.clear();
       };
       try {
+        if (routeSettings) {
+          const disconnect = routeSettings.connect();
+          const unsubscribe = routeSettings.subscribe(notify);
+          stopSettings = () => {
+            unsubscribe();
+            disconnect();
+          };
+        }
         if (route.data.transition) schedule();
         // Schedule before the address transport hears a move: its URL push makes retained-route
         // custody stale until the router re-renders, so a later listener would see no custody and
@@ -281,15 +318,21 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
           const basis = owner.invocation(owner.capture("pea:attention"), {});
           const lease = basis.ok ? issuer.lease(basis.value) : basis;
           if (!lease.ok) return { kind: "refused" as const, code: "lease", message: lease.reason };
-          const result = owner.acceptPage(lease.value, patch as Parameters<typeof owner.acceptPage>[1]);
+          const result = owner.acceptPage(
+            lease.value,
+            patch as Parameters<typeof owner.acceptPage>[1],
+          );
           if (result.kind === "refused") return result;
           const accepted = read();
           return {
             ...result,
             receipt: {
-              current: () => !closed && owner.read()?.scope === accepted.scope &&
+              current: () =>
+                !closed &&
+                owner.read()?.scope === accepted.scope &&
                 owner.read()?.pageRevision === accepted.pageRevision,
-              rendered: (page: object) => canonicalEnvironmentInput(page) === canonicalEnvironmentInput(accepted.page),
+              rendered: (page: object) =>
+                canonicalEnvironmentInput(page) === canonicalEnvironmentInput(accepted.page),
             },
           };
         },
@@ -307,6 +350,7 @@ export function createRouteShell(services: Omit<KernelServices, "target">) {
         revision: () => revision,
         release() {
           if (closed) return;
+          invocation.close();
           resources = "released";
           readings.suspend();
           for (const id of Object.keys(route.data.readings)) geometry.suspend(id);

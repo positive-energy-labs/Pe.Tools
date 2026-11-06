@@ -6,8 +6,14 @@ import {
   type PromptAttachment,
 } from "@pe/agent-contracts";
 
-import { chatGraph, type ChatRouteDeps } from "./graph";
-import { createGraphMount } from "#/shell/mount";
+import { chatData, runChatCommand, threadIdentity, type ChatRouteDeps } from "./graph";
+import { admitChat } from "./admission";
+import { createRouteShell } from "#/shell/admitted-mount";
+import { sourceRouteServices } from "#/shell/source-route-services";
+import { chatLocalPort } from "./local";
+import { placeInput } from "#/shell/admitted-place.test-fixture";
+import { emptyThreadHead } from "@pe/agent-contracts";
+import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import { emptyPrompt } from "#/workbench/prompt";
 import { emptyChatState, selectMessages } from "@pe/agent-contracts/chat-state";
 import { harnessClient, type PromptRequest } from "#/workbench/provider/harness-client";
@@ -19,26 +25,39 @@ const csv: PromptAttachment = {
   size: 7,
   text: "a,b\n1,2",
 };
-const owners: ReturnType<typeof createGraphMount>[] = [];
-function sendControl(deps: ChatRouteDeps) {
-  const graph = chatGraph(() => deps);
-  const owner = createGraphMount(graph, {
-    sources: Object.fromEntries(
-      Object.keys(graph.readings).map((id) => [id, { kind: "use" as const, open: () => {} }]),
+const owners: { dispose(): void }[] = [];
+async function sendControl(deps: ChatRouteDeps) {
+  const route = await admitChat(() => deps);
+  const owner = createRouteShell({
+    ...sourceRouteServices(
+      Object.fromEntries(
+        Object.keys(chatData.readings).map((id) => [
+          id,
+          {
+            kind: "use" as const,
+            open(_context, publish) {
+              publish({
+                kind: "complete",
+                revision: 0,
+                value: id === "head" ? emptyThreadHead : id === "machine" ? machineFixture([]) : [],
+              });
+            },
+          },
+        ]),
+      ),
     ),
-    initialPage: { thread: deps.thread },
-    getSnapshot: () => ({ target: { kind: "host" }, work: null }),
-    subscribe: () => () => {},
-    subscribeAcceptedDeltas: () => () => {},
-    write: async () => {
-      throw Error("Chat never writes route Work");
-    },
-    binding: (_id, row) => ({ subject: null, args: row ?? {} }),
-  });
-  owners.push(owner as ReturnType<typeof createGraphMount>);
+    local: chatLocalPort(() => deps),
+  }).mount(
+    route,
+    placeInput({ read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} }),
+  );
+  owners.push(owner);
+  owner.controls.subject(threadIdentity(deps.thread));
+  owner.setPaneDemand("chat", true);
+  await vi.waitFor(() => expect(owner.readingStatus("machine").snapshot.current).toBe(true));
   return {
-    ready: (input: unknown) => owner.control("send", input).refusal,
-    run: (input: unknown) => owner.control("send", input).run(),
+    ready: (input: unknown) => owner.localReadiness("send", input),
+    run: (input: unknown) => runChatCommand(owner, "send", input),
     owner,
   };
 }
@@ -49,7 +68,7 @@ afterEach(() => {
 
 it("a sent draft with attachments reaches send, and attachments alone are a prompt", async () => {
   const sent: PromptRequest[] = [];
-  const send = sendControl({
+  const send = await sendControl({
     thread: "t",
     ready: true,
     send: async (input) => void sent.push(input),
@@ -65,8 +84,8 @@ it("a sent draft with attachments reaches send, and attachments alone are a prom
   );
 });
 
-it("a draft holding only mentions is a prompt: the composer, the route and the host agree", () => {
-  const send = sendControl({ thread: "t", ready: true, send: async () => {} });
+it("a draft holding only mentions is a prompt: the composer, the route and the host agree", async () => {
+  const send = await sendControl({ thread: "t", ready: true, send: async () => {} });
   const mention = {
     key: "skill:@product/skills/execute",
     kind: "skill",
@@ -81,8 +100,8 @@ it("a draft holding only mentions is a prompt: the composer, the route and the h
   expect(emptyPrompt({ ...draft, mentions: [] })).toBe("Enter a prompt, attachment or mention");
 });
 
-it("Send refuses a kind the thread's harness does not read, before the request", () => {
-  const send = sendControl({
+it("Send refuses a kind the thread's harness does not read, before the request", async () => {
+  const send = await sendControl({
     thread: "t",
     ready: true,
     send: async () => {},
@@ -128,19 +147,19 @@ it("the user turn draws a prompt event's image as a thumbnail and its text file 
 });
 
 it("chat mode is a Page verb and never enters Work's inverse journal", async () => {
-  const { owner } = sendControl({ thread: "t", ready: true });
-  expect(await owner.control("world").run()).toMatchObject({ state: "done", kind: "page" });
-  expect(owner.view.read().page.mode).toBe("world");
-  expect(await owner.restore("undo")).toBeNull();
-  expect(owner.view.read().page.mode).toBe("world");
+  const { owner } = await sendControl({ thread: "t", ready: true });
+  expect(owner.invoke("world", {})).toMatchObject({ kind: "accepted" });
+  expect(owner.page.read().mode).toBe("world");
+  expect(owner.journal()).toBeNull();
+  expect(owner.page.read().mode).toBe("world");
 });
 
 it("a composer cannot send to a thread that changed after its Page binding", async () => {
   const sent = vi.fn(async () => {});
   const deps: ChatRouteDeps = { thread: "first", ready: true, send: sent };
-  const send = sendControl(deps);
+  const send = await sendControl(deps);
   deps.thread = "second";
   expect(send.ready({ text: "old draft" })).toBe("Thread state is loading");
-  expect(await send.run({ text: "old draft" })).toMatchObject({ state: "refused" });
+  expect(await send.run({ text: "old draft" })).toBe("Thread state is loading");
   expect(sent).not.toHaveBeenCalled();
 });

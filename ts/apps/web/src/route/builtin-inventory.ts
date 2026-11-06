@@ -8,9 +8,13 @@ import { module as schedules } from "../schedules/kernel";
 import { module as families } from "../families/kernel";
 import { module as ducts } from "../ducts/kernel";
 import { module as fans } from "../fans/kernel";
+import { module as chat } from "../chat/kernel";
 import { builtins, type BuiltinKey } from "./builtins.neutral";
 
-const modules = { captures, schedules, families, ducts, fans } satisfies Record<BuiltinKey, unknown>;
+const modules = { captures, schedules, families, ducts, fans, chat } satisfies Record<
+  BuiltinKey,
+  unknown
+>;
 type Admitted =
   | { readonly ok: true; readonly route: AdmittedRoute }
   | { readonly ok: false; readonly diagnostics: readonly RouteDiagnostic[] };

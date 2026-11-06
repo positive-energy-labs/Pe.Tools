@@ -63,6 +63,14 @@ type IntentForEffect<I, Effect> = Effect extends "ModelWrite"
 type CommandIntent<E extends EntryTable, K> = K extends keyof E
   ? IntentForEffect<Input<E, K>, E[K]["axes"]["effect"]>
   : never;
+type Intent<G extends RouteGraphJson, S extends SchemaTable, E extends EntryTable, V> = V extends {
+  kind: "local";
+  entry: infer K;
+}
+  ? K extends keyof NonNullable<G["local"]>
+    ? SchemaValue<S, NonNullable<G["local"]>[K]["input"]>
+    : never
+  : CommandIntent<E, At<V, "entry">>;
 type Output<E extends EntryTable, K> = K extends keyof E ? z.output<E[K]["output"]> : never;
 export type ReadingValue<
   G extends RouteGraphJson,
@@ -213,7 +221,9 @@ type WorkVerbOutcome<V> = V extends { review: "none" }
       ? MoveResult
       : V extends { kind: "command" }
         ? JournalSubmission
-        : void
+        : V extends { kind: "local" }
+          ? { readonly kind: "local"; readonly press: string }
+          : void
   : V extends { review: "shown" }
     ?
         | { readonly kind: "review"; readonly preview: unknown }
@@ -408,7 +418,7 @@ type VerbSlots<G extends RouteGraphJson, S extends SchemaTable, E extends EntryT
         (
           ctx: InvocationContext<G, S, E, G["verbs"][K]>,
           input: VerbInput<G, S, K>,
-        ) => CommandIntent<E, At<G["verbs"][K], "entry">>
+        ) => Intent<G, S, E, G["verbs"][K]>
       >
     | Slot<
         At<G["verbs"][K], "args">,

@@ -27,7 +27,9 @@ export class ReviewRefusal extends Error {
   ) {
     super(
       detail ??
-        (reason === "review-stale" ? "Review is stale; prepare it again" : `Review refused: ${reason}`),
+        (reason === "review-stale"
+          ? "Review is stale; prepare it again"
+          : `Review refused: ${reason}`),
     );
     this.name = "ReviewRefusal";
   }
@@ -51,9 +53,50 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     entryFor,
     sourceTimeline,
     now,
+    local: localPort,
+    available,
   } = context;
   const work = context.work();
   const { snapshots, beginQuery, workHandles } = context.readings();
+  const localPending = new Set<{
+    invocation: InvocationToken;
+    controller: AbortController;
+    row: import("./timeline").TimelineEntry;
+  }>();
+  const localRows = () => sourceTimeline.get(owner) ?? [];
+  const localReadiness = (id: string, input: unknown): string | null => {
+    try {
+      if (!available() || target === null) return "Place is not writable";
+      resolve();
+      const verb = route.data.verbs[id];
+      if (verb?.kind !== "local") return "Not a local command";
+      if (!localPort) return "Local commands unavailable";
+      if (localPending.size >= 128) return "Too many pending local commands";
+      if ([...localPending].some((pending) => pending.row.verb === id))
+        return "Command still running";
+      const parsed = bindings.schemas[verb.input]!.parse(input);
+      const evidence = projectEvidence(
+        verb.deps,
+        read().page,
+        read().work?.value ?? {},
+        snapshots(),
+      );
+      const result = verb.ready
+        ? bindings.bodies[verb.ready]!.run({ ...evidence, workBasis: null, captures: {} }, parsed)
+        : true;
+      return result === true ? null : String(result);
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  };
+  const retireLocal = (
+    pending: typeof localPending extends Set<infer T> ? T : never,
+    reason: string,
+  ) => {
+    pending.controller.abort();
+    pending.row.outcome = { ...pending.row.outcome!, state: "stale", reason };
+    localPending.delete(pending);
+  };
 
   const preparing = createAdmittedRetention<{
     invocation: import("../../../../packages/agent-contracts/src/route-kernel-page.ts").InvocationToken;
@@ -137,13 +180,36 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     reviewRefusals.delete(id);
     const declaration = route.data.verbs[id];
     if (!declaration) throw Error(`Unknown verb: ${id}`);
+    if (declaration.kind === "local") {
+      const refusal = localReadiness(id, input);
+      if (refusal) {
+        const press = crypto.randomUUID();
+        const rows = localRows();
+        rows.push({
+          kind: "invocation",
+          at: now(),
+          press,
+          verb: id,
+          outcome: { id: press, state: "refused", input, reason: refusal },
+        });
+        if (rows.length > 200) rows.shift();
+        sourceTimeline.set(owner, rows);
+        notify();
+        throw Error(refusal);
+      }
+    }
     const parsed = bindings.schemas[declaration.input]!.parse(input);
     const edit = basis === undefined ? undefined : editBases.get(basis);
     if (basis !== undefined && (!edit || edit.scope !== owner.read()?.scope))
       throw Error("Stale or foreign accepted Work basis");
     if (declaration.deps.work.length && (!work.ready() || !read().work))
       throw Error("Work unavailable");
-    const dependencies = readingHashes(declaration.deps.readings, snapshots());
+    const dependencies = readingHashes(
+      declaration.kind === "local"
+        ? declaration.deps.readings.filter((id) => snapshots()[id]?.current)
+        : declaration.deps.readings,
+      snapshots(),
+    );
     const issued = owner.invocation(owner.capture(`verb:${id}`), dependencies);
     if (!issued.ok) throw Error(issued.reason);
     const invocation = issued.value;
@@ -208,6 +274,63 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
         );
         return observation;
       };
+    } else if (declaration.kind === "local") {
+      const entry = route.data.local![declaration.entry]!;
+      const args = freezePage(
+        bindings.schemas[entry.input]!.parse(
+          bindings.bodies[declaration.intent]!.run(context(), parsed),
+        ),
+      );
+      const row: import("./timeline").TimelineEntry = {
+        kind: "invocation",
+        at: now(),
+        press: invocation.id,
+        verb: id,
+        outcome: { id: invocation.id, state: "running", input: args },
+      };
+      const rows = localRows();
+      rows.push(row);
+      if (rows.length > 200) rows.shift();
+      sourceTimeline.set(owner, rows);
+      const pending = { invocation, controller: new AbortController(), row };
+      localPending.add(pending);
+      notify();
+      // Abort retires this observation only. The provider owns the harness turn and its Stop.
+      void Promise.resolve()
+        .then(() => {
+          if (!owner.current(invocation) || !available())
+            throw Error("Local command scope retired");
+          return localPort!(
+            { verb: id, entry: declaration.entry, input: args },
+            pending.controller.signal,
+          );
+        })
+        .then(
+          (output) => {
+            if (!localPending.has(pending)) return;
+            if (!owner.current(invocation) || !available())
+              return retireLocal(pending, "Local command scope retired");
+            const decoded = bindings.schemas[entry.output]!.safeParse(output);
+            row.outcome = {
+              ...row.outcome!,
+              state: decoded.success ? "succeeded" : "failed",
+              ...(decoded.success ? {} : { reason: "local-output-invalid" }),
+            };
+          },
+          (error: unknown) => {
+            if (!localPending.has(pending)) return;
+            row.outcome = {
+              ...row.outcome!,
+              state: owner.current(invocation) && available() ? "failed" : "stale",
+              reason: error instanceof Error ? error.message : String(error),
+            };
+          },
+        )
+        .finally(() => {
+          localPending.delete(pending);
+          notify();
+        });
+      return { kind: "local" as const, press: invocation.id };
     } else if (declaration.kind === "command") {
       const entry = bindings.entries[declaration.entry]!;
       const modelWrite = entry.axes.effect === "ModelWrite";
@@ -215,7 +338,11 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       // this invocation's Work revision and reading hashes; do not retain a second full copy.
       const evidence = () => {
         const captured = context();
-        return Object.freeze({ page: captured.page, work: captured.work, readings: captured.readings });
+        return Object.freeze({
+          page: captured.page,
+          work: captured.work,
+          readings: captured.readings,
+        });
       };
       const accepted = read();
       if (modelWrite && basis && basis.workRevision !== accepted.work?.revision)
@@ -227,9 +354,10 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
       const handles = workHandles(declaration.deps.readings);
       if (accepted.work && accepted.scope.identity.work && work.ready())
         handles[accepted.work.handle.key.route] = accepted.work.handle;
-      const workRoute = command && "writeBoundary" in command
-        ? command.writeBoundary.route
-        : accepted.scope.identity.work?.route;
+      const workRoute =
+        command && "writeBoundary" in command
+          ? command.writeBoundary.route
+          : accepted.scope.identity.work?.route;
       const primaryWork = workRoute ? handles[workRoute] : undefined;
       if (modelWrite && !primaryWork) throw Error("Accepted owner Work unavailable");
       // ModelWrite has one input authority: its accepted owner's handle, never draft intent.
@@ -265,7 +393,10 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
         const timelineOwner = key ? entryFor(key) : owner;
         const starts = sourceTimeline.get(timelineOwner) ?? [];
         starts.push({
-          kind: "invocation", at: now(), press: invocation.id, verb: id,
+          kind: "invocation",
+          at: now(),
+          press: invocation.id,
+          verb: id,
           outcome: { id: invocation.id, state: "running", input: intent },
         });
         if (starts.length > 200) starts.shift();
@@ -403,7 +534,14 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     present,
     reviews,
     presenting: () => presenting,
+    close() {
+      for (const pending of localPending) retireLocal(pending, "Mount closed");
+      notify();
+    },
     sync() {
+      for (const pending of localPending)
+        if (!owner.current(pending.invocation) || !available())
+          retireLocal(pending, "Local command scope retired");
       for (const [id, pending] of preparing.entries()) {
         if (!owner.current(pending.invocation)) {
           preparing.delete(id);
@@ -442,6 +580,7 @@ export function createAdmittedInvocation<W extends Record<string, unknown>>(
     ): CommandResultDecode | { kind: "gap"; reason: string; receiptId: string } =>
       landings.get(id) ?? { kind: "gap", reason: "Read the durable action receipt", receiptId: id },
     public: {
+      localReadiness,
       review: (id: string) => {
         const review = reviews.get(id);
         if (!review) return null;

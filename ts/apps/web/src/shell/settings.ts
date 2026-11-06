@@ -139,7 +139,7 @@ export function createSettingsOwner(
 }
 export type SettingsOwner = ReturnType<typeof createSettingsOwner>;
 const owners = new WeakMap<object, SettingsOwner>();
-export function graphSettings(graph: RouteGraph<any, any>): SettingsOwner {
+export function graphSettings(graph: Pick<RouteGraph<any, any>, "key" | "fields">): SettingsOwner {
   let owner = owners.get(graph);
   if (!owner) {
     owner = createSettingsOwner(settingFields(graph), {

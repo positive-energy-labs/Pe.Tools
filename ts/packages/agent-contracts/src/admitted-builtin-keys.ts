@@ -5,4 +5,5 @@ export const admittedBuiltinKeys: readonly string[] = [
   "families",
   "ducts",
   "fans",
+  "chat",
 ];

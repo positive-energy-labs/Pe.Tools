@@ -29,7 +29,11 @@ export const routeFieldJsonSchema = z.discriminatedUnion("role", [
     identity: z.union([ref, refs.min(2)]),
     picker: z.strictObject({ reading: ref, options: ref }),
   }),
-  z.strictObject({ role: z.literal("selection"), kinds: refs }),
+  z.strictObject({
+    role: z.literal("selection"),
+    kinds: refs,
+    allowAll: z.literal(true).optional(),
+  }),
   z.strictObject({ role: z.literal("setting"), schema: ref, codec: ref, initial }),
   z.strictObject({
     role: z.enum(["pose", "stage", "query", "draft", "device", "transient"]),
@@ -87,6 +91,13 @@ const verb = {
   chord: ref.optional(),
 };
 export const routeVerbJsonSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("local"),
+    ...verb,
+    review: z.literal("none"),
+    entry: ref,
+    intent: ref,
+  }),
   z.strictObject({
     kind: z.literal("work"),
     ...verb,
@@ -184,12 +195,13 @@ const layout: z.ZodType<LayoutJson> = z.lazy(() =>
 export const RouteGraphJson = z.strictObject({
   version: z.literal(1),
   capabilities: z
-    .array(z.enum(["work", "geometry", "native-write"]))
+    .array(z.enum(["work", "geometry", "native-write", "local"]))
     .refine(
       (groups) => new Set(groups).size === groups.length,
       "Capability groups must be distinct",
     ),
   key: ref,
+  local: z.record(ref, z.strictObject({ input: ref, output: ref })).optional(),
   address: z.string().startsWith("/"),
   name: z.string(),
   directory: z.strictObject({

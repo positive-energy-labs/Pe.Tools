@@ -17,9 +17,14 @@ import { routeFile } from "#/route";
  * never holds `/pea`, so Pea has no view of this route to set.
  */
 const file = routeFile("pea");
+const validateSearch = (search: Parameters<typeof file.validateSearch>[0]) => ({
+  ...file.validateSearch(search),
+  selected: search.selected,
+});
 export const Route = createFileRoute("/pea")({
-  validateSearch: file.validateSearch,
-  search: { middlewares: [retainSearchParams(["thread"]), ...file.search.middlewares] },
+  // The admitted owner decodes selection identities; the legacy list codec would erase them.
+  validateSearch,
+  search: { middlewares: [retainSearchParams<ReturnType<typeof validateSearch>>(["thread"])] },
   component: RouteComponent,
 });
 

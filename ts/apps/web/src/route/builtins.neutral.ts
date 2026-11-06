@@ -14,6 +14,8 @@ import schedulesGenerated from "../schedules/source-closure.generated.json" with
 import familiesGenerated from "../families/source-closure.generated.json" with { type: "json" };
 import ductsGenerated from "../ducts/source-closure.generated.json" with { type: "json" };
 import fansGenerated from "../fans/source-closure.generated.json" with { type: "json" };
+import chatGenerated from "../chat/source-closure.generated.json" with { type: "json" };
+import { module as chat } from "../chat/kernel.ts";
 
 const member = z.strictObject({ id: z.string(), sha256: z.string() });
 const closureSchema: z.ZodType<{ fingerprint: string; envelope: BuiltinClosure }> = z.strictObject({
@@ -34,12 +36,19 @@ interface Builtin {
   closure: z.output<typeof closureSchema>;
   host: HostRouteModule;
 }
-export const builtins: Record<"captures" | "schedules" | "families" | "ducts" | "fans", Builtin> = {
+export const builtins: Record<
+  "captures" | "schedules" | "families" | "ducts" | "fans" | "chat",
+  Builtin
+> = {
   captures: { closure: captures, host: { data: captures.envelope.data, schemas: {}, bodies: {} } },
   schedules: { closure: closureSchema.parse(schedulesGenerated), host: schedulesHostModule },
   families: { closure: closureSchema.parse(familiesGenerated), host: familiesHostModule },
   ducts: { closure: closureSchema.parse(ductsGenerated), host: ductsHostModule },
   fans: { closure: closureSchema.parse(fansGenerated), host: fansHostModule },
+  chat: {
+    closure: closureSchema.parse(chatGenerated),
+    host: { data: chat.data, schemas: chat.schemas, bodies: {} },
+  },
 };
 export type BuiltinKey = keyof typeof builtins;
 export const isBuiltinKey = (key: string): key is BuiltinKey => Object.hasOwn(builtins, key);
