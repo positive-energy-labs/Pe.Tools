@@ -621,7 +621,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(proc
     expect(poisoned).toBe(0); expect(nativeCalls).toBe(calls);
     expect(liveFactories).toMatchObject({ sdk: 0, bridge: 0, work: 0 });
     liveFiles.mockRestore();
-  } finally { releaseNative.resolve(); releaseMark.resolve(); releaseHuman.resolve(); vi.restoreAllMocks(); await historical?.dispose(); await live.dispose(); await rm(dir, { recursive: true, force: true }); }
+  } finally { releaseNative.resolve(); releaseMark.resolve(); releaseHuman.resolve(); vi.restoreAllMocks(); await historical?.dispose(); await live.dispose(); liveFactories.recorded = false; await rm(dir, { recursive: true, force: true }); }
 // The production listener, full native schema decoding and each independent cold owner run here.
 // The 180 s boundary completed live acquisition but expired during progressing cold consumers.
 }, 300000);
