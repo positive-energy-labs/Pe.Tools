@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { matchPeRoute } from "@pe/agent-contracts/pe-api";
 import { hostOpSafety } from "@pe/host-contracts/generated";
 import { familyReads, scheduleReads, readingRequestsSchema, type ReadingRequest } from "@pe/agent-contracts";
-import { decodeResourceSubscriptionUpdate } from "../../packages/runtime/src/resource-stream.ts";
+import { decodeResourceSubscriptionUpdate } from "@pe/runtime";
 import type { Plugin, ProxyOptions } from "vite-plus";
 import {
   HOST_RUNTIME_SERVICE_HEADER,
