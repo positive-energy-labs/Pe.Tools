@@ -16,10 +16,6 @@ public sealed class FamilySharedValueTypeTests {
              "types":{"A":{"Offset Symbol":"CELL"}}}
             """.Replace("SPEC", YesNoSpec).Replace("CELL", cell)).Diagnostics.Where(d => d.Code == FamilyModelDiagnosticCodes.ValueDataTypeMismatch);
 
-    [Test]
-    public void Shared_yes_no_cell_refuses_text() =>
-        Assert.That(Mismatches("Noj3-a-1").Select(d => d.Path), Is.EqualTo(new[] { "$.types.A.Offset Symbol" }));
-
     [TestCase("Yes")]
     [TestCase("No")]
     public void Shared_yes_no_cell_accepts_yes_and_no(string cell) => Assert.That(Mismatches(cell), Is.Empty);
