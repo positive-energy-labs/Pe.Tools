@@ -24,7 +24,7 @@ import {
 import { composerAnswer } from "./question-form";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { useSend, type ChatHandle } from "#/chat/composer-head";
-import { chatReading, chatOutcome, runChatCommand } from "./graph";
+import { chatReading, chatOutcome, runChatCommand } from "./owner-ports";
 import { Composer, ComposerFrame } from "#/components/lang/conversation";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";

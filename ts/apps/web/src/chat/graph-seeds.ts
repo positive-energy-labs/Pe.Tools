@@ -1,4 +1,4 @@
-import { CHAT_SEEDS, CHAT_SEED_THREAD_WORK } from "./seeds";
+import { CHAT_SEEDS, CHAT_SEED_THREAD_WORK } from "./seeds.ts";
 export const chatSeeds = Object.fromEntries(
   Object.entries(CHAT_SEEDS).map(([name, seed]) => [
     name,

@@ -6,7 +6,8 @@ import {
   type PromptAttachment,
 } from "@pe/agent-contracts";
 
-import { chatData, runChatCommand, threadIdentity, type ChatRouteDeps } from "./graph";
+import { chatData, threadIdentity, type ChatRouteDeps } from "./graph";
+import { runChatCommand } from "./owner-ports";
 import { admitChat } from "./admission";
 import { createRouteShell } from "#/shell/admitted-mount";
 import { sourceRouteServices } from "#/shell/source-route-services";

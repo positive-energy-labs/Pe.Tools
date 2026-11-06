@@ -1,4 +1,4 @@
-import { chatSeedChoices } from "./seed-choices";
+import { chatSeedChoices } from "./seed-choices.ts";
 /**
  * Chat seed data — plain values, no provider, no behaviour. `?fixture=<action>` mounts one of these
  * through the kernel's fixture owner; nothing here renders or holds state. Each seed is a thread body
@@ -19,9 +19,9 @@ import {
   type Seed,
   type ThreadWorkSnapshot,
 } from "@pe/agent-contracts";
-import { CHECKOUT_HOT, MACHINE_SEEDS } from "#/open/seeds";
+import { CHECKOUT_HOT, MACHINE_SEEDS } from "../open/seeds.ts";
 
-import type { ChatReading } from "#/chat/graph";
+import type { ChatReading } from "./graph.ts";
 import { emptyChatState, type ChatState } from "@pe/agent-contracts/chat-state";
 
 const at = (minute: number) => new Date(Date.UTC(2026, 7, 30, 19, minute));
