@@ -29,6 +29,7 @@ import { RouteHelpButton } from "#/route/help";
 import { useSurfaceHost } from "./surface-host";
 import { startFeedback } from "#/components/feedback-picker";
 import "./app-bar.css";
+import { RecordedSourceChip } from "#/machine/devices";
 import { PageBindingChip } from "#/pages-bind/chip";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
@@ -346,6 +347,7 @@ export function AppBar() {
       >
         {compact && <SituationDrawer barAnchor={shellRef.current} rail={actions} />}
         {pageSlug && <PageBindingChip slug={pageSlug} />}
+        <RecordedSourceChip />
         {!compact && actions}
       </div>
     </div>

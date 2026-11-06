@@ -98,7 +98,7 @@ export function DocumentPicker({ place, target, needs, enabled }: {
     ).map((doc) => ({
       ref: { session: session.sessionId, openId: doc.openId },
       label: doc.title,
-      session: session.sdkSessionId ?? `Revit - pid ${session.processId}`,
+      session: session.sdkSessionId ?? `Revit${session.processId === null ? "" : ` - pid ${session.processId}`}`,
     })),
   );
   const key = (ref: { session: string; openId: string }) => JSON.stringify(ref);

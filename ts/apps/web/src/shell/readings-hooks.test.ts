@@ -10,7 +10,7 @@ vi.mock("./readings", async (importOriginal) => ({
     throw Error("a shell hook subject ran a second reading engine");
   },
 }));
-const { readingAtom } = await import("./readings-hooks");
+const { readingAtom, inventoryOf } = await import("./readings-hooks");
 
 afterEach(() => vi.useRealTimers());
 
@@ -33,9 +33,9 @@ function transport() {
   };
 }
 
-function watch(source: never) {
+function watch(source: never, kind: "world" | "inventory" = "world") {
   const registry = AtomRegistry.make();
-  const atom = readingAtom({ kind: "world" }, source);
+  const atom = readingAtom({ kind }, source);
   let last: Reading<unknown> = { state: "absent" };
   const stop = registry.subscribe(atom, (reading) => (last = reading), { immediate: true });
   return { read: () => last, stop };
@@ -95,5 +95,32 @@ test("a synchronous cached answer stays current past the initial silence deadlin
   expect(w.read()).toEqual({ state: "ready", observation: { a: 1 } });
   await vi.advanceTimersByTimeAsync(31_000);
   expect(w.read()).toEqual({ state: "ready", observation: { a: 1 } });
+  w.stop();
+});
+
+test("inventory decodes at the hook boundary and retains truthful evidence on malformed observations", () => {
+  const t = transport();
+  const w = watch(t.source, "inventory");
+  const value = {
+    sessions: [
+      {
+        sessionId: "recorded-session",
+        connected: true,
+        openDocumentCount: 0,
+        openDocuments: null,
+        processId: null,
+        custody: null,
+      },
+    ],
+  };
+  t.send({ kind: "snapshot", value });
+  expect(w.read()).toEqual({ state: "ready", observation: value });
+  expect(inventoryOf(value.sessions)[0]).toMatchObject({ processId: null, custody: null });
+  expect(() =>
+    t.send({ kind: "snapshot", value: { sessions: [{ connected: "yes" }] } }),
+  ).not.toThrow();
+  expect(w.read()).toMatchObject({ state: "failed", previous: value });
+  t.send({ kind: "snapshot", value });
+  expect(w.read()).toEqual({ state: "ready", observation: value });
   w.stop();
 });

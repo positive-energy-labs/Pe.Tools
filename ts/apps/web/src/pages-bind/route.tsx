@@ -37,7 +37,7 @@ function Body({ owner, page }: MountBody<BindPage, never>) {
                 (session.openDocuments ?? []).map((doc) => ({
                   title: doc.title,
                   address: doc.address ?? null,
-                  revit: `Revit ${session.year ?? ""} / pid ${session.processId}`,
+                  revit: `Revit ${session.year ?? ""}${session.processId === null ? "" : ` / pid ${session.processId}`}`,
                   ref: { session: session.sessionId, openId: doc.openId },
                 })),
               )

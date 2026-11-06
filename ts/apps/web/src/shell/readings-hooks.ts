@@ -18,7 +18,12 @@ import * as Atom from "effect/reactivity/Atom";
 import { deepEqual } from "@tanstack/react-router";
 import { useCallback, useContext, useMemo, useRef, useSyncExternalStore } from "react";
 import type { Custody, Lane } from "@pe/host-contracts/contracts";
-import type { BridgeSessionListEntry, HostOpResponse } from "@pe/host-contracts/operation-types";
+import {
+  bridgeSessionsListSchema,
+  type BridgeSessionListEntry,
+  type HostOpResponse,
+} from "@pe/host-contracts/operation-types";
+import { Schema, Exit } from "effect";
 import { reportFault } from "#/host/diagnostics";
 import { peReadings, type Readings } from "#/readings";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
@@ -80,10 +85,18 @@ function subject(
       let revision = 0;
       return source.subscribe(request, (frame) => {
         if (frame.kind === "snapshot") {
+          const inventory =
+            request.kind === "inventory"
+              ? Schema.decodeUnknownExit(bridgeSessionsListSchema)(frame.value)
+              : null;
+          if (inventory && Exit.isFailure(inventory)) {
+            deliver({ kind: "failure", error: "Host inventory does not decode." });
+            return;
+          }
           meta.changed = frame.changed;
           deliver({
             kind: "complete",
-            value: frame.value,
+            value: inventory && Exit.isSuccess(inventory) ? inventory.value : frame.value,
             revision: ++revision,
             fresh: !frame.stale,
           });
@@ -243,14 +256,14 @@ export const useHostStatusSlice = <S>(select: (reading: Reading<PeInfo>) => S, e
 export interface SessionInventory {
   /** The BROKER's id: hash(pid + processStartUtc). Not the pe-revit session id. */
   sessionId: string;
-  processId: number;
+  processId: number | null;
   processStartUtcUnixMs?: number | null;
   lane: Lane | null;
   /** The id `pe-revit session list` prints, when this payload was launched by pe-revit. */
   sdkSessionId?: string;
   year?: string;
   /** Disclosed by the broker. The UI never re-implements the SDK's `observed` refusal. */
-  custody: Custody;
+  custody: Custody | null;
   activeDocumentId?: string;
   activeDocumentTitle?: string;
   openDocumentCount: number;
@@ -268,14 +281,14 @@ export function inventoryOf(entries: readonly BridgeSessionListEntry[]): Session
     .filter((e) => e.connected)
     .map((e) => ({
       sessionId: e.sessionId,
-      processId: e.processId ?? 0,
+      processId: e.processId ?? null,
       processStartUtcUnixMs: e.processStartUtcUnixMs ?? null,
       // Anything outside the SDK's union is no lane at all, not an invented "unknown" member.
       lane: LANES.find((l) => l === e.lane) ?? null,
       sdkSessionId: e.sdkSessionId ?? undefined,
       year: e.revitVersion ?? undefined,
-      // An entry that predates `custody` is treated as observed: the read-only reading.
-      custody: CUSTODIES.find((c) => c === e.custody) ?? "observed",
+      // Missing disclosure grants no custody fact.
+      custody: CUSTODIES.find((c) => c === e.custody) ?? null,
       activeDocumentId: e.activeDocumentCloudModelGuid ?? e.activeDocumentPath ?? undefined,
       activeDocumentTitle: e.activeDocumentTitle ?? undefined,
       observedAtUnixMs: e.activeDocumentObservedAtUnixMs ?? undefined,
