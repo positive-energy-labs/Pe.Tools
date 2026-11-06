@@ -37,6 +37,7 @@ export function staticSpaLayer(root: string | null, refused?: Effect.Effect<Http
   }));
 }
 
+// TODO: reconcile admitted trailing-slash navigation aliases without broadening API or recorded-Page fallback.
 const webRequest = (request: HttpServerRequest.HttpServerRequest) => {
   if (request.method !== "GET" && request.method !== "HEAD") return false;
   const pathname = new URL(decodeURIComponent(new URL(request.url, "http://host").pathname).replaceAll("\\", "/").replace(/\/{2,}/g, "/"), "http://host").pathname;

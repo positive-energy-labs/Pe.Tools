@@ -571,6 +571,7 @@ function historicalHttpLive(options: HttpLiveOptions) {
   const port = () => { const address = server.address(); return address && typeof address !== "string" ? address.port : options.port; };
   const identity = requestIdentityLayer({
     port, frontendOrigin: Effect.succeed(undefined),
+    // TODO: map this historical wrong-Host denial through typed identity failure; today it becomes a fail-closed defect.
     share: { read: async () => { throw new Refused({ code: "context.missing", door: "historical host", reason: "Historical host admits local transport only" }); }, observe: () => {} },
   });
   return ServiceFileLive.pipe(Layer.provideMerge(HttpRouter.serve(historicalRoutes(options.inputs, options.webRoot).pipe(
