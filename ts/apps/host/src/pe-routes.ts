@@ -200,6 +200,8 @@ export interface PeRoutesOptions {
   ductsSheets?: DuctsSheetSources;
 }
 export interface PeRouteInvocation {
+  readonly readEvents?: Response;
+  readonly readGraph?: (request: unknown) => Promise<unknown>;
   readonly sheets?: DuctsSheetSources;
   readonly document?: (ref: DocumentRef) => Promise<DocumentRow>;
   readonly observe?: ResourceObserver;
@@ -222,7 +224,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 
 const historicalPeRefusal = (inputs: HostInputContext["Service"] | undefined, method: string, id: string) => {
   if (inputs?.lane.kind !== "recording") return null;
-  if (!["ducts.sheet", "ducts.roster", "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get"].includes(id))
+  if (!["reads.events", "fans.sheet", "ducts.sheet", "ducts.roster", "work.get", "work.list", "resources.stream", "resources.subscriptions", "features.get"].includes(id))
     return method === "GET" ? new InvalidRead({ message: "Recording does not cover this route owner", status: 409, problem: "recording.coverage" })
       : inputs.check({ kind: "work", verb: "edit" });
   const needs = id.startsWith("work.") ? ["work" as const] : id.startsWith("ducts.") ? ["document" as const, "files" as const, "marks" as const, "work" as const] : [];
@@ -447,6 +449,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
           404,
         );
       }
+    }
+    if (declared.id === "reads.events") return invocation.readEvents ?? json({ error: "Read publications are unavailable" }, 503);
+    if (declared.id === "fans.sheet") {
+      if (!invocation.readGraph) return json({ error: "Host read graph is unavailable" }, 503);
+      return json(await invocation.readGraph(await request.json()));
     }
     if (declared.id === "ducts.sheet" || declared.id === "ducts.roster") {
       if (!options.ductsSheets && !invocation.sheets) return json({ error: "Duct sheets are unavailable" }, 503);

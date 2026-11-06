@@ -92,7 +92,7 @@ export function openSourceReading<T>(
         case "complete":
           return emit(
             frame.fresh === false
-              ? held("unavailable", "Reading is stale", sent)
+              ? held("unavailable", frame.reason ?? "Reading is stale", sent)
               : {
                   status: "ready",
                   current: true,

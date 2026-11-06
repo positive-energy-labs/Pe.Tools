@@ -1,4 +1,5 @@
-import type { HostRouteModule } from "../../../../packages/agent-contracts/src/host-route-admission.ts";
+import { fansReadArgs, fansReadResponse } from "@pe/agent-contracts";
+import type { HostRouteModule } from "@pe/agent-contracts";
 import {
   applyPatches,
   ductsSheetEditsSchema,
@@ -11,15 +12,13 @@ import {
   type FansRouteDocument,
 } from "@pe/agent-contracts";
 import { z } from "zod";
-import { TABLE_IDS } from "@pe/ducts-domain/pricing";
 import type {
   BodyBindings,
   WorkPatch,
-} from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
+} from "@pe/agent-contracts";
 import type {
-  Immutable,
   RouteGraphJson,
-} from "../../../../packages/agent-contracts/src/route-kernel-data.ts";
+} from "@pe/agent-contracts";
 import {
   entries as ductEntries,
   localId,
@@ -49,7 +48,7 @@ const pane = <const K extends string>(body: K, label: string, purpose: string) =
     body,
     label,
     purpose,
-    draws: ["fans", "sheet", "sheetSnapshot", "sheetView", "ductsWork", "pricing"],
+    draws: ["fans", "sheet", "sheetSnapshot", "sheetView", "ductsWork"],
     verbs: ["browse", "edit", "scope", "sheetEdit", "ductsEdit"],
   }) as const;
 
@@ -204,45 +203,12 @@ export const fansData = {
     "sheet-roster": pane("sheet-roster", "Fans", "Open fan ports"),
   },
   readings: {
+    value: { ...readPolicy, kind: "use", entry: "fans.sheet", args: "valueArgs", deps: { page: ["fan", "sheetPath"], work: workKeys, readings: ["ductsWork"] } },
     ductsWork: { kind: "work", route: "ducts", output: "ductsWork", ...readPolicy, deps: { page: [], work: [], readings: [] } },
-    tables: { ...readPolicy, kind: "use", entry: "ducts.tables", args: "tablesArgs", deps: { page: [], work: [], readings: [] } },
-    catalogs: { ...readPolicy, kind: "use", entry: "ducts.catalogs", args: "catalogsArgs", deps: { page: [], work: [], readings: [] } },
-    fans: {
-      args: "fansArgs",
-      ...readPolicy,
-      deps: { page: [], readings: [], work: workKeys },
-      entry: "ducts.fans",
-      kind: "use",
-    },
-    meshes: {
-      ...readPolicy,
-      deps: { page: [], readings: [], work: [] },
-      derive: "meshes",
-      kind: "derive",
-      output: "snapshot",
-    },
-    pricing: {
-      ...readPolicy,
-      demand: "explicit", refresh: "explicit",
-      deps: { page: [], work: workKeys, readings: ["sheetSnapshot", "ductsWork", "tables", "catalogs"] },
-      derive: "price",
-      kind: "derive",
-      output: "pricing",
-    },
-    sheet: {
-      args: "sheetArgs",
-      ...readPolicy,
-      deps: { page: ["fan", "sheetPath"], readings: ["fans", "ductsWork"], work: workKeys },
-      entry: "ducts.sheet",
-      kind: "use",
-    },
-    sheetSnapshot: {
-      args: "sheetSnapshotArgs",
-      ...readPolicy,
-      deps: { page: [], readings: ["sheet"], work: workKeys },
-      entry: "ducts.sheet-snapshot",
-      kind: "use",
-    },
+    fans: { ...readPolicy, kind: "derive", output: "fans", derive: "fans", deps: { page: [], work: [], readings: ["value"] } },
+    sheet: { ...readPolicy, kind: "derive", output: "sheet", derive: "sheet", deps: { page: [], work: [], readings: ["value"] } },
+    sheetSnapshot: { ...readPolicy, kind: "derive", output: "sheetSnapshot", derive: "sheetSnapshot", deps: { page: [], work: [], readings: ["value"] } },
+    meshes: { ...readPolicy, kind: "derive", output: "snapshot", derive: "meshes", deps: { page: [], work: [], readings: [] } },
     // The fan's losses plan (ADR 0030 rule 4): an explicit Read the shared write button draws.
     lossPlan: {
       kind: "use",
@@ -255,7 +221,7 @@ export const fansData = {
     },
     sheetView: {
       ...readPolicy,
-      deps: { page: [], readings: ["sheet"], work: [] },
+      deps: { page: [], readings: ["value"], work: [] },
       derive: "sheetView",
       kind: "derive",
       output: "sheetView",
@@ -357,6 +323,9 @@ const fanSheetFields = {
 } as const;
 const fanSchemas = {
   none: z.strictObject({}),
+  value: fansReadResponse,
+  fans: ductEntries["ducts.fans"].output,
+  sheetSnapshot: sharedSchemas.sheetSnapshot,
   snapshot: sharedSchemas.sheetSnapshot.nullable(),
   ductsWork: ductsDocumentSchema,
   sheetEdit: sharedSchemas.sheetEdit.extend({
@@ -411,36 +380,14 @@ export const schemas: typeof fanSchemas & Pick<typeof sharedSchemas,
   viewport: sharedSchemas.viewport,
   edit: sharedSchemas.edit,
 };
-const workSchema: z.ZodType<Immutable<FansRouteDocument>> = fansDocumentSchema;
-const fanReadingSchema: z.ZodType<
-  Immutable<z.output<(typeof ductEntries)["ducts.fans"]["output"]>>
-> = ductEntries["ducts.fans"].output;
-const sheetReadingSchema: z.ZodType<Immutable<z.output<typeof sharedSchemas.sheet>>> =
-  sharedSchemas.sheet;
 export const entries = {
-  "ducts.tables": ductEntries["ducts.tables"],
   "ducts.plan-losses": ductEntries["ducts.plan-losses"],
   "ducts.apply-losses": ductEntries["ducts.apply-losses"],
-  "ducts.catalogs": ductEntries["ducts.catalogs"],
-  "ducts.fans": { ...ductEntries["ducts.fans"], input: z.object({ work: workSchema.nullable(), fanWork: workSchema.optional() }) },
-  "ducts.sheet": {
-    ...ductEntries["ducts.sheet"],
-    input: ductEntries["ducts.sheet"].input.extend({
-      work: workSchema.nullable(),
-      fans: fanReadingSchema,
-    }),
-  },
-  "ducts.sheet-snapshot": {
-    ...ductEntries["ducts.sheet-snapshot"],
-    input: ductEntries["ducts.sheet-snapshot"].input.extend({
-      work: workSchema.nullable(),
-      sheet: sheetReadingSchema,
-    }),
-  },
+  "fans.sheet": { ...ductEntries["ducts.sheet"], input: fansReadArgs.omit({ target: true }), output: fansReadResponse },
 };
 const source = { module: "fans/neutral.ts", export: "fansNeutralBodies" };
 function patches(
-  work: import("../../../../packages/agent-contracts/src/route-kernel-data.ts").Immutable<FansRouteDocument>,
+  work: import("@pe/agent-contracts").Immutable<FansRouteDocument>,
   input: readonly import("@pe/agent-contracts").RouteStatePatch[],
 ): readonly WorkPatch<typeof fansDocumentSchema>[] {
   const next = applyPatches(
@@ -480,7 +427,9 @@ export const fansNeutralBodies: Omit<
   | "seedLayout"
   | "seedColours"
   | "seedNavigation"
-  | "price"
+  | "fans"
+  | "sheet"
+  | "sheetSnapshot"
   | "presentLosses"
   | "sheetView"
   | "sheet-roster"
@@ -488,8 +437,6 @@ export const fansNeutralBodies: Omit<
   | "sheet-picture"
   | "sheet-ledger"
 > = {
-  tablesArgs: { slot: "readings.tables.args", kind: "args", source, run: () => ({ ids: [...TABLE_IDS] }) },
-  catalogsArgs: { slot: "readings.catalogs.args", kind: "args", source, run: () => ({}) },
   lossPlanArgs: { slot: "readings.lossPlan.args", kind: "args", source, run: () => null },
   losses: { slot: "verbs.losses.intent", kind: "intent", source, run: () => ({}) },
   lossReady: {
@@ -584,30 +531,8 @@ export const fansNeutralBodies: Omit<
     source,
     run: () => ({ label: "Choose write scope" }),
   },
-  fansArgs: {
-    slot: "readings.fans.args",
-    kind: "args",
-    source,
-    run: (ctx) => ({ work: ctx.work, fanWork: ctx.work }),
-  },
-  sheetArgs: {
-    slot: "readings.sheet.args",
-    kind: "args",
-    source,
-    run: (ctx) => ({
-      fan: namesOf(ctx.page.fan),
-      sheetPath: ctx.page.sheetPath,
-      fans: ctx.readings.fans.value ?? null,
-      work: ctx.work,
-      fanWork: ctx.work,
-    }),
-  },
-  sheetSnapshotArgs: {
-    slot: "readings.sheetSnapshot.args",
-    kind: "args",
-    source,
-    run: (ctx) => ({ sheet: ctx.readings.sheet.value ?? null, work: ctx.work, fanWork: ctx.work }),
-  },
+  valueArgs: { slot: "readings.value.args", kind: "args", source,
+    run: ctx => ({ fan: namesOf(ctx.page.fan), sheetPath: ctx.page.sheetPath }) },
   meshes: { slot: "readings.meshes.derive", kind: "derive", source, run: () => null },
   pickFans: {
     slot: "fields.fan.picker.options",

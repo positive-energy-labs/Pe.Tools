@@ -51,13 +51,7 @@ import { BridgeError } from "./bridge.ts";
 
 /** The tolerances C# measures model health under (one home, ducts LEDGER 2026-10-29): the project's criteria. */
 type Tolerances = { autoJoinGapIn: number; candidateBoxIn: number };
-type SnapshotRequest = {
-  /** Work's parameter slots (the airflow slot among them): the C# read measures under these. */
-  slots?: Partial<Record<string, string>>;
-  selector:
-    | { kind: "roster" }
-    | ({ kind: "from"; unitId: number; portIndex?: number; maxHops?: number } & Tolerances);
-};
+type SnapshotRequest = Omit<Extract<import("@pe/agent-contracts").DuctsReadingRequest, { kind: "ducts-snapshot" }>, "kind" | "target">;
 // Each rule's default, the fallback it prices when that default is not served (ER5-2 for ER5-1),
 // and every option a person may pick: a picked table prices only if its grid is served, and the
 // picker names each option by the ASHRAE title its grid carries (a missing id is reported, not thrown).
@@ -87,6 +81,8 @@ export interface DuctsSheetSources {
     readonly work: WorkReadContext;
     readonly overview?: (basis: string, recompute: (request: DuctsSheetRequest, sources: DuctsSheetSources) => Promise<void>) => Promise<void>;
   };
+  /** The graph pins both Work inputs once; legacy Ducts keeps its existing workspace path. */
+  readWork?: (owner: "ducts" | "fans", scope: WorkKey) => Promise<{ doc: unknown; revision: number } | null>;
   workKey?: (target: DocumentRef) => Promise<WorkKey>;
   firm: () => Promise<import("./ducts-inputs.ts").FirmReading>;
   catalogs: () => Promise<import("./duct-catalogs.ts").CatalogReading>;
@@ -239,8 +235,8 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
   /** The layers the resolver reads: Work's staged edits and the firm file, with the state that names them. */
   async function loadLayers(target: DocumentRef, reads: DuctsSheetSources) {
     const scope = reads.workKey ? await reads.workKey(target) : work ? await work.key(target) : null;
-    const owned = scope && work ? await work.workspace.readRaw(scope, "ducts", reads.inputs?.work) : null;
-    const fans = scope && work ? await work.workspace.view({ ...scope, route: "fans" }, "fans", reads.inputs?.work) : null;
+    const owned = scope && reads.readWork ? await reads.readWork("ducts", scope) : scope && work ? await work.workspace.readRaw(scope, "ducts", reads.inputs?.work) : null;
+    const fans = scope && reads.readWork ? await reads.readWork("fans", { ...scope, route: "fans" }) : scope && work ? await work.workspace.view({ ...scope, route: "fans" }, "fans", reads.inputs?.work) : null;
     const doc = ductsDesign(owned ? ductsDocumentSchema.parse(owned.doc) : null, fansDocumentSchema.parse(fans?.doc ?? {}));
     const firm = await reads.firm();
     return {

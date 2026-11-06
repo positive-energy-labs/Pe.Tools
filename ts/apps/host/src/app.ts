@@ -1,3 +1,8 @@
+import { readInvalidations } from "./reads/invalidations.ts";
+import { readEvents } from "./reads/events.ts";
+import { Publications } from "./reads/evaluator.ts";
+import { fansSheet, fansInputPort } from "./reads/fans.ts";
+import { fansReadRequest } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
 import type { TakingObserver } from "./native-recording.ts";
 import { BodyReceiptAudience, bodyReceipts } from "./body-receipts.ts";
@@ -276,6 +281,9 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
   const owner = recorded ? new DuctsReadings() : live!.owner;
   const files = Context.get(services, HostFiles), marks = Context.get(services, HostDocumentMarks);
   const readSets = Context.get(services, HostInputReadSets);
+  const publications = new Publications();
+  const invalidations = readInvalidations(workspace, marks, recorded, publications);
+  yield* Effect.addFinalizer(() => Effect.sync(invalidations.close));
   const receipts = writer ? bodyReceipts(writer) : undefined;
   const acceptPoints = writer && receipts ? yield* acceptedPointPolicy(writer, receipts) : undefined;
   const json = (value: unknown) => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));
@@ -301,7 +309,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
         expectedVersion: readOptions.version ?? null, role }), scope: canonicalJson(input.scope) }),
         catch: (error) => isDoorFailure(error) ? error : new InvalidRead({ message: String(error), status: 409, problem: "recording.context" }) });
       return yield* retainedDuctsRead(owner, input, readOptions, { document, basis }).pipe(
-        Effect.tap(() => sealed(nested)), Effect.ensuring(nested.close), Effect.provideService(CurrentInputConsumption, nested));
+        Effect.onExit(() => sealed(nested)), Effect.ensuring(nested.close), Effect.provideService(CurrentInputConsumption, nested));
     });
   const invocation: PeInvocationFactory = async (request, web, fallback) => {
     const identity = Context.get(request, RequestIdentity);
@@ -309,14 +317,20 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
     const admitted = Context.add(provided, RequestIdentity, identity);
     const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) => runPods({}, Effect.provide(effect, admitted));
     const url = new URL(web.url), declared = matchPeRoute(web.method, url.pathname)!;
+    if (declared.id === "reads.events") return { readEvents: readEvents(publications, identity.caller, web) };
     if (declared.id === "resources.subscriptions") return { resourceAudience: audience };
-    if (!["ducts.roster", "ducts.sheet", "work.get", "resources.stream"].includes(declared.id)) return {};
+    if (!["fans.sheet", "ducts.roster", "ducts.sheet", "work.get", "resources.stream"].includes(declared.id)) return {};
     const stream = declared.id === "resources.stream";
     const input = declared.route.input.parse({ params: declared.params,
       query: Object.fromEntries(url.searchParams), body: web.method === "GET" ? undefined : await web.clone().json() });
-    const recipe: ConsumerRecipe = { key: declared.id, input: json(input), scope: canonicalJson(json(identity.scope)) };
+    const graphRequest = declared.id === "fans.sheet" ? fansReadRequest.parse(input.body) : null;
+    if (graphRequest?.release) return { readGraph: async () => {
+      publications.release(canonicalJson([identity.caller, graphRequest.subscription]), graphRequest.generation);
+      return { key: "", generation: graphRequest.generation, version: 0, value: null, state: "superseded" };
+    } };
+    const recipe: ConsumerRecipe = { key: declared.id, input: json(declared.id === "fans.sheet" ? { body: { args: fansReadRequest.parse(input.body).args } } : input), scope: canonicalJson(json(identity.scope)) };
     // Transport registration consumes no recording; POST-added keys admit their own frames.
-    const consumption = recorded && stream ? undefined : await invoke(readSets.open(recipe, null));
+    const consumption = recorded && stream ? undefined : await invoke(readSets.open(recipe, declared.id === "fans.sheet" ? fansReadRequest.parse(input.body).readSet as ReadSetId ?? null : null));
     const scoped = (current: InputConsumption): WorkInputRunner => (effect) =>
       runPods({}, Effect.provide(effect, Context.add(admitted, CurrentInputConsumption, current)));
     const complete = (current: InputConsumption) => scoped(current)(sealed(current));
@@ -529,7 +543,13 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
       return () => { released = true; release(); };
     };
     const source = consumption ? sources(consumption) : undefined;
-    return { ...(source && { sheets: source, work: source.inputs!.work,
+    return { ...(declared.id === "fans.sheet" && source ? { readGraph: async (raw: unknown) => {
+      const request = fansReadRequest.parse(raw);
+      const id = canonicalJson([identity.caller, request.subscription]);
+      return publications.publish(id, request.generation, fansSheet, request.args, fansInputPort({
+        source, workspace, marks, run: scoped(consumption!), evaluation: consumption!.id, origin: () => inputs.source, revision: invalidations.revision,
+      }));
+    } } : {}), ...(source && { sheets: source, work: source.inputs!.work,
       document: (ref: import("@pe/agent-contracts").DocumentRef) => runPods({}, Effect.provide(inventory.document(ref), Context.add(admitted, CurrentInputConsumption, consumption!))) }), observe,
       closeResources: () => { closingResources = true; closeResources(); },
       resourceAudience: audience,
@@ -542,7 +562,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
         }
         try { if ("response" in result && result.response.ok) {
           await complete(consumption!);
-          if (receipts && audience && !writer!.capture.truncated()) {
+          if (declared.id !== "fans.sheet" && receipts && audience && !writer!.capture.truncated()) {
             const text = await result.response.clone().text();
             const receipt = await invoke(receipts.mint(consumption!.id, createHash("sha256").update(text).digest("hex"), audience));
             if (receipt) result.response.headers.set(BODY_RECEIPT_HEADER, receipt);
@@ -606,7 +626,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
       return { answer, ...(bodyReceipt ? { bodyReceipt } : {}) };
     }).pipe(Effect.provideService(CurrentInputConsumption, root), Effect.provideService(HostNativeRead, Context.get(services, HostNativeRead)), Effect.ensuring(root.close));
   });
-  return { work, invocation, retainedCall, nativeCall, nativeBody, services };
+  return { work, invocation, retainedCall, nativeCall, nativeBody, services, publications };
 });
 
 type FansOwnerOptions = NonNullable<Parameters<typeof makeFansOwner>[1]>;
