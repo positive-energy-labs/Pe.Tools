@@ -1193,7 +1193,7 @@ export class RouteWorkspace {
           deliveries = deliveries.then(async () => {
             const [got, carriage] = await Promise.all([ready, begun]);
             if (got && !closed) deliver(got, carriage);
-          });
+          }).catch(end);
         },
         true,
         true,
@@ -1211,7 +1211,7 @@ export class RouteWorkspace {
               for (const write of held ?? []) ack(write);
               held = null;
             },
-          );
+          ).catch(end);
         },
         (write) => {
           if (closed) return;
