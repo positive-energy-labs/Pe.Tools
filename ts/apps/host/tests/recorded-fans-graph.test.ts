@@ -109,7 +109,9 @@ async function firstFrame(response: Response) {
   try { return await frames.next(); } finally { await frames.close(); }
 }
 
-test.skipIf(!existsSync(source)).each([false, true])("real Fans graph persistent SSE and cold replay (capture=%s)", async (capturing) => {
+test.skipIf(!existsSync(source)).each([
+  { capturing: false, recovery: false }, { capturing: true, recovery: false }, { capturing: true, recovery: true },
+])("real Fans graph persistent SSE and cold replay (capture=$capturing recovery=$recovery)", async ({ capturing, recovery }) => {
   const dir = await mkdtemp(join(tmpdir(), "pe-fans-graph-"));
   const completed: { recipe: ConsumerRecipe; id: ReadSetId; requestId?: string; caller?: Caller }[] = []; let nativeCalls = 0, poisoned = 0;
   let workspace: RouteWorkspace, holdHuman = false;
@@ -202,12 +204,14 @@ test.skipIf(!existsSync(source)).each([false, true])("real Fans graph persistent
       expect(value, JSON.stringify(value)).toMatchObject({ kind: "snapshot", value: { state } });
       if (capturing) {
         const entry = completed.filter((entry) => !claimed.has(entry.id) && (entry.recipe.key === "resource.frame" || (entry.recipe.key === "resource.notification" && canonicalJson(entry.recipe.input) === canonicalJson({ reading: resource, envelope: value.value })))).at(-1)!;
+        expect(entry, JSON.stringify({ state, value, truncated: writer.capture.truncated() })).toBeDefined();
         claimed.add(entry.id); cases.push({ url, value, readSet: entry.id, stream: true, caller });
       }
       return value;
     };
     try {
       const original = await next("ready");
+      const retiredWalk = recovery ? cases.find((entry) => entry.url === "/call") : undefined;
       changedAt = 0; for (const notify of markListeners) notify();
       expect(await next("ready")).toMatchObject({ changed: false, value: original.value });
       changedAt = 300; for (const notify of markListeners) notify();
@@ -215,18 +219,37 @@ test.skipIf(!existsSync(source)).each([false, true])("real Fans graph persistent
       for (const listener of liveFactories.listeners) listener({ sessionId: ref.session, kind: "event",
         eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
       await next("stale");
-      const roster = await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
+      const beforeReacquire = nativeCalls;
+      const roster = recovery ? await send(live, "/pe/ducts/roster", { target: ref })
+        : await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
       expect(roster.status, await roster.clone().text()).toBe(200);
+      if (recovery) {
+        expect(nativeCalls).toBe(beforeReacquire + 1);
+        const prior = cases.find((entry) => entry.value.kind === "overview")!.value;
+        expect((await roster.json()).rows.find((row: any) => row.unitId === prior.fan.unitId && row.portIndex === prior.fan.portIndex)).not.toHaveProperty("blockerCount");
+      }
       await next("loading"); const fresh = await next("ready");
       expect(fresh.value.version).not.toBe(original.value.version);
-      expect(fresh.value.version).toBe(roster.headers.get(DUCTS_BODY_VERSION_HEADER));
+      if (!recovery) expect(fresh.value.version).toBe(roster.headers.get(DUCTS_BODY_VERSION_HEADER));
       const refresh = ductsExecutors(liveFactories.service!)["ducts.refresh"]!;
       await refresh.run({ admission: { target: { kind: "document", ref } } } as CommandContext, {} as ActionExecution);
       await next("stale");
-      const refreshed = await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
+      const refreshed = recovery ? await send(live, "/pe/ducts/roster", { target: ref })
+        : await send(live, "/call", { key: "ducts.snapshot.roster", request: { selector: { kind: "roster" } } });
       expect(refreshed.status, await refreshed.clone().text()).toBe(200);
       await next("loading");
-      expect((await next("ready")).value.version).toBe(refreshed.headers.get(DUCTS_BODY_VERSION_HEADER));
+      const refreshedFrame = await next("ready");
+      if (!recovery) expect(refreshedFrame.value.version).toBe(refreshed.headers.get(DUCTS_BODY_VERSION_HEADER));
+      if (retiredWalk) {
+        expect(writer.capture.truncated()).toBeNull();
+        const beforeRefusal = nativeCalls;
+        const refused = await live.handler(new Request(`${liveHost.base}/call`, { method: "POST", headers: {
+          "content-type": "application/json", [DUCTS_BODY_VERSION_HEADER]: retiredWalk.value.version,
+        }, body: JSON.stringify(retiredWalk.body) }), Context.make(RequestIdentity, admitted()));
+        expect(refused.status, await refused.clone().text()).toBe(409);
+        expect(await refused.json()).toMatchObject({ error: { details: { problem: "read.retained" } } });
+        expect(nativeCalls).toBe(beforeRefusal);
+      }
     } finally { await frames.close(); }
   };
   try {
@@ -235,7 +258,7 @@ test.skipIf(!existsSync(source)).each([false, true])("real Fans graph persistent
       expect(warm.status, await warm.clone().text()).toBe(200);
       await persistentProof(); return;
     }
-    await persistentProof();
+    if (!recovery) await persistentProof();
     const roster = await capture("/pe/ducts/roster", { target: ref });
     expect(roster.rows.length).toBeGreaterThan(0);
     const rosterCalls = nativeCalls;
@@ -294,6 +317,17 @@ test.skipIf(!existsSync(source)).each([false, true])("real Fans graph persistent
     releaseHuman.resolve();
     const humanView = await humanRead;
     expect([humanView.revision, peaView.revision]).toEqual([2, 3]);
+    if (recovery) {
+      await persistentProof();
+      const fresh = await send(live, "/pe/ducts/sheet", request);
+      expect(fresh.status, await fresh.clone().text()).toBe(200);
+      expect((await fresh.json()).basis).not.toBe(overview.basis);
+      const roots = completed.filter((entry) => entry.recipe.key === "ducts.roster");
+      await writeFile(join(import.meta.dirname, "../../../../.artifacts/runs/kernel-crusade-20261104/step-7/version-records.json"), JSON.stringify({
+        truncated: writer.capture.truncated(), roots: await Promise.all(roots.map(async (entry) => ({ id: entry.id, state: (await run(writer.readSets.get(entry.id))).state }))),
+      }, null, 2));
+      return;
+    }
     // K5: the production Fans sheet and /call must share the bridge-subscribed refresh owner.
     const reread = async () => {
       const calls = nativeCalls;

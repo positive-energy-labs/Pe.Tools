@@ -18,6 +18,7 @@ import {
   type DuctsSheetOverview,
   type DuctsSheetResponse,
 } from "@pe/agent-contracts";
+import { isDoorFailure } from "./http-problems.ts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
@@ -325,11 +326,13 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
     return beyondOf(merged, sheet, markOf);
   }
   async function current(entry: Entry, reads: DuctsSheetSources) {
-    const responses = await Promise.all([
+    const responses = await Promise.allSettled([
       readNative(reads, "ducts.snapshot.walk", entry.request, entry.target, entry.version, "validate"),
       readNative(reads, "ducts.tables", tableRequest, entry.target, entry.tablesVersion, "validate"),
     ]);
-    await Promise.all(responses.map((response) => response.body?.cancel()));
+    // A rejected validation cannot leave its sibling recording after the caller completes.
+    await Promise.all(responses.map((result) => result.status === "fulfilled" ? result.value.body?.cancel() : undefined));
+    for (const result of responses) if (result.status === "rejected") throw result.reason;
   }
   return {
     async sheet(request: DuctsSheetRequest, reads = sources): Promise<DuctsSheetResponse> {
@@ -570,7 +573,9 @@ export function createDuctsSheets(sources: DuctsSheetSources | undefined, work?:
             const candidate = cached.value as Sheet;
             if (saved.layers === cached.layers) sheet = candidate;
           } catch (error) {
-            if (!(error instanceof BridgeError) || error.statusCode !== 409) throw error;
+            // The roster is fresh; a retired optional sheet contributes no summary.
+            const retired = isDoorFailure(error) && error._tag === "InvalidRequest" && error.status === 409 && error.problem === "read.retained";
+            if (!retired && (!(error instanceof BridgeError) || error.statusCode !== 409)) throw error;
             entries.delete(cached.value.basis);
           }
         }
