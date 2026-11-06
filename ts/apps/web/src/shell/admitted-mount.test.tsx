@@ -1,6 +1,6 @@
 import { placeInput } from "./admitted-place.test-fixture";
 import { RouteActivity, RouteVisibility } from "../route/activity";
-import { draftCellSchema, actionReceiptSchema } from "@pe/agent-contracts";
+import { draftCellSchema, actionReceiptSchema, memberWork } from "@pe/agent-contracts";
 // @vitest-environment jsdom
 import { createElement, StrictMode } from "react";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -772,6 +772,55 @@ const settle = (observation: Observation<WorkWriteOutcome>) =>
       () => {},
     ),
   );
+
+test("fixture Page defaults select canonical member Work before acquisition and survive address restores", async () => {
+  const pages: Record<string, unknown> = { sample: { pod: "test-pod", path: "settings/a.json", selected: "all" }, alternate: { pod: "other-pod", path: "settings/b.json" } };
+  const make = async () => admitted(false, false, {
+    schemas: { work: z.object({ amount: z.number() }) },
+    data: {
+      capabilities: ["work"], work: { route: "note", schema: "work", version: 1, migrations: {} }, workSubject: "note",
+      fields: { ...data.fields, selected: { ...data.fields.selected, allowAll: true }, pod: data.fields.query, path: data.fields.query },
+      transition: "deriveMember", transitionDeps: { page: [], work: [], readings: [] },
+      seeds: { ...data.seeds, alternate: { title: "Alternate", load: "alternateSeed" } },
+    },
+    bodies: {
+      seed: { ...bodies.seed, run: () => ({ page: pages.sample, readings: { notes: "fixture" }, work: { amount: 0 } }) },
+      alternateSeed: { ...bodies.seed, slot: "seeds.alternate.load", run: () => ({ page: pages.alternate, readings: { notes: "fixture" }, work: { amount: 0 } }) },
+      deriveMember: { slot: "transition", kind: "transition", source, run: (current: Record<string, unknown>, patch: Record<string, unknown>) => {
+        const next = { ...current, ...patch };
+        const member = next.pod && next.path ? memberWork({ pod: String(next.pod), path: String(next.path) }) : "default";
+        const encoded = identityCodecs.local.encode({ namespace: "pods", subject: member });
+        if (!encoded.ok) return encoded;
+        return { ok: true, value: { ...patch, note: encoded.value } };
+      } },
+    },
+  });
+  const route = await make();
+  const shell = createRouteShell(transports().services);
+  const open = (query: string, memory = {}) => {
+    const location = locationPort(query);
+    const mount = shell.mount(route, placeInput(location.address, { memory: () => memory }));
+    closes.push(mount.close);
+    return { mount, location };
+  };
+  const first = open("?fixture=sample");
+  await vi.waitFor(() => expect(first.mount.work()?.handle.key).toMatchObject({ binding: "workspace", work: "member:@test-pod/settings/a.json" }));
+  expect(first.mount.page.read()).toMatchObject({ pod: "test-pod", selected: "all" });
+  first.mount.restore();
+  expect(first.mount.page.read()).toMatchObject({ pod: "test-pod", selected: "all" });
+  const alternate = open("?fixture=alternate");
+  expect(alternate.mount.page.read()).toMatchObject({ pod: "other-pod", path: "settings/b.json" });
+  const empty = open("?fixture=sample&pod=&path=", { pod: "memory-pod", path: "memory.json" });
+  await vi.waitFor(() => expect(empty.mount.work()?.handle.key).toMatchObject({ work: "default" }));
+  expect(empty.mount.page.read()).toMatchObject({ pod: "", path: "" });
+  const memory = open("?fixture=sample&path=url.json", { pod: "memory-pod", path: "memory.json" });
+  expect(memory.mount.page.read()).toMatchObject({ pod: "memory-pod", path: "url.json" });
+  for (const bad of [null, [], "bad", { unknown: "bad" }, { pod: 42 }, { pose: { x: "bad" } }, { pod: "test", device: "bad" }]) {
+    pages.sample = bad;
+    const invalid = await make();
+    expect(() => shell.mount(invalid, placeInput(locationPort("?fixture=sample").address))).toThrow();
+  }
+});
 
 test("Page verbs dispatch declared ephemeral roles through human ports and refuse cross-role output", async () => {
   let patch: unknown = { editor: "open" };
