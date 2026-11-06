@@ -23,6 +23,8 @@ import type { FanPort } from "@pe/ducts-domain/roster";
 import { buildSheet, type SheetSnapshot } from "@pe/ducts-domain/sheet/index";
 import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
 import { admit } from "../fans/admission.fixture.ts";
+import { admitChat } from "../chat/admission";
+import { createChatModule } from "../chat/kernel";
 
 /**
  * Manual D re-drive #4, defect 7: internal keys rendered as text. Every fixture route's visible
@@ -194,9 +196,10 @@ test("a duplicate fan mark is told apart by level, then system, then order; neve
   expect(fanLabel({ ...a, mark: "MUAS-1" }, [a, b])).toBe("MUAS-1 / port 0");
 });
 
-test("admitted ducts and fans render declared subject and pane words without internal ids", async () => {
+test("admitted ducts, fans and chat render declared subject and pane words without internal ids", async () => {
   const { owner, presenter } = await admit();
-  for (const route of [owner, presenter]) {
+  const chat = await admitChat(() => ({ thread: "" }));
+  for (const route of [owner, presenter, chat]) {
     const words = [
       route.data.name,
       route.data.subject.noun,
@@ -207,5 +210,14 @@ test("admitted ducts and fans render declared subject and pane words without int
       words.flatMap((word) => leaks(word)),
       route.data.key,
     ).toEqual([]);
+  }
+});
+
+test("admitted chat fixture seeds carry no internal identity in display text", () => {
+  const module = createChatModule(() => ({ thread: "" }));
+  for (const [id, body] of Object.entries(module.bodies)) {
+    if (body.kind !== "seed") continue;
+    for (const text of displayStrings(body.run()))
+      expect(leaks(text), `chat ${id}: "${text}"`).toEqual([]);
   }
 });

@@ -36,6 +36,26 @@ it("allows narrow PagePort contracts and the admitted registry door", () => {
   expect(Object.values(actual).flat()).toEqual([]);
 });
 
+it("keeps admitted Place composition private without permitting body or re-export escapes", () => {
+  const actual = boundaryCensus({
+    "ts/apps/web/src/chat/owner.tsx": `import { useWorkbench } from 'provider.ts'; const mode = place.fixture; export const ChatOwner = () => null;`,
+    "ts/apps/web/src/chat/chat-shell.tsx": `import { ChatOwner } from '#/chat/owner';`,
+    "ts/apps/web/src/route/builtin-routes.tsx": `const ChatRoute = () => import('#/chat/chat-shell');`,
+    "provider.ts": `import { appAtomRegistry } from '#/shell/owner'; export const useWorkbench = () => appAtomRegistry;`,
+    "ts/apps/web/src/example/body.ts": `import { useWorkbench } from 'provider.ts'; const mode = state.fixture;`,
+  });
+  expect(actual.rawPageImports).toHaveLength(1);
+  expect(actual.rawPageImports![0]).toContain("example/body.ts");
+  expect(actual.fixtureMode).toHaveLength(1);
+  expect(actual.fixtureMode![0]).toContain("example/body.ts");
+  const escape = boundaryCensus({
+    "ts/apps/web/src/chat/owner.tsx": `export { createViewOwner } from '#/route/view-owner';`,
+    "ts/apps/web/src/example/body.ts": `import { createViewOwner } from '#/chat/owner';`,
+    "ts/apps/web/src/route/builtin-routes.tsx": `import { appAtomRegistry } from '#/shell/owner';`,
+  });
+  expect(escape.rawPageImports).toHaveLength(3);
+});
+
 it("inventories registered, standalone, aliased, namespace and dynamic Pod legacy doors", () => {
   const input = {
     "ts/apps/web/src/example/route.tsx": `
