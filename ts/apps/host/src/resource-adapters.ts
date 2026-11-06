@@ -322,6 +322,9 @@ export function hostResourceObserver(
         }
         // A LiveDocument key's value names its document, which binds the mark (`documentIn`).
         case "field-options": {
+          // TODO: Use the admitted recorded native-read door before recording closes (ADR 0031 rule 1).
+          // Runtime falsifier: capture options, replay with a poisoned bridge and require zero live calls;
+          // a recorded miss must refuse, never return the current document's live options.
           if (!bridge) {
             accept({ error: "No Revit bridge" });
             return () => {};
