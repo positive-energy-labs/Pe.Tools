@@ -103,7 +103,6 @@ it("a footnote badge sits on a drawn subject (mesh, else ghosted centreline, els
             onPick() {},
             onFrame() {},
             onRuling() {},
-            onHover() {},
           } as unknown as Parameters<typeof Annotations>[0])}
         />
       </SubjectTextContext.Provider>
@@ -233,7 +232,6 @@ it("pin pointer entry paints reach and right click exposes Select and Section Bo
     onPick() {},
     onFrame() {},
     onRuling: pick,
-    onHover() {},
   };
   const view = render(
     <NativeObservationScope
