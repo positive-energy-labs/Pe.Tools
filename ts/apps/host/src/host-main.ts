@@ -3,7 +3,8 @@ import { isSea } from "node:sea";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { hostProgram } from "./host-program.ts";
+import { Effect } from "effect";
+import { hostProgram, recordingInputSelection } from "./host-program.ts";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { hostRedirectionTrust, relaunchOutOfGuard } from "./redirection-trust.ts";
@@ -68,12 +69,12 @@ for (const [event, code] of [
     void fatalReceipt(currentReceiptExport(), code, error);
   });
 
+// Explicit recording wins over the source-only unrecorded exception; stamped admission stays strict.
 // effect-edge: process-main
-// Explicit unrecorded source exception; baked/SEA launches retain root admission and capture.
-NodeRuntime.runMain(hostProgram(
+NodeRuntime.runMain(recordingInputSelection(process.argv).pipe(Effect.flatMap((selection) => hostProgram(
   undefined,
   undefined,
-  !isSea() && typeof __PE_HOST_RECEIPT_BUILD__ === "undefined"
+  selection ?? (!isSea() && typeof __PE_HOST_RECEIPT_BUILD__ === "undefined"
     ? { kind: "live", capture: "off" }
-    : undefined,
-));
+    : undefined),
+))));

@@ -229,7 +229,9 @@ const liveNativeRecipe = HostNativeReadLive.pipe(
   Layer.provide(RevitBridgeLive),
 );
 
-export const historicalRoutes = (inputs: HostInputContext["Service"]) => fansInputRoutes(inputs);
+const recordingCoverage = Effect.fail(new InvalidRead({ message: "Recording does not cover this owner", status: 409, problem: "recording.coverage" }));
+export const historicalRoutes = (inputs: HostInputContext["Service"], webRoot: string | null) =>
+  Layer.mergeAll(fansCoreRoutes(inputs), staticSpaLayer(webRoot, recordingCoverage)).pipe(Layer.provide(httpProblems));
 
 /** One Fans HTTP/Work graph; live uses the bridge-subscribed retained owner, replay builds no live port. */
 export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostInputContext["Service"], options: {
@@ -540,16 +542,18 @@ type FansOwnerOptions = NonNullable<Parameters<typeof makeFansOwner>[1]>;
 
 class FansOwner extends Context.Service<FansOwner, Effect.Success<ReturnType<typeof makeFansOwner>>>()("pe/FansOwner") {}
 
-export const fansInputRoutes = (inputs: HostInputContext["Service"], options: Parameters<typeof makeFansOwner>[1] = {}) =>
+const fansCoreRoutes = (inputs: HostInputContext["Service"], options: Parameters<typeof makeFansOwner>[1] = {}) =>
   Layer.unwrap(Effect.gen(function* () {
     const fans = yield* makeFansOwner(inputs, options);
     const routes = createPeRoutes({ inputs, workspace: fans.work.workspace, registrations: fans.work.registrations });
     return Layer.mergeAll(peCoreRoutes(routes, fans.invocation, inputs), nativeReadResolveRoute,
       nativeCallRouteFor(fans.retainedCall),
-      HttpRouter.add('*', '/*', () => Effect.fail(new InvalidRead({ message: 'Recording does not cover this owner', status: 409, problem: 'recording.coverage' }))),
     ).pipe(HttpRouter.provideRequest(Layer.succeedContext(Context.add(fans.services, HostInputContext, inputs))),
-      Layer.provide(Layer.succeedContext(Context.add(fans.services, HostInputContext, inputs))), Layer.provide(httpProblems));
+      Layer.provide(Layer.succeedContext(Context.add(fans.services, HostInputContext, inputs))));
   }));
+
+export const fansInputRoutes = (inputs: HostInputContext["Service"], options: Parameters<typeof makeFansOwner>[1] = {}) =>
+  Layer.mergeAll(fansCoreRoutes(inputs, options), HttpRouter.add("*", "/*", () => recordingCoverage)).pipe(Layer.provide(httpProblems));
 
 /** Root-fixed selection: the live factory is not even called on a historical/fixture lane. */
 export const hostInputGraph = <A, E, R, B, F, S>(inputs: HostInputContext["Service"], live: () => Layer.Layer<A, E, R>, recording: () => Layer.Layer<B, F, S>): Layer.Layer<A & B, E | F, R | S> =>
@@ -569,7 +573,7 @@ function historicalHttpLive(options: HttpLiveOptions) {
     port, frontendOrigin: Effect.succeed(undefined),
     share: { read: async () => { throw new Refused({ code: "context.missing", door: "historical host", reason: "Historical host admits local transport only" }); }, observe: () => {} },
   });
-  return ServiceFileLive.pipe(Layer.provideMerge(HttpRouter.serve(historicalRoutes(options.inputs).pipe(
+  return ServiceFileLive.pipe(Layer.provideMerge(HttpRouter.serve(historicalRoutes(options.inputs, options.webRoot).pipe(
     Layer.provide(identity),
   )).pipe(Layer.provideMerge(hostServerLayer(server, options.port)))),
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)), Layer.provide(NodeServices.layer));
