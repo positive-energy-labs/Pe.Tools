@@ -1,17 +1,11 @@
 import type { SettingsRouteDocument } from "@pe/agent-contracts";
-import { memberReadInput, runsReadInput } from "./inputs";
+import { compositionInput, memberReadInput, runsReadInput } from "./inputs";
 
 import { callOp } from "#/shell/readings-api";
 import { subscriptionSource } from "#/shell/readings-use";
 import type { ReadingContext, ReadingSource, ReadingScope } from "#/shell/readings";
 import type { PodsPage } from "./page";
-import {
-  draftOf,
-  readingValue,
-  selectedMember,
-  type CompositionRead,
-  type MemberRead,
-} from "./model";
+import { readingValue, type CompositionRead, type MemberRead } from "./model";
 
 const page = (ctx: ReadingContext) => ctx.page as PodsPage;
 const work = (ctx: ReadingContext) => ctx.work as SettingsRouteDocument | null;
@@ -69,22 +63,12 @@ export function podsSources(): Readonly<Record<string, ReadingSource>> {
       dirties: ["pods"],
       key: (scope) => (scope as ReadingScope<PodsPage, SettingsRouteDocument>).work?.fields,
       async open(ctx, deliver) {
-        const ref = selectedMember(page(ctx));
         const member = readingValue<MemberRead>(ctx.inputs.member);
-        if (!ref || !member || !ref.path.endsWith(".json"))
-          return deliver({ kind: "complete", value: null, revision: 0 });
-        let draft: string;
+        const input = compositionInput({ page: page(ctx), work: work(ctx) }, member);
+        if (!input) return deliver({ kind: "complete", value: null, revision: 0 });
+        const { content: draft, ...ref } = input;
         try {
-          draft = draftOf({ page: page(ctx), work: work(ctx) }, member);
-          JSON.parse(draft);
-        } catch {
-          return deliver({ kind: "complete", value: null, revision: 0 });
-        }
-        try {
-          const result = await callOp({ signal: ctx.signal }, "pod.member.compose", {
-            ...ref,
-            content: draft,
-          });
+          const result = await callOp({ signal: ctx.signal }, "pod.member.compose", input);
           deliver({
             kind: "complete",
             value: { member: ref, draft, result } satisfies CompositionRead,
