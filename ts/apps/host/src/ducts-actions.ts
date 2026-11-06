@@ -317,16 +317,18 @@ export function ductsExecutors(
       losses: {
         key: "ducts.apply",
         native: "ducts.apply.plan",
+        refusePlan: (value: unknown) => lossPlanRefusal((value as DuctsApply.Res.Response).writes),
         retires: (input: Record<string, unknown>, value: unknown) =>
           appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response),
       },
       heal: {
         key: "ducts.heal",
         native: "ducts.heal.preview",
+        refusePlan: null,
         retires: (input: Record<string, unknown>, value: unknown) =>
           healedCellPaths(input, value as DuctsHeal.Res.Response),
       },
-      "assign-fan": { key: "ducts.assign-fan", native: "ducts.assign-fan.preview", retires: () => [] as string[][] },
+      "assign-fan": { key: "ducts.assign-fan", native: "ducts.assign-fan.preview", refusePlan: null, retires: () => [] as string[][] },
     }[kind];
     // The losses plan reads through the native Read sibling; a rehearsal calls its rolled-back TransactRead;
     // only apply reaches the ModelWrite leaf. Heal and fan plans never get here: the write boundary seals them.
@@ -340,8 +342,8 @@ export function ductsExecutors(
     );
     // A plan the native owner refuses outright (a shared type write it cannot scope, a refused store) seals
     // nothing, so it can never arm an apply; its reasons are the plan's refusal and every staged cell stays.
-    if (kind === "losses" && phase !== "apply") {
-      const refusal = lossPlanRefusal((value as DuctsApply.Res.Response).writes);
+    if (phase !== "apply") {
+      const refusal = entry.refusePlan?.(value);
       if (refusal) throw refused(refusal, "ducts.plan-refused");
     }
     const handle = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
