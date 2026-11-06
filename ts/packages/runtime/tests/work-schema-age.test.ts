@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { OLDER_WORK, UNREADABLE_WORK, workKey, type WorkKey } from "@pe/agent-contracts";
+import { workKey, type WorkKey } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 
 const key: WorkKey = { binding: "host", route: "age", target: null };
@@ -27,11 +27,11 @@ function fixture(saved: unknown) {
 }
 
 test.each([undefined, 3, "1", 0])(
-  "unreadable schema %s cannot write or reset for either author",
+  "undecodable schema %s is deleted; stale writers cannot recreate it",
   async (schemaVersion) => {
     const saved = { version: 1, revision: 4, schemaVersion, doc: { future: "keep me" } };
     const { workspace, setState, rows } = fixture(saved);
-    await expect(workspace.read(key, "age")).rejects.toThrow(UNREADABLE_WORK);
+    expect(await workspace.read(key, "age")).toBeNull();
     for (const by of ["human", "pea"] as const) {
       expect(await workspace.startFresh(key, "age", by)).toMatchObject({ ok: false });
       expect(
@@ -41,8 +41,8 @@ test.each([undefined, 3, "1", 0])(
         await workspace.publish(key, "age", [{ path: ["note"], value: "lost" }], 4),
       ).toMatchObject({ ok: false });
     }
-    expect(setState).not.toHaveBeenCalled();
-    expect(rows.get("age")).toEqual(saved);
+    expect(setState).toHaveBeenCalledExactlyOnceWith({ targetKey: workKey(key), route: "age", value: null });
+    expect(rows.get("age")).toBeNull();
   },
 );
 
@@ -61,7 +61,6 @@ test("an unmarked compatible Work reads without rewriting and acquires the curre
 test("a proven older unreadable Work recovers with exact aside bytes and a newer revision", async () => {
   const saved = { version: 1, schemaVersion: 1, revision: 4, doc: { old: "keep" } };
   const { workspace, rows } = fixture(saved);
-  await expect(workspace.read(key, "age")).rejects.toThrow(OLDER_WORK);
   expect(await workspace.startFresh(key, "age", "human")).toMatchObject({ ok: true, revision: 5 });
   expect(rows.get("age:aside:1")).toEqual(saved);
   expect(rows.get("age")).toMatchObject({ schemaVersion: 2, revision: 5, doc: { note: "" } });
@@ -74,7 +73,6 @@ test("recovery rechecks schema age inside the serialized operation", async () =>
     revision: 4,
     doc: { old: true },
   });
-  await expect(workspace.read(key, "age")).rejects.toThrow(OLDER_WORK);
   const newer = { version: 1, schemaVersion: 3, revision: 5, doc: { future: true } };
   rows.set("age", newer);
   expect(await workspace.startFresh(key, "age", "human")).toMatchObject({ ok: false });

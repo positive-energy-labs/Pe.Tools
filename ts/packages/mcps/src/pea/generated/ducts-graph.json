@@ -302,9 +302,7 @@
     "schema": "work",
     "route": "ducts",
     "version": 2,
-    "migrations": {
-      "1": "dropFanCells"
-    }
+    "migrations": {}
   },
   "readings": {
     "fansWork": {

@@ -909,10 +909,8 @@ test("apply-request builds a canonical immutable candidate without reacquiring",
 
 test("a fan cell left in the ducts Work is not priced; at the fans binding it is", async () => {
   const f = fixture();
-  // A v1 ducts Work still holding a fan cell: the 1 -> 2 migration drops it (Q5), and the
-  // analysis reads drops from the fans Work only.
+  // Analysis reads fan drops from the fans Work only.
   const drop = { "2": { edit: { value: { inWg: 0.12, source: "Approved purpose point" } } } };
-  expect(ductsRouteState.migrations[1]({ terminalDrops: drop })).toEqual({});
   f.sources.readWork = works(() => ({}), 1, () => ({ terminalDrops: drop }));
   const stale = await f.api.read(read({ kind: "fresh", target: f.target }));
   expect(stale.findings).toContainEqual(

@@ -54,7 +54,7 @@ const snapshotRaw = JSON.parse(readFileSync(snapshotPath, "utf8").replace(/^\uFE
 const snapshot = Schema.decodeUnknownSync(Schema.Json)(snapshotRaw.result ?? snapshotRaw);
 
 async function setup(mode = "normal") {
-  const dir = await mkdtemp(join(tmpdir(), "pe-body-receipts-"));
+  const dir = await mkdtemp(join(tmpdir(), "pe-capture-continuity-"));
   await mkdir(join(dir, "catalogs"));
   await writeFile(join(dir, "firm.json"), JSON.stringify(FIRM_SEED));
   const writer = await settle(

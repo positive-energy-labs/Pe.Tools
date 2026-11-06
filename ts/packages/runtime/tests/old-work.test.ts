@@ -1,8 +1,3 @@
-/**
- * Obligation 12: an old-shape persisted Work document is fail-closed. No read, reload, human or
- * Pea write rewrites or deletes its bytes, and every path answers with one readable sentence. Only
- * explicit start fresh moves them, unchanged, aside.
- */
 import { expect, test, vi } from "vite-plus/test";
 import {
   address,
@@ -11,15 +6,12 @@ import {
   parameterLinksRouteState,
   START_FRESH_ASIDE,
   takeoffsRouteState,
-  UNREADABLE_WORK,
   workKey,
   type RouteStateSpec,
   type WorkKey,
 } from "@pe/agent-contracts";
 import type { z } from "zod";
-import { observeResources, resourceResponse } from "../src/resource-stream.ts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
-import { convertLegacyWork } from "../src/work-cutover.ts";
 
 const target = address("C:\\Models\\Old.rvt");
 // Exactly what the pre-cells contracts persisted (`fb3d7b9`): arrays of edits and accepts.
@@ -81,91 +73,23 @@ const oldTakeoffs = {
 };
 
 for (const [spec, saved] of [
-  [familiesRouteState, oldFamilies],
-  [familyDraftRouteState, oldFamily],
-  [parameterLinksRouteState, oldParameterLinks],
-  [takeoffsRouteState, oldTakeoffs],
+  [familiesRouteState, oldFamilies], [familyDraftRouteState, oldFamily],
+  [parameterLinksRouteState, oldParameterLinks], [takeoffsRouteState, oldTakeoffs],
 ] as const) {
-  test(`/${spec.route}: old-shape Work is left byte-for-byte and refused in one sentence`, async () => {
-    const scope: WorkKey = { binding: "address" as const, route: spec.route, target };
-    const bytes = JSON.stringify(saved);
-    const state = new Map([[`${workKey(scope)}\0${spec.route}`, JSON.parse(bytes) as unknown]]);
-    const setState = vi.fn(async () => {});
+  test(`/${spec.route}: undecodable stored Work is deleted and treated as absent`, async () => {
+    const scope: WorkKey = { binding: "address", route: spec.route, target };
+    let stored: unknown = structuredClone(saved);
+    const setState = vi.fn(async ({ value }: { value: unknown }) => { stored = value; });
     const module = new RouteWorkspace({
       registrations: [{ spec: spec as unknown as RouteStateSpec<z.ZodType> }],
-      store: {
-        getState: async ({ targetKey, route }) =>
-          structuredClone(state.get(`${targetKey}\0${route}`)),
-        setState,
-      },
+      store: { getState: async () => structuredClone(stored), setState },
     });
-
-    // Read, and a reload (a second read).
-    await expect(module.read(scope, spec.route)).rejects.toThrow(UNREADABLE_WORK);
-    await expect(module.read(scope, spec.route)).rejects.toThrow(UNREADABLE_WORK);
-    // A human write and a Pea write, each at the saved revision.
-    for (const actor of ["human", "pea"] as const)
-      expect(
-        await module.apply(scope, spec.route, actor, [{ path: ["excludedIds"], value: [] }], 0),
-      ).toMatchObject({ ok: false, error: UNREADABLE_WORK });
-    // The Work Reading stream says the same sentence.
-    const scopes = { observe: () => () => {} };
-    const abort = new AbortController();
-    const response = resourceResponse(
-      new Request(
-        `http://host/pe/resources?${new URLSearchParams({ keys: JSON.stringify([{ kind: "work", ...scope }]) }).toString()}`,
-        { signal: abort.signal },
-      ),
-      observeResources(module, scopes),
-    );
-    const { value } = await response.body!.getReader().read();
-    abort.abort();
-    expect(JSON.parse(new TextDecoder().decode(value).slice(6))).toMatchObject({
-      kind: "failure",
-      error: UNREADABLE_WORK,
-    });
-
-    expect(setState).not.toHaveBeenCalled();
-    expect(JSON.stringify(state.get(`${workKey(scope)}\0${spec.route}`))).toBe(bytes);
+    expect(await module.read(scope, spec.route)).toBeNull();
+    expect(stored).toBeNull();
+    expect(await module.read(scope, spec.route)).toBeNull();
+    expect(setState).toHaveBeenCalledExactlyOnceWith({ targetKey: workKey(scope), route: spec.route, value: null });
   });
 }
-
-test("/family: a legacy proposal reads as the staged edit with its author; legacy slots require explicit conversion", async () => {
-  const scope: WorkKey = { binding: "address" as const, route: "family", target };
-  const state = new Map<string, unknown>();
-  const setState = vi.fn(async () => {});
-  const module = new RouteWorkspace({
-    registrations: [{ spec: familyDraftRouteState as unknown as RouteStateSpec<z.ZodType> }],
-    store: { getState: async () => structuredClone(state.get("doc")), setState },
-  });
-
-  for (const by of ["human", "pea"] as const) {
-    const legacy = {
-      version: 1,
-      revision: 2,
-      doc: { reading: "{}", cells: { "/a": { proposal: { value: 1, by }, staged: null } } },
-    };
-    const bytes = JSON.stringify(legacy);
-    state.set("doc", JSON.parse(bytes));
-    await expect(module.read(scope, "family")).rejects.toThrow(UNREADABLE_WORK);
-    expect(setState).not.toHaveBeenCalled();
-    expect(JSON.stringify(state.get("doc"))).toBe(bytes);
-
-    // Startup cutover is explicit. Reading Work never infers or discards an author.
-    const converted = convertLegacyWork(legacy, "family");
-    state.set("doc", converted);
-    expect(await module.read(scope, "family")).toMatchObject({
-      revision: 2,
-      doc: {
-        reading: "{}",
-        cells: { "/a": { edit: { value: 1, by, at: null, base: null } } },
-      },
-    });
-    expect(setState).not.toHaveBeenCalled();
-    expect(state.get("doc")).toEqual(converted);
-    expect(JSON.stringify(legacy)).toBe(bytes);
-  }
-});
 
 test.each(["human", "pea"] as const)(
   "/families: %s starts fresh without changing old bytes or clobbering an aside",
