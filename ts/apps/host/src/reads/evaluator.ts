@@ -411,10 +411,11 @@ export class Publications {
     const attempt = ++slot.attempt;
     const mine = () =>
       slot.generation === generation && slot.key === key && slot.attempt === attempt;
-    // Concurrent equal keys share evaluation, but each subscription still owns its publication fence.
+    // Share only the same admitted input set. Equal args cannot substitute another recording's inputs.
     const flightKey = fingerprint([
       key,
       generation,
+      port.evaluation,
       definition.run.toString(),
       schemaId(definition.input),
       schemaId(definition.output),

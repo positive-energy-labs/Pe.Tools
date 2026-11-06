@@ -154,7 +154,12 @@ async function fixture() {
     }),
     { disableLogger: true },
   );
-  const send = async (generation: number, fan: string[], hold?: ReturnType<typeof gate>) => {
+  const send = async (
+    generation: number,
+    fan: string[],
+    hold?: ReturnType<typeof gate>,
+    subscription = "sheet",
+  ) => {
     const admitted = admittedRequestIdentity(who, scope);
     if (hold) holds.set(admitted.requestId, hold);
     const response = await withInvocationContext({ caller: who }, () =>
@@ -162,7 +167,7 @@ async function fixture() {
         new Request("http://host/pe/fans/sheet", {
           method: "POST",
           body: JSON.stringify({
-            subscription: "sheet",
+            subscription,
             generation,
             args: { target: ref, fan, sheetPath: "" },
           }),
@@ -223,6 +228,20 @@ test("F1 MUAS-1 -> FC-23 -> MUAS-1 never publishes an old generation, including 
     a.release.resolve();
     expect((await first).state).toBe("superseded");
     expect((await f.send(4, [fan("MUAS-1")])).version).toBeGreaterThan(current.version);
+    // Equal recipe and generation cannot make another subscription consume this one's input set.
+    const other = gate();
+    const held = f.send(1, [fan("MUAS-1")], other, "left");
+    await other.entered.promise;
+    try {
+      const independent = await f.send(1, [fan("MUAS-1")], undefined, "right");
+      expect(independent.state, independent.reason).toBe("current");
+      other.release.resolve();
+      const own = await held;
+      expect(own.value!.inputs).not.toBe(independent.value!.inputs);
+    } finally {
+      other.release.resolve();
+      await held;
+    }
   } finally {
     a.release.resolve();
     b.release.resolve();
