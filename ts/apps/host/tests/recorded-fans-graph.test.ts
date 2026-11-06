@@ -258,6 +258,7 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
     const calls = nativeCalls;
     for (const recorded of cases) {
       if (recorded.url === "/call") continue; // the hit-only set was already replayed cold above
+      console.info("cold recorded consumer", recorded.readSet, recorded.url, recorded.body?.detail?.kind ?? recorded.value.kind);
       const lane: HostInputLane = { kind: "recording", recordingStore: reader, at: null };
       const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer(lane))));
       // Each request has an explicit trusted read set; repeated occurrences have no guessed binding.
@@ -289,4 +290,6 @@ test.skipIf(!existsSync(source))("real Fans roster, full sheet, cold details and
     expect(liveFactories).toMatchObject({ sdk: 0, bridge: 0, work: 0 });
     liveFiles.mockRestore();
   } finally { releaseHuman.resolve(); vi.restoreAllMocks(); await historical?.dispose(); await live.dispose(); await rm(dir, { recursive: true, force: true }); }
-}, 180000);
+// The production listener, full native schema decoding and each independent cold owner run here.
+// The 180 s boundary completed live acquisition but expired during progressing cold consumers.
+}, 300000);
