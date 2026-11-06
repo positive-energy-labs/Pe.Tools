@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { HostCallError } from "@pe/host-contracts/operation-types";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { sceneRequest } from "./host";
