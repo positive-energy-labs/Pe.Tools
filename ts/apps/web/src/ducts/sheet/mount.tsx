@@ -23,7 +23,7 @@ import { SubjectTextContext } from "@pe/kit/lang/reach";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import * as Atom from "effect/reactivity/Atom";
 import { useMemo, useRef } from "react";
-import type { PaneContext } from "../../../../../packages/agent-contracts/src/route-kernel-bodies";
+import type { PaneContext } from "@pe/agent-contracts";
 import { entries, fansData, schemas } from "../../fans/neutral";
 import { attentionSubjects } from "../cell-focus";
 import { localId, localSubject, namesOf } from "../neutral.ts";

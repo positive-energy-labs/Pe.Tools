@@ -1,11 +1,11 @@
 import {
   captureAdmittedHostBindings,
   type AdmittedRoute,
-} from "../../agent-contracts/src/route-module.ts";
+} from "@pe/agent-contracts";
 import type {
   HostAdmittedRoute,
   HostWorkRegistration,
-} from "../../agent-contracts/src/host-route-admission.ts";
+} from "@pe/agent-contracts";
 import type { RouteFingerprint } from "../../agent-contracts/src/route-kernel-admission.ts";
 import type {
   WorkAdmission,

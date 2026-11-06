@@ -1,6 +1,6 @@
 import { builtins } from "../../web/src/route/builtins.neutral.ts";
-import type { BuiltinClosure } from "../../../packages/agent-contracts/src/route-module.ts";
-import type { HostRouteModule } from "../../../packages/agent-contracts/src/host-route-admission.ts";
+import type { BuiltinClosure } from "@pe/agent-contracts";
+import type { HostRouteModule } from "@pe/agent-contracts";
 
 export interface BuiltinEnrollment {
   readonly routeKey: string;

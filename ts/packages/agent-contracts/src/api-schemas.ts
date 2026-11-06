@@ -91,3 +91,5 @@ export const familiesPartsSchema = z.object({
   reading: familiesObservationSchema,
   records: z.array(z.string()).nullable(),
 });
+
+export * from "./fans-read.ts";

@@ -159,6 +159,8 @@ export type PeApiSchemas = Record<
   | "turnElementNamesObservationSchema"
   | "routeStatePatchSchema"
   | "workWriteSchema"
+  | "fansReadRequest"
+  | "fansReadResponse"
   | "ductsSheetRequestSchema"
   | "ductsSheetResponseSchema"
   | "ductsRosterRequestSchema"
@@ -847,6 +849,8 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "pe",
       "human",
     ),
+    "reads.events": route("GET", "/pe/read-events", none, object, "read", "pe", "read", "stream"),
+    "fans.sheet": route("POST", "/pe/fans/sheet", schemas.fansReadRequest as S["fansReadRequest"], schemas.fansReadResponse as S["fansReadResponse"], "read", "pe", "read"),
     "ducts.sheet": route(
       "POST",
       "/pe/ducts/sheet",

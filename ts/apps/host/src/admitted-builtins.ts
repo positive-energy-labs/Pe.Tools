@@ -1,15 +1,15 @@
 import { createRouteRegistrations } from "../../../packages/mcps/src/pea/routes.ts";
 import { composeHostRouteRegistration } from "./host-route-registration.ts";
-import type { HostWorkRegistration } from "../../../packages/agent-contracts/src/host-route-admission.ts";
+import type { HostWorkRegistration } from "@pe/agent-contracts";
 import { Context, Effect, Layer, Schema } from "effect";
 import type { RouteWorkspace } from "@pe/runtime";
 import { admittedBuiltinKeys } from "../../../packages/agent-contracts/src/admitted-builtin-keys.ts";
 import {
   createBuiltinRouteInventory,
   createHostAdmittedRouteRegistry,
-} from "../../../packages/agent-contracts/src/route-module.ts";
-import { captureHostModule } from "../../../packages/agent-contracts/src/host-route-admission.ts";
-import type { HostAdmittedRoute } from "../../../packages/agent-contracts/src/host-route-admission.ts";
+} from "@pe/agent-contracts";
+import { captureHostModule } from "@pe/agent-contracts";
+import type { HostAdmittedRoute } from "@pe/agent-contracts";
 import { builtinEnrollments, type BuiltinEnrollment } from "./builtin-enrollment.ts";
 import { registerAdmittedHostRoute } from "./pod-routes.ts";
 
