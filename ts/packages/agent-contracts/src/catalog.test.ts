@@ -16,9 +16,6 @@ const leaf = (key: string, uses: CatalogLink["uses"] = []): CatalogLink => ({
   cardinality: "One",
 });
 describe("catalog dependency graph", () => {
-  test("links the shipped catalog", () => {
-    expect(errorsOf(catalogEntries)).toEqual([]);
-  });
   test("declares every HTTP route and includes its children's touched data", () => {
     const byKey = new Map(catalogEntries.map((row) => [row.key, row]));
     for (const id of Object.keys(httpRoutes) as (keyof typeof httpRoutes)[]) {

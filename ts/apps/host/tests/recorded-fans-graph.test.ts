@@ -87,7 +87,11 @@ const nativeValue = async (response: Response) => ({
 function resourceFrames(response: Response) {
   expect(response.status).toBe(200);
   const reader = response.body!.getReader(); let text = "";
-  return { close: () => reader.cancel(), next: async (events = false) => {
+  return { opening: async () => {
+    const chunk = await reader.read();
+    expect(chunk.done).toBe(false);
+    expect(new TextDecoder().decode(chunk.value)).toBe(": open\n\n");
+  }, close: () => reader.cancel(), next: async (events = false) => {
     while (true) {
       const end = text.indexOf("\n");
       if (end >= 0) {
@@ -552,6 +556,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(proc
     expect(basis(original)).toHaveLength(1); expect(basis(current)).toHaveLength(1);
     expect(basis(original)[0]!.takingId).not.toBe(basis(current)[0]!.takingId);
     const calls = nativeCalls;
+    const consumerReads = vi.spyOn(reader.readSets, "get");
     const context = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "recording", recordingStore: reader, at: null }))));
     historical = HttpRouter.toWebHandler(Layer.unwrap(Effect.gen(function* () {
       yield* TestClock.setTime(10000);
@@ -580,8 +585,14 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(proc
     const healthy = JSON.parse(new URL(feeds[0]!.url, "http://host").searchParams.get("keys")!)[0];
     const absent: ReadingRequest = { kind: "ducts-tables", session: "missing-session", ids: ["missing-table"] };
     const connection = crypto.randomUUID();
-    const frames = resourceFrames(await send(historical, `/pe/resources?connection=${connection}&keys=${encodeURIComponent(JSON.stringify([resource, healthy, absent]))}`));
+    consumerReads.mockClear();
+    const frames = resourceFrames(await send(historical, `/pe/resources?connection=${connection}`));
     try {
+      await frames.opening();
+      expect(consumerReads).not.toHaveBeenCalled();
+      const bootstrap = await send(historical, `/pe/resource-subscriptions?connection=${connection}`,
+        { add: [resource, healthy, absent], remove: [] });
+      expect(bootstrap.status).toBe(200);
       const batch = [await frames.next(), await frames.next(), await frames.next()];
       expect(batch.find((frame) => frame.key === readingKey(healthy))).toEqual(feeds[0]!.value);
       expect(batch.find((frame) => frame.key === readingKey(resource))).toMatchObject({ kind: "failure", failure: { code: "recording.ambiguous" } });
@@ -591,6 +602,9 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", ...(proc
         { add: [sibling], remove: [readingKey(absent), readingKey(resource)] });
       expect(changed.status).toBe(200);
       expect(await frames.next()).toEqual(feeds[1]!.value);
+      await writeFile(join(import.meta.dirname, "../../../../.artifacts/runs/kernel-crusade-20261104/step-7/reconciliation-case.json"),
+        JSON.stringify({ emptyGet: 200, opening: ": open\n\n", prePostConsumerReads: 0, bootstrapPost: bootstrap.status,
+          batch, replacementPost: changed.status, liveFactories: { sdk: liveFactories.sdk, bridge: liveFactories.bridge, work: liveFactories.work }, poisoned }, null, 2));
     } finally { await frames.close(); }
     const refused = await send(historical, "/pe/route-state/fans/apply?open=captured-chadds/chadds-open", { patches: [], expectedRevision: 2, press: crypto.randomUUID() });
     expect(refused.status).toBe(409);

@@ -1,6 +1,6 @@
 import { gate, pane, split, type LayoutNode } from "@pe/agent-contracts";
 import { expect, test, vi } from "vite-plus/test";
-import { reduceLayout, sidebars, withDoc } from "../src/components/lang/layout-graph";
+import { reduceLayout } from "../src/components/lang/layout-graph";
 
 const h = (id: string, a: LayoutNode, b: LayoutNode) =>
   split(id, { axis: "h", sized: "start", size: 320 }, a, b);
@@ -61,21 +61,4 @@ test("reduction preserves declaration data, order and input without mutation", (
     children: [pane("a"), pane("c")],
   });
   expect(tree).toEqual(before);
-});
-
-test("presets declare ordinary layouts and keep optional sidebars optional", () => {
-  const main = pane("main");
-  expect(sidebars({ main })).toBe(main);
-  expect(sidebars({ main, start: pane("nav") })).toMatchObject({
-    axis: "h",
-    sized: "start",
-    children: [pane("nav"), main],
-  });
-  expect(withDoc(main, "doc")).toEqual(sidebars({ main, end: pane("doc") }));
-  const both = sidebars({ start: pane("nav"), main, end: pane("doc") });
-  expect(both).toMatchObject({
-    children: [pane("nav"), { children: [main, pane("doc")] }],
-  });
-  const nested = withDoc(both, "reference");
-  expect(nested.kind === "split" && both.kind === "split" && nested.id !== both.id).toBe(true);
 });

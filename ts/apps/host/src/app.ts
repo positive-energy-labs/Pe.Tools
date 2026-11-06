@@ -305,6 +305,7 @@ export const makeFansOwner = Effect.fn("Fans.compose")(function* (inputs: HostIn
     const input = declared.route.input.parse({ params: declared.params,
       query: Object.fromEntries(url.searchParams), body: web.method === "GET" ? undefined : await web.clone().json() });
     const recipe: ConsumerRecipe = { key: declared.id, input: json(input), scope: canonicalJson(json(identity.scope)) };
+    // Transport registration consumes no recording; POST-added keys admit their own frames.
     const consumption = recorded && stream ? undefined : await invoke(readSets.open(recipe, null));
     const scoped = (current: InputConsumption): WorkInputRunner => (effect) =>
       runPods({}, Effect.provide(effect, Context.add(admitted, CurrentInputConsumption, current)));

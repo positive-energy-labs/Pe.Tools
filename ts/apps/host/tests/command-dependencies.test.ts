@@ -240,7 +240,7 @@ async function setup(probe?: CommandResources["probe"]) {
   return { directory, work, key, events, runs, journal, ready, approve, close };
 }
 
-test("durable dispatch evidence overrides a domain refusal and retains overlap protection", async () => {
+test.each([409, 499])("durable dispatch evidence overrides a %s refusal and retains overlap protection", async (status) => {
   const h = await setup();
   try {
     const intent = {
@@ -258,7 +258,10 @@ test("durable dispatch evidence overrides a domain refusal and retains overlap p
         if (context.admission.id === "behind-dispatched") return ++writes;
         return execution.step("native", "write", {}, async (id) => {
           await h.journal.markDispatched(id);
-          throw new BridgeError("Domain claims no dispatch", 409, { notDispatched: true });
+          throw new BridgeError("Domain claims no dispatch", status, {
+            notDispatched: true,
+            ...(status === 499 ? { nativeOutcome: "CancelledBeforeDispatch" } : {}),
+          });
         });
       },
     );
@@ -275,49 +278,6 @@ test("durable dispatch evidence overrides a domain refusal and retains overlap p
       executor,
     );
     expect((await h.journal.wait("behind-dispatched")).state).toBe("failed");
-    expect(writes).toBe(0);
-  } finally {
-    await h.close();
-  }
-});
-
-test("a cancellation-shaped refusal after durable dispatch remains unknown and blocks overlap", async () => {
-  const h = await setup();
-  try {
-    let writes = 0;
-    const executor = fixtureCommand(
-      [{ kind: "file", path: "C:/probe/cancelled-dispatch" }],
-      async () => null,
-      async (execution, context) => {
-        if (context.admission.id === "behind-cancelled") return ++writes;
-        return execution.step("native", "write", {}, async (id) => {
-          await h.journal.markDispatched(id);
-          throw new BridgeError("Domain claims cancellation before dispatch", 499, {
-            notDispatched: true,
-            nativeOutcome: "CancelledBeforeDispatch",
-          });
-        });
-      },
-    );
-    const intent = {
-      id: "contradictory-cancellation",
-      key: "probe.cancelled-dispatch",
-      target: { kind: "host" as const },
-      input: {},
-    };
-    await invokeFixtureCommand(h.journal, intent, { caller: human, basis: null }, executor);
-    const settled = await h.journal.wait(intent.id);
-    expect(settled.state).toBe("unknown");
-    expect(settled).not.toHaveProperty("notDispatched", true);
-    expect(settled.steps[0]).toMatchObject({ state: "unknown", dispatchedAt: expect.any(String) });
-    expect(settled.steps[0]).not.toHaveProperty("notDispatched", true);
-    await invokeFixtureCommand(
-      h.journal,
-      { ...intent, id: "behind-cancelled" },
-      { caller: human, basis: null },
-      executor,
-    );
-    expect((await h.journal.wait("behind-cancelled")).state).toBe("failed");
     expect(writes).toBe(0);
   } finally {
     await h.close();

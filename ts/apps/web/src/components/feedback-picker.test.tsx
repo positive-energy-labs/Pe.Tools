@@ -1,19 +1,8 @@
-// @vitest-environment jsdom
 import { deliverFeedback, sendFeedback, type Feedback } from "#/host/feedback";
 import { hostFetch } from "#/host/runtime";
-import { cleanup } from "@testing-library/react";
-import { afterEach, expect, test, vi } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 
 vi.mock("#/host/runtime", () => ({ hostFetch: vi.fn() }));
-
-vi.mock("#/actions/use-action", () => ({
-  useAction: () => ({ isPending: false, error: null, mutate: vi.fn() }),
-}));
-vi.mock("react-grab/primitives", () => ({
-  getElementAtPoint: () => null,
-  isElementGrabbable: () => true,
-}));
-afterEach(cleanup);
 
 const note: Feedback = {
   comment: "the duct table hides the 4th column",

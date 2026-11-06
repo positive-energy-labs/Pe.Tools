@@ -26,6 +26,7 @@
       "default": "./src/invocation-context.ts"
     },
     "./work-journal": "./src/work-journal.ts",
+    "./resource-stream": "./src/resource-stream.ts",
     "./runtime-owner": "./src/runtime-owner.ts"
   },
   "publishConfig": {

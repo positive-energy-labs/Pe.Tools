@@ -349,17 +349,10 @@ export class PeReadings {
     const generation = this.generation;
     const observationEpoch = this.observationEpoch;
     const url = new URL(this.url());
-    url.searchParams.set(
-      "keys",
-      JSON.stringify(
-        [...this.entries.values()].slice(0, READING_MAX_KEYS).map(({ request }) => request),
-      ),
-    );
+    url.searchParams.delete("keys");
     this.connection = crypto.randomUUID();
     url.searchParams.set("connection", this.connection);
-    this.sent = new Map(
-      [...this.entries].slice(0, READING_MAX_KEYS).map(([key, entry]) => [key, entry.request]),
-    );
+    this.sent = new Map();
     // Topology changes can overtake a still-opening replacement. Retire that candidate, not the
     // active stream: commands remain live while the newest connection acquires its keys.
     this.opening?.close();
