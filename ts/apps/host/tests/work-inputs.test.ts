@@ -490,3 +490,24 @@ test("no context: a recording refuses before access; capture truncates and live 
   await expect(firstFeed(recorded, "work-acks")).rejects.toMatchObject({ problem: "recording.context" });
   expect(touched).toBe(0);
 });
+
+test("absent Work feeds capture and replay null without stopping recording", async () => {
+  const { dir, writer } = await bundle();
+  const capture = capturedWorkReads(writer, run);
+  const request = await consumer({ kind: "live", captureStore: writer });
+  for (const shape of ["work", "work-acks"] as const) {
+    const begun = capture.begin({ kind: "feed", key, admission, shape }, request.context);
+    if (!begun.ok) throw begun.error;
+    await capture.feed(key, admission, shape, null, begun.carriage);
+  }
+  await run(request.consumption.seal);
+  expect(writer.capture.truncated()).toBeNull();
+  const recording = await reader(dir);
+  const source = recordedWorkSource(recording);
+  const replay = await consumer({ kind: "recording", recordingStore: recording, at: null }, request.consumption.id);
+  for (const shape of ["work", "work-acks"] as const) {
+    const begun = source.begin({ kind: "feed", key, admission, shape }, replay.context);
+    if (!begun.ok) throw begun.error;
+    expect(await source.feed(key, admission, shape, begun.carriage)).toBeNull();
+  }
+});

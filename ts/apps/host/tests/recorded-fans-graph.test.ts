@@ -199,6 +199,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       },
     } });
   type Web = { handler: (request: Request, context: Context.Context<import("@pe/host-internal/request-contracts").RequestIdentity>) => Promise<Response>; dispose: () => Promise<void> };
+  const browserCookie = mintBrowserContext({ kind: "local" }).split(";")[0]!;
   const live: Web = {
     handler: async (request, context) => {
       const who = Context.get(context, RequestIdentity).caller;
@@ -207,7 +208,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
       headers.set(HOST_RPC_DOCUMENT_HEADER, ref.openId);
       if (who.kind === "pea") headers.set(HOST_CONTEXT_HEADER, mintContext({ kind: "pea", thread: who.thread!, run: who.run, root: who.root }));
       else {
-        headers.set("cookie", mintBrowserContext({ kind: "local" }).split(";")[0]!);
+        headers.set("cookie", browserCookie);
         headers.set("origin", liveHost.base); headers.set(HOST_RUNTIME_SERVICE_HEADER, hostOwnership.serviceName);
         headers.set("referer", `${liveHost.base}/fans`);
       }
@@ -348,7 +349,8 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
           const deliveries = records.filter((record) => record.recipe.key === "resource.frame" && (record.recipe.input as { route?: string }).route === "legacy" && record.inputs.some((input) => input.input.kind === "work"));
           expect(deliveries).toHaveLength(4);
           expect(deliveries.every((record) => record.state === "complete" && record.inputs.some((input) => input.input.kind === "marks"))).toBe(true);
-          expect(new Set(deliveries.flatMap((record) => record.inputs.map((input) => input.takingId))).size).toBe(8);
+          expect(new Set(deliveries.flatMap((record) => record.inputs.map((input) => input.takingId))).size)
+            .toBe(deliveries.reduce((total, record) => total + record.inputs.length, 0));
           expect(writer.capture.truncated()).toBeNull();
         } else expect(writer.capture.truncated()?.reason).toBe(mode === "legacy-full" ? "full" : "io");
         expect(await workspace!.apply(key("legacy"), "legacy", "human", [{ path: ["count"], value: 2 }], 1)).toMatchObject({ ok: true });

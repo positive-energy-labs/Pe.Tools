@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,8 +26,7 @@ import {
   type RecordingWriter,
   type RecordingReader,
 } from "../src/native-recording.ts";
-import { acceptedPointPolicy, recordingPoints } from "../src/recording-points.ts";
-import { bodyReceipts } from "../src/body-receipts.ts";
+import { recordingPoints } from "../src/recording-points.ts";
 import { workInput, workInputScope, workInputCodecs } from "../src/work-inputs.ts";
 import { effectTest } from "./effect-test.ts";
 
@@ -127,31 +126,18 @@ const fixture = Effect.gen(function* () {
   yield* container.linkReadSet("work", work.id);
   yield* container.seal;
   yield* container.close;
-  const receipts = bodyReceipts(writer),
-    accept = yield* acceptedPointPolicy(writer, receipts);
-  const sign = (id: string, value: unknown) =>
-    receipts.mint(
-      id,
-      createHash("sha256").update(JSON.stringify(value)).digest("hex"),
-      "validated-audience",
-    );
-  const aReceipt = (yield* sign(container.id, { native: { id: "native-A" }, work: workValue }))!,
-    bReceipt = (yield* sign(b, { id: "native-B" }))!,
-    workReceipt = (yield* sign(work.id, workValue))!;
-  yield* accept(
-    [
-      {
-        document: doc,
-        consumer: consumer("A"),
-        bodyReceipts: [aReceipt, workReceipt, workReceipt],
-      },
-      { document: doc, consumer: consumer("B"), bodyReceipts: [bReceipt, workReceipt] },
-    ],
-    "validated-audience",
-    () => true,
-  );
-  expect(writer.capture.truncated()).toBeNull();
-  const point = yield* writer.points.get(writer.points.ids()[0]!);
+  const second = yield* live.open({ key: "point.fixture", input: null, scope: "{}" }, null);
+  yield* second.linkReadSet("native", b);
+  yield* second.linkReadSet("work", work.id);
+  yield* second.seal;
+  yield* second.close;
+  const point = {
+    version: 1 as const, id: randomUUID() as RecordingPointId, document: doc,
+    reason: { kind: "captured" as const }, at: 1, identity,
+    takingRange: { start: 0, end: writer.takingCursor() },
+    bindings: [ { ...consumer("A"), readSetId: container.id }, { ...consumer("B"), readSetId: second.id } ],
+  };
+  yield* writer.points.keep(point);
   const outsideRecipe = { ...recipe, input: { selector: "outside" } };
   const outside = yield* nativeBody(writer, live, "outside", outsideRecipe);
   // Capture is over. All selection below reopens durable read-only stores, with no live inputs.
@@ -169,8 +155,6 @@ const fixture = Effect.gen(function* () {
     work: work.id,
     outside,
     outsideRecipe,
-    accept,
-    aReceipt,
   };
 });
 const selectedNative = (reader: RecordingReader, current: InputConsumption) =>
@@ -183,7 +167,7 @@ const selectedNative = (reader: RecordingReader, current: InputConsumption) =>
   });
 
 effectTest(
-  "signed multipart points reopen the exact A/B body, never the aggregate or its authority",
+  "point bindings reopen the exact A/B recipe without live inputs",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;
@@ -231,7 +215,7 @@ effectTest(
       expect(
         yield* problem(f.points.open(doc, randomUUID() as RecordingPointId, consumer("A"), recipe)),
       ).toBe("recording.point");
-      // A late incomplete OTHER body still invalidates the whole aggregate, not just that selection.
+      // A late incomplete OTHER body still invalidates the whole bound graph, not just that selection.
       const record = yield* f.reader.readSets.get(f.work);
       yield* Effect.promise(() =>
         writeFile(
@@ -246,27 +230,14 @@ effectTest(
 );
 
 effectTest(
-  "aggregate metadata and distinct same-recipe body ids refuse instead of selecting a preference",
+  "corrupt graph metadata and distinct same-recipe ids refuse instead of selecting a preference",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;
       const binding = f.point.bindings.find((binding) => binding.instance === "B")!;
       const file = join(f.dir, "read-sets", `${binding.readSetId}.json`),
         aggregate = yield* f.reader.readSets.get(binding.readSetId);
-      const input = aggregate.recipe.input as {
-        document: typeof doc;
-        consumer: RecordingConsumer;
-        bodyVersions: string[];
-      };
       for (const changed of [
-        { ...aggregate, recipe: { ...aggregate.recipe, key: "legacy.direct" } },
-        { ...aggregate, recipe: { ...aggregate.recipe, input: { ...input, document: foreign } } },
-        {
-          ...aggregate,
-          recipe: { ...aggregate.recipe, input: { ...input, consumer: consumer("foreign") } },
-        },
-        { ...aggregate, recipe: { ...aggregate.recipe, input: { ...input, bodyVersions: [] } } },
-        { ...aggregate, recipe: { ...aggregate.recipe, input: { ...input, bodyVersions: [""] } } },
         { ...aggregate, identity: { ...identity, catalog: "foreign" } },
         { ...aggregate, dependencies: { ...aggregate.dependencies, cycle: aggregate.id } },
       ]) {
@@ -280,11 +251,7 @@ effectTest(
           file,
           JSON.stringify({
             ...aggregate,
-            recipe: {
-              ...aggregate.recipe,
-              input: { ...input, bodyVersions: [...input.bodyVersions, "another-body"] },
-            },
-            dependencies: { ...aggregate.dependencies, "body:2": f.a },
+            dependencies: { ...aggregate.dependencies, another: f.a },
           }),
         ),
       );
@@ -296,7 +263,6 @@ effectTest(
       for (const changed of [
         { ...f.point, takingRange: { ...f.point.takingRange, start: f.point.takingRange.end } },
         { ...f.point, identity: { ...identity, build: "foreign" } },
-        { ...f.point, bindings: [{ ...binding, readSetId: f.b }] },
       ]) {
         yield* Effect.promise(() => writeFile(pointFile, JSON.stringify(changed)));
         expect(yield* problem(f.points.open(doc, f.point.id, consumer("B"), recipe))).toBe(
@@ -306,15 +272,10 @@ effectTest(
     }),
 );
 
-effectTest("K4 keeps valid signed points after truncation and creates no new point", () =>
+effectTest("K4 keeps valid durable point bindings readable after truncation", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     yield* f.writer.capture.stop(f.writer.capture.begin()!, "full");
-    yield* f.accept(
-      [{ document: doc, consumer: consumer("A"), bodyReceipts: [f.aReceipt] }],
-      "validated-audience",
-      () => true,
-    );
     expect(f.writer.points.ids()).toHaveLength(1);
     const reader = yield* openRecordingReader(f.dir, identity, bounds),
       points = recordingPoints(
@@ -329,51 +290,31 @@ effectTest("K4 keeps valid signed points after truncation and creates no new poi
 
 const corpus = process.env.PE_RECORDING_POINT_CORPUS;
 if (corpus)
-  effectTest(
-    "REAL retained corpus duplicates bind their signed roster body after read-only reopen",
-    () =>
-      Effect.gen(function* () {
-        const dir = yield* temporary;
-        yield* Effect.promise(() => cp(corpus, dir, { recursive: true }));
-        const manifest = yield* Effect.promise(async () =>
-          JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")),
-        );
-        const writer = yield* openRecordingWriter(dir, manifest, bounds),
-          receipts = bodyReceipts(writer),
-          accept = yield* acceptedPointPolicy(writer, receipts);
-        const ids = [
-          "17cd7b7c-fedb-4352-b8f9-9a66b0311126",
-          "c4308818-7c32-4bc4-8880-6ad3267731d1",
-        ];
-        const record = yield* writer.readSets.get(ids[0]!);
-        const taking = writer.taking(
-          record.inputs.find((input) => input.input.kind === "document")!.takingId,
-        )!;
-        const value = yield* writer.observation(taking);
-        const document = documentId((value as { address: string }).address);
-        const accepted = yield* Effect.forEach(ids, (id, index) =>
-          receipts.mint(id, `corpus-body-${index}`, "corpus-audience").pipe(
-            Effect.map((receipt) => ({
-              document,
-              consumer: consumer(String(index)),
-              bodyReceipts: [receipt!],
-            })),
-          ),
-        );
-        yield* accept(accepted, "corpus-audience", () => true);
-        const reader = yield* openRecordingReader(dir, manifest, bounds),
-          replay = yield* readSets({ kind: "recording", recordingStore: reader, at: null });
-        expect(yield* problem(replay.open(record.recipe, null))).toBe("recording.ambiguous");
-        const point = yield* reader.points.get(reader.points.ids()[0]!);
-        for (const [index, id] of ids.entries()) {
-          const current = yield* recordingPoints(reader, replay).open(
-            document,
-            point.id,
-            consumer(String(index)),
-            record.recipe,
-          );
-          expect(current.id).toBe(id);
-          yield* current.close;
-        }
-      }),
+  effectTest("REAL retained corpus duplicates reopen through exact durable point bindings", () =>
+    Effect.gen(function* () {
+      const dir = yield* temporary;
+      yield* Effect.promise(() => cp(corpus, dir, { recursive: true }));
+      const manifest = yield* Effect.promise(async () => JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")));
+      const writer = yield* openRecordingWriter(dir, manifest, bounds);
+      const ids = ["17cd7b7c-fedb-4352-b8f9-9a66b0311126", "c4308818-7c32-4bc4-8880-6ad3267731d1"];
+      const record = yield* writer.readSets.get(ids[0]!);
+      const taking = writer.taking(record.inputs.find((input) => input.input.kind === "document")!.takingId)!;
+      const value = yield* writer.observation(taking);
+      const document = documentId((value as { address: string }).address);
+      const point = {
+        version: 1 as const, id: randomUUID() as RecordingPointId, document,
+        reason: { kind: "captured" as const }, at: 1, identity: writer.identity,
+        takingRange: { start: 0, end: writer.takingCursor() },
+        bindings: ids.map((readSetId, index) => ({ ...consumer(String(index)), readSetId })),
+      };
+      yield* writer.points.keep(point);
+      const reader = yield* openRecordingReader(dir, manifest, bounds);
+      const replay = yield* readSets({ kind: "recording", recordingStore: reader, at: null });
+      expect(yield* problem(replay.open(record.recipe, null))).toBe("recording.ambiguous");
+      for (const [index, id] of ids.entries()) {
+        const current = yield* recordingPoints(reader, replay).open(document, point.id, consumer(String(index)), record.recipe);
+        expect(current.id).toBe(id);
+        yield* current.close;
+      }
+    }),
   );

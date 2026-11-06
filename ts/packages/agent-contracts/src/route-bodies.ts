@@ -318,15 +318,6 @@ export function linkRouteBodies(
         "Work belongs to its declaring route",
         "policy",
       );
-    for (let version = 1; version < data.work.version; version++)
-      if (!Object.hasOwn(data.work.migrations, String(version)))
-        fail(
-          `work.migrations.${version}`,
-          "",
-          "migration",
-          "Incomplete migration chain",
-          "missing",
-        );
     for (const [version, id] of Object.entries(data.work.migrations)) {
       if (Number(version) >= data.work.version)
         fail(

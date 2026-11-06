@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -11,7 +10,7 @@ import {
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
-import { convertLegacyWork, type RouteDocumentStore } from "@pe/runtime";
+import type { RouteDocumentStore } from "@pe/runtime";
 
 const recordSchema = z.object({
   format: z.literal("route-state-record-v2"),
@@ -24,45 +23,22 @@ const filename = (targetKey: string, route: string) =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Indexed Work carries its identity; unindexed bytes await explicit identity recovery. */
+/** Indexed Work carries its identity; obsolete record formats are discarded on read. */
 export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
   mkdirSync(dir, { recursive: true });
-  // Cut over once at startup, before serving Work. Original bytes survive every write and crash.
-  for (const file of readdirSync(dir).filter((name) => /^[a-f0-9]{64}\.json$/.test(name))) {
-    const path = join(dir, file);
-    try {
-      const bytes = readFileSync(path);
-      const record: unknown = JSON.parse(bytes.toString("utf8"));
-      if (isRecord(record) && record.format === "route-state-record-v2") continue;
-      const backup = `${path}.pre-shared-work`;
-      if (!existsSync(backup)) writeFileSync(backup, bytes, { flag: "wx" });
-      if (
-        !isRecord(record) ||
-        record.format !== "route-state-record-v1" ||
-        typeof record.route !== "string"
-      )
-        continue;
-      const converted = {
-        ...record,
-        format: "route-state-record-v2",
-        value: convertLegacyWork(record.value, record.route),
-      };
-      writeFileSync(`${path}.tmp`, JSON.stringify(converted));
-      renameSync(`${path}.tmp`, path);
-    } catch (error) { console.warn("ts/apps/host/src/route-document-store.ts: fallback after failure", error);
-      // Conflicts/unreadable records stay exact and fail the normal schema read; no data is guessed.
-    }
-  }
   return {
     getState: async ({ targetKey, route }) => {
       const path = join(dir, filename(targetKey, route));
       if (!existsSync(path)) return null;
-      const raw: unknown = JSON.parse(readFileSync(path, "utf8"));
-      if (!isRecord(raw) || !("format" in raw))
-        throw Error(
-          "Unindexed historical Work needs explicit identity recovery; source bytes were retained",
-        );
-      const record = recordSchema.parse(raw);
+      let raw: unknown;
+      try { raw = JSON.parse(readFileSync(path, "utf8")); }
+      catch (error) {
+        if (error instanceof SyntaxError) { rmSync(path, { force: true }); return null; }
+        throw error;
+      }
+      const parsed = recordSchema.safeParse(raw);
+      if (!parsed.success) { rmSync(path, { force: true }); return null; }
+      const record = parsed.data;
       if (record.targetKey !== targetKey || record.route !== route)
         throw new Error("Stored Work identity does not match its address");
       return record.value;

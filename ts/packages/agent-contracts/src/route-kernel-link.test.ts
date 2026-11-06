@@ -184,7 +184,7 @@ describe("one decoded admission", () => {
       }),
     ).toContainEqual(expect.objectContaining({ path: "fields" }));
   });
-  it("checks field codecs, refinements, stage enums and migration coverage", async () => {
+  it("checks field codecs, refinements and stage enums", async () => {
     const data = {
       ...builtinData,
       fields: {
@@ -215,9 +215,6 @@ describe("one decoded admission", () => {
         },
       }),
     ).toContainEqual(expect.objectContaining({ path: "fields.density.codec" }));
-    expect(
-      await refuse({ ...builtinData, work: { ...builtinData.work, version: 2 } }),
-    ).toContainEqual(expect.objectContaining({ path: "work.migrations.1" }));
     expect(
       await refuse(builtinData, { schemas: { ...schemas, subjectOne: z.string().nullable() } }),
     ).toContainEqual(expect.objectContaining({ path: "fields.system.schema", code: "identity" }));

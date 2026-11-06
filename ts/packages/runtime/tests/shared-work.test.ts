@@ -2,7 +2,6 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { bindWork, draftCellSchema, type RouteStateSpec } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
-import { convertLegacyWork } from "../src/work-cutover.ts";
 
 test("connected workspace shares edits, stamps either writer and preserves a revision fence", async () => {
   const schema = z.object({
@@ -67,54 +66,4 @@ test("connected workspace shares edits, stamps either writer and preserves a rev
       2,
     ),
   ).toMatchObject({ ok: true });
-});
-
-test("explicit conversion preserves revision/evidence and never invents historical provenance", () => {
-  const old = {
-    version: 1,
-    revision: 19,
-    doc: {
-      cells: { width: { staged: { value: 200 }, proposal: { value: 250, note: "source page 2" } } },
-      basis: { captureId: "evidence" },
-    },
-  };
-  const converted = convertLegacyWork(old, "family");
-  expect(converted).toEqual({
-    version: 1,
-    revision: 19,
-    doc: {
-      cells: {
-        width: {
-          edit: { value: 200, by: "unknown", at: null, base: null },
-          suggestion: { value: 250, note: "source page 2", by: "unknown", at: null, base: null },
-        },
-      },
-      basis: { captureId: "evidence" },
-    },
-  });
-  expect(old.doc.cells.width.staged.value).toBe(200);
-  expect(() =>
-    convertLegacyWork(
-      {
-        version: 1,
-        revision: 1,
-        doc: { cells: { width: { staged: { value: 1 }, edit: { value: 2 } } } },
-      },
-      "family",
-    ),
-  ).toThrow("both old and shared");
-});
-
-test("conversion treats user JSON and evidence as opaque and supports cells named edit", () => {
-  const value = { proposal: { value: 1 }, staged: { value: 2 }, edit: { value: 3 } };
-  const old = {
-    version: 1,
-    revision: 3,
-    doc: { fields: { edit: { staged: { value } } }, basis: { evidence: value } },
-  };
-  const next = convertLegacyWork(old, "pods") as typeof old & {
-    doc: { fields: { edit: { edit: { value: unknown } } } };
-  };
-  expect(next.doc.fields.edit.edit.value).toEqual(value);
-  expect(next.doc.basis).toEqual(old.doc.basis);
 });
