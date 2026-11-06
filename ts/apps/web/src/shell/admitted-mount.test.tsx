@@ -773,6 +773,35 @@ const settle = (observation: Observation<WorkWriteOutcome>) =>
     ),
   );
 
+test("Page verbs dispatch declared ephemeral roles through human ports and refuse cross-role output", async () => {
+  let patch: unknown = { editor: "open" };
+  const route = await admitted(false, false, {
+    data: {
+      fields: { ...data.fields,
+        editor: { ...data.fields.query, role: "device", url: false, share: false, agent: "none" },
+        hover: { ...data.fields.query, role: "transient", url: false, share: false, agent: "none" },
+      },
+      verbs: { change: { kind: "page", input: "text", label: "Edit", review: "none", deps: { page: [], work: [], readings: [] }, captures: [], fields: ["editor"], patch: "patch" } },
+      panes: { main: { ...data.panes.main, verbs: ["change"] } },
+    },
+    bodies: {
+      patch: { slot: "verbs.change.patch", kind: "page", source, run: () => patch },
+      main: { ...bodies.main, run: (ctx: unknown) => ctx },
+    },
+  });
+  const t = transports();
+  const mount = createRouteShell(t.services).mount(route, placeInput(locationPort().address));
+  closes.push(mount.close);
+  const invoke = () => (mount.read("main") as { verbs: { change(input: string): unknown } }).verbs.change("");
+  expect(invoke()).toMatchObject({ kind: "accepted" });
+  expect(Reflect.get(mount.page.read(), "editor")).toBe("open");
+  patch = { hover: "foreign" };
+  expect(invoke).toThrow("undeclared field");
+  patch = { editor: 42 };
+  expect(invoke).toThrow();
+  expect(mount.page.read()).toMatchObject({ editor: "open", hover: "" });
+});
+
 test("D4: a new writer at either shared Work submission path cannot bypass Place authority", async () => {
   const route = await workRoute();
   const key = { binding: "workspace", route: "note", target: null, work: "default" } as const;
