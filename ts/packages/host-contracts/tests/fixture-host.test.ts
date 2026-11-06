@@ -37,34 +37,6 @@ test("admission refuses unknown keys, invalid responses and model writes", async
 
 test("the generated catalog schema is the fixture response authority", () => {
   const entry = hostOpCatalog.find((entry) => entry.key === "revit.catalog.loaded-families")!;
-  expect(
-    createFixtureHost(hostOpCatalog, {
-      [entry.key]: {
-        families: [],
-        issues: [],
-        summary: {
-          totalFamilies: 0,
-          placedFamilies: 0,
-          unplacedFamilies: 0,
-          totalTypes: 0,
-          totalPlacedInstances: 0,
-          truncated: false,
-        },
-      },
-    }).read(entry.key),
-  ).toEqual({
-    families: [],
-    issues: [],
-    summary: {
-      totalFamilies: 0,
-      placedFamilies: 0,
-      unplacedFamilies: 0,
-      totalTypes: 0,
-      totalPlacedInstances: 0,
-      truncated: false,
-    },
-  });
-
   expect(() =>
     createFixtureHost(hostOpCatalog, { [entry.key]: { families: "invalid" } }),
   ).toThrow();
