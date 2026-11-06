@@ -285,7 +285,10 @@ export function createWorkFeedClient(
             stopAcks = source.subscribe(
               { kind: "work-acks", work: scope.key, admission },
               (frame) => {
-                if (closed || ("stale" in frame && frame.stale)) return;
+                if (closed) return;
+                if (frame.kind === "stale" || ("stale" in frame && frame.stale)) {
+                  acquiring = true; emit({ kind: "pending" }); return;
+                }
                 if (frame.kind === "failure")
                   return fail(
                     frame.failure ? workFeedFailureMessage(frame.failure) : frame.error,
@@ -300,7 +303,7 @@ export function createWorkFeedClient(
                   acquiring = false;
                   emit({
                     kind: "ready",
-                    snapshot: { handle: parsed.data.handle, revision, value: parsed.data.doc },
+                    snapshot: Object.assign({ handle: parsed.data.handle, revision, value: parsed.data.doc }, { bodyReceipts: frame.changed ? undefined : frame.bodyReceipts }),
                     history: parsed.data.history,
                   });
                   drain();
@@ -320,7 +323,10 @@ export function createWorkFeedClient(
               return stop;
             }
             stopSnapshot = source.subscribe(request, (frame) => {
-              if (closed || ("stale" in frame && frame.stale)) return;
+              if (closed) return;
+              if (frame.kind === "stale" || ("stale" in frame && frame.stale)) {
+                acquiring = true; emit({ kind: "pending" }); return;
+              }
               if (frame.kind === "failure")
                 return fail(
                   frame.failure ? workFeedFailureMessage(frame.failure) : frame.error,
@@ -333,7 +339,7 @@ export function createWorkFeedClient(
               acquiring = false;
               emit({
                 kind: "ready",
-                snapshot: { handle: parsed.data.handle, revision, value: parsed.data.doc },
+                snapshot: Object.assign({ handle: parsed.data.handle, revision, value: parsed.data.doc }, { bodyReceipts: frame.changed ? undefined : frame.bodyReceipts }),
                 history: parsed.data.history,
               });
               drain();

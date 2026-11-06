@@ -117,7 +117,7 @@ function networks(): UseSource<NetworkSnapshot | null> {
           revision: 0,
         });
 
-      const parts: { snapshot: DuctSnapshot; version: string }[] = [];
+      const parts: { snapshot: DuctSnapshot; version: string; bodyReceipts?: readonly string[] }[] = [];
       const completed = new Set<number>();
       const missing: number[] = [];
       let serial = 0;
@@ -142,6 +142,7 @@ function networks(): UseSource<NetworkSnapshot | null> {
           parts.push({
             snapshot: event.value,
             version: event.sourceVersion ?? "",
+            bodyReceipts: event.bodyReceipts,
           });
           for (const id of batch) completed.add(id);
           missing.push(
@@ -156,6 +157,7 @@ function networks(): UseSource<NetworkSnapshot | null> {
             },
             revision: ++serial,
             sourceVersion: parts.map((part) => part.version).join("+"),
+            bodyReceipts: parts.every(part => part.bodyReceipts?.length) ? [...new Set(parts.flatMap(part => part.bodyReceipts!))] : undefined,
           });
         }
       } catch (error) {
@@ -209,6 +211,11 @@ function sheets(): UseSource<SheetReading> {
       }
       if (!ref || !chosen.length) return deliver({ kind: "complete", value: empty, revision: 0 });
       const opened: OpenSheet[] = [];
+      const receipts = new Set<string>();
+      let recordable = true;
+      const bodyContext = { ...ctx, onBodyReceipt(receipt: string | null) {
+        if (receipt) receipts.add(receipt); else recordable = false;
+      } };
       let serial = 0;
 
       try {
@@ -222,7 +229,7 @@ function sheets(): UseSource<SheetReading> {
             portIndex: fan.portIndex,
           };
 
-          const result = await callCompose(ctx, "ducts.sheet", { body: request });
+          const result = await callCompose(bodyContext, "ducts.sheet", { body: request });
 
           if (result.kind !== "overview") throw Error("Expected a fan sheet overview");
 
@@ -250,10 +257,10 @@ function sheets(): UseSource<SheetReading> {
             ]),
           ];
           const [inputs, elements, worksheet, ...legs] = await Promise.all([
-            sheetDetail(ctx, result, "inputs"),
-            sheetDetail(ctx, result, "elements"),
-            sheetDetail(ctx, result, "worksheet"),
-            ...paths.map((path) => sheetDetail(ctx, result, "legs", path)),
+            sheetDetail(bodyContext, result, "inputs"),
+            sheetDetail(bodyContext, result, "elements"),
+            sheetDetail(bodyContext, result, "worksheet"),
+            ...paths.map((path) => sheetDetail(bodyContext, result, "legs", path)),
           ] as const);
           opened.push({
             overview: result,
@@ -269,6 +276,7 @@ function sheets(): UseSource<SheetReading> {
         deliver({
           kind: "complete",
           value: { open: opened[0] ?? null, opened, rows, progress: null },
+          bodyReceipts: recordable && receipts.size ? [...receipts] : undefined,
           revision: ++serial,
         });
       } catch (error) {

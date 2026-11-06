@@ -57,6 +57,7 @@ export type ReadingPublication<T = unknown> =
       value: T;
       revision: number;
       sourceVersion?: string;
+      bodyReceipts?: readonly string[];
       fresh?: boolean;
     }
   | { kind: "pending" | "stale" }

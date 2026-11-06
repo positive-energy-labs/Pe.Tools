@@ -67,7 +67,7 @@ export function openSourceReading<T>(
     }, live.waitS * 1000);
   };
   const emit = (snapshot: ReadingSnapshot<T>) => {
-    if (context.signal.aborted) return;
+    if (context.signal.aborted || closed) return;
     if (snapshot.value !== undefined) value = snapshot.value;
     deliver(snapshot);
   };
@@ -77,7 +77,7 @@ export function openSourceReading<T>(
     source,
     context,
     (frame) => {
-      if (context.signal.aborted) return;
+      if (context.signal.aborted || closed) return;
       if (live && frame.kind !== "log") {
         // A live subject's failure is said until its next answer; silence re-arms the deadline.
         if (failed && (frame.kind === "pending" || frame.kind === "stale")) return;
@@ -98,6 +98,7 @@ export function openSourceReading<T>(
                   current: true,
                   value: sent,
                   hash: z.string().parse(contentHash(sent)),
+                  bodyReceipts: frame.bodyReceipts,
                 },
           );
         case "pending":
@@ -202,6 +203,7 @@ export function subscriptionSource<T>(options: {
               value,
               revision: ++revision,
               fresh,
+              bodyReceipts: fresh ? frame.bodyReceipts : undefined,
             });
           } catch (error) {
             deliver({ kind: "failure", error });
