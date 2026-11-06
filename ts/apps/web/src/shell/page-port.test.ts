@@ -133,6 +133,14 @@ test("device and transient use exact human role ports and reject schema, agent a
   }
 });
 
+test("fixture defaults cannot initialize settings, device or transient fields through the restore lane", () => {
+  for (const patch of [{ density: 2 }, { editor: "active" }, { hover: "active" }]) {
+    const policy = createPagePolicy(graph, schemas, () => "verified", undefined, patch);
+    expect(policy.initial()).toMatchObject({ ok: false });
+    expect(policy.restoreState({}, {})).toMatchObject({ ok: false });
+  }
+});
+
 test("subject, selection and frame restore once; a subject move clears selection and frame atomically", () => {
   const f = fixture();
   const seen = f.published;

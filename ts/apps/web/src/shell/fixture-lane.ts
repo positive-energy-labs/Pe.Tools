@@ -25,9 +25,16 @@ import {
 } from "./route-environment";
 
 export interface RouteFixtureSeed {
+  readonly page?: Readonly<Record<string, unknown>>;
   readonly readings: Readonly<Record<string, unknown>>;
   readonly work?: unknown;
   readonly works?: Readonly<Record<string, unknown>>;
+}
+/** Fixture Page is declaration data; the admitted Page policy owns field/role/schema decoding. */
+export function fixturePage(seed: unknown): Readonly<Record<string, unknown>> {
+  const parsed = z.object({ page: z.record(z.string(), z.unknown()).optional() }).safeParse(seed);
+  if (!parsed.success) throw Error("Invalid fixture Page seed");
+  return parsed.data.page ?? {};
 }
 const fixtureSelector = z.strictObject({
   fixtureSelect: z.strictObject({
@@ -197,6 +204,7 @@ export function createNamedFixtureRouteEnvironment(
       readings: z.record(z.string(), z.unknown()),
       work: z.unknown().optional(),
       works: z.record(z.string(), z.unknown()).optional(),
+      page: z.record(z.string(), z.unknown()).optional(),
     })
     .safeParse(seed);
   return createFixtureRouteEnvironment({

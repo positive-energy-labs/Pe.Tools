@@ -18,6 +18,8 @@ import { currentReadingHashes, projectEvidence } from "./admitted-context.ts";
 import type { PlaceInput } from "./admitted-place.ts";
 import { createApplicationWorkRegistry } from "./application-work-registry.ts";
 import { createPagePolicy } from "./page-port.ts";
+import { admittedSeed } from "./admitted-reading-plan";
+import { fixturePage } from "./fixture-lane";
 import { createRouteEnvironment, type EnvironmentValidation } from "./route-environment.ts";
 export function createAdmittedScope<W extends Record<string, unknown>>({
   route,
@@ -41,6 +43,14 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
   const { address, target } = input;
   const { registry, registration, resolve } = admission;
   const bindings = resolve();
+  let selectedPage = {};
+  try {
+    selectedPage =
+      input.fixture === null ? {} : fixturePage(admittedSeed(route, bindings, input.fixture) ?? {});
+  } catch (error) {
+    registration.deactivate();
+    throw error;
+  }
   // COMMON 3: admission owns slot/kind checks. A linked cell admission is valid but
   // this shell cannot execute it; retain that capability refusal before acquisition.
   for (const body of Object.values(bindings.bodies))
@@ -91,6 +101,7 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
           return result;
         }
       : undefined,
+    selectedPage,
   );
 
   const initial = policy.initial();
@@ -171,7 +182,24 @@ export function createAdmittedScope<W extends Record<string, unknown>>({
         }
       : ownerOptions,
   );
-  owner.enter(identityForPage(initial.value), initial.value);
+  let initialPage = initial.value;
+  if (input.fixture !== null) {
+    const restored = policy.restoreState({}, {});
+    const prepared = restored.ok
+      ? policy.prepare(initialPage, restored.value, {
+          kind: "restore",
+          source: "initial",
+          token: issuer.restore("initial"),
+        })
+      : restored;
+    if (!prepared.ok) {
+      registration.deactivate();
+      owner.close();
+      throw Error(prepared.reason);
+    }
+    initialPage = prepared.value.page;
+  }
+  owner.enter(identityForPage(initialPage), initialPage);
   const read = (): MountedSnapshot<W> => {
     const snapshot = owner.read();
     if (!snapshot) throw Error("Mount has no accepted snapshot");
