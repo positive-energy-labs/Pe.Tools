@@ -7,7 +7,8 @@ declare const pointId: unique symbol;
 export type RecordingPointId = string & { readonly [pointId]: "RecordingPointId" };
 export const recordingPointIdSchema = Schema.declare(
   (value): value is RecordingPointId =>
-    typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value),
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value),
 );
 const document = Schema.declare(
   (value): value is IdentityId<"document"> =>

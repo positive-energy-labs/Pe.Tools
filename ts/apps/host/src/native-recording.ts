@@ -25,6 +25,11 @@ import {
 import { Refused } from "./control.ts";
 import { InvalidRead, ReadBusy, ReadRetiring } from "./native-reads.ts";
 import { readSchemas } from "./request-services.ts";
+import {
+  recordingPointSchema,
+  recordingPointIdSchema,
+  type RecordingPoint,
+} from "@pe/agent-contracts";
 
 export interface RecordingIdentity {
   readonly build: string;
@@ -219,6 +224,13 @@ const observationOf = (taking: Taking) =>
 /** A historical bundle, read only: replay can select and read takings but never add one. */
 export interface RecordingReader {
   readonly identity: RecordingIdentity;
+  /** Half-open append cursors; timestamps and candidate order never select a point. */
+  readonly takingCursor: () => number;
+  readonly takingAt: (cursor: number) => Taking | undefined;
+  readonly points: {
+    readonly ids: () => readonly string[];
+    readonly get: (id: string) => Effect.Effect<RecordingPoint, InvalidRead>;
+  };
   /** Every taking of one input identity, oldest first; equal bytes never merge takings. */
   readonly candidates: (identity: string) => readonly Taking[];
   readonly taking: (id: string) => Taking | undefined;
@@ -247,6 +259,10 @@ export interface CaptureLatch {
 }
 /** The one capture writer of a bundle in this process (no cross-process lock is claimed). */
 export interface RecordingWriter extends RecordingReader {
+  readonly points: RecordingReader["points"] & {
+    readonly keep: (point: RecordingPoint) => Effect.Effect<void, InvalidRead>;
+  };
+
   /** Visible to `candidates` only after its observation and line are durable. */
   readonly append: (input: TakingInput, outcome: Outcome) => Effect.Effect<Taking, InvalidRead>;
   readonly capture: CaptureLatch;
@@ -341,6 +357,23 @@ const loadBundle = Effect.fn("Recording.load")(function* (
     used += (yield* io(() => stat(join(dir, READ_SETS, name)))).size;
     if (!pending) sets.push(id);
   }
+  const pointNames = yield* io(() =>
+    readdir(join(dir, "points")).catch((error: unknown) =>
+      missing(error) ? [] : Promise.reject(error),
+    ),
+  );
+  if (pointNames.length > bounds.maxTakings)
+    return yield* refuse("full", "Recording has too many point metadata files", 507);
+  const points: string[] = [];
+  for (const name of pointNames) {
+    const pending = name.endsWith(".json.tmp");
+    const suffix = pending ? ".json.tmp" : ".json";
+    const id = yield* Schema.decodeUnknownEffect(recordingPointIdSchema)(
+      name.endsWith(suffix) ? name.slice(0, -suffix.length) : null,
+    ).pipe(Effect.mapError(() => refuse("tamper", "Point filename is not host minted")));
+    used += (yield* io(() => stat(join(dir, "points", name)))).size;
+    if (!pending) points.push(id);
+  }
   if (used > bounds.maxBytes || takings.length > bounds.maxTakings)
     return yield* refuse("full", "Recording exceeds its bounds", 507);
   const marker = yield* bounded(join(dir, TRUNCATION), null);
@@ -353,6 +386,28 @@ const loadBundle = Effect.fn("Recording.load")(function* (
         });
   const reader: RecordingReader = {
     identity,
+    takingCursor: () => takings.length,
+    takingAt: (cursor) => takings[cursor],
+    points: {
+      ids: () => points.slice(),
+      get: Effect.fn("Recording.point")(function* (id: string) {
+        const name = yield* Schema.decodeUnknownEffect(recordingPointIdSchema)(id).pipe(
+          Effect.mapError(() => refuse("point", "Point id is not host minted")),
+        );
+        const text = yield* bounded(join(dir, "points", `${name}.json`), null);
+        if (text === null) return yield* refuse("point", "No such recording point");
+        const point = yield* Schema.decodeUnknownEffect(
+          Schema.fromJsonString(recordingPointSchema),
+        )(text).pipe(Effect.mapError(() => refuse("tamper", "Point metadata is damaged")));
+        if (
+          point.id !== name ||
+          point.identity.build !== identity.build ||
+          point.identity.catalog !== identity.catalog
+        )
+          return yield* refuse("mismatch", "Point belongs to another build, catalog or name");
+        return point;
+      }),
+    },
     candidates: (wanted: string) =>
       takings.filter((taking) => inputIdentity(taking.input) === wanted),
     taking: (id: string) => takings.find((taking) => taking.id === id),
@@ -398,7 +453,7 @@ const loadBundle = Effect.fn("Recording.load")(function* (
       }),
     },
   };
-  return { reader, takings, stored, sets, used, takingsPath, observations };
+  return { reader, takings, stored, sets, points, used, takingsPath, observations };
 });
 
 /** Opens an existing bundle for replay. A missing, damaged, foreign or oversized bundle refuses. */
@@ -426,6 +481,7 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
   let truncated = reader.truncation;
   // In-flight observation writes, so two equal observations share one durable write.
   const writing = new Map<string, Promise<void>>();
+  const pointWrites = new Set<string>();
   let reserved = 0;
   const clock = yield* Clock.Clock;
   const writeObservation = (sha: string, bytes: string) => {
@@ -469,6 +525,35 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
   });
   return {
     ...reader,
+    points: {
+      ...reader.points,
+      keep: Effect.fn("Recording.keepPoint")(function* (point: RecordingPoint) {
+        const bytes = yield* Schema.encodeUnknownEffect(
+          Schema.fromJsonString(recordingPointSchema),
+        )(point).pipe(
+          Effect.mapError(() => refuse("input", "Point metadata is not encodable", 400)),
+        );
+        if (point.identity.build !== identity.build || point.identity.catalog !== identity.catalog)
+          return yield* refuse("mismatch", "Point belongs to another build or catalog");
+        const size = Buffer.byteLength(bytes);
+        if (reader.points.ids().includes(point.id) || pointWrites.has(point.id))
+          return yield* refuse("point", "Point already exists");
+        if (used + size > bounds.maxBytes || reader.points.ids().length + pointWrites.size >= bounds.maxTakings)
+          return yield* refuse("full", "Recording is full; point was not kept", 507);
+        used += size;
+        pointWrites.add(point.id);
+        const path = join(dir, "points", `${point.id}.json`);
+        // Same reservation and atomic metadata durability as read sets. Failed IO remains charged.
+        const kept = yield* Effect.exit(io(async () => {
+          await mkdir(join(dir, "points"), { recursive: true });
+          await writeFile(`${path}.tmp`, bytes, { flag: "wx" });
+          await rename(`${path}.tmp`, path);
+        }));
+        pointWrites.delete(point.id);
+        if (Exit.isFailure(kept)) return yield* Effect.failCause(kept.cause);
+        loaded.points.push(point.id);
+      }),
+    },
     readSets: { ...reader.readSets, keep: keepReadSet },
     get truncation() {
       return truncated;
