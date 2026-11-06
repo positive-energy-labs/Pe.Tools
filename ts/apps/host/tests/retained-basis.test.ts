@@ -1,4 +1,4 @@
-import { mkdtemp, rm, rename, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Result, Schema } from "effect";
@@ -37,6 +37,7 @@ const producer = (counts: { reads: number }) => Layer.succeed(HostNativeRead, {
     actualTarget, freshness: { freshnessGeneration: "g1" }, cost: {}, outcome: "committed" as const }))),
 });
 const inventory = Layer.succeed(HostSessionInventory, {
+  list: () => Effect.die("inventory not requested"), subscribe: () => () => {},
   attachment: () => Effect.succeed({ sessionId: ref.session }), session: () => Effect.succeed({ sessionId: ref.session }),
   document: () => Effect.succeed(row),
 });
@@ -124,6 +125,48 @@ test("full native or basis capture stops recording but preserves the live miss a
       const count = c.takes.length;
       const hit = await c.web.post(); expect(hit.status).toBe(200); expect(hit.headers.get("x-pe-ducts-reused")).toBe("true");
       expect(c.counts.reads).toBe(1); expect(c.takes).toHaveLength(count);
+    } finally { await c.web.close(); }
+  }
+});
+
+test("admitted stale validation keeps its typed refusal through capture, cold replay, full and I/O loss", async () => {
+  let original: unknown;
+  for (const mode of ["record", "full", "io"] as const) {
+    const c = await captured(mode === "full" ? 3 : 100);
+    try {
+      const first = await c.web.post(); expect(first.status).toBe(200);
+      const version = first.headers.get(DUCTS_BODY_VERSION_HEADER)!;
+      const before = c.takes.length;
+      expect((await c.web.post({}, true)).status).toBe(403);
+      expect(c.takes).toHaveLength(before); // admission denies before any basis capture
+      c.owner.changed({ kind: "event", sessionId: ref.session, eventName: "document-changed",
+        payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }) });
+      if (mode === "io") {
+        await rename(join(c.dir, "takings.jsonl"), join(c.dir, "saved-takings.jsonl"));
+        await mkdir(join(c.dir, "takings.jsonl"));
+      }
+      const refused = await c.web.post({ [DUCTS_BODY_VERSION_HEADER]: version });
+      expect(refused.status).toBe(409);
+      const problem = await refused.json(); expect(problem.problem).toBe("read.retained");
+      if (mode === "record") original = problem; else expect(problem).toEqual(original);
+      expect(c.counts.reads).toBe(1);
+      if (mode !== "record") {
+        expect(c.writer.capture.truncated()?.reason).toBe(mode === "full" ? "full" : "io");
+        expect((await c.web.post()).status).toBe(200); // capture loss cannot break fresh acquisition
+        continue;
+      }
+      const failed = c.takes.slice(before);
+      expect(failed).toHaveLength(1);
+      expect(failed[0]!.outcome).toMatchObject({ kind: "refused", failure: { tag: "InvalidRequest", problem: "read.retained" } });
+      const reader = await run(openRecordingReader(c.dir, identity, bounds));
+      const counts = { reads: 0 };
+      const cold = router({ kind: "recording", recordingStore: reader, at: null, bindings: await bindings(failed) }, new DuctsReadings(), counts);
+      try {
+        const replay = await cold.post({ [DUCTS_BODY_VERSION_HEADER]: version });
+        expect(replay.status).toBe(409); expect(await replay.json()).toEqual(problem);
+        expect((await cold.post({}, true)).status).toBe(403);
+      } finally { await cold.close(); }
+      expect(counts.reads).toBe(0);
     } finally { await c.web.close(); }
   }
 });

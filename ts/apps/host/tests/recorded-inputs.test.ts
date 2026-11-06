@@ -142,6 +142,7 @@ effectTest("inventory replays recorded answers and refusal classes without an SD
       problem: "target.closed",
     });
     const live = Layer.succeed(HostSessionInventory, {
+      list: () => Effect.fail(closed), subscribe: () => () => {},
       attachment: () => Effect.succeed({ sessionId: "bridge-1" }),
       session: () => Effect.succeed({ sessionId: "bridge-1" }),
       document: () => Effect.fail(closed),
@@ -153,6 +154,7 @@ effectTest("inventory replays recorded answers and refusal classes without an SD
     const ref = { session: "bridge-1", openId: "A" };
     yield* asPea(inventory.attachment("sdk-alias"));
     yield* asPea(Effect.flip(inventory.document(ref)));
+    yield* asPea(Effect.flip(inventory.list()));
     const recorded = yield* service(
       HostSessionInventory,
       HostSessionInventory.recorded(yield* reader(dir)),
@@ -161,6 +163,9 @@ effectTest("inventory replays recorded answers and refusal classes without an SD
     const refused = yield* asPea(Effect.flip(recorded.document(ref)));
     expect(refused).toBeInstanceOf(InvalidRead);
     expect(refused).toMatchObject({ problem: "target.closed", status: 409 });
+    const listRefused = yield* asPea(Effect.flip(recorded.list()));
+    expect(listRefused).toBeInstanceOf(InvalidRead);
+    expect(listRefused).toMatchObject({ problem: "target.closed", status: 409 });
     expect(yield* asPea(problem(recorded.attachment("other")))).toBe("recording.miss");
     expect(yield* asPea(problem(recorded.session({ bridgeSessionId: "bridge-1" })))).toBe(
       "recording.miss",

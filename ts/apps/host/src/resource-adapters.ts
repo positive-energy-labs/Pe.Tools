@@ -12,12 +12,11 @@ import {
   commandTool,
   type ReadingFrame,
 } from "@pe/agent-contracts";
-import { OwnerReads, resourceSnapshot, type ResourceObserver, type OwnerValue, type WorkCarriage } from "@pe/runtime";
+import { resourceSnapshot, type ResourceObserver, type OwnerValue, type WorkCarriage } from "@pe/runtime";
 import type { BridgeError, RevitBridge } from "./bridge.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { ActionJournal } from "./action-journal.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
-import { listBridgeSessions } from "./local-ops.ts";
 import { observeSdkReading } from "./session-route.ts";
 import { sdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef } from "./document-marks.ts";
@@ -181,7 +180,6 @@ export function hostResourceObserver(
     scope: HostSessionScope,
   ) => Effect.Effect<{ sessionId: string }, BridgeError> = sdkSession,
 ): ResourceObserver {
-  const inventoryReads = new OwnerReads();
   return (request, publish) => {
     const headers = invocationContext()?.headers;
     const key = readingKey(request);
@@ -365,17 +363,6 @@ export function hostResourceObserver(
             live = false;
           };
         }
-        case "inventory":
-          return inventoryReads.observe(
-            "inventory",
-            () =>
-              bridge
-                ? // effect-edge: island, phase 5
-                  Effect.runPromise(listBridgeSessions(bridge.list))
-                : Promise.resolve({ sessions: [] }),
-            (notify) => (bridge ? bridge.subscribe(() => notify()) : () => {}),
-            accept,
-          );
         case "world": {
           const release = bridge
             ? bridge.subscribe((event) =>
