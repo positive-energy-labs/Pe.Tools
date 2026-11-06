@@ -224,8 +224,14 @@ public sealed class ValueWriteExperimentTests {
         var sw = Stopwatch.StartNew();
         try { action(); } finally { phases[name] = sw.Elapsed.TotalMilliseconds; }
     }
-    private static void Write(string output, List<object> results, List<string> failures) =>
-        File.WriteAllText(Path.Combine(output, "value-experiment.json"), JsonConvert.SerializeObject(new {
-            pid = Environment.ProcessId, assembly = typeof(ValueWriteExperimentTests).Assembly.Location,
-            results, failures }, Formatting.Indented));
+    // Called from finally blocks: a failed evidence write is logged, never thrown, so it cannot replace the test's own failure.
+    private static void Write(string output, List<object> results, List<string> failures) {
+        try {
+            File.WriteAllText(Path.Combine(output, "value-experiment.json"), JsonConvert.SerializeObject(new {
+                pid = Environment.ProcessId, assembly = typeof(ValueWriteExperimentTests).Assembly.Location,
+                results, failures }, Formatting.Indented));
+        } catch (Exception ex) {
+            Serilog.Log.Error(ex, "value experiment write");
+        }
+    }
 }

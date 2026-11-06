@@ -49,7 +49,12 @@ public sealed class ElectricalConnectorParameterCensusTests {
             transaction.RollBack();
         } finally {
             document.Close(false);
-            File.WriteAllText(Path.Combine(output, "electrical-connector-parameter-census.json"), rows.ToString());
+            // Runs in finally: a failed evidence write is logged, never thrown, so it cannot replace the test's own failure.
+            try {
+                File.WriteAllText(Path.Combine(output, "electrical-connector-parameter-census.json"), rows.ToString());
+            } catch (Exception ex) {
+                Serilog.Log.Error(ex, "electrical connector census write");
+            }
         }
 
         Assert.That(rows.OfType<JObject>().Single(row => row.Value<string>("systemType") == nameof(ElectricalSystemType.PowerBalanced))
