@@ -1,6 +1,5 @@
 using NetTopologySuite.Coverage;
 using NetTopologySuite.Geometries;
-using NUnit.Framework;
 using Pe.Revit.Takeoff;
 
 namespace Pe.Takeoff.Tests;

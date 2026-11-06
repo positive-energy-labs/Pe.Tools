@@ -2,7 +2,6 @@ using System.IO.Compression;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.Operation.OverlayNG;
 using Newtonsoft.Json;
-using NUnit.Framework;
 using Pe.Revit.Partition;
 using Pe.Revit.Space;
 

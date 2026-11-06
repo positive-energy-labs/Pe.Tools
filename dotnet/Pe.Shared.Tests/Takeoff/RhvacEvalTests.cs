@@ -1,6 +1,5 @@
 using Pe.Revit.Takeoff.Rhvac;
 
-using NUnit.Framework;
 
 namespace Pe.Takeoff.Tests;
 

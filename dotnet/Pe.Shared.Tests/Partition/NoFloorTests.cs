@@ -1,6 +1,5 @@
 using System.Numerics;
 using Autodesk.Revit.DB;
-using NUnit.Framework;
 using Pe.Revit.Space;
 
 namespace Pe.Partition.Tests;
