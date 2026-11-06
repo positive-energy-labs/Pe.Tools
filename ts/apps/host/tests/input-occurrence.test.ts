@@ -3,7 +3,7 @@
  * await, capture binds it to the actual durable taking, and replay selects by read set + input +
  * scope + start. Completion order, equal values and first/latest never supply identity.
  */
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -33,7 +33,7 @@ const bounds = { maxBytes: 1_000_000, maxTakings: 100 };
 const FIRM = { kind: "files", file: "firm" } as const;
 const recipe: ConsumerRecipe = {
   key: "ducts.sheet",
-  input: { fan: "F-1" },
+  input: { fan: "F-1", mode: "sheet" },
   scope: '["bridge-1","A"]',
 };
 const codec = Schema.Unknown;
@@ -72,7 +72,8 @@ effectTest(
 
       const reader = yield* openRecordingReader(dir, identity, bounds);
       const historical = yield* readSets({ kind: "recording", recordingStore: reader, at: null });
-      const replayed = yield* historical.open(recipe, consumption.id);
+      const replayed = yield* historical.open({ ...recipe, input: { mode: "sheet", fan: "F-1" } }, null);
+      expect(replayed.id).toBe(consumption.id);
       const again = (effect: Effect.Effect<unknown, unknown>) =>
         effect.pipe(Effect.provideService(CurrentInputConsumption, replayed));
       expect(yield* again(replayInput(reader, FIRM, "{}", codec))).toBe("firm-first");
@@ -113,7 +114,7 @@ effectTest(
           ),
         ).toBe(value);
       }
-      expect(yield* problem(historical.open(recipe, null))).toBe("recording.context");
+      expect(yield* problem(historical.open(recipe, null))).toBe("recording.ambiguous");
       expect(yield* problem(historical.open(recipe, unsealed.id))).toBe("recording.context");
       expect(yield* problem(historical.open({ ...recipe, key: "ducts.roster" }, human.id))).toBe(
         "recording.mismatch",
@@ -233,6 +234,53 @@ const record = (
   exports: [],
   ...fields,
 });
+
+effectTest("unbound admission counts incomplete matches, validates every record and writes nothing", () =>
+  Effect.gen(function* () {
+    const dir = yield* bundle;
+    const writer = yield* openRecordingWriter(dir, identity, bounds);
+    const complete = record({ id: randomUUID(), recipe });
+    const partial = record({ id: randomUUID(), recipe, state: "incomplete" });
+    expect(writer.readSets.ids()).toEqual([]);
+    yield* writer.readSets.keep(partial);
+    expect(writer.readSets.ids()).toEqual([partial.id]);
+    const historical = yield* readSets({ kind: "recording", recordingStore: writer, at: null });
+    expect(yield* problem(historical.open(recipe, null))).toBe("recording.context");
+    for (const different of [
+      { ...recipe, key: "ducts.roster" },
+      { ...recipe, input: { fan: "F-2" } },
+      { ...recipe, scope: "another-document" },
+    ]) expect(yield* problem(historical.open(different, null))).toBe("recording.miss");
+    yield* writer.readSets.keep(complete);
+    yield* writer.readSets.keep(complete);
+    expect(
+      yield* problem(writer.readSets.keep({ ...complete, identity: { ...identity, build: "foreign" } })),
+    ).toBe("recording.mismatch");
+    expect(writer.readSets.ids().slice().sort()).toEqual([partial.id, complete.id].sort());
+    const admission = historical.open(recipe, null);
+    yield* writer.readSets.keep({ ...partial, recipe: child("unrelated") });
+    expect((yield* admission).id).toBe(complete.id);
+    yield* writer.readSets.keep(partial);
+    expect(yield* problem(admission)).toBe("recording.ambiguous");
+    const before = yield* Effect.promise(() => readdir(dir, { recursive: true }));
+    const files = ["manifest.json", ...writer.readSets.ids().map((id) => `read-sets/${id}.json`)];
+    const contents = () => Promise.all(files.map((file) => readFile(join(dir, file), "utf8")));
+    const original = yield* Effect.promise(contents);
+    const bytes = yield* Effect.promise(() => readFile(join(dir, "read-sets", `${complete.id}.json`), "utf8"));
+    const reader = yield* openRecordingReader(dir, identity, bounds);
+    expect(reader.readSets.ids().slice().sort()).toEqual([partial.id, complete.id].sort());
+    const reopened = yield* readSets({ kind: "recording", recordingStore: reader, at: null });
+    expect(yield* problem(reopened.open(recipe, null))).toBe("recording.ambiguous");
+    expect((yield* reopened.open(recipe, complete.id as ReadSetId)).id).toBe(complete.id);
+    expect(yield* Effect.promise(() => readdir(dir, { recursive: true }))).toEqual(before);
+    expect(yield* Effect.promise(contents)).toEqual(original);
+    // Even an unrelated consumer must pass get's existing validator before it can be excluded.
+    yield* Effect.promise(() => writeFile(join(dir, "read-sets", `${partial.id}.json`), "{}"));
+    expect(yield* problem(reopened.open({ ...recipe, key: "missing" }, null))).toBe("recording.tamper");
+    yield* Effect.promise(() => writeFile(join(dir, "read-sets", "foreign.json"), bytes));
+    expect(yield* problem(openRecordingReader(dir, identity, bounds))).toBe("recording.tamper");
+  }),
+);
 
 effectTest(
   "replay refuses duplicate exact child occurrences and bounds the whole loaded graph",
