@@ -147,9 +147,7 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Owed
 
-- **K4 live capture continuity:** automatic capture on main d30b82d7 can fail plan/apply reads when full or after I/O failure. Main-based repair must preserve live outcomes and expose truncated coverage; the maxTakings-1 falsifier plus the usual Driver GREEN gates its landing. Other recording fills are checkpointed until it lands.
-
-- Step 5 presentation follow-on, Driver `drive/step-5/CASES.md`, explicitly non-blocking for main: refresh copied-Pod discovery without host restart; replace the dead `/pod-admin` link; investigate a second-turn Pod set-view rendered-ack refusal, absent Pea `pod.import` discovery, refusal text rendered with misleading fan chips, the initial missing Ducts handle, `sheetSnapshot` unavailable after Back, a route-open 403 and the legacy outcome-unknown chip. T1 cb88e274 is not browser-proven yet. Preserve this classification unless a new write/data consequence is observed.
+- Step 5 presentation follow-on, Driver `drive/step-5/CASES.md`, explicitly non-blocking for main: refresh copied-Pod discovery without host restart; replace the dead `/pod-admin` link; investigate a second-turn Pod set-view rendered-ack refusal, absent Pea `pod.import` discovery, refusal text rendered with misleading fan chips, the initial missing Ducts handle, `sheetSnapshot` unavailable after Back, a route-open 403 and the legacy outcome-unknown chip. Preserve this classification unless a new write/data consequence is observed.
 
 - Wave 2 engine cutover: legacy `shell/mount-readings-owner.ts` still constructs `createReadingGraph`, while admitted routes use `createAdmittedReadings`. Source opening is shared at 27510ae6; dependency ownership and the hook context's empty Page are not. Migrate or retire the remaining legacy route declarations with their Page and Work doors in Step 8, then delete the legacy scheduler; do not nest two engines or claim this as completed by sharing acquisition.
 
