@@ -41,22 +41,12 @@ test("same-type opened systems take fixed lightness rungs in natural order; stub
   ).toBe(1);
 });
 
-test("no two lightness rungs cross at defaults, and a selection lift stays between neighbours", () => {
+test("no two system lightness rungs cross at defaults", () => {
   for (const theme of ["light", "dark"] as const) {
     const rungs = SYSTEM_LIGHTNESS[theme];
     const legibility = rungs.map((L) => Math.abs(L - (theme === "light" ? 1 : 0)));
     legibility.forEach((v, n) => n && expect(v).toBeLessThan(legibility[n - 1]!));
-    rungs.forEach(
-      (L, n) =>
-        n &&
-        expect(Math.abs(L - rungs[n - 1]!)).toBeGreaterThanOrEqual(
-          LOOK.defaults.lift.selected - 1e-9,
-        ),
-    );
   }
-  const { hover, lit, selected } = LOOK.defaults.lift;
-  expect(hover).toBeLessThan(lit);
-  expect(lit).toBeLessThan(selected);
 });
 
 test("stub is the rung above context: stub opacity sits strictly between context glass peak and subject", () => {

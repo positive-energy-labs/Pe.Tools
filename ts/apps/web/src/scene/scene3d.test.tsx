@@ -123,8 +123,10 @@ it("keeps camera gestures local and the viewport mounted across membership and n
   const row = view.getByText("linked row").closest(".dl-row")!;
   fireEvent.pointerOver(row);
   expect(renderer.current.paint.mock.lastCall[3]).toEqual(new Set(["mesh42"]));
+  expect(renderer.current.hoverElement).toHaveBeenLastCalledWith("mesh42");
   fireEvent.pointerOver(view.container.firstElementChild!);
   expect(renderer.current.paint.mock.lastCall[3]).toEqual(new Set());
+  expect(renderer.current.hoverElement).toHaveBeenLastCalledWith(null);
   picking.current = { instance: meshes.instances[0]!, point: [0, 0, 0] };
   fireEvent.pointerMove(renderer.current.canvas);
   act(() => frames.splice(0).forEach((frame) => frame(0)));

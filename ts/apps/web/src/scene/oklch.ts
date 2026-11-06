@@ -40,5 +40,3 @@ export function withLightness(colour: THREE.Color, L: number) {
     .clone()
     .setRGB(Math.max(0, r), Math.max(0, g), Math.max(0, b), THREE.LinearSRGBColorSpace);
 }
-export const liftLightness = (colour: THREE.Color, dL: number) =>
-  withLightness(colour, toOklch(colour).L + dL);
