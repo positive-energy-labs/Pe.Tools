@@ -18,7 +18,7 @@ afterEach(cleanup);
 test("choosing a document pins one exact lifetime, preserving this Place's subject and history", async () => {
   const write = vi.fn();
   const place = { fixture: null, address: { read: () => new URLSearchParams("system=SA&thread=chat"), write } } as unknown as PanePlace;
-  render(<DocumentPicker place={place} target={null} needs="project" />);
+  render(<DocumentPicker place={place} target={null} needs="project" enabled />);
   fireEvent.click(screen.getByRole("button", { name: "Choose a document" }));
   expect(screen.queryByText("Family A")).toBeNull();
   fireEvent.click(await screen.findByText("Project A"));
