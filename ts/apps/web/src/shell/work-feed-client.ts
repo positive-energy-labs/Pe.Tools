@@ -297,6 +297,7 @@ export function createWorkFeedClient(
                 if (frame.kind === "gap")
                   return fail("Work acknowledgement transport lost an unknown revision interval");
                 if (frame.kind === "snapshot" && acquiring) {
+                  if (frame.value === null) { buffered.length = 0; revision = null; emit({ kind: "pending" }); return; }
                   const parsed = snapshotSchema.safeParse(frame.value);
                   if (!parsed.success) return fail(parsed.error.message);
                   revision = parsed.data.revision;
@@ -333,6 +334,7 @@ export function createWorkFeedClient(
                   frame.failure,
                 );
               if (!acquiring || frame.kind !== "snapshot") return;
+              if (frame.value === null) { buffered.length = 0; revision = null; emit({ kind: "pending" }); return; }
               const parsed = snapshotSchema.safeParse(frame.value);
               if (!parsed.success) return fail(parsed.error.message);
               revision = parsed.data.revision;

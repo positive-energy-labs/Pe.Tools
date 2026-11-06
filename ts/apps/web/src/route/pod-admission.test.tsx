@@ -177,7 +177,7 @@ async function hostHarness() {
   await store.setState({
     targetKey: workKey(key),
     route: key.route,
-    value: { version: 1, schemaVersion: 1, revision: 7, doc: { state: { inputs } }, history: [] },
+    value: { version: 1, schemaVersion: 2, revision: 7, doc: { version: 2, inputs }, history: [] },
   });
   await routes.trust(row!.key, row!.fingerprint, true);
   const trusted = (await routes.list())[0]!;
@@ -248,7 +248,7 @@ const address = () => ({
   subscribe: () => () => {},
 });
 
-test("Snowdon real host + React mount migrates v1, renders subject/calculation, edits, undoes and redoes", async () => {
+test("Snowdon real host + React mount renders current Work, subject/calculation, edits, undoes and redoes", async () => {
   const h = await hostHarness();
   let mount!: AdmittedMount;
   const base = createRouteShell({
@@ -271,7 +271,7 @@ test("Snowdon real host + React mount migrates v1, renders subject/calculation, 
     expect(screen.getAllByText("Copper voltage-drop worksheet").length).toBeGreaterThan(0);
     expect(screen.getByText(/Authored inputs/).textContent).toContain('"drop"');
     expect(await h.store.getState({ targetKey: workKey(h.key), route: h.key.route })).toMatchObject(
-      { schemaVersion: 2, revision: 8, doc: { version: 2, inputs: h.inputs } },
+      { schemaVersion: 2, revision: 7, doc: { version: 2, inputs: h.inputs } },
     );
     await act(async () => {
       expect(

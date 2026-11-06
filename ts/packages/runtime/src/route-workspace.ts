@@ -492,8 +492,8 @@ export class RouteWorkspace {
   }
 
   /**
-   * A reader's view of the route: absent Work reads as the empty document at r0, the one `apply`
-   * starts from. Null only for an unregistered route, so a registered route never reads unknown.
+   * A reader's view of the route: absent Work uses schema defaults at r0 when available.
+   * Without defaults it stays absent; no required authored value is invented.
    */
   async view(scope: WorkKey, route: string, context?: WorkReadContext) {
     return (await this.#captured(scope, "view", context, () => this.#read(scope, route, true, false, context))).value;
@@ -592,6 +592,7 @@ export class RouteWorkspace {
     }
     return this.#serialized(async () => {
       const envelope = await this.#load(scope, registration.spec).catch(unreadable);
+      if (!envelope) return refuse("refused", "Work has no initial value", "Provide Work matching the current schema before editing.");
       if ("ok" in envelope) return envelope;
       const kind = trusted ? "publish" : context.kind;
       const press = kind === "apply" ? context.press : null;
@@ -834,8 +835,9 @@ export class RouteWorkspace {
         );
       let slot = 1;
       while ((await this.#store.getState({ targetKey, route: aside(route, slot) })) != null) slot++;
-      await this.#store.setState({ targetKey, route: aside(route, slot), value: raw });
       const fresh = emptyEnvelope(spec);
+      if (!fresh) return refuse("refused", "Work has no initial value", "Provide Work matching the current schema before starting fresh.");
+      await this.#store.setState({ targetKey, route: aside(route, slot), value: raw });
       const prior = envelopeSchema.safeParse(raw);
       fresh.revision = (prior.success ? prior.data.revision : 0) + 1;
       // Recovery is the explicit exception to schema-valid restore: only these host-held bytes return.
@@ -1018,7 +1020,8 @@ export class RouteWorkspace {
       this.#acceptedListeners.set(key, listeners);
       listeners.add(listener);
       const envelope = await this.#load(scope, spec, true);
-      if (disposed || !envelope) return;
+      if (disposed) return;
+      if (!envelope) { snapshot(null); return; }
       const records = this.#retain(this.#inverses.get(key) ?? [], envelope.revision);
       snapshot({
         doc: structuredClone(envelope.doc),
@@ -1190,11 +1193,10 @@ export class RouteWorkspace {
     }
   }
 
-  #load(scope: WorkKey, spec: RouteStateSpec<z.ZodType>): Promise<RouteEnvelope<unknown>>;
   #load(
     scope: WorkKey,
     spec: RouteStateSpec<z.ZodType>,
-    create: boolean,
+    create?: boolean,
   ): Promise<RouteEnvelope<unknown> | null>;
   async #load(
     scope: WorkKey,
@@ -1375,12 +1377,15 @@ function storedWorkKey(value: string, route: string): WorkKey | null {
   return parsed.success && workKey(parsed.data) === value ? parsed.data : null;
 }
 
-function emptyEnvelope(spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {
+function emptyEnvelope(spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> | null {
+  const empty = spec.schema.safeParse({});
+  // Absent Work stays absent when its schema supplies no default; never invent required values.
+  if (!empty.success) return null;
   return {
     version: ENVELOPE_VERSION,
     schemaVersion: spec.schemaVersion ?? 1,
     revision: 0,
-    doc: spec.schema.parse({}),
+    doc: empty.data,
   };
 }
 

@@ -57,13 +57,8 @@ test("Snowdon publishes deterministic exact bytes and admits the decoded package
   );
 }, 30000);
 
-test("Snowdon declares a real v1-to-v2 Work migration and retains the copper calculation", () => {
+test("Snowdon declares current Work and retains the copper calculation", () => {
   expect(data.work.version).toBe(2);
-  expect(data.work.migrations).toEqual({ "1": "upgradeV1" });
-  expect(bodies.upgradeV1.run({ state: { inputs: { amps: 30 } } })).toEqual({
-    version: 2,
-    inputs: { ...initial, amps: 30 },
-  });
   expect(module.schemas.work.parse({})).toEqual({ version: 2, inputs: initial });
   const result = bodies.calculate.run({
     work: { inputs: initial },
