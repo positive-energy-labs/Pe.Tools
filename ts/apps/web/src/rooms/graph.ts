@@ -267,7 +267,7 @@ export const roomsGraph: RouteGraph<RoomsPage, RoomsRouteDocument> = defineRoute
   },
   layout: split(
     "rooms-scope",
-    { axis: "v", sized: "start", size: 32 },
+    { axis: "v", sized: "start", size: 104, minSize: 104 },
     gate("editing", pane("scope")),
     split(
       "rooms-layout",

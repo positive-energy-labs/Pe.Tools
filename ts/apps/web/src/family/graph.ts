@@ -112,7 +112,7 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph
     document: { kind: "derive", source: "family.document", },
     profile: {
       source: "family.profile",
-      args: (page) => [page.pod, page.path],
+      args: (page) => page.pod && page.path ? { pod: page.pod, path: page.path } : null,
     },
     receipts: {  source: "family.receipts", },
     applyReceipt: {
@@ -126,11 +126,11 @@ export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph
     buildReceipt: {
       source: "family.build-receipt",
       deps: ["receipts", "profile"],
-      args: (page) => [page.pod, page.path],
+      args: (page) => page.pod && page.path ? { pod: page.pod, path: page.path } : null,
     },
     spec: {
       source: "family.spec",
-      args: (page) => [page.pod, page.path],
+      args: (page) => page.pod && page.path ? { pod: page.pod, path: page.path } : null,
     },
     pods: {  source: "family.pods", retire: "never" },
   },

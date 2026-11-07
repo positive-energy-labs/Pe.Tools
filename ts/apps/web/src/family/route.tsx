@@ -24,8 +24,10 @@ import { FamilyWorkspaceDocPane } from "./workspace-doc-pane";
 type Body = MountBody<FamilyPage, FamilyDraft>;
 function ParametersBody() {
   const { store } = useFamilyWorkspace();
+  const profile = store.scope.readings.profile;
   return (
     <>
+      {profile?.status === "failed" && <OutcomeLine kind="error" label="Saved family profile" says={`${profile.error ?? "The member could not be read"}. Choose another saved member or retry Refresh.`} />}
       {store.editFailure && (
         <OutcomeLine kind="refused" label="Family edit" says={store.editFailure.message} />
       )}

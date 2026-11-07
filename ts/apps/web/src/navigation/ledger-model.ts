@@ -173,7 +173,7 @@ export function ledgerRows(sources: LedgerSources, now: number): LedgerRow[] {
       .filter((thread) => thread.lifecycle.status === "active")
       .flatMap((thread) => threadRow(thread, sources.asks, now) ?? []),
     ...sources.receipts.flatMap((receipt) => receiptRow(receipt) ?? []),
-    // A Work enters only when Pea proposed on it; Home's directory already lists every saved Work.
+    // Staged Work includes human edits and scope choices; it carries no proposal-actor count.
     ...sources.works
       .filter((work) => work.staged > 0)
       .map((work) => ({
@@ -182,7 +182,7 @@ export function ledgerRows(sources: LedgerSources, now: number): LedgerRow[] {
         verb: "review",
         what: work.label,
         where: work.context,
-        says: `${work.staged} Pea suggestion${work.staged === 1 ? "" : "s"} to review`,
+        says: `${work.staged} staged change${work.staged === 1 ? "" : "s"} to review`,
         at: null,
         url: work.url,
         refusal: work.url ? undefined : (work.reason ?? "No resumable destination"),

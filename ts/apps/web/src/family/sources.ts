@@ -3,6 +3,7 @@ import {
   actionReceiptSchema,
   actionStatusSchema,
   settingsSnapshotSchema,
+  podMemberSchema,
   workKey,
   type ActionStatus,
   type ParsedDocView,
@@ -93,7 +94,7 @@ export function familySources(): Readonly<Record<string, ReadingSource>> {
       dirties: ["pods"],
       effects: () => [],
       async open(ctx, deliver) {
-        const ref = member(ctx);
+        const ref = podMemberSchema.nullable().parse(ctx.args);
         if (!ref) return deliver({ kind: "complete", value: null, revision: 0 });
         try {
           const read = await callOp({ signal: ctx.signal }, "pod.member.read", ref);
@@ -156,7 +157,7 @@ export function familySources(): Readonly<Record<string, ReadingSource>> {
       kind: "use",
       dirties: ["family", "pods"],
       async open(ctx, deliver) {
-        const ref = member(ctx);
+        const ref = podMemberSchema.nullable().parse(ctx.args);
         if (!ref) return deliver({ kind: "complete", value: null, revision: 0 });
         try {
           const link = await callCompose(ctx, "family.spec", {

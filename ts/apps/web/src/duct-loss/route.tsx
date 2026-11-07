@@ -7,7 +7,7 @@ import { Switcher } from "@pe/kit/lang/switcher";
 import { DuctCharts } from "#/duct-loss/duct/charts";
 import { FACES, type FaceKey } from "#/duct-loss/duct/ductulator";
 import { Ductulator } from "#/duct-loss/duct/wheel";
-import { type DuctInput, type DuctResult, materials, solve } from "#/duct-loss/duct/math";
+import { type DuctInput, type DuctResult, materials, solve, ductInputError } from "#/duct-loss/duct/math";
 import { routeFromGraph, type MountBody, type RouteAdapters } from "#/shell/mount";
 import { ductLossGraph, type DuctLossPage } from "./graph";
 
@@ -70,13 +70,14 @@ Dₑ  = 1.30 (ab)^0.625 / (a + b)^0.25           Huebscher`;
 type Body = MountBody<DuctLossPage, null>;
 const pageSchema = routeAddress("duct-loss").schema;
 
+const bodyPage = (owner: Body["owner"]) => owner.view.read().page;
 function result({ owner }: Body) {
-  return owner.readings.get("result").value as DuctResult | undefined;
+  return ductInputError(bodyPage(owner)) ? undefined : owner.readings.get("result").value as DuctResult | undefined;
 }
 
 function Wheel(body: Body) {
   const r = result(body);
-  if (!r) return <output role="status">Calculating duct loss</output>;
+  if (!r) return <output role="status">{ductInputError(body.page) ?? "Calculating duct loss"}</output>;
   const { page: d, owner } = body;
   return (
     <div className="mx-auto aspect-square h-full max-w-full">
@@ -93,7 +94,6 @@ function Wheel(body: Body) {
 
 function Inputs(body: Body) {
   const r = result(body);
-  if (!r) return <output role="status">Calculating duct loss</output>;
   const { page: d, owner } = body;
   const setPage = owner.view.setPage;
   const set = (patch: Partial<DuctInput>) => setPage(patch);
@@ -166,7 +166,7 @@ function Inputs(body: Body) {
         </Field>
       </section>
 
-      <section className="flex flex-col gap-2">
+      {r ? <section className="flex flex-col gap-2">
         <h2 className="t-prose font-medium">Loss</h2>
         <div className="flex flex-wrap gap-1.5 pb-1">
           <FactChip title="Friction loss over the entered length">
@@ -189,14 +189,14 @@ function Inputs(body: Body) {
         <pre className="hairline face-mono t-prose rounded-md p-3 whitespace-pre-wrap text-ink">
           {formula}
         </pre>
-      </section>
+      </section> : <output role="alert">{ductInputError(d) ?? "Calculating duct loss"}</output>}
     </div>
   );
 }
 
 function Charts(body: Body) {
   const r = result(body);
-  if (!r) return <output role="status">Calculating duct loss</output>;
+  if (!r) return <output role="status">{ductInputError(body.page) ?? "Calculating duct loss"}</output>;
   const { page: d, owner } = body;
   return (
     <DuctCharts

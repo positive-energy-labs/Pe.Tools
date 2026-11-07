@@ -38,7 +38,20 @@ export type DuctResult = {
   loss: number; // in. wg over `length`
 };
 
+export function ductInputError(d: DuctInput): string | null {
+  if (![d.a, d.b, d.cfm, d.length, d.roughness, d.density].every(Number.isFinite))
+    return "Enter finite duct dimensions, airflow and material values";
+  if (d.a <= 0 || (d.shape === "rect" && d.b <= 0))
+    return "Duct dimensions must be greater than zero";
+  if (d.cfm < 0) return "Airflow must be zero or greater";
+  if (d.length < 0 || d.roughness < 0 || d.density <= 0)
+    return "Length and roughness must be zero or greater; density must be greater than zero";
+  return null;
+}
+
 export function solve(d: DuctInput): DuctResult {
+  const error = ductInputError(d);
+  if (error) throw Error(error);
   const [a, b] = d.shape === "round" ? [d.a, d.a] : [d.a, d.b];
   const area = (d.shape === "round" ? (Math.PI * a * a) / 4 : a * b) / 144;
   const hydraulicDiameter = d.shape === "round" ? a : (2 * a * b) / (a + b);
