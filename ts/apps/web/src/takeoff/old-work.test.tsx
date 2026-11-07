@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useSyncExternalStore } from "react";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,6 +14,7 @@ import { route } from "../route/typed-route";
 import { mountTypedRoute, type TypedMount } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { TypedWorkRecovery } from "../shell/typed-work-recovery";
+import { startFreshRouteWork, writeRouteWork } from "../route/host";
 import { module as takeoffs } from "./route";
 
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
@@ -22,9 +23,7 @@ function Recovery({mount}:{mount:TypedMount}) {
   return <TypedWorkRecovery mount={mount}/>;
 }
 
-test.each([OLDER_WORK, UNREADABLE_WORK])(
-  "takeoffs preserves the host refusal and only resets provably older Work: %s",
-  async message=>{
+async function oldWorkJourney(message: string, reviewGuards=false) {
     const dir=await mkdtemp(join(tmpdir(),"takeoffs-old-work-"));
     try {
     // A next trusted schema version makes a positive older-version witness possible.
@@ -62,11 +61,12 @@ test.each([OLDER_WORK, UNREADABLE_WORK])(
     });
     const work=createWorkFeedClient({subscribe:observeResources(workspace,{observe:()=>()=>{}}),dirty(){}},
       {write:(key,write)=>workspace.write(key,key.route,"human",write),submit:()=>{throw Error("No native command during recovery");}});
+    let writable=true;
     const mount=mountTypedRoute(module,{fixture:null,target:{kind:"document",ref},work:{address:null,open:ref},
-      custody:{current:()=>true},memory:()=>({}),address:{read:()=>new URLSearchParams(),write(){},subscribe:()=>()=>{}}},admitted.route.workFingerprint,
+      custody:{current:()=>writable},memory:()=>({}),address:{read:()=>new URLSearchParams(),write(){},subscribe:()=>()=>{}}},admitted.route.workFingerprint,
       {work,sources:Object.fromEntries([module.spec.core!,...Object.values(module.spec.reads??{})].map(read=>[read.key,{kind:"use",open:()=>()=>{}}]))});
     try {
-      render(<Recovery mount={mount}/>);
+      const view=render(<Recovery mount={mount}/>);
       await waitFor(()=>expect(mount.owner()?.failure).toMatchObject({kind:"failed",code:"WorkUnreadable",
         schemaAge:message===OLDER_WORK?"older":"unknown"}));
       const refusal=mount.owner()?.failure;
@@ -81,6 +81,30 @@ test.each([OLDER_WORK, UNREADABLE_WORK])(
       fireEvent.click(screen.getByRole("button",{name:"Start fresh"}));
       const review=await screen.findByRole("dialog",{name:"Start fresh review"});
       expect(screen.getByText(message)).toBeTruthy();
+      if(reviewGuards) {
+        const commit=within(review).getByRole("button",{name:"Commit Start fresh"});
+        await act(async()=>{writable=false;view.rerender(<Recovery mount={mount}/>);});
+        expect(commit.getAttribute("aria-disabled"), "a review does not grant Place custody").toBe("true");
+        fireEvent.click(commit);
+        expect(posts, "ineligible Place submits nothing").toEqual([]);
+        expect(await readFile(saved,"utf8")).toBe(original);
+        await act(async()=>{writable=true;view.rerender(<Recovery mount={mount}/>);});
+        expect(commit.getAttribute("aria-disabled")).toBeNull();
+
+        // A second author resets and edits this exact Work while the first review is open.
+        expect(await startFreshRouteWork(key)).toMatchObject({ok:true,revision:8});
+        expect(await writeRouteWork(key,{kind:"apply",expectedRevision:8,press:crypto.randomUUID(),
+          label:"Keep the other author's room",patches:[{path:["bases","peer-room"],value:{name:"Peer room"}}]}))
+          .toMatchObject({ok:true,revision:9});
+        const laterBytes=await readFile(saved,"utf8"),laterFiles=await readdir(dir);
+        fireEvent.click(commit);
+        await waitFor(()=>expect(screen.getByText(/Work changed; review the current Work again|this route's Work is readable/)).toBeTruthy());
+        expect(await readFile(saved,"utf8"), "stale confirmation preserves the later edit byte-for-byte").toBe(laterBytes);
+        expect(await readdir(dir), "stale confirmation creates no further aside").toEqual(laterFiles);
+        expect((await workspace.read(key,key.route))?.doc).toMatchObject({bases:{"peer-room":{name:"Peer room"}}});
+        expect((await disk.listState!()).records.find(row=>row.route==="takeoffs:aside:1")?.value).toEqual(raw);
+        return;
+      }
       fireEvent.click(within(review).getByRole("button",{name:"Commit Start fresh"}));
       await waitFor(()=>expect(screen.queryByText(message),responses.join("\n")).toBeNull());
       await waitFor(()=>expect(mount.owner()?.ready).toBe(true));
@@ -95,5 +119,12 @@ test.each([OLDER_WORK, UNREADABLE_WORK])(
       cleanup();mount.dispose();registration.close();
     }
     } finally { await rm(dir,{recursive:true,force:true}); }
-  },60000,
+}
+
+test.each([OLDER_WORK, UNREADABLE_WORK])(
+  "takeoffs preserves the host refusal and only resets provably older Work: %s",
+  message=>oldWorkJourney(message),60000,
 );
+
+test("typed old-Work review loses Place authority and refuses confirmation after another author edits",
+  ()=>oldWorkJourney(OLDER_WORK,true),60000);
