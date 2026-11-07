@@ -386,7 +386,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         invoke(documentRead(ref));
       return {
         file: (name,args) => name === "firm" ? invoke(files.firm) : name === "catalogs" ? invoke(files.ductCatalogs)
-          : name === "capture" ? scoped(current)(asset(String(args))).then(bytes=>bytes.toString("base64")) : takeFile(name,args,current),
+          : name === "capture" ? scoped(current)(asset(String(args))).then(()=>String(args)) : takeFile(name,args,current),
         workKey: async (ref) => bindWork("ducts", (await document(ref)).address, undefined, ref),
         inputs: {
           consumption: current,
