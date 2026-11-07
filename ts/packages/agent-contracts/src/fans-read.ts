@@ -36,6 +36,8 @@ export const fansReadArgs = z.object({
 export const fansReadRequest = publicationRequest(fansReadArgs);
 
 export const fansSheetData = fanSheetSchema.extend({
+  espOptions: nativeResponseSchema("revit.catalog.field-options").nullable(),
+  espOptionsError:z.string().nullable(),
   sheetView: z.object({
     blockers: detail[4].shape.blockers,
     tiers: z.record(z.enum(["taken", "accept", "preview"]), z.number()),
