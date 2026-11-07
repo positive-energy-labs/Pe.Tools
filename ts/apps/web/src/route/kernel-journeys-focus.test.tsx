@@ -11,8 +11,28 @@ import * as mounts from "../shell/typed-mount";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { ReviewSurface } from "../shell/review-surface";
 import { RouteVisibility } from "./activity";
+import { module as family } from "../family/route";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+test("JM H17 browse an optional host route without a pin, then refuse malformed document pins", async () => {
+  const module = route({ ...family.spec, edits: undefined, core: undefined, commands: {}, reads: {},
+    panes: { main: { title: "Optional document", purpose: "Inspect exact target authority",
+      draw: ctx => <p role="status">{ctx.target?.kind === "host" ? "Host browsing" : "Pinned document"}</p> } },
+    layout: { kind: "pane", id: "main" } });
+  const stamp = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
+  let search = new URLSearchParams();
+  const listeners = new Set<() => void>();
+  const address = { read: () => new URLSearchParams(search), write(next: URLSearchParams) { search = next; listeners.forEach(f => f()); },
+    subscribe(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; } };
+  const root = createRootRoute({ component: () => <TypedShell module={module} fingerprint={stamp} address={address} /> });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/"] }) });
+  render(<RouterProvider router={router} />);
+  await screen.findByText("Host browsing");
+  address.write(new URLSearchParams({ target: "not JSON" }));
+  await waitFor(() => expect(screen.queryByText("Host browsing"), "H17: a bad pin never falls back to host authority").toBeNull());
+  expect(screen.queryByText("Pinned document"), "H17: unresolved pin grants no document authority").toBeNull();
+});
 
 test("JZ B04 read a long review, dismiss with Escape and return to its opener", async () => {
   function Journey() {

@@ -18,7 +18,7 @@ import {
 } from "@pe/agent-contracts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { withInvocationContext } from "@pe/runtime/context";
-import { fixture, ref, path, who } from "../../../host/tests/host-read-graph.test-support";
+import { fixture, ref, path, who, gate } from "../../../host/tests/host-read-graph.test-support";
 import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
 import { ActionJournal } from "../../../host/src/action-journal";
 import { makeCallRoute } from "../../../host/src/call-route";
@@ -125,8 +125,14 @@ async function journey() {
     const value = await response.json();
     return (response.ok ? value : (value.error?.details ?? value)) as RouteStateWriteResult;
   };
+  let heldWrite: ReturnType<typeof gate> | undefined;
   const work = createWorkFeedClient(source, {
-    write: (key, body) => write(key, body),
+    write: async (key, body) => {
+      const held = heldWrite; heldWrite = undefined;
+      const result = await write(key, body);
+      if (held) { held.entered.resolve(); await held.release.promise; }
+      return result;
+    },
     submit: async (command) => {
       const response = await request("/actions", command);
       expect([200, 202], await response.clone().text()).toContain(response.status);
@@ -166,8 +172,8 @@ async function journey() {
     }),
   };
   const mounts: ReturnType<typeof mountTypedRoute>[] = [];
-  const mount = (readOnly = false) => {
-    const m = mountTypedRoute(fans, { ...input, readOnly }, fingerprint, {
+  const mount = (readOnly = false, place: Partial<typeof input> = {}) => {
+    const m = mountTypedRoute(fans, { ...input, ...place, readOnly }, fingerprint, {
       work,
       sources: { "fans.sheet": read },
     });
@@ -203,6 +209,7 @@ async function journey() {
     ready,
     cells,
     key,
+    holdWrite() { heldWrite = gate(); return heldWrite; },
     depart() {
       current = false;
     },
@@ -282,6 +289,26 @@ test("JW1 edit typed flows and race two atomic HTTP writes at the accepted revis
   } finally {
     await j.close();
   }
+}, 60_000);
+
+test("JM B06 complete an acknowledged HTTP edit after its typed Page is disposed", async () => {
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.start();
+    held = j.holdWrite();
+    const writing = j.cells().at(["flows", "4"]).stage({ cfm: 410 }, { label: "Departing airflow" });
+    await held.entered.promise;
+    j.m.dispose();
+    const retired = structuredClone(j.m.owner()!.doc);
+    held.release.resolve();
+    await writing;
+    expect(j.m.owner()!.doc, "B06: a retired pane cannot receive a late Work completion").toEqual(retired);
+    const replacement = j.mount();
+    await vi.waitFor(() => expect(replacement.owner()?.ready).toBe(true));
+    expect(replacement.owner()!.doc.flows["4"].edit.value,
+      "H03: the host acknowledgement stays durable for a new inspection").toEqual({ cfm: 410 });
+  } finally { held?.release.resolve(); await j.close(); }
 }, 60_000);
 
 test("JW2 receive Pea proposals, accept and deny individual cells without changing stored facts", async () => {
@@ -370,4 +397,81 @@ test("JW7 typed recovery sets only proven older owner Work aside through the hos
     await expect(refused.startFresh("ducts")).rejects.toThrow("Only proven older");
     expect(await store.getState({ targetKey: workKey(scope), route: "ducts" })).toEqual(newer);
   } finally { vi.unstubAllGlobals(); await j.close(); }
+}, 60_000);
+
+test("JM H27 interleave a second writer, refuse the original undo and keep its named history", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    expect(await j.cells().at(["flows", "4"]).stage({ cfm: 240 }, { label: "Set terminal airflow" })).toBeNull();
+    await j.ready();
+    const step = j.m.history.entries.at(-1)!;
+    expect(await j.m.history.undo(step.press), "H07: typed Work undoes the named edit").toMatchObject({ ok: true });
+    await j.ready();
+    expect(await j.m.history.redo(step.press), "H07: typed Work redoes the same edit").toMatchObject({ ok: true });
+    await j.ready();
+    const result = await j.write(j.key(), { kind: "apply", expectedRevision: j.m.owner()!.handle!.revision,
+      press: crypto.randomUUID(), label: "Another designer changes airflow",
+      patches: [{ path: ["flows", "4", "edit"], value: { value: { cfm: 500 } } }] });
+    expect(result).toMatchObject({ ok: true });
+    await vi.waitFor(() => expect(j.m.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 500 }));
+    await j.ready();
+    const before = structuredClone(j.m.owner()!.doc), revision = j.m.owner()!.handle!.revision;
+    const undo = await j.m.history.undo(step.press);
+    expect(undo, "H27: a changed affected path refuses its original inverse").toMatchObject({ ok: false });
+    expect(j.m.owner()!.doc, "H27: conflicting undo changes no path").toEqual(before);
+    expect(j.m.owner()!.handle!.revision, "H27: no inverse retry writes a new revision").toBe(revision);
+    expect(j.m.history.entries.some(entry => entry.press === step.press), "H27: the named entry survives refusal").toBe(true);
+  } finally { await j.close(); }
+}, 60_000);
+
+test("JM H01/H13 hide one document, inspect another and reopen the first named Work history", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    expect(await j.cells().at(["flows", "4"]).stage({ cfm: 240 }, { label: "Terminal A design airflow" })).toBeNull();
+    await j.ready();
+    const firstKey = j.m.owner()!.scope.key;
+    j.m.release();
+    const other = j.mount(false, { work: { address: path.replace("Chadds", "Other") as typeof path, open: ref } });
+    await vi.waitFor(() => expect(other.owner()?.absent).toBe(true));
+    expect(other.owner()!.scope.key, "H01: a second document acquires its own Work").not.toEqual(firstKey);
+    expect(j.m.owner()!.scope.key, "H01: a hidden Place cannot acquire the active document's Work").toEqual(firstKey);
+    other.dispose();
+    const reopened = j.mount();
+    await vi.waitFor(() => expect(reopened.owner()?.ready).toBe(true));
+    expect(reopened.owner()!.scope.key).toEqual(firstKey);
+    expect(reopened.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 240 });
+    expect(JSON.stringify(reopened.journal()), "H13: cold reopening retains the human action label").toContain("Terminal A design airflow");
+  } finally { await j.close(); }
+}, 60_000);
+
+test("JM H12 leave a Page with drawn cells, inspect it, and refuse both old edits and native planning", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const cell = j.cells().at(["flows", "4"]), before = structuredClone(j.m.owner()!.doc);
+    const receipts = (await j.journal.list()).length;
+    j.depart();
+    expect(j.m.value().value, "H12: departure preserves inspection").toBeDefined();
+    expect(await cell.stage({ cfm: 700 }, { label: "Late airflow" }), "H12: captured cell cannot write after departure").toMatchObject({ code: "refused" });
+    await expect(j.m.action("losses").plan(), "H12: departure cannot acquire a new native plan").rejects.toThrow("Place");
+    expect(j.m.owner()!.doc).toEqual(before);
+    expect((await j.journal.list()).length, "H12: neither path submits a native action").toBe(receipts);
+  } finally { await j.close(); }
+}, 60_000);
+
+test("JM H30 refuse a stale drawn edit and retain its original intent across refresh", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const old = j.cells().at(["flows", "4"]);
+    expect(await j.cells().at(["flows", "999"]).stage({ cfm: 300 }, { label: "Newer sibling edit" })).toBeNull();
+    await j.ready();
+    const before = structuredClone(j.m.owner()!.doc);
+    expect(await old.stage({ cfm: 731 }, { label: "Keep my original airflow" })).toMatchObject({ code: "refused" });
+    await j.ready();
+    expect(j.m.owner()!.doc, "H30: stale intent never recomputes on newer Work").toEqual(before);
+    expect(JSON.stringify(j.m.journal()), "H30: rejected input remains inspectable until explicit discard").toContain("Keep my original airflow");
+  } finally { await j.close(); }
 }, 60_000);

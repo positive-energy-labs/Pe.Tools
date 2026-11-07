@@ -8,7 +8,8 @@ import { makeAtomRegistry } from "../shell/owner";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { route, localId } from "./typed-route";
 import { module as fans } from "../fans/route";
-import { PictureBody } from "../ducts/sheet/mount";
+import { PictureBody, RosterBody } from "../ducts/sheet/mount";
+import { SubjectDoor, typedSubjectDoor } from "../shell/subject";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 const io = vi.hoisted(() => ({ call: vi.fn(), orbit: null as Scene3DProps["orbit"] | null }));
 vi.mock("#/host/client", () => ({ callHostRpc: io.call }));
@@ -43,34 +44,7 @@ const observers = new Map<Element, ResizeObserverCallback>();
 afterEach(() => { cleanup(); observers.clear(); io.call.mockReset(); vi.unstubAllGlobals(); });
 
 test("JZ H04 typed Fans picture demands exact elements and reach, refuses document-only detail and replaces document authority", async () => {
-  vi.stubGlobal("ResizeObserver", class {
-    constructor(private callback: ResizeObserverCallback) {}
-    observe(element: Element) { observers.set(element, this.callback); }
-    disconnect() {}
-  });
-  io.call.mockImplementation(() => new Promise(() => {}));
-  const spec = route({ ...fans.spec, edits: undefined });
-  const registry = makeAtomRegistry();
-  const stamp = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
-  const mounts: ReturnType<typeof mountTypedRoute>[] = [];
-  const open = (openId: string, empty = false) => {
-    const mount = mountTypedRoute(spec, {
-      target: { kind: "document", ref: { session: "h04", openId } }, fixture: null,
-      work: { address: null, open: null },
-      address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
-      custody: { current: () => true }, memory: () => ({}),
-    }, stamp, { sources: { "fans.sheet": { kind: "use", open(ctx, deliver) {
-      const packet = structuredClone(fans.spec.core!.source.provide!("layout", ctx.args));
-      const data = packet.value!.data as any;
-      data.sheetSnapshot.sourceVersion = `h04-${openId}`;
-      if (empty) { data.sheetSnapshot.nodes = []; data.sheetSnapshot.segments = []; data.open = null; data.opened = []; data.rows = []; data.fans.rows = []; }
-      deliver({ kind: "complete", value: packet, revision: 1 });
-    } } } });
-    mounts.push(mount); mount.subscribe(() => {}); mount.page.subject({ kind: "ids", ids: [localId("ducts-fan", "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001@2")] });
-    return mount;
-  };
-  const tree = (mount: ReturnType<typeof open>) => <TestAttention registry={registry}>{mount.draw("sheet-picture", ctx => <PictureBody ctx={ctx as any} />) as React.ReactNode}</TestAttention>;
-  const resize = () => act(() => { for (const [target, callback] of observers) callback([{ target, contentRect: { width: 640, height: 480 } } as ResizeObserverEntry], {} as ResizeObserver); });
+  const { open, tree, resize, mounts, registry } = pictureJourney();
   try {
     const a = open("a");
     await waitFor(() => expect(a.value(), JSON.stringify(a.value())).toMatchObject({current:true}));
@@ -104,5 +78,73 @@ test("JZ H04 typed Fans picture demands exact elements and reach, refuses docume
     expect(view.queryByRole("button", { name: "Read detailed" }), "H04: no element scope offers no detail action").toBeNull();
     await act(async () => {});
     expect(io.call.mock.calls.length, "H04: a document without elements never authorizes detail").toBe(before);
+  } finally { cleanup(); mounts.forEach(m => m.dispose()); registry.dispose(); }
+});
+
+function pictureJourney() {
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(private callback: ResizeObserverCallback) {}
+    observe(element: Element) { observers.set(element, this.callback); }
+    unobserve(element: Element) { observers.delete(element); }
+    disconnect() {}
+  });
+  io.call.mockImplementation(() => new Promise(() => {}));
+  const spec = route({ ...fans.spec, edits: undefined });
+  const registry = makeAtomRegistry();
+  const stamp = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
+  const mounts: ReturnType<typeof mountTypedRoute>[] = [];
+  const open = (openId: string, empty = false) => {
+    const mount = mountTypedRoute(spec, {
+      target: { kind: "document", ref: { session: "h04", openId } }, fixture: null,
+      work: { address: null, open: null },
+      address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+      custody: { current: () => true }, memory: () => ({ viewport: { kind: "orbit", yaw: 225, elev: 32, zoom: 1, pivot: [0, 0, 0] } }),
+    }, stamp, { sources: { "fans.sheet": { kind: "use", open(ctx, deliver) {
+      const packet = structuredClone(fans.spec.core!.source.provide!("layout", ctx.args));
+      const data = packet.value!.data as any;
+      data.sheetSnapshot.sourceVersion = `h04-${openId}`;
+      if (empty) { data.sheetSnapshot.nodes = []; data.sheetSnapshot.segments = []; data.open = null; data.opened = []; data.rows = []; data.fans.rows = []; }
+      deliver({ kind: "complete", value: packet, revision: 1 });
+    } } } });
+    mounts.push(mount); mount.subscribe(() => {}); mount.page.subject({ kind: "ids", ids: [localId("ducts-fan", "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001@2")] });
+    return mount;
+  };
+  const tree = (mount: ReturnType<typeof open>) => <TestAttention registry={registry}>{mount.draw("sheet-picture", ctx => <PictureBody ctx={ctx as any} />) as React.ReactNode}</TestAttention>;
+  const resize = () => act(() => { for (const [target, callback] of observers) callback([{ target, contentRect: { width: 640, height: 480 } } as ResizeObserverEntry], {} as ResizeObserver); });
+  return { open, tree, resize, mounts, registry };
+}
+
+test("JM B03/B14/B18 named Fans roster and a live gesture survive typed Page projections", async () => {
+  const { open, tree, resize, mounts, registry } = pictureJourney();
+  try {
+    const a = open("jm-pose");
+    await waitFor(() => expect(a.value().current).toBe(true));
+    const view = render(tree(a)); resize();
+    await waitFor(() => expect(io.orbit?.read()).not.toBeNull());
+    const orbit = io.orbit!;
+    const pose: import("../scene/orbit").OrbitViewport = { kind: "orbit", yaw: 170, elev: 17, zoom: 2, pivot: [0, 0, 0] };
+    const gesture = orbit.begin();
+    const committed = a.page.read().viewport;
+    act(() => orbit.preview(gesture, pose));
+    expect(a.page.read().viewport, "B14: pointer preview does not publish Page or recompute route reads").toEqual(committed);
+    view.rerender(tree(a)); resize();
+    expect(io.orbit, "B18: equal typed Page projection retains the camera owner").toBe(orbit);
+    expect(orbit.owns(gesture), "B18: resize does not interrupt an uncommitted gesture").toBe(true);
+    expect(orbit.read(), "B18: resize and projection preserve the uncommitted pose").toEqual(pose);
+    act(() => orbit.end(gesture));
+    expect(a.page.read().viewport, "B18: gesture release commits the same pose into Page").toEqual(pose);
+    const roster = render(<TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(a)}>
+      {a.draw("sheet-roster", ctx => <RosterBody ctx={ctx as any} />) as React.ReactNode}
+    </SubjectDoor></TestAttention>);
+    expect(roster.getByRole("combobox", { name: "Search fans" }), "B03: Fans keeps its own named roster").toBeTruthy();
+    expect(roster.queryByRole("button", { name: "Choose fan" }), "B03: a route roster has no duplicate picker").toBeNull();
+    expect(roster.container.textContent, "B03: readable identity never prints encoded subject ids").not.toContain("9cb9f188-28aa-4094-8b76");
+    fireEvent.click(roster.getByRole("button", { name: "All fans" }));
+    expect(a.page.read().fan, "B03: All remains symbolic").toEqual({ kind: "all" });
+    act(() => typedSubjectDoor(a)!.add([localId("ducts-fan", "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001@2")]));
+    expect(a.page.read().fan, "B03: additive open never narrows All").toEqual({ kind: "all" });
+    fireEvent.click(roster.getByRole("button", { name: "Clear fans" }));
+    expect(a.page.read().fan, "B03: None remains explicit").toEqual({ kind: "ids", ids: [] });
+    roster.unmount();
   } finally { cleanup(); mounts.forEach(m => m.dispose()); registry.dispose(); }
 });
