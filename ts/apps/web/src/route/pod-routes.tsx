@@ -4,7 +4,7 @@ import { message, type PodRouteDescriptor } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { registerTypedRoute } from "../shell/route-registration";
-import { loadPodRoute } from "./pod-artifact";
+import { loadPodRoute } from "./pod-module";
 import { createPodRouteLoader } from "./pod-loader";
 
 import {PodRoutesContext} from "./pod-route-context";

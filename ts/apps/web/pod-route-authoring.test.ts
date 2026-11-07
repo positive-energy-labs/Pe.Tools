@@ -75,7 +75,7 @@ test("typed Pod bytes register through the builtin door; changed bytes never acq
   const {resolve}=await import("node:path");
   const {createJiti}=await import("jiti");
   const {podRouteSkeleton}=await import("./src/route/pod-skeleton.ts");
-  const {loadPodRoute}=await import("./src/route/pod-artifact.ts");
+  const {loadPodRoute}=await import("./src/route/pod-module.ts");
   const {admitPodArtifact:hostAdmit}=await import("../host/src/pod-artifact.ts");
   const {registerTypedRoute}=await import("./src/shell/route-registration.ts");
   const {publicRoutes}=await import("./src/route/route-discovery.ts");
