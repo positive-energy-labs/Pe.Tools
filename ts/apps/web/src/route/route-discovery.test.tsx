@@ -10,11 +10,16 @@ vi.mock("../routes/__root", async () => {
   return { Route: createRootRoute() };
 });
 beforeAll(() => publicRoutesReady);
-test("every admitted builtin is discoverable once with a hosted mount and no legacy graph", () => {
+test("every builtin is discoverable once with its native or admitted authority and a hosted mount", () => {
   for (const key of builtinRouteKeys) {
     const entries = publicRoutes.entries().filter(({ manifest }) => manifest.key === key);
     expect(entries, key).toHaveLength(1);
-    expect(entries[0]!.admitted?.data.key).toBe(key);
+    if (key === "fans" || key === "ducts") {
+      const registered = publicRoutes.byAddress(`/${key}`);
+      expect(registered && "typed" in registered && registered.typed.spec.key).toBe(key);
+      expect(entries[0]!.admitted).toBeUndefined();
+    } else expect(entries[0]!.admitted?.data.key).toBe(key);
+    expect(publicRoutes.declaration(key)?.key).toBe(key);
     expect(entries[0]!.graph).toBeUndefined();
     expect(entries[0]!.hosted).toBeTypeOf("function");
     expect(legacyRouteDiscovery.get(key)).toBeUndefined();
