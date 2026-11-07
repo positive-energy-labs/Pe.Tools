@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { observeResources } from "@pe/runtime";
-import { workFingerprintSchema } from "@pe/agent-contracts";
+import { workFingerprintSchema, actionReceiptSchema } from "@pe/agent-contracts";
 import { fixture, ref, path, gate, snapshot } from "../../../host/tests/host-read-graph.test-support";
 import { module as fans } from "../fans/route";
 import { localId } from "./typed-route";
@@ -50,7 +50,7 @@ import { NodeServices, NodeHttpClient } from "../../../host/tests/family-attach-
 
 const trace = z.array(z.object({ name: z.string(), args: z.unknown() }));
 
-test("JM H05/B05 dirty a watched host publication, hide it, then return for a fresh answer", async () => {
+test("JZ Plan fingerprint: reconnect and hide preserve sealed inputs; changed Work stales review", async () => {
   const j = await journey();
   const streams = new Set<{ close(): void }>();
   let mounted: ReturnType<typeof mountTypedRoute> | undefined;
@@ -91,8 +91,23 @@ test("JM H05/B05 dirty a watched host publication, hide it, then return for a fr
     const source = publicationSource({ read: (ctx, publication, release) => j.host.send(publication.generation,
       (ctx.args as { fan: string[] }).fan, undefined, publication.subscription, release) });
     const row = j.mount.value(fans.spec.reads!.roster).value.rows.find((row: { mark: string }) => row.mark === "MUAS-1")!;
-    mounted = mountTypedRoute(fans, { ...j.input, memory: () => ({ fan: { kind: "ids", ids: [localId("ducts-fan", `${row.uniqueId}@${row.portIndex}`)] } }) }, j.fingerprint,
-      { work: j.work, sources: { "fans.sheet": source } });
+    for (const route of ["fans", "ducts"])
+      expect((await j.host.workspace.start(bindWork(route, path, undefined, ref), {}, "human")).ok).toBe(true);
+    const work = createWorkFeedClient(
+      { subscribe: observeResources(j.host.workspace, { observe: () => () => {} }), dirty() {} },
+      { write: (key, write) => j.host.workspace.write(key, key.route, "human", write),
+        // Native preview is recorded; publications and Work use the real host graph.
+        submit: async command => actionReceiptSchema.parse({ ...command, state: "succeeded",
+          steps: [], prepared: { state: "unprepared" }, recovery: [],
+          caller: { kind: "human", via: "local" }, basis: null, startedAt: new Date().toISOString(),
+          result: { previewOnly: true, takenAt: "2026-11-07T00:00:00Z",
+            seal: { caller: { kind: "human", via: "local" }, requestHash: "sealed", work: { handle: command.input.work },
+              documentMark: { ...ref, observedSince: 1, changedAt: 10 }, incarnation: {}, dependencies: "exact" },
+            response: { writes: [{ id: row.unitId, kind: "equipment-flow", outcome: "planned", before: "880 cfm", after: "925 cfm" }],
+              counts: { planned: 1, written: 0, refused: 0, unchanged: 0 } } } }) });
+    const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "fans")!.closure.fingerprint}`);
+    mounted = mountTypedRoute(fans, { ...j.input, memory: () => ({ fan: { kind: "ids", ids: [localId("ducts-fan", `${row.uniqueId}@${row.portIndex}`)] } }) }, fingerprint,
+      { work, sources: { "fans.sheet": source } });
     mounted.subscribe(() => {});
     await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
     await vi.waitFor(() => expect(streams.size).toBeGreaterThan(0));
@@ -103,23 +118,39 @@ test("JM H05/B05 dirty a watched host publication, hide it, then return for a fr
     expect(mounted.value(), "H05: a host dirty event immediately withdraws current authority").toMatchObject({ current: false, value: before });
     held.release.resolve();
     await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
-    const retainedStreams = [...streams];
-    mounted.release();
-    // Pane retention keeps publication identity for sealed Plans; only disposal closes inputs.
-    expect([...streams], "H05: hiding retains the original watched publications").toEqual(retainedStreams);
-    const calls = j.host.nativeCalls;
-    held = j.host.holdNative();
-    j.host.changed();
-    await held.entered.promise;
-    expect(mounted.value(), "H05: hidden host invalidation still withdraws current authority").toMatchObject({ current: false });
-    held.release.resolve();
+    await vi.waitFor(() => expect(mounted!.work(), mounted!.problem() ?? "Work ready").not.toBeNull());
+    const key = mounted.work()!.handle.key;
+    const staged = await j.host.workspace.apply(key, "fans", "human", [
+      { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: row.unitId, portIndex: row.portIndex } } } } },
+      { path: ["equipmentFlows", String(row.unitId), "edit"], value: { value: { cfm: 925, source: "test" } } },
+    ], mounted.work()!.revision);
+    expect(staged.ok).toBe(true);
+    mounted.refresh();
     await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
-    expect(j.host.nativeCalls, "B05: retained hidden inputs refresh the dirtied host basis").toBeGreaterThan(calls);
-    const refreshedCalls = j.host.nativeCalls;
+    await mounted.action("losses").plan();
+    expect(mounted.review("losses")).toMatchObject({ stale: false, preview: expect.anything() });
+    const sealed = mounted.value().publication!;
+    // Reopening a source creates a new subscription/consumption, as on page reload.
+    mounted.refresh();
+    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    expect(mounted.value().publication!.inputs).not.toBe(sealed.inputs);
+    expect(mounted.value().publication!.data).toEqual(sealed.data);
+    expect(mounted.review("losses"), "identical sealed inputs remain Apply-eligible after reconnect").toMatchObject({ stale: false, preview: expect.anything() });
+    expect(mounted.writeRefusal()).toBeNull();
+    mounted.release();
+    await vi.waitFor(() => expect(streams.size, "B05: hiding releases streams").toBe(0));
     mounted.subscribe(() => {});
     await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
-    expect(j.host.nativeCalls, "B05: return keeps the refreshed publication without reacquisition").toBe(refreshedCalls);
-    expect([...streams], "B05: return preserves publication subscriptions").toEqual(retainedStreams);
+    expect(mounted.review("losses"), "show reacquires identical inputs without retiring the Plan").toMatchObject({ stale: false, preview: expect.anything() });
+    expect(mounted.writeRefusal()).toBeNull();
+    const changed = await j.host.workspace.apply(key, "fans", "human", [
+      { path: ["equipmentFlows", String(row.unitId), "edit"], value: { value: { cfm: 950, source: "test" } } },
+    ], mounted.work()!.revision);
+    expect(changed.ok).toBe(true);
+    mounted.refresh();
+    await vi.waitFor(() => expect(mounted!.value().current).toBe(true), { timeout: 20_000 });
+    expect(mounted.review("losses")).toMatchObject({ stale: true, rows: [], cells: [] });
+    await expect(mounted.action("losses").apply()).rejects.toThrow(/stale/i);
     mounted.dispose();
     await vi.waitFor(() => expect(streams.size, "H05: disposal closes watched inputs").toBe(0));
   } finally { held?.release.resolve(); mounted?.dispose(); streams.forEach(stream => stream.close()); vi.unstubAllGlobals(); await j.close(); }

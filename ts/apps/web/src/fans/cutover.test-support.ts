@@ -1,4 +1,5 @@
 import { systemList } from "@pe/ducts-domain/system-list";
+import { createHash } from "node:crypto";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { pricingResult } from "@pe/ducts-domain/pricing-result";
 import { ductsDesign, ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-contracts";
@@ -194,7 +195,8 @@ export async function createWitness(
             state: "current",
             value: {
               data,
-              evaluation: `fixture:${version}`,
+              // Mirror host content identity; reopening a recorded source restarts its frame counter.
+              evaluation: createHash("sha256").update(JSON.stringify(data)).digest("hex"),
               inputs: "fixture",
               origin: { kind: "fixture", name: "cutover" },
               trace: [],
