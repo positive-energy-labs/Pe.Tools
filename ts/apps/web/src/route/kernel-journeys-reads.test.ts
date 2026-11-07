@@ -257,3 +257,58 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
     await j.close();
   }
 }, 60_000);
+
+test("JZ H19 wait beyond the browser budget, then inspect queue and conflict refusals without retry", async () => {
+  const { HOST_READ_WAIT_S, NATIVE_READ_WAIT_S } = await import("./waits");
+  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const { makeCallRoute } = await import("../../../host/src/call-route");
+  const { BridgeError } = await import("../../../host/src/bridge");
+  const { detachedBridge, testHostInputs } = await import("../../../host/tests/effect-test");
+  const { serveRoutes } = await import("../../../host/tests/real-server");
+  const { Effect, Layer } = await import("effect");
+  const j = await journey();
+  let held: ReturnType<typeof gate> | undefined;
+  try {
+    await j.ready();
+    const roster = await j.host.send(100, []);
+    const row = roster.value!.data.fans.rows.find(row => row.mark === "MUAS-1")!;
+    held = j.host.holdNative();
+    j.mount.page.subject({ kind: "ids", ids: [localId("ducts-fan", `${row.uniqueId}@${row.portIndex}`)] });
+    await held.entered.promise;
+    const calls = j.host.nativeCalls;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await vi.advanceTimersByTimeAsync((Math.max(HOST_READ_WAIT_S, NATIVE_READ_WAIT_S) + 1) * 1000);
+    expect(j.host.nativeCalls, "H19: browser waiting does not duplicate native dispatch").toBe(calls);
+    expect(j.mount.value(), "H19: slow read is still pending").toMatchObject({ current: false, status: "pending" });
+    vi.useRealTimers();
+    held.release.resolve();
+    await j.ready();
+    expect(j.mount.value().current, "H19: original late answer lands").toBe(true);
+    const f = await nativeFixture();
+    try {
+      let attempts = 0;
+      const { ActionJournal } = await import("../../../host/src/action-journal");
+      const queueJournal = new ActionJournal(`${j.host.dir}/queue.json`, Date.now);
+      const server = await serveRoutes(makeCallRoute(queueJournal, undefined, {}, { dispatch: () => {
+        attempts++;
+        return Effect.fail(new BridgeError("queue refused before send", 423, { notDispatched: true, nativeOutcome: "RefusedQueueUnresponsive" }));
+      } }).pipe(Layer.provide(testHostInputs)), detachedBridge());
+      try {
+        const response = await fetch(`${server.base}/call`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "pod.list" }) });
+        expect(response.status).toBe(423);
+        expect(await response.json()).toMatchObject({ nativeOutcome: "RefusedQueueUnresponsive", notDispatched: true });
+        expect(response.headers.get("retry-after"), "H19: no blind queue retry instruction").toBeNull();
+        expect(attempts).toBe(1);
+      } finally { await server.close(); await queueJournal.close(); }
+      const work = { key: f.key, revision: 0 };
+      const changed = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } }], 0);
+      expect(changed.ok).toBe(true);
+      const response = await f.post("/actions", { id: "jz-conflict", key: "ducts.apply-losses", target: f.target, input: { work } });
+      expect(response.ok).toBe(true);
+      const receipt = await f.journal.wait("jz-conflict");
+      expect(receipt.state, "H19: original stale revision is refused").not.toBe("succeeded");
+      expect(f.dispatched, "H19: conflict cannot retry native mutation").toEqual([]);
+      expect((await f.journal.list()).filter(row => row.key === "ducts.apply-losses")).toHaveLength(1);
+    } finally { await f.close(); }
+  } finally { vi.useRealTimers(); held?.release.resolve(); await j.close(); }
+}, 60_000);

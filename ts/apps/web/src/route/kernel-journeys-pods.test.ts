@@ -198,3 +198,46 @@ test("JP2 reject tampered deliveries and replaced Pod bytes until their new publ
     expect(String(replaced.draw("calculation")), "H16: explicit trust admits the replacement publication").toContain("Copper voltage-drop worksheet");
   } finally { await j.close(); }
 }, 60_000);
+
+// H29 exercises the surviving sealed-Plan authority through the real HTTP action handler.
+test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", async () => {
+  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const { pea } = await import("../../../host/tests/callers");
+  const f = await nativeFixture();
+  try {
+    for (const caller of [pea("review-owner"), { kind: "external-mcp" as const, label: "foreign", context: "jz-external" }]) {
+      const response = await f.post("/call", { key: "rhvac.launch", request: { path: "review.r10" } }, caller);
+      expect(response.status, "H29: RPC refuses non-human binding").toBe(403);
+      expect(await response.json()).toMatchObject({ notDispatched: true });
+    }
+    const staged = await f.saved.apply(f.key, "ducts", "human", [
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } },
+    ], 0);
+    expect(staged.ok).toBe(true);
+    if (!staged.ok) throw Error("Stage refused");
+    const work = { key: f.key, revision: staged.revision };
+    const plan = await f.post("/actions", { id: "jz-plan", key: "ducts.plan-losses", target: f.target, input: { work } });
+    expect(plan.ok).toBe(true);
+    const preview = await f.journal.wait("jz-plan");
+    expect(preview.state, JSON.stringify(preview)).toBe("succeeded");
+    if (preview.state !== "succeeded") throw Error(JSON.stringify(preview));
+    const foreign = await f.post("/actions", { id: "jz-foreign", key: "ducts.apply-losses", target: f.target,
+      input: { work } }, { kind: "human", via: "cli", login: "review-thief" });
+    expect(foreign.ok).toBe(true);
+    const refused = await f.journal.wait("jz-foreign");
+    expect(refused.state, "H29: another caller cannot borrow the human Plan").not.toBe("succeeded");
+    expect(f.dispatched.filter(row => row.key === "ducts.apply")).toEqual([]);
+    const forged = await f.post("/actions", { id: "jz-forged", key: "ducts.apply-losses", target: f.target,
+      input: { work, seal: { forged: true }, reviewTicket: "invented" } }, pea("forger"));
+    expect(forged.ok).toBe(true);
+    expect((await f.journal.wait("jz-forged")).state, "H29: payload cannot manufacture a Plan").not.toBe("succeeded");
+    const changed = await f.saved.apply(f.key, "ducts", "human", [
+      { path: ["writeIntent", "edit"], value: { value: { groups: ["g2"] } } },
+    ], staged.revision);
+    expect(changed.ok).toBe(true);
+    const stale = await f.post("/actions", { id: "jz-stale", key: "ducts.apply-losses", target: f.target, input: { work } });
+    expect(stale.ok).toBe(true);
+    expect((await f.journal.wait("jz-stale")).state, "H29: changed Work withdraws the old review").not.toBe("succeeded");
+    expect(f.dispatched.filter(row => row.key === "ducts.apply"), "H29: no refused attempt writes native").toEqual([]);
+  } finally { await f.close(); }
+}, 60_000);
