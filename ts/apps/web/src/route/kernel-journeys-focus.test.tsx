@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { journey as takeoffJourney, Drawing as TakeoffDrawing } from "../takeoff/adoption.test.fixture";
+import { adoptionData } from "@pe/agent-contracts/takeoff-read";
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -72,3 +74,41 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
   press(screen.getByRole("button", { name: "jz-a focus" }));
   expect(undo.map(spy => spy.mock.calls.length), "B02: hidden B cannot steal undo").toEqual([2, 1]);
 });
+
+
+test("JZ H01 H17 saved takeoff choice preserves authored Work and live Initialize while History captures", async () => {
+  const j = await takeoffJourney();
+  try {
+    await j.ready();
+    expect((await j.host.journal.list()).some(row => row.key === "work.start" && row.state === "succeeded"), "ordinary Start crossed the real /actions handler").toBe(true);
+    const originalWork = j.mount.owner()!.handle;
+    expect(originalWork).toBeTruthy();
+    render(<TakeoffDrawing mount={j.mount} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose views" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Zoning plan" }));
+    await waitFor(() => expect(j.mount.value().current).toBe(true), {timeout:20000});
+    await waitFor(() => expect(j.mount.owner()?.ready || j.mount.owner()?.absent).toBe(true));
+    expect(j.mount.owner()!.handle, "H01: view choice cannot select another Work through serialized Page fields").toEqual(originalWork);
+    await j.ready();
+    const capture = adoptionData.parse(j.mount.value().value).captures[0]!;
+    fireEvent.click(screen.getByRole("button", { name: "Choose capture" }));
+    const option = (await screen.findAllByRole("option")).find(row => row.textContent?.includes(capture.capturedAt));
+    expect(option, "choose this exact saved capture").toBeTruthy();
+    fireEvent.click(option!);
+    await waitFor(() => expect(j.mount.value().current).toBe(true), {timeout:20000});
+    await waitFor(() => expect(j.mount.owner()?.ready || j.mount.owner()?.absent).toBe(true));
+    expect(screen.getByText(/Archived takeoff/)).toBeTruthy();
+    expect(j.mount.owner()!.handle, "H01: a saved-evidence id cannot select another Work").toEqual(originalWork);
+    expect(j.host.inputs.source).toMatchObject({capturing:true});
+    fireEvent.click(screen.getByRole("button", {name:"live"}));
+    await j.ready();
+    await screen.findByRole("checkbox", {name:"Select Office zone in Zoning plan"});
+    expect(j.mount.owner()!.handle).toEqual(originalWork);
+    expect((screen.getByRole("button", {name:"initialize"}) as HTMLButtonElement).disabled, "H17: live readiness uses the current document and its original Work").toBe(false);
+    expect(j.mount.value().value.initialize.refusal).toBeNull();
+    expect(j.host.inputs.source).toMatchObject({capturing:true});
+    expect(j.host.inputs.lane.kind).toBe("live");
+    if(j.host.inputs.lane.kind === "live")
+      expect(j.host.inputs.lane.captureStore!.capture.truncated(), "zero capture stops").toBeNull();
+  } finally { await j.close(); }
+}, 60000);
