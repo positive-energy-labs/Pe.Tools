@@ -65,6 +65,8 @@ export type ReadingPublication<T = unknown> =
   | { kind: "log"; value: unknown; id?: string };
 
 export interface ReadingContext extends ReadingScope {
+  readonly historyPoint?: string;
+  readonly historyPose?: import("@pe/agent-contracts").HistoryPose;
   readonly publication?: { readonly subscription: string; readonly generation: number };
   readonly attempt: ReadingAttempt;
   /** Sources subscribe on demand; an expensive capture starts only for an explicit invocation. */

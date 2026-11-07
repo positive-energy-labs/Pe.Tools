@@ -11,6 +11,8 @@ export type PlaceInput = Readonly<{
   work: Readonly<{ address: Address | null; open: DocumentRef | null }>;
   custody: Readonly<{ current(): boolean }>;
   memory(this: void): unknown;
+  history?: import("./history.ts").HistorySnapshot;
+  readOnly?: boolean;
 }>;
 
 type Disposable = { dispose(): void };

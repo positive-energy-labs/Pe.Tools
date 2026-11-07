@@ -1443,6 +1443,8 @@ const addPeHttpRoutes = (router: HttpRouter.HttpRouter,
     yield* router.add(route.method, route.path, (request) => Effect.gen(function* () {
       const context = yield* Effect.context<RequestIdentityKey>();
       const declared = matchPeRoute(request.method, new URL(request.originalUrl, "http://host").pathname)!;
+      if (request.headers["x-pe-history-point"] && ![...graphRouteIds, "features.get", "capabilities.list"].includes(declared.id))
+        return yield* new InvalidRead({ message: "needs live Revit", status: 409, problem: "history.read-only" });
       const denied = historicalPeRefusal(inputs, request.method, declared.id);
       if (denied) return yield* denied;
       let failure: import("@pe/host-internal/request-contracts").DoorFailure | undefined;

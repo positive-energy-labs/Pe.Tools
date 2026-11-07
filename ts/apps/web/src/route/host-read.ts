@@ -64,7 +64,10 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
                     target: context.target.ref,
                   },
                 },
-              } as never),
+              } as never, {
+                ...(context.historyPoint ? { "x-pe-history-point": context.historyPoint } : {}),
+                ...(context.historyPose ? { "x-pe-history-page": encodeURIComponent(JSON.stringify(context.historyPose)) } : {}),
+              }),
             );
           },
         }).open(ctx, deliver);

@@ -44,3 +44,4 @@ export { subjectSchema } from "./route-kernel-codecs.ts";
 export { workFeedFailureMessage } from "./work-journal-door.ts";
 export type { WorkFeedFailure } from "./work-journal-door.ts";
 export { presentationSchema } from "./route-kernel-bodies.ts";
+export * from "./history.ts";

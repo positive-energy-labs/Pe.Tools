@@ -7,7 +7,7 @@ import {
 import { fansSheet } from "./fans.ts";
 import { fanRoster, ductSheet } from "./fan-sheet.ts";
 import { ductsRoster, ductsNetwork, ductsPricing } from "./ducts.ts";
-import { evaluate, type InputPort, type Read, type Publications } from "./evaluator.ts";
+import { evaluate, fingerprint, type InputPort, type Read, type Publications, type Publication } from "./evaluator.ts";
 
 export const graphRouteIds = ["fans.sheet", "ducts.read", "ducts.roster", "ducts.sheet"];
 function bind<I, O>(
@@ -22,12 +22,14 @@ function bind<I, O>(
 ) {
   return {
     name: definition.name,
+    key: fingerprint([definition.name, definition.input.parse(args)]),
     args,
     publication,
     readSet: publication?.readSet,
     evaluate: async (port: InputPort) => (await evaluate(definition, args, port)).data,
-    publish: (owner: Publications, id: string, generation: number, port: InputPort) =>
-      owner.publish(id, generation, definition, args, port),
+    publish: (owner: Publications, id: string, generation: number, port: InputPort,
+      keep?: (publication: Publication<O>) => Promise<() => void>) =>
+      owner.publish(id, generation, definition, args, port, keep),
   };
 }
 /** HTTP adapters select a read; composition and freshness belong to the evaluator. */
