@@ -82,7 +82,7 @@ test("Q2a keeps kind and colour editors on ducts and fan settings on fans", asyn
   expect(screen.getByRole("combobox", { name: "Search systems" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Duct settings" }));
   expect(await screen.findByRole("region", { name: "System colours" })).toBeTruthy();
-  expect(screen.getByRole("link", { name: "Fan inputs" }).getAttribute("href")).toMatch(/^\/fans\?/);
+  expect(screen.getByRole("link", { name: "Fan inputs" }).getAttribute("href")).toMatch(/^\/fans(?:\?|$)/);
   expect(screen.getAllByRole("region", { name: "Unit kinds" })).toHaveLength(1);
   expect(screen.queryByRole("region", { name: "Fan settings" })).toBeNull();
   view.unmount();

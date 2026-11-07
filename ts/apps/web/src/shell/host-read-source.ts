@@ -11,8 +11,7 @@ export function hostReadSource(read:HostRead):UseSource {
         if (ctx.signal.aborted) return;
         return publicationSource({
           async read(context, publication, release) {
-            return contract.output.parse(
-              await callCompose(context, contract.endpoint ?? (key as PeRouteId), {
+            return callCompose(context, contract.endpoint ?? (key as PeRouteId), {
                 body: {
                   ...publication,
                   release,
@@ -27,8 +26,7 @@ export function hostReadSource(read:HostRead):UseSource {
               } as never, {
                 ...(context.historyPoint ? { "x-pe-history-point": context.historyPoint } : {}),
                 ...(context.historyPose ? { "x-pe-history-page": encodeURIComponent(JSON.stringify(context.historyPose)) } : {}),
-              }),
-            );
+              });
           },
         }).open(ctx, deliver);
       },
