@@ -5,5 +5,6 @@ type AddressSearch<R extends RouteKey> = ReturnType<ReturnType<typeof routeAddre
 /** The typed mount owns field decoding. Router validation preserves the original search object. */
 export function routeFile<R extends RouteKey>(_route: R) {
   return {validateSearch:(search:SearchSchemaInput & Record<string,unknown>) =>
+    // Exception to no casts: router search types are projected; runtime is identity and Page decodes only in typed-mount.decodePage.
     search as unknown as ReturnType<typeof routeSearch> & AddressSearch<R>};
 }
