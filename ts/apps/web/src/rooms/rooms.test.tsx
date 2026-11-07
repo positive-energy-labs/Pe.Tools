@@ -66,11 +66,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
   const onSelect = vi.fn();
   const view = render(
     <>
-      <RoomsTable
-        rows={rows}
-        onSelect={() => {}}
-        empty={{ says: "empty", exit: "none" }}
-      />
+      <RoomsTable rows={rows} onSelect={() => {}} empty={{ says: "empty", exit: "none" }} />
       <RoomsPlan
         renderPane={(body, furniture) => (
           <Pane picture {...furniture}>
@@ -84,8 +80,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
         empty={null}
         onSelect={onSelect}
         trace={{ data: null, none: "fixture" }}
-        page={page}
-        setPage={() => {}}
+        page={{ read: () => page, pose: () => {} }}
       />
     </>,
   );
