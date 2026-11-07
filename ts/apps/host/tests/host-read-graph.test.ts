@@ -224,6 +224,7 @@ test("History reopens the host's exact publication after newer Values, with no l
     expect(first.state, first.reason).toBe("current");
     const listed = await f.history(`?document=${encodeURIComponent(path)}`);
     expect(listed.points, listed.problem).toHaveLength(1);
+    expect((await f.history(`?document=${encodeURIComponent(path.toUpperCase())}`)).points).toHaveLength(1);
     const point = historyPointSchema.parse(await f.history("", { kind: "captured", document: path }));
     const fan = first.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
     const next = await f.send(1, [`${fan.uniqueId}@${fan.portIndex}`]);

@@ -6,6 +6,8 @@ import {
   historyPoseSchema,
   recordedWorkSchema,
   identityCodecs,
+  sameAddress,
+  addressSchema,
   type HistoryBinding,
   type HistoryPoint,
   type HistoryPose,
@@ -30,8 +32,9 @@ export function localHistory(caller: Caller) {
 }
 const json = (value: unknown) =>
   Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));
+const addressKey = (address: Address) => address.replaceAll("/", "\\").toLowerCase();
 const documentId = (address: Address) => {
-  const result = identityCodecs.document.encode({ document: address });
+  const result = identityCodecs.document.encode({ document: addressKey(address) });
   if (!result.ok) throw fail(result.reason);
   return result.value;
 };
@@ -100,9 +103,9 @@ export class History {
     });
     return () => {
       this.published.set(subscription, kept);
-      this.poses.set(canonicalJson([address, pose.instance]), pose);
+      this.poses.set(canonicalJson([addressKey(address), pose.instance]), pose);
       const basis = canonicalJson([
-        address,
+        addressKey(address),
         value.trace.filter((t) => t.name === "document-mark").map((t) => t.hash),
       ]);
       if (!this.synced.has(basis)) {
@@ -116,18 +119,18 @@ export class History {
     const pose = historyPoseSchema.parse(raw);
     if (
       ![...this.published.values()].some(
-        (p) => p.address === address && p.pose.instance === pose.instance,
+        (p) => sameAddress(p.address, address) && p.pose.instance === pose.instance,
       )
     )
       throw fail("No host publication for this Page");
-    this.poses.set(canonicalJson([address, pose.instance]), immutable(pose));
+    this.poses.set(canonicalJson([addressKey(address), pose.instance]), immutable(pose));
   }
 
   /** Snapshot the ledger now, before queued IO can observe a later publication. */
   private snapshot(address: Address, reason: RecordingPointReason): RecordingPoint {
     if (!this.writer || this.writer.capture.truncated())
       throw fail("History storage is full or unavailable");
-    const slots = [...this.published.values()].filter((p) => p.address === address);
+    const slots = [...this.published.values()].filter((p) => sameAddress(p.address, address));
     if (!slots.length) throw fail("No published Values for this document");
     const end = this.writer.takingCursor();
     return {
@@ -143,7 +146,7 @@ export class History {
         address,
         target: slots.at(-1)!.target,
         poses: [...new Set(slots.map((p) => p.pose.instance))].map(
-          (instance) => this.poses.get(canonicalJson([address, instance]))!,
+          (instance) => this.poses.get(canonicalJson([addressKey(address), instance]))!,
         ),
         publications: slots.map((p) => {
           const latest = this.ledger?.publication(p.binding.subscription);
@@ -237,10 +240,12 @@ export class History {
     if (
       !taking ||
       taking.input.kind !== "publication" ||
-      taking.input.key !== binding.key ||
-      taking.scope !== canonicalJson([point.history.address, instance, read])
+      taking.input.key !== binding.key
     )
       throw fail("Missing published Value");
+    const scope = z.tuple([addressSchema, z.string(), z.string()]).parse(JSON.parse(taking.scope));
+    if (!sameAddress(scope[0], point.history.address) || scope[1] !== instance || scope[2] !== read)
+      throw fail("Published Value belongs to another document or pane");
     const raw = await this.run(this.reader.observation(taking));
     const publication = z
       .object({
