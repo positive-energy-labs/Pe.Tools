@@ -6,4 +6,5 @@ import c3 from "../families/source-closure.generated.json" with {type:"json"};
 import c4 from "../fans/source-closure.generated.json" with {type:"json"};
 import c5 from "../pods/source-closure.generated.json" with {type:"json"};
 import c6 from "../schedules/source-closure.generated.json" with {type:"json"};
-export const builtinClosures={"captures":c0,"chat":c1,"ducts":c2,"families":c3,"fans":c4,"pods":c5,"schedules":c6};
+import c7 from "../settings/source-closure.generated.json" with {type:"json"};
+export const builtinClosures={"captures":c0,"chat":c1,"ducts":c2,"families":c3,"fans":c4,"pods":c5,"schedules":c6,"settings":c7};
