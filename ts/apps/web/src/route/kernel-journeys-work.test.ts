@@ -649,3 +649,36 @@ test("JZ direct query drops a retired Page reply after A-B-A and discloses the r
     expect(j.m.action("audit").failure).toBeNull();
   } finally { held.release.resolve(); await j.close(); }
 }, 60_000);
+
+test("JZ raw Work patch paths and ambiguous operation fields refuse atomically at HTTP", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const before = structuredClone(j.m.owner()!.doc), revision = j.m.owner()!.handle!.revision;
+    const patches = [
+      { path: ["flows", "4"], op: "delete", value: { edit: { value: { cfm: 220 } } } },
+      { path: ["missing"], value: {} },
+      { path: ["flows", "4", "missing"], value: 2 },
+      { path: ["flows", "__proto__"] },
+      { path: ["flows", "constructor"] },
+      { path: ["flows"], value: 2 },
+      { path: ["flows", "4", "edit"], value: { value: { cfm: "wrong" } } },
+      { path: ["designFriction", "edit"], value: { value: "wrong" } },
+    ];
+    const outcomes: Array<{ patch: unknown; accepted: boolean }> = [];
+    for (const patch of patches) {
+      const response = await j.request(peRouteUrl("work.apply", routeInput(j.key().route, j.key())), {
+        kind: "apply", expectedRevision: j.m.owner()!.handle!.revision, press: crypto.randomUUID(), patches: [patch],
+      });
+      const outcome = await response.json();
+      outcomes.push({ patch, accepted: response.ok && outcome.ok === true });
+    }
+    expect(outcomes.filter(row => row.accepted), "No ambiguous, unsafe or ill-typed path is admitted").toEqual([]);
+    await j.ready();
+    expect(j.m.owner()!.doc).toEqual(before);
+    expect(j.m.owner()!.handle!.revision).toBe(revision);
+    expect(await j.cells().at(["flows", "4"]).stage({ cfm: 240 })).toBeNull();
+    await j.ready();
+    expect(j.m.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 240 });
+  } finally { await j.close(); }
+}, 60_000);
