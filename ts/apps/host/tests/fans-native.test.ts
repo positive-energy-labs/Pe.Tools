@@ -215,6 +215,11 @@ test.each(["human", "pea"] as const)("D03/C07: %s plan shares admitted inputs, p
   expect(words.rows.join(" ")).toContain("250 cfm");
   expect(words.rows.join(" ")).toContain("PE_M_Grd_AirFlow");
   expect(words.rows.join(" ")).toContain("grille");
+  // The human must review its own Plan before applying a Pea-derived scope.
+  if (actor === "pea") {
+    await command(f, "human-preview", "ducts.plan-losses", work);
+    expect((await f.journal.wait("human-preview")).state).toBe("succeeded");
+  }
   await command(f, "commit", "ducts.apply-losses", work);
   const receipt = await f.journal.wait("commit");
   expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
@@ -247,8 +252,6 @@ test.each(["reject", "deadline"] as const)(
   async (mode) => {
     const f = await fixture();
     const work = await stage(f);
-    await command(f, "preview", "ducts.plan-losses", work);
-    expect((await f.journal.wait("preview")).state).toBe("succeeded");
     const run = { thread: `fans-${mode}`, turn: "one" };
     f.runs.open(run);
     const caller: Caller = {
@@ -258,6 +261,8 @@ test.each(["reject", "deadline"] as const)(
       run,
       root: run,
     };
+    await command(f, "preview", "ducts.plan-losses", work, caller);
+    expect((await f.journal.wait("preview")).state).toBe("succeeded");
     await command(f, "pea-commit", "ducts.apply-losses", work, caller);
     await vi.waitFor(() =>
       expect(f.events.some((event) => event.kind === "permission_request")).toBe(true),

@@ -60,7 +60,7 @@ test("live MUAS preview/apply seals ignore traversal diagnostics but retain mode
       },
     };
     const projection = executor.seal!(value);
-    return writeSeal({ request: projection.request, input: capture.input, work: capture.work as any, incarnation: capture.incarnation, documentMark: MARK, consumed: capture.dependencies as WriteSealInput["consumed"], evidence: projection.evidence });
+    return writeSeal({ caller: { kind: "human", via: "local" }, request: projection.request, input: capture.input, work: capture.work as any, incarnation: capture.incarnation, documentMark: MARK, consumed: capture.dependencies as WriteSealInput["consumed"], evidence: projection.evidence });
   };
   expect(seal(apply)).toEqual(seal(preview));
   for (const mutate of [
@@ -87,7 +87,7 @@ test.each(writes)("%s seals semantic evidence across permutation/refetch", (key)
   ];
   const seal = (p: unknown, dependencies = consumed, handle = work, intent: unknown = { a: 1 }, incarnation: unknown = { openId: "doc" }) => {
     const projection = executor.seal!(p);
-    return writeSeal({ request: projection.request, input: intent, work: handle, incarnation, documentMark: MARK, consumed: dependencies, evidence: projection.evidence });
+    return writeSeal({ caller: { kind: "human", via: "local" }, request: projection.request, input: intent, work: handle, incarnation, documentMark: MARK, consumed: dependencies, evidence: projection.evidence });
   };
   const baseline = seal(raw);
   for (let seed = 0; seed < 32; seed++) {
@@ -116,7 +116,7 @@ test.each(writes)("%s seals semantic evidence across permutation/refetch", (key)
   };
   expect(mutations(raw).some(changed => JSON.stringify(executor.seal!(changed)) !== JSON.stringify(executor.seal!(raw))), `${key}: projection dropped every semantic fact`).toBe(true);
   const p = executor.seal!(raw);
-  const at = (request: unknown) => writeSeal({ request, input: {}, work, incarnation: {}, documentMark: MARK, consumed: [], evidence: p.evidence });
+  const at = (request: unknown) => writeSeal({ caller: { kind: "human", via: "local" }, request, input: {}, work, incarnation: {}, documentMark: MARK, consumed: [], evidence: p.evidence });
   expect(at([p.request, "a"])).not.toEqual(at(["a", p.request]));
 });
 
@@ -128,7 +128,7 @@ test.each(writes)("%s preview round-trips its public response contract", async (
     value,
     previewOnly: true,
     takenAt: "2026-11-02T15:17:11.675Z",
-    seal: { requestHash: "request", work: {}, documentMark: MARK, incarnation: {}, dependencies: "dependencies" },
+    seal: { caller: { kind: "human", via: "local" }, requestHash: "request", work: {}, documentMark: MARK, incarnation: {}, dependencies: "dependencies" },
   };
   const result = await executor.run(
     {

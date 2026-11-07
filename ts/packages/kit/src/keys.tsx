@@ -6,8 +6,8 @@
  * A node is LIVE when it is not hidden and no node above it is hidden. Focus decides which live
  * node is innermost: a node registers its keys on its own element, so the browser only routes a
  * key to it when focus is inside that element, and the library's `stopPropagation` default means
- * the innermost live binding wins and the ones above it never see the event. The route node has
- * no element — it binds on the document, so a route chord still fires with nothing focused.
+ * the innermost live binding wins and the ones above it never see the event. Typed routes use
+ * `KeyScopeHost`; only unhosted app scopes bind on the document.
  *
  * `useScopeKeys` is the only door. A file that imports `@tanstack/react-hotkeys` to register a
  * chord is a repo-guard red (`tests/repo-guards/src/route-primitive.guard.test.ts`).
@@ -16,6 +16,8 @@ import {
   createContext,
   use,
   useMemo,
+  useRef,
+  useState,
   useLayoutEffect,
   type ReactNode,
   type RefObject,
@@ -27,6 +29,7 @@ import {
   useHotkeys,
   type UseHotkeyDefinition,
 } from "@tanstack/react-hotkeys";
+import { flushSync } from "react-dom";
 
 import { readTeaching } from "./components/lang/teach";
 import { TeachLive, useTeach, useTeachingFacts } from "./components/lang/use-teach";
@@ -66,7 +69,7 @@ interface ScopeNode {
   depth: number;
   /** Not hidden, and nothing above it hidden. A node that is not live binds nothing. */
   live: boolean;
-  /** The element focus must be inside; absent = the document (the route node). */
+  /** The element focus must be inside; absent = the document (an app scope). */
   element?: RefObject<HTMLElement | null>;
 }
 
@@ -104,6 +107,22 @@ export function KeyScope({
 
 /** Whether the innermost scope node is live: a key `available` reads it so a hidden pane binds nothing. */
 export const useScopeLive = (): boolean => use(ScopeContext).live;
+
+/** A route's DOM host also owns focus in its React portals. */
+export function KeyScopeHost({ id, hidden, className, children }: {
+  id: string; hidden?: boolean; className?: string; children: ReactNode;
+}) {
+  const host = useRef<HTMLDivElement>(null);
+  const [portal, setPortal] = useState<HTMLElement | null>(null);
+  const element = useMemo(() => portal ? { current: portal } : host, [portal]);
+  return <KeyScope id={id} hidden={hidden} element={element}>
+    <div ref={host} className={className} onFocusCapture={event => {
+      const target = event.currentTarget.contains(event.target) ? null : event.target as HTMLElement;
+      // Focus and the next key may occur in one turn; portal bindings must already exist.
+      flushSync(() => setPortal(target));
+    }} onBlurCapture={() => flushSync(() => setPortal(null))}>{children}</div>
+  </KeyScope>;
+}
 
 /** One chord a scope node binds. */
 export interface ScopeKey {

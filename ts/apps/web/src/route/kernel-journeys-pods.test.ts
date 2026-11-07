@@ -226,11 +226,11 @@ test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", 
     expect(foreign.ok).toBe(true);
     const refused = await f.journal.wait("jz-foreign");
     expect(refused.state, "H29: another caller cannot borrow the human Plan").not.toBe("succeeded");
+    expect(JSON.stringify(refused)).toContain("preview.caller");
     expect(f.dispatched.filter(row => row.key === "ducts.apply")).toEqual([]);
     const forged = await f.post("/actions", { id: "jz-forged", key: "ducts.apply-losses", target: f.target,
       input: { work, seal: { forged: true }, reviewTicket: "invented" } }, pea("forger"));
-    expect(forged.ok).toBe(true);
-    expect((await f.journal.wait("jz-forged")).state, "H29: payload cannot manufacture a Plan").not.toBe("succeeded");
+    expect(forged.status, "H29: strict admission rejects invented seal and ticket fields").toBe(409);
     const changed = await f.saved.apply(f.key, "ducts", "human", [
       { path: ["writeIntent", "edit"], value: { value: { groups: ["g2"] } } },
     ], staged.revision);
