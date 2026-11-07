@@ -292,16 +292,6 @@ export type PaneContext<
    * and workRevision is the accepted revision. Kernel membership rejects copied bases. */
   readonly workBasis: InvocationToken | null;
   readonly readings: Reads<G, S, E, G["panes"][P]["draws"][number]>;
-  /** Declared explicit geometry readings only. The mount owns invocation and refresh. */
-  readonly readingActions?: {
-    readonly [K in Extract<
-      G["panes"][P]["draws"][number],
-      keyof G["readings"]
-    > as G["readings"][K] extends { geometry: { representation: "detailed" } } ? K : never]: {
-      readDetailed(): void;
-      refresh(): void;
-    };
-  };
   /** Event-only row placement; the mount refuses dispatch during pane draw. */
   readonly place?: G["panes"][P]["verbs"] extends { row: infer R; allowed: readonly (infer V)[] }
     ? (
@@ -309,7 +299,6 @@ export type PaneContext<
         input: unknown,
       ) => Readonly<Partial<Record<Extract<V, string>, () => unknown>>>
     : never;
-  readonly readCosts?: Readonly<Record<string, import("./native-read-door.ts").ReadCost>>;
   readonly visible: boolean;
   /** Presentational Place provenance only; never Target, Work or dispatch authority. */
   readonly fixture: string | null;

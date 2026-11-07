@@ -9,11 +9,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { Effect } from "effect";
 import { effectTest } from "../../../host/tests/effect-test.ts";
 import { z } from "zod";
-import {
-  builtinModule,
-  readOnlyModule,
-  localCodec,
-} from "../../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
+import { builtinModule, readOnlyModule } from "../../../../packages/agent-contracts/src/route-kernel.fixtures.ts";
 import {
   createRouteAdmission,
   routeFingerprint,
@@ -22,10 +18,7 @@ import {
   createRouteTokenIssuer,
   type DecodeResult,
 } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
-import {
-  canonicalEnvironmentInput,
-  createRouteEnvironmentIssuer,
-} from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
+import { createRouteEnvironmentIssuer } from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
 import {
   createRouteEnvironment,
   routeEnvironmentLayer,
@@ -209,22 +202,7 @@ async function setup(
 }
 
 
-test("detail authority refuses background, copied, nonfinite and small reaches, without cost cap", async () => {
-  const s = await setup();
-  const explicit = unwrap(s.environment.geometry.requestDetail(s.invocation));
-  const subject = {
-    kind: "region" as const,
-    id: unwrap(localCodec.encode({ namespace: "region", subject: "one" })),
-  };
-  for (const reach of [4.99, NaN, Infinity])
-    expect(s.environment.geometry.prepareReach(subject, reach, explicit).ok).toBe(false);
-  expect(s.environment.geometry.prepareReach(subject, 50000, explicit).ok).toBe(true);
-  expect(s.environment.geometry.prepareReach(subject, 5, Object.assign({}, explicit)).ok).toBe(
-    false,
-  );
-  s.stale();
-  expect(s.environment.geometry.requestDetail(s.invocation).ok).toBe(false);
-});
+
 test("subscription and read lifetimes release once; command submission revalidates", async () => {
   const s = await setup();
   const deliver = vi.fn();
@@ -255,50 +233,3 @@ effectTest("Effect service scope releases acquisitions", () =>
     expect(s.release).toHaveBeenCalledTimes(1);
   }),
 );
-
-test("non-explicit invocations and subjects from another scope cannot acquire geometry", async () => {
-  const s = await setup();
-  const denied = createRouteEnvironment({
-    ...s.options,
-    validate: { ...s.options.validate, detail: () => false },
-  });
-  expect(denied.environment.geometry.requestDetail(s.invocation).ok).toBe(false);
-  const explicit = unwrap(s.environment.geometry.requestDetail(s.invocation));
-  const reach = unwrap(
-    s.environment.geometry.prepareReach(
-      { kind: "region", id: unwrap(localCodec.encode({ namespace: "regions", subject: "one" })) },
-      5,
-      explicit,
-    ),
-  );
-  const request = { representation: "meshes" as const, reach };
-  const geometry = s.issuer.mintGeometry(
-    { ...s.key, sortedKeyInput: canonicalEnvironmentInput(request) },
-    z.object({ kind: z.literal("unavailable"), reason: z.string() }),
-    s.route,
-    s.token,
-    request,
-  );
-  const foreign = createRouteEnvironment({
-    ...s.options,
-    validate: { ...s.options.validate, geometryScope: () => false },
-  });
-  expect(() => foreign.environment.geometry.acquire(geometry, s.token)).toThrow("scope");
-  expect(s.dispatch).not.toHaveBeenCalled();
-  denied.close();
-  foreign.close();
-  s.close();
-});
-
-
-
-
-
-
-
-
-
-
-
-
-

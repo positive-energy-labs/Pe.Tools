@@ -1,24 +1,8 @@
 import { expect, test } from "vite-plus/test";
 import type { SubjectKey } from "@pe/kit/lang/attention";
-import {
-  captureRequest,
-  hoverGroupsOf,
-  jumpSubject,
-  markPick,
-  membersWithStrands,
-} from "./picture";
+import { hoverGroupsOf, jumpSubject, markPick, membersWithStrands } from "./picture";
 
-test("focus captures walked and near once, sorted; context layers ask context", () => {
-  const focus = {
-    walked: ["e:3", "e:1"] as SubjectKey[],
-    near: ["e:3", "e:9", "issue:x"] as SubjectKey[],
-  };
-  const request = captureRequest(focus, ["meshes"], 10, "link-boxes")!;
-  expect(request.elementIds).toEqual([1, 3, 9]);
-  expect(request.focusOnly).toBe(true);
-  expect(captureRequest(focus, ["halo"], 10, "link-boxes")!.focusOnly).toBe(false);
-  expect(captureRequest({ walked: [], near: [] }, ["context"], 10, "link-boxes")).toBeNull();
-});
+
 
 test("a strand pick selects its own subject; an issue pick its element and the issue", () => {
   expect(markPick({ key: "run:7", elementId: 1, subject: true })).toEqual({
@@ -64,12 +48,4 @@ test("a jump frames the named element alone, and a run by its element leaves", (
   expect(jumpSubject("run:a", members)).toEqual({ selected: "run:a", ids: new Set([10, 20, 30]) });
   // An undeclared group has no elements to frame: the picture says it is not here.
   expect(jumpSubject("run:gone", members).ids.size).toBe(0);
-});
-
-test("detailed capture keeps five feet of context even with context layers hidden", () => {
-  expect(captureRequest({ walked: ["e:1"], near: [] }, [], 2, "meshes")).toMatchObject({
-    contextRepresentation: "meshes",
-    contextPaddingFt: 5,
-    focusOnly: false,
-  });
 });

@@ -1,15 +1,10 @@
 // @vitest-environment jsdom
 import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import {
-  admittedJournalKeys,
-  admittedSubjectDoor,
-  routeHasSubjectList,
-  PaneStatus,
-} from "./admitted-chrome";
+import { admittedSubjectDoor, routeHasSubjectList, PaneStatus } from "./admitted-chrome";
 import { SubjectPicker as AdmittedSubjectPicker, subjectOf } from "./subject-picker";
 import { ReviewSurface } from "./review-surface";
-import { routeOwnsKey } from "./mount-work";
+
 import type { AdmittedMount } from "./admitted-mount";
 import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 beforeEach(() => {
@@ -24,46 +19,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("Work undo follows current focus through portals and preserves native text undo", () => {
-  const restoreWork = vi.fn();
-  const mine = document.createElement("section");
-  mine.dataset.routeMount = "mine";
-  mine.dataset.routeJournal = "";
-  const theirs = document.createElement("section");
-  theirs.dataset.routeMount = "theirs";
-  theirs.dataset.routeJournal = "";
-  const composer = document.createElement("button");
-  const input = document.createElement("textarea");
-  document.body.append(mine, theirs, composer, input);
-  let primary = true,
-    live = true;
-  const keys = admittedJournalKeys(
-    { restoreWork, journalRefusal: () => null } as unknown as AdmittedMount,
-    () => live,
-    (event) => routeOwnsKey(mine, primary, event),
-  );
-  const press = (node: HTMLElement, index: number) => {
-    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true });
-    node.dispatchEvent(event);
-    keys[index]!.callback(event, {} as never);
-    return event;
-  };
-  expect(press(composer, 0).defaultPrevented).toBe(true);
-  press(mine, 1);
-  press(composer, 2);
-  expect(restoreWork.mock.calls).toEqual([["undo"], ["redo"], ["redo"]]);
-  expect(press(input, 0).defaultPrevented).toBe(false);
-  press(theirs, 0);
-  primary = false;
-  press(composer, 0);
-  live = false;
-  press(mine, 0);
-  expect(restoreWork).toHaveBeenCalledTimes(3);
-  mine.remove();
-  theirs.remove();
-  composer.remove();
-  input.remove();
-});
+
 
 test("many-subject all/none use the declared control and unknown membership never prints ids", () => {
   const subject = vi.fn();

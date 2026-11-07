@@ -1,9 +1,8 @@
 import type { InvocationToken } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
 import type { MountContext } from "./admitted-context.ts";
 export function createAdmittedBody<W extends Record<string, unknown>>(context: MountContext<W>) {
-  const { route, read, resolve, ports, geometry: getGeometry, observers, duringDraw } = context;
-  const geometry = getGeometry(),
-    invocation = context.invocation(),
+  const { route, read, resolve, ports, observers, duringDraw } = context;
+  const invocation = context.invocation(),
     historyOwner = context.history(),
     transitionCell = context.cellActions(),
     snapshots = context.readings().snapshots;
@@ -32,12 +31,6 @@ export function createAdmittedBody<W extends Record<string, unknown>>(context: M
         readings: Object.freeze(
           Object.fromEntries(declaration.draws.map((id) => [id, snapshots()[id]])),
         ),
-        readingActions: Object.fromEntries(
-          declaration.draws
-            .filter((id) => geometry.actions[id])
-            .map((id) => [id, geometry.actions[id]]),
-        ),
-        readCosts: Object.freeze({ ...geometry.costs }),
         visible: true,
         fixture: context.input.fixture,
         verbs: Object.fromEntries(

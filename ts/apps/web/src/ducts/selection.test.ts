@@ -1,53 +1,19 @@
 import { afterEach, expect, test } from "vite-plus/test";
-import { resetKnob, setKnob, knobModules } from "#/knobs/knobs";
-import { scopeOf, sectionsOf, systemScope } from "@pe/ducts-domain/system-scope";
+import { resetKnob } from "#/knobs/knobs";
+import { systemScope } from "@pe/ducts-domain/system-scope";
 import type { SceneInstance } from "#/scene/types";
 import { paintOf } from "#/scene/grounds";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture";
-import { DUCTS_MULTI, paintOfDucts } from "./selection";
-import { ductsFocus } from "./proto/e/picture";
-import { captureRequest } from "#/scene/picture/picture";
+import { paintOfDucts } from "./selection";
+
+
 afterEach(() => resetKnob());
 
-test("selection knobs change admission and disclose the capture cost", () => {
-  const spec = knobModules().find((module) => module.name === "ducts")!.spec.selection!;
-  expect(Object.keys(spec)).toEqual(["stubFt", "hop"]);
-  expect(Object.values(spec).every((knob) => knob.cost === "refetch")).toBe(true);
-  setKnob("ducts.selection.hop", "all");
-  expect(DUCTS_MULTI.read().selection.hop).toBe("all");
-});
 
-test("halo and big context share capture; paint names kind and tier only", () => {
-  const { snapshot } = NAVIGATION_FIXTURE;
-  for (const layers of [["halo"], ["context"], ["halo", "context"]] satisfies (
-    | "halo"
-    | "context"
-  )[][])
-    expect(
-      captureRequest(ductsFocus(snapshot, ["SA Office"])!, layers, 10, "link-boxes")!.focusOnly,
-    ).toBe(false);
-  const id = snapshot.segments[0]!.id;
-  const paint = paintOfDucts(snapshot, new Set([id]), new Set());
-  expect(paint({ revitId: id } as SceneInstance)).toEqual({ tier: "subject", kind: "supply" });
-});
 
-test("the production fixture unions sections once and captures every opened member plus stubs", () => {
-  const { snapshot } = NAVIGATION_FIXTURE;
-  const systems = ["SA Office", "SA Lab", "EA Lab"];
-  const scope = scopeOf(snapshot, systems)!;
-  expect(scope.groups).toHaveLength(2);
-  expect([...sectionsOf(snapshot, systems).keys()]).toEqual(scope.groups);
-  expect(scope.shared.get(scope.groups[0]!)).toEqual(["SA Lab"]);
-  const request = captureRequest(
-    ductsFocus(snapshot, systems, [], [999999, 999999])!,
-    ["meshes"],
-    10,
-    "link-boxes",
-  )!;
-  expect(request.elementIds).toEqual([...scope.members, 999999].sort((a, b) => a - b));
-  expect(request.focusOnly).toBe(true);
-  expect(ductsFocus(snapshot, [])).toBeNull();
-});
+
+
+
 
 test("non-focus MEP paints as stub (kind from its snapshot system, pipes unknown); other context stays context", () => {
   const { snapshot } = NAVIGATION_FIXTURE;

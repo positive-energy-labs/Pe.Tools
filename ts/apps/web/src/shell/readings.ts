@@ -652,7 +652,6 @@ export function createReadingGraph<P, W>(
   }
 }
 
-export type ReadingGraph<P, W> = ReturnType<typeof createReadingGraph<P, W>>;
 
 /** One source-open: release before a port's answer; rejection fails; a leased (graph) worker is never stopped here. */
 export function openSource<T>(

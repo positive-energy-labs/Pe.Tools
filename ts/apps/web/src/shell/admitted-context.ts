@@ -37,7 +37,6 @@ export type MountContext<W extends Record<string, unknown>> = ReturnType<
   observers: ReturnType<typeof import("./admitted-observers.ts").createAdmittedObservers>;
   work(this: void): ReturnType<typeof import("./admitted-work.ts").createAdmittedWork>;
 
-  geometry(this: void): ReturnType<typeof import("./admitted-geometry.ts").createAdmittedGeometry>;
   environment(
     this: void,
   ): ReturnType<typeof import("./route-environment.ts").createRouteEnvironment>;

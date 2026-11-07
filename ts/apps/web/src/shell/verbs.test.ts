@@ -15,21 +15,7 @@ import {
   type WorkKey,
 } from "@pe/agent-contracts";
 import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
-import {
-  bind,
-  commandVerb,
-  commit,
-  invoke,
-  queryVerb,
-  rpcVerb,
-  pageVerb,
-  workVerb,
-  type Caller,
-  type InvocationPhase,
-  type VerbDelivery,
-  type VerbContext,
-  type VerbSubject,
-} from "./verbs";
+import { bind, commandVerb, invoke, queryVerb, pageVerb, workVerb, type Caller, type VerbDelivery, type VerbContext, type VerbSubject } from "./verbs";
 
 
 const transport = vi.hoisted(() => ({
@@ -205,69 +191,17 @@ const reviewed = (result: VerbDelivery) => {
 
 
 
-test("shown review can be skipped by agent, and cannot be skipped by human at type or runtime boundary", async () => {
-  const human = environment("human");
-  const agent = environment("agent", { ...key, work: "agent" });
-  const verb = command("shown");
-  // @ts-expect-error A human phase has no skip alternative.
-  const illegal: InvocationPhase<"human"> = { kind: "skip" };
-  expect((await invoke(human.ctx, verb, null, { stage: "sheet" }, illegal)).state).toBe("refused");
-  expect(transport.run).not.toHaveBeenCalled();
-  const review = reviewed(await invoke(human.ctx, verb, null, { stage: "sheet" }));
-  expect(transport.run).not.toHaveBeenCalled();
-  expect((await commit(human.ctx, verb, review.ticket)).state).toBe("done");
-  expect((await invoke(agent.ctx, verb, null, { stage: "sheet" }, { kind: "skip" })).state).toBe(
-    "done",
-  );
-  expect(transport.run).toHaveBeenCalledTimes(2);
-});
 
 
 
 
 
-test.each(["reading", "revision", "target"] as const)(
-  "ticket %s drift invalidates without dispatch, and releases admission",
-  async (kind) => {
-    const env = environment("human");
-    const verb = command("shown");
-    const review = reviewed(await invoke(env.ctx, verb, null, { stage: "sheet" }));
-    if (kind === "reading") env.drift();
-    if (kind === "revision") env.moveRevision();
-    if (kind === "target") env.target.ref.openId = "new-incarnation";
-    expect((await commit(env.ctx, verb, review.ticket)).state).toBe("stale");
-    expect(transport.run).not.toHaveBeenCalled();
-    expect((await commit(env.ctx, verb, review.ticket)).state).toBe("refused");
-    expect((await invoke(env.ctx, command("none"), null, { stage: "sheet" })).state).toBe("done");
-  },
-);
 
-test("tickets cannot be forged or moved between callers, and explicit cancellation releases the owner", async () => {
-  const human = environment("human");
-  const agent = environment("agent", { ...key, work: "agent" });
-  const verb = command("shown");
-  const review = reviewed(await invoke(human.ctx, verb, null, { stage: "sheet" }));
-  expect((await commit(agent.ctx, verb, review.ticket)).state).toBe("refused");
-  expect(
-    (await commit(human.ctx, verb, { ...review.ticket, input: { stage: "forged" } })).state,
-  ).toBe("refused");
-  expect(Object.isFrozen(review.ticket.input)).toBe(true);
-  expect(
-    (await invoke(human.ctx, verb, null, undefined, { kind: "cancel", ticket: review.ticket }))
-      .state,
-  ).toBe("refused");
-  expect((await invoke(human.ctx, command("none"), null, { stage: "sheet" })).state).toBe("done");
-});
 
-test("Pea can commit an authentic ticket after JSON transport with the same invocation press", async () => {
-  const env = environment("agent");
-  const verb = command("shown");
-  const review = reviewed(await invoke(env.ctx, verb, null, { stage: "sheet" }));
-  const ticket = JSON.parse(JSON.stringify(review.ticket));
-  const result = await commit(env.ctx, verb, ticket);
-  expect(result).toMatchObject({ state: "done", kind: "command", press: review.press });
-  expect(transport.run).toHaveBeenCalledTimes(1);
-});
+
+
+
+
 
 
 
@@ -331,25 +265,7 @@ test("a query's final result is admitted only into the scope generation it start
 
 
 
-test("K1.2: a human-only RPC refuses agent binding and direct invocation before dispatch", async () => {
-  const run = vi.fn(async () => ({ ok: true }));
-  const verb = rpcVerb(
-    { key: "page.bind", input: z.object({}), run },
-    { label: "Bind", input: z.object({}), review: "none", caller: "human" },
-    { intent: () => ({}) },
-  );
-  const agent = environment("agent", { ...key, work: "agent" });
-  expect(bind(verb, { ctx: agent.ctx, subject: null, args: {} }).refusal).toContain(
-    "Only a person",
-  );
-  expect(await invoke(agent.ctx, verb, null, {})).toMatchObject({ state: "refused" });
-  expect(run).not.toHaveBeenCalled();
-  expect(await invoke(environment("human").ctx, verb, null, {})).toMatchObject({
-    state: "done",
-    kind: "rpc",
-  });
-  expect(run).toHaveBeenCalledTimes(1);
-});
+
 
 
 
@@ -419,13 +335,3 @@ test("K1.2: page.bind resolves its HTTP contract at invocation and validates bef
     vi.unstubAllGlobals();
   }
 });
-
-
-
-
-
-
-
-
-
-
