@@ -14,7 +14,7 @@ import type { ConsentEvent } from "../src/run-consent.ts";
 
 test("Work start validates seeds, waits for consent, and cannot overwrite a winner after consent",async()=>{
   const dir=await mkdtemp(join(tmpdir(),"pe-work-start-"));
-  const workspace=new RouteWorkspace({store:fileRouteDocumentStore(join(dir,"work"))});
+  const workspace=new RouteWorkspace({registrations:[],store:fileRouteDocumentStore(join(dir,"work"))});
   workspace.register({spec:{route:"sample",title:"Sample",description:"Start witness",schema:z.object({count:z.number()})}});
   const events:ConsentEvent[]=[],runs=testConsents((_,event)=>events.push(event));
   const run={thread:"start-thread",turn:"start-turn"};runs.open(run);

@@ -9,6 +9,10 @@ import { z } from "zod";
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
 import { address, bindWork, historyPointSchema } from "@pe/agent-contracts";
 import { History } from "../src/reads/history.ts";
+import { nativeRead } from "../src/reads/inputs.ts";
+import { registeredReads } from "../src/reads/routes.ts";
+import { familiesViewArgs } from "@pe/agent-contracts";
+import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { withInvocationContext } from "@pe/runtime/context";
 import type { RouteWorkspace } from "@pe/runtime";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
@@ -187,6 +191,9 @@ async function fixture(capture = false) {
   };
   return {
     dir,
+    probe: (body:unknown) => withInvocationContext({caller:who},()=>web.handler(new Request(new URL(peRouteUrl("reads.value"),"http://host"),{
+      method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body),
+    }),Context.make(RequestIdentity,admittedRequestIdentity(who,scope)))),
     send,
     history: async (query = "", body?: unknown) => {
       const response = await withInvocationContext({ caller: who }, () => web.handler(new Request(`http://host/pe/history${query}`, body === undefined ? {} : {
@@ -217,6 +224,29 @@ async function fixture(capture = false) {
     },
   };
 }
+
+test("HTTP document targets normalize once before generated native handles and preserve the mark fence",async()=>{
+  const tables=nativeRead("ducts.tables");
+  const definition=read("test.document-target",{input:familiesViewArgs,output:tables.output,
+    run:(ctx,args)=>ctx.read(tables,{target:{kind:"document" as const,ref:args.target},request:{ids:[]}})});
+  registeredReads.reads.set(definition.name,definition);
+  const f=await fixture();
+  try {
+    for(const target of [ref,{kind:"document",ref}]) {
+      const response=await f.probe({read:definition.name,subscription:"document-handle",generation:1,args:{target}});
+      const body=await response.json() as {state:string;value:{trace:{name:string;args:unknown}[]}};
+      expect(response.status).toBe(200);expect(body.state).toBe("current");
+      expect(body.value.trace).toEqual(expect.arrayContaining([
+        expect.objectContaining({name:"native",args:expect.objectContaining({target:{kind:"document",ref}})}),
+        expect.objectContaining({name:"document-mark",args:ref}),
+      ]));
+    }
+    const calls=f.nativeCalls;
+    const denied=await f.probe({read:definition.name,subscription:"wrong-target",generation:1,args:{target:{kind:"host"}}});
+    expect(denied.status).not.toBe(200);expect(f.nativeCalls).toBe(calls);
+    expect(()=>nativeRead("ducts.apply")).toThrow("Read/Read");
+  } finally {registeredReads.reads.delete(definition.name);await f.close();}
+});
 
 test("History reopens the host's exact publication after newer Values, with no live fill", async () => {
   const f = await fixture(true);
