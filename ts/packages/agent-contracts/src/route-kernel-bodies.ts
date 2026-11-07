@@ -26,6 +26,7 @@ import type { JournalSubmission, Observation, WorkWriteOutcome } from "./work-jo
  */
 export const presentCellSchema = z.strictObject({
   key: z.string(),
+  group: z.string().optional(),
   label: z.string(),
   before: z.string().nullable(),
   after: z.string(),

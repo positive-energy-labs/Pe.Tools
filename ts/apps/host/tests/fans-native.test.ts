@@ -4,7 +4,8 @@ import { Deferred, Effect } from "effect";
 import { settle } from "./effect-test.ts";
 import { human, pea } from "./callers.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
-import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
+import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER ,
+} from "@pe/host-contracts/operation-types";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { nativeFixture } from "./fans-native.fixture.ts";
 import { presentLosses } from "../../web/src/ducts/reviews.ts";
@@ -37,7 +38,8 @@ async function stage(f: Awaited<ReturnType<typeof nativeFixture>>) {
     0,
   );
   if (!staged.ok) throw Error(JSON.stringify(staged));
-  const ducts = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } }], 0);
+  const ducts = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["g1"] } } }], 0,
+  );
   if (!ducts.ok) throw Error(JSON.stringify(ducts));
   return { key: f.key, revision: ducts.revision };
 }
@@ -174,12 +176,13 @@ test.each(["human", "pea"] as const)("D03/C07: %s plan shares admitted inputs, p
   f.readPause.wait = Deferred.await(held);
   const before = [...f.native];
   await command(f, "preview", "ducts.plan-losses", work, caller);
-  await vi.waitFor(() => expect(f.dispatched.filter((row) => row.key === "ducts.snapshot.walk")).toHaveLength(1));
+  await vi.waitFor(() => expect(f.dispatched.filter((row) => row.key === "ducts.snapshot.walk")).toHaveLength(1),
+    );
   const pending = f.dispatched.find((row) => row.key === "ducts.snapshot.walk")!;
   const scope = { bridgeSessionId: f.target.ref.session, openDocumentId: f.target.ref.openId };
   const descriptor = await settle(f.rootReads.native!.resolve({ key: pending.key, input: pending.input, scope }).pipe(
-    Effect.provideService(RequestIdentity, admittedRequestIdentity(caller, scope)),
-  ));
+    Effect.provideService(RequestIdentity, admittedRequestIdentity(caller, scope))),
+  );
   expect(descriptor).toMatchObject({
     operationKey: pending.key,
     normalizedInput: canonicalRouteInput(pending.input),
@@ -188,10 +191,13 @@ test.each(["human", "pea"] as const)("D03/C07: %s plan shares admitted inputs, p
   });
   const sibling = f.request(new Request("http://fixture/call", {
     method: "POST",
-    headers: { "content-type": "application/json", [HOST_RPC_BRIDGE_SESSION_HEADER]: scope.bridgeSessionId, [HOST_RPC_DOCUMENT_HEADER]: scope.openDocumentId },
+    headers: { "content-type": "application/json", [HOST_RPC_BRIDGE_SESSION_HEADER]: scope.bridgeSessionId, [HOST_RPC_DOCUMENT_HEADER]: scope.openDocumentId ,
+        },
     body: JSON.stringify({ key: pending.key, request: pending.input }),
-  }), human);
-  await vi.waitFor(async () => expect(await settle(f.rootReads.shared!.retained)).toMatchObject({ entries: 1, joiners: 2 }));
+  }), human,
+    );
+  await vi.waitFor(async () => expect(await settle(f.rootReads.shared!.retained)).toMatchObject({ entries: 1, joiners: 2 }),
+    );
   await settle(Deferred.succeed(held, undefined));
   const shared = await sibling;
   expect(shared.status, await shared.clone().text()).toBe(200);
@@ -207,7 +213,8 @@ test.each(["human", "pea"] as const)("D03/C07: %s plan shares admitted inputs, p
     expect(identity.ownership.causalParent).toBe("preview");
     expect(identity.ownership.owner).toBe(identity.requestId);
   }
-  expect(new Set(f.nativeCallers.map((identity) => identity.requestId)).size).toBe(f.nativeCallers.length);
+  expect(new Set(f.nativeCallers.map((identity) => identity.requestId)).size).toBe(f.nativeCallers.length,
+    );
   expect((await f.saved.view(f.key, "ducts"))?.handle).toEqual(work);
   expect((await f.saved.view({ ...f.key, route: "fans" }, "fans"))?.handle).toEqual(fans.handle);
   expect([...f.native]).toEqual(before);
@@ -226,7 +233,8 @@ test.each(["human", "pea"] as const)("D03/C07: %s plan shares admitted inputs, p
   expect(f.native.get(4)).toBe(250);
   expect(f.native.get(999)).toBe(777);
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toHaveLength(1);
-});
+},
+);
 
 test("a changed SDK incarnation between plan input reads refuses without applying or retiring Work", async () => {
   const f = await fixture();
@@ -236,13 +244,16 @@ test("a changed SDK incarnation between plan input reads refuses without applyin
   f.readPause.key = "ducts.snapshot.walk";
   f.readPause.wait = Deferred.await(held);
   await command(f, "scope-changed", "ducts.plan-losses", work);
-  await vi.waitFor(() => expect(f.dispatched.filter((row) => row.key === "ducts.snapshot.walk")).toHaveLength(1));
-  f.sdkInput.read = async (args = []) => (await sdkSessions(args)).replaceAll("1970-01-01T00:00:01.0000000Z", "1970-01-01T00:00:02.0000000Z");
+  await vi.waitFor(() => expect(f.dispatched.filter((row) => row.key === "ducts.snapshot.walk")).toHaveLength(1),
+  );
+  f.sdkInput.read = async (args = []) => (await sdkSessions(args)).replaceAll("1970-01-01T00:00:01.0000000Z", "1970-01-01T00:00:02.0000000Z",
+    );
   await settle(Deferred.succeed(held, undefined));
   const result = await f.journal.wait("scope-changed");
   expect(result, JSON.stringify(result)).toMatchObject({ state: "failed", notDispatched: true });
   expect(JSON.stringify(result)).toMatch(/incarnation|process|attachment/i);
-  expect(f.dispatched.filter((row) => row.key === "ducts.tables" || row.key === "ducts.apply")).toEqual([]);
+  expect(f.dispatched.filter((row) => row.key === "ducts.tables" || row.key === "ducts.apply"),
+  ).toEqual([]);
   expect((await f.saved.view(f.key, "ducts"))?.handle).toEqual(work);
   expect(f.native.get(4)).toBe(200);
 });
@@ -287,19 +298,24 @@ test.each(["reject", "deadline"] as const)(
 );
 
 
-test("a Plan the native Read refuses settles refused, dispatched and without model writes", async () => {
+test("a refused native Plan retains its review without Apply authority or model writes", async () => {
   const f = await fixture();
   const work = await stage(f);
   f.planRefusal.reason = "Shared type 'Grille 24x24' is used outside this scope";
   await command(f, "refused-plan", "ducts.plan-losses", work);
   const receipt = await f.journal.wait("refused-plan");
   expect(receipt, JSON.stringify(receipt)).toMatchObject({
-    state: "failed",
-    refusal: { kind: "domain", code: "ducts.plan-refused" },
-    outcome: { state: "refused", reason: expect.stringContaining("Shared type") },
-    steps: [{ kind: "native", key: "ducts.apply.plan", effect: "Read", state: "succeeded", dispatchedAt: expect.any(String) }],
+    state: "succeeded",
+    result: { planRefusal: expect.stringContaining("Shared type") },
+    steps: [{ kind: "native", key: "ducts.apply.plan", effect: "Read", state: "succeeded", dispatchedAt: expect.any(String) ,
+      },
+    ],
   });
   expect(receipt).not.toHaveProperty("notDispatched");
+  if (receipt.state !== "succeeded") throw Error(JSON.stringify(receipt));
+  expect(receipt.result).toHaveProperty("planRefusal");
+  await command(f, "refused-plan-apply", "ducts.apply-losses", work);
+  expect(await f.journal.wait("refused-plan-apply")).toMatchObject({ state: "failed", refusal: { code: "ducts.plan-refused" } });
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
   expect(f.native.get(4)).toBe(200);
   expect((await f.saved.view(f.key, "ducts"))?.revision).toBe(work.revision);
@@ -311,27 +327,35 @@ test("a stale Fans revision refuses sealed apply before native dispatch", async 
   await command(f, "preview-two", "ducts.plan-losses", work);
   expect(await f.journal.wait("preview-two")).toMatchObject({ state: "succeeded", result: { seal: { work: {
     consumed: expect.arrayContaining(["ducts", "fans"].map((route) => expect.objectContaining({
-      kind: "work", probe: expect.objectContaining({ handle: expect.objectContaining({ key: expect.objectContaining({ route }) }) }),
-    }))),
-  } } } });
+      kind: "work", probe: expect.objectContaining({ handle: expect.objectContaining({ key: expect.objectContaining({ route }) }) ,
+                }),
+    }),
+            ),
+          ),
+  } ,
+      } ,
+    } ,
+  });
   const fansKey = { ...f.key, route: "fans" };
   const fans = await f.saved.view(fansKey, "fans");
   if (!fans) throw Error("Fans Work missing");
   const changed = await f.saved.apply(fansKey, "fans", "human", [
-    { path: ["flows", "4", "edit"], value: { value: { cfm: 300 } } },
-  ], fans.revision);
+    { path: ["flows", "4", "edit"], value: { value: { cfm: 300 } } }], fans.revision,
+  );
   expect(changed.ok).toBe(true);
   await f.post("/actions", { id: "stale-fans", key: "ducts.apply-losses", target: f.target,
     input: { work, readWorks: { fans: { key: fansKey, revision: fans.revision } } },
   });
   const receipt = await f.journal.wait("stale-fans");
-  expect(receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "stale_revision" } });
+  expect(receipt).toMatchObject({ state: "failed", notDispatched: true, refusal: { kind: "stale_revision" } ,
+  });
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
   expect(f.native.get(4)).toBe(200);
   await command(f, "changed-fans", "ducts.apply-losses", work);
   const changedSeal = await f.journal.wait("changed-fans");
   expect(changedSeal).toMatchObject({ state: "failed", notDispatched: true,
-    refusal: { kind: "domain", code: "preview.stale" } });
+    refusal: { kind: "domain", code: "preview.stale" } ,
+  });
   expect(f.dispatched.filter((row) => row.key === "ducts.apply")).toEqual([]);
 });
 
@@ -342,11 +366,13 @@ test("H1: a canonical Fans handle beside an Address key carrying case and Save A
   expect(work.key).toMatchObject({ binding: "address", from: expect.anything() });
   const fans = (await f.saved.view({ ...f.key, route: "fans" }, "fans"))!.handle;
   const plan = async (id: string, handle: typeof fans) => {
-    await f.post("/actions", { id, key: "ducts.plan-losses", target: f.target, input: { work, readWorks: { fans: handle } } });
+    await f.post("/actions", { id, key: "ducts.plan-losses", target: f.target, input: { work, readWorks: { fans: handle } } ,
+    });
     return f.journal.wait(id);
   };
   const same = await plan("same", fans);
   expect(same, JSON.stringify(same)).toMatchObject({ state: "succeeded" });
-  const foreign = await plan("foreign", { ...fans, key: { binding: "address", route: "fans", target: address("C:/other.rvt") } });
+  const foreign = await plan("foreign", { ...fans, key: { binding: "address", route: "fans", target: address("C:/other.rvt") } ,
+  });
   expect(JSON.stringify(foreign)).toContain("Fans Work belongs to another document");
 });

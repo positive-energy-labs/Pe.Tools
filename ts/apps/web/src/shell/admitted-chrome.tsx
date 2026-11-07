@@ -1,7 +1,9 @@
+import { z } from "zod";
 import { subjectOf, SubjectPicker } from "./subject-picker";
 import { CatalogWorkReviews, writeReject } from "./catalog-work-reviews";
 import { HostedChrome } from "../route/hosted-chrome";
-import { useMemo, useRef, useState, useEffect, useContext, createContext, type ReactNode } from "react";
+import { useMemo, useRef, useState, useEffect, useContext, createContext, type ReactNode ,
+} from "react";
 import { Button } from "@pe/kit/lang/button";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { KeyScope, ScopeKeys, actionScopeKeys, useScopeKeys, type ScopeKey } from "@pe/kit/keys";
@@ -74,7 +76,8 @@ function DocumentKeys({ keys }: { keys: readonly ScopeKey[] }) {
  * moves every door shares (`openSet`). */
 export function routeHasSubjectList(data: RouteGraphJson) {
   const field = data.fields[data.subject!.field];
-  return field?.role === "subject" && Object.values(data.panes).some((pane) => pane.draws.includes(field.picker.reading));
+  return (
+    field?.role === "subject" && Object.values(data.panes).some((pane) => pane.draws.includes(field.picker.reading)));
 }
 
 export function admittedLayout(
@@ -119,9 +122,10 @@ export function writeHeld(
     stale: boolean;
   } | null,
 ) {
-  if (!review) return { held: null, stale: null, sealed: false };
-  if (review.stale) return { held: null, stale: "changed since plan", sealed: false };
-  const sealed = writeResponseSchema.safeParse(review.preview).success;
+  if (!review) return { held: null, stale: null, sealed: false, refusal: null };
+  if (review.stale) return { held: null, stale: "changed since plan", sealed: false, refusal: null };
+  const refusal = z.object({ planRefusal: z.string() }).safeParse(review.preview);
+  const sealed = !refusal.success && writeResponseSchema.safeParse(review.preview).success;
   return {
     // ponytail: the plan is a Read today; rehearsed=true waits on a declared ducts.rehearse-* receipt.
     // Cells replace the rows they describe; rows remain for presenters with no cell source.
@@ -130,6 +134,7 @@ export function writeHeld(
       : { word: writeWord(label, review.rows.length, false), summary: review.sentence ?? "", rows: review.rows },
     stale: null,
     sealed,
+    refusal: refusal.success ? refusal.data.planRefusal : null,
   };
 }
 const settled = async (run: () => unknown): WriteRun => {
@@ -140,10 +145,12 @@ const settled = async (run: () => unknown): WriteRun => {
     return { message: error instanceof Error ? error.message : String(error) };
   }
 };
-export function AdmittedWrite({ mount, data, id }: { mount: AdmittedMount; data: RouteGraphJson; id: string }) {
+export function AdmittedWrite({ mount, data, id ,
+}: { mount: AdmittedMount; data: RouteGraphJson; id: string ;
+}) {
   const verb = data.verbs[id]!;
   const review = mount.review(id);
-  const { held, stale, sealed } = writeHeld(verb.label, review);
+  const { held, stale, sealed , refusal } = writeHeld(verb.label, review);
   return (
     <WriteAction
       label={`plan ${verb.label}`}
@@ -156,12 +163,13 @@ export function AdmittedWrite({ mount, data, id }: { mount: AdmittedMount; data:
       apply={{
         label: verb.label,
         says: `${verb.label} what the plan sealed`,
-        refusal: sealed ? null : "Plan the current Work first",
+        refusal: refusal ?? (sealed ? null : "Plan the current Work first"),
         run: () => settled(() => mount.confirm(id)),
         done: `${verb.label} sent`,
       }}
       reject={writeReject(mount.timeline(), [id, "entry" in verb ? verb.entry : id], (thread, requestId) =>
-        void harnessClient(resolveWorkbenchConfig().origin).permission(thread, requestId, "stop_writes"),
+        void harnessClient(resolveWorkbenchConfig().origin).permission(thread, requestId, "stop_writes",
+          ),
         typeof mount.page.read().thread === "string" ? String(mount.page.read().thread) : undefined,
       )}
     />
@@ -424,7 +432,8 @@ function Chrome({
 
 export function PaneStatus({ mount, draws }: { mount: AdmittedMount; draws: readonly string[] }) {
   const readings = draws.map((id) => mount.readingStatus(id)).filter((reading) =>
-    reading.snapshot.current || !["Explicit demand required", "Explicit detail refresh required", "Pane hidden"].includes(reading.snapshot.reason),
+    reading.snapshot.current || !["Explicit demand required", "Explicit detail refresh required", "Pane hidden"].includes(reading.snapshot.reason,
+        ),
   );
   const problem = readings.find(
     (r) => r.snapshot.status === "unavailable" || r.snapshot.status === "failed",
@@ -447,7 +456,8 @@ export function admittedSubjectDoor(mount: AdmittedMount, data: RouteGraphJson):
     remove: (id) => subjectOf(mount, data)?.remove(id),
     setActive: (id) => subjectOf(mount, data)?.setActive(id),
     all: () => { mount.controls.subject({ kind: "all" }); },
-    clear: () => { mount.controls.subject(field?.role === "subject" && field.cardinality === "many" ? { kind: "ids", ids: [] } : null); },
+    clear: () => { mount.controls.subject(field?.role === "subject" && field.cardinality === "many" ? { kind: "ids", ids: [] } : null,
+      ); },
   };
 }
 
@@ -462,8 +472,7 @@ export function AdmittedChrome(props: {
   // Read at call time, so the door never holds a stale subject.
   const door = useMemo<AdmittedSubject>(
     () => admittedSubjectDoor(mount, data),
-    [mount, data],
-  );
+    [mount, data]);
   return (
     <SubjectDoor.Provider value={door}>
       <PaneActionSlots>

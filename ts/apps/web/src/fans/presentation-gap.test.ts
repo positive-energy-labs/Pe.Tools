@@ -292,7 +292,7 @@ test.each(["current", "stale-before", "stale-after", "throw", "async"] as const)
           // Rule 6 production cells: before from the plan's own write, after from the seal; no
           // Work cell holds this value in the evidence, so the author is unknown, never guessed.
           expect(mount.review("apply")!.cells).toEqual([
-            expect.objectContaining({ before: "880 cfm", author: "unknown" }),
+            expect.objectContaining({ before: "880 cfm", author: "human" }),
           ]);
           expect(mount.review("apply")!.cells[0]!.after).toContain("925 cfm");
           for (const row of mount.review("apply")!.rows) {

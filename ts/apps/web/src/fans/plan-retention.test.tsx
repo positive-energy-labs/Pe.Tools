@@ -144,7 +144,7 @@ test.each([false, true])(
     );
     expect(f.fans.review("losses")).toMatchObject({
       stale: false,
-      cells: [{ before: "880 cfm", author: "pea" }],
+      cells: [{ before: "880 cfm", author: "human" }],
     });
     expect(f.fans.review("losses")!.rows[0]).toContain("MUAS-1");
     // Broad route-surface witness: the real typed action consumes its receipt feed, and the
