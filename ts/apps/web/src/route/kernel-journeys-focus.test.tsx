@@ -149,6 +149,81 @@ test("JZ Schedules Description Enter stages r3, reviews BEFORE to AFTER, and sho
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+test("JZ Ducts chooser query keys preserve open systems until an explicit choice", async () => {
+  const [{ default: userEvent }, { fixture, ref, path }, { registeredReads }, reads,
+    { module: ducts }, { TypedSubject }, { observeResources }, { valueReadResponse }, { localId }] = await Promise.all([
+    import("@testing-library/user-event"), import("../../../host/tests/host-read-graph.test-support"),
+    import("../../../host/src/reads/routes"), import("../../../host/src/reads/ducts"),
+    import("../ducts/route"), import("../shell/typed-shell"), import("@pe/runtime"),
+    import("@pe/agent-contracts"), import("./typed-route"),
+  ]);
+  const { default: saved } = await import("../ducts/fixtures/synthetic-snapshot.json");
+  const { nativeResponseSchema } = await import("@pe/host-contracts/decoders");
+  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(saved);
+  snapshot.systems = [snapshot.systems[0]!, { ...snapshot.systems[0]!, id: 501, name: "SA 16" }];
+  for (const element of [...snapshot.nodes, ...snapshot.segments]) element.uniqueId ||= `chooser-${element.id}`;
+  const host = await fixture(false, { snapshot, roster: { ...snapshot, groups: [], segments: [], flows: [] } });
+  const definitions = [reads.ductsPricing, reads.ductsNetwork, reads.ductsRoster];
+  const unregister = registeredReads.register(Object.fromEntries(definitions
+    .filter(d => !registeredReads.reads.has(d.name)).map(d => [d.name, d])));
+  let generation = 0;
+  const requests: unknown[] = [];
+  const sources = Object.fromEntries(definitions.map(d => [`${d.name}.value`, {
+    kind: "use" as const,
+    open(ctx, deliver) {
+      requests.push(ctx.args);
+      return host.probe({ read: d.name, subscription: `chooser-${++generation}`, generation,
+        args: { target: ref, ...(ctx.args as object) } }).then(async response => {
+        if (!response.ok) throw Error(await response.text());
+        const packet = valueReadResponse.parse(await response.json());
+        deliver({ kind: "complete", value: packet, revision: packet.version });
+      }).catch(error => deliver({ kind: "failure", error }));
+    },
+  } satisfies UseSource]));
+  let search = new URLSearchParams({ system: JSON.stringify({ kind: "ids", ids: [localId("ducts-system", "SA 1")] }) });
+  const listeners = new Set<() => void>();
+  const work = createWorkFeedClient({ subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {} }, {
+    write: (key, write) => host.workspace.write(key, key.route, "human", write),
+    submit: () => { throw Error("Chooser journey cannot write native data"); },
+  });
+  const mount = mounts.mountTypedRoute(ducts, {
+    target: { kind: "document", ref }, fixture: null, work: { address: path, open: ref },
+    custody: { current: () => true }, memory: () => ({}),
+    address: { read: () => new URLSearchParams(search), write(next) { search = next; listeners.forEach(f => f()); },
+      subscribe(f) { listeners.add(f); return () => { listeners.delete(f); }; } },
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, sources });
+  let view: ReturnType<typeof render> | undefined;
+  try {
+    await waitFor(() => expect(mount.value().current).toBe(true), { timeout: 20_000 });
+    const pending: string[] = [];
+    const unsubscribe = mount.subscribe(() => { if (mount.value().status === "pending") pending.push(mount.value().status); });
+    const root = createRootRoute({ component: () => <KeyScopeHost id="chooser-journey"><TypedSubject mount={mount} /></KeyScopeHost> });
+    const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/ducts"] }) });
+    view = render(<RouterProvider router={router} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Choose system" }));
+    await user.click(await screen.findByRole("combobox", { name: "system search" }));
+    const before = search.toString(), count = requests.length;
+    for (const key of "SA 16") {
+      await user.keyboard(key);
+      expect.soft(search.toString(), `query key ${JSON.stringify(key)} never changes URL selection`).toBe(before);
+    }
+    expect((screen.getByRole("combobox", { name: "system search" }) as HTMLInputElement).value).toBe("SA 16");
+    expect(screen.queryByRole("option", { name: "SA 1" }), "filtered-out selected item stays open").toBeNull();
+    expect.soft(mount.page.read().system).toEqual({ kind: "ids", ids: [localId("ducts-system", "SA 1")] });
+    expect.soft(pending, "query never starts Reading").toEqual([]);
+    expect.soft(requests.length, "query never dispatches a host read").toBe(count);
+    unsubscribe();
+    await user.click(screen.getByRole("option", { name: "SA 16" }));
+    // The ordinary Ducts chooser opens multiple systems. A choice adds SA 16; SA 1 stays open.
+    await waitFor(() => expect(mount.page.read().system.ids).toEqual([
+      localId("ducts-system", "SA 1"), localId("ducts-system", "SA 16"),
+    ]));
+    await waitFor(() => expect(mount.value().current).toBe(true), { timeout: 20_000 });
+    expect(requests.length).toBeGreaterThan(count);
+  } finally { view?.unmount(); mount.dispose(); unregister(); await host.close(); }
+});
+
 test("JM H17 browse an optional host route without a pin, then refuse malformed document pins", async () => {
   const module = route({ ...family.spec, edits: undefined, core: undefined, commands: {}, reads: {},
     panes: { main: { title: "Optional document", purpose: "Inspect exact target authority",
