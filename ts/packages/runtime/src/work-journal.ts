@@ -26,12 +26,16 @@ export type TimelineBarrier = TimelineEntry & {
   kind: "receipt";
   paths: readonly RouteStatePatch["path"][];
 };
-export const receiptBarrier = (entry: TimelineEntry): TimelineBarrier | null =>
-  entry.kind === "receipt" &&
-  entry.paths?.length &&
-  (!entry.outcome || ["succeeded", "outcome-unknown"].includes(entry.outcome.state))
+export const receiptBarrier = (entry: TimelineEntry): TimelineBarrier | null => {
+  const receipt = (entry.basis as { receipt?: ActionStatus } | undefined)?.receipt;
+  // Reading Work during a successful preview does not commit the edits it consumed.
+  if (receipt?.state === "succeeded" && !receipt.effects.length) return null;
+  return entry.kind === "receipt" &&
+    entry.paths?.length &&
+    (!entry.outcome || ["succeeded", "outcome-unknown"].includes(entry.outcome.state))
     ? (structuredClone(entry) as TimelineBarrier)
     : null;
+};
 
 type Transition = {
   revision: number;

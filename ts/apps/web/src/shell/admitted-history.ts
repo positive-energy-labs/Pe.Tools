@@ -273,7 +273,9 @@ export function createAdmittedHistory<W extends Record<string, unknown>>(context
         : null;
   const { entryFor, sourceTimeline, now } = context;
   const ownerJournals = () => {
-    const key = read().scope.identity.work;
+    const snapshot = owner.read();
+    if (!snapshot) return [];
+    const key = snapshot.scope.identity.work;
     const own = key && { journal: mountJournal(key), reading: null, handle: null };
     return [
       ...(own ? [own] : []),
