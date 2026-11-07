@@ -27,7 +27,6 @@ export function Members({ ctx }: { ctx: PodsRosterContext }) {
   });
   return (
     <>
-      <a href="/pod-admin">Manage Pod installation and trust</a>
       <RouteSource packageId={page.pod}/>
       {value.value?.pods.flatMap((pod) =>
         pod.diagnostics.map((diagnostic, i) => (

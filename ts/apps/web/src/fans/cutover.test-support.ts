@@ -41,9 +41,8 @@ export async function createWitness(
     closes.push(() => registration.close());
   }
   // Explicit fixture setup: reading absent production Work never creates it.
-  for(const host of [admitted.hostOwner,admitted.hostPresenter]) {
-    const state=host.workState!;
-    if(!saved.has(state.route)) saved.set(state.route,{version:1,schemaVersion:state.schemaVersion??1,revision:0,doc:state.schema.parse({})});
+  for(const [route,schema] of [["fans",fansDocumentSchema],["ducts",ductsDocumentSchema]] as const) {
+    if(!saved.has(route)) saved.set(route,{version:1,schemaVersion:1,revision:0,doc:schema.parse({})});
   }
   const observe = observeResources(ws, { observe: () => () => {} });
   const calls = new Map<string,number>();

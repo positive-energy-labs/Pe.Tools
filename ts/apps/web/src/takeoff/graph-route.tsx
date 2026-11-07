@@ -66,8 +66,6 @@ function ScopeBody({ owner, page }: Body) {
       <nav aria-label="Takeoff siblings">
         {[
           ["/takeoffs", "View adoption"],
-          ["/zone-audit", "Zone audit"],
-          ["/rhvac-sync", "RHVAC sync"],
         ].map(([path, label]) => (
           <a
             key={path}
