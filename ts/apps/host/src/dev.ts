@@ -8,10 +8,10 @@ import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { serviceFilePath } from "@pe/host-contracts/pe-service";
 import { publishDevTraySession } from "../scripts/dev-tray-session.ts";
 import { hostOwnership } from "./host-ownership.ts";
-import { prepareSourceClosures } from "./source-closures.ts";
+import { prepareDevRouteProjection } from "./source-closures.ts";
 
 // The host graph imports closures from disk: prepare them, then link it (see source-closures.ts).
-await prepareSourceClosures();
+const routeProjection = await prepareDevRouteProjection();
 const { hostProgram } = await import("./host-program.ts");
 
 if (process.argv.includes("--share"))
@@ -64,9 +64,10 @@ const program = hostProgram(
       const url = yield* Effect.tryPromise({
         try: () =>
           new Promise<string>((resolve, reject) => {
+            // Bridge, not tuned: double route-closure build measured ~57s at 38% load; commit 2 reuses the host projection.
             const timeout = setTimeout(
-              () => reject(new Error("Dev frontend did not start within 60s")),
-              60_000,
+              () => reject(new Error("Dev frontend did not start within 180s")),
+              180_000,
             );
             child.once("error", (error) => {
               clearTimeout(timeout);
@@ -105,6 +106,7 @@ const program = hostProgram(
               port: handle.serviceFile.port,
               sourceRoot: handle.serviceFile.sourceRoot,
               name: hostOwnership.serviceName,
+              routeProjection,
             });
           }),
         catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),

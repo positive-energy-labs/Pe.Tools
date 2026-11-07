@@ -1,3 +1,5 @@
+import { currentRouteStartupProjection } from "@pe/host-contracts/route-startup";
+import type { RouteStartupProjection } from "@pe/host-contracts/route-startup";
 import { readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -159,6 +161,18 @@ export async function buildRouteArtifact(options: {
 
 const exec = promisify(execFile);
 async function runtimeRoutes() {
+  const handoff = process.env.PE_DEV_ROUTE_PROJECTION;
+  // One launch handoff only: edits and subsequent builds always return to the producer.
+  delete process.env.PE_DEV_ROUTE_PROJECTION;
+  if (handoff) {
+    try {
+      const receipt = JSON.parse(readFileSync(handoff, "utf8")) as RouteStartupProjection;
+      const root = fileURLToPath(new URL("../../../", import.meta.url));
+      if (currentRouteStartupProjection(root, receipt)) return receipt.projections;
+    } catch {
+      // Unavailable or malformed handoff: recompute rather than serving stale projections.
+    }
+  }
   const producer = fileURLToPath(new URL("./scripts/route-graphs.ts", import.meta.url));
   const { stdout } = await exec(process.execPath, [producer, "--runtime"], {
     maxBuffer: 16 * 1024 * 1024,
