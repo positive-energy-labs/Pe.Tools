@@ -140,6 +140,7 @@ export const module = route({
     },
   },
   edits: {
+    seed: () => ductsRouteState.schema.parse({}),
     work: ductsRouteState,
     value: "ductsWork",
     owners: {

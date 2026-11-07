@@ -115,6 +115,7 @@ export const module = route({
     },
   },
   edits: {
+    seed: () => fansDocumentSchema.parse({}),
     work: fansDocumentSchema,
     value: "fansWork",
     owners: {
