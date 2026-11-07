@@ -95,7 +95,8 @@ export const reads = {
     },
   }),
 };
-// TODO: S gap 10 has no Pod ReadingRequest yet; these leaves call the canonical in-process owners.
+// SHIM: untracked, recording incomplete. Delete when S admits pod.* host-local native reads.
+// Replace runPods calls with services.take("native", {key, request, target: {kind: "host"}}).
 export const leaves = {
   "pods.inventory": async () => podRowsSchema.parse((await runPods({}, listPods())).pods),
   "pods.saved": async (raw: unknown) => {

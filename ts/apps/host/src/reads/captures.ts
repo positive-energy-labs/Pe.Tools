@@ -15,7 +15,8 @@ export const reads = {
 };
 export const leaves = {
   "captures.store": async () => {
-    // TODO: S gap 10: use resource once PictureCaptureStore has a ReadingRequest; no self-HTTP.
+    // SHIM: untracked, recording incomplete. Delete when S binds captures to its resource observer.
+    // Replacement: services.take("resource", {kind: "captures"}); never self-HTTP.
     const captures = await Effect.runPromise(
       Effect.flatMap(PictureCaptureStore, (pictures) => Effect.promise(() => pictures.list())).pipe(
         Effect.provide(PictureCaptureStore.layer()),
