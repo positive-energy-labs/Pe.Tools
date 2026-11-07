@@ -15,7 +15,7 @@ vi.mock("#/shell/readings-hooks", () => ({
   inventoryOf: () => [],
 }));
 
-import { BindPicker } from "./picker";
+import { BindPicker } from "./bind-picker";
 
 afterEach(cleanup);
 

@@ -7,7 +7,7 @@
  */
 import type { GraphSeed } from "@pe/agent-contracts";
 import { useSyncExternalStore } from "react";
-import { publicRoutes } from "#/route/builtin-routes";
+import { publicRoutes } from "#/route/route-discovery";
 import { Demo } from "./exhibit";
 
 interface SeedRow {

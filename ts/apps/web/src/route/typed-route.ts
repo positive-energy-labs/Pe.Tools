@@ -78,7 +78,7 @@ export const command = <K extends WriteCommand & keyof typeof commandCatalogAxes
   };
 };
 type SessionCommandKey = { [K in keyof typeof commandCatalogAxes]:
-  (typeof commandCatalogAxes)[K]["effect"] extends "SessionWrite" ? K : never }[keyof typeof commandCatalogAxes];
+  "SessionWrite" extends (typeof commandCatalogAxes)[K]["effect"] ? K : never }[keyof typeof commandCatalogAxes];
 export const sessionCommand = <K extends SessionCommandKey & keyof typeof commands>(key: K) => {
   if(commandCatalogAxes[key].effect !== "SessionWrite") throw Error("Session commands require a SessionWrite contract");
   return {kind:"session" as const,entry:key,contract:commandContract(key)};
@@ -189,6 +189,7 @@ export type Specification<
   edits?: {
     work: W | RouteStateSpec<W>;
     key?(page: Page<F>): string | null;
+    seed?(): z.output<W>;
     value?: keyof D & string;
     owners: Owners;
     input: Edit;
@@ -236,7 +237,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
   for (const [key,field] of Object.entries(spec.fields)) {
     schemas[key]=field.schema;
     fields[key]={role:field.role === "subject" ? "query" : field.role,schema:key,codec:key,
-      initial:field.initial,url:field.url,share:true,agent:"set"};
+      ...(field.initial === undefined ? {} : {initial:field.initial}),url:field.url,share:true,agent:"set"};
   }
   const readIds = new Map<HostRead,string>();
   if(spec.core) readIds.set(spec.core,"value");

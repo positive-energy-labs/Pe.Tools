@@ -8,7 +8,7 @@ import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
 import { peFind } from "../../../../packages/mcps/src/pea/capability-tools.ts";
 import { fakeRuntimeHost } from "../../../../packages/mcps/tests/runtime-host-fixture.ts";
 import { machineOwner, type PromiseMachineSources } from "../../../host/tests/effect-test.ts";
-import { BAY_YOURS_25, CHECKOUT_HOT, MACHINE_SEEDS } from "./seeds";
+import { BAY_YOURS_25, CHECKOUT_HOT, MACHINE_SEEDS } from "../design-system/open-examples";
 
 beforeEach(() => {
   vi.stubGlobal(

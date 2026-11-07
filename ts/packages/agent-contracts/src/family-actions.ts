@@ -4,8 +4,10 @@ import { specDocSchema } from "./family.ts";
 import { documentRefSchema } from "./target.ts";
 import { nativeProcessSchema } from "./native-process.ts";
 import { workKeySchema } from "./route-state.ts";
+import { workHandleSchema } from "./command.ts";
 import { podDraftSourceSchema, podMemberSchema, podMemberSourceSchema } from "./settings.ts";
 import {
+  familiesObservationSchema,
   diagnosticSchema,
   familyExecutionOptionsSchema,
   ffPlanEntrySchema,
@@ -113,6 +115,14 @@ const applyInputSchema = z
     "Choose one source, source batch, preview, or the reviewed Work",
   );
 export const familyActions = {
+  "families.read": {
+    says: "Audit the selected Families Work scope in the exact document, then bind its completed observation at the reviewed Work revision.",
+    dirties: ["families"],
+    needs: "project-document",
+    effect: "command",
+    input: z.strictObject({ work: workHandleSchema, readId: z.uuid() }),
+    result: familiesObservationSchema,
+  },
   "families.cancel-read": {
     says: "Cancel this exact running Families read in the selected document.",
     dirties: [],

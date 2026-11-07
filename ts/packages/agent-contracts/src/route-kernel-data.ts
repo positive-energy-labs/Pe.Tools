@@ -20,7 +20,7 @@ const policy = {
   share: z.boolean(),
   agent: z.enum(["read", "set", "none"]),
 };
-const scalar = { schema: ref, codec: ref, initial, ...policy };
+const scalar = { schema: ref, codec: ref, initial: initial.optional(), ...policy };
 export const routeFieldJsonSchema = z.discriminatedUnion("role", [
   z.strictObject({
     role: z.literal("subject"),

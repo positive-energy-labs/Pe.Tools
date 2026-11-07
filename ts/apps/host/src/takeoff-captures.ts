@@ -285,6 +285,12 @@ export class TakeoffCaptures {
     );
   }
 
+  /** The typed route reads the same full observation as the explicit Families command. */
+  observeFamilies(work:WorkKey, listener:(value:OwnerValue<FamiliesObservation|null>)=>void) {
+    const key=`families-reading:${workKey(work)}`;
+    return this.reads.observe(key,()=>this.displayedFamilies(work),notify=>this.subscribe(key,notify),listener);
+  }
+
   /**
    * The families matrix Reading's envelope (MAP ruling 3): the last completed matrix read of this
    * document over this filter, as its taken-at and its body's id. The body stays on disk, fetched
@@ -710,6 +716,7 @@ export class TakeoffCaptures {
     const temp = `${path}.${randomUUID()}.tmp`;
     await writeFile(temp, id);
     await rename(temp, path);
+    this.notify(`families-reading:${workKey(work)}`);
   }
 
   async families(id: string): Promise<FamiliesObservation> {

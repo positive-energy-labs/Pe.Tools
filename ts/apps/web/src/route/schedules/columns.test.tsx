@@ -16,14 +16,40 @@ function Grid({
   state,
   onRefused,
 }: {
-  state: Omit<ScheduleGridState, "table" | "setTable" | "cell" | "locate">;
+  state: Omit<ScheduleGridState, "table" | "setTable" | "cell" | "locate" | "at">;
   onRefused: (says: string) => void;
 }) {
   const [table, setTable] = useTableState();
   const [cell, locate] = useState("");
   return (
     <ScheduleGridWorkspace
-      state={{ ...state, table, setTable, cell, locate }}
+      state={{
+        ...state,
+        table,
+        setTable,
+        cell,
+        locate,
+        at: (key) => {
+          const value = state.slice?.cells[key] ?? {};
+          const clear = async () =>
+            state.apply(
+              cellPatches(["cells"], key, value, { kind: "clear" }),
+              state.revision ?? undefined,
+            );
+          return {
+            owner: { route: "schedules", label: "Work" },
+            value,
+            refusal: null,
+            clear,
+            stage: async (value2) =>
+              state.apply(
+                cellPatches(["cells"], key, value, { kind: "set", rung: { value: value2 } }),
+                state.revision ?? undefined,
+              ),
+            transitions: () => (value.edit ? [{ kind: "clear", run: clear }] : []),
+          };
+        },
+      }}
       onRefused={onRefused}
     />
   );
@@ -74,12 +100,8 @@ test("millwork in Model AND Count > 1, through the query box, the header, and it
         revision: 1,
         hydrated: true,
         apply: async () => null,
-        execute: async () => null,
         snapshot,
-        catalog: null,
-        busy: null,
         refused: {},
-        onFocus: { grid: () => {} },
         freshness: "current",
       }}
       onRefused={() => undefined}
@@ -229,12 +251,8 @@ test("a grid cell draws the contract's transitions and accept writes at the rend
         revision: 7,
         hydrated: true,
         apply,
-        execute: async () => null,
         snapshot,
-        catalog: null,
-        busy: null,
         refused: {},
-        onFocus: { grid: () => {} },
         freshness: "current",
       }}
       onRefused={refused.onRefused}
@@ -283,12 +301,8 @@ test("Shift selected schedule cells fill in one revision checked write; focused 
         revision: 9,
         hydrated: true,
         apply,
-        execute: async () => null,
         snapshot: editable,
-        catalog: null,
-        busy: null,
         refused: {},
-        onFocus: { grid: () => {} },
         freshness: "current",
       }}
       onRefused={refused.onRefused}
@@ -345,12 +359,8 @@ test("a range containing a locked schedule cell refuses the whole fill", async (
         revision: 3,
         hydrated: true,
         apply,
-        execute: async () => null,
         snapshot,
-        catalog: null,
-        busy: null,
         refused: {},
-        onFocus: { grid: () => {} },
         freshness: "current",
       }}
       onRefused={refused.onRefused}

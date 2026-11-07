@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { publicRoutes } from "../route/builtin-routes";
+import { publicRoutes } from "../route/route-discovery";
 import { GraphSettingsFields } from "./settings-fields";
 import { settingFields } from "./settings";
 

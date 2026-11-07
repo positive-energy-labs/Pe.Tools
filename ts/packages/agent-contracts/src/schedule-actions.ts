@@ -9,6 +9,7 @@ import {
 } from "./schedule-grid-data.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 import type { RouteStatePatch } from "./route-state.ts";
+import { workHandleSchema } from "./command.ts";
 import { podMemberSourceSchema } from "./settings.ts";
 
 export const scheduleReadingSchema = z.object({
@@ -69,6 +70,18 @@ export function unstale(
   return [rest.length ? { path: ["basis", "stale"], value: rest } : { path: ["basis", "stale"] }];
 }
 export const scheduleActions = {
+  "schedule.grid.read": {
+    says: "Read the selected schedule and bind its immutable capture to that schedule's reviewed Work without dropping authored cells.",
+    needs: "project-document",
+    effect: "command",
+    dirties: ["schedules"],
+    input: z.strictObject({
+      work: workHandleSchema,
+      scheduleId: z.number().int(),
+      maxRows: z.number().int().min(1).max(2000).default(200),
+    }),
+    result: scheduleReadingSchema,
+  },
   "schedule.grid.bind": {
     says: "Bind immutable host schedule evidence to shared Work at an expected revision; retain authored cells and mark changed native bindings stale.",
     needs: "nothing",

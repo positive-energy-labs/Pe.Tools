@@ -312,6 +312,8 @@ export function hostResourceObserver(
           });
         case "takeoff-reading":
           return captures().observe(request.target, accept);
+        case "families-reading":
+          return captures().observeFamilies(request.work,accept);
         case "families-matrix":
           return captures().observeFamiliesMatrix(request.target, request.filter, accept);
         case "family-readings": {

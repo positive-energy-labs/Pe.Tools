@@ -9,18 +9,9 @@ import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Button } from "@pe/kit/lang/button";
 import { routeTree } from "./routeTree.gen";
-import { settingsRoute } from "./settings/route";
-import { ductLossRoute } from "./duct-loss/route";
-import { schedulesRoute } from "./schedules/route";
-import { familiesRoute } from "./families/route";
-import { familyRoute } from "./family/route";
-import { roomsRoute } from "./rooms/route";
 import { takeoffsRoute } from "./takeoff/route";
-import { podsRoute } from "./pods/route";
-import { bindRoute } from "./pages-bind/route";
-import { capturesRoute } from "./captures/route";
-import { opsRoute } from "./ops/route";
-import { openRoute } from "./open/route";
+import { podsRoute } from "./pods/route.tsx";
+import { capturesRoute } from "./captures/route.tsx";
 import { Route as rootRoute } from "./routes/__root";
 
 // Use the unannotated root: the generated tree's file-only type map excludes code routes.
@@ -29,17 +20,8 @@ import { Route as rootRoute } from "./routes/__root";
 const pathOf = (route: AnyRoute) => (route.options as { path?: string }).path;
 const codeRoutes: AnyRoute[] = [
   sessionsRoute,
-  settingsRoute,
-  opsRoute,
-  openRoute,
-  ductLossRoute,
-  schedulesRoute,
-  familiesRoute,
-  familyRoute,
-  roomsRoute,
   takeoffsRoute,
   podsRoute,
-  bindRoute,
   capturesRoute,
 ];
 const codePaths = new Set(codeRoutes.map(pathOf));
@@ -55,17 +37,8 @@ const appRouteTree = rootRoute.addChildren([
   ...fileRoutes,
   ...codeRoutes,
 ] as unknown as FileChildren & {
-  settingsRoute: typeof settingsRoute;
-  opsRoute: typeof opsRoute;
-  openRoute: typeof openRoute;
-  ductLossRoute: typeof ductLossRoute;
-  schedulesRoute: typeof schedulesRoute;
-  familiesRoute: typeof familiesRoute;
-  familyRoute: typeof familyRoute;
-  roomsRoute: typeof roomsRoute;
   takeoffsRoute: typeof takeoffsRoute;
   podsRoute: typeof podsRoute;
-  bindRoute: typeof bindRoute;
   capturesRoute: typeof capturesRoute;
 });
 function NotFound() {

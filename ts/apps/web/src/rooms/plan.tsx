@@ -20,26 +20,19 @@ import type { PaneApi } from "../../../../packages/kit/src/components/lang/graph
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
-import type { RoomsPage } from "./graph";
+import type { RoomsPage } from "./page";
 
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { boundsOf, contentViewport, fitFrame, type Bounds2, type Point2 } from "#/lib/affine-frame";
 import { token } from "@pe/kit/lib/token";
-import { PlanImageLayer, planCorners, type TakeoffPlanImage } from "#/takeoff/level-plan";
+import { PlanImageLayer, planCorners, type TakeoffPlanImage } from "#/scene/plan-image";
 import { pathD } from "#/takeoff/model";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan";
 import { ROOMS_LAYERS, toggleLayer } from "@pe/agent-contracts";
 import { LAYER_SAYS, TraceFaces, TraceLayers, type Layer, type TraceRead } from "./layers";
 import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 import type { PlanGeo } from "./sketch";
-import { useRouteLease } from "#/route/view-bridge";
-
-export interface RoomsPlanLease {
-  thread?: string;
-  ready: boolean;
-  context: Record<string, unknown>;
-}
 
 export type RoomsRegion = RoomsSnapshot.Res.RoomsRegion;
 
@@ -139,7 +132,6 @@ const FILL_HOT_PCT = 40;
 export function RoomsPlan({
   renderPane,
   fixture = false,
-  lease,
   rows,
   plan,
   planRefusal,
@@ -154,7 +146,6 @@ export function RoomsPlan({
   renderPane: PaneApi;
   /** A synthetic plan (`?fixture=plan`): said in the pane's meta, where the view is named. */
   fixture?: boolean;
-  lease?: RoomsPlanLease;
   /** Drawn over the plan in screen px (the feedback layer), given the plan's frame. */
   overlay?: (geo: PlanGeo) => ReactNode;
   /** The regions on the drawn view, labelled as the table labels them. */
@@ -280,7 +271,9 @@ export function RoomsPlan({
     dragDistance: dragDist,
     handlers,
   } = viewport;
-  const layers = (ROOMS_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer)));
+  const layers = ROOMS_LAYERS.filter(
+    (layer) => page.layers === "all" || page.layers.includes(layer),
+  );
   const mapShapes = useMemo(
     () =>
       world?.shapes.map((shape) => ({ d: shape.d, ink: token(REGION_INK[shape.state].ink!) })) ??
@@ -300,7 +293,13 @@ export function RoomsPlan({
       options: ROOMS_LAYERS.map((key) => ({ key, label: key, says: LAYER_SAYS[key] })),
       onToggle: (key: string) =>
         setPage(
-          { layers: toggleLayer(ROOMS_LAYERS, (ROOMS_LAYERS.filter(layer => page.layers === "all" || page.layers.includes(layer))), key as Layer) },
+          {
+            layers: toggleLayer(
+              ROOMS_LAYERS,
+              ROOMS_LAYERS.filter((layer) => page.layers === "all" || page.layers.includes(layer)),
+              key as Layer,
+            ),
+          },
           { history: "push" },
         ),
     },
@@ -313,34 +312,6 @@ export function RoomsPlan({
         [shape.box.minX, shape.box.minY] as const,
         [shape.box.maxX, shape.box.maxY] as const,
       ]) ?? [];
-
-  // The lease's one key is the viewport (`roomsAddress.agent`); the rest stays the person's.
-  useRouteLease("rooms", [page, setPage], {
-    thread: lease?.thread,
-    visible: !!lease?.ready && !empty && !!world && !!size,
-    context: {
-      ...lease?.context,
-      size,
-      frame: world?.frame.transform ?? null,
-      plan: plan ? { href: plan.href, registration: plan.registration } : null,
-    },
-    facts: {
-      pose: view,
-      size,
-      fit: world?.fit ?? null,
-      frame: world?.frame.transform ?? null,
-      units: "model XY feet; affine frame to world pixels; viewport scale and screen translations",
-      counts,
-      totalRegions: rows.length,
-      truncated: rows.length > 100,
-      regions: (world?.shapes ?? []).slice(0, 100).map((shape) => ({
-        guid: shape.region.guid,
-        label: shape.label,
-        role: shape.region.role,
-        bounds: shape.box,
-      })),
-    },
-  });
 
   const callouts = useMemo(() => {
     if (!world || !size) return [];

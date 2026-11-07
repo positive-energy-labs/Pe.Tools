@@ -6,7 +6,7 @@
  */
 import type { RouteGraph } from "@pe/agent-contracts";
 import { GraphRouteView, Refused } from "./mount-chrome";
-import { codeRoute, type CodeRoute } from "./mount-page";
+import { codeRoute, type CodeRoute } from "./mount-file";
 import { admitRoute, type RouteAdapters } from "./mount-pane";
 import { GraphLease, useGraphRoute, type MountRouteProps } from "./mount-work";
 

@@ -1,6 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { loadBuiltinRoute, builtinRouteStamp } from "./builtin-inventory";
-import { module } from "../captures/kernel";
+import { module } from "../shell/admitted-module.test.fixture";
 import generated from "../captures/source-closure.generated.json";
 import {
   createRouteAdmission,
@@ -16,7 +15,7 @@ const closure = () => ({
   ...generated.envelope,
   source: z.literal("builtin-closure").parse(generated.envelope.source),
   version: z.literal(1).parse(generated.envelope.version),
-  data: RouteGraphJson.parse(generated.envelope.data),
+  data: RouteGraphJson.parse(module.data),
   variants: generated.envelope.variants.map((v) => ({
     ...v,
     client: z.enum(["web", "pea"]).parse(v.client),
@@ -24,7 +23,9 @@ const closure = () => ({
 });
 
 test("production source imports admit once through the linker and exact handle registry", async () => {
-  const result = await loadBuiltinRoute("captures", builtinRouteStamp("captures"));
+  const envelope=closure(), fingerprint=await builtinClosureFingerprint(envelope);
+  const inventory=createBuiltinRouteInventory({captures:{module,closure:{envelope,fingerprint},catalog:Object.entries(module.entries).map(([key,entry])=>({key,...entry.axes,uses:[]}))}});
+  const result=(await inventory.prepare("captures",fingerprint)).admit(module);
   expect(result.ok, JSON.stringify(result)).toBe(true);
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   const registry = createAdmittedRouteRegistry();
@@ -44,7 +45,7 @@ test("production source imports admit once through the linker and exact handle r
   receipt.deactivate();
   expect(registry.resolve(result.route)).toBeNull();
   expect(() => registry.register(result.route)).toThrow(/retired/);
-  await expect(loadBuiltinRoute("captures", "0".repeat(64))).rejects.toThrow(/Stale/);
+  await expect(inventory.prepare("captures", "0".repeat(64))).rejects.toThrow(/Stale/);
 });
 
 test("a structural builtin receipt cannot claim source admission", async () => {

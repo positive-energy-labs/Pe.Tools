@@ -12,7 +12,7 @@ import { CellListSelect, List, ListInput, ListPopup } from "@pe/kit/lang/list-po
 import { Button } from "@pe/kit/lang/button";
 import { Table } from "@pe/kit/table/table";
 import { CHAT_SEEDS, CHAT_SEED_STATE, CHAT_SEED_THREADS } from "#/design-system/chat-examples";
-import { DEMO_FAMILIES } from "#/families/seeds";
+import { DEMO_FAMILIES } from "#/design-system/family-fixtures";
 import { DEMO_PODS } from "#/route/seeds";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { selectSkillCommands } from "@pe/agent-contracts/chat-state";

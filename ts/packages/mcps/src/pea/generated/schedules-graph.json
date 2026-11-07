@@ -2,7 +2,8 @@
   "version": 1,
   "capabilities": [
     "work",
-    "native-write"
+    "native-write",
+    "geometry"
   ],
   "key": "schedules",
   "address": "/schedules",
@@ -30,29 +31,26 @@
   "fields": {
     "workspaceId": {
       "role": "subject",
-      "schema": "subject",
-      "codec": "subject",
-      "initial": null,
+      "schema": "workspaceId",
+      "codec": "workspaceId",
+      "initial": {
+        "kind": "ids",
+        "ids": []
+      },
       "url": "push",
       "share": true,
       "agent": "set",
-      "cardinality": "one",
-      "identity": "schedule",
+      "cardinality": "many",
+      "identity": "subject",
       "picker": {
-        "reading": "catalog",
-        "options": "pick"
+        "reading": "roster",
+        "options": "subject"
       }
-    },
-    "selected": {
-      "role": "selection",
-      "kinds": [
-        "schedule"
-      ]
     },
     "table": {
       "role": "pose",
       "schema": "table",
-      "codec": "json",
+      "codec": "table",
       "initial": {
         "query": "",
         "sorts": [],
@@ -61,10 +59,29 @@
       "url": "replace",
       "share": true,
       "agent": "set"
+    },
+    "cell": {
+      "role": "pose",
+      "schema": "cell",
+      "codec": "cell",
+      "initial": "",
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "focus"
+      ]
     }
   },
   "identities": {
-    "schedule": {
+    "subject": {
+      "kind": "local",
+      "codec": "local"
+    },
+    "focus": {
       "kind": "local",
       "codec": "local"
     }
@@ -72,10 +89,11 @@
   "subject": {
     "field": "workspaceId",
     "noun": "schedule",
-    "roster": "catalog",
-    "detail": "retained",
+    "roster": "roster",
+    "detail": "roster",
     "pane": "grid"
   },
+  "historyDetail": "historyDetail",
   "work": {
     "schema": "work",
     "route": "schedules",
@@ -83,29 +101,15 @@
     "migrations": {}
   },
   "readings": {
-    "catalog": {
+    "value": {
       "kind": "use",
-      "entry": "schedules.catalog",
-      "args": "empty",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "retained": {
-      "kind": "use",
-      "entry": "schedules.retained",
-      "args": "workspace",
+      "entry": "schedules.view",
       "deps": {
         "page": [
-          "workspaceId"
+          "workspaceId",
+          "table",
+          "cell",
+          "selected"
         ],
         "work": [],
         "readings": []
@@ -117,31 +121,15 @@
       },
       "refresh": "dependencies"
     },
-    "saved": {
+    "roster": {
       "kind": "use",
-      "entry": "schedules.saved",
-      "args": "savedArgs",
-      "deps": {
-        "page": [],
-        "work": [
-          "basis"
-        ],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "receipts": {
-      "kind": "use",
-      "entry": "schedules.receipts",
-      "args": "receiptArgs",
+      "entry": "schedules.view",
       "deps": {
         "page": [
-          "workspaceId"
+          "workspaceId",
+          "table",
+          "cell",
+          "selected"
         ],
         "work": [],
         "readings": []
@@ -152,86 +140,56 @@
         "resource": "scope"
       },
       "refresh": "dependencies"
-    },
-    "outcome": {
-      "kind": "derive",
-      "output": "outcome",
-      "derive": "outcome",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "receipts"
-        ]
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "preview": {
-      "kind": "use",
-      "entry": "schedule.grid.push.preview",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "explicit",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "explicit"
-    },
-    "snapshot": {
-      "kind": "use",
-      "entry": "schedule.grid.snapshot",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "explicit",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "explicit"
     }
   },
   "verbs": {
     "read": {
-      "kind": "query",
-      "input": "read",
+      "kind": "command",
+      "input": "none",
       "label": "Read schedule",
-      "review": "none",
+      "review": "shown",
       "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
+        "page": [
+          "workspaceId"
+        ],
+        "work": [
+          "writeIntent",
+          "basis",
+          "cells",
+          "takenAt"
+        ],
+        "readings": [
+          "value"
+        ]
       },
-      "captures": [],
-      "entry": "schedule.grid.snapshot",
-      "args": "readArgs",
-      "cancellation": "scope",
-      "lands": "readLands"
+      "captures": [
+        "value"
+      ],
+      "entry": "schedule.grid.read",
+      "intent": "read"
     },
     "bind": {
       "kind": "command",
       "input": "none",
       "label": "Bind schedule",
-      "review": "none",
+      "review": "shown",
       "deps": {
-        "page": [],
-        "work": [],
+        "page": [
+          "workspaceId"
+        ],
+        "work": [
+          "writeIntent",
+          "basis",
+          "cells",
+          "takenAt"
+        ],
         "readings": [
-          "retained"
+          "value"
         ]
       },
-      "captures": [],
+      "captures": [
+        "value"
+      ],
       "entry": "schedule.grid.bind",
       "intent": "bind"
     },
@@ -241,44 +199,24 @@
       "label": "Apply cells",
       "review": "shown",
       "deps": {
-        "page": [],
-        "work": [
-          "basis",
-          "cells"
-        ],
-        "readings": [
-          "saved",
-          "receipts"
-        ]
-      },
-      "captures": [],
-      "ready": "pushReady",
-      "present": "presentPush",
-      "entry": "schedule.grid.push",
-      "intent": "push"
-    },
-    "edit": {
-      "kind": "work",
-      "input": "edit",
-      "label": "Edit schedule cells",
-      "review": "none",
-      "deps": {
         "page": [
           "workspaceId"
         ],
         "work": [
-          "cells",
+          "writeIntent",
           "basis",
+          "cells",
           "takenAt"
         ],
         "readings": [
-          "retained"
+          "value"
         ]
       },
-      "captures": [],
-      "ready": "editReady",
-      "patches": "edit",
-      "describe": "describeEdit"
+      "captures": [
+        "value"
+      ],
+      "entry": "schedule.grid.push",
+      "intent": "push"
     }
   },
   "panes": {
@@ -286,20 +224,13 @@
       "label": "Schedules",
       "purpose": "Inspect and edit schedule cells",
       "draws": [
-        "catalog",
-        "retained",
-        "snapshot",
-        "saved",
-        "receipts",
-        "outcome"
+        "value"
       ],
       "verbs": [
         "read",
-        "edit",
         "bind",
         "push"
-      ],
-      "body": "grid"
+      ]
     }
   },
   "layout": {
@@ -314,7 +245,6 @@
       ],
       "verbs": [
         "read",
-        "edit",
         "bind",
         "push"
       ]
@@ -326,14 +256,8 @@
   "predicates": {},
   "cells": {},
   "workFields": {},
-  "seeds": {
-    "read": {
-      "title": "Mechanical equipment",
-      "load": "seed"
-    }
-  },
+  "seeds": {},
   "needs": "project",
-  "workSubject": "workspaceId",
   "resetOnTarget": [],
   "observe": []
 }

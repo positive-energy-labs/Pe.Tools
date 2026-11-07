@@ -1,5 +1,5 @@
 /** The four authored family fixtures. DATA ONLY — `createFixtureFamilyStore` is deleted (fold 4);
- *  `family/seeds.ts` supplies the Pod browser fixtures. */
+ *  `design-system/family-authoring-examples.ts` supplies the Pod browser fixtures. */
 import box from "@family-fixtures/a-box.json?raw";
 import grd from "@family-fixtures/b-grd.json?raw";
 import bath from "@family-fixtures/c-bath-shower.json?raw";

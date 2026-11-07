@@ -43,7 +43,7 @@ import { queryWords, readClause, visibleRows } from "@pe/kit/table/view";
 
 import { keyOf, pidOf, processOf, selectionOf } from "#/machine/session";
 
-import { OpenControlScope, outcomeOf, useOpenKernel, useOpenOwner } from "./kernel";
+import { OpenControlScope, outcomeOf, useOpenKernel, useOpenOwner } from "./context";
 import type { OutcomeKind } from "@pe/kit/lang/outcome";
 import type { TableState } from "@pe/kit/table/model";
 
@@ -62,7 +62,7 @@ import {
   type LaunchDraft,
   type LaunchPlan,
 } from "./model";
-import { BAY_THREADS } from "./seeds";
+import { BAY_THREADS } from "../design-system/open-examples";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 

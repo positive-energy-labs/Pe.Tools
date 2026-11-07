@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import {
   familyEvidenceSchema,
   settingsCandidate,
+  type SettingsSnapshot,
   settingsFieldDirectives,
   settingsFieldSegments,
   cellPatches,
@@ -15,8 +16,8 @@ import type { TableState } from "@pe/kit/table/model";
 import type { CellWire } from "#/components/work/band";
 import type { GraphMount } from "#/shell/mount";
 import { useWork } from "@pe/kit/lang/work";
-import { familyGraph, type FamilyPage } from "./graph";
-import { readingValue, type FamilySpecReading } from "./sources";
+import type { FamilyPage } from "./page";
+import { readingValue, type FamilySpecReading } from "./value";
 import { familySource } from "./source";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "./model";
 import { draftToPatches, FAMILY_CELLS } from "./project";
@@ -25,7 +26,10 @@ import { displaySpec } from "./spec";
 import { projectBuildReceipt } from "./build";
 import type { FamilySnapshot } from "./types";
 
-export type FamilyMount = GraphMount<FamilyPage, FamilyDraft>;
+export type FamilyMount = Pick<
+  GraphMount<FamilyPage, FamilyDraft>,
+  "snapshot" | "view" | "readings" | "control" | "busy" | "registry" | "subscribe" | "version"
+>;
 export type Inspect = { kind: "part"; slug: string } | { kind: "param"; name: string } | null;
 export type Binding = { slug: string; property: string } | null;
 export type PickerState = { open: string | null; level: string | null; query: string };
@@ -48,7 +52,10 @@ export function useFamilyStore(owner: FamilyMount) {
     ...owner.snapshot(),
     page: owner.view.read().page,
     readings: Object.fromEntries(
-      Object.keys(familyGraph.readings).map((id) => [id, owner.readings.get(id)]),
+      ["profile", "spec", "pods", "receipts", "captureReceipt", "buildReceipt"].map((id) => [
+        id,
+        owner.readings.get(id),
+      ]),
     ),
   };
   const { page, work, target } = scope;
@@ -94,7 +101,6 @@ export function useFamilyStore(owner: FamilyMount) {
   const flush = useCallback(async () => {
     await edits?.flush();
   }, [edits]);
-  const fields = work?.doc.cells ?? {};
   const draftSnapshot = useCallback(
     (edited: boolean): FamilySnapshot | null => {
       if (!work?.doc.reading) return null;
@@ -130,7 +136,17 @@ export function useFamilyStore(owner: FamilyMount) {
     },
     [work?.doc, member],
   );
-  const snapshot = useMemo(() => draftSnapshot(false), [draftSnapshot]);
+  const profile = readingValue<SettingsSnapshot>(scope.readings.profile);
+  // Selecting a saved member is inspection; only an explicit Open replaces the document draft.
+  const snapshot = useMemo(() => {
+    if (member)
+      return profile?.member.pod === member.pod && profile.member.path === member.path
+        ? profile
+        : null;
+    return draftSnapshot(false);
+  }, [draftSnapshot, member, profile]);
+  const inspecting = !!member && snapshot?.rawContent !== work?.doc.reading;
+  const fields = inspecting ? {} : (work?.doc.cells ?? {});
   const authored = useMemo((): unknown => {
     try {
       return snapshot ? JSON.parse(snapshot.rawContent.replace(/^\uFEFF/, "")) : null;
@@ -148,9 +164,13 @@ export function useFamilyStore(owner: FamilyMount) {
         return write(patches, revision);
       },
       lockOf: (key) =>
-        page.stage === "history" ? "History is inspection only" : familyLockOf(authored)(key),
+        inspecting
+          ? "Open this saved member before editing its cells"
+          : page.stage === "history"
+            ? "History is inspection only"
+            : familyLockOf(authored)(key),
     }),
-    [work?.handle.revision, write, flush, authored, page.stage],
+    [work?.handle.revision, write, flush, authored, page.stage, inspecting],
   );
   const [memory, setMemory] = useState({
     drill: { sorts: [], query: "" } as TableState,
@@ -200,8 +220,11 @@ export function useFamilyStore(owner: FamilyMount) {
   );
   const saved = useMemo(() => savedFrom(initialDraft(lane.world)), [lane]);
   const draft = useMemo(
-    () => editState.draft ?? initialDraft(familySource(draftSnapshot(true), evidence).world),
-    [editState.draft, draftSnapshot, evidence],
+    () =>
+      inspecting
+        ? initialDraft(lane.world)
+        : (editState.draft ?? initialDraft(familySource(draftSnapshot(true), evidence).world)),
+    [editState.draft, draftSnapshot, evidence, inspecting, lane],
   );
   const documentTarget = target.kind === "document" ? target.ref : null;
   const documentScope = useMemo(
@@ -219,6 +242,7 @@ export function useFamilyStore(owner: FamilyMount) {
     () => ({
       setDraft: (value: Setter<Draft>): string | void => {
         if (page.stage === "history") return "History is inspection only";
+        if (inspecting) return "Open this saved member before editing its cells";
         if (!lane.document || !edits || !work) return "Read the family before editing fields";
         const previous = edits.getSnapshot().draft ?? draft;
         const updated = next(value, previous);
@@ -299,6 +323,7 @@ export function useFamilyStore(owner: FamilyMount) {
     }),
     [
       page,
+      inspecting,
       lane,
       edits,
       work,

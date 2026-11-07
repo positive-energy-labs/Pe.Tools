@@ -29,59 +29,42 @@
     "resume": "document"
   },
   "fields": {
-    "scope": {
-      "role": "subject",
-      "schema": "subject",
-      "codec": "json",
-      "initial": "[\"families\",\"draft\"]",
-      "url": "push",
+    "readId": {
+      "role": "pose",
+      "schema": "readId",
+      "codec": "readId",
+      "initial": "",
+      "url": "replace",
       "share": true,
-      "agent": "set",
-      "cardinality": "one",
-      "identity": "scope",
-      "picker": {
-        "reading": "scopes",
-        "options": "pickScope"
-      }
+      "agent": "set"
+    },
+    "focus": {
+      "role": "pose",
+      "schema": "focus",
+      "codec": "focus",
+      "initial": "",
+      "url": "replace",
+      "share": true,
+      "agent": "set"
     },
     "selected": {
       "role": "selection",
       "kinds": [
-        "scope"
+        "focus"
       ]
-    },
-    "readId": {
-      "role": "pose",
-      "schema": "text",
-      "codec": "json",
-      "initial": "",
-      "url": false,
-      "share": false,
-      "agent": "none"
-    },
-    "focus": {
-      "role": "pose",
-      "schema": "text",
-      "codec": "json",
-      "initial": "",
-      "url": false,
-      "share": false,
-      "agent": "set"
     }
   },
   "identities": {
-    "scope": {
+    "subject": {
+      "kind": "local",
+      "codec": "local"
+    },
+    "focus": {
       "kind": "local",
       "codec": "local"
     }
   },
-  "subject": {
-    "field": "scope",
-    "noun": "family draft scope",
-    "roster": "scopes",
-    "detail": "matrix",
-    "pane": "main"
-  },
+  "historyDetail": "historyDetail",
   "work": {
     "schema": "work",
     "route": "families",
@@ -89,46 +72,15 @@
     "migrations": {}
   },
   "readings": {
-    "receipts": {
+    "value": {
       "kind": "use",
-      "entry": "families.receipts",
-      "args": "receiptArgs",
+      "entry": "families.view",
       "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "matrix"
-        ]
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
-    },
-    "catalog": {
-      "kind": "use",
-      "entry": "revit.catalog.loaded-families",
-      "args": "catalogArgs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "explicit"
-    },
-    "scopes": {
-      "kind": "derive",
-      "output": "scopes",
-      "derive": "scopes",
-      "deps": {
-        "page": [],
+        "page": [
+          "readId",
+          "focus",
+          "selected"
+        ],
         "work": [],
         "readings": []
       },
@@ -138,114 +90,62 @@
         "resource": "scope"
       },
       "refresh": "dependencies"
-    },
-    "matrix": {
-      "kind": "use",
-      "entry": "families.read",
-      "args": "matrixArgs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "explicit",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "explicit"
-    },
-    "preview": {
-      "kind": "use",
-      "entry": "families.apply.preview",
-      "args": "previewArgs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "explicit",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "explicit"
     }
   },
   "verbs": {
-    "writeCells": {
-      "kind": "work",
-      "input": "cellPatches",
-      "label": "Review family cell",
-      "review": "none",
+    "read": {
+      "kind": "command",
+      "input": "none",
+      "label": "Read families",
+      "review": "shown",
       "deps": {
         "page": [],
         "work": [
+          "writeIntent",
           "scope",
+          "excluded",
           "cells",
           "patch",
-          "excluded",
+          "executionOptions",
+          "pod",
           "takenAt"
         ],
         "readings": [
-          "matrix"
+          "value"
         ]
       },
-      "captures": [],
-      "ready": "cellsReady",
-      "patches": "writeCells",
-      "describe": "describeCells"
+      "captures": [
+        "value"
+      ],
+      "entry": "families.read",
+      "intent": "read"
     },
-    "pick": {
-      "kind": "work",
-      "input": "filter",
-      "label": "Choose families",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "captures": [],
-      "patches": "pick"
-    },
-    "edit": {
-      "kind": "work",
-      "input": "edit",
-      "label": "Edit family value",
-      "review": "none",
+    "stop": {
+      "kind": "command",
+      "input": "none",
+      "label": "Stop family read",
+      "review": "shown",
       "deps": {
         "page": [],
         "work": [
+          "writeIntent",
           "scope",
+          "excluded",
           "cells",
           "patch",
-          "excluded",
+          "executionOptions",
+          "pod",
           "takenAt"
         ],
         "readings": [
-          "matrix"
+          "value"
         ]
       },
-      "captures": [],
-      "ready": "editReady",
-      "patches": "edit",
-      "describe": "describeEdit"
-    },
-    "revert": {
-      "kind": "work",
-      "input": "key",
-      "label": "Revert family value",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [
-          "cells"
-        ],
-        "readings": []
-      },
-      "captures": [],
-      "patches": "revert"
+      "captures": [
+        "value"
+      ],
+      "entry": "families.cancel-read",
+      "intent": "stop"
     },
     "apply": {
       "kind": "command",
@@ -255,53 +155,24 @@
       "deps": {
         "page": [],
         "work": [
+          "writeIntent",
           "scope",
+          "excluded",
           "cells",
           "patch",
-          "excluded",
+          "executionOptions",
+          "pod",
           "takenAt"
         ],
         "readings": [
-          "matrix"
+          "value"
         ]
       },
-      "captures": [],
-      "ready": "applyReady",
-      "present": "present",
+      "captures": [
+        "value"
+      ],
       "entry": "families.apply",
       "intent": "apply"
-    },
-    "read": {
-      "kind": "query",
-      "input": "read",
-      "label": "Read families",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [
-          "scope"
-        ],
-        "readings": []
-      },
-      "captures": [],
-      "entry": "families.read",
-      "reading": "matrix",
-      "args": "read",
-      "cancellation": "scope"
-    },
-    "stop": {
-      "kind": "command",
-      "input": "stop",
-      "label": "Stop family read",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "captures": [],
-      "entry": "families.cancel-read",
-      "intent": "stop"
     }
   },
   "panes": {
@@ -309,20 +180,13 @@
       "label": "Families",
       "purpose": "Audit family values",
       "draws": [
-        "matrix",
-        "catalog",
-        "receipts"
+        "value"
       ],
       "verbs": [
-        "writeCells",
-        "pick",
         "read",
         "stop",
-        "edit",
-        "revert",
         "apply"
-      ],
-      "body": "main"
+      ]
     }
   },
   "layout": {
@@ -330,8 +194,8 @@
     "id": "main"
   },
   "stages": {
-    "audit": {
-      "word": "Auditing",
+    "main": {
+      "word": "Families",
       "panes": [
         "main"
       ],
@@ -343,42 +207,12 @@
     }
   },
   "stageOrder": [
-    "audit"
+    "main"
   ],
   "predicates": {},
-  "salvage": "salvage",
-  "cells": {
-    "parameters": {
-      "segment": "cells",
-      "key": "key",
-      "value": "cell",
-      "groupOf": "group",
-      "show": "show",
-      "label": "label",
-      "focus": "focus",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    }
-  },
-  "workFields": {
-    "cells": {
-      "label": "family parameters",
-      "internal": false
-    },
-    "takenAt": {
-      "label": "capture time",
-      "internal": true
-    }
-  },
-  "seeds": {
-    "audit": {
-      "title": "Family parameters",
-      "load": "seed"
-    }
-  },
+  "cells": {},
+  "workFields": {},
+  "seeds": {},
   "needs": "project",
   "resetOnTarget": [],
   "observe": []

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vite-plus/tes
 
 import { acknowledgeUpdate } from "#/host/install";
 import { alignRevitBootstrap, switchRemoteAdministration, switchShare } from "#/host/machine";
-import { BAY_YOURS_25, MACHINE_SEEDS } from "#/open/seeds";
+import { BAY_YOURS_25, MACHINE_SEEDS } from "#/design-system/open-examples";
 import { GENERATED_FROM } from "@pe/host-contracts/pe-revit-contract";
 import { Button } from "@pe/kit/lang/button";
 import { BootstrapAlignment } from "./bootstrap";

@@ -1,5 +1,5 @@
 import { currentFixture } from "#/shell/fixture-lane";
-import { createContext, use, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { message, type PodRouteDescriptor } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
@@ -7,16 +7,8 @@ import { registerRoute } from "../shell/route-registration";
 import { admitPodArtifact } from "./pod-artifact";
 import { createPodRouteLoader } from "./pod-loader";
 
-type Inventory = {
-  rows: PodRouteDescriptor[];
-  errors: Readonly<Record<string, string>>;
-  loading: boolean;
-  trust: (row: PodRouteDescriptor, trusted: boolean) => Promise<void>;
-};
-const Context = createContext<Inventory | null>(null);
-export function usePodRoutes() {
-  return use(Context);
-}
+import {PodRoutesContext} from "./pod-route-context";
+export {usePodRoutes} from "./pod-route-context";
 
 export function PodRoutesProvider({ children }: { children: ReactNode }) {
   const [rows, setRows] = useState<PodRouteDescriptor[]>([]);
@@ -96,5 +88,5 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
     });
     await publish(next);
   };
-  return <Context value={{ rows, errors, loading, trust }}>{children}</Context>;
+  return <PodRoutesContext value={{ rows, errors, loading, trust }}>{children}</PodRoutesContext>;
 }

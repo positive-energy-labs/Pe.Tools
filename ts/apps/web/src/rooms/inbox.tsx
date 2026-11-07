@@ -17,7 +17,7 @@ import { Button } from "@pe/kit/lang/button";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { tokenRef } from "@pe/kit/lib/token";
 import { CARD_META, CARD_STATES, type Card, type CardState } from "./cards";
-import type { RoomsPage } from "./graph";
+import type { RoomsPage } from "./page";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 type Region = RoomsSnapshot.Res.RoomsRegion;

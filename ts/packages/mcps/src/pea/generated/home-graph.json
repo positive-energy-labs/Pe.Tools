@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "capabilities": [],
+  "key": "home",
+  "address": "/",
+  "name": "Home",
+  "directory": {
+    "group": "Start / open work",
+    "summary": "Find tools and resume open work",
+    "label": "Home",
+    "icon": "Home",
+    "exposure": "Main",
+    "surfaces": {
+      "web": "full",
+      "pwa": "full",
+      "tray": false
+    },
+    "aliases": [],
+    "runtimeNeed": "Host activity and tool directory",
+    "listed": false,
+    "satellites": []
+  },
+  "fields": {
+    "threadSearch": {
+      "role": "query",
+      "schema": "threadSearch",
+      "codec": "threadSearch",
+      "initial": {
+        "v": 1,
+        "keywords": "",
+        "pills": [
+          {
+            "field": "scope",
+            "op": "=",
+            "value": "all"
+          }
+        ]
+      },
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "threadSort": {
+      "role": "query",
+      "schema": "threadSort",
+      "codec": "threadSort",
+      "initial": "",
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "query": {
+      "role": "query",
+      "schema": "query",
+      "codec": "query",
+      "initial": "",
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "exposure": {
+      "role": "query",
+      "schema": "exposure",
+      "codec": "exposure",
+      "initial": "All",
+      "url": "push",
+      "share": true,
+      "agent": "set"
+    },
+    "sort": {
+      "role": "query",
+      "schema": "sort",
+      "codec": "sort",
+      "initial": "workflow",
+      "url": "push",
+      "share": true,
+      "agent": "set"
+    },
+    "folded": {
+      "role": "query",
+      "schema": "folded",
+      "codec": "folded",
+      "initial": [],
+      "url": "replace",
+      "share": true,
+      "agent": "set"
+    },
+    "selected": {
+      "role": "selection",
+      "kinds": [
+        "focus"
+      ]
+    }
+  },
+  "identities": {
+    "subject": {
+      "kind": "local",
+      "codec": "local"
+    },
+    "focus": {
+      "kind": "local",
+      "codec": "local"
+    }
+  },
+  "readings": {},
+  "verbs": {},
+  "panes": {
+    "main": {
+      "label": "Home",
+      "purpose": "Find tools and inspect activity",
+      "draws": [],
+      "verbs": []
+    }
+  },
+  "layout": {
+    "kind": "pane",
+    "id": "main"
+  },
+  "stages": {
+    "main": {
+      "word": "Home",
+      "panes": [
+        "main"
+      ],
+      "verbs": []
+    }
+  },
+  "stageOrder": [
+    "main"
+  ],
+  "predicates": {},
+  "cells": {},
+  "workFields": {},
+  "seeds": {},
+  "needs": "nothing",
+  "resetOnTarget": [],
+  "observe": []
+}

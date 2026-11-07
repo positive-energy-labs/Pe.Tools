@@ -732,9 +732,7 @@ test("a Pea open of a new tool keeps its first lease instance, and a set against
       commandId: "55555555-5555-4555-8555-555555555555",
       revision: 1,
       patch: {
-        sort: routeAddress("families").agent.write({
-          sort: { columns: [{ key: "Name", dir: "asc" }] },
-        }).sort!,
+        sort: familiesProbeGraph.fields.sort!.codec.encode({columns:[{key:"Name",dir:"asc"}]}),
       },
     }),
   );

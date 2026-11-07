@@ -48,7 +48,7 @@ export const module = route({
       title: "Pea",
       purpose: "Read and compose",
       read: loaded,
-      draw: draw(() => import("./chat-shell.tsx"), "ChatDrawing"),
+      draw: draw(() => import("./chat-drawing.tsx"), "ChatDrawing"),
     },
   },
   layout: { kind: "pane", id: "main" },

@@ -16,7 +16,8 @@ const layoutPanes = (panes: Readonly<Record<string, { label: string; purpose: st
       { label, purpose, draws: [], verbs: [] },
     ]),
   );
-import { opsGraph } from "#/ops/graph";
+import {module as opsModule} from "../ops/route";
+const opsGraph=opsModule.data;
 import { PaneSplit } from "../../../../packages/kit/src/components/lang/pane-resize";
 
 beforeEach(() => {
@@ -75,14 +76,13 @@ for (const width of [720, 1280, 1920]) {
     );
     const { container } = render(
       <GraphLayoutView
-        layout={opsGraph.layout}
-        panes={opsGraph.panes}
+        layout={opsGraph.layout as LayoutNode}
+        panes={layoutPanes(opsGraph.panes)}
         active={() => true}
         bodies={bodies}
       />,
     );
-    expect(container.querySelector('[data-pane-id="operation"]')).toBeTruthy();
-    expect(container.querySelector('[data-pane-id="receipts"]')).toBeTruthy();
+    for(const id of Object.keys(opsGraph.panes)) expect(container.querySelector(`[data-pane-id="${id}"]`)).toBeTruthy();
   });
 }
 

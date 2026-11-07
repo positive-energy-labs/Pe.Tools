@@ -29,7 +29,7 @@ import {
   unsavedOf,
   PHASE_TONE,
 } from "#/machine/session";
-import { outcomeOf, useOpenKernel } from "./kernel";
+import { outcomeOf, useOpenKernel } from "./context";
 
 /** The kit's reading of one census row, derived here once for both densities. */
 export const factsOf = (session: MachineSession): SessionFacts => {

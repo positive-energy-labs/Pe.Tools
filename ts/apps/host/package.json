@@ -52,6 +52,7 @@
   "exports": {
     "./settings": "./src/settings.ts",
     "./family-actions": "./src/family-actions.ts",
-    "./family-spec": "./src/family-spec.ts"
+    "./family-spec": "./src/family-spec.ts",
+    "./read-graph": "./src/reads/evaluator.ts"
   }
 }

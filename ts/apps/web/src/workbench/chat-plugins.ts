@@ -22,8 +22,8 @@ import {
   type DocumentRequest,
 } from "@pe/agent-contracts";
 
-import { publicRoutes } from "#/route/builtin-routes";
-import { isRecord } from "#/shell/owner";
+import { publicRoutes } from "#/route/route-discovery";
+import { isRecord } from "@pe/agent-contracts";
 
 export type ChatPluginRoute = string;
 const chatPluginRoutes = () => publicRoutes.keys();

@@ -101,7 +101,6 @@ async function mounted(cells: FamilyDraft["cells"], reading = raw) {
       sources: familySources(),
       binding: familyBinding,
       cell: familyCell,
-      verbDepends: { apply: ["profile"], build: ["profile"] },
       getSnapshot: () => scope,
       subscribe: (notify) => {
         listeners.add(notify);

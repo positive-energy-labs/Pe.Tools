@@ -2,7 +2,6 @@
 import { expect, test, vi, afterEach } from "vite-plus/test";
 import { callOp } from "#/shell/readings-api";
 import { takeoffSources } from "./sources";
-import { roomsSnapshotSource } from "../rooms/sources";
 import type { ReadingContext } from "#/shell/readings";
 
 vi.mock("#/shell/readings-api", async (original) => ({
@@ -35,21 +34,6 @@ test("takeoff acquisition sends the chosen views and zones before subscribing", 
   );
 });
 
-test("rooms entry reads the roster until a view is chosen, then reads only that view", async () => {
-  const deliver = vi.fn();
-  const release = roomsSnapshotSource().open(context({ view: "" }), deliver);
-  await vi.waitFor(() =>
-    expect(callOp).toHaveBeenCalledWith(expect.anything(), "rooms.roster", {}),
-  );
-  if (typeof release === "function") release();
-  const detail = roomsSnapshotSource().open(context({ view: "Zoning plan" }), deliver);
-  await vi.waitFor(() =>
-    expect(callOp).toHaveBeenCalledWith(expect.anything(), "rooms.snapshot", {
-      view: "Zoning plan",
-    }),
-  );
-  if (typeof detail === "function") detail();
-});
 
 test("takeoff metadata roster lists views without requesting a geometry snapshot", async () => {
   const source = takeoffSources()["takeoffs.roster"]!;

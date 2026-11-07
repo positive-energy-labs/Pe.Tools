@@ -1,8 +1,8 @@
 import { settingsCandidate, type FamilyDraft, type SettingsSnapshot } from "@pe/agent-contracts";
 import type { BindingScope } from "#/shell/mount-owner";
 import { familyLockOf } from "./store";
-import type { FamilyPage } from "./graph";
-import { readingValue } from "./sources";
+import type { FamilyPage } from "./page";
+import { readingValue } from "./value";
 
 export type FamilyScope = BindingScope<FamilyPage, FamilyDraft>;
 export const familyWorkRefusal = (scope: FamilyScope) =>
@@ -74,7 +74,8 @@ export function familyCell(row: unknown, scope: FamilyScope) {
   let authored: unknown = null;
   try {
     authored = JSON.parse(scope.work.doc.reading ?? "null");
-  } catch (error) { console.warn("ts/apps/web/src/family/actions.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/family/actions.ts: fallback after failure", error);
     return null;
   }
   if (familyLockOf(authored)(value.key)) return null;

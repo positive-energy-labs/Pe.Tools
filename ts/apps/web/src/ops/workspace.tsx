@@ -1,5 +1,4 @@
-import type { ReadingState } from "#/shell/readings";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { FactChip } from "@pe/kit/lang/chip";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
@@ -7,12 +6,12 @@ import { Code, stringify } from "@pe/kit/lang/code";
 import { Ladder } from "#/route/ladder";
 import { NativeObservationScope } from "#/revit/observation";
 import type { DocumentRef } from "@pe/agent-contracts";
-import type { MountBody } from "#/shell/mount";
+import type { OpsContext } from "./route";
+import { requestOf } from "./form";
 import { OpForm, seedValues, type FormValues } from "./form";
 import { isMutation } from "./manifest";
 import { outputRenderers } from "./renderers";
-import type { OpsPage } from "./graph";
-import type { OpsCatalog } from "./sources";
+
 type Value = {
   op: string;
   request: unknown;
@@ -20,25 +19,26 @@ type Value = {
   elapsedMs: number;
   document: DocumentRef | null;
 };
-export function OpsBody({ owner, page }: MountBody<OpsPage, unknown>) {
-  const catalog = owner.readings.get("catalog") as ReadingState<OpsCatalog>;
-  const observed = catalog.value ?? catalog.previous;
+export function Operation({ ctx }: { ctx: OpsContext }) {
+  const page = ctx.page.read(),
+    observed = ctx.value.value?.catalog;
+  const [values, setValues] = useState<FormValues>({}),
+    [value, setValue] = useState<Value | null>(null),
+    [failure, setFailure] = useState<string | null>(null);
   const operations = observed?.operations ?? [];
   const selected = operations.find((entry) => entry.key === page.op);
-  const values = page.values;
-  const setValues = (values: FormValues) => owner.view.setPage({ values });
-  const value = page.result as Value | null;
+
   const Output = value ? outputRenderers[value.op] : undefined;
   useEffect(() => {
     if (selected)
-      owner.view.setPage({
-        values: seedValues(
+      setValues(
+        seedValues(
           selected.requestSchemaJson,
           selected.requestExamples?.[0]?.json ?? selected.safeDefaultRequestJson ?? undefined,
         ),
-        result: null,
-      });
-  }, [owner, selected?.key]);
+      );
+    setValue(null);
+  }, [selected?.key]);
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
       <Ladder
@@ -52,9 +52,9 @@ export function OpsBody({ owner, page }: MountBody<OpsPage, unknown>) {
               label: entry.displayName ?? entry.key,
               sub: `${entry.intent ?? "unknown"} / ${entry.needs}`,
             })),
-            note: catalog.error ?? observed?.bridgeCatalogError,
+            note: !ctx.value.current ? ctx.value.reason : observed?.bridgeCatalogError,
             picked: (id) => id === page.op,
-            pick: (op) => owner.view.setPage({ op }),
+            pick: (op) => ctx.page.query({ op }),
           },
         ]}
       />
@@ -96,9 +96,32 @@ export function OpsBody({ owner, page }: MountBody<OpsPage, unknown>) {
               schemaJson={selected.requestSchemaJson}
               values={values}
               onChange={setValues}
-              target={owner.snapshot().target}
+              target={ctx.target ?? { kind: "host" }}
             />
           </section>
+          <Button
+            label="Run operation read"
+            refusal={
+              isMutation(selected)
+                ? "Use a semantic command with Plan and Apply for mutations"
+                : !ctx.value.current
+                  ? ctx.value.reason
+                  : null
+            }
+            onClick={() =>
+              void ctx
+                .write("run")
+                .run({ op: selected, request: requestOf(values) })
+                .then((result) => {
+                  setValue(result as Value);
+                  setFailure(null);
+                })
+                .catch((error) => setFailure(String(error)))
+            }
+          >
+            Run read
+          </Button>
+          {failure && <p role="alert">{failure}</p>}
           {value ? (
             <section className="flex flex-col gap-2">
               <h2>

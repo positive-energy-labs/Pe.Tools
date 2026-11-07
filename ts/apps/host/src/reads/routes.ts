@@ -1,4 +1,4 @@
-import {builtins} from "../../../web/src/route/builtins.neutral.ts";
+import {hostReadModules} from "./registry.generated.ts";
 import {valueReadRequest,type HostRouteModule} from "@pe/agent-contracts";
 import {
   fansReadRequest,
@@ -35,7 +35,7 @@ function bind<I, O>(
   };
 }
 /** Trusted host modules extend the graph without an endpoint or port branch. */
-export function readRegistry(modules:readonly HostRouteModule[]) {
+export function readRegistry(modules:readonly Pick<HostRouteModule,"reads"|"leaves">[]) {
   const reads=new Map<string,Read<any,any>>(),leaves:Record<string,NonNullable<HostRouteModule["leaves"]>[string]>={};
   for(const module of modules) {
     for(const read of Object.values(module.reads ?? {})) {
@@ -49,7 +49,7 @@ export function readRegistry(modules:readonly HostRouteModule[]) {
   }
   return {reads,leaves};
 }
-export const registeredReads=readRegistry(Object.values(builtins).map(b=>b.host));
+export const registeredReads=readRegistry(hostReadModules);
 /** HTTP adapters select a read; composition and freshness belong to the evaluator. */
 export function graphRoute(id: string, raw: unknown, registry=registeredReads) {
   if(id === "reads.value") {

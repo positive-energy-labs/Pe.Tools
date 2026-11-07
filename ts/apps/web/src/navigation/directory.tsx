@@ -13,11 +13,11 @@ import { Information } from "./popover";
 import type { NavigationWork } from "./navigation-client";
 import { PrimaryRouteControls } from "./route-controls";
 import { RouteHelpButton } from "#/route/help";
-import { useRouteLease, type AddressPage } from "#/route";
+
 import { usePublishRouteOptions } from "#/settings/options";
 import type { PageOption } from "#/settings/option-state";
 import type { DirectorySearch } from "./directory-search";
-import { usePodRoutes } from "#/route/pod-routes";
+import { usePodRoutes } from "#/route/pod-route-context";
 
 type DirectoryPage = DirectorySearch;
 const directoryOptions: readonly PageOption<DirectoryPage>[] = [
@@ -106,11 +106,15 @@ function NavigationStatus() {
     </div>
   );
 }
-export function Directory({ page: address }: { page: AddressPage<"home"> }) {
+export function Directory({
+  page: address,
+}: {
+  page: readonly [DirectorySearch, (patch: Partial<DirectorySearch>) => void];
+}) {
   const pods = usePodRoutes();
   const [page, setPage] = address;
   const { query, exposure, sort, folded } = page;
-  usePublishRouteOptions("index", "Tools", directoryOptions, page, setPage);
+  usePublishRouteOptions("home", "Tools", directoryOptions, page, setPage);
   const { snapshot, loading, error } = useNavigation();
   const go = useDestination();
   const tools = TOOLS.filter((tool) => exposure === "All" || tool.exposure === exposure);
@@ -162,7 +166,9 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
       ...local,
       search: { v: 1, keywords: query, pills: [] },
       sort,
-      open: tools.filter((tool) => !(folded === "all" || folded.includes(tool.to))).map((tool) => tool.to),
+      open: tools
+        .filter((tool) => !(folded.includes(tool.to)))
+        .map((tool) => tool.to),
     },
     onState: (next) => {
       setLocal(next);
@@ -170,7 +176,9 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
         query: next.search.keywords,
         sort: next.sort || "workflow",
         folded: [
-          ...(folded === "all" ? tools.map(tool => tool.to) : folded).filter((path) => !tools.some((tool) => tool.to === path)),
+          ...folded.filter(
+            (path) => !tools.some((tool) => tool.to === path),
+          ),
           ...tools.filter((tool) => !next.open.includes(tool.to)).map((tool) => tool.to),
         ],
       });
@@ -185,16 +193,6 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
             ? podPath(item.pod)
             : item.work.url;
       if (url) go(url);
-    },
-  });
-  useRouteLease("home", address, {
-    facts: {
-      tools: list.rows
-        .filter((item) => item.item.kind === "tool")
-        .slice(0, 200)
-        .map(({ item }) =>
-          item.kind === "tool" ? { to: item.tool.to, exposure: item.tool.exposure } : {},
-        ),
     },
   });
   const row = (item: DirectoryItem): ListRowParts => {
@@ -255,7 +253,7 @@ export function Directory({ page: address }: { page: AddressPage<"home"> }) {
   return (
     <Scroll className="size-full">
       <main className="mx-auto w-full max-w-6xl p-5">
-        <PrimaryRouteControls route="index">
+        <PrimaryRouteControls route="home">
           <RouteHelpButton
             name="Tool directory"
             docs="Find a tool by task or description. Main, Preview and Archive are provisional exposure choices, not quality certification. Saved Works stay under the tool that owns them; unavailable destinations explain why they cannot resume. Ctrl Shift K searches tools, saved Works and Pea threads. Search and Home open explicit destinations; route-owned guards retain control of edit changes."

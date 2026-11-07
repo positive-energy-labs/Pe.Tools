@@ -1,6 +1,6 @@
 import { cellPatches, type RouteStatePatch, type CellLike } from "@pe/agent-contracts";
 
-import { DEMO_FAMILIES } from "#/families/seeds";
+import { DEMO_FAMILIES } from "#/design-system/family-fixtures";
 
 export const PARAMETERS = [
   "Manufacturer",

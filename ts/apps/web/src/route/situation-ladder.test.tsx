@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { discoveryMachine, readingKey, READING_MAX_FRAME_BYTES } from "@pe/agent-contracts";
 import { resourceResponse } from "../../../../packages/runtime/src/resource-stream.ts";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture.ts";
-import { MACHINE_SEEDS, CHECKOUT_HOT } from "#/open/seeds";
+import { MACHINE_SEEDS, CHECKOUT_HOT } from "#/design-system/open-examples";
 
 vi.mock("#/machine/use-machine", () => ({
   useMachineSlice: (select: (reading: { state: "absent" }) => unknown) =>
