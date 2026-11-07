@@ -743,14 +743,14 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                     canonicalJson([identity.caller, graph.publication.subscription]),
                     graph.publication.generation,
                     port,
-                    history && writer && documentRefSchema.safeParse((graph.args as {target?:unknown}).target).success ? (publication) => history.record(async () => {
+                    history && writer && documentRefSchema.safeParse((graph.args as {target?:unknown}).target).success ? async (publication) => {
                       const row = await scoped(consumption!)(inventory.document((graph.args as { target: import("@pe/agent-contracts").DocumentRef }).target).pipe(Effect.provideService(RequestIdentity, identity)));
                       const address = addressSchema.parse(row.address);
                       await complete(consumption!);
                       const raw = web.headers.get("x-pe-history-page");
                       const pose = raw ? historyPoseSchema.parse(JSON.parse(decodeURIComponent(raw))) : { instance: graph.name, route: graph.name.split(".")[0]!, page: {}, href: `/${graph.name.split(".")[0]}` };
-                      return [canonicalJson([identity.caller, graph.publication!.subscription]), graph.name, pose, address, row, publication];
-                    }) : undefined,
+                      return history.record(canonicalJson([identity.caller, graph.publication!.subscription]), graph.name, pose, address, row, publication);
+                    } : undefined,
                   )
                 : graph.evaluate(port).catch((error: unknown) => {
                     if (isDoorFailure(error)) throw error;
