@@ -6,12 +6,12 @@ import {
 } from "@pe/kit/lang/popover";
 import { useRouteSearchSlice } from "#/route/activity";
 import { fansLink } from "../../../fans/route.ts";
-import { AttentionRoot, useHoveredIssue } from "#/attention";
+import { useHoveredIssue } from "#/attention";
 import { PointerCite } from "#/shell/pointer-list";
 import { pointerRefs } from "../../pointer-refs";
 import { subscribe as knobsChanged } from "#/knobs/knobs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
-import { NativeObservationScope, type NativeObservation } from "#/revit/observation";
+import { type NativeObservation } from "#/revit/observation";
 import { LoadingContext } from "#/route/loading-context";
 import { PaneActions } from "#/shell/pane-actions";
 import { useAdmittedSubject } from "#/shell/subject";

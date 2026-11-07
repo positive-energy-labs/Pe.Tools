@@ -4,11 +4,9 @@ import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length
 import { StateCell, cellSource } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
-import { AttentionRoot } from "#/attention";
 import { PointerCite } from "#/shell/pointer-list";
 import { pointerRefs } from "../pointer-refs";
 import { useRevitSubjectProps } from "#/revit/element-menu";
-import { NativeObservationScope } from "#/revit/observation";
 import { useRouteSearchSlice } from "#/route/activity";
 import { picturePageMove } from "#/shell/picture-page";
 import { useAdmittedSubject } from "#/shell/subject";

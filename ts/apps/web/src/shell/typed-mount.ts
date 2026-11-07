@@ -270,6 +270,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         patches:step.transitions.slice(0,step.cursor).reverse().flatMap(t=>t.inverse)},token);
     } };
   const reviews = new Map<string, { preview: z.output<typeof writePreviewSchema>; input: Record<string, unknown>; token: InvocationToken; signature: string; presentation: any }>();
+  const consentReviews = new Map<string, ReturnType<typeof reviews.get>>();
   const problems = new Map<string,string>();
   const plans = new Map<string,InvocationToken>();
   const workSignature = () => canonicalRouteInput([...owners].map(([id,o]) => [id,o.ready,o.handle]));
@@ -337,9 +338,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (apply) {
       const held = reviews.get(id);
       if (!held || held.signature !== workSignature() || !gate.current(held.token)) throw Error("Review is stale; prepare it again");
-      reviews.delete(id); notify();
-      const result = await settleNative(door.submit({ id: crypto.randomUUID(), key: cmd.entry, target: input.target!, input: held.input }));
-      syncReads(true); return result;
+      consentReviews.set(id,held); reviews.delete(id); notify();
+      try {
+        const result = await settleNative(door.submit({ id: crypto.randomUUID(), key: cmd.entry, target: input.target!, input: held.input }));
+        syncReads(true); return result;
+      } finally {consentReviews.delete(id);notify();}
     }
     let token: InvocationToken | undefined;
     try {
@@ -408,9 +411,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     refresh: (read?:import("../route/host-read").HostRead) => {
       requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);
     }, run, result:(id:string)=>results.get(id),
-    review: (id: string) => { const r=reviews.get(id); if(!r) return null;
+    review: (id: string) => { const r=reviews.get(id)??consentReviews.get(id); if(!r) return null;
       const stale = r.signature !== workSignature() || !gate.current(r.token);
-      return { preview: stale ? undefined : r.preview, sentence: stale ? null : r.presentation.sentence,
+      return { preview: stale || !reviews.has(id) ? undefined : r.preview, sentence: stale ? null : r.presentation.sentence,
         rows: stale ? [] : r.presentation.rows, cells: stale ? [] : r.presentation.cells, stale }; },
     reviewProblem: (id: string) => problems.get(id) ?? null,
     cancel: (id: string) => { const token=plans.get(id);if(token) gate.retire(token.token);plans.delete(id);reviews.delete(id);notify(); },

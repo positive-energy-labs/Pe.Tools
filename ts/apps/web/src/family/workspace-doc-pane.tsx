@@ -25,6 +25,7 @@ import { Code, stringify } from "@pe/kit/lang/code";
 
 export function FamilyWorkspaceDocPane() {
   const {
+    cells,
     world,
     parse,
     lane,

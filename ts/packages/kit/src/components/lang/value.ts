@@ -8,7 +8,7 @@ export interface ValueHandle<Data> {
   readonly reason?: string;
 }
 
-type DrawingData<T> = T extends (...args: never[]) => unknown
+type DrawingData<T> = T extends string | number | boolean | bigint | symbol | null | undefined ? T : T extends (...args: never[]) => unknown
   ? T
   : T extends ReadonlyMap<infer K, infer V>
     ? Map<K, DrawingData<V>>
