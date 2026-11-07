@@ -46,7 +46,11 @@ test("production workspace acquisitions carry context", () => {
         const type = checker.getNonNullableType(checker.getTypeAtLocation(node.expression.expression));
         if (type.getSymbol()?.name === "RouteWorkspace" && ["view", "read", "subscribe"].includes(method)) {
           const required = method === "subscribe" ? 2 : 3;
-          if (node.arguments.length < required || node.arguments[required - 1]?.getText(source) === "undefined")
+          const context = node.arguments[required - 1];
+          const contextType = context && checker.getTypeAtLocation(context);
+          const maybeAbsent = (type: ts.Type): boolean =>
+            !!(type.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null)) || (type.isUnion() && type.types.some(maybeAbsent));
+          if (!contextType || maybeAbsent(contextType))
             offenders.push(`${path}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1} ${method}`);
         }
       }

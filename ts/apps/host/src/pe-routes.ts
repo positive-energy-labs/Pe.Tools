@@ -311,7 +311,7 @@ export function createPeRoutes(options: PeRoutesOptions) {
     ? createDuctsAnalysis({
         ...options.ductsAnalysis,
         readWork: async (key) => {
-          const saved = await work.read(key, key.route, context);
+          const saved = await (context ? work.read(key, key.route, context) : work.readUncaptured(key, key.route));
           if (!saved) throw Error(`Work is absent for ${key.route}`);
           return saved;
         },
