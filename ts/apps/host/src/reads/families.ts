@@ -22,6 +22,7 @@ export const familiesView = read("families.view", {
     const view = await ctx.read(workRead("families", familiesRouteState.schema), scope);
     const work = familiesRouteState.schema.parse(view?.doc ?? {});
     const { body: catalog } = await ctx.read(nativeRead("revit.catalog.loaded-families"), {
+      role: "none",
       request: { filter: {}, budget: { maxEntries: 5000 } },
       target: { kind: "document", ref: args.target },
     });

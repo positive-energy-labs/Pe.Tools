@@ -29,6 +29,7 @@ export const ductsRoster = read("ducts.roster", {
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
     const response = await ctx.read(nativeRead("ducts.snapshot.roster"), {
+      role: "acquire",
       target: { kind: "document", ref: target },
       request: {
         slots: staged.parameters,
@@ -49,6 +50,7 @@ const systems = read("ducts.systems", {
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
     const response = await ctx.read(nativeRead("ducts.snapshot.walk"), {
+      role: "acquire",
       target: { kind: "document", ref: target },
       request: {
         slots: staged.parameters,
@@ -126,6 +128,7 @@ export const ductsPricing = read("ducts.pricing", {
     const layers = await ctx.read(designLayers, args.target),
       catalog = await ctx.read(catalogs, null);
     const tables = await ctx.read(nativeRead("ducts.tables"), {
+      role: "acquire",
       target: { kind: "document", ref: args.target },
       request: { ids: [...TABLE_IDS] },
     });

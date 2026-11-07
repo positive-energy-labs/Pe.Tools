@@ -295,7 +295,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     current: InputConsumption,
     input: NativeReadInput,
     readOptions: { version?: string; refresh?: string },
-    role: "acquire" | "validate" | "join" | "beyond" | undefined,
+    role: "acquire" | "validate" | "join" | "beyond" | "none",
     document: HostSessionInventory["Service"]["document"],
   ) =>
     Effect.gen(function* () {

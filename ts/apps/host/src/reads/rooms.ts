@@ -17,6 +17,7 @@ export const reads = {
       const work = await ctx.read(workRead("rooms", roomsRouteState.schema), key);
       const snapshot = (
         await ctx.read(nativeRead(view ? "rooms.snapshot" : "rooms.roster"), {
+          role: "none",
           request: view ? { view } : {},
           target,
         })
@@ -27,8 +28,13 @@ export const reads = {
         planError = null;
       if (view) {
         try {
-          trace = (await ctx.read(nativeRead("rooms.trace"), { request: { view }, target: target }))
-            .body;
+          trace = (
+            await ctx.read(nativeRead("rooms.trace"), {
+              role: "none",
+              request: { view },
+              target: target,
+            })
+          ).body;
         } catch (error) {
           traceError = String(error);
         }
@@ -36,6 +42,7 @@ export const reads = {
           plan = planOf(
             (
               await ctx.read(nativeRead("revit.context.view-image"), {
+                role: "none",
                 request: { target: { name: view }, pixelSize: 8000 },
                 target,
               })

@@ -49,8 +49,13 @@ test("recorded host-local inputs and immutable capture files replay without a li
     input: z.object({ target: executionTargetSchema }),
     output: nativeOutputSchema("revit.context.view-image"),
     run: async (ctx, args) =>
-      (await ctx.read(nativeRead("revit.context.view-image"), { target: args.target, request: {} }))
-        .body,
+      (
+        await ctx.read(nativeRead("revit.context.view-image"), {
+          role: "none",
+          target: args.target,
+          request: {},
+        })
+      ).body,
   });
   const unregister = registeredReads.register({ image: imageRead });
   const writer = await settle(openRecordingWriter(join(dir, "bundle"), identity, bounds));

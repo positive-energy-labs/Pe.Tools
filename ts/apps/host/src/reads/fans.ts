@@ -138,6 +138,7 @@ export const fansSheet = read("fans.sheet", {
     ].sort((a, b) => a - b);
     const geometry = ids.length
       ? await ctx.read(nativeRead("ducts.snapshot.walk"), {
+          role: "acquire",
           request: {
             slots: staged.parameters,
             labelParameter: staged.labelParameter ?? undefined,

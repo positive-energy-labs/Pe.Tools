@@ -47,6 +47,7 @@ export const espOptions = read("fans.esp-options", {
       return { espOptions: null, espOptionsError: "No unit identities in this fan scope" };
     try {
       const response = await ctx.read(nativeRead("revit.catalog.field-options"), {
+        role: "none",
         target: { kind: "document", ref: target },
         request: {
           key: "parameter-identities",
@@ -180,10 +181,12 @@ const sheetModel = read("fans.calculation", {
             },
     };
     const response = await ctx.read(nativeRead("ducts.snapshot.walk"), {
+      role: "acquire",
       request: acquisition,
       target: { kind: "document", ref: request.target },
     });
     const tables = await ctx.read(nativeRead("ducts.tables"), {
+      role: "acquire",
       request: tableRequest,
       target: { kind: "document", ref: request.target },
     });
@@ -504,6 +507,7 @@ export const fanRoster = read("fans.roster", {
       design = ductsDesign(saved.ducts, saved.fans);
     const slots = stagedDucts(design, design).parameters;
     const response = await ctx.read(nativeRead("ducts.snapshot.roster"), {
+      role: "acquire",
       target: { kind: "document", ref: target },
       request: { ...(Object.keys(slots).length ? { slots } : {}), selector: { kind: "roster" } },
     });

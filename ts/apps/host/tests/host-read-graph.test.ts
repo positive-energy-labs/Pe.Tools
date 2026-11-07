@@ -283,6 +283,7 @@ test("HTTP document targets normalize once before generated native handles and p
     output: tables.output,
     run: (ctx, args) =>
       ctx.read(tables, {
+        role: "acquire",
         target: { kind: "document" as const, ref: args.target },
         request: { ids: [] },
       }),
