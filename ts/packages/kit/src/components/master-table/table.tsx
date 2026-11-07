@@ -8,6 +8,7 @@ import { cellFactsText, cellStateLabel } from "../lang/cell";
 import { Tag } from "../lang/chip";
 import { useCollection } from "../lang/collection";
 import type { ListReading } from "../lang/collection";
+import { valueRows, type ValueHandle } from "../lang/value";
 import { StatusLine } from "../lang/list-popup";
 import { EmptyState } from "../lang/empty";
 import { Scroll } from "../lang/scroll";
@@ -57,8 +58,7 @@ function useTableSelection(selection: TableSelection | undefined, shown: readonl
   return { toggle: (key: string, range: boolean) => collection.pick(key, range) };
 }
 
-export interface TableProps<Row extends RowData> {
-  rows: readonly Row[];
+interface TablePresentation<Row extends RowData> {
   status?: ListReading;
   failure?: string;
   columns: readonly Column<Row>[];
@@ -98,14 +98,21 @@ export interface TableProps<Row extends RowData> {
   };
 }
 
+export type TableProps<Row extends RowData, Data = readonly Row[]> = TablePresentation<Row> & (
+  { rows: readonly Row[]; value?: never; rowsOf?: never } |
+  { value: ValueHandle<Data>; rowsOf: (data: Data) => readonly Row[]; rows?: never }
+);
+
 /** Why a named target is not drawn: the query filtered its row out, or its column is hidden. */
 export const ACTIVE_ROW_HIDDEN = "its row is hidden by the query";
 export const ACTIVE_COLUMN_HIDDEN = "its column is hidden";
 
-export function Table<Row extends RowData>({
-  rows,
-  status = "ready",
-  failure,
+export function Table<Row extends RowData, Data = readonly Row[]>({
+  rows: suppliedRows,
+  value,
+  rowsOf,
+  status: suppliedStatus = "ready",
+  failure: suppliedFailure,
   columns: rawColumns,
   rowKey,
   label,
@@ -127,7 +134,11 @@ export function Table<Row extends RowData>({
   maxHeight,
   caption,
   cellEdit,
-}: TableProps<Row>) {
+}: TableProps<Row, Data>) {
+  const projection = value ? valueRows(value, rowsOf) : null;
+  const rows = projection?.items ?? suppliedRows!;
+  const status = projection?.status ?? suppliedStatus;
+  const failure = projection?.failure ?? suppliedFailure;
   const [own, setOwn] = useState(emptyTableState);
   const state = controlled ?? own;
   const columns = useMemo(
