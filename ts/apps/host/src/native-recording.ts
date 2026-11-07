@@ -11,6 +11,8 @@ import { Cause, Clock, Effect, Exit, Layer, Option, Result, Schema } from "effec
 import { attemptFor, CurrentInputConsumption } from "./input-occurrence.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { validationIssueSchema } from "@pe/host-contracts/contracts";
+import { nativeOutputSchema } from "@pe/agent-contracts";
+import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { BridgeError } from "@pe/host-internal/dispatch";
 import { HostNativeRead, canonicalJson, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
@@ -909,12 +911,10 @@ const replaying = (store: RecordingReader, bindings: ReadonlyMap<string, string>
       Effect.gen(function* () {
         const { taking, answer } = yield* select(request, true);
         const raw = yield* store.observation(taking);
-        const schemas = yield* readSchemas(request.key);
-        const value = yield* Schema.decodeUnknownEffect(schemas.response)(raw).pipe(
-          Effect.mapError(() =>
-            refuse("mismatch", `Recorded ${request.key} no longer satisfies its contract`),
-          ),
-        );
+        const value = yield* Effect.try({
+          try:()=>Schema.decodeUnknownSync(Schema.Json)(nativeOutputSchema(request.key as HostOperationKey).parse(raw)),
+          catch:()=>refuse("mismatch", `Recorded ${request.key} no longer satisfies its contract`),
+        });
         return {
           value,
           nativeRequestId: answer.nativeRequestId,
