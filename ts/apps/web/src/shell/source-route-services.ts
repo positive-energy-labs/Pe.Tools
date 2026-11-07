@@ -106,6 +106,7 @@ export function sourceRouteServices(
       ) {
         const state = reads.get(request);
         // Semantic previews belong to the host journal, never the native /call door.
+        // TODO: historical Read plans need a recorded command-input port; current executors acquire native lifecycle outside the read graph.
         const command = Object.hasOwn(commands, request.key.op)
           ? commands[request.key.op as SemanticActionKey]
           : undefined;
