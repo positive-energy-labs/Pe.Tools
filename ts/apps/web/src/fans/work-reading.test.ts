@@ -23,7 +23,7 @@ const settle = (write: Observation<WorkWriteOutcome>) =>
     ),
   );
 
-test("the host refuses cross-route patches and the declared Work reading observes the real owner", async () => {
+test("the host refuses cross-route patches and the declared Work owner observes the real owner", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.fans.readingStatus("owner:ducts").snapshot.current).toBe(true));
   const fanCalls = () => [...f.calls].filter(([key]) => key.startsWith("fans:"));
@@ -43,10 +43,9 @@ test("the host refuses cross-route patches and the declared Work reading observe
   const admission = {
     routeKey: "fans",
     fingerprint: f.admitted.presenter.workFingerprint,
-    reading: "owner:ducts",
   };
   expect(await f.ws.admitFeed(ductKey, admission)).toBeNull();
-  expect(await f.ws.admitFeed(ductKey, { ...admission, reading: "not-declared" })).toMatchObject({
+  expect(await f.ws.admitFeed({...ductKey,route:"rooms"}, admission)).toMatchObject({
     code: "WorkRouteMismatch",
   });
   expect(

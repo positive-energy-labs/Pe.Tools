@@ -325,22 +325,6 @@
         "resource": "scope"
       },
       "refresh": "dependencies"
-    },
-    "owner:fans": {
-      "kind": "work",
-      "route": "fans",
-      "output": "fans",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
     }
   },
   "verbs": {

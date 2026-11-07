@@ -2,12 +2,14 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ChoiceCell } from "../ducts/sheet/choice-cell";
+import type { OwnedCell } from "../route/typed-route";
 import { EspParameter } from "../ducts/sheet/esp-parameter";
 import { Roster } from "../ducts/sheet/view";
 import { SubjectDoor } from "../shell/subject";
 import fixture from "../ducts/sheet/sheet.fixture.json";
 import { ductsRosterResponseSchema } from "@pe/agent-contracts";
 
+const parameterCell = (stage:OwnedCell["stage"] = vi.fn(async()=>null)):OwnedCell => ({owner:{route:"fans",label:"Work"},value:{},refusal:null,stage,clear:async()=>null,transitions:()=>[]});
 const live = vi.hoisted(() => ({ state: "ready", result: "Success", read: vi.fn() }));
 vi.mock("../shell/readings-hooks", async (original) => ({
   ...(await original<object>()),
@@ -69,15 +71,13 @@ test("F6 an acknowledged role edit renders the option label with its author, nev
 });
 
 test("F5 live parameter metadata reaches the picker and the slot stages the name, not the identity key", async () => {
-  const commit = vi.fn(async () => undefined);
+  const commit = vi.fn(async () => null);
   render(
     <EspParameter
       target={{ session: "s", openId: "d" }}
       units={["u"]}
-      cell={{}}
+      cell={parameterCell(commit)}
       model="Old ESP"
-      transitions={[]}
-      commit={commit}
     />,
   );
   expect(live.read).toHaveBeenLastCalledWith(
@@ -92,7 +92,7 @@ test("F5 live parameter metadata reaches the picker and the slot stages the name
   fireEvent.click(screen.getByRole("button", { name: "Old ESP" }));
   expect(await screen.findByText("Shared · Double · pressure")).toBeTruthy();
   fireEvent.click(screen.getByRole("option", { name: /Available ESP/ }));
-  await waitFor(() => expect(commit).toHaveBeenCalledWith("Available ESP"));
+  await waitFor(() => expect(commit).toHaveBeenCalledWith("Available ESP", {label:"Unit ESP"}));
 });
 
 test("a staged write scope keeps its own cell census rather than today's offered scope", () => {
@@ -117,10 +117,8 @@ test("F5 no unit identities never widens parameter discovery to the document", (
     <EspParameter
       target={{ session: "s", openId: "d" }}
       units={[]}
-      cell={{}}
+      cell={parameterCell()}
       model="ESP"
-      transitions={[]}
-      commit={vi.fn()}
     />,
   );
   expect(live.read).toHaveBeenLastCalledWith(
@@ -137,10 +135,8 @@ test.each(["loading", "failed"])("F5 %s options cannot stage a stale choice", (s
     <EspParameter
       target={{ session: "s", openId: "d" }}
       units={["u"]}
-      cell={{}}
+      cell={parameterCell()}
       model="Old ESP"
-      transitions={[]}
-      commit={vi.fn()}
     />,
   );
   expect(view.container.querySelector('[data-body="locked"]')).toBeTruthy();

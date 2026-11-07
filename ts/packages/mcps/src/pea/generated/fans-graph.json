@@ -277,22 +277,6 @@
         "resource": "scope"
       },
       "refresh": "dependencies"
-    },
-    "owner:ducts": {
-      "kind": "work",
-      "route": "ducts",
-      "output": "ducts",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "visible",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "dependencies"
     }
   },
   "verbs": {
