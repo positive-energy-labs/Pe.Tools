@@ -70,6 +70,20 @@ function harness(replay: Frame[] = []) {
     emit: (kind: string, frame: Frame) => listeners.get(kind)!(frame),
   };
 }
+test("absent Work stays absent without failing or releasing feeds, then accepts current Work", () => {
+  const h = harness();
+  h.emit("work-acks", { kind: "snapshot", key: "acks", value: null });
+  h.emit("work", { kind: "snapshot", key: "work", value: null });
+  expect(h.values.at(-1)).toEqual({ kind: "absent" });
+  expect(h.values.some((state) => state.kind === "failed")).toBe(false);
+  expect(h.end).not.toHaveBeenCalled();
+  expect(h.stops.every((stop) => stop.mock.calls.length === 0)).toBe(true);
+  h.emit("work", snapshot(0));
+  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { revision: 0, value: { amount: 0 } } });
+  h.unsubscribe();
+  expect(h.stops.every((stop) => stop.mock.calls.length === 1)).toBe(true);
+});
+
 test("ack invalidation after a ready snapshot requests a new snapshot instead of stranding Work", () => {
   const h = harness();
   h.emit("work", snapshot(1));
