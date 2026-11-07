@@ -11,7 +11,8 @@ import { productPathNames, scriptingWorkspaceIdentity } from "@pe/host-contracts
 import { hostOwnership } from "./host-ownership.ts";
 import {
   archiveId,
-  exportPod,
+  preparePodExport,
+  writePodExport,
   installArchive,
   readZip,
   TransferRefused,
@@ -37,12 +38,22 @@ async function shippedPodsRoot(options: TransferOptions & { ledger?: string }): 
   const listing = await listPackages(examples);
   if (listing.unreadable.length)
     throw Error(`Unreadable shipped Pods: ${listing.unreadable.map((pod) => pod.message).join("; ")}`);
-  const shipped = join(dirname(options.ledger ?? ledgerPath()), "shipped-pods");
-  for (const pod of listing.packages)
-    await exportPod(
-      { pod: pod.id, archivePath: join(shipped, `${pod.id}.zip`) },
-      { podsRoot: examples, captures: options.captures },
-    );
+  // The complete admitted input snapshot includes vendored dependencies. Content-addressed
+  // archives are shared safely across hosts, and unchanged examples need no export or rewrite.
+  const fingerprint = createHash("sha256").update(JSON.stringify(listing.packages.map(pod =>
+    [pod.id, pod.members.map(member => [member.path, member.sha256])]))).digest("hex");
+  const shipped = join(dirname(options.ledger ?? ledgerPath()), "shipped-pods", fingerprint);
+  for (const pod of listing.packages) {
+    const archivePath = join(shipped, `${pod.id}.zip`);
+    if (await readFile(archivePath).then(() => true, error => {
+      if (error.code !== "ENOENT") throw error;
+      return false;
+    })) continue;
+    await writePodExport(await preparePodExport(
+      { pod: pod.id, archivePath },
+      { podsRoot: examples, captures: options.captures }, listing,
+    ));
+  }
   return shipped;
 }
 

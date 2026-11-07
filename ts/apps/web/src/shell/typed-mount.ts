@@ -26,6 +26,7 @@ import { applicationWorkRegistry, createApplicationWorkRegistry } from "./applic
 import { createWorkFeedClient } from "./work-feed-client";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import { publicationPose, recordedWorkDoor } from "./history";
+import { startFreshRouteWork } from "../route/host";
 import { settleWork } from "./work-door-observation";
 import { freezePage } from "./page-port";
 import type { PlaceInput } from "./typed-place";
@@ -145,7 +146,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           if (ack.revision > record.handle.revision) {
             const result = applyPatches(config.state, { version: 1, revision: record.handle.revision, doc: record.doc },
               ack.by, ack.patches, ack.base, true, true);
-            if (!result.ok) throw Error(result.error);
+            if (!result.ok) throw Error("error" in result ? result.error : "Start fresh was refused");
             accept(record, { key: ack.key, revision: ack.revision }, result.envelope.doc);
           }
           lease.entry.journal.accept(ack);
@@ -393,6 +394,27 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const mounted = {
     spec, subjectState, move,
     absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
+    recoveryOwners: () => [...owners].filter(([,record]) =>
+      record.failure?.kind === "failed" && record.failure.code === "WorkUnreadable" && record.failure.schemaAge === "older" &&
+      !input.readOnly && !input.history && input.fixture === null).map(([id]) => id),
+    recoveryPending: () => pending.has("work.fresh"),
+    recoveryFailure: () => problems.get("work.fresh") ?? null,
+    async startFresh(owner: string) {
+      requireWritable();
+      if (!mounted.recoveryOwners().includes(owner)) throw Error("Only proven older Work permits Start fresh");
+      if (pending.has("work.fresh")) throw Error("Start fresh already pending");
+      const record = owners.get(owner)!;
+      pending.add("work.fresh"); problems.delete("work.fresh"); notify();
+      try {
+        const result = await startFreshRouteWork(record.scope.key);
+        if (!result.ok) throw Error("error" in result ? result.error : "Start fresh was refused");
+        requireWritable();
+        if (owners.get(owner) !== record) return;
+        // Failed feeds are terminal. Reacquire the same selected Work after the explicit recovery.
+        ownerKey = undefined; syncWork(); syncReads(true);
+      } catch(error) { problems.set("work.fresh",error instanceof Error ? error.message : String(error)); throw error; }
+      finally { pending.delete("work.fresh"); notify(); }
+    },
     startAction():import("../route/typed-route").ActionHandle|null {
       if([...owners.values()].some(record=>!record.ready&&!record.absent)) return null;
       const absent=[...owners].filter(([,record])=>record.absent);

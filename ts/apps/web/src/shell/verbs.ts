@@ -571,7 +571,7 @@ function resolve(
 ): VerbScope | Refusal {
   if (verb.caller === "human" && ctx.caller !== "human")
     return refuse("not-ready", "Only a person can invoke this host door");
-  if (snapshot.closed && verb.kind !== "page")
+  if (snapshot.closed && verb.kind !== "page" && implementationOf(verb)?.recover !== "start-fresh")
     return refuse("not-ready", snapshot.failure ?? "This Work only reads");
   if (snapshot.failure && verb.kind !== "query" && verb.kind !== "recovery" && verb.kind !== "page")
     return refuse("not-ready", snapshot.failure);

@@ -24,8 +24,9 @@ export function fileRouteDocumentStore(dir: string): RouteDocumentStore {
       const path = join(dir, filename(targetKey, route));
       if (!existsSync(path)) return null;
       // ADR 0033 rule 5 exception (2026-11-07, PROVISIONAL pending kaitpw): refuse and keep
-      // unreadable/old-schema bytes so nothing vanishes silently; explicit Start fresh sets
-      // them aside. No migration or conversion is permitted.
+      // all unreadable bytes. Only a proven older schema permits explicit Start fresh to set
+      // bytes aside; corruption, newer/unknown schemas and identity mismatches get no reset.
+      // No migration or conversion is permitted.
       const unreadable = (reason: string) =>
         Object.assign(Error(`Stored Work '${targetKey}' (${route}) cannot be read: ${reason}`), {
           code: "WorkUnreadable",

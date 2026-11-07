@@ -52,7 +52,7 @@ export function createMountVerbs<P, W>(
   const { timeline } = history;
   // One executable recovery for every mount; its declaration is the contract's, so Pea reads the same verb.
   const { kind: _kind, review: _review, ...freshDeclaration } = startFreshVerb;
-  const startFresh = recoveryVerb("start-fresh", freshDeclaration);
+  const startFresh = recoveryVerb("start-fresh", { ...freshDeclaration, primary: true });
   const { kind: _salvageKind, review: _salvageReview, ...salvageDeclaration } = salvageVerb;
   const salvage = recoveryVerb("salvage", salvageDeclaration);
   // Validation ran above: cell verb ids cannot collide with graph verbs, so a plain spread is safe.

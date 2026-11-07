@@ -832,7 +832,7 @@ export class RouteWorkspace {
   }
 
   /**
-   * Either author moves unreadable Work aside, byte-for-byte and never parsed, to the first free
+   * Either author moves provably older Work aside, byte-for-byte and never parsed, to the first free
    * `<route>:aside:<n>`, and starts an empty Work at the same address. Readable Work is refused.
    */
   async startFresh(scope: WorkKey, route: string, by: WorkAuthor): Promise<RouteStateWriteResult> {
@@ -851,14 +851,13 @@ export class RouteWorkspace {
       const raw = await this.#store.getState({ targetKey, route });
       if (raw == null || readable(raw, spec))
         return refuse("refused", "this route's Work is readable", "Nothing to set aside.");
-      // Recovery also covers unreadable values at the current schema (U8rv). The
-      // older-schema-only rule would strand these bytes; newer/unknown schemas stay closed.
+      // ADR 0033 rule 5: only a proven older schema grants recovery authority.
       const age = workSchemaAge(raw, spec);
-      if (age !== "older" && age !== "current")
+      if (age !== "older")
         return refuse(
           "refused",
           UNREADABLE_WORK,
-          "Only a known current or older schema permits Start fresh.",
+          "Only a proven older schema permits Start fresh.",
         );
       let slot = 1;
       while ((await this.#store.getState({ targetKey, route: aside(route, slot) })) != null) slot++;
@@ -1254,8 +1253,8 @@ export class RouteWorkspace {
           ? "reason" in error && typeof error.reason === "string" ? error.reason : error.message
           : String(error);
         throw Object.assign(
-          new Error(`Stored Work '${workKey(scope)}' cannot be read: ${reason}`),
-          { code: "WorkUnreadable", key: scope, reason },
+          new Error(workSchemaAge(raw, spec) === "older" ? OLDER_WORK : `Stored Work '${workKey(scope)}' cannot be read: ${reason}`),
+          { code: "WorkUnreadable", key: scope, reason, schemaAge: workSchemaAge(raw, spec) },
         );
       }
     }
