@@ -5,6 +5,9 @@ using Pe.Revit.DocumentData.Schedules.Apply;
 using Pe.Revit.DocumentData.Schedules.Collect;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
+using Pe.Shared.RevitData.Serialization;
+using Newtonsoft.Json;
+using System.IO;
 
 namespace Pe.Revit.Tests;
 
@@ -90,6 +93,18 @@ public sealed class ScheduleCellBindingProofTests {
                 var plan = projectDocument.ApplyReviewedScheduleCells(new ScheduleCellApplyRequest(
                     entry.ScheduleId, entry.ScheduleUniqueId,
                     [new(dataRows[0].RowNumber, reviewed.ColumnNumber, reviewed, "PE-REVIEW-AFTER")], DryRun: true));
+                var after = CollectEntry(projectDocument, entry.ScheduleId);
+                var settings = RevitDataJson.CreateSerializerSettings();
+                settings.DefaultValueHandling = DefaultValueHandling.Include;
+                settings.NullValueHandling = NullValueHandling.Include;
+                var output = RevitFamilyFixtureHarness.CreateTemporaryOutputDirectory("ScheduleReviewIdentity");
+                var evidence = Path.Combine(output, "native-review.json");
+                File.WriteAllText(evidence, JsonConvert.SerializeObject(new {
+                    before = entry, response = plan, after
+                }, Formatting.Indented, settings));
+                TestContext.WriteLine($"Schedule review native evidence: {evidence}");
+                Assert.That(JsonConvert.SerializeObject(after, settings), Is.EqualTo(JsonConvert.SerializeObject(entry, settings)),
+                    "DryRun must leave independently recollected native values and bindings unchanged.");
                 Assert.That(plan.Results.Single().Ok, Is.True);
                 Assert.That(plan.Results.Single().CurrentBinding!.Targets.Single().ElementLabel, Is.AnyOf(MarkA, MarkB));
                 Assert.That(plan.Results.Single().ParameterResults.Single().ParsedRaw, Is.EqualTo("PE-REVIEW-AFTER"));
