@@ -131,7 +131,7 @@ const envelopeSchema = kernelZ.strictObject({
   executables: kernelZ
     .array(
       kernelZ.strictObject({
-        client: kernelZ.enum(["web", "pea", "shared"]),
+        client: kernelZ.enum(["web", "pea", "shared", "host"]),
         entry: packagePath,
         members: kernelZ.array(kernelZ.strictObject({ path: packagePath, sha256: sha })).min(1),
       }),
@@ -192,7 +192,7 @@ export interface PackageRouteAdmissionEvidence {
   readonly expectedFingerprint: string;
   readonly contracts: readonly { readonly id: string; readonly bytes: Uint8Array }[];
   readonly executables: readonly {
-    readonly client: "web" | "pea" | "shared";
+    readonly client: "web" | "pea" | "shared" | "host";
     readonly entry: string;
     readonly resolved: boolean;
     readonly members: readonly { readonly path: string; readonly bytes: Uint8Array }[];

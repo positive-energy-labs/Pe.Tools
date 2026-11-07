@@ -43,7 +43,7 @@ export interface RouteArtifactBytes {
   readonly fingerprint: string;
   readonly contracts: readonly { readonly id: string; readonly bytes: Uint8Array }[];
   readonly executables: readonly {
-    readonly client: "web" | "pea" | "shared";
+    readonly client: "web" | "pea" | "shared" | "host";
     readonly entry: string;
     readonly resolved: boolean;
     readonly members: readonly { readonly path: string; readonly bytes: Uint8Array }[];
