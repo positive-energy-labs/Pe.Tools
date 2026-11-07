@@ -143,7 +143,7 @@ effectTest("live context loss truncates capture and keeps the live answer unchan
       );
     expect(yield* read("one")).toBe("one");
     expect(yield* read("two")).toBe("two");
-    expect(writer.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), reason: "unsupported" });
+    expect(writer.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), site: "occurrence", op: "files.firm", reason: "unsupported" });
     yield* consumption.seal;
     // A truncated capture never publishes a complete read set.
     const reader = yield* openRecordingReader(dir, identity, bounds);

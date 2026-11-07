@@ -69,7 +69,7 @@ export class History {
       const at = this.writer.capture.begin();
       const problem = error instanceof InvalidRead ? error.problem : undefined;
       if (at !== null) await this.run(this.writer.capture.stop(at,
-        problem === "recording.full" ? "full" : problem === "recording.unsupported" ? "unsupported" : "io"));
+        problem === "recording.full" ? "full" : problem === "recording.unsupported" ? "unsupported" : "io", { site: "builtin", op: "history.record" }));
       return () => {};
     }
   }
