@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { routeAddress, canonicalRouteInput } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { EmptyState } from "@pe/kit/lang/empty";
+import { useList } from "@pe/kit/lang/collection";
+import { PlainList } from "@pe/kit/lang/list-view";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Ladder } from "../route/ladder";
 import { AdoptRegions, type AdoptionStore } from "./adopt-panel";
@@ -11,6 +13,12 @@ import { viewCatalogue, type AdoptionContext } from "./route";
 
 export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
   const data = ctx.value.value;
+  const savedZones = useList({
+    items: data?.saved?.snapshot.world.zones ?? [],
+    keyOf: (row) => row.zone.guid,
+    search: (row) => ({ text: [row.name, row.zone.lane.label, row.zone.declaredSqft, row.stage] }),
+    select: "none",
+  });
   const page = ctx.page.read();
   const catalogue = ctx.read(viewCatalogue);
   const viewNote = catalogue.current ? undefined : catalogue.status === "pending"
@@ -148,9 +156,12 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
             <p>This capture stores takeoff data, not a view image.</p>
             {data.saved.snapshot.world.zones.length === 0 ?
               <EmptyState story="scope" exit="Return to live, choose views and adopt zoning regions">No adopted zones in this saved takeoff</EmptyState> :
-              <ul>{data.saved.snapshot.world.zones.map(row => <li key={row.zone.guid}>
-                {row.name} / {row.zone.lane.label} / {row.zone.declaredSqft} sf / {row.stage}
-              </li>)}</ul>}
+              <PlainList
+                list={savedZones}
+                aria-label="Saved takeoff zones"
+                empty={{ message: "No adopted zones in this saved takeoff", exit: "Return to live, choose views and adopt zoning regions" }}
+                row={(row) => ({ label: `${row.name} / ${row.zone.lane.label} / ${row.zone.declaredSqft} sf / ${row.stage}` })}
+              />}
           </section>}
           <Button label="live" onClick={() => ctx.page.query({ work: "" })}>
             live
