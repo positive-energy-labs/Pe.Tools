@@ -191,14 +191,14 @@ effectTest("an unrebuildable failure or a full bundle stops capture, keeps no ta
     );
     // K4: the live failure is returned as it was; capture stops instead of failing the read.
     expect((yield* Effect.flip(files.firm)) as unknown).toEqual(new Error("disk"));
-    expect(writer.capture.truncated()).toEqual({ at: 1, stoppedAt: expect.any(Number), reason: "unsupported" });
+    expect(writer.capture.truncated()).toEqual({ at: 1, stoppedAt: expect.any(Number), site: "failure", op: "files.firm", reason: "unsupported" });
     expect(writer.coverage()).toEqual([]);
     const fullDir = yield* bundle;
     const full = yield* openRecordingWriter(fullDir, identity, { maxBytes: 1_000_000, maxTakings: 1 });
     const kept = yield* service(DuctFiles, DuctFiles.capturing(full).pipe(Layer.provide(liveFiles)));
     yield* kept.ductCatalogs;
     expect(yield* kept.ductCatalogs).toEqual(catalogs);
-    expect(full.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), reason: "full" });
+    expect(full.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "full" });
     expect((yield* reader(fullDir)).coverage()).toEqual(["files"]);
   }),
 );
@@ -264,7 +264,7 @@ effectTest(
       );
       yield* files.firm;
       expect(yield* files.firm).toEqual(firm);
-      expect(writer.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), reason: "full" });
+      expect(writer.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "full" });
       expect(seen).toEqual([(yield* reader(dir)).candidates(inputIdentity(FIRM))[0]!.id]);
       const broken = new InvalidRead({
         message: "read set closed",
@@ -277,7 +277,7 @@ effectTest(
         DuctFiles.capturing(other, () => Effect.fail(broken)).pipe(Layer.provide(liveFiles)),
       );
       expect(yield* refusing.firm).toEqual(firm);
-      expect(other.capture.truncated()).toEqual({ at: 1, stoppedAt: expect.any(Number), reason: "observer" });
+      expect(other.capture.truncated()).toEqual({ at: 1, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "observer" });
     }),
 );
 
