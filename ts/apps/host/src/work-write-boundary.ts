@@ -25,7 +25,8 @@ const hash = (value: unknown) =>
 const canonicalSet = <T>(values: readonly T[]): T[] =>
   [...new Set(values.map(canonicalRouteInput))].sort().map((value) => JSON.parse(value));
 /** The document mark the plan read, as the seal carries it (ADR 0030 rule 4). */
-export const sealedDocumentMark = (marks: DocumentMarks, ref: DocumentRef): WriteSeal["documentMark"] => ({
+export const sealedDocumentMark = (marks: DocumentMarks, ref: DocumentRef,
+): WriteSeal["documentMark"] => ({
   session: ref.session,
   openId: ref.openId,
   observedSince: marks.observedSince ?? null,
@@ -42,7 +43,8 @@ export interface WriteSealInput {
   consumed: readonly Exclude<Consumed, { kind: "document-mark" }>[];
   evidence: unknown;
 }
-export function writeSeal({ caller, request, input, work, incarnation, documentMark, consumed, evidence }: WriteSealInput): WriteSeal {
+export function writeSeal({ caller, request, input, work, incarnation, documentMark, consumed, evidence ,
+}: WriteSealInput): WriteSeal {
   const dependencies = canonicalSet(
     consumed
       .map((item) =>
@@ -90,7 +92,8 @@ async function deriveFromWork(
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader },
 ) {
-  const { work, readWorks } = z.object({ work: workHandleSchema, readWorks: z.record(z.string(), workHandleSchema).optional() }).parse(definition.input.parse(ctx.admission.input));
+  const { work, readWorks } = z.object({ work: workHandleSchema, readWorks: z.record(z.string(), workHandleSchema).optional() ,
+    }).parse(definition.input.parse(ctx.admission.input));
   if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
   const target = ctx.admission.target.ref;
   const observed = await lifetime(bridge, target, false, deps);
@@ -202,11 +205,18 @@ export function workWriteBoundary(
             row.state === "succeeded" &&
             canonicalRouteInput(row.target) === canonicalRouteInput(ctx.admission.target),
         );
-      const preview = previews.filter(row => row.state === "succeeded" &&
+      const latest = previews.at(-1);
+      const planRefusal =
+        latest?.state === "succeeded"
+          ? (latest.result as { planRefusal?: string }).planRefusal
+          : null;
+      if (!previewOnly && planRefusal) throw refused(planRefusal, "ducts.plan-refused");
+      const preview = previews.filter((row ) => row.state === "succeeded" &&
         canonicalRouteInput((row.result as { seal?: WriteSeal }).seal?.caller) === canonicalRouteInput(ctx.caller),
       ).at(-1);
       if (!previewOnly && !preview && previews.length)
-        throw refused("Plan belongs to another caller; plan the current Work first", "preview.caller");
+        throw refused("Plan belongs to another caller; plan the current Work first", "preview.caller",
+        );
       const derivedContext = withInput(ctx, input);
       // Reproduce generated paths and plan references from this exact preview, never a new caller payload.
       derivedContext.admission.id = !previewOnly && preview ? preview.id : ctx.admission.id;
@@ -265,7 +275,8 @@ export function workWriteBoundary(
                   kind: "document-mark" as const,
                   probe: {
                     ref: target,
-                    sealed: { observedSince: plannedMark.observedSince, changedAt: plannedMark.changedAt },
+                    sealed: { observedSince: plannedMark.observedSince, changedAt: plannedMark.changedAt ,
+                    },
                   },
                   expected: true as const,
                 },

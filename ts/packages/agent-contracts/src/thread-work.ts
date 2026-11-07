@@ -5,6 +5,7 @@ import { documentRefSchema } from "./target.ts";
 /** A remembered document connection is display context, never native execution authority. */
 export const threadWorkSchema = z.strictObject({
   threadId: z.string().min(1),
+  place: z.string().min(1).optional(),
   documents: z.array(
     z.strictObject({
       id: z.string().min(1),

@@ -1,3 +1,4 @@
+import { refuse } from "../route/refusal";
 import * as Atom from "effect/reactivity/Atom";
 import { AttentionScope } from "../attention";
 import { NativeObservationScope } from "../revit/observation";
@@ -29,7 +30,8 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { typedSubjectDoor } from "./subject";
 import { PrimaryRouteControls, useHasGlobalNavigation } from "../navigation/route-controls";
 import { useRouteViewBridge } from "../route/view-bridge";
-
+import { createContext, useInsertionEffect, useLayoutEffect } from "react";
+import { useRouteCurrent } from "../route/activity";
 import { mountTypedRoute, type TypedMount } from "./typed-mount";
 import type { TypedRoute } from "../route/typed-route";
 import type { RouteFingerprint } from "@pe/agent-contracts";
@@ -65,17 +67,18 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
   const input = useMemo<PlaceInput>(() => ({ address: place.address, fixture, target: resolved, history, readOnly: !!snapshot, publicationInstance: instance,
     work: { address: history?.point.history.address ?? target.workAddress, open: resolved?.kind === "document" ? resolved.ref : target.workOpen },
     custody: { current: () => place.current() && current.current === signature }, memory: history ? () => pose?.page ?? {} : place.memory }), [place,signature]);
-  const [mount,setMount] = useState<TypedMount | null>(null);
+  const [mounted,setMount] = useState<{mount:TypedMount;input:PlaceInput} | null>(null);
+  const mount = mounted?.input === input ? mounted.mount : null;
   const [problem,setProblem] = useState<string | null>(null);
   useEffect(() => {
     place.setVisible(visible);
-    if (snapshot && !pose || needs !== "browser" && !input.target && !input.work.address && !input.work.open) return;
+    if (snapshot && !pose || needs !== "browser" && !input.target && !input.work.address && !input.work.open) { setMount(null); setProblem(null); return; }
     let state: { mount: TypedMount; input?: PlaceInput; dispose(): void };
     try {
       state = place.state(() => ({ mount: mountTypedRoute(module,input,fingerprint), input, dispose() { this.mount.dispose(); } }));
       if (state.input !== input) { state.mount.dispose(); state.mount=mountTypedRoute(module,input,fingerprint); state.input=input; }
-      setMount(state.mount); setProblem(null);
-    } catch(error) { setProblem(String(error)); return; }
+      setMount({mount:state.mount,input}); setProblem(null);
+    } catch(error) { setMount(null); setProblem(String(error)); return; }
     return () => state.mount.release();
   }, [module,place,input,visible]);
   const lastPose = useRef("");
@@ -99,11 +102,11 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
   if (snapshot && !pose) return <p role="status">This route was never published at this point, or its Page is ambiguous</p>;
   return <><HistoryRail document={snapshot?.point.history.address ?? target.workAddress} route={module.spec.key} address={place.address} snapshot={snapshot} compare={compare} />
     <section className="flex min-h-0 flex-1 flex-col" data-tone={history ? "caution" : undefined} data-wash={history ? "" : undefined} aria-label={history ? "Recorded view, read-only" : undefined}>
-      {problem ? <p role="alert">{problem}</p> : mount ? <TypedChrome mount={mount} document={document} /> : <>{document}<p>Choose a document</p></>}
+      {problem ? <>{document}<p role="alert">{problem}</p></> : mount ? <TypedChrome mount={mount} document={document} thread={params.get("thread") ?? undefined} /> : <>{document}<p role="status">{target.resolution.kind === "failed" ? target.resolution.message : target.bindingLost?.sentence ?? "Document unavailable; choose an exact document again."}</p></>}
     </section></>;
 
 }
-export function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNode }) {
+export function TypedChrome({ mount, document, thread }: { mount: TypedMount; document: ReactNode; thread?: string }) {
   useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);
   const { spec }=mount;
   const visible=useContext(RouteVisibility), portal=useHasGlobalNavigation();
@@ -111,14 +114,17 @@ export function TypedChrome({ mount, document }: { mount: TypedMount; document: 
   const slot=usePaneActionSlot();
   const subject=useMemo(()=>typedSubjectDoor(mount),[mount]);
   const codec=mount.attention;
-  useRouteViewBridge({ route:spec.key,codec,visible,surface:"route",page:mount.page.read(),context:{},facts:{},apply:patch=>{
+  const currentTarget = mount.target();
+  const view = <PlaceView view={{ route:spec.key,thread,codec,visible,surface:"route",page:mount.page.read(),
+    context:{ document: currentTarget?.kind === "document" ? currentTarget.ref : null, work: mount.work()?.handle.key ?? null },facts:{},apply:patch=>{
+    if (!mount.available()) return {ok:false,refusal:refuse("not-ready","Reveal this Place before changing its Page")};
     mount.move(patch as Record<string,unknown>,"push"); return {ok:true,moved:true,receipt:{current:()=>visible,rendered:page=>canonicalRouteInput(page)===canonicalRouteInput(mount.page.read())}};
-  } });
+  } }} />;
   const head=<SituationBand name={spec.name} context={<>{document}<TypedSubject mount={mount} />{spec.edits && mount.work()?<span>{`r${mount.work()!.revision}`}</span>:null}</>}
     alerts={<>{mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}{mount.problem() ? <span role="alert">{mount.problem()}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
     verbs={[...mount.recoveryOwners().map(owner=><TypedWorkRecovery key={owner} mount={mount} owner={owner}/>),...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)]}
     timeline={<TimelineHead owner={mount} history={<GraphHistory owner={mount} />} />} />;
-  return <SubjectDoor.Provider value={subject}><KeyScopeHost id={`route:${spec.key}`} hidden={!visible} className="flex min-h-0 flex-1 flex-col">
+  return <SubjectDoor.Provider value={subject}>{view}<KeyScopeHost id={`route:${spec.key}`} hidden={!visible} className="flex min-h-0 flex-1 flex-col">
     <ScopeKeys keys={actionScopeKeys((["undo","redo"] as const).map(direction=>({id:`work.${direction}`,label:direction,bindings:direction==="undo"?["Mod+Z"]:["Mod+Shift+Z","Mod+Y"],
       options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.history[direction]();}})))} />
     {portal ? <PrimaryRouteControls route={spec.key} slot="situation">{head}</PrimaryRouteControls> : head}
@@ -182,3 +188,40 @@ function TypedStart({mount}:{mount:TypedMount}) {
 export function retainedValueLabel(value:{current:boolean;status:string;value?:unknown}) {
   return value.current||value.value===undefined?null:value.status === "pending"?"Showing previous Value; refreshing":"Showing previous Value; refresh needed";
 }
+
+type View = Parameters<typeof useRouteViewBridge>[0];
+function createViews() {
+  const entries = new Map<string, { view: View; current(): boolean }>();
+  const listeners = new Set<() => void>();
+  let revision = 0;
+  const changed = () => { revision++; for (const listener of listeners) listener(); };
+  return {
+    entries,
+    subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    revision: () => revision,
+    put(id: string, view: View, current: () => boolean) { entries.set(id, { view, current }); changed(); },
+    remove(id: string) { if (entries.delete(id)) changed(); },
+  };
+}
+const PlaceViews = createContext<ReturnType<typeof createViews> | null>(null);
+export function usePlaceViews() { return useMemo(createViews, []); }
+export const PlaceViewsProvider = PlaceViews.Provider;
+
+/** The selected Place keeps its context when Activity folds its drawing and disconnects effects. */
+export function PlaceView({ view }: { view: View }) {
+  const views = useContext(PlaceViews);
+  return views ? <RetainedView views={views} view={view} /> : <DirectView view={view} />;
+}
+function DirectView({ view }: { view: View }) { useRouteViewBridge(view); return null; }
+function RetainedView({ views, view }: { views: ReturnType<typeof createViews>; view: View }) {
+  const id = useMemo(() => crypto.randomUUID(), []), current = useRouteCurrent();
+  useLayoutEffect(() => { views.put(id, view, current); });
+  // Insertion cleanup follows removal, whereas Activity disconnects layout/passive effects on fold.
+  useInsertionEffect(() => () => { queueMicrotask(() => views.remove(id)); }, [views, id]);
+  return null;
+}
+export function PublishedPlaceViews({ views }: { views: ReturnType<typeof createViews> }) {
+  useSyncExternalStore(views.subscribe, views.revision, views.revision);
+  return [...views.entries].map(([id, entry]) => <PublishedView key={id} view={{ ...entry.view, thread: undefined, visible: entry.current() }} />);
+}
+function PublishedView({ view }: { view: View }) { useRouteViewBridge(view); return null; }

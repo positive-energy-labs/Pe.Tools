@@ -36,6 +36,7 @@ export type InputControl =
       digits: number;
       cell: WorkCell;
       positive?: boolean;
+      refusal?: string;
       edit: (value: number) => DuctsSheetEdits;
     }
   | {
@@ -66,7 +67,7 @@ export type InputRow = {
 };
 
 export interface RowContext {
-  snapshot: Pick<DuctSnapshot, "nodes">;
+  snapshot: Pick<DuctSnapshot, "nodes"> & Partial<Pick<DuctSnapshot, "slots">>;
   doc: DuctsDesign | null;
   inputs: SheetInputs | null;
   /** The open fan's unit: its ESP is an input of this sheet; another unit's is not. */
@@ -173,6 +174,10 @@ export function inputRows(ctx: RowContext): InputRow[] {
       (cfm) => ({ equipmentFlows: { [id]: { cfm } } }),
       { equipmentFlows: { [id]: null } },
     );
+    const node = nodes.get(n);
+    const flowControl = rows[rows.length - 1]!.control;
+    if (node && node.flowParameter === null && flowControl.kind === "number")
+      flowControl.refusal = `${[node.type, node.family].filter(Boolean).join(" / ") || "This fan"} has no ${ctx.snapshot.slots?.fanFlow ?? "selected airflow"} parameter; add it to the family or map flow to an existing parameter`;
     if (n === ctx.fanUnitId && ctx.flowConflict)
       rows[rows.length - 1]!.source = ctx.flowConflict.replace(/^fan \d+: /, "Conflict: ");
     if (n === ctx.fanUnitId || unit.esp.source === "Work")

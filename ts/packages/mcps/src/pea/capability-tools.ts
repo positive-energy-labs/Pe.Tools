@@ -15,6 +15,7 @@ import {
   legacyViewRoute,
   familyCatalogRequest,
   refusalSchema,
+  workKeySchema,
   type ActionReceipt,
   actionReceiptSchema,
 } from "@pe/agent-contracts";
@@ -917,8 +918,25 @@ async function dispatch(
       )
         throw new Error("workspaceId targets Pods or Schedules Work only.");
       const workspaceId = input.workspaceId;
+      let mountedScope: Awaited<ReturnType<typeof routeWorkScope>> | undefined;
+      if (viewThread && input.target === undefined && !workspaceId) {
+        const response = await fetch(`${base()}/pe/route-view/${encodeURIComponent(parsed.route)}?thread=${encodeURIComponent(viewThread)}`).catch(() => null);
+        if (response?.ok) {
+          const mounted = await response.json() as { context?: { work?: unknown }; work?: Record<string, unknown> };
+          const key = workKeySchema.safeParse(mounted.context?.work);
+          if (key.success && key.data.route === parsed.route) {
+            const work = key.data, query = new URLSearchParams();
+            if (work.binding === "address") query.set("target", work.target);
+            if (work.binding === "workspace") query.set("work", work.work);
+            const open = work.binding === "open" ? work.open : work.binding === "address" ? work.from : undefined;
+            if (open) query.set("open", `${open.session}/${open.openId}`);
+            mountedScope = { query: query.toString(), target: { session: open?.session ?? null, document: work.binding === "address" ? work.target : null } };
+            if (parsed.member === undefined && mounted.work) return { ok: true, target: mountedScope.target, result: peaWorkValue(mounted.work, payload.schema === true) };
+          }
+        }
+      }
       let workTarget = defaultTarget;
-      if (documentWork(row)) {
+      if (documentWork(row) && !mountedScope) {
         if (input.target !== undefined) {
           if (!("kind" in input.target))
             throw Error(
@@ -938,7 +956,7 @@ async function dispatch(
               query: new URLSearchParams({ work: workspaceId }).toString(),
               target: { session: null, document: null },
             }
-          : await routeWorkScope(workTarget);
+          : mountedScope ?? await routeWorkScope(workTarget);
         const result = peaWorkValue(await routeFetch(parsed.route, scope.query), payload.schema === true);
         if (parsed.route === familiesRouteState.route && !("isError" in result))
           result.hint =
@@ -1000,7 +1018,7 @@ async function dispatch(
                 query: new URLSearchParams({ work: workspaceId }).toString(),
                 target: { session: null, document: null },
               }
-            : await routeWorkScope(workTarget);
+            : mountedScope ?? await routeWorkScope(workTarget);
           const result = await routeFetch(
             parsed.route,
             scope.query,
@@ -1013,7 +1031,7 @@ async function dispatch(
           return { ok: !("isError" in result), target: scope.target, result };
         }
         // Ducts Work is keyed by document: an unbound write lands in Work no page reads (wave 3, 2026-10-19).
-        if (parsed.route === "ducts" && !workspaceId && !workTarget)
+        if (parsed.route === "ducts" && !workspaceId && !workTarget && !mountedScope)
           throw new Error(
             "route:ducts.edit needs an exact document. Pass target {kind: open, ref: {session, openId}} or set a thread default, then read its Work revision before editing.",
           );
@@ -1023,6 +1041,7 @@ async function dispatch(
           input.expectedRevision,
           { patches: Array.isArray(payload.patches) ? payload.patches : [] },
           workspaceId,
+          mountedScope,
         );
       }
       throw Error(`Unknown route operation '${row.key}'`);
@@ -1177,13 +1196,14 @@ async function routeWrite(
   expectedRevision: number,
   body: Record<string, unknown>,
   workspaceId?: string,
+  mountedScope?: Awaited<ReturnType<typeof routeWorkScope>>,
 ): Promise<Outcome> {
   const scope = workspaceId
     ? {
         query: new URLSearchParams({ work: workspaceId }).toString(),
         target: { session: null, document: null },
       }
-    : await routeWorkScope(defaultTarget);
+    : mountedScope ?? await routeWorkScope(defaultTarget);
   const { query } = scope;
   const result = await routeFetch(route, query, {
     ...body,

@@ -201,7 +201,7 @@ test("JP2 reject tampered deliveries and replaced Pod bytes until their new publ
 }, 60_000);
 
 // Recorded harness events enter the same consumers as the conversation and its context ledger.
-import { createElement, Fragment } from "react";
+import { createElement, Fragment, useEffect, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
 import * as Atom from "effect/reactivity/Atom";
@@ -482,4 +482,135 @@ test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", 
     expect((await f.journal.wait("jz-stale")).state, "H29: changed Work withdraws the old review").not.toBe("succeeded");
     expect(f.dispatched.filter(row => row.key === "ducts.apply"), "H29: no refused attempt writes native").toEqual([]);
   } finally { await f.close(); }
+}, 60_000);
+
+
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
+import { createContributionContent } from "../../../host/src/pe-routes";
+import { importShippedPods } from "../../../host/src/installed-pods";
+import { exportPod, installArchive } from "../../../host/src/pod-transfer";
+import { createPluginsHandler } from "../../../host/src/plugins-handler";
+import { PictureCaptures } from "../../../host/src/captures-route";
+import { Directory } from "../navigation/directory";
+import { NavigationProvider } from "../navigation/state";
+import { PodRoutesProvider } from "./pod-routes";
+import { Route as PodTrustRoute } from "../routes/tool.$key";
+import { Members } from "../pods/drawing";
+
+test("JP5 bootstrap replaces only unchanged imports and Home discovers the untrusted publication without reload", async () => {
+  for (const modified of [false, true]) {
+    const host = await fixture(true);
+    const root = resolve(host.dir, "Pods"), shipped = resolve(host.dir, "shipped");
+    const captures = new PictureCaptures(resolve(host.dir, "pictures"), 64 * 1024 * 1024, Date.now);
+    const source = resolve(host.dir, "old", "snowdon-circuits");
+    const examples = resolve(process.cwd(), "../../../examples/pods");
+    const gate = Promise.withResolvers<void>();
+    const completed = Promise.withResolvers<Awaited<ReturnType<typeof importShippedPods>>>();
+    let content: ReturnType<typeof createContributionContent> | undefined;
+    let routes: ReturnType<typeof createPodRoutes> | undefined;
+    let view: ReturnType<typeof render> | undefined;
+    try {
+      await cp(resolve(examples, "snowdon-circuits"), source, {
+        recursive: true, filter: path => !path.split(/[\\/]/).includes("node_modules"),
+      });
+      const manifest = JSON.parse(await readFile(resolve(source, "pod.json"), "utf8"));
+      const current = manifest.routes[0];
+      manifest.routes = [{ sourcePath: "routes/voltage-drop/index.js", name: current.name, description: current.description }];
+      await writeFile(resolve(source, "pod.json"), JSON.stringify(manifest));
+      await writeFile(resolve(source, "routes/voltage-drop/index.js"), "throw Error('Obsolete Pod must never execute');");
+      const old = await exportPod({ pod: manifest.id, archivePath: resolve(host.dir, "old.zip") },
+        { podsRoot: resolve(host.dir, "old"), captures });
+      await installArchive(await readFile(old.archivePath), old.archivePath, undefined, { podsRoot: root, captures });
+      await exportPod({ pod: manifest.id, archivePath: resolve(shipped, "snowdon-circuits.zip") }, { podsRoot: examples, captures });
+      const pod = resolve(root, manifest.id), key = `route:@${manifest.id}/${current.artifact}`;
+      const oldTrust = `pod-bytes:${old.archiveSha256}`;
+      const trustPath = resolve(host.dir, "trust.json");
+      await writeFile(trustPath, JSON.stringify({ [key]: oldTrust }));
+      if (modified) await writeFile(resolve(pod, "README.md"), "Keep this authored worksheet note.");
+      const before = (await listPackages(root)).packages.find(p => p.id === manifest.id)!.members.map(m => [m.path, m.sha256]);
+      content = createContributionContent({ worldRoot: host.dir, packages: () => listPackages(root),
+        decisionsPath: resolve(host.dir, "enabled.json"), bootstrapInBackground: true,
+        bootstrap: async () => {
+          await gate.promise;
+          try {
+            const report = await importShippedPods({ shippedRoot: shipped, podsRoot: root, captures,
+              ledger: resolve(host.dir, "state/shipped-pods.json") });
+            completed.resolve(report);
+          } catch (error) { completed.reject(error); throw error; }
+        },
+      });
+      routes = createPodRoutes(content.lifecycle, { trustPath });
+      const handler = createPluginsHandler(content, routes);
+      let inventoryReads = 0, homeMounts = 0;
+      vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(new URL(input instanceof Request ? input.url : String(input), "http://host"), init);
+        if (new URL(request.url).pathname === "/pe/plugin-routes") {
+          const response = await handler(request); inventoryReads++; return response;
+        }
+        if (new URL(request.url).pathname === "/pe/navigation")
+          return Response.json({ observedAt: new Date().toISOString(), works: [], observations: [], truncated: false });
+        throw Error(`Unexpected JP5 request ${request.url}`);
+      });
+      function Home() {
+        const [page, setPage] = useState<Parameters<typeof Directory>[0]["page"][0]>({ query: "snowdon", exposure: "All", sort: "workflow", folded: [] });
+        useEffect(() => { homeMounts++; }, []);
+        return createElement(Directory, { page: [page, patch => setPage(prior => ({ ...prior, ...patch }))] });
+      }
+      const top = createRootRoute({ component: () => createElement(NavigationProvider, null,
+        createElement(PodRoutesProvider, null, createElement(Outlet))) });
+      // File-route mount metadata is normally supplied by the generated route tree.
+      const trustMount = { id: "/tool/$key", path: "/tool/$key", getParentRoute: () => top, component: PodTrustRoute.options.component };
+      const trust = PodTrustRoute.update(trustMount);
+      const router = createRouter({ routeTree: top.addChildren([
+        createRoute({ getParentRoute: () => top, path: "/", component: Home }), trust,
+      ]), history: createMemoryHistory({ initialEntries: ["/"] }) });
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      await router.load();
+      view = render(createElement(RouterProvider, { router }));
+      await vi.waitFor(() => expect(inventoryReads).toBe(1));
+      expect(screen.queryByText(current.name), "H16: obsolete declarations cannot become executable Home rows").toBeNull();
+      await act(async () => { gate.resolve(); await completed.promise; });
+      const report = await completed.promise;
+      if (!modified && report.outcomes[0]?.outcome === "updated")
+        await vi.waitFor(async () => expect((await routes!.list()).find(row => row.packageId === manifest.id)).toMatchObject({ fingerprint: current.fingerprint }));
+      // Import completion precedes the owner's asynchronous lifecycle reconciliation.
+      // The provider's real interval re-reads; neither router nor Home is reloaded or remounted.
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+      await vi.waitFor(() => expect(inventoryReads).toBeGreaterThan(1));
+      expect(homeMounts, "H16: completion discovers content in the already mounted Home").toBe(1);
+      if (!modified) {
+        expect.soft(report.outcomes[0]?.outcome, "H16: unchanged imported example updates at bootstrap").toBe("updated");
+        const row = (await routes.list()).find(row => row.packageId === manifest.id);
+        expect.soft(row, "H16: replacement publication is discoverable but has no inherited trust").toMatchObject({ trusted: false, fingerprint: current.fingerprint });
+        expect.soft(current.fingerprint).not.toBe(oldTrust);
+        const title = screen.queryByText(current.name);
+        expect.soft(title, "H16: Home gains the published tool without reload").not.toBeNull();
+        if (title) {
+          const item = title.closest('[role="treeitem"]')!;
+          expect(within(item as HTMLElement).getByText("Trust required")).toBeTruthy();
+          fireEvent.click(item);
+          await screen.findByRole("button", { name: `Trust ${current.name} at this fingerprint` });
+          expect(router.state.location.pathname, "H16: Home opens the actual trust page").toBe(`/tool/${encodeURIComponent(key)}`);
+          expect(screen.getByText("Trust this fingerprint")).toBeTruthy();
+        }
+      } else {
+        const kept = (await listPackages(root)).packages.find(p => p.id === manifest.id)!;
+        expect(kept.members.map(m => [m.path, m.sha256]), "H16: modified authored members stay byte-identical").toEqual(before);
+        expect.soft(kept.diagnostics.find(d => d.code === "ShippedExampleUpdateKept"), "H16: retained stale example has a named refusal").toMatchObject({ message: expect.stringContaining("authored members differ") });
+        view.unmount(); cleanup();
+        view = render(createElement(Members, { ctx: {
+          page: { read: () => ({ pod: manifest.id }), query() {} },
+          value: { current: true, value: { pods: [kept] } },
+        } as unknown as Parameters<typeof Members>[0]["ctx"] }));
+        const refusal = screen.getAllByRole("alert").map(node => node.textContent).join(" ");
+        expect.soft(refusal, "H16: the actual Pods pane names the preserved example and reason").toContain("Example update kept Snowdon Circuits: its authored members differ");
+        expect.soft(refusal, "H16: product refusal text never exposes validator internals").not.toMatch(/invalid_type|unrecognized_keys|expected string|received undefined/);
+      }
+    } finally {
+      gate.resolve(); view?.unmount(); cleanup();
+      vi.useRealTimers(); vi.unstubAllGlobals();
+      routes?.close(); await content?.close();
+      await host.close();
+    }
+  }
 }, 60_000);

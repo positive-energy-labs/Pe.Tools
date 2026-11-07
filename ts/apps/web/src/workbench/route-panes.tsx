@@ -1,3 +1,4 @@
+import { usePlaceViews, PlaceViewsProvider, PublishedPlaceViews } from "../shell/typed-shell";
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
@@ -29,6 +30,7 @@ export function RouteDock({
   renderRoute: (body: ReactNode) => ReactNode;
 }) {
   const { store } = useWorkbench();
+  const views = usePlaceViews();
   const tabs = useRouteTabs();
   const pea = useRouterState({
     select: (state) => state.location.pathname === routeAddress("pea").path,
@@ -142,7 +144,7 @@ export function RouteDock({
                     onOpen={() => void navigate({ to: "/open" })}
                   />
                 )}
-                <RouteRetention {...tabs} renderRoute={renderRoute} />
+                <PlaceViewsProvider value={views}><RouteRetention {...tabs} renderRoute={renderRoute} /></PlaceViewsProvider>
               </>,
               {
                 tabs: strip,
@@ -163,6 +165,7 @@ export function RouteDock({
             ),
         }}
       />
+      <PublishedPlaceViews views={views} />
     </ChatPlanIntent.Provider>
   );
 }

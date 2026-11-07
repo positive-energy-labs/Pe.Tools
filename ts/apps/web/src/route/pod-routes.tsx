@@ -1,11 +1,12 @@
 import { currentFixture } from "../shell/fixture-name";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { message, type PodRouteDescriptor } from "@pe/agent-contracts";
+import { type PodRouteDescriptor } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { registerTypedRoute } from "../shell/route-registration";
 import { loadPodRoute } from "./pod-module";
 import { createPodRouteLoader } from "./pod-loader";
+import { readableRefusal } from "./readable-refusal";
 
 import {PodRoutesContext} from "./pod-route-context";
 export {usePodRoutes} from "./pod-route-context";
@@ -36,7 +37,7 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
         if (!current()) return () => {};
         return registerTypedRoute(route.module, route.fingerprint);
       } catch (error) {
-        if (current()) setErrors((prior) => ({ ...prior, [row.key]: message(error) }));
+        if (current()) setErrors((prior) => ({ ...prior, [row.key]: readableRefusal(error, "Pod route unavailable: its artifact does not match the typed route contract. Rebuild this Pod before trusting it.") }));
         throw error;
       }
     });
@@ -74,7 +75,7 @@ export function PodRoutesProvider({ children }: { children: ReactNode }) {
       })
       .catch(async (error: unknown) => {
         if (controller.signal.aborted) return;
-        setErrors({ inventory: message(error) });
+        setErrors({ inventory: readableRefusal(error, "Pod inventory unavailable: the host response does not match its contract. Refresh to try again.") });
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);

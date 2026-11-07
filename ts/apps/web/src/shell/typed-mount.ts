@@ -3,18 +3,11 @@ import { writeReject } from "./catalog-work-reviews";
 import { harnessClient } from "../workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "../workbench/config";
 import { z } from "zod";
+import { readableRefusal } from "../route/readable-refusal";
 
 /** Host refusals carry serialized issues; local Value decoding throws the same issues. */
 function valueRefusal(error: unknown, read: string): string {
-  const message = error instanceof Error ? error.message : String(error);
-  let issues: unknown = error instanceof z.ZodError ? error.issues : null;
-  if (!issues) {
-    try { issues = JSON.parse(message); } catch { /* Domain refusals remain readable as supplied. */ }
-  }
-  return Array.isArray(issues) && issues.length > 0 && issues.every(issue =>
-    issue !== null && typeof issue === "object" && "code" in issue && "path" in issue)
-    ? `Value unavailable (${read}): the model reading does not match its contract. Refresh to try again.`
-    : message;
+  return readableRefusal(error, `Value unavailable (${read}): the model reading does not match its contract. Refresh to try again.`);
 }
 import { decodeField } from "../route/field-codec";
 import {
@@ -100,7 +93,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const selectedKey = () => {
     if(!edits) return null;
     if(edits.key) {const member=edits.key(page as never);return member === null ? null : bindWork(own,null,member);}
-    return bindWork(own,input.work.address,input.address.read().get("work") || undefined,input.work.open ?? undefined);
+    return bindWork(own,input.work.address,undefined,input.work.open ?? undefined);
   };
   let key = selectedKey();
   let renderedBasis: InvocationToken | null = null;
@@ -315,12 +308,14 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const problems = new Map<string,string>();
   const plans = new Map<string,InvocationToken>();
   const workSignature = () => canonicalRouteInput([...owners].map(([id,o]) => [id,o.ready,o.handle]));
+  // Plans seal Work, target and native reads, not the browser-owned Page pose (ADR 0033).
+  const reviewCurrent = (id: string, token: InvocationToken, signature: string) =>
+    !disposed && plans.get(id) === token && gate.read()?.scope === token.token.scope &&
+    signature === workSignature() && Object.entries(token.dependencies).every(([key, hash]) => dependencies()[key] === hash);
   const staleReview = (token: InvocationToken, signature: string) => {
     const state = gate.read(), current = dependencies();
     const changed = [
       signature !== workSignature() && `Work readiness/handles ${signature} -> ${workSignature()}`,
-      token.pageEpoch !== state?.pageEpoch && "Page epoch",
-      token.pageRevision !== state?.pageRevision && `Page revision ${token.pageRevision} -> ${state?.pageRevision}`,
       token.workRevision !== (state?.work?.revision ?? null) && `Work revision ${token.workRevision} -> ${state?.work?.revision ?? null}`,
       ...Object.entries(token.dependencies).flatMap(([key, hash]) => current[key] === hash ? [] : [`Value ${key} ${hash} -> ${current[key] ?? "unavailable"}`]),
     ].filter(Boolean);
@@ -378,7 +373,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     }
     if (apply) {
       const held = reviews.get(id);
-      if (!held || held.signature !== workSignature() || !gate.current(held.token)) throw Error("Review is stale; prepare it again");
+      if (!held || !reviewCurrent(id, held.token, held.signature)) throw Error("Review is stale; prepare it again");
       consentReviews.set(id,held); reviews.delete(id); notify();
       try {
         const result = await settleNative(door.submit({ id: crypto.randomUUID(), key: cmd.entry, target: input.target!, input: held.input }));
@@ -404,7 +399,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const preview = writePreviewSchema.parse(cmd.planContract.output.parse(result));
       const handle = z.object({ handle: workHandleSchema }).parse(preview.seal.work).handle;
       if (canonicalRouteInput(handle) !== canonicalRouteInput(primary)) throw Error("Preview sealed a different Work");
-      if (signature !== workSignature() || !gate.current(token)) throw staleReview(token, signature);
+      if (!reviewCurrent(id, token, signature)) throw staleReview(token, signature);
       const presented=presentationSchema.parse(cmd.present(preview,data,doc));
       reviews.set(id, { preview, input: request as Record<string,unknown>, token, signature,
         presentation: typeof presented === "string" ? {sentence:presented,rows:[]} : presented });
@@ -492,8 +487,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     journal: () => {
       const journals=[...owners.values()].map(o=>o.lease.entry.journal.read()),base=owners.get(own)?.lease.entry.journal.read() ?? {revision:null,from:0,busy:false,receipts:[],undo:[],redo:[],moves:[],last:null};
       return {...base, undo:journals.flatMap(j=>j.undo).sort((a,b)=>a.at-b.at), redo:journals.flatMap(j=>j.redo).sort((a,b)=>a.at-b.at),
-        moves:journals.flatMap(j=>j.moves).sort((a,b)=>a.at-b.at), last:journals.flatMap(j=>j.last?[j.last]:[]).sort((a,b)=>a.step.at-b.step.at).at(-1)??null};
+        intents:journals.flatMap(j=>j.intents), moves:journals.flatMap(j=>j.moves).sort((a,b)=>a.at-b.at), last:journals.flatMap(j=>j.last?[j.last]:[]).sort((a,b)=>a.step.at-b.step.at).at(-1)??null};
     },
+    discardIntent(id: string) { for (const owner of owners.values()) owner.lease.entry.journal.discardIntent(id); notify(); },
     restoreWork: restore, journalRefusal: () => input.readOnly || input.history ? "needs live Revit" : [...owners.values()].some(o=>!o.ready)?"Work unavailable":null,
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
@@ -504,14 +500,14 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     owner: (id = own) => owners.get(id),
     page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => moveRole("pose",patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => moveRole("query",patch), select: (selected: any) => move({selected}), subject: (subject: any) => {if(!spec.subject) throw Error("No subject declared");return move({ [spec.subject.field]: subject },"push");} },
     subscribe(listener: () => void) { released = false; listeners.add(listener); syncReads(); return () => { listeners.delete(listener); }; },
-    revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
+    available: () => !disposed && !released && input.custody.current(), target: () => input.target, revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
     commandRefusal:(id:string)=> input.readOnly || input.history ? "needs live Revit" : input.fixture !== null ? "Fixture has no native actions" : "kind" in spec.commands[id]! ? null : basisRefusal(),
     problem: () => edits?basisRefusal():null, writeRefusal: () => input.fixture !== null ? "Fixture has no native writes" : basisRefusal(),
     refresh: (read?:import("../route/host-read").HostRead) => {
       requireCurrent(); for(const selected of read?[read]:allReads) demanded.add(selected); syncReads(true);
     }, run, result:(id:string)=>results.get(id),
     review: (id: string) => { const r=reviews.get(id)??consentReviews.get(id); if(!r) return null;
-      const stale = r.signature !== workSignature() || !gate.current(r.token);
+      const stale = !reviewCurrent(id, r.token, r.signature);
       return { preview: stale || !reviews.has(id) ? undefined : r.preview, sentence: stale ? null : r.presentation.sentence,
         rows: stale ? [] : r.presentation.rows, cells: stale ? [] : r.presentation.cells, stale }; },
     reviewProblem: (id: string) => problems.get(id) ?? null,
@@ -522,37 +518,49 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const value = pane.read ? reads.get(pane.read)?.snapshot ?? unavailable(pane.read.demand === "explicit"?"Press Read":"Reading...") : unavailable("No read declared");
       const core = spec.core ? reads.get(spec.core)?.snapshot ?? unavailable("Reading...") : unavailable("No read declared");
       const token = basis();
+      const drawnOwners = new Map(owners);
       const handles = new Map([...owners].map(([id,o]) => [id,o.handle]));
+      const docs = new Map([...owners].map(([id,o]) => [id,o.doc]));
       const ready = !!token && (!pane.read || value.current);
+      const refusal = ready ? null : basisRefusal() ?? (!value.current ? value.reason : "Read the current Value before editing");
       const ownerOf = (path: readonly string[], preferred?: string) => {
         const id = preferred ?? (Object.hasOwn(edits!.work.schema.shape,path[0]!) ? own : [...owners].find(([,o]) => Object.hasOwn(o.config.state.schema.shape,path[0]!))?.[0]);
         if (!id || !owners.has(id) || !Object.hasOwn(owners.get(id)!.config.state.schema.shape,path[0]!)) throw Error(`No owning Work for ${path.join(".")}`);
         return id;
       };
       const patch = async (request: readonly RouteStatePatch[] | (()=>readonly RouteStatePatch[]), detail: EditHistory = {label:"Edit"}, preferred?: string): Promise<EditFailure> => {
-        if (!ready || !token) return {code:"unavailable",message:basisRefusal() ?? (!value.current ? value.reason : "Read the current Value before editing")};
+        if (!ready || !token) return {code:"unavailable",message:refusal ?? "Read the current Value before editing"};
         try {
-          requireWritable();
-          if (!basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
           const patches = typeof request === "function" ? request() : request;
           const groups = new Map<string,RouteStatePatch[]>();
           for (const p of patches) { const id=ownerOf(p.path.map(String),preferred); groups.set(id,[...(groups.get(id)??[]),p]); }
           await Promise.all([...groups].map(async ([id, patches]) => {
-            const record=owners.get(id)!, handle=handles.get(id)!;
-            if (!record.ready || canonicalRouteInput(record.handle) !== canonicalRouteInput(handle)) throw Error("Owning Work changed since this cell was drawn");
-            const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc:record.doc},"human",patches,handle.revision,false,true);
+            const record=drawnOwners.get(id)!, handle=handles.get(id)!;
+            const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc:docs.get(id)},"human",patches,handle.revision,false,true);
             if (!applied.ok) throw Error(applied.error);
             // Scalar cells travel whole; record cells keep their narrow keys (host inverse authority).
             const normalized=[...new Set(patches.map(p=>String(p.path[0])))].flatMap(key => bare(record.config.state.schema.shape[key]!) instanceof z.ZodRecord
               ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
             const label=id===own ? detail.label : `${detail.label} · from /${id}`;
-            await submit(record,{kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))},token);
+            const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
+            const journal=record.lease.entry.journal, intent=journal.retainIntent(write,label);
+            notify();
+            try {
+              requireWritable();
+              if (!basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
+              if (owners.get(id)!==record || !record.ready || canonicalRouteInput(record.handle)!==canonicalRouteInput(handle)) throw Error("Owning Work changed since this cell was drawn");
+              await submit(record,write,token);
+              journal.discardIntent(intent);
+            } catch(error) {
+              journal.refuseIntent(intent,error instanceof Error?error.message:String(error));
+              throw error;
+            } finally { notify(); }
           }));
           return null;
         } catch(error) { return {code:"refused",message:error instanceof Error?error.message:String(error)}; }
       };
       const cells: DrawContext<any, any, any, any>["cells"] = {
-        doc: owners.get(own)?.doc ?? null, basis: token, ready, refusal: basisRefusal(), history,
+        doc: owners.get(own)?.doc ?? null, basis: token, ready, refusal, history,
         owner(path) { const route=ownerOf(path); return {route,label:route===own?"Work":`from /${route}`}; },
         at(path,preferred,facts={}) {
           const route=ownerOf(path,preferred), address=[...path];
@@ -574,7 +582,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             return result.ok?null:{code:"undo-refused",message:"message" in result?String(result.message):"Cell undo refused"};
           };
           return {owner:{route,label:route===own?"Work":`from /${route}`},value, facts:{...facts,baseline:facts.baseline??value.base?.value},
-            freshness:ready?"current":owners.get(route)!.doc===null&&core.value===undefined?"never":"stale", refusal: basisRefusal(), clear, accept,deny:clear,undo,
+            freshness:ready?"current":owners.get(route)!.doc===null&&core.value===undefined?"never":"stale", refusal: facts.readOnly ? "This cell is read-only" : refusal, clear, accept,deny:clear,undo,
             stage:(value2,detail)=> facts.readOnly ? Promise.resolve({code:"read-only",message:"This cell is read-only"}) :
               patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,
                 Object.hasOwn(facts,"baseline")&&canonicalRouteInput(value2)===canonicalRouteInput(facts.baseline)?{kind:"clear"}:{kind:"set",rung:{value:value2}}),detail,route),
@@ -587,7 +595,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return (render ?? pane.draw)({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
         write:mounted.action } as any);
     },
-    release() { released = true; for (const r of reads.values()) {r.args="";r.stop();} },
+    // Visibility suspends gestures, not the retained Place's input subscriptions or Plan review.
+    // dispose owns cancellation; real Work/native invalidations must still reach a hidden Place.
+    release() { released = true; },
     dispose() { if (disposed) return; disposed=true; cleanups.splice(0).reverse().forEach(stop => stop()); listeners.clear(); },
   };
   const stopSubject=observeSubject(spec.key,{current:()=>!disposed&&!released&&input.custody.current(),read:subjectState,subscribe:mounted.subscribe});

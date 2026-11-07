@@ -164,6 +164,44 @@ test("J1 open Fans, choose a subject, carry pose through Back/Forward and share 
   }
 }, 60_000);
 
+test("JM B01 move a typed Page while URL custody waits for the router, then share and restore it", async () => {
+  const j = await journey();
+  try {
+    await j.ready();
+    let current = true;
+    const address = { ...j.input.address, write(next: URLSearchParams, intent?: "push" | "replace") {
+      j.input.address.write(next, intent); current = false;
+    } };
+    const mount = mountTypedRoute(fans, { ...j.input, address, custody: { current: () => current } }, j.fingerprint,
+      { work: j.work, sources: { "fans.sheet": j.source } });
+    try {
+      mount.subscribe(() => {});
+      mount.page.subject(j.fan("MUAS-1"));
+      expect(mount.page.read().fan, "B01: its own URL write cannot suppress the visible move").toEqual(j.fan("MUAS-1"));
+      current = true;
+      const restored = mountTypedRoute(fans, j.input, j.fingerprint, { work: j.work, sources: { "fans.sheet": j.source } });
+      try { expect(restored.page.read().fan).toEqual(mount.page.read().fan); } finally { restored.dispose(); }
+    } finally { mount.dispose(); }
+  } finally { await j.close(); }
+}, 60_000);
+
+test("JM H18 open core and roster together, switch fan and retain both host publications", async () => {
+  const j = await journey();
+  try {
+    await j.ready();
+    const roster = fans.spec.reads!.roster;
+    await vi.waitFor(() => expect(j.mount.value(roster).current, "H18: roster survives concurrent core demand").toBe(true));
+    j.mount.page.subject(j.fan("MUAS-1"));
+    await j.ready();
+    expect(j.mount.value(roster).current, "H18: selected core cannot supersede the roster").toBe(true);
+    expect(j.mount.value(roster).value.rows.length).toBeGreaterThan(1);
+    expect(j.mount.value().value.opened.length, "H18: core retains its own selected scope").toBe(1);
+    const point = historyPointSchema.parse(await j.host.history("", { kind: "captured", document: path }));
+    expect(point.history.publications.filter(p => p.read === "fans.sheet").length,
+      "H18: shared operation records both distinct argument publications").toBeGreaterThanOrEqual(2);
+  } finally { await j.close(); }
+}, 60_000);
+
 test("J2 switch a subject while its answer is delayed, then hide and return", async () => {
   const j = await journey();
   let held: ReturnType<typeof gate> | undefined;

@@ -309,11 +309,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
     // Identity and revision checks govern shared Work; thread targets only constrain trust adapters.
     return bindWork(route, doc.address, undefined, { session: doc.session, openId: doc.openId });
   }
-  const analysis = options.ductsAnalysis
+  const analysis = (context?: import("@pe/runtime").WorkReadContext) => options.ductsAnalysis
     ? createDuctsAnalysis({
         ...options.ductsAnalysis,
         readWork: async (key) => {
-          const saved = await work.readRaw(key, key.route);
+          const saved = await work.read(key, key.route, context);
           if (!saved) throw Error(`Work is absent for ${key.route}`);
           return saved;
         },
@@ -441,11 +441,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
       return json(await read(await request.json()));
     }
     if (declared.id === "ducts.analysis" || declared.id === "ducts.analysis-artifact") {
-      if (!analysis) return json({ error: "Ducts analysis is unavailable" }, 503);
+      if (!options.ductsAnalysis) return json({ error: "Ducts analysis is unavailable" }, 503);
       try {
         return declared.id === "ducts.analysis"
-          ? json(await analysis.read(peRoutes["ducts.analysis"].body.parse(await request.json())))
-          : await analysis.artifact(declared.params.id!);
+          ? json(await analysis(invocation.work)!.read(peRoutes["ducts.analysis"].body.parse(await request.json())))
+          : await analysis()!.artifact(declared.params.id!);
       } catch (error) {
         const problem = error as { message?: unknown; statusCode?: unknown };
         const status =
@@ -720,9 +720,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
         const thread = url.searchParams.get("thread");
         if (!thread) return json({ error: "thread required" }, 400);
         const result = views.select(thread, route, url.searchParams.get("instance") ?? undefined);
-        return result && !("ok" in result)
-          ? json(result)
-          : json(result ?? { ok: false, error: "view unavailable" }, 409);
+        if (!result || "ok" in result) return json(result ?? { ok: false, error: "view unavailable" }, 409);
+        const mounted = mountedWorkKeySchema.safeParse(result.context.work);
+        const mountedWork = mounted.success && mounted.data.route === route
+          ? await work.view(mounted.data, route, invocation.work) : null;
+        return json({ ...result, ...(mountedWork ? { work: mountedWork } : {}) });
       }
       if (method === "POST" && instance === "set") {
         const parsed = routeViewSetSchema.safeParse(await body());

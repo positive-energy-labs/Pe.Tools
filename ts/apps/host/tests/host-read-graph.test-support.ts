@@ -1,3 +1,9 @@
+import { ActionJournal } from "../src/action-journal.ts";
+import { makeCallRoute } from "../src/call-route.ts";
+import { RevitBridgeLive } from "../src/bridge.ts";
+import { nativeReadRoot } from "../src/app.ts";
+import { PictureCaptureStore } from "../src/captures-route.ts";
+import { NodeServices, NodeHttpClient } from "@effect/platform-node";
 import { CaptureStore } from "../src/takeoff-captures.ts";
 import type { NativeReadInput } from "@pe/host-internal/native-read";
 import type { BridgeSessionsListData } from "@pe/host-contracts/operation-types";
@@ -16,7 +22,9 @@ import type { RouteWorkspace } from "@pe/runtime";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import rosterCapture from "../../../packages/host-contracts/src/fixtures/k2-roster.json" with { type: "json" };
 import fanCapture from "../../../packages/host-contracts/src/fixtures/k2-four-fan-walk.json" with { type: "json" };
-import { readInputRoutes } from "../src/app.ts";
+import { makeReadOwner } from "../src/builtin-inputs.ts";
+import { createPeRoutes, peCoreRoutes } from "../src/pe-routes.ts";
+import { historyRoutes } from "../src/reads/history-routes.ts";
 import { fansReadResponse } from "../../../packages/agent-contracts/src/fans-read.ts";
 import { HostInputContext } from "../src/input-context.ts";
 import { DuctFiles } from "../src/ducts-files.ts";
@@ -48,6 +56,7 @@ export const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(fanCap
 export async function fixture(
   capture = false,
   recorded: {
+    actions?: boolean;
     snapshot?: typeof snapshot;
     roster?: typeof roster;
     document?: HostSessionInventory["Service"]["document"];
@@ -90,8 +99,23 @@ export async function fixture(
       ),
     ),
   );
+  const journal = new ActionJournal(join(dir, "actions.jsonl"), Date.now);
+  let reads!: Effect.Success<ReturnType<typeof makeReadOwner>>;
+  const fixtureRoutes = (options: Parameters<typeof makeReadOwner>[1]) => Layer.unwrap(Effect.gen(function* () {
+    reads = yield* makeReadOwner(inputs, options);
+    const routes = createPeRoutes({ inputs, workspace: reads.work.workspace, registrations: reads.work.registrations });
+    return Layer.mergeAll(peCoreRoutes(routes, reads.invocation, inputs), historyRoutes(reads.history),
+      recorded.actions ? makeCallRoute(journal, undefined, {workspace: reads.work.workspace, workReads: reads.work.reads}).pipe(
+        nativeReadRoot(), Layer.provide(RevitBridgeLive),
+        Layer.provideMerge(PictureCaptureStore.layer(join(dir, "pictures"))),
+        HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, RevitBridgeLive)),
+      ) : Layer.empty).pipe(
+      HttpRouter.provideRequest(Layer.succeedContext(Context.add(reads.services, HostInputContext, inputs))),
+      Layer.provide(Layer.succeedContext(Context.add(reads.services, HostInputContext, inputs))),
+    );
+  }));
   const web = HttpRouter.toWebHandler(
-    readInputRoutes(inputs, {
+    fixtureRoutes({
       store: fileRouteDocumentStore(join(dir, "work")),
       initialize: async (current) => {
         workspace = current;
@@ -215,6 +239,11 @@ export async function fixture(
   };
   return {
     dir,
+    get reads() { return reads; },
+    inputs,
+    journal,
+    request: (request: Request) => withInvocationContext({ caller: who }, () =>
+      web.handler(request, Context.make(RequestIdentity, admittedRequestIdentity(who, scope)))),
     publicationEvent: async (generation: number) => {
       const url = new URL(peRouteUrl("reads.events", {}), "http://host");
       url.searchParams.set("subscription", "sheet");
