@@ -1,26 +1,19 @@
 import { useContext } from "react";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 /**
- * The rooms table: one row per zone, room and held region. Every edit stages a Work cell (`cellPatches`)
+ * The rooms table: one row per zone, room and held region. Every edit stages an owner cell
  * against what the region holds in Revit; nothing is written until `apply`.
  */
 import { useMemo, useState } from "react";
 import type { TableState } from "@pe/kit/table/model";
 import { visibleRows } from "@pe/kit/table/view";
 import { TableFrame } from "#/components/master-table/table-frame";
-import {
-  roomEditKey,
-  roomEditSchema,
-  cellPatches,
-  type RoomEditField,
-  type RoomsRouteDocument,
-  type RouteStatePatch,
-} from "@pe/agent-contracts";
+import { roomEditKey, roomEditSchema, type RoomEditField } from "@pe/agent-contracts";
 
-import type { CellWire } from "#/components/work/band";
-import { cellFromDraft, type StateCellProps } from "@pe/kit/lang/cell";
+import type { StateCellProps, HandleCellProps } from "@pe/kit/lang/cell";
+import type { ValueHandle } from "@pe/kit/lang/collection";
+import type { RoomsContext } from "./route";
 import { EmptyState } from "@pe/kit/lang/empty";
-import { CellListSelect } from "@pe/kit/lang/list-popup";
 import type { Column, Verdict } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import {
@@ -34,10 +27,7 @@ import {
 } from "./plan";
 
 const ROOM_TYPES = roomEditSchema.shape.type.unwrap().options;
-type RoomType = (typeof ROOM_TYPES)[number];
 const ROLES = roomEditSchema.shape.role.unwrap().options;
-type Role = (typeof ROLES)[number];
-type Cells = RoomsRouteDocument["edits"];
 
 const NUMBERS = [
   ["ceilingFt", "ceiling", "ceiling height, ft"],
@@ -79,23 +69,6 @@ export function roomRows(regions: readonly RoomsRegion[], levels: readonly strin
     .map((region, index) => ({ region, label: regionLabel(region, index) }));
 }
 
-/** One field's stage: equal to what Revit holds stages nothing (the cell unstages). */
-const stagePatches = (
-  cells: Cells,
-  region: RoomsRegion,
-  field: RoomEditField,
-  value: string | number,
-): RouteStatePatch[] => {
-  const key = roomEditKey(region.guid, field);
-  // A designation no person chose has no baseline: staging the same role confirms it as a person's.
-  const held = field === "role" && region.designation !== "person" ? undefined : region[field];
-  return cellPatches(["edits"], key, cells[key] ?? {}, {
-    kind: "set",
-    rung: { value },
-    ...(held === null || held === undefined || held === "" ? {} : { baseline: { value: held } }),
-  });
-};
-
 /** A field as the cell shows it: Revit's null is empty, never "null". */
 const shown = (value: string | number | null | undefined) =>
   value === null || value === undefined ? "" : String(value);
@@ -111,15 +84,13 @@ const VERDICT_TONE = {
 export function RoomsTable({
   rows,
   cells,
-  wire,
-  transitions,
+  value,
   onSelect,
   empty,
 }: {
   rows: readonly RoomRow[];
-  cells: Cells;
-  wire: CellWire;
-  transitions?: (key: string) => StateCellProps["transitions"];
+  cells?: Pick<RoomsContext["cells"], "at">;
+  value?: ValueHandle<unknown>;
   onSelect: (guids: ReadonlySet<string>) => void;
   empty: { says: string; exit: string };
 }) {
@@ -144,28 +115,37 @@ export function RoomsTable({
       region.role === "zone"
         ? ""
         : ((region.zone == null ? undefined : zoneLabels.get(region.zone)) ?? "unassigned");
-    const stage = (region: RoomsRegion, field: RoomEditField, value: string | number) =>
-      wire.write(stagePatches(cells, region, field, value)).then((refusal) => refusal?.message);
-    const cellOf = (row: RoomRow, field: RoomEditField, numeric: boolean): StateCellProps => {
-      const key = roomEditKey(row.region.guid, field);
-      const cell = cells[key] ?? {};
+    const cellOf = (
+      row: RoomRow,
+      field: RoomEditField,
+      numeric = false,
+    ): StateCellProps | HandleCellProps => {
       const held = shown(row.region[field]);
-      const authored = cell.edit;
+      if (!cells) return { value: held, cap: "locked", capReason: "No writable owner" };
+      const owned = cells.at(["edits", roomEditKey(row.region.guid, field)]);
+      const baseline =
+        field === "role" && row.region.designation !== "person" ? undefined : row.region[field];
       return {
-        ...cellFromDraft(cell, {
-          value: authored ? shown(authored.value) : held,
-          modelValue: held || "(blank)",
-          cap: "editable",
-          note:
-            authored && shown(authored.value) !== held
-              ? `Revit holds ${held || "nothing"}`
-              : undefined,
-        }),
+        // CHEAT: owner handles lack baseline-equal clearing and inferred-role confirmation.
+        cell: {
+          ...owned,
+          stage: (next, history) =>
+            baseline !== null && baseline !== undefined && baseline !== "" && next === baseline
+              ? owned.clear(history)
+              : owned.stage(next, history),
+        },
+        value,
+        label: `Edit ${row.label} ${field}`,
+        model: row.region[field],
+        format: (next) => shown(next as string | number | null),
         ...(numeric ? { numeric: { min: 0, digits: 2 } } : {}),
-        onCommit: (text: string) =>
-          numeric ? stage(row.region, field, Number(text)) : stage(row.region, field, text),
-        transitions: transitions?.(key),
       };
+    };
+    const choice = (row: RoomRow, field: RoomEditField, options: readonly string[]) => {
+      const props = cellOf(row, field);
+      return "cell" in props
+        ? { ...props, options: options.map((key) => ({ key, label: key })) }
+        : props;
     };
     return [
       {
@@ -202,33 +182,10 @@ export function RoomsTable({
         width: "w-20",
         facet: (row) => row.region.role,
         options: ROLES.map((role) => ({ value: role, label: role })),
-        cell: (row) => {
-          if (row.region.role === "held")
-            return <span className="block px-(--item-pad-x)">held</span>;
-          const key = roomEditKey(row.region.guid, "role");
-          const cell = cells[key];
-          const value = shown(cell?.edit?.value ?? row.region.role);
-          return (
-            <CellListSelect<Role>
-              aria-label={`${row.label} role`}
-              value={value}
-              display={cell?.edit ? <b>{value}</b> : value}
-              title={
-                cell?.edit
-                  ? `edit · Revit holds ${row.region.role}`
-                  : `${row.region.designation ?? "machine"} designation`
-              }
-              items={ROLES}
-              keyOf={(role) => role}
-              labelOf={(role) => role}
-              empty="no roles"
-              select="single"
-              selected={[value]}
-              onPick={(role) => void stage(row.region, "role", role)}
-              row={(role) => ({ label: role })}
-            />
-          );
-        },
+        state: (row) =>
+          row.region.role === "held"
+            ? { value: "held", cap: "locked" }
+            : choice(row, "role", ROLES),
       },
       {
         key: "type",
@@ -236,27 +193,7 @@ export function RoomsTable({
         width: "w-32",
         facet: (row) => row.region.type,
         options: ROOM_TYPES.map((type) => ({ value: type, label: type })),
-        cell: (row) => {
-          const key = roomEditKey(row.region.guid, "type");
-          const cell = cells[key];
-          const value = shown(cell?.edit?.value ?? row.region.type);
-          return (
-            <CellListSelect<RoomType>
-              aria-label={`${row.label} type`}
-              value={value}
-              display={cell?.edit ? <b>{value}</b> : value || "—"}
-              title={cell?.edit ? `edit · Revit holds ${row.region.type || "nothing"}` : undefined}
-              items={ROOM_TYPES}
-              keyOf={(type) => type}
-              labelOf={(type) => type}
-              empty="no room types"
-              select="single"
-              selected={[value]}
-              onPick={(type) => void stage(row.region, "type", type)}
-              row={(type) => ({ label: type })}
-            />
-          );
-        },
+        state: (row) => choice(row, "type", ROOM_TYPES),
       },
       ...NUMBERS.map(
         ([field, label, title]): Column<RoomRow> => ({
@@ -298,7 +235,7 @@ export function RoomsTable({
         },
       },
     ];
-  }, [cells, wire, rows, transitions]);
+  }, [cells, value, rows]);
 
   // The table is a collection like any list (SURFACE-PHILOSOPHY N3): one search, "/" focuses it.
   const [state, setState] = useState<TableState>({ sorts: [], query: "" });
@@ -319,7 +256,7 @@ export function RoomsTable({
     >
       <Table
         label="room regions"
-        rows={rows}
+        {...(value ? { value, rowsOf: () => rows } : { rows })}
         columns={columns}
         rowKey={rowKey}
         state={state}

@@ -4,7 +4,8 @@ import { familyPageSchema } from "./page";
 import type { FamilyContext } from "./route";
 import type { FamilyMount } from "./store";
 
-/** Forward the existing DocLab drawing contract to typed cells and actions; no legacy engine. */
+/** CHEAT: DocLab projections, edit buffer and pose still need app drawing ports (K gap 4).
+ * Ordinary drawn cells receive ctx.cells/Value directly; this bridge owns no state or engine. */
 export function useFamilyOwner(ctx: FamilyContext): FamilyMount {
   const registry = useContext(RegistryContext);
   const current = useRef(ctx);
@@ -37,35 +38,6 @@ export function useFamilyOwner(ctx: FamilyContext): FamilyMount {
               ),
             ),
           );
-        },
-      },
-      readings: {
-        get: (id: string) => {
-          const ctx = current.current,
-            value = ctx.value,
-            data = value.current ? value.value : undefined;
-          const error =
-            id === "profile" ? data?.profileError : id === "spec" ? data?.specError : null;
-          const body =
-            id === "profile"
-              ? data?.profile
-              : id === "spec"
-                ? data?.spec
-                : id === "pods"
-                  ? data?.pods
-                  : [];
-          return {
-            status: error
-              ? "failed"
-              : value.current
-                ? "complete"
-                : value.status === "pending"
-                  ? "pending"
-                  : "failed",
-            current: value.current,
-            error: error ?? (!value.current ? value.reason : null),
-            value: body,
-          };
         },
       },
       control: (id: string, input: any = {}) => ({
