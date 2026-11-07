@@ -1,8 +1,5 @@
 import { z } from "zod";
 import {
-  commands,
-  commandTool,
-  type Command,
   type CellsDecl,
   type RouteGraph,
   type RouteFingerprint,
@@ -102,9 +99,11 @@ export function createRouteDiscovery() {
     keys: () => [...registered.keys()],
     get: (key: string) => registered.get(key),
     actionRoute(key: string) {
-      const command: Command | undefined = commands[key as keyof typeof commands];
-      const owner = command?.work?.route ?? commandTool(key)?.name;
-      return owner && registered.has(owner) ? owner : null;
+      return entries().find(({ typed }) =>
+        Object.values(typed.spec.commands).some((verb) =>
+          verb.entry === key || ("plan" in verb && verb.plan === key),
+        ),
+      )?.manifest.key ?? null;
     },
   });
 }
