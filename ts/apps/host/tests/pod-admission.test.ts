@@ -30,7 +30,7 @@ async function fixture(
     key: "pod.fixture.tool",
     address,
     name: `Fixture ${salt}`,
-    work: { schema: "work", route: "pod.fixture.tool", version: 2, migrations: {} },
+    work: { schema: "work", route: "pod.fixture.tool", version: 2, },
   };
   const entry = join(root, "entry.ts");
   const imports = fileURLToPath(
@@ -321,32 +321,6 @@ test("trusted Pod transports complete evidence and opens fingerprint-bound curre
   }
 }, 30_000);
 
-test("undecodable Pod Work refuses both feeds and preserves its stored bytes", async () => {
-  const f = await setup({
-    version: 1,
-    schemaVersion: 1,
-    revision: 7,
-    doc: { oldAmount: 3 },
-    history: [],
-  });
-  try {
-    const [row] = await f.routes.list();
-    await f.routes.trust(row!.key, f.artifact.fingerprint, true);
-    const snapshot = f.feed("work"),
-      acks = f.feed("work-acks");
-    f.unblock();
-    await vi.waitFor(() => expect(snapshot[0]).toMatchObject({ kind: "failure" }));
-    await vi.waitFor(() => expect(acks[0]).toMatchObject({ kind: "failure" }));
-    expect(await readFile(f.savedPath, "utf8")).toBe(f.original);
-    await expect(f.workspace.read(f.key, f.key.route)).rejects.toMatchObject({
-      code: "WorkUnreadable",
-      key: f.key,
-    });
-  } finally {
-    await f.close();
-  }
-}, 30_000);
-
 test("replacement retires old feeds and requires trust in the new closure; removal releases registration", async () => {
   const f = await setup();
   try {
@@ -574,71 +548,5 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     await rm(root, { recursive: true, force: true });
-  }
-}, 60_000);
-
-test("corrupt stored Work refuses direct reads and the file remains byte-for-byte inspectable", async () => {
-  const f = await setup({
-    version: 1,
-    schemaVersion: 1,
-    revision: 7,
-    doc: { oldAmount: 3 },
-    history: [],
-  });
-  try {
-    const [row] = await f.routes.list();
-    await f.routes.trust(row!.key, f.artifact.fingerprint, true);
-    const refused = await f.readStored();
-    expect(refused?.status).toBe(403);
-    expect(await refused!.json()).toMatchObject({
-      failure: { code: "WorkUnreadable", key: f.key, reason: expect.any(String) },
-    });
-    expect(await readFile(f.savedPath, "utf8")).toBe(f.original);
-    const corrupt = "{not JSON";
-    await writeFile(f.savedPath, corrupt);
-    const corruptResponse = await f.readStored();
-    expect(corruptResponse?.status).toBe(403);
-    expect(await corruptResponse!.json()).toMatchObject({
-      failure: { code: "WorkUnreadable", key: workKey(f.key), reason: expect.any(String) },
-    });
-    expect(await readFile(f.savedPath, "utf8")).toBe(corrupt);
-  } finally {
-    await f.close();
-  }
-}, 30_000);
-
-test("G17 HTTP Start fresh accepts only older Work and preserves refused schema ages byte-for-byte", async () => {
-  for (const age of ["current", "newer", "unknown", "older"] as const) {
-    const schemaVersion = age === "older" ? 1 : age === "current" ? 2 : age === "newer" ? 3 : undefined;
-    const f = await setup({ version: 1, ...(schemaVersion === undefined ? {} : { schemaVersion }),
-      revision: 7, doc: { oldAmount: 3 }, history: [] }, false, true);
-    try {
-      const [row] = await f.routes.list();
-      await f.routes.trust(row!.key, f.artifact.fingerprint, true);
-      const files = await readdir(join(f.root, "Work"));
-      const response = await withInvocationContext({ caller: { kind: "human", via: "local" } }, () =>
-        createPeRoutes({ workspace: f.workspace, registrations: [] }).fetch(
-          new Request(`http://host/pe/route-state/${f.key.route}/start-fresh`, {
-            method: "POST", headers: { "content-type": "application/json" }, body: "{}",
-          }),
-        ));
-      expect(response, `${age}: reset is a registered HTTP door`).not.toBeNull();
-      const body = await response!.json();
-      if (age === "older") {
-        expect(response!.status, JSON.stringify(body)).toBe(200);
-        expect(body).toMatchObject({ ok: true, revision: 8 });
-        expect(await (await f.readStored())!.json()).toMatchObject({ schemaVersion: 2, revision: 8 });
-        const records = await Promise.all((await readdir(join(f.root, "Work")))
-          .map(async name => JSON.parse(await readFile(join(f.root, "Work", name), "utf8"))));
-        const original = JSON.parse(f.original);
-        expect(records).toContainEqual({ ...original, route: `${f.key.route}:aside:1` });
-      } else {
-        expect(response!.status, `${age}: ${JSON.stringify(body)}`).toBe(200);
-        expect(body).toMatchObject({ ok: false, kind: "refused" });
-        expect(JSON.stringify(body)).toContain("Only a proven older schema permits Start fresh");
-        expect(await readFile(f.savedPath, "utf8"), age).toBe(f.original);
-        expect(await readdir(join(f.root, "Work")), age).toEqual(files);
-      }
-    } finally { await f.close(); }
   }
 }, 60_000);

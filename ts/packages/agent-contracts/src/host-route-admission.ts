@@ -1,7 +1,9 @@
 import type { z } from "zod";
-import type { RouteStateSpec, RouteWriteAdmission } from "./route-state.ts";
-import type { RouteDiagnostic, RouteGraphJson } from "./route-kernel-data.ts";
+import { z as hostZ } from "zod";
 import type { RouteFingerprint } from "./route-kernel-admission.ts";
+import type { RouteDiagnostic, RouteGraphJson } from "./route-kernel-data.ts";
+import { RouteGraphJson as hostGraphSchema } from "./route-kernel-data.ts";
+import type { RouteStateSpec, RouteWriteAdmission } from "./route-state.ts";
 
 declare const hostAdmission: unique symbol;
 /** Host execution authority only. Never a web mount handle. */
@@ -15,8 +17,7 @@ export interface HostAdmittedRoute {
     readonly schema: z.ZodType;
   };
 }
-/** The host executes Work migrations and recovery extraction from neutral bindings.
- * Recovery reads raw persisted Work; the web salvage body derives patches from its output.
+/** The host captures neutral Work bindings.
  * Dependencies (including codecs) are ordinary imports of these neutral bodies.
  * Browser slots remain in data and the closure but are never loaded or fabricated here. */
 export interface HostWorkRegistration {
@@ -35,17 +36,7 @@ export interface HostRouteModule extends Omit<HostWorkRegistration, "spec"> {
     readonly run:(context:any,args:any)=>unknown;
   }>>;
   readonly leaves?: Readonly<Record<string,(args:unknown,services:HostLeafServices)=>Promise<unknown>>>;
-  readonly bodies: Readonly<
-    Record<
-      string,
-      {
-        readonly slot: string;
-        readonly kind: "migration" | "recovery";
-        readonly source: { readonly module: string; readonly export: string };
-        readonly run: (doc: unknown) => unknown;
-      }
-    >
-  >;
+
 }
 export interface HostLeafServices {
   readonly evaluation:string;
@@ -62,8 +53,6 @@ export interface HostRouteAdmissionPort {
   admitHost(module: HostRouteModule): HostRouteAdmission;
 }
 
-import { z as hostZ } from "zod";
-import { RouteGraphJson as hostGraphSchema } from "./route-kernel-data.ts";
 // Exhaustive against RouteStateSpec: adding a field requires deciding its boundary validation.
 const workStateFields = {
   route: hostZ.string().min(1),
@@ -72,20 +61,9 @@ const workStateFields = {
   finds: hostZ.array(hostZ.string()).optional(),
   schema: hostZ.custom<z.ZodType>((v) => v instanceof hostZ.ZodType),
   schemaVersion: hostZ.number().int().positive().optional(),
-  migrations: hostZ
-    .record(
-      hostZ.string(),
-      hostZ.custom<NonNullable<RouteStateSpec<z.ZodType>["migrations"]>[number]>(
-        (v) => typeof v === "function",
-      ),
-    )
-    .optional(),
   editable: hostZ.array(hostZ.array(hostZ.union([hostZ.string(), hostZ.number()]))).optional(),
   reconcileEdit: hostZ
     .custom<RouteStateSpec<z.ZodType>["reconcileEdit"]>((v) => typeof v === "function")
-    .optional(),
-  salvage: hostZ
-    .custom<RouteStateSpec<z.ZodType>["salvage"]>((v) => typeof v === "function")
     .optional(),
 } satisfies Record<keyof RouteStateSpec<z.ZodType>, z.ZodType>;
 const workStateSchema = hostZ.strictObject(workStateFields);
@@ -103,15 +81,7 @@ const hostModuleSchema = hostZ.strictObject({
   workState: hostZ
     .custom<RouteStateSpec<z.ZodType>>((v) => workStateSchema.safeParse(v).success)
     .optional(),
-  bodies: hostZ.record(
-    hostZ.string(),
-    hostZ.strictObject({
-      slot: hostZ.string(),
-      kind: hostZ.enum(["migration", "recovery"]),
-      source: hostZ.strictObject({ module: hostZ.string().min(1), export: hostZ.string().min(1) }),
-      run: hostZ.custom<(doc: unknown) => unknown>((v) => typeof v === "function"),
-    }),
-  ),
+
 });
 /** Capture exports before fingerprint verification yields. Never freeze caller-owned Zod internals. */
 export function captureHostModule(input: unknown): HostRouteModule {
@@ -131,22 +101,13 @@ export function captureHostModule(input: unknown): HostRouteModule {
                 key,
                 key === "schema" || typeof field === "function" || field === undefined
                   ? field
-                  : key === "migrations"
-                    ? Object.freeze({ ...field })
-                    : freezeStateData(structuredClone(field)),
+                  : freezeStateData(structuredClone(field)),
               ]),
             ),
           ) as unknown as Readonly<RouteStateSpec<z.ZodType>>,
         }
       : {}),
-    bodies: Object.freeze(
-      Object.fromEntries(
-        Object.entries(value.bodies).map(([id, body]) => [
-          id,
-          Object.freeze({ ...body, source: Object.freeze({ ...body.source }) }),
-        ]),
-      ),
-    ),
+
   });
 }
 

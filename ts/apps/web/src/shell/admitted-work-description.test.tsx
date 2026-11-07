@@ -39,7 +39,7 @@ async function witness(describe?: (...args: any[]) => unknown) {
       key,
       address: "/w1b-history",
       capabilities: ["work"] as const,
-      work: { route: key, schema: "work", version: 1, migrations: {} },
+      work: { route: key, schema: "work", version: 1, },
       verbs: { drop: { ...declaration, ...(describe && { describe: "describeDrop" }) } },
     },
     bodies: {

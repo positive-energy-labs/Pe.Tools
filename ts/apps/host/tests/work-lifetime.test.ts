@@ -599,14 +599,6 @@ test("HTTP authored writes enforce short local revision checks", async () => {
       await post("/pe/route-state/test-route/apply", { ...edit, expectedRevision: 99 })
     ).json(),
   ).toMatchObject({ ok: false, code: "stale_revision" });
-  // Both authors share recovery; readable Work has nothing to set aside.
-  expect(
-    await (await post("/pe/route-state/test-route/start-fresh", {}, pea())).json(),
-  ).toMatchObject({ ok: false, error: "this route's Work is readable" });
-  expect(await (await post("/pe/route-state/test-route/start-fresh", {})).json()).toMatchObject({
-    ok: false,
-    error: "this route's Work is readable",
-  });
   // Work has no execution endpoint; consequential commands belong to the journal door.
   expect(
     (await post("/pe/route-state/test-route/command", { command: "external", input: {} })).status,

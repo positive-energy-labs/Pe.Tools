@@ -15,7 +15,6 @@ import {
   createAdmittedRouteRegistry,
   resolveRouteBindings,
 } from "../../../../packages/agent-contracts/src/route-module.ts";
-import * as recoveryHost from "../route/host.ts";
 import { createAdmittedAddress } from "./admitted-address.ts";
 import { createAdmittedBody } from "./admitted-body.ts";
 import { createAdmittedCellActions, createAdmittedCells } from "./admitted-cells.ts";
@@ -182,7 +181,6 @@ export function createRouteShell(
             drawing = false;
           }
         },
-        recoveryHost: fixture === null && !input.history ? recoveryHost : undefined,
         sourceEvidence: {
           dependencies: evidence?.dependencies.bind(evidence),
           observe: fixture === null && !input.history ? evidence?.observe.bind(evidence) : undefined,

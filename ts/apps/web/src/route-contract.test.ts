@@ -8,7 +8,6 @@ import {
   pane,
   projectRouteGraph,
   routeGraphHash,
-  START_FRESH_VERB,
   validateRouteGraph,
   type CellsDecl,
   type FieldRole,
@@ -387,30 +386,6 @@ test("a query verb projects its read identity; selecting Work requires workSubje
   expect(await routeGraphHash(projectRouteGraph(unselecting as RouteGraph))).not.toBe(
     await routeGraphHash(json),
   );
-});
-
-test("every graph with Work projects the kernel's start-fresh recovery; its id and kind are reserved", () => {
-  const json = projectRouteGraph(withCells(rules));
-  expect(json.verbs[START_FRESH_VERB]).toEqual({
-    kind: "recovery",
-    label: "Start fresh",
-    review: "shown",
-    says: expect.any(String),
-    input: expect.objectContaining({ type: "object", additionalProperties: false }),
-  });
-  expect(projectRouteGraph(ductLoss).verbs).toEqual({});
-  const collided = { ...withCells(rules), verbs: { [START_FRESH_VERB]: verb("Fresh") } };
-  expect(validateRouteGraph(collided)).toEqual([
-    {
-      code: "reserved-verb",
-      path: `verbs.${START_FRESH_VERB}`,
-      message: `'${START_FRESH_VERB}' is a kernel verb id`,
-    },
-  ]);
-  const own = { ...withCells(rules), verbs: { mine: { ...verb("Mine"), kind: "recovery" } } };
-  expect(validateRouteGraph(own as RouteGraph)).toEqual([
-    { code: "reserved-verb", path: "verbs.mine", message: "Recovery verbs are kernel-owned" },
-  ]);
 });
 
 test("public legacy discovery has no registration door and new builtin keys refuse", () => {

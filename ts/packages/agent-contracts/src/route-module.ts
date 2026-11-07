@@ -1,6 +1,8 @@
-import type { WorkOf } from "./route-kernel-page.ts";
-import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
-import type { SchemaTable } from "./route-kernel-page.ts";
+import type { z } from "zod";
+import { z as kernelZ } from "zod";
+import { commandLink, requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
+import type { CatalogLink } from "./catalog.ts";
+import type { Command } from "./command.ts";
 import {
   captureHostModule,
   type HostRouteModule,
@@ -8,15 +10,24 @@ import {
   type HostRouteAdmissionPort,
   type HostAdmittedRoute,
 } from "./host-route-admission.ts";
-import type { RouteModule as KernelModule, RouteBodyRender } from "./route-kernel-admission.ts";
-import { bare, manyCodec } from "./route-field.ts";
 import { linkedCatalog } from "./pe-api.ts";
-import { commandLink, requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
-import type { z } from "zod";
-import type { Command } from "./command.ts";
-import type { RouteStateSpec } from "./route-state.ts";
+import { bare, manyCodec } from "./route-field.ts";
 import type { RouteGraph } from "./route-graph.ts";
 import { validateRouteGraph } from "./route-graph.ts";
+import { canonicalRouteJson } from "./route-graph.ts";
+
+import type { RouteModule as KernelModule, RouteBodyRender } from "./route-kernel-admission.ts";
+import type {
+  RouteFingerprint,
+  RouteFingerprintInput,
+  RouteAdmissionPort,
+  RouteAdmission,
+  AdmittedRouteRegistry,
+} from "./route-kernel-admission.ts";
+import type { BodyBindings, EntryTable } from "./route-kernel-bodies.ts";
+import type { WorkOf } from "./route-kernel-page.ts";
+import type { SchemaTable } from "./route-kernel-page.ts";
+import type { RouteStateSpec } from "./route-state.ts";
 
 /** The same admission envelope for shipped and Pod-authored route modules. */
 export interface RouteModule<B = unknown> {
@@ -88,8 +99,7 @@ export const admittedRouteEntries = new Map<
 
 // Kernel admission is prepared independently of the legacy directory above. S2 removes
 // the old executable-graph API when its remaining mount/Pod consumers migrate.
-import { z as kernelZ } from "zod";
-import { canonicalRouteJson } from "./route-graph.ts";
+
 import {
   decodeRouteGraph,
   linkRouteBodies,
@@ -97,19 +107,12 @@ import {
   routeDiagnostic,
   type RouteBindings,
 } from "./route-bodies.ts";
-import type { CatalogLink } from "./catalog.ts";
+
 import type {
   RouteGraphJson as KernelGraph,
   Immutable,
   RouteDiagnostic,
 } from "./route-kernel-data.ts";
-import type {
-  RouteFingerprint,
-  RouteFingerprintInput,
-  RouteAdmissionPort,
-  RouteAdmission,
-  AdmittedRouteRegistry,
-} from "./route-kernel-admission.ts";
 
 const sha = kernelZ.string().regex(/^[a-f0-9]{64}$/);
 const packagePath = kernelZ
@@ -805,7 +808,7 @@ function admitHostProjection(
     fail("data", "Neutral declaration differs from the verified builtin closure");
   if (canonicalRouteJson(data) !== canonicalRouteJson(captured.data))
     fail("data", "Neutral declaration changed after capture");
-  for (const table of ["schemas", "bodies"] as const) {
+  for (const table of ["schemas"] as const) {
     if (
       Object.keys(module[table]).sort().join("\n") !==
       Object.keys(captured[table]).sort().join("\n")
@@ -815,17 +818,6 @@ function admitHostProjection(
   for (const [id, schema] of Object.entries(module.schemas))
     if (captured.schemas[id] !== schema)
       fail(`schemas.${id}`, "Schema differs from captured exports");
-  for (const [id, body] of Object.entries(module.bodies)) {
-    const original = captured.bodies[id];
-    if (
-      !original ||
-      original.run !== body.run ||
-      original.slot !== body.slot ||
-      original.kind !== body.kind ||
-      canonicalRouteJson(original.source) !== canonicalRouteJson(body.source)
-    )
-      fail(`bodies.${id}`, "Body differs from captured exports");
-  }
   if (
     Object.hasOwn(module, "admit") !== Object.hasOwn(captured, "admit") ||
     module.admit !== captured.admit ||
@@ -838,7 +830,7 @@ function admitHostProjection(
     fail("readWorks", "Work owners differ from captured exports");
   const state = module.workState;
   const originalState = captured.workState;
-  // Whole neutral exports have the same captured-function authority as named migration bodies.
+  // Neutral Work exports retain captured-function authority.
   if (
     Object.keys(state ?? {})
       .sort()
@@ -852,18 +844,6 @@ function admitHostProjection(
     const original = originalState?.[key as keyof NonNullable<typeof originalState>];
     if (key === "schema" || typeof value === "function") {
       if (value !== original) fail(`workState.${key}`, "Work spec export changed after capture");
-    } else if (key === "migrations") {
-      const migrations = value as NonNullable<NonNullable<typeof state>["migrations"]>;
-      if (
-        Object.keys(migrations).sort().join() !==
-          Object.keys(originalState?.migrations ?? {})
-            .sort()
-            .join() ||
-        Object.entries(migrations).some(
-          ([age, run]) => originalState?.migrations?.[Number(age)] !== run,
-        )
-      )
-        fail("workState.migrations", "Work migrations changed after capture");
     } else if (
       value === undefined || original === undefined
         ? value !== original
@@ -885,19 +865,6 @@ function admitHostProjection(
         fail("work.schema", "Work needs a finite object schema");
       else
         resolvedWork = { spec: work as Extract<KernelGraph["work"], { schema: string }>, schema };
-      // ADR 0033 rule 5: schema versions do not require legacy conversion bodies.
-      for (const [age, id] of Object.entries(work.migrations)) {
-        const body = module.bodies[id];
-        if (Number(age) >= work.version)
-          fail(`work.migrations.${age}`, "Migration age must precede current version");
-        if (
-          !body ||
-          body.kind !== "migration" ||
-          body.slot !== `work.migrations.${age}` ||
-          typeof body.run !== "function"
-        )
-          fail(`work.migrations.${age}`, "Missing or misbound host migration");
-      }
     }
   }
   if (work?.schema && work.route === data.key) {
@@ -909,33 +876,9 @@ function admitHostProjection(
         (state.schemaVersion ?? 1) !== work.version
       )
         fail("workState", "Work spec differs from the declared owner/schema/version");
-      if (
-        Object.keys(state.migrations ?? {})
-          .sort()
-          .join() !== Object.keys(work.migrations).sort().join()
-      )
-        fail("workState.migrations", "Work spec migration chain differs from declaration");
-      for (const [age, id] of Object.entries(work.migrations))
-        if (state.migrations?.[Number(age)] !== module.bodies[id]?.run)
-          fail(`workState.migrations.${age}`, "Work migration differs from captured body");
-      if (data.salvage && state.salvage !== module.bodies[data.salvage]?.run)
-        fail("workState.salvage", "Work recovery differs from captured body");
+
     }
   } else if (state) fail("workState", "Only a Work owner declares a Work spec");
-  if (data.salvage && work?.schema) {
-    const body = module.bodies[data.salvage];
-    if (!body || body.kind !== "recovery" || body.slot !== "salvage")
-      fail("salvage", "Missing or misbound host recovery extraction");
-  }
-  for (const [id, body] of Object.entries(module.bodies))
-    if (
-      !work?.schema ||
-      (!(body.kind === "recovery" && id === data.salvage && body.slot === "salvage") &&
-        !Object.entries(work.migrations).some(
-          ([age, ref]) => ref === id && body.slot === `work.migrations.${age}`,
-        ))
-    )
-      fail(`bodies.${id}`, "Undeclared host body");
   if (errors.length) return { ok: false, diagnostics: errors };
   // Only this factory, after source verification and host linking, asserts the nominal type.
   const route = Object.freeze({

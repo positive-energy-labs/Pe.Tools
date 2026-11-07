@@ -66,13 +66,8 @@ export interface RouteHandle<W, R extends string, P, A extends string> {
     ) => Promise<Refusal | null>;
     /** Another writer landed first; the last write was refused. `reload` reads Work again. */
     readonly conflict: boolean;
-    /** The owner's own sentence when Work cannot be read (e.g. saved in an older shape). */
+    /** The owner's own sentence when Work cannot be read. */
     readonly refusal: string | null;
-    /**
-     * Human-only: sets the unreadable Work aside, untouched, and starts an empty Work. A refusal
-     * lands on `failure`; success re-reads Work. Null unless the failure is the host's UNREADABLE_WORK.
-     */
-    readonly startFresh: (() => Promise<Refusal | null>) | null;
     readonly reload: () => void;
   };
   readonly readings: Readonly<Record<R, Reading<unknown>>>;

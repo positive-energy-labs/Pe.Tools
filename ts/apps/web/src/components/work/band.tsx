@@ -9,7 +9,6 @@ import {
 import { Undo2 } from "lucide-react";
 import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
-import { useScopeKeys } from "@pe/kit/keys";
 import { Button } from "@pe/kit/lang/button";
 import {
   cellFromDraft,
@@ -24,10 +23,6 @@ interface WorkStandingProps {
   conflict?: boolean;
   unresolved?: readonly string[];
   reload?: () => void;
-  /** Offered only on unreadable saved Work: set it aside, untouched, and start an empty one. */
-  startFresh?: () => void;
-  /** Read-only preview of the Work bytes Start fresh sets aside. */
-  startFreshAside?: ReactNode;
 }
 
 /** The Work in one word for meters and ledgers: "r4 · changed elsewhere"; the sentence owns counts. */
@@ -52,8 +47,6 @@ export function WorkStanding({
   conflict,
   unresolved = [],
   reload,
-  startFresh,
-  startFreshAside,
 }: WorkStandingProps) {
   return (
     <>
@@ -70,7 +63,6 @@ export function WorkStanding({
               reload
             </Button>
           ) : null}
-          {startFresh ? <StartFresh run={startFresh} aside={startFreshAside} /> : null}
         </div>
       ) : null}
     </>
@@ -297,55 +289,6 @@ export function UnstageAll({
         </span>
       )}
     </>
-  );
-}
-
-/**
- * Start fresh, confirmed: the first press shows what is set aside (read-only), the second sets it
- * aside. No lapse, so the person can read it; Escape or "keep it" cancels. Pea cannot do this.
- */
-function StartFresh({ run, aside }: { run: () => void; aside?: ReactNode }) {
-  const [armed, setArmed] = useState(false);
-  useScopeKeys(
-    armed
-      ? [
-          {
-            hotkey: "Escape",
-            callback: () => setArmed(false),
-            label: "cancel start fresh",
-            says: "keep the saved Work; nothing is set aside",
-            options: { enabled: armed },
-          },
-        ]
-      : [],
-  );
-  return (
-    <span className="flex flex-col gap-1">
-      <span className="flex items-baseline gap-2">
-        <Button
-          kind="framed"
-          label={armed ? "start fresh? press again" : "start fresh"}
-          reason={
-            armed
-              ? "Press again to set the saved Work aside, untouched on disk, and start an empty one; Escape keeps it"
-              : "Sets the saved Work aside, untouched on disk, and starts a new empty Work here (asks first). Pea cannot do this."
-          }
-          onClick={() => {
-            if (!armed) return setArmed(true);
-            setArmed(false);
-            run();
-          }}
-        >
-          {armed ? "start fresh? press again" : "start fresh"}
-        </Button>
-        {armed ? (
-          <Button kind="framed" label="keep it" onClick={() => setArmed(false)}>
-            keep it
-          </Button>
-        ) : null}
-      </span>
-      {armed ? aside : null}
-    </span>
   );
 }
 

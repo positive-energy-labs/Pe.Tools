@@ -9,7 +9,6 @@ import {
   bindWork,
   workKey,
   fansRouteState,
-  salvageWork,
   documentRequestSchema,
 } from "@pe/agent-contracts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
@@ -21,10 +20,7 @@ import type {
   BodyBindings,
   PaneContext,
 } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import type {
-  Observation,
-  WorkWriteOutcome,
-} from "../../../../packages/agent-contracts/src/work-journal-door";
+
 import { module as captures } from "../shell/admitted-module.test.fixture";
 import { createRouteShell } from "../shell/admitted-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
@@ -32,8 +28,8 @@ import {
   inputHistoryMetaSchema,
 } from "../ducts/sheet/input-history.neutral";
 import { sourceRouteServices } from "../shell/source-route-services";
-import * as recoveryHost from "../route/host";
-import { peClient } from "../host/pe-client";
+
+
 import * as sourceServices from "../shell/source-route-services";
 import { applicationRouteShell } from "../shell/application-route-shell";
 import { useRouteTarget } from "../route/route-target";
@@ -51,11 +47,8 @@ const data = {
   name: "Ducts",
   capabilities: ["work"],
   needs: "project",
-  work: { route: "ducts", schema: "work", version: 2, migrations: {} },
+  work: { route: "ducts", schema: "work", version: 1, },
   historyDetail: "historyDetail",
-  salvage: "salvage",
-  salvagePresent: "salvagePresent",
-  salvageDeps: { page: [], work: [], readings: ["names"] },
   readings: {
     ...captures.data.readings,
     names: {
@@ -112,42 +105,13 @@ const bodies = {
     run: () => ({ label: "fanFlow → PE_M_Fan_AirFlow" }),
   },
   names: { slot: "readings.names.derive", kind: "derive", source, run: () => ({ "100": "FC-1" }) },
-  salvagePresent: {
-    slot: "salvagePresent",
-    kind: "present",
-    source,
-    run: (patches, evidence) => {
-      expect(Object.keys(evidence)).toEqual(["page", "work", "readings"]);
-      expect(Object.keys(evidence.readings)).toEqual(["names"]);
-      expect(evidence.page).toEqual({});
-      expect(evidence.work).toEqual({});
-      expect(Object.isFrozen(evidence)).toBe(true);
-      const names = evidence.readings.names;
-      if (!names.current) throw Error("Names unavailable");
-      expect(Object.isFrozen(names.value)).toBe(true);
-      return {
-        sentence: "Carry over 1 recovered input",
-        rows: patches.map((patch) => `${names.value[String(patch.path[1])]} drop: 0.18 in-wg`),
-      };
-    },
-  },
-  salvage: {
-    slot: "salvage",
-    kind: "salvage",
-    source,
-    run: (raw) => {
-      const cell = salvageWork(fansDocumentSchema, raw).doc.componentDrops["100"];
-      return { ok: true, value: cell ? [{ path: ["componentDrops", "100"], value: cell }] : [] };
-    },
-  },
 } satisfies BodyBindings<typeof data, typeof schemas, typeof captures.entries>;
-const extract = (raw: unknown) => salvageWork(fansDocumentSchema, raw).doc;
 const neutral = {
   data,
   schemas,
-  bodies: { salvage: { slot: "salvage", kind: "recovery" as const, source, run: extract } },
+  bodies: { },
   // The fan cells are the recovery material (fans Work since FANSPLIT), keyed as this witness route.
-  workState: { ...fansRouteState, route: "ducts", schemaVersion: 2, salvage: extract },
+  workState: { ...fansRouteState, route: "ducts", },
 };
 const cleanup: (() => void)[] = [];
 afterEach(() => {
@@ -158,18 +122,7 @@ afterEach(() => {
     .forEach((close) => close());
   vi.restoreAllMocks();
 });
-const settle = (o: Observation<WorkWriteOutcome>) =>
-  new Promise<WorkWriteOutcome>((resolve) =>
-    o.subscribe(
-      (v) => {
-        if (v.kind !== "pending") resolve(v);
-      },
-      () => {},
-    ),
-  );
 async function witness(
-  raw?: unknown,
-  failure?: "throw" | "invalid",
   limits?: { maxCount: number; maxBytes: number },
   description?: { label: string; meta?: z.output<typeof inputHistoryMetaSchema> },
   onHistory?: (history: Parameters<typeof bodies.main.run>[0]["history"]) => void,
@@ -190,14 +143,6 @@ async function witness(
       describe: {
         ...bodies.describe,
         run: description ? () => description : bodies.describe.run,
-      },
-      salvagePresent: {
-        ...bodies.salvagePresent,
-        run: (...[patches, evidence]: Parameters<typeof bodies.salvagePresent.run>) => {
-          if (failure === "throw") throw Error("Presentation failed");
-          if (failure === "invalid") return Promise.resolve("late");
-          return bodies.salvagePresent.run(patches, evidence);
-        },
       },
     },
   };
@@ -224,7 +169,7 @@ async function witness(
   const host = (await inventory.prepare("host", fingerprint)).admitHost(neutral);
   if (!web.ok) throw Error(JSON.stringify(web.diagnostics));
   if (!host.ok) throw Error(JSON.stringify(host.diagnostics));
-  const saved = new Map<string, unknown>(raw ? [["ducts", raw]] : []);
+  const saved = new Map<string, unknown>();
   const ws = new RouteWorkspace({
     registrations: [],
     workHistoryLimits: limits,
@@ -237,9 +182,6 @@ async function witness(
   });
   const registration = ws.registerAdmitted(host.route);
   await registration.ready;
-  // Stored schema 1 is provably older than this witness schema 2; reset before reviewing carry-over.
-  if (raw === unreadable)
-    expect(await ws.startFresh(bindWork("ducts", null, undefined, { session: "fixture", openId: "w1f" }), "ducts", "human")).toMatchObject({ ok: true });
   cleanup.push(() => registration.close());
   const observe = observeResources(ws, { observe: () => () => {} });
   let skipped = 0;
@@ -339,68 +281,6 @@ async function witness(
     },
   };
 }
-const unreadable = {
-  version: 1,
-  schemaVersion: 1,
-  revision: 7,
-  doc: { componentDrops: { "100": { edit: { value: { inWg: 0.18 } } } }, unknownOldField: true },
-};
-function recovery(f: Awaited<ReturnType<typeof witness>>) {
-  vi.spyOn(recoveryHost, "startFreshRouteWork").mockImplementation((key) =>
-    f.ws.startFresh(key, "ducts", "human"),
-  );
-  vi.spyOn(recoveryHost, "salvageRouteWork").mockImplementation(
-    (key) => f.ws.salvage(key, "ducts") as ReturnType<typeof recoveryHost.salvageRouteWork>,
-  );
-}
-
-
-test("H7: canonical recovery presents named rows from captured evidence and accepts the keyed edit", async () => {
-  const f = await witness(unreadable);
-  recovery(f);
-  vi.mocked(recoveryHost.salvageRouteWork).mockRestore();
-  vi.spyOn(peClient, "response").mockImplementation(async () =>
-    Response.json(await f.ws.salvage(f.mount.workBasis()!.token.scope.identity.work!, "ducts")),
-  );
-  await vi.waitFor(() => expect(f.mount.recovery().carryOver).toBe(true));
-  await f.mount.salvage();
-  expect(f.mount.review("work.salvage")).toMatchObject({
-    sentence: "Carry over 1 recovered input",
-    rows: ["FC-1 drop: 0.18 in-wg"],
-    stale: false,
-  });
-  const review = f.mount.review("work.salvage")!;
-  expect(JSON.stringify({ sentence: review.sentence, rows: review.rows })).not.toMatch(/100|900/);
-  await settle(f.mount.confirm("work.salvage") as Observation<WorkWriteOutcome>);
-  expect(
-    fansDocumentSchema.parse(f.mount.work()!.value).componentDrops["100"]?.edit?.value.inWg,
-  ).toBe(0.18);
-  expect(f.saved.get("ducts:aside:1")).toEqual(unreadable);
-});
-test.each(["throw", "invalid"] as const)(
-  "H7: %s recovery presentation refuses before submission",
-  async (failure) => {
-    const f = await witness(unreadable, failure);
-    recovery(f);
-    await vi.waitFor(() => expect(f.mount.recovery().carryOver).toBe(true));
-    await expect(f.mount.salvage()).rejects.toThrow(
-      failure === "throw" ? /present-threw/ : /present-invalid/,
-    );
-    expect(f.mount.review("work.salvage")).toBeNull();
-    expect(fansDocumentSchema.parse(f.mount.work()!.value).componentDrops).toEqual({});
-  },
-);
-
-
-test("H7: a later Work edit hides named recovery evidence and refuses stale confirmation", async () => {
-  const f = await witness(unreadable);
-  recovery(f);
-  await vi.waitFor(() => expect(f.mount.recovery().carryOver).toBe(true));
-  await f.mount.salvage();
-  await settle(f.mount.invoke("slot", "") as Observation<WorkWriteOutcome>);
-  expect(f.mount.review("work.salvage")).toMatchObject({ sentence: null, rows: [], stale: true });
-  expect(() => f.mount.confirm("work.salvage")).toThrow(/stale/);
-});
 
 
 
@@ -409,25 +289,14 @@ test("H7: a later Work edit hides named recovery evidence and refuses stale conf
 
 
 
-test.each([true, false])(
-  "D4: a prepared recovery review respects Place write eligibility (%s)",
-  async (writable) => {
-    const f = await witness(unreadable);
-    recovery(f);
-    await vi.waitFor(() => expect(f.mount.recovery().carryOver).toBe(true));
-    await f.mount.salvage();
-    expect(f.mount.review("work.salvage")?.stale).toBe(false);
-    const before = structuredClone(f.saved.get("ducts"));
-    f.eligibility(writable ? "writable" : "read-only");
-    if (writable) await settle(f.mount.confirm("work.salvage") as Observation<WorkWriteOutcome>);
-    else
-      expect(() => f.mount.confirm("work.salvage")).toThrow(
-        expect.objectContaining({ reason: "place-read-only" }),
-      );
-    if (writable) expect(f.saved.get("ducts")).not.toEqual(before);
-    else expect(f.saved.get("ducts")).toEqual(before);
-  },
-);
+
+
+
+
+
+
+
+
 
 
 

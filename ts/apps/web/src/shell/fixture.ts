@@ -150,7 +150,6 @@ export function pendingFixtureEnvironment<P, W>(
         return refuse(snapshot.failure ?? "Fixture Work is unavailable");
       return workspace!.write(requestKey, key.route, "human", request);
     },
-    startFresh: async () => refuse("Fixture Work is already in memory"),
     reread() {},
     subscribeAcceptedDeltas(key, notify) {
       return workspace?.observeAccepted(key, notify) ?? (() => {});
@@ -160,7 +159,6 @@ export function pendingFixtureEnvironment<P, W>(
       bindingLost: null,
       targetProvenance: { source: "seed" },
       closed: false,
-      unreadable: false,
       failure,
     },
   };

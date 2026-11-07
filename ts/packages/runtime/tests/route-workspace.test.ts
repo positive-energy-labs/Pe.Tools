@@ -106,56 +106,6 @@ test("throwing accepted and publish listeners cannot fail a committed write or s
   }
 });
 
-test("start-fresh commits and publishes despite a throwing accepted listener", async () => {
-  const memory = memoryStore();
-  await memory.store.setState({
-    targetKey: workKey(documentA),
-    route: documentA.route,
-    value: { version: 1, schemaVersion: 1, revision: 4, doc: { count: "unreadable" } },
-  });
-  const olderRegistration = registration();
-  olderRegistration.spec.schemaVersion = 2;
-  const module = workspace(memory.store, { registration: olderRegistration });
-  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-  const accepted = vi.fn();
-  const published = vi.fn();
-  const stops = [
-    module.observeAccepted(
-      documentA,
-      () => {
-        throw Error("accepted listener failed");
-      },
-      undefined,
-      false,
-    ),
-    module.observeAccepted(documentA, accepted, undefined, false),
-    module.subscribe(published),
-  ];
-  try {
-    expect(await module.startFresh(documentA, documentA.route, "human")).toMatchObject({
-      ok: true,
-      revision: 5,
-    });
-    expect(await bind(workspace(memory.store, { registration: olderRegistration })).read()).toMatchObject({
-      revision: 5,
-      doc: { count: 0 },
-    });
-    expect(accepted).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ kind: "start-fresh", revision: 5 }),
-    );
-    expect(published).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ ok: true, revision: 5 }),
-    );
-    expect(logged).toHaveBeenCalledExactlyOnceWith(
-      "Work accepted listener failed",
-      expect.any(Error),
-    );
-  } finally {
-    stops.forEach((stop) => stop());
-    logged.mockRestore();
-  }
-});
-
 function bind(module: RouteWorkspace, scope: WorkKey = documentA) {
   return {
     read: () => module.read(scope, "test-route"),

@@ -32,7 +32,7 @@ async function witness() {
       key: "w1b-history",
       address: "/w1b-history",
       capabilities: ["work"] as const,
-      work: { route: "w1b-history", schema: "work", version: 1, migrations: {} },
+      work: { route: "w1b-history", schema: "work", version: 1, },
       verbs: { drop: declaration },
     },
     bodies: {

@@ -18,9 +18,8 @@ test("instance discovery validates actual persisted Work and never reads, create
         {
           targetKey: workKey(scope),
           route: "family",
-          value: { version: 1, revision: 5, doc: { authored: "kept-private" } },
+          value: { version: 1, schemaVersion: 1, revision: 5, doc: { authored: "kept-private" } },
         },
-        { targetKey: workKey(scope), route: "family:aside:1", value: { raw: "unreadable" } },
         { targetKey: "open-work", route: "register", value: [] },
         { targetKey: "family/target:relative.rvt", route: "family", value: {} },
       ],

@@ -7,7 +7,6 @@ import { useRouteViewBridge } from "../route/view-bridge";
 import { refuse } from "../route/refusal";
 import { useRouter } from "@tanstack/react-router";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { Button } from "@pe/kit/lang/button";
 import {
   createElement,
   Fragment,
@@ -53,7 +52,6 @@ export function AdmittedAttention({
 
 function Pane({ mount, route }: { mount: AdmittedMount; route: AdmittedRoute }) {
   useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
-  const recovery = mount.recovery();
   const failure = mount.workFailure();
   const problem = mount.workProblem();
   const workMessage =
@@ -63,26 +61,12 @@ function Pane({ mount, route }: { mount: AdmittedMount; route: AdmittedRoute }) 
   return createElement(
     AdmittedChrome,
     { key: route.data.key, mount, data: route.data },
-    (recovery.sentence ?? workMessage) &&
+    workMessage &&
       createElement(OutcomeLine, {
         kind: "error",
         label: failure?.kind ?? "Work unavailable",
-        says: recovery.sentence ?? workMessage!,
+        says: workMessage!,
       }),
-    recovery.problem &&
-      createElement(OutcomeLine, { kind: "error", label: "Work recovery", says: recovery.problem }),
-    recovery.startFresh &&
-      createElement(
-        Button,
-        {
-          label: "Start fresh",
-          refusal: recovery.busy ? "Recovery is in progress" : null,
-          onClick: () => {
-            void mount.startFresh().catch(() => {});
-          },
-        },
-        "Start fresh",
-      ),
     ...mount.commandProblems().map((problem) =>
       createElement(OutcomeLine, {
         key: problem.receiptId,

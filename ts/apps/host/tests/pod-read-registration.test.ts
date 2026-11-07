@@ -35,7 +35,7 @@ test("digest-verified Pod host reads enter reads.value and retire with their Wor
     ...builtinData,
     key: "pod.registry.tool",
     address: `/tool/${encodeURIComponent("route:@registry/routes/tool/route.artifact")}`,
-    work: { schema: "work", route: "pod.registry.tool", version: 1, migrations: {} },
+    work: { schema: "work", route: "pod.registry.tool", version: 1, },
   };
   const source = join(root, "host.ts"),
     zod = fileURLToPath(import.meta.resolve("zod"));

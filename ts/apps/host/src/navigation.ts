@@ -48,7 +48,7 @@ export async function readThreadWork(
   if (!contexts) observations.push("Remembered thread connections are unavailable.");
   if (!census?.available) observations.push("Persisted Work discovery is unavailable.");
   if (census?.unindexed)
-    observations.push(`${census.unindexed} older Work files have no discoverable identity.`);
+    observations.push(`${census.unindexed} stored Work files have no discoverable identity.`);
   const unreadable =
     (census?.unreadable ?? 0) + (census?.works.filter((w) => w.state !== "ready").length ?? 0);
   if (unreadable)

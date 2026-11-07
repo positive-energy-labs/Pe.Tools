@@ -68,8 +68,7 @@
   "work": {
     "schema": "work",
     "route": "families",
-    "version": 1,
-    "migrations": {}
+    "version": 1
   },
   "readings": {
     "value": {

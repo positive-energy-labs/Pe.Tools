@@ -15,17 +15,9 @@ import type { BuiltinClosure } from "./route-module.ts";
 const base: HostRouteModule = {
   data: {
     ...builtinData,
-    work: { route: builtinData.key, schema: "work", version: 2, migrations: { "1": "upgrade" } },
+    work: { route: builtinData.key, schema: "work", version: 2, },
   },
   schemas: { work: z.object({ amount: z.number() }) },
-  bodies: {
-    upgrade: {
-      kind: "migration",
-      slot: "work.migrations.1",
-      source: { module: "neutral.ts", export: "upgrade" },
-      run: () => ({ amount: 1 }),
-    },
-  },
 };
 const neutral: HostRouteModule = {
   ...base,
@@ -35,7 +27,6 @@ const neutral: HostRouteModule = {
     description: base.data.directory.summary,
     schema: base.schemas.work!,
     schemaVersion: 2,
-    migrations: { 1: base.bodies.upgrade!.run },
   },
 };
 async function prepare(module = neutral, data = module.data) {
@@ -78,23 +69,12 @@ test("neutral data cannot differ from the full web closure", async () => {
     false,
   );
 });
-test("missing and misbound host migrations and schemas refuse", async () => {
+test("missing host schemas refuse", async () => {
   const candidates: HostRouteModule[] = [
     { ...neutral, schemas: {} },
-    { ...neutral, bodies: {} },
-    { ...neutral, bodies: { upgrade: { ...neutral.bodies.upgrade!, slot: "panes.main.body" } } },
   ];
   for (const candidate of candidates)
     expect((await prepare(candidate)).admitHost(candidate).ok).toBe(false);
-});
-test("post-prepare replacement of a host body refuses", async () => {
-  const port = await prepare();
-  expect(
-    port.admitHost({
-      ...neutral,
-      bodies: { upgrade: { ...neutral.bodies.upgrade!, run: () => ({ amount: 2 }) } },
-    }).ok,
-  ).toBe(false);
 });
 
 test("complete Work spec is required and every host-run export is captured", async () => {
@@ -115,7 +95,6 @@ test("complete Work spec is required and every host-run export is captured", asy
     { ...module, workState: { ...workState, reconcileEdit: () => null } },
     { ...module, workState: { ...workState, finds: [] } },
     { ...module, workState: { ...workState, editable: [] } },
-    { ...module, workState: { ...workState, migrations: { 1: () => null } } },
   ])
     expect(port.admitHost(candidate).ok).toBe(false);
   expect(
@@ -148,7 +127,6 @@ test("host write admission is callable, owner-only and captured before prepare y
     ...module,
     data: { ...data, capabilities: [] },
     workState: undefined,
-    bodies: {},
-  };
+    };
   expect((await prepare(noWork)).admitHost(noWork).ok).toBe(false);
 });

@@ -37,7 +37,6 @@ import type { TypedRoute } from "../route/typed-route";
 import type { RouteFingerprint } from "@pe/agent-contracts";
 import type { AdmittedAddressPort } from "./typed-address";
 import { hostedRouteAddress, type HostedRouteProps } from "../workbench/hosted-route";
-import { TypedWorkRecovery } from "./typed-work-recovery";
 
 /** A typed route bypasses web admission. Only its host Work registration needs the closure stamp. */
 export function TypedRouteView({ module, fingerprint, address: supplied }: { module: TypedRoute; fingerprint: RouteFingerprint; address?: AdmittedAddressPort }) {
@@ -122,7 +121,7 @@ export function TypedChrome({ mount, document, thread }: { mount: TypedMount; do
   } }} />;
   const head=<SituationBand name={spec.name} context={<>{document}<TypedSubject mount={mount} />{spec.edits && mount.work()?<span>{`r${mount.work()!.revision}`}</span>:null}</>}
     alerts={<>{mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}{mount.problem() ? <span role="alert">{mount.problem()}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
-    verbs={[...mount.recoveryOwners().map(owner=><TypedWorkRecovery key={owner} mount={mount} owner={owner}/>),...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)]}
+    verbs={[...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)]}
     timeline={<TimelineHead owner={mount} history={<GraphHistory owner={mount} />} />} />;
   return <SubjectDoor.Provider value={subject}>{view}<KeyScopeHost id={`route:${spec.key}`} hidden={!visible} className="flex min-h-0 flex-1 flex-col">
     <ScopeKeys keys={actionScopeKeys((["undo","redo"] as const).map(direction=>({id:`work.${direction}`,label:direction,bindings:direction==="undo"?["Mod+Z"]:["Mod+Shift+Z","Mod+Y"],

@@ -326,7 +326,6 @@ export function createAdmittedReadings<W extends Record<string, unknown>>(
             if (declaration.refresh === "explicit" && declaration.deps.work.length)
               demanded.delete(id);
         explicitWorkRevision = revision;
-        context.history().sync();
         if (evidenceScope !== read().scope) {
           evidenceScope = read().scope;
           for (const [id, reading] of Object.entries(route.data.readings))

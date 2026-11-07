@@ -58,7 +58,7 @@ async function fixture(connected = false) {
       key,
       address: "/u8p",
       capabilities: ["work"] as const,
-      work: { route: key, schema: "work", version: 1, migrations: {} },
+      work: { route: key, schema: "work", version: 1, },
       verbs: {
         edit: {
           kind: "work" as const,

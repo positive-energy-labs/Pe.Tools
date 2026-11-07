@@ -83,8 +83,7 @@
   "work": {
     "schema": "work",
     "route": "pods",
-    "version": 1,
-    "migrations": {}
+    "version": 1
   },
   "readings": {
     "value": {

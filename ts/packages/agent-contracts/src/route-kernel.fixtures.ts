@@ -112,7 +112,7 @@ export const builtinData = {
     search: text,
   },
   subject: { field: "system", noun: "system", roster: "roster", detail: "total", pane: "main" },
-  work: { schema: "work", route: "tiny", version: 1, migrations: {} },
+  work: { schema: "work", route: "tiny", version: 1, },
   readings: {
     roster: {
       kind: "use",
@@ -210,7 +210,7 @@ export const builtinBodies = {
   },
 } satisfies BodyBindings<typeof builtinData, typeof schemas, typeof entries, string>;
 
-// Complete representative Pod: manual/native subjects, migration, typed cell key and bindings.
+// Complete representative Pod: manual/native subjects, typed cell key and bindings.
 export const podData = {
   ...builtinData,
   capabilities: ["work", "native-write", "geometry"],
@@ -230,7 +230,7 @@ export const podData = {
     },
     selected: { role: "selection", kinds: ["manual", "circuit"] },
   },
-  work: { schema: "work", route: "pod.circuits", version: 2, migrations: { "1": "upgradeV1" } },
+  work: { schema: "work", route: "pod.circuits", version: 2, },
   readings: {
     ...builtinData.readings,
     overview: {
@@ -309,12 +309,6 @@ export const podBodies = {
     run: ({ work, captures }) => ({ amount: captures.total.value?.total ?? work.amount }),
   },
   main: { ...builtinBodies.main, run: ({ page }) => page.read().system?.kind ?? "none" },
-  upgradeV1: {
-    slot: "work.migrations.1",
-    kind: "migration",
-    source,
-    run: (raw) => ({ amount: z.object({ amount: z.number() }).parse(raw).amount, note: "" }),
-  },
   cellGroup: {
     slot: "cells.input.groupOf",
     kind: "group",

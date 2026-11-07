@@ -1,3 +1,4 @@
+import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
 import type { DocumentRef } from "@pe/agent-contracts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import {
@@ -12,7 +13,6 @@ import {
   routeViewSchema,
   readingKey,
   recentRows,
-  START_FRESH,
   contributionKey,
   isCanonicalSlug,
   parseContributionKey,
@@ -375,13 +375,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
         const { direction, expectedRevision } = body as z.infer<typeof historyBody>;
         return work.step(scope, route, by, direction, expectedRevision);
       },
-    },
-    // Authenticated authors share recovery; the workspace preserves unreadable source bytes.
-    [START_FRESH]: {
-      schema: z.object({}),
-      hint: "expected {}",
-      run: (scope: WorkKey, route: string, by: "pea" | "human") =>
-        work.startFresh(scope, route, by),
     },
   } as Record<
     string,
@@ -764,21 +757,8 @@ export function createPeRoutes(options: PeRoutesOptions) {
           return view ? json(view) : json({ error: `unknown route '${route}'` }, 404);
         } catch (error) {
           if (isDoorFailure(error)) throw error;
-          if (error instanceof Error && "code" in error && error.code === "WorkUnreadable")
-            return json({error: error.message, failure: {code: error.code,
-              ...("key" in error ? {key: error.key} : {}),
-              ...("reason" in error ? {reason: error.reason} : {}),
-            }},403);
           return json({ error: message(error) }, 403);
         }
-      }
-      // Human-only and read-only; any other caller is refused by name, not 404.
-      if (method === "GET" && route && verb === "salvage") {
-        const scope = workKey(url, route, "read");
-        if (scope instanceof Response) return scope;
-        const salvaged = await work.salvage(scope, route);
-        if (!salvaged) return json(null);
-        return "ok" in salvaged ? json(salvaged, 403) : json(salvaged);
       }
       const write = method === "POST" && route && verb ? writes[verb] : undefined;
       if (write && route && caller.kind !== "human" && caller.kind !== "pea")

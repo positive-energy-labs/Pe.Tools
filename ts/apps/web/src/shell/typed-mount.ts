@@ -39,7 +39,6 @@ import { applicationWorkRegistry, createApplicationWorkRegistry } from "./applic
 import { createWorkFeedClient } from "./work-feed-client";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import { publicationPose, recordedWorkDoor } from "./history";
-import { startFreshRouteWork } from "../route/host";
 import { settleWork } from "./work-door-observation";
 import { freezePage } from "./page-port";
 import type { PlaceInput } from "./typed-place";
@@ -56,7 +55,7 @@ const unavailable = (reason: string, value?: any, publication: Value["publicatio
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
 export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerprint: RouteFingerprint,
-  ports: { work?: WorkJournalDoor; sources?: Record<string, ReadingSource>; startFresh?: typeof startFreshRouteWork } = {}) {
+  ports: { work?: WorkJournalDoor; sources?: Record<string, ReadingSource> } = {}) {
   const cleanups: (() => void)[] = [];
   try {
   const { spec } = module;
@@ -161,7 +160,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           if (ack.revision > record.handle.revision) {
             const result = applyPatches(config.state, { version: 1, revision: record.handle.revision, doc: record.doc },
               ack.by, ack.patches, ack.base, true, true);
-            if (!result.ok) throw Error("error" in result ? result.error : "Start fresh was refused");
+            if (!result.ok) throw Error("error" in result ? result.error : "Work acknowledgement was refused");
             accept(record, { key: ack.key, revision: ack.revision }, result.envelope.doc);
           }
           lease.entry.journal.accept(ack);
@@ -411,31 +410,6 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const mounted = {
     spec, data: module.data, subjectState, move,
     absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
-    recoveryOwners: () => [...owners].filter(([,record]) => record.failure?.kind === "failed" && record.failure.code === "WorkUnreadable" && record.failure.schemaAge === "older" && !input.readOnly && !input.history && input.fixture === null).map(([id])=>id),
-    startFreshAction(owner: string = own) {
-      const record=owners.get(owner),selected=record?.scope.key;
-      if(!selected||record?.failure?.kind!=="failed"||record.failure.code!=="WorkUnreadable"||record.failure.schemaAge!=="older"||input.readOnly||input.history||input.fixture!==null) return null;
-      const attempt=workAttempt,failure=record.failure;
-      return {
-        get pending(){return pending.has("work.start-fresh");},
-        get current(){return !disposed&&!released&&input.custody.current()&&workAttempt===attempt&&owners.get(owner)===record&&owners.get(owner)?.failure===failure;},
-        async run() {
-          requireWritable();
-          const failure=owners.get(owner)?.failure;
-          if(workAttempt!==attempt||owners.get(owner)!==record||failure?.kind!=="failed"||failure.code!=="WorkUnreadable"||failure.schemaAge!=="older")
-            throw Error("Work recovery changed; review the current Work again");
-          if(pending.has("work.start-fresh")) throw Error("Start fresh already pending");
-          pending.add("work.start-fresh");notify();
-          try {
-            const result=await (ports.startFresh??startFreshRouteWork)(selected);
-            if(!result.ok) throw Error("error" in result?result.error:JSON.stringify(result));
-            requireWritable();
-            if(workAttempt!==attempt||owners.get(owner)!==record)return;
-            ownerKey=undefined;syncWork();syncReads(true);
-          } finally { pending.delete("work.start-fresh");notify(); }
-        },
-      };
-    },
     startAction():import("../route/typed-route").ActionHandle|null {
       if([...owners.values()].some(record=>!record.ready&&!record.absent)) return null;
       const absent=[...owners].filter(([,record])=>record.absent);

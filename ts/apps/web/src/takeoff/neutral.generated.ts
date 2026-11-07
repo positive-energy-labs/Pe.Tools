@@ -5,4 +5,4 @@ import {RouteGraphJson} from "../../../../packages/agent-contracts/src/route-ker
 import type {HostRouteModule} from "@pe/agent-contracts";
 import closure from "./source-closure.generated.json" with {type:"json"};
 const data=RouteGraphJson.parse(closure.envelope.data);
-export const host:HostRouteModule={data,bodies:{},workState:work,readWorks:[],schemas:{[data.work!.schema!]:work.schema,[data.historyDetail!]:z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{}})},};
+export const host:HostRouteModule={data,workState:work,readWorks:[],schemas:{[data.work!.schema!]:work.schema,[data.historyDetail!]:z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{}})},};

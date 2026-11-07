@@ -226,8 +226,7 @@
   "work": {
     "schema": "work",
     "route": "ducts",
-    "version": 2,
-    "migrations": {}
+    "version": 2
   },
   "readings": {
     "value": {

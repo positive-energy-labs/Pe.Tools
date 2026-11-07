@@ -437,7 +437,7 @@ async function workRoute(
         } as const)
       : {}),
     capabilities: ["work", "native-write"] as const,
-    work: { route: "note", schema: "work", version: 1, migrations: {} },
+    work: { route: "note", schema: "work", version: 1, },
     workFields: { amount: { label: "amount", internal: false } },
     ...(needs === "document" ? {} : { workSubject: "note" }),
     readings: {
@@ -682,7 +682,7 @@ test("fixture Page defaults select canonical member Work before acquisition and 
   const make = async () => admitted(false, false, {
     schemas: { work: z.object({ amount: z.number() }) },
     data: {
-      capabilities: ["work"], work: { route: "note", schema: "work", version: 1, migrations: {} }, workSubject: "note",
+      capabilities: ["work"], work: { route: "note", schema: "work", version: 1, }, workSubject: "note",
       fields: { ...data.fields, selected: { ...data.fields.selected, allowAll: true }, pod: data.fields.query, path: data.fields.query },
       transition: "deriveMember", transitionDeps: { page: [], work: [], readings: [] },
       seeds: { ...data.seeds, alternate: { title: "Alternate", load: "alternateSeed" } },

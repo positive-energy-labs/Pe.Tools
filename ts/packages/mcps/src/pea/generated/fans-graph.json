@@ -212,8 +212,7 @@
   "work": {
     "schema": "work",
     "route": "fans",
-    "version": 1,
-    "migrations": {}
+    "version": 1
   },
   "readings": {
     "value": {

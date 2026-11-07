@@ -27,7 +27,7 @@ export interface ExecutableMember {
  * executables is [{client,entry,members:[{path,sha256}]}] sorted by client then entry,
  * members sorted by path. Sorts use UTF-16 code units, never locale ordering.
  * Each member hash covers exact shipped artifact bytes. Include the transitive closure
- * of body, renderer, adapter, refinement, transform, codec, migration and seed modules,
+ * of body, renderer, adapter, refinement, transform, codec and seed modules,
  * plus all transitively loaded assets/dependencies. No timestamps or absolute paths.
  * Bundles may represent that closure as one member. Externals need pinned content hashes;
  * unresolved/dynamic dependency closure refuses admission. Function.toString is forbidden.

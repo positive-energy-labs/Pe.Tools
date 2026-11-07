@@ -214,7 +214,7 @@ for (const key of keys) {
       }
     }
     await emit(new URL(`../src/${folder}/neutral.generated.ts`,import.meta.url),
-      `// Generated from route.ts by codegen:routes. Neutral projection only.\n${workImport}${typed.spec.edits?'import {z} from "zod";\n':""}import {RouteGraphJson} from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type {HostRouteModule} from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with {type:"json"};\nconst data=RouteGraphJson.parse(closure.envelope.data);\nexport const host:HostRouteModule={data,bodies:{},${workBody||"schemas:{},"}};\n`);
+      `// Generated from route.ts by codegen:routes. Neutral projection only.\n${workImport}${typed.spec.edits?'import {z} from "zod";\n':""}import {RouteGraphJson} from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type {HostRouteModule} from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with {type:"json"};\nconst data=RouteGraphJson.parse(closure.envelope.data);\nexport const host:HostRouteModule={data,${workBody||"schemas:{},"}};\n`);
     await emit(new URL(`../src/${folder}/host.generated.ts`,import.meta.url),
       `// Generated from route.ts by codegen:routes. Host only.\nimport {host as neutral} from "./neutral.generated.ts";\n${runtime?`import * as runtime from ${JSON.stringify(runtime)};\n`:""}import type {HostRouteModule} from "@pe/agent-contracts";\nexport const host:HostRouteModule={...neutral,${runtime?'reads:(runtime as Pick<HostRouteModule,"reads">).reads,':""}};\n`);
 

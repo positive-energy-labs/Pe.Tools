@@ -244,7 +244,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
       ...(["document","project","family"].includes(normalized.needs)?["geometry" as const]:[])],fields,
     identities:{subject:{kind:"local",codec:"local"},focus:{kind:"local",codec:"local"}},
     ...(spec.subject?{subject:{field:spec.subject.field,noun:spec.subject.noun,pane:spec.subject.pane,roster:subjectRead!,detail:subjectRead!}}:{}),
-    ...(work?{historyDetail:"historyDetail",work:{schema:"work",route:work.route,version:work.schemaVersion??1,migrations:{}}}:{}),
+    ...(work?{historyDetail:"historyDetail",work:{schema:"work",route:work.route,version:work.schemaVersion??1,}}:{}),
     workFields:Object.fromEntries(Object.entries(work?.schema.shape ?? {}).flatMap(([key,schema])=>{
       const meta=(schema as z.ZodType).meta();
       return meta?.title ? [[key,{label:meta.title,internal:meta.internal === true}]] : [];
@@ -252,7 +252,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
       draws:p.read?[readIds.get(p.read)!]:[],verbs:Object.keys(verbs)}])),readings,verbs,seeds:{},layout:discoveryLayout(spec.layout),
     needs:normalized.needs === "browser" || normalized.needs === "host" ? "nothing" : normalized.needs,
     predicates:{},observe:[],resetOnTarget:[],stageOrder:[stage],stages:{[stage]:{panes:Object.keys(spec.panes),verbs:Object.keys(verbs),word:spec.name}}};
-  const host:HostRouteModule={data,schemas,bodies:{},...(work?{workState:work,readWorks:Object.keys(owners).filter(id=>id!==work.route)}:{})};
+  const host:HostRouteModule={data,schemas,...(work?{workState:work,readWorks:Object.keys(owners).filter(id=>id!==work.route)}:{})};
   const entries:Record<string,EntryContract>=Object.fromEntries([...[...readIds.keys()].map(read=>[read.key,read]),
     ...Object.values(normalized.commands).flatMap(c=>[[c.entry,c.contract],...("plan" in c?[[c.plan,c.planContract]]:[])])]);
   return {spec:normalized,data,host,entries};

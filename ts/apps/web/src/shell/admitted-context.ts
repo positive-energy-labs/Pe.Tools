@@ -54,9 +54,7 @@ export type MountContext<W extends Record<string, unknown>> = ReturnType<
     import("../../../../packages/agent-contracts/src/route-kernel-environment.ts").KernelServices["submitNative"]
   >;
   local?: import("../../../../packages/agent-contracts/src/route-kernel-environment.ts").LocalCommandPort;
-  recoveryHost:
-    | Pick<typeof import("../route/host.ts"), "startFreshRouteWork" | "salvageRouteWork">
-    | undefined;
+
   sourceEvidence: Partial<import("./source-route-services.ts").SourceReadingEvidence>;
   notify(this: void): void;
   schedule(this: void): void;

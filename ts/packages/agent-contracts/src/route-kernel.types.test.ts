@@ -718,8 +718,6 @@ export function consumeFeedFailure(failure: Extract<WorkFeedState, { kind: "fail
       expectTypeOf(failure.expected).toEqualTypeOf<RouteFingerprint>();
       expectTypeOf(failure.received).toEqualTypeOf<RouteFingerprint>();
       return "reload";
-    case "migration-failed":
-      return [failure.fromVersion, failure.toVersion, failure.step, failure.message];
     case "failed":
       return [failure.code, failure.message];
     default:

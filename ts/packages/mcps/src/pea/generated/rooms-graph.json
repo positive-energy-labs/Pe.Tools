@@ -106,8 +106,7 @@
   "work": {
     "schema": "work",
     "route": "rooms",
-    "version": 1,
-    "migrations": {}
+    "version": 1
   },
   "readings": {
     "value": {

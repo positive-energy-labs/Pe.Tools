@@ -159,7 +159,7 @@ test("historical mutation doors refuse without append or any live graph", async 
       ["/actions", { key: "ducts.apply-losses" }],
       ["/actions", { key: "ducts.plan-losses" }],
       ["/pe/route-state/fans/apply", { kind: "apply" }], ["/pe/route-state/fans/history", { direction: "undo" }],
-      ["/pe/route-state/fans/start-fresh", {}], ["/call", { key: "pointers.point", request: {} }],
+      ["/call", { key: "pointers.point", request: {} }],
       ["/call", { key: "pointers.dismiss", request: {} }],
     ] as const) {
       const response = await app.send(path, body);
@@ -187,7 +187,6 @@ test("journal, Work and pointer owners refuse before storage or executor access"
     () => workspace.step(work, "/fans", "human", "undo", 0),
     () => workspace.step(work, "/fans", "human", "redo", 0),
     () => workspace.publish(work, "/fans", [], 0),
-    () => workspace.startFresh(work, "/fans", "human"),
   ]) await expect(Promise.resolve().then(async () => { await run(); })).rejects.toMatchObject({ problem: "recording.historical" });
   let mutations = 0; const pointers = threadPointerPort(inputs);
   pointers.bind({ read: () => ({ threadId: "t1", pointers: [] }), point: () => { mutations++; return { threadId: "t1", pointers: [] }; }, dismiss: () => { mutations++; return { threadId: "t1", pointers: [] }; } });
