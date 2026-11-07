@@ -323,6 +323,19 @@ test("HTTP document targets normalize once before generated native handles and p
     });
     expect(denied.status).not.toBe(200);
     expect(f.nativeCalls).toBe(calls);
+    for (const target of [
+      { kind: "session", session: ref.session },
+      { kind: "document", ref: { session: ref.session } },
+    ]) {
+      const refused = await f.probe({
+        read: definition.name,
+        subscription: "invalid-target",
+        generation: 1,
+        args: { target },
+      });
+      expect(refused.status).not.toBe(200);
+      expect(f.nativeCalls).toBe(calls);
+    }
     expect(() => nativeRead("ducts.apply")).toThrow("Read/Read");
   } finally {
     unregister();

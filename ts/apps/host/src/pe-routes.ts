@@ -760,6 +760,11 @@ export function createPeRoutes(options: PeRoutesOptions) {
           return view ? json(view) : json({ error: `unknown route '${route}'` }, 404);
         } catch (error) {
           if (isDoorFailure(error)) throw error;
+          if (error instanceof Error && "code" in error && error.code === "WorkUnreadable")
+            return json({error: error.message, failure: {code: error.code,
+              ...("key" in error ? {key: error.key} : {}),
+              ...("reason" in error ? {reason: error.reason} : {}),
+            }},403);
           return json({ error: message(error) }, 403);
         }
       }
