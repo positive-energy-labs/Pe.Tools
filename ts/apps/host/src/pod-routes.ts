@@ -8,7 +8,7 @@ import type { HostAdmittedRoute } from "../../../packages/agent-contracts/src/ho
 import type { createPackageLifecycle } from "./package-lifecycle.ts";
 import { productRouteTrustPath } from "./product-paths.ts";
 import { readJson, writeArtifact } from "./page-artifacts.ts";
-import { admitPodArtifact, verifyPodArtifact } from "./pod-artifact.ts";
+import { admitPodArtifact, loadPodHostEntry, verifyPodArtifact } from "./pod-artifact.ts";
 import { registeredReads } from "./reads/routes.ts";
 
 /** Builtin source admission and verified Pod-byte admission share this host-owned door.
@@ -16,6 +16,7 @@ import { registeredReads } from "./reads/routes.ts";
 export function registerAdmittedHostRoute(
   route: contracts.AdmittedRoute | HostAdmittedRoute,
   workspace: RouteWorkspace,
+  host?: Pick<contracts.HostRouteModule, "reads" | "leaves">,
 ): ReturnType<RouteWorkspace["registerAdmitted"]> {
   // Builtins joined the same registry at startup. A verified Pod owns its runtime entries.
   const captured = route.fingerprint.startsWith("pod-bytes:")
@@ -24,7 +25,7 @@ export function registerAdmittedHostRoute(
   let unregister = () => {};
   try {
     if (captured) {
-      const bindings = captured.bindings;
+      const bindings = host ?? captured.bindings;
       unregister = registeredReads.register(
         "reads" in bindings ? bindings.reads : undefined,
         "leaves" in bindings ? bindings.leaves : undefined,
@@ -124,6 +125,10 @@ export function createPodRoutes(
         const pod = lifecycle.packages().find((pod) => pod.id === route.packageId)!;
         const bytes = pod.members.find((member) => member.path === route.artifact)!.bytes;
         const value: unknown = JSON.parse(Buffer.from(bytes).toString("utf8"));
+        const evidence = await verifyPodArtifact(value, route.fingerprint);
+        const host = evidence.executables.some((entry) => entry.client === "host")
+          ? await loadPodHostEntry(value, route.fingerprint)
+          : undefined;
         const admitted = await admitPodArtifact(value, route.fingerprint);
         if (
           admitted.data.key !== route.workRoute ||
@@ -133,7 +138,7 @@ export function createPodRoutes(
           throw Error("Admitted route identity differs from its package declaration");
         if (closed) return [];
         if (!current(route.key, route.fingerprint)) continue;
-        const registration = registerAdmittedHostRoute(admitted, options.workspace);
+        const registration = registerAdmittedHostRoute(admitted, options.workspace, host);
         const dispose = registration.close;
         registrations.set(route.key, { hash: route.fingerprint, dispose });
       }
