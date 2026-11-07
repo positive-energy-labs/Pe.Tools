@@ -59,7 +59,7 @@ function Sessions({
       {selected && (
         <section aria-label="Session detail">
           <p>
-            {keyOf(selected)} Ã‚Â· Revit {selected.row.year}
+            {keyOf(selected)} · Revit {selected.row.year}
           </p>
           {["stop", "restart"].map((id) => {
             let request: unknown;

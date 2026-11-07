@@ -1,18 +1,52 @@
-import {hostReadSource} from "./host-read-source.ts";
+import { hostReadSource } from "./host-read-source.ts";
 import { writeReject } from "./catalog-work-reviews";
 import { harnessClient } from "../workbench/provider/harness-client";
 import { resolveWorkbenchConfig } from "../workbench/config";
 import { z } from "zod";
+
+/** Host refusals carry serialized issues; local Value decoding throws the same issues. */
+function valueRefusal(error: unknown, read: string): string {
+  const message = error instanceof Error ? error.message : String(error);
+  let issues: unknown = error instanceof z.ZodError ? error.issues : null;
+  if (!issues) {
+    try { issues = JSON.parse(message); } catch { /* Domain refusals remain readable as supplied. */ }
+  }
+  return Array.isArray(issues) && issues.length > 0 && issues.every(issue =>
+    issue !== null && typeof issue === "object" && "code" in issue && "path" in issue)
+    ? `Value unavailable (${read}): the model reading does not match its contract. Refresh to try again.`
+    : message;
+}
 import { decodeField } from "../route/field-codec";
-import { applyPatches, bindWork, cellPatches, commands, commandTarget, canonicalRouteInput, workKey,
-  writePreviewSchema, presentationSchema, workHandleSchema, workFeedFailureMessage, type WorkFeedFailure, type WorkHandle, type WorkWrite, type RouteStatePatch,
-  bare, focusSelectionSchema, type WorkJournalDoor, type WorkScope, type RouteFingerprint, type InvocationToken,
-  type RouteStateWriteResult } from "@pe/agent-contracts";
+import {
+  applyPatches,
+  bindWork,
+  cellPatches,
+  commands,
+  commandTarget,
+  canonicalRouteInput,
+  workKey,
+  writePreviewSchema,
+  presentationSchema,
+  workHandleSchema,
+  workFeedFailureMessage,
+  type WorkFeedFailure,
+  type WorkHandle,
+  type WorkWrite,
+  type RouteStatePatch,
+  bare,
+  focusSelectionSchema,
+  type WorkJournalDoor,
+  type WorkScope,
+  type RouteFingerprint,
+  type InvocationToken,
+  type RouteStateWriteResult,
+} from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";
 import { createWorkFeedClient } from "./work-feed-client";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import { publicationPose, recordedWorkDoor } from "./history";
+import { startFreshRouteWork } from "../route/host";
 import { settleWork } from "./work-door-observation";
 import { freezePage } from "./page-port";
 import type { PlaceInput } from "./typed-place";
@@ -20,8 +54,8 @@ import type { ReadingContext, ReadingSource } from "./source-contract";
 import type { DrawContext, EditFailure, EditHistory, TypedRoute } from "../route/typed-route";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
-import { OLDER_WORK } from "@pe/agent-contracts";
-import { startFreshRouteWork } from "../route/host";
+
+
 
 type Value = DrawContext<any, any, any, any>["value"];
 const unavailable = (reason: string, value?: any, publication: Value["publication"] = null): Extract<Value,{current:false}> =>
@@ -134,7 +168,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           if (ack.revision > record.handle.revision) {
             const result = applyPatches(config.state, { version: 1, revision: record.handle.revision, doc: record.doc },
               ack.by, ack.patches, ack.base, true, true);
-            if (!result.ok) throw Error(result.error);
+            if (!result.ok) throw Error("error" in result ? result.error : "Start fresh was refused");
             accept(record, { key: ack.key, revision: ack.revision }, result.envelope.doc);
           }
           lease.entry.journal.accept(ack);
@@ -176,9 +210,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             const current = frame.kind === "complete" && frame.fresh !== false && packet.state === "current" &&
               !!packet.value && !packet.value.coverage.unknown.length && !packet.value.coverage.refused.length;
             record.snapshot = current ? { status: "ready", current: true, value: publication!.data, publication, hash: packet.value!.evaluation }
-              : unavailable(frame.reason ?? packet.reason ?? "Incomplete Value", publication?.data??record.snapshot.value, publication??record.snapshot.publication);
-          } catch (error) { record.snapshot = unavailable(String(error), record.snapshot.value, record.snapshot.publication); }
-        } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(String(frame.error),record.snapshot.value,record.snapshot.publication):{...unavailable("Reading...",record.snapshot.value,record.snapshot.publication),status:"pending"};
+              : unavailable(valueRefusal(frame.reason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??record.snapshot.value, publication??record.snapshot.publication);
+          } catch (error) { record.snapshot = unavailable(valueRefusal(error, read.key), record.snapshot.value, record.snapshot.publication); }
+        } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(valueRefusal(frame.error, read.key),record.snapshot.value,record.snapshot.publication):{...unavailable("Reading...",record.snapshot.value,record.snapshot.publication),status:"pending"};
         notify();
       };
       if (input.fixture !== null) {
@@ -382,31 +416,35 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const mounted = {
     spec, subjectState, move,
     absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
-    startFreshAction() {
-      const record=owners.get(own),selected=selectedKey();
-      if(!selected||record?.failure?.kind!=="failed"||record.failure.message!==OLDER_WORK||input.readOnly||input.history||input.fixture!==null) return null;
+    recoveryOwners: () => [...owners].filter(([,record]) => record.failure?.kind === "failed" && record.failure.code === "WorkUnreadable" && record.failure.schemaAge === "older" && !input.readOnly && !input.history && input.fixture === null).map(([id])=>id),
+    startFreshAction(owner: string = own) {
+      const record=owners.get(owner),selected=record?.scope.key;
+      if(!selected||record?.failure?.kind!=="failed"||record.failure.code!=="WorkUnreadable"||record.failure.schemaAge!=="older"||input.readOnly||input.history||input.fixture!==null) return null;
       const attempt=workAttempt,failure=record.failure;
       return {
         get pending(){return pending.has("work.start-fresh");},
-        get current(){return !disposed&&!released&&input.custody.current()&&workAttempt===attempt&&canonicalRouteInput(selected)===canonicalRouteInput(selectedKey())&&owners.get(own)?.failure===failure;},
+        get current(){return !disposed&&!released&&input.custody.current()&&workAttempt===attempt&&owners.get(owner)===record&&owners.get(owner)?.failure===failure;},
         async run() {
           requireWritable();
-          const failure=owners.get(own)?.failure;
-          if(workAttempt!==attempt||canonicalRouteInput(selected)!==canonicalRouteInput(selectedKey())||failure?.kind!=="failed"||failure.message!==OLDER_WORK)
+          const failure=owners.get(owner)?.failure;
+          if(workAttempt!==attempt||owners.get(owner)!==record||failure?.kind!=="failed"||failure.code!=="WorkUnreadable"||failure.schemaAge!=="older")
             throw Error("Work recovery changed; review the current Work again");
           if(pending.has("work.start-fresh")) throw Error("Start fresh already pending");
           pending.add("work.start-fresh");notify();
           try {
             const result=await (ports.startFresh??startFreshRouteWork)(selected);
             if(!result.ok) throw Error("error" in result?result.error:JSON.stringify(result));
+            requireWritable();
+            if(workAttempt!==attempt||owners.get(owner)!==record)return;
             ownerKey=undefined;syncWork();syncReads(true);
           } finally { pending.delete("work.start-fresh");notify(); }
         },
       };
     },
     startAction():import("../route/typed-route").ActionHandle|null {
-      const record=owners.get(own);
-      if(!record?.absent||!edits?.seed||!key||input.readOnly||input.history) return null;
+      if([...owners.values()].some(record=>!record.ready&&!record.absent)) return null;
+      const absent=[...owners].filter(([,record])=>record.absent);
+      if(!absent.length||!edits?.seed||!key||input.readOnly||input.history) return null;
       const selected=key;
       const run=async()=>{
         requireWritable();
@@ -414,10 +452,19 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         if(pending.has("work.start")) throw Error("Start already pending");
         pending.add("work.start");problems.delete("work.start");notify();
         try {
-          const request=commands["work.start"].input.parse({key:selected,seed:edits.seed!(page as never,input.target)});
-          await settleNative(door.submit({id:crypto.randomUUID(),key:"work.start",target:{kind:"host"},input:request}));
+          const requests=absent.map(([id,record])=>commands["work.start"].input.parse({key:record.scope.key,
+            seed:id===own?edits.seed!(page as never,input.target):record.config.state.schema.parse({})}));
+          for(const request of requests){
+            requireWritable();
+            const started=z.object({ok:z.literal(true),handle:workHandleSchema,doc:z.json()}).parse(
+              await settleNative(door.submit({id:crypto.randomUUID(),key:"work.start",target:{kind:"host"},input:request})));
+            requireWritable();
+            const record=owners.get(request.key.route);
+            if(!record) throw Error("Started Work no longer belongs to this route");
+            accept(record,started.handle,started.doc);
+          }
           if(canonicalRouteInput(selected)!==canonicalRouteInput(selectedKey())) return;
-          ownerKey=undefined;syncWork();syncReads(true);
+          syncReads(true);
         } catch(error){problems.set("work.start",error instanceof Error?error.message:String(error));throw error;}
         finally{pending.delete("work.start");notify();}
       };
@@ -498,7 +545,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             // Scalar cells travel whole; record cells keep their narrow keys (host inverse authority).
             const normalized=[...new Set(patches.map(p=>String(p.path[0])))].flatMap(key => bare(record.config.state.schema.shape[key]!) instanceof z.ZodRecord
               ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
-            const label=id===own ? detail.label : `${detail.label} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· from /${id}`;
+            const label=id===own ? detail.label : `${detail.label} · from /${id}`;
             await submit(record,{kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))},token);
           }));
           return null;

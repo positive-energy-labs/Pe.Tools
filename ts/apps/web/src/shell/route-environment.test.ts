@@ -1,16 +1,14 @@
-import { Effect } from "effect";
+import { createFixtureWorkDoor } from "./fixture-work-door";
+
+
+
+
+const command = { id: "write", key: "write", target: { kind: "host" as const }, input: {} };
 import { createHash } from "node:crypto";
 import { expect, test, vi } from "vite-plus/test";
+import { Effect } from "effect";
+import { effectTest } from "../../../host/tests/effect-test.ts";
 import { z } from "zod";
-import type { RouteFingerprintInput } from "../../../../packages/agent-contracts/src/route-kernel-admission.ts";
-import {
-  canonicalEnvironmentInput,
-  createRouteEnvironmentIssuer,
-} from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
-import {
-  createRouteTokenIssuer,
-  type DecodeResult,
-} from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
 import {
   builtinModule,
   readOnlyModule,
@@ -20,16 +18,23 @@ import {
   createRouteAdmission,
   routeFingerprint,
 } from "../../../../packages/agent-contracts/src/route-module.ts";
-import { effectTest } from "../../../host/tests/effect-test.ts";
-import { createAdmittedReadingPlan } from "./admitted-reading-plan";
-
-import { createFixtureWorkDoor } from "./fixture-work-door";
+import {
+  createRouteTokenIssuer,
+  type DecodeResult,
+} from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
+import {
+  canonicalEnvironmentInput,
+  createRouteEnvironmentIssuer,
+} from "../../../../packages/agent-contracts/src/route-kernel-environment.ts";
 import {
   createRouteEnvironment,
   routeEnvironmentLayer,
   RouteEnvironmentService,
   type EnvironmentPorts,
 } from "./route-environment";
+import { createAdmittedReadingPlan } from "./admitted-reading-plan";
+
+import type { RouteFingerprintInput } from "../../../../packages/agent-contracts/src/route-kernel-admission.ts";
 const unwrap = <T>(result: DecodeResult<T>): T => {
   if (!result.ok) throw new Error(result.reason);
   return result.value;
@@ -203,6 +208,7 @@ async function setup(
   };
 }
 
+
 test("detail authority refuses background, copied, nonfinite and small reaches, without cost cap", async () => {
   const s = await setup();
   const explicit = unwrap(s.environment.geometry.requestDetail(s.invocation));
@@ -219,7 +225,24 @@ test("detail authority refuses background, copied, nonfinite and small reaches, 
   s.stale();
   expect(s.environment.geometry.requestDetail(s.invocation).ok).toBe(false);
 });
-
+test("subscription and read lifetimes release once; command submission revalidates", async () => {
+  const s = await setup();
+  const deliver = vi.fn();
+  const stop = s.environment.readings.subscribe(s.read, s.token, deliver);
+  expect(deliver).toHaveBeenCalledTimes(1);
+  expect(s.environment.nativeWrite?.lifetime).toBe("command");
+  expect(() => s.environment.nativeWrite?.submit(command)).toThrow("Command unavailable");
+  s.stale();
+  s.emit();
+  expect(deliver).toHaveBeenCalledTimes(1);
+  stop();
+  s.emit();
+  stop();
+  s.stale();
+  expect(() => s.environment.nativeWrite?.submit(command)).toThrow("Command unavailable");
+  s.close();
+  expect(s.unsubscribe).toHaveBeenCalledTimes(1);
+});
 effectTest("Effect service scope releases acquisitions", () =>
   Effect.gen(function* () {
     const s = yield* Effect.promise(() => setup());
@@ -266,3 +289,16 @@ test("non-explicit invocations and subjects from another scope cannot acquire ge
   foreign.close();
   s.close();
 });
+
+
+
+
+
+
+
+
+
+
+
+
+

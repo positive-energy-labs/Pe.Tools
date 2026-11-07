@@ -964,14 +964,20 @@ const encoded = <A, I>(codec: Schema.Codec<A, I>, value: A) =>
  * One owner's live read, kept as a taking before its answer is returned. A value or a
  * class-faithful failure is recorded; a capture failure stops recording without changing the live exit.
  */
-/** The taking an occurrence selects: its consumer's stored link, else the root's exact binding. */
+/** An occurrence must agree with an explicit binding; only an unowned read uses the binding alone. */
 const selectedFor = (input: RecordedInput, scope: string, bound: string | undefined) =>
   Effect.flatMap(attemptFor(input, scope), (attempt) =>
     attempt === null
       ? Effect.succeed(bound)
       : Result.isFailure(attempt)
         ? Effect.fail(attempt.failure)
-        : attempt.success.selected,
+        : attempt.success.selected.pipe(
+            Effect.flatMap((selected) =>
+              bound === undefined || bound === selected
+                ? Effect.succeed(selected)
+                : Effect.fail(refuse("mismatch", "The bound taking differs from the consumer occurrence")),
+            ),
+          ),
   );
 
 export const captureInput = <A, I>(

@@ -45,7 +45,17 @@ export const identity = { build: "host-read-spike", catalog: nativeCatalogIdenti
 export const bounds = { maxBytes: 256 * 1024 * 1024, maxTakings: 2000 };
 export const roster = nativeResponseSchema("ducts.snapshot.walk").parse(rosterCapture);
 export const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(fanCapture);
-export async function fixture(capture = false, native?: { read(input: NativeReadInput): unknown; inventory: BridgeSessionsListData }) {
+export async function fixture(
+  capture = false,
+  recorded: {
+    snapshot?: typeof snapshot;
+    roster?: typeof roster;
+    document?: HostSessionInventory["Service"]["document"];
+    read?: (input: NativeReadInput) => unknown;
+    inventory?: BridgeSessionsListData;
+  } = {},
+) {
+  const native = recorded.read && recorded.inventory ? { read: recorded.read, inventory: recorded.inventory } : undefined;
   const dir = await mkdtemp(join(tmpdir(), "host-read-spike-"));
   await mkdir(join(dir, "catalogs"));
   await writeFile(join(dir, "firm.json"), JSON.stringify(FIRM_SEED));
@@ -105,7 +115,7 @@ export async function fixture(capture = false, native?: { read(input: NativeRead
             }),
         }),
         inventory: Layer.succeed(HostSessionInventory, {
-          document: () => Effect.succeed({ ...ref, address: path }),
+          document: recorded.document ?? (() => Effect.succeed({ ...ref, address: path })),
           session: () => Effect.succeed({ sessionId: ref.session }),
           attachment: () => Effect.succeed({ sessionId: ref.session }),
           list: () => native ? Effect.succeed(native.inventory) : Effect.die("No inventory list requested"),
@@ -145,8 +155,8 @@ export async function fixture(capture = false, native?: { read(input: NativeRead
                           unsupported: {},
                         }
                       : input.key === "ducts.snapshot.roster"
-                        ? roster
-                        : snapshot,
+                        ? (recorded.roster ?? roster)
+                        : (recorded.snapshot ?? snapshot),
                 ),
                 nativeRequestId: `native-${nativeCalls}`,
                 actualTarget:
@@ -205,6 +215,27 @@ export async function fixture(capture = false, native?: { read(input: NativeRead
   };
   return {
     dir,
+    publicationEvent: async (generation: number) => {
+      const url = new URL(peRouteUrl("reads.events", {}), "http://host");
+      url.searchParams.set("subscription", "sheet");
+      url.searchParams.set("generation", String(generation));
+      const response = await withInvocationContext({ caller: who }, () =>
+        web.handler(new Request(url), Context.make(RequestIdentity, admittedRequestIdentity(who, scope))),
+      );
+      expect(response.status).toBe(200);
+      const reader = response.body!.getReader();
+      try {
+        let text = "";
+        while (!text.includes("data: ")) {
+          const chunk = await reader.read();
+          if (chunk.done) throw Error("Publication stream closed without a state");
+          text += new TextDecoder().decode(chunk.value);
+        }
+        return JSON.parse(text.split("data: ")[1]!.split("\n")[0]!);
+      } finally {
+        await reader.cancel();
+      }
+    },
     probe: (body: unknown) =>
       withInvocationContext({ caller: who }, () =>
         web.handler(

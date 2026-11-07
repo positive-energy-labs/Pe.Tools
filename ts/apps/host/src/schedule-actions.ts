@@ -168,7 +168,6 @@ export async function readSchedule(
     // An unsaved document has no address, so its schedules have no Work yet (a read refuses too).
     const address = doc.address ? addressSchema.parse(doc.address) : null;
     return scheduleCatalogSchema.parse({
-      takenAt: new Date().toISOString(),
       schedules: catalog.entries
         .filter((e) => !e.isTemplate)
         .map((e) => ({

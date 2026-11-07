@@ -8,6 +8,39 @@ import { localId } from "./typed-route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
+import { Effect } from "effect";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { ductsPricingData, valueReadResponse } from "@pe/agent-contracts";
+import { InvalidRead } from "../../../host/src/native-reads";
+import { registeredReads } from "../../../host/src/reads/routes";
+import { ductsPricing, ductsNetwork, ductsRoster } from "../../../host/src/reads/ducts";
+import { fansSheet } from "../../../host/src/reads/fans";
+import { module as ducts } from "../ducts/route";
+import savedNetwork from "../ducts/fixtures/synthetic-snapshot.json";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Context, Layer } from "effect";
+import { HttpRouter } from "effect/http";
+import { RouteWorkspace } from "@pe/runtime";
+import { bindWork, familiesRouteState } from "@pe/agent-contracts";
+import { withInvocationContext } from "@pe/runtime/context";
+import {
+  captureStore,
+  detachedBridge,
+  sessionView,
+  familiesReader,
+  testHostInputs,
+} from "../../../host/tests/effect-test";
+import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
+import { fileRouteDocumentStore } from "../../../host/src/route-document-store";
+import { ActionJournal } from "../../../host/src/action-journal";
+import { makeCallRoute } from "../../../host/src/call-route";
+import { nativeReadRoot } from "../../../host/src/app";
+import { RevitBridge } from "../../../host/src/bridge";
+import { hostOwnership } from "../../../host/src/host-ownership";
+import { RequestIdentity, admittedRequestIdentity } from "../../../host/src/request-services";
+import { NodeServices, NodeHttpClient } from "../../../host/tests/family-attach-host.fixture";
 
 const trace = z.array(z.object({ name: z.string(), args: z.unknown() }));
 
@@ -87,7 +120,7 @@ async function journey() {
   };
 }
 
-test("JX1 choose named fans, compare their engineering answers and clear the scope", async () => {
+test("JX1 compare named Fans and shared-fan Duct systems, clear scope, then close the document", async () => {
   const j = await journey();
   try {
     await j.ready();
@@ -165,6 +198,8 @@ test("JX1 choose named fans, compare their engineering answers and clear the sco
   } finally {
     await j.close();
   }
+  await compareSystemAnswers();
+  await closeDocumentLifetime();
 }, 60_000);
 
 test("JX2 retain the pane through waiting, a refused subject, hiding and returning", async () => {
@@ -258,6 +293,459 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
   }
 }, 60_000);
 
+async function compareSystemAnswers() {
+  // Existing native-shaped purpose capture, with the same shared-fan variant as system-list.test.ts.
+  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(savedNetwork);
+  for (const element of [...snapshot.nodes, ...snapshot.segments])
+    element.uniqueId ||= `jx-native-${element.id}`;
+  snapshot.groups[0]!.systemNames.push("SA 2");
+  snapshot.systems.push({ ...snapshot.systems[0]!, id: 501, name: "SA 2" });
+  for (const element of [...snapshot.nodes, ...snapshot.segments])
+    if ([12, 22, 31].includes(element.id)) element.systemName = "SA 2";
+  const roster = {
+    ...snapshot,
+    groups: [],
+    segments: [],
+    flows: [],
+    nodes: snapshot.nodes.filter((node) => node.kind === "equipment"),
+  };
+  const host = await fixture(false, { snapshot, roster });
+  await host.send(0, []);
+  const definitions = { ductsPricing, ductsNetwork, ductsRoster };
+  const unregister = registeredReads.register(
+    Object.fromEntries(
+      Object.entries(definitions).filter(
+        ([, definition]) => !registeredReads.reads.has(definition.name),
+      ),
+    ),
+  );
+  let generation = 0;
+  const sources = Object.fromEntries(
+    Object.values(definitions).map((definition) => [
+      `${definition.name}.value`,
+      {
+        kind: "use" as const,
+        open(ctx, deliver) {
+          return host
+            .probe({
+              read: definition.name,
+              subscription: `jx-ducts-${++generation}`,
+              generation,
+              args: { target: ref, ...(ctx.args as object) },
+            })
+            .then(async (response) => {
+              if (!response.ok) throw Error(await response.text());
+              const packet = valueReadResponse.parse(await response.json());
+              deliver({ kind: "complete", value: packet, revision: packet.version });
+            })
+            .catch((error) => deliver({ kind: "failure", error }));
+        },
+      } satisfies UseSource,
+    ]),
+  );
+  const work = createWorkFeedClient(
+    { subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {} },
+    {
+      write: (key, write) => host.workspace.write(key, key.route, "human", write),
+      submit: () => {
+        throw Error("Read journey has no native writes");
+      },
+    },
+  );
+  const mount = mountTypedRoute(
+    ducts,
+    {
+      target: { kind: "document", ref },
+      fixture: null,
+      work: { address: path, open: ref },
+      memory: () => ({}),
+      custody: { current: () => true },
+      address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+    },
+    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
+    { work, sources },
+  );
+  try {
+    const staged = await host.workspace.apply(
+      { route: "fans", binding: "address", target: path },
+      "fans",
+      "human",
+      [30, 31].map((id, i) => ({
+        path: ["terminalDrops", String(id), "edit"],
+        value: { value: { inWg: i ? 0.35 : 0.05 } },
+      })),
+      0,
+    );
+    expect(staged.ok).toBe(true);
+    mount.page.subject({ kind: "all" });
+    await vi.waitFor(
+      () =>
+        expect(
+          mount.value(),
+          `H23: both systems publish a current host Value: ${JSON.stringify(mount.value())}`,
+        ).toMatchObject({ current: true }),
+      { timeout: 20_000 },
+    );
+    const result = ductsPricingData.parse(mount.value().value);
+    const first = result.analysis.systems.find((row) => row.name === "SA 1")!;
+    const second = result.analysis.systems.find((row) => row.name === "SA 2")!;
+    expect(
+      first.total,
+      "H23: sharing a fan does not copy the other system's pressure",
+    ).toBeLessThan(second.total!);
+    expect(
+      first.split!.rows.some((row) => row.id === 30),
+      "H23: first system retains its own terminal",
+    ).toBe(true);
+    expect(
+      first.split!.rows.some((row) => row.id === 31),
+      "H23: first system excludes the second terminal",
+    ).toBe(false);
+    expect(
+      result.priced.flows["30"]?.source,
+      "H23: terminal flow retains its provenance",
+    ).toBeTruthy();
+    expect(
+      result.network.systemReads.missing,
+      "H23: requested system coverage is explicit",
+    ).toEqual([]);
+    mount.page.subject({ kind: "ids", ids: [] });
+    await vi.waitFor(() => expect(mount.value().current).toBe(true), { timeout: 20_000 });
+    const unread = ductsPricingData.parse(mount.value().value);
+    expect(unread.network.systemReads.completed, "H23: none reads no systems").toEqual([]);
+    expect(
+      unread.analysis.systems.every((row) => row.total === null),
+      "H23: unread systems retain unknown pressure, never complete zeros",
+    ).toBe(true);
+  } finally {
+    mount.dispose();
+    unregister();
+    await host.close();
+  }
+}
+
+async function closeDocumentLifetime() {
+  let open = true;
+  const host = await fixture(false, {
+    document: (requested) =>
+      open && requested.session === ref.session && requested.openId === ref.openId
+        ? Effect.succeed({ ...ref, address: path })
+        : Effect.fail(
+            new InvalidRead({
+              message: "Document lifetime is closed or unknown",
+              status: 409,
+              problem: "target.closed",
+            }),
+          ),
+  });
+  const unregister = registeredReads.register(
+    registeredReads.reads.has(fansSheet.name) ? {} : { fansSheet },
+  );
+  const read = (target: unknown) =>
+    host.probe({
+      read: "fans.sheet",
+      subscription: "jx-lifetime",
+      generation: 1,
+      args: { target, fan: [], sheetPath: "" },
+    });
+  try {
+    expect((await read(ref)).status, "H17: the resolved document lifetime is readable").toBe(200);
+    const calls = host.nativeCalls;
+    open = false;
+    host.changed();
+    for (const target of [
+      ref,
+      { ...ref, session: "replacement-process" },
+      { ...ref, openId: "unknown" },
+    ]) {
+      const response = await read(target);
+      const body = await response.json();
+      expect(
+        response.ok && body.state === "current",
+        `H17: closed and replacement lifetimes refuse: ${JSON.stringify(body)}`,
+      ).toBe(false);
+      expect(host.nativeCalls, "H17: an invalid lifetime dispatches no native read").toBe(calls);
+    }
+  } finally {
+    unregister();
+    await host.close();
+  }
+}
+
+test("JX4 Families apply readback cannot overwrite a newer manual read or certify an unread family", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "jx-families-"));
+  const target = { session: "session-a", openId: "open-a" };
+  const key = bindWork("families", path, undefined, target);
+  const workspace = new RouteWorkspace({
+    registrations: [{ spec: familiesRouteState }],
+    store: fileRouteDocumentStore(join(dir, "work")),
+  });
+  const filter = {
+    categoryNames: ["Air Terminals"],
+    familyNames: [],
+    placementScope: "AllLoaded" as const,
+  };
+  await workspace.view(key, "families");
+  await workspace.apply(
+    key,
+    "families",
+    "human",
+    [{ path: ["scope", "edit"], value: { value: filter } }],
+    0,
+  );
+  const captures = captureStore(join(dir, "captures"));
+  const family = {
+    familyId: 1,
+    familyUniqueId: "uid-1",
+    familyName: "Diffuser",
+    categoryName: "Air Terminals",
+    typeNames: ["24x24"],
+    parameters: [],
+    issues: [],
+    isPartial: false,
+    placedInstanceCount: 0,
+  };
+  const observed = {
+    families: [family],
+    issues: [],
+    page: { totalCount: 1, returnedCount: 1, isTruncated: false },
+  };
+  let hold: ReturnType<typeof gate> | undefined;
+  let broken = false;
+  const bridge = detachedBridge({
+    list: Effect.sync(() => [
+      sessionView({
+        sessionId: target.session,
+        connected: true,
+        processId: 42,
+        processStartUtcUnixMs: 1000,
+        lane: hostOwnership.lane,
+        sourceRoot: hostOwnership.sourceRoot,
+        serviceName: hostOwnership.serviceName,
+        state: {
+          openDocuments: [
+            {
+              openId: target.openId,
+              address: path,
+              title: "Families.rvt",
+              isFamilyDocument: false,
+            },
+          ],
+        },
+      }),
+    ]),
+    invoke: (operation: string, raw: any) =>
+      Effect.promise(async () => {
+        let value: unknown;
+        if (operation === "host.ops.catalog")
+          value = {
+            operations: [
+              {
+                key: "revit.matrix.loaded-families",
+                intent: "Read",
+                needs: "project-document",
+                subject: "None",
+                touches: "Metadata",
+                effect: "Read",
+                cardinality: "One",
+                costTier: "Cheap",
+              },
+            ],
+          };
+        else if (operation === "revit.catalog.loaded-families")
+          value = {
+            summary: { truncated: false },
+            families: [{ ...family, typeCount: 1, types: [{ typeId: 11, typeName: "24x24" }] }],
+            issues: [],
+          };
+        else if (operation === "families.plan")
+          value = {
+            diagnostics: [],
+            families: [
+              {
+                familyId: 1,
+                familyName: "Diffuser",
+                planHash: "jx-plan",
+                changes: [],
+                runEffects: ["Set Model"],
+                refusals: [],
+                warnings: [],
+              },
+            ],
+          };
+        else if (operation === "families.apply")
+          value = {
+            diagnostics: [],
+            receipts: [
+              {
+                familyId: 1,
+                familyName: "Diffuser",
+                success: true,
+                converged: true,
+                residue: [],
+                errors: [],
+              },
+            ],
+          };
+        else if (operation === "revit.matrix.loaded-families") {
+          if (raw.phase === "Prepare")
+            value = {
+              families: [],
+              issues: [],
+              source: {
+                families: [{ ...family, typeCount: 1, types: [] }],
+                revitVersion: "2025",
+                version: "v1",
+                copyRefusal: "Recorded input",
+              },
+            };
+          else if (raw.phase === "Extract")
+            value = { families: [family], issues: [], elapsedMs: 1 };
+          else {
+            const paused = hold;
+            hold = undefined;
+            if (paused) {
+              paused.entered.resolve();
+              await paused.release.promise;
+            }
+            value = broken
+              ? {
+                  ...observed,
+                  families: [
+                    {
+                      ...family,
+                      isPartial: true,
+                      issues: [
+                        { code: "CollectorError", severity: "Error", message: "values unreadable" },
+                      ],
+                    },
+                  ],
+                }
+              : observed;
+          }
+        } else throw Error(`Unexpected native input ${operation}`);
+        return { target: { session: target.session, document: null }, value };
+      }),
+  });
+  const journal = new ActionJournal(join(dir, "actions.jsonl"), Date.now);
+  const web = HttpRouter.toWebHandler(
+    makeCallRoute(
+      journal,
+      captures,
+      { sdk: sdkSessions, workspace, podsRoot: dir },
+      { families: await familiesReader() },
+    ).pipe(
+      nativeReadRoot(),
+      Layer.provide(testHostInputs),
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Layer.succeed(RevitBridge, bridge),
+          NodeServices.layer,
+          NodeHttpClient.layerUndici,
+        ),
+      ),
+    ),
+    { disableLogger: true },
+  );
+  const caller = { kind: "human" as const, via: "local" as const };
+  const invoke = async (command: string, extra = {}) => {
+    const id = crypto.randomUUID();
+    const work = (await workspace.view(key, "families"))!.handle;
+    const response = await withInvocationContext({ caller }, () =>
+      web.handler(
+        new Request("http://host/actions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            id,
+            key: command,
+            target: { kind: "document", ref: target },
+            input: { work, ...extra },
+          }),
+        }),
+        Context.make(RequestIdentity, admittedRequestIdentity(caller, {})),
+      ),
+    );
+    expect(response.ok, await response.clone().text()).toBe(true);
+    return journal.wait(id);
+  };
+  const apply = () => invoke("families.apply");
+  let paused: ReturnType<typeof gate> | undefined;
+  try {
+    expect((await invoke("families.read", { readId: crypto.randomUUID() })).state).toBe(
+      "succeeded",
+    );
+    const current = (await workspace.view(key, "families"))!;
+    expect(
+      await workspace.apply(
+        key,
+        "families",
+        "human",
+        [
+          {
+            path: ["writeIntent", "families.apply", "edit"],
+            value: {
+              value: {
+                source: {
+                  path: "settings/family/patch.json",
+                  content: JSON.stringify({ family: { name: "Diffuser" } }),
+                },
+              },
+            },
+          },
+        ],
+        current.revision,
+      ),
+    ).toMatchObject({ ok: true });
+    const preview = await invoke("families.apply.preview");
+    expect(preview, JSON.stringify(preview)).toMatchObject({ state: "succeeded" });
+    hold = paused = gate();
+    const applying = apply();
+    await Promise.race([
+      paused.entered.promise,
+      applying.then((row) => {
+        throw Error(`Apply never reached readback: ${JSON.stringify(row)}`);
+      }),
+    ]);
+    const manual = await invoke("families.read", { readId: crypto.randomUUID() });
+    expect(manual.state).toBe("succeeded");
+    const latest = await captures.latestFamilies(key);
+    paused.release.resolve();
+    const stale = await applying;
+    expect(
+      stale,
+      "H34: the applied action reports stale targeted verification instead of replacing manual evidence",
+    ).toMatchObject({
+      state: "succeeded",
+      result: expect.objectContaining({
+        readbackError: expect.stringContaining("newer Families reading"),
+      }),
+    });
+    expect(
+      (await captures.latestFamilies(key))?.id,
+      "H34: manual read stays the latest completed result",
+    ).toBe(latest!.id);
+    broken = true;
+    expect((await invoke("families.apply.preview")).state).toBe("succeeded");
+    const refused = await apply();
+    expect(
+      refused,
+      "H34: a refused family batch cannot certify complete targeted coverage",
+    ).toMatchObject({
+      state: "succeeded",
+      result: expect.objectContaining({ readbackError: expect.stringContaining("completely") }),
+    });
+    expect(
+      (await captures.latestFamilies(key))?.id,
+      "H34: failed verification retains the completed result",
+    ).toBe(latest!.id);
+  } finally {
+    paused?.release.resolve();
+    await journal.close();
+    await web.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 60_000);
 test("JZ H19 wait beyond the browser budget, then inspect queue and conflict refusals without retry", async () => {
   const { HOST_READ_WAIT_S, NATIVE_READ_WAIT_S } = await import("./waits");
   const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");

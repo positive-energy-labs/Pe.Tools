@@ -8,7 +8,7 @@ import { useRouter } from "@tanstack/react-router";
 import { GraphLayoutView, type GraphLayoutState } from "@pe/kit";
 import { Button } from "@pe/kit/lang/button";
 import { PreviewAction } from "@pe/kit/lang/write-action";
-import { KeyScope, ScopeKeys, actionScopeKeys } from "@pe/kit/keys";
+import { KeyScopeHost, ScopeKeys, actionScopeKeys } from "@pe/kit/keys";
 import { routeOf, routeAddress, canonicalRouteInput, type LayoutNode } from "@pe/agent-contracts";
 import { useRouteTarget } from "../route/route-target";
 import { appAtomRegistry } from "./owner";
@@ -27,6 +27,7 @@ import { SubjectDoor } from "./subject";
 import { typedSubjectDoor } from "./subject";
 import { PrimaryRouteControls, useHasGlobalNavigation } from "../navigation/route-controls";
 import { useRouteViewBridge } from "../route/view-bridge";
+
 import { mountTypedRoute, type TypedMount } from "./typed-mount";
 import type { TypedRoute } from "../route/typed-route";
 import type { RouteFingerprint } from "@pe/agent-contracts";
@@ -113,16 +114,16 @@ function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNo
   } });
   const head=<SituationBand name={spec.name} context={<>{document}{spec.edits?<span>{mount.work()?.revision === undefined ? "Reading Work..." : `r${mount.work()!.revision}`}</span>:null}</>}
     alerts={<>{mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}{mount.problem() ? <span role="alert">{mount.problem()}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
-    verbs={[<TypedWorkRecovery key="recovery" mount={mount}/>,<TypedStart key="start" mount={mount}/>,...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)]}
+    verbs={[...mount.recoveryOwners().map(owner=><TypedWorkRecovery key={owner} mount={mount} owner={owner}/>),...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)]}
     timeline={<TimelineHead owner={mount} history={<GraphHistory owner={mount} />} />} />;
-  return <SubjectDoor.Provider value={subject}><KeyScope id={`route:${spec.key}`}><div className="flex min-h-0 flex-1 flex-col">
+  return <SubjectDoor.Provider value={subject}><KeyScopeHost id={`route:${spec.key}`} hidden={!visible} className="flex min-h-0 flex-1 flex-col">
     <ScopeKeys keys={actionScopeKeys((["undo","redo"] as const).map(direction=>({id:`work.${direction}`,label:direction,bindings:direction==="undo"?["Mod+Z"]:["Mod+Shift+Z","Mod+Y"],
       options:{ignoreInputs:true},invoke:()=>{if(visible) void mount.history[direction]();}})))} />
     {portal ? <PrimaryRouteControls route={spec.key} slot="situation">{head}</PrimaryRouteControls> : head}
     <GraphLayoutView layout={layout(spec.layout)} panes={Object.fromEntries(Object.entries(spec.panes).map(([id,p])=>[id,{label:p.title,purpose:p.purpose,draws:[],verbs:[]}]))}
       active={when=>when === "subject" && !!spec.subject && (mount.page.read()[spec.subject.field]?.kind === "all" || !!mount.page.read()[spec.subject!.field]?.ids?.length)} state={{panes,onChange:next=>{setPanes(next);writeLayoutState(`route:${spec.key}`,next);}}}
       bodies={Object.fromEntries(Object.keys(spec.panes).map(id=>[id,pane=>pane(mount.draw(id,ctx=><TypedPane mount={mount} id={id} ctx={ctx} />) as ReactNode,{actions:<>{slot(id)}<Button label={`${spec.panes[id]!.read?.demand === "explicit"?"Read":"Refresh"} ${spec.panes[id]!.title}`} onClick={()=>mount.refresh(spec.panes[id]!.read)}>{spec.panes[id]!.read?.demand === "explicit"?"Read":"Refresh"}</Button></>})]))} />
-  </div></KeyScope></SubjectDoor.Provider>;
+  </KeyScopeHost></SubjectDoor.Provider>;
 }
 export function TypedWrite({ mount, id }: { mount: TypedMount; id: string }) {
   const command=mount.spec.commands[id]!,handle=mount.action(id);

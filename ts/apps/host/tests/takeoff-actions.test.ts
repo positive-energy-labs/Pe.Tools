@@ -109,7 +109,7 @@ test.each(["selected", "unrelated", "none"] as const)(
           target: { kind: "document", ref: target },
           input: { work: { key, revision: rendered.revision } },
         },
-        { caller: { kind: "human", via: "local" }, basis: { kind: "human" } },
+        { caller: { kind: "pea", context: "rooms-test", thread: run.thread, run, root: run }, basis: null },
       );
       expect((await owner.wait("preview")).state).toBe("succeeded");
       await owner.invoke(

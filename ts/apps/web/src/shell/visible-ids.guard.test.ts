@@ -1,16 +1,20 @@
-
+import { sessionsGraph } from "../sessions/graph";
+import { indexGraph } from "../index/graph";
+import type { RouteGraph } from "@pe/agent-contracts";
+import { familyGraph } from "../family/graph";
+import { takeoffGraph } from "../takeoff/graph";
+import { afterEach, expect, test, vi } from "vite-plus/test";
+import { createFixtureMount } from "./fixture";
+import { legacySubjectState } from "./subject";
+import { leaks } from "./visible-text";
+import { fanLabel } from "../ducts/sheet/model";
+import { SCENE_FIXTURE } from "../ducts/scene.fixture";
+import { LAYOUT_FIXTURE, LAYOUT_ROSTER } from "../ducts/layout.fixture";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import type { FanPort } from "@pe/ducts-domain/roster";
 import { buildSheet, type SheetSnapshot } from "@pe/ducts-domain/sheet/index";
 import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
-import { afterEach, expect, test, vi } from "vite-plus/test";
-import { LAYOUT_FIXTURE, LAYOUT_ROSTER } from "../ducts/layout.fixture";
-import { SCENE_FIXTURE } from "../ducts/scene.fixture";
-import { fanLabel } from "../ducts/sheet/model";
-
 import { admit } from "../fans/admission.fixture.ts";
-
-import { leaks } from "./visible-text";
 
 /**
  * Manual D re-drive #4, defect 7: internal keys rendered as text. Every fixture route's visible
@@ -18,8 +22,84 @@ import { leaks } from "./visible-text";
  * and stage words) must come from declared display labels, never UniqueIds, port keys or ids.
  */
 afterEach(() => vi.unstubAllGlobals());
+const routes = [
+  indexGraph,
+  sessionsGraph,
+  familyGraph,
+  takeoffGraph,
+] as unknown as RouteGraph<any, any>[];
+
+test.each(routes.map((graph) => [graph.address, graph] as const))(
+  "/%s renders no internal identity in its subject, verb, pane or stage words",
+  async (_, graph) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        throw Error("Real host called");
+      }),
+    );
+    const internal = [...Object.keys(graph.verbs), ...Object.keys(graph.panes ?? {})].filter((id) =>
+      id.includes("-"),
+    );
+    const words = [
+      ...Object.values(graph.verbs).map((verb) => verb.label),
+      ...Object.values(graph.panes ?? {}).map((pane) => (pane as { label?: string }).label ?? ""),
+      ...Object.values(graph.stages ?? {}).map((stage) => (stage as { word?: string }).word ?? ""),
+    ];
+    const subject = graph.subjectField;
+    const picker = subject && graph.fields[subject.field]?.picker;
+    for (const name of Object.keys(graph.seeds ?? {})) {
+      const owner = await createFixtureMount(graph, name);
+      const release = owner.connect();
+      const demand = picker ? owner.readings.mount([picker.reading]) : () => {};
+      try {
+        if (picker && subject) {
+          const options = picker.options(owner.readings.get(picker.reading).value);
+          words.push(...options.map((option) => option.label));
+          const search = { fixture: name };
+          for (const option of options.slice(0, 5)) {
+            const page = {
+              ...search,
+              [subject.field]: subject.cardinality === "many" ? [option.id] : option.id,
+            };
+            // Before the roster lands, then after: neither may fall back to the raw key.
+            words.push(legacySubjectState(graph, page).label);
+            words.push(legacySubjectState(graph, page, owner.readings.get(picker.reading)).label);
+          }
+        }
+      } finally {
+        demand();
+        release();
+        owner.dispose();
+      }
+    }
+    for (const text of words)
+      expect(leaks(text, internal), `${graph.address}: "${text}"`).toEqual([]);
+  },
+);
+
+/** Every display string a payload carries: the text-like fields a pane renders, at any depth. */
+const TEXT_KEYS = /^(detail|note|text|label|title|message|sentence|reason|caption|verb|name)$/;
+function displayStrings(value: unknown, key = "", out: string[] = []): string[] {
+  if (typeof value === "string") {
+    if (TEXT_KEYS.test(key)) out.push(value);
+  } else if (Array.isArray(value)) value.forEach((item) => displayStrings(item, key, out));
+  else if (value && typeof value === "object")
+    for (const [k, v] of Object.entries(value)) displayStrings(v, k, out);
+  return out;
+}
 
 // Manual D re-drive #5 defect 7: widened from words to what each fixture seed hands its panes.
+test.each(routes.map((graph) => [graph.address, graph] as const))(
+  "/%s fixture seeds carry no internal identity in any display text",
+  async (_, graph) => {
+    for (const [name, seed] of Object.entries(graph.seeds ?? {})) {
+      const loaded = await (seed as { load: () => Promise<unknown> }).load();
+      for (const text of displayStrings(loaded))
+        expect(leaks(text), `${graph.address}?fixture=${name}: "${text}"`).toEqual([]);
+    }
+  },
+);
 
 // The ledger's findings and notes: every fan of every ducts fixture model, built fresh.
 test.each([
@@ -62,12 +142,12 @@ test("one element label: mark, else type/family/category, else size and kind; ne
         connectors: [],
       },
     ],
-    segments: [{ id: 3, kind: "duct", size: '10"Ã¸', connectors: [] }],
+    segments: [{ id: 3, kind: "duct", size: '10"ø', connectors: [] }],
   } as never);
   expect([label(8775469), label(2), label(3), label(13771267)]).toEqual([
     "MUAS 10",
     "MUAS-1",
-    "10â€³ duct",
+    "10″ duct",
     "an element outside this read",
   ]);
 });
@@ -87,9 +167,9 @@ test("a duplicate fan mark is told apart by level, then system, then order; neve
     level: "Level 3",
     system: "SA 1",
   };
-  expect(fanLabel(a, [a, b])).toBe("FC-23 Â· Level 2 / port 0");
+  expect(fanLabel(a, [a, b])).toBe("FC-23 · Level 2 / port 0");
   const c = { ...b, level: "Level 2", system: "SA 2" };
-  expect(fanLabel(c, [a, c])).toBe("FC-23 Â· SA 2 / port 0");
+  expect(fanLabel(c, [a, c])).toBe("FC-23 · SA 2 / port 0");
   const d = { ...c, system: "SA 1" };
   expect([fanLabel(a, [a, d]), fanLabel(d, [a, d])]).toEqual([
     "FC-23 (1 of 2) / port 0",

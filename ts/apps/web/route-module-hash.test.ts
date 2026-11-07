@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { buildRouteArtifact, routeModuleHash } from "./route-module-hash.ts";
 import { routeSourceHash } from "./route-source-hash.ts";
 
-const id = fileURLToPath(new URL("./src/rooms/graph.ts", import.meta.url));
+const id = fileURLToPath(new URL("./src/rooms/route.ts", import.meta.url));
 const closure = fileURLToPath(
   new URL("./src/rooms/source-closure.generated.json", import.meta.url),
 );

@@ -54,9 +54,10 @@ export async function exportPod(
 export async function preparePodExport(
   request: { pod: string; archivePath: string },
   options: TransferOptions = {},
+  snapshot?: PackageListing,
 ) {
   const archivePath = zipPath(request.archivePath);
-  const listing = await listPackages(options.podsRoot ?? productPodsRootPath());
+  const listing = snapshot ?? await listPackages(options.podsRoot ?? productPodsRootPath());
   const pod = unique(listing, request.pod);
   const captured = await capturePackage(pod).catch((error: unknown) => {
     throw new TransferRefused(`Pod '${request.pod}' is not exportable: ${message(error)}`);

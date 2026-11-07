@@ -34,7 +34,7 @@ export function PaneHead<P, W>({
           data-tone={failed ? "caution" : undefined}
           className="text-ink-2 t-small"
         >
-          {failed ? "failed" : status === "pending" ? "readingâ€¦" : "stale"}
+          {failed ? "failed" : status === "pending" ? "reading…" : "stale"}
         </span>
       )}
       {failed && draws.some((id) => owner.readings.get(id).errorDetails) && (

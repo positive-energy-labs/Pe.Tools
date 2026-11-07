@@ -267,10 +267,20 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
         f.changed(cause === "same-ms-mark");
       hold.release.resolve();
       const result = await pending;
-      expect(result.state, `${cause}: ${result.reason}`).toBe("refresh-needed");
-      expect(result.value!.evaluation).toBe(before.value!.evaluation);
-      expect(result.value!.freshness).toBe("refresh-needed");
-      expect(result.version).toBe(before.version);
+      if (cause === "work" || cause === "all") {
+        // Start-capture supersedes the pending request, not the retained publication.
+        expect(result.state, `${cause}: ${result.reason}`).toBe("superseded");
+        expect(result.value).toBeNull();
+      } else {
+        expect(result.state, `${cause}: ${result.reason}`).toBe("refresh-needed");
+        expect(result.value!.evaluation).toBe(before.value!.evaluation);
+        expect(result.value!.freshness).toBe("refresh-needed");
+        expect(result.version).toBe(before.version);
+      }
+      // The surface still holds the old Value and receives its exact version with a stale label.
+      expect(await f.publicationEvent(2)).toEqual({
+        generation: 2, version: before.version, state: "refresh-needed",
+      });
     } finally {
       hold?.release.resolve();
       await f.close();

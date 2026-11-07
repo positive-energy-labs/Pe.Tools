@@ -115,6 +115,7 @@ test.each([false, true])(
           takenAt: "2026-11-05T00:00:00Z",
           derivedRequest: { equipmentFlows: [{ id: 14577391, cfm: 925, source: "test" }] },
           seal: {
+            caller: { kind: "human", via: "local" },
             requestHash: "sealed",
             work: { handle: input.work },
             documentMark: {

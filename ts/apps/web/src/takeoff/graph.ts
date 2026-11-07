@@ -1,4 +1,7 @@
 import { defineRouteGraph } from "@pe/agent-contracts";
+// TODO: docs/features/routes/LEDGER.md#s6-declaration-takeoff Declaration 112 > 60 after kernel defaults. Adopt/sync/retry/launch workflows and atlas selection remain distinct.
+import { manyField } from "../../../../packages/agent-contracts/src/route-field";
+import { z } from "zod";
 import {
   gate,
   pane,
@@ -9,10 +12,6 @@ import {
   type RouteGraph,
   type TakeoffsRouteDocument,
 } from "@pe/agent-contracts";
-// TODO: docs/features/routes/LEDGER.md#s6-declaration-takeoff Declaration 112 > 60 after kernel defaults. Adopt/sync/retry/launch workflows and atlas selection remain distinct.
-
-import { z } from "zod";
-import { manyField } from "../../../../packages/agent-contracts/src/route-field";
 import {
   field,
   text,
@@ -49,7 +48,7 @@ export const takeoffBase: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> = 
     icon: "Map",
     category: "Calculate loads & airflow",
     blurb:
-      "The takeoff atlas â€” zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
+      "The takeoff atlas — zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
     aliases: ["manual", "j", "loads", "rhvac", "zones"],
     listed: true,
     satellites: [],

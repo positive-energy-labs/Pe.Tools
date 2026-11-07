@@ -174,7 +174,8 @@ export function useWorkScope<P, W>(
   const reading = useOwned(appAtomRegistry, atom);
   // Only the host's own unreadable-Work failure offers recovery; a host that is down does not.
   const failure = reading?.state === "failed" ? reading.message : null;
-  const unreadable = !closed && failure === OLDER_WORK;
+  // Host-owned recovery can outlive the native document; saved captures remain read-only.
+  const unreadable = !capture && failure === OLDER_WORK;
   const snapshot = useMemo((): MountScope<W> => {
     const seen = reading ? previousOf(reading) : undefined;
     // Absent Work is the empty document at revision 0; only an authored write creates it.
@@ -227,7 +228,6 @@ export function useWorkScope<P, W>(
       startFresh: spec
         ? async (key: WorkKey) => {
             if (
-              store.closed ||
               !store.snapshot.unreadable ||
               workKey(key) !== workKey(store.snapshot.unreadable)
             )

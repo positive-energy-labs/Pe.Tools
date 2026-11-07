@@ -50,7 +50,7 @@ export function createMountVerbs<P, W>(
   const { timeline } = history;
   // One executable recovery for every mount; its declaration is the contract's, so Pea reads the same verb.
   const { kind: _kind, review: _review, ...freshDeclaration } = startFreshVerb;
-  const startFresh = recoveryVerb("start-fresh", freshDeclaration);
+  const startFresh = recoveryVerb("start-fresh", { ...freshDeclaration, primary: true });
   // Validation ran above: cell verb ids cannot collide with graph verbs, so a plain spread is safe.
   const kernel = kernelCellVerbs(graph);
   const verbs: Readonly<Record<string, VerbDecl>> = {

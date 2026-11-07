@@ -62,7 +62,8 @@ export const workFeedFailureSchema = z.discriminatedUnion("kind", [
     step: z.number().int().positive().optional(),
     message: z.string(),
   }),
-  z.strictObject({ kind: z.literal("failed"), code: z.string(), message: z.string() }),
+  z.strictObject({ kind: z.literal("failed"), code: z.string(), message: z.string(),
+    schemaAge: z.enum(["older", "current", "newer", "unknown"]).optional() }),
 ]);
 export type WorkFeedFailure = z.infer<typeof workFeedFailureSchema>;
 export const workFeedFailureMessage = (failure: WorkFeedFailure): string =>

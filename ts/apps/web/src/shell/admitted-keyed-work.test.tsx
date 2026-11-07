@@ -1,13 +1,25 @@
-
-
+import { placeInput } from "./typed-place.test-support";
+import { acceptedWork } from "./work-publication.test-support";
 // @vitest-environment jsdom
-import { applyPatches, scheduleGridRouteState, workWriteSchema } from "@pe/agent-contracts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-
+import { z } from "zod";
+import { applyPatches, scheduleGridRouteState, workWriteSchema } from "@pe/agent-contracts";
 import type { WorkPatch } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-
+import type {
+  Observation,
+  WorkWriteOutcome,
+} from "../../../../packages/agent-contracts/src/work-journal-door";
+import {
+  builtinClosureFingerprint,
+  createBuiltinRouteInventory,
+} from "../../../../packages/agent-contracts/src/route-module";
+import { module as base } from "../shell/admitted-module.test.fixture";
+import { createRouteShell } from "./admitted-mount";
+import { createFixtureWorkDoor } from "./fixture-work-door";
+import { sourceRouteServices } from "./source-route-services";
+import { createWorkFeedClient } from "./work-feed-client";
+import { admittedWorkPatches } from "./admitted-cells";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace";
-
 
 const spec = scheduleGridRouteState;
 const seed = () =>
@@ -27,13 +39,135 @@ const patch = {
 } as const satisfies WorkPatch<typeof spec.schema>;
 const stops: (() => void)[] = [];
 afterEach(() => stops.splice(0).forEach((stop) => stop()));
+const settle = (o: Observation<WorkWriteOutcome>) =>
+  new Promise<WorkWriteOutcome>((resolve) =>
+    o.subscribe(
+      (v) => {
+        if (v.kind !== "pending") resolve(v);
+      },
+      () => {},
+    ),
+  );
+
+async function fixture(connected = false) {
+  const key = `u8p-${crypto.randomUUID()}`;
+  const module = {
+    ...base,
+    data: {
+      ...base.data,
+      key,
+      address: "/u8p",
+      capabilities: ["work"] as const,
+      work: { route: key, schema: "work", version: 1, migrations: {} },
+      verbs: {
+        edit: {
+          kind: "work" as const,
+          input: "edit",
+          label: "Edit",
+          review: "none" as const,
+          deps: { page: [], work: ["cells"], readings: [] },
+          captures: [],
+          patches: "edit",
+        },
+      },
+    },
+    schemas: {
+      ...base.schemas,
+      work: spec.schema,
+      edit: z.custom<readonly WorkPatch<typeof spec.schema>[]>(),
+    },
+    bodies: {
+      ...base.bodies,
+      edit: {
+        slot: "verbs.edit.patches",
+        kind: "work" as const,
+        source: { module: "shell/admitted-keyed-work.test.tsx", export: "fixture" },
+        run: (_ctx: unknown, patches: readonly WorkPatch<typeof spec.schema>[]) => patches,
+      },
+    },
+  };
+  const envelope = {
+    source: "builtin-closure" as const,
+    version: 1 as const,
+    data: module.data,
+    hostVersion: "u8p",
+    variants: [{ client: "web" as const, entry: "witness.ts" }],
+    modules: [{ id: "witness.ts", sha256: "a".repeat(64) }],
+    inputs: [],
+    externals: [],
+  };
+  const fingerprint = await builtinClosureFingerprint(envelope);
+  const inventory = createBuiltinRouteInventory({
+    witness: {
+      module,
+      closure: { envelope, fingerprint },
+      catalog: Object.entries(module.entries).map(([key, entry]) => ({
+        key,
+        ...entry.axes,
+        uses: [],
+      })),
+    },
+  });
+  const admitted = (await inventory.prepare("witness", fingerprint)).admitUnknown(module);
+  if (!admitted.ok) throw Error(JSON.stringify(admitted.diagnostics));
+  const store = createFixtureWorkDoor({ ...spec, route: key }, seed());
+  const reconcile = vi.fn(spec.reconcileEdit);
+  const persisted = new Map<string, unknown>();
+  const host = new RouteWorkspace({
+    registrations: [{ spec: { ...spec, route: key, reconcileEdit: reconcile } }],
+    store: {
+      getState: async ({ targetKey }) =>
+        persisted.get(targetKey) ?? { version: 1, revision: 0, doc: seed() },
+      setState: async ({ targetKey, value }) => {
+        persisted.set(targetKey, structuredClone(value));
+      },
+    },
+  });
+  const transport = createWorkFeedClient(undefined, {
+    write: async (scope, write) =>
+      host.write(scope, key, "human", workWriteSchema.parse(JSON.parse(JSON.stringify(write)))),
+    submit: async () => {
+      throw Error("Unexpected native command");
+    },
+  });
+  const door = {
+    ...store,
+    submitWork: vi.fn((...args: Parameters<typeof store.submitWork>) =>
+      connected ? transport.submitWork(...args) : store.submitWork(...args),
+    ),
+  };
+  const mount = createRouteShell({ ...sourceRouteServices({}), work: door }).mount(
+    admitted.route,
+    placeInput({
+      read: () => new URLSearchParams(),
+      write() {},
+      subscribe: () => () => {},
+    }),
+  );
+  stops.push(mount.close);
+  await acceptedWork(mount);
+  const edit = (patches: unknown, basis = mount.workBasis()!) =>
+    settle(mount.invoke("edit", patches, basis) as Observation<WorkWriteOutcome>);
+  return { mount, door, edit, module, reconcile };
+}
 
 
 
 
 
 
-
+test("untyped Work results cannot bypass path, key, leaf or value checks", async () => {
+  const { module } = await fixture();
+  for (const invalid of [
+    { path: ["missing"], value: {} },
+    { path: ["cells", "1::1", "missing"], value: 2 },
+    { path: ["takenAt", "x"], op: "delete" },
+    { path: ["cells", "1::1", "edit"], value: { value: {} } },
+    { path: ["cells", "__proto__"], op: "delete" },
+    { path: ["cells", "1::1"], op: "delete", value: {} },
+  ])
+    expect(() => admittedWorkPatches(module.data, module.schemas, [invalid])).toThrow();
+});
 test("W3b direct witness: keyed edit preserves the second stale mark while root replacement clears it", () => {
   const envelope = { version: 1 as const, revision: 0, doc: seed() };
   const direct = applyPatches(
@@ -104,3 +238,7 @@ test("host RouteWorkspace applies the same keyed path in one revision and refuse
   expect(restored.ok).toBe(true);
   expect(spec.schema.parse((await host.read(key, "schedules"))!.doc)).toEqual(doc);
 });
+
+
+
+

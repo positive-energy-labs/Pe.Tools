@@ -1,20 +1,26 @@
-import { draftCellSchema } from "@pe/agent-contracts";
-import { workHandleSchema, writePreviewSchema } from "@pe/agent-contracts";
+import { placeInput } from "./typed-place.test-support";
 
+import { draftCellSchema, actionReceiptSchema, memberWork } from "@pe/agent-contracts";
 // @vitest-environment jsdom
-import { cleanup } from "@testing-library/react";
 import { createElement } from "react";
+import { cleanup } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import type { BodyBindings } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
 import type { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
-
+import type { KernelServices } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import {
   builtinClosureFingerprint,
   createBuiltinRouteInventory,
 } from "../../../../packages/agent-contracts/src/route-module";
 
 import { identityCodecs } from "./page-port";
+import { createRouteShell, PlaceWriteRefusal } from "./admitted-mount";
+import { createAdmittedWork } from "./admitted-work";
+import { createRouteScopeGate } from "../../../../packages/runtime/src/route-scope-gate";
+import { createWorkJournal } from "../../../../packages/runtime/src/work-journal";
+
+import { admittedRouterAddress } from "./typed-place-boundary";
 
 const data = {
   version: 1,
@@ -272,6 +278,67 @@ async function admitted(
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   return result.route;
 }
+function locationPort(search = "") {
+  let location = { pathname: "/note", search, hash: "#main" };
+  const listeners = new Set<() => void>();
+  const writes: string[] = [];
+  const navigate = (href: string) => {
+    const url = new URL(href, "http://test");
+    location = { pathname: url.pathname, search: url.search, hash: url.hash };
+    listeners.forEach((listener) => listener());
+  };
+  const history = {
+    get location() {
+      return location;
+    },
+    push: (href: string) => {
+      writes.push("push");
+      navigate(href);
+    },
+    replace: (href: string) => {
+      writes.push("replace");
+      navigate(href);
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+  return { address: admittedRouterAddress(history), navigate, writes, listeners };
+}
+function transports() {
+  const frames: ((value: unknown) => void)[] = [];
+  const keys: (number | string | null)[] = [];
+  const releases = vi.fn();
+  const unsubscribes = vi.fn();
+  const services: KernelServices = {
+    reads: {
+      lifetime: "read",
+      acquire: (request) => {
+        keys.push(request.key.freshnessGeneration);
+        return {
+          lifetime: "read",
+          key: request.key,
+          release: releases,
+          read: () => ({ status: "pending", current: false, reason: "Waiting" }),
+        };
+      },
+    },
+    readings: {
+      lifetime: "subscription",
+      subscribe: (_request, _token, deliver) => {
+        frames.push(deliver as (value: unknown) => void);
+        return unsubscribes;
+      },
+    },
+    clock: { lifetime: "read", now: Date.now },
+    availability: {},
+  };
+  return { services, frames, releases, unsubscribes, keys };
+}
+const ready = (value: string) => ({ status: "ready", current: true, value, hash: value });
 const closes: (() => void)[] = [];
 afterEach(() => {
   cleanup();
@@ -280,6 +347,57 @@ afterEach(() => {
     .reverse()
     .forEach((close) => close());
 });
+
+
+
+
+test("a move renders even though its URL push leaves custody stale until the router re-renders", async () => {
+  const location = locationPort();
+  let current = true;
+  const address = {
+    ...location.address,
+    write: (...args: Parameters<typeof location.address.write>) => {
+      location.address.write(...args);
+      current = false; // a retained route's custody lags its own history entry
+    },
+  };
+  const mount = createRouteShell(transports().services).mount(
+    await admitted(),
+    placeInput(address, { custody: { current: () => current } }),
+  );
+  closes.push(mount.close);
+  const before = mount.revision();
+  mount.page.pose({ pose: { x: 1 } }, "named");
+  expect(location.writes).toEqual(["push"]);
+  expect(mount.revision()).toBeGreaterThan(before);
+});
+
+
+
+test("explicit readings wait for demand and malformed live output cannot reach bodies", async () => {
+  const t = transports();
+  const mount = createRouteShell(t.services).mount(
+    await admitted(true),
+    placeInput(locationPort().address),
+  );
+  closes.push(mount.close);
+  expect(t.frames).toHaveLength(0);
+  mount.refresh("notes");
+  expect(t.frames).toHaveLength(1);
+  t.frames[0]!({ ...ready("bad"), value: 12 });
+  expect(mount.read("main")).toMatchObject({ props: { children: "pending" } });
+  t.frames[0]!(ready("valid"));
+  expect(mount.read("main")).toMatchObject({ props: { children: "Label valid" } });
+});
+import { createFixtureWorkDoor } from "./fixture-work-door";
+import { RouteWorkspace, observeResources } from "@pe/runtime";
+import type {
+  WorkJournalDoor,
+  WorkFeedState,
+  WorkWriteOutcome,
+  Observation,
+} from "../../../../packages/agent-contracts/src/work-journal-door";
+
 
 async function workRoute(
   review: "none" | "shown" = "none",
@@ -549,6 +667,344 @@ async function workRoute(
   if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
   return result.route;
 }
+const settle = (observation: Observation<WorkWriteOutcome>) =>
+  new Promise<WorkWriteOutcome>((resolve) =>
+    observation.subscribe(
+      (value) => {
+        if (value.kind !== "pending") resolve(value);
+      },
+      () => {},
+    ),
+  );
+
+test("fixture Page defaults select canonical member Work before acquisition and survive address restores", async () => {
+  const pages: Record<string, unknown> = { sample: { pod: "test-pod", path: "settings/a.json", selected: "all" }, alternate: { pod: "other-pod", path: "settings/b.json" } };
+  const make = async () => admitted(false, false, {
+    schemas: { work: z.object({ amount: z.number() }) },
+    data: {
+      capabilities: ["work"], work: { route: "note", schema: "work", version: 1, migrations: {} }, workSubject: "note",
+      fields: { ...data.fields, selected: { ...data.fields.selected, allowAll: true }, pod: data.fields.query, path: data.fields.query },
+      transition: "deriveMember", transitionDeps: { page: [], work: [], readings: [] },
+      seeds: { ...data.seeds, alternate: { title: "Alternate", load: "alternateSeed" } },
+    },
+    bodies: {
+      seed: { ...bodies.seed, run: () => ({ page: pages.sample, readings: { notes: "fixture" }, work: { amount: 0 } }) },
+      alternateSeed: { ...bodies.seed, slot: "seeds.alternate.load", run: () => ({ page: pages.alternate, readings: { notes: "fixture" }, work: { amount: 0 } }) },
+      deriveMember: { slot: "transition", kind: "transition", source, run: (current: Record<string, unknown>, patch: Record<string, unknown>) => {
+        const next = { ...current, ...patch };
+        const member = next.pod && next.path ? memberWork({ pod: String(next.pod), path: String(next.path) }) : "default";
+        const encoded = identityCodecs.local.encode({ namespace: "pods", subject: member });
+        if (!encoded.ok) return encoded;
+        return { ok: true, value: { ...patch, note: encoded.value } };
+      } },
+    },
+  });
+  const route = await make();
+  const shell = createRouteShell(transports().services);
+  const open = (query: string, memory = {}) => {
+    const location = locationPort(query);
+    const mount = shell.mount(route, placeInput(location.address, { memory: () => memory }));
+    closes.push(mount.close);
+    return { mount, location };
+  };
+  const first = open("?fixture=sample");
+  await vi.waitFor(() => expect(first.mount.work()?.handle.key).toMatchObject({ binding: "workspace", work: "member:@test-pod/settings/a.json" }));
+  expect(first.mount.page.read()).toMatchObject({ pod: "test-pod", selected: "all" });
+  first.mount.restore();
+  expect(first.mount.page.read()).toMatchObject({ pod: "test-pod", selected: "all" });
+  const alternate = open("?fixture=alternate");
+  expect(alternate.mount.page.read()).toMatchObject({ pod: "other-pod", path: "settings/b.json" });
+  const empty = open("?fixture=sample&pod=&path=", { pod: "memory-pod", path: "memory.json" });
+  await vi.waitFor(() => expect(empty.mount.work()?.handle.key).toMatchObject({ work: "default" }));
+  expect(empty.mount.page.read()).toMatchObject({ pod: "", path: "" });
+  const memory = open("?fixture=sample&path=url.json", { pod: "memory-pod", path: "memory.json" });
+  expect(memory.mount.page.read()).toMatchObject({ pod: "memory-pod", path: "url.json" });
+  for (const bad of [null, [], "bad", { unknown: "bad" }, { pod: 42 }, { pose: { x: "bad" } }, { pod: "test", device: "bad" }]) {
+    pages.sample = bad;
+    const invalid = await make();
+    expect(() => shell.mount(invalid, placeInput(locationPort("?fixture=sample").address))).toThrow();
+  }
+});
+
+
+
+test("D4: a new writer at either shared Work submission path cannot bypass Place authority", async () => {
+  const route = await workRoute();
+  const key = { binding: "workspace", route: "note", target: null, work: "default" } as const;
+  const owner = createRouteScopeGate({
+    dependencies: () => ({}),
+    preparePage: (page) => ({
+      ok: true,
+      value: { page, changed: false, membership: "verified" },
+    }),
+    workSchema: z.object({ amount: z.number() }),
+    hashWork: JSON.stringify,
+    journal: createWorkJournal,
+  });
+  owner.enter({ target: null, work: key }, { note: null, selected: [], query: "", pose: { x: 0 } });
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  const submitted = vi.spyOn(store, "submitWork");
+  let authority: "writable" | "read-only" = "writable";
+  const work = createAdmittedWork(
+    route,
+    owner,
+    store,
+    () => {
+      if (authority === "read-only") throw new PlaceWriteRefusal();
+    },
+    () => {},
+    () => {},
+  );
+  closes.push(work.close, owner.close);
+  work.sync();
+  await vi.waitFor(() => expect(work.ready()).toBe(true));
+  const issued = owner.invocation(owner.capture("new-writer"), {});
+  if (!issued.ok) throw Error(issued.reason);
+  const request: Parameters<typeof work.submit>[0] = {
+    kind: "apply",
+    expectedRevision: 0,
+    press: "new-writer",
+    patches: [{ path: ["amount"], value: 4 }],
+  };
+  const write = () =>
+    work.write(() => request.patches, issued.value, "new", { label: "New writer" });
+  authority = "read-only";
+  expect(write).toThrow(PlaceWriteRefusal);
+  await expect(work.submit(request, issued.value)).rejects.toMatchObject({
+    reason: "place-read-only",
+  });
+  expect(submitted).not.toHaveBeenCalled();
+  expect(owner.read()?.work).toMatchObject({ revision: 0, value: { amount: 0 } });
+  authority = "writable";
+  expect(await settle(write())).toMatchObject({ kind: "accepted" });
+  expect(submitted).toHaveBeenCalledTimes(1);
+  expect(owner.read()?.work).toMatchObject({ revision: 1, value: { amount: 4 } });
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+import { workHandleSchema, writePreviewSchema } from "@pe/agent-contracts";
+
+
+
+
+
+
+
+
+import { createWorkFeedClient } from "./work-feed-client";
+
+
+async function historyFixture(pea = false) {
+  const route = await workRoute();
+  const disk = new Map<string, unknown>();
+  const host = async () => {
+    const workspace = new RouteWorkspace({
+      registrations: [],
+      store: {
+        getState: async ({ targetKey }) =>
+          structuredClone(
+            disk.get(targetKey) ?? {
+              version: 1,
+              revision: 0,
+              doc: { amount: 0 },
+            },
+          ),
+        setState: async ({ targetKey, value }) => {
+          disk.set(targetKey, structuredClone(value));
+        },
+      },
+    });
+    const registration = workspace.registerAdmitted(route);
+    expect(await registration.ready).toBeNull();
+    closes.push(registration.close);
+    return workspace;
+  };
+  const workspace = await host();
+  const acks: import("@pe/agent-contracts").WorkWriteAck[] = [];
+  const outcomes: WorkWriteOutcome[] = [];
+  const streams = new Set<(state: WorkFeedState) => void>();
+  let paused = false;
+  let scope: Parameters<WorkJournalDoor["open"]>[0];
+  const connect = (ws: RouteWorkspace) => {
+    const store = createWorkFeedClient(
+      { subscribe: observeResources(ws, { observe: () => () => {} }), dirty() {} },
+      {
+        write: (key, write) => ws.write(key, key.route, "human", write),
+        submit: async () => {
+          throw Error("History never invokes native writes");
+        },
+      },
+    );
+    const submitWork = vi.fn<WorkJournalDoor["submitWork"]>((key, write, invocation) => ({
+      subscribe(deliver, end) {
+        return store.submitWork(key, write, invocation).subscribe((outcome) => {
+          outcomes.push(outcome);
+          deliver(outcome);
+        }, end);
+      },
+    }));
+    const door: WorkJournalDoor = {
+      ...store,
+      submitWork,
+      open(key) {
+        scope = key;
+        return {
+          subscribe(deliver, end) {
+            streams.add(deliver);
+            const stop = store.open(key).subscribe((state) => {
+              if (state.kind === "ack") {
+                acks.push(state.ack);
+                if (paused) return;
+              }
+              deliver(state);
+            }, end);
+            return () => {
+              streams.delete(deliver);
+              stop();
+            };
+          },
+        };
+      },
+    };
+    return { door, submitWork };
+  };
+  const connected = connect(workspace);
+  const shell = createRouteShell({ ...transports().services, work: connected.door });
+  const mountOn = async (shell: ReturnType<typeof createRouteShell>) => {
+    const mount = shell.mount(route, placeInput(locationPort().address));
+    closes.push(mount.close);
+    await vi.waitFor(() => expect(mount.work()).not.toBeNull());
+    return mount;
+  };
+  const mount = await mountOn(shell);
+  return {
+    mount,
+    shell,
+    route,
+    acks,
+    outcomes,
+    ...connected,
+    second: () =>
+      mountOn(createRouteShell({ ...transports().services, work: connect(workspace).door })),
+    restart: async () =>
+      mountOn(createRouteShell({ ...transports().services, work: connect(await host()).door })),
+    failFeed: () => streams.forEach((deliver) => deliver({
+      kind: "failed", failure: { kind: "failed", code: "stream.failed", message: "readings offline" },
+    })),
+    pause: () => {
+      paused = true;
+    },
+    flush: () => {
+      acks.forEach((ack) => streams.forEach((deliver) => deliver({ kind: "ack", ack })));
+      paused = false;
+    },
+    external: async (amount: number) => {
+      const result = await workspace.write(scope.key, "note", pea ? "pea" : "human", {
+        kind: "apply",
+        press: "external",
+        label: "Set amount",
+        expectedRevision: (await workspace.read(scope.key, "note"))!.revision,
+        patches: [{ path: ["amount"], value: amount }],
+      });
+      if (!result.ok) throw Error(JSON.stringify(result));
+      await vi.waitFor(() => expect(acks.at(-1)?.revision).toBe(result.revision));
+      return result;
+    },
+  };
+}
+
+
+
+
+
+
+
+
+
+test("undo refuses a changed host inverse after a concurrent write without retrying", async () => {
+  const f = await historyFixture();
+  await settle(f.mount.invoke("change", 5) as Observation<WorkWriteOutcome>);
+  f.pause();
+  await f.external(9);
+  const before = f.submitWork.mock.calls.length;
+  expect(await f.mount.history!.undo()).toMatchObject({ ok: false, code: "write-refused" });
+  expect(f.submitWork.mock.calls).toHaveLength(before + 1);
+  expect(f.submitWork.mock.calls.at(-1)?.[1].expectedRevision).toBe(1);
+  expect(f.outcomes.at(-1)).toMatchObject({
+    kind: "refused",
+    refusal: { error: "this inverse is unknown or its paths changed" },
+  });
+  expect(f.mount.journalRefusal()).toBeTruthy();
+  f.flush();
+  expect(f.mount.journalRefusal()).toBeNull();
+  expect(f.mount.work()).toMatchObject({ revision: 2, value: { amount: 9 } });
+  expect(await f.mount.history!.undo(f.acks[0]!.press!)).toMatchObject({
+    ok: false,
+    code: "entry-changed",
+  });
+});
+
+
+
+
+
+
+
+
+
+test("slot census refuses unsupported bodies at mount admission and invokes picker options", async () => {
+  // COMMON 3: prove refusal at the admission boundary instead of copying its kind census.
+  await expect(
+    admitted(false, false, { bodies: { pick: { ...bodies.pick, kind: "unsupported" } } }),
+  ).rejects.toThrow(/Expected picker/);
+  const identity = identityCodecs.local.encode({ namespace: "note", subject: "options" });
+  if (!identity.ok) throw Error(identity.reason);
+  const run = vi.fn((snapshot) =>
+    snapshot.current ? [{ id: identity.value, label: snapshot.value }] : [],
+  );
+  const route = await admitted(false, false, {
+    bodies: { pick: { ...bodies.pick, run } },
+  });
+  const t = transports();
+  const mount = createRouteShell(t.services).mount(route, placeInput(locationPort().address));
+  closes.push(mount.close);
+  expect(run).toHaveBeenCalled();
+  expect(mount.subjectState({})).toMatchObject({ ready: true, label: "" });
+  mount.controls.subject(identity.value);
+  expect(mount.subjectState({})).toMatchObject({ ready: false, label: "" });
+  t.frames.at(-1)!(ready("options"));
+  expect(mount.picker("note")).toEqual([{ id: identity.value, label: "options" }]);
+  expect(mount.subjectState({})).toMatchObject({ ready: true, refusal: null, label: "options" });
+  const old = t.frames.at(-1)!;
+  mount.refresh();
+  expect(mount.subjectState({})).toMatchObject({ ready: false, label: "" });
+  old(ready("late old roster"));
+  expect(mount.subjectState({})).toMatchObject({ ready: false, label: "" });
+  t.frames.at(-1)!(ready("new roster"));
+  expect(mount.subjectState({})).toMatchObject({ ready: true });
+  mount.close();
+  expect(mount.subjectState({})).toMatchObject({ ready: false, label: "" });
+});
+
+
+
+
+
+
 
 const transitionData = {
   ...data,
@@ -585,10 +1041,200 @@ test("transition dependency references are linked at admission", async () => {
   ).rejects.toThrow(/missing/);
 });
 
+
 vi.mock("../route/route-target", async (original) => ({
   ...(await original<typeof import("../route/route-target")>()),
   useRouteTarget: vi.fn(),
 }));
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+test("cell displays, focus and clear refusal use real shared Page/Work owners", async () => {
+  const t = transports(),
+    store = createFixtureWorkDoor(
+      { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+      { amount: 6 },
+    );
+  const mount = createRouteShell({ ...t.services, work: store }).mount(
+    await workRoute("none", false, "nothing", undefined, true),
+    placeInput(locationPort().address),
+  );
+  closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
+  expect(mount.cells().amount).toEqual([
+    { key: "amount", group: ["amount"], labels: ["AMOUNT"], text: "6" },
+  ]);
+  expect(() => mount.clearCell("amount", "amount")).toThrow("Reading unavailable");
+  expect(mount.focusCell("amount", "amount").kind).toBe("accepted");
+  expect(mount.page.read().query).toBe("amount");
+});
+
+
+
+
+
+
+
+async function landingFixture(
+  output: z.ZodType = z.object({ name: z.string() }),
+  submissionKey?: string,
+) {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  let deliver: (
+    result: import("../../../../packages/agent-contracts/src/work-journal-door").AcceptedResult,
+  ) => void = () => {};
+  let kept: import("../../../../packages/agent-contracts/src/work-journal-door").AcceptedResult = {
+    kind: "pending",
+  };
+  let receiptFeed: (value: import("../../../../packages/agent-contracts/src/work-journal-door").ReceiptFeedState) => void = () => {};
+  const land = vi.fn((result: unknown, current: unknown) => ({
+    query: `${(current as { query: string }).query}${result === undefined ? "outputless" : (result as { name: string }).name}`,
+  }));
+  const door: WorkJournalDoor = {
+    ...store,
+    receipts: () => ({ subscribe(deliver) { receiptFeed = deliver; return () => {}; } }),
+    submit: (command) => ({
+      key: submissionKey ?? command.key,
+      lifetime: "command",
+      handle: {
+        id: command.id as import("../../../../packages/agent-contracts/src/work-journal-door").JournalCommandId,
+        lifetime: "command",
+        causalParent:
+          command.id as import("../../../../packages/agent-contracts/src/route-kernel-page").CausalParentId,
+      },
+      accepted: {
+        subscribe(listener) {
+          deliver = (result) => {
+            kept = result;
+            listener(result);
+          };
+          return () => {};
+        },
+      },
+    }),
+    accepted: () => kept,
+  };
+  const route = await workRoute("none", false, "nothing", undefined, false, { run: land, output });
+  const shell = createRouteShell({ ...t.services, work: door });
+  const location = locationPort();
+  const mount = shell.mount(route, placeInput(location.address));
+  closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
+  mount.invoke("native", 0);
+  const submission = mount.confirm("native") as ReturnType<WorkJournalDoor["submit"]>;
+  return {
+    shell,
+    location,
+    route,
+    mount,
+    submission,
+    land,
+    deliver: (result: Parameters<typeof deliver>[0]) => deliver(result),
+    door,
+    receiptFeed: (value: Parameters<typeof receiptFeed>[0]) => receiptFeed(value),
+  };
+}
+
+test("a completed receipt never resurrects its local start when a later snapshot omits it", async () => {
+  const { projectTimeline } = await import("./timeline");
+  const f = await landingFixture();
+  const id = f.submission.handle.id;
+  const first = 1 as import("../../../../packages/agent-contracts/src/work-journal-door").ReceiptCursor;
+  const next = 2 as typeof first;
+  const rows = () => projectTimeline(f.mount.timeline(), f.route.data.verbs);
+  expect(rows().find((row) => row.entry.press === id)?.outcome?.state).toBe("running");
+  const receipt = actionReceiptSchema.parse({
+    id, key: f.submission.key, state: "succeeded", result: {},
+    caller: { kind: "human", via: "local" }, target: { kind: "host" }, input: {},
+    basis: null, prepared: { state: "unprepared" }, steps: [], recovery: [], consumes: [],
+    startedAt: "2026-11-05T08:53:19Z",
+  });
+  f.receiptFeed({ kind: "ready", receipts: { rows: [receipt], from: first, through: first } });
+  expect(rows().filter((row) => row.outcome?.id === id)).toMatchObject([
+    { kind: "receipt", outcome: { state: "succeeded" } },
+  ]);
+  f.receiptFeed({ kind: "ready", receipts: { rows: [], from: next, through: next } });
+  expect(rows().some((row) => row.entry.press === id && row.outcome?.state === "running")).toBe(false);
+});
+
+
+
+
+
+test.each(["failed", "absent", "malformed"] as const)(
+  "%s native output does not land",
+  async (mode) => {
+    const f = await landingFixture();
+    f.deliver(
+      mode === "failed"
+        ? { kind: "rejected", failure: "failed", problem: "failed native write" }
+        : {
+            kind: "accepted-native",
+            outcome: "committed",
+            receiptId: "r",
+            ...(mode === "malformed" ? { result: { name: 12 } } : {}),
+          },
+    );
+    expect(f.land).not.toHaveBeenCalled();
+    expect(f.mount.page.read().query).toBe("");
+    if (mode !== "failed") {
+      expect(f.mount.commandLanding(f.submission.handle.id)).toMatchObject({
+        kind: "result-undecodable",
+        key: "native.write",
+      });
+      expect(f.mount.commandProblems()).toHaveLength(1);
+    }
+  },
+);
+
+test("mount decodes by JournalSubmission.key rather than the current verb entry", async () => {
+  const f = await landingFixture(undefined, "notes.read");
+  f.deliver({
+    kind: "accepted-native",
+    outcome: "committed",
+    receiptId: "r",
+    result: { name: "would fit native.write" },
+  });
+  expect(f.land).not.toHaveBeenCalled();
+  expect(f.mount.commandLanding(f.submission.handle.id)).toMatchObject({
+    kind: "result-undecodable",
+    key: "notes.read",
+  });
+});
+
+test("mount admits absent output only when the submitted schema permits undefined", async () => {
+  const f = await landingFixture(z.undefined());
+  f.deliver({ kind: "accepted-native", outcome: "committed", receiptId: "r" });
+  expect(f.mount.page.read().query).toBe("outputless");
+  expect(f.land.mock.calls[0]![0]).toBeUndefined();
+});
+
+
+
+
+
+
 
 test("a mount never receives an admission referring to another route's Work", async () => {
   const owner = await workRoute();
@@ -622,4 +1268,209 @@ test("a mount never receives an admission referring to another route's Work", as
   const result = (await inventory.prepare("foreign", fingerprint)).admitUnknown(module);
   expect(result.ok).toBe(false);
   registration.deactivate();
+});
+
+test.each(["accepted", "refused"] as const)(
+  "pane Work outcome %s after departure never reaches replacement",
+  async (kind) => {
+    const t = transports();
+    const store = createFixtureWorkDoor(
+      { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+      { amount: 0 },
+    );
+    let pane: {
+      workBasis: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
+      verbs: { change(input: number, basis: unknown): Observation<WorkWriteOutcome> };
+    };
+    const route = await workRoute("none", false, "nothing", undefined, false, {
+      output: z.string(),
+      run: () => ({}),
+      pane: (ctx) => {
+        pane = ctx as typeof pane;
+        return null;
+      },
+    });
+    let finish: () => void = () => {
+      throw Error("Write not submitted");
+    };
+    const door: WorkJournalDoor = {
+      ...store,
+      submitWork: (scope, write, invocation) => ({
+        subscribe(deliver, end) {
+          finish = () => {
+            if (kind === "accepted")
+              store.submitWork(scope, write, invocation).subscribe(deliver, end);
+            else {
+              deliver({
+                kind: "refused",
+                refusal: {
+                  kind: "refused",
+                  code: "stale_revision",
+                  error: "Old subject stale",
+                  hint: "Refresh",
+                  revision: 7,
+                },
+              });
+              end();
+            }
+          };
+          return () => {};
+        },
+      }),
+    };
+    const mount = createRouteShell({ ...t.services, work: door }).mount(
+      route,
+      placeInput(locationPort().address),
+    );
+    closes.push(mount.close);
+    await vi.waitFor(() => expect(mount.work()).not.toBeNull());
+    mount.read("main");
+    const outcome = pane!.verbs.change(2, pane!.workBasis);
+    await Promise.resolve();
+    const next = identityCodecs.local.encode({ namespace: "note", subject: "replacement" });
+    if (!next.ok) throw Error(next.reason);
+    mount.controls.subject(next.value);
+    await vi.waitFor(() =>
+      expect(mount.work()).toMatchObject({
+        handle: { key: { work: "replacement" } },
+        revision: 0,
+        value: { amount: 0 },
+      }),
+    );
+    mount.read("main");
+    const replacement = mount.work();
+    const changed = vi.fn();
+    const stop = mount.subscribe(changed);
+    finish();
+    expect((await settle(outcome)).kind).toBe(kind);
+    expect(mount.work()).toEqual(replacement);
+    expect(mount.workProblem()).toBeNull();
+    expect(changed).not.toHaveBeenCalled();
+    stop();
+  },
+);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+test("a null Place target refuses Work through the shared action boundary", async () => {
+  const mount = createRouteShell(transports().services).mount(
+    await workRoute("none", false, "nothing"),
+    placeInput(locationPort().address, { target: null }),
+  );
+  closes.push(mount.close);
+  expect(() => mount.invoke("change", 3)).toThrow(PlaceWriteRefusal);
+});
+
+test("resource release never withdraws the Place's write authority", async () => {
+  const f = await historyFixture();
+  f.mount.release();
+  expect((await settle(f.mount.invoke("change", 2) as Observation<WorkWriteOutcome>)).kind).toBe(
+    "accepted",
+  );
+});
+
+test.each(["clear"] as const)(
+  "cell %s captures its channel and label and refuses stale readings or lost custody",
+  async (kind) => {
+    const t = transports();
+    const initial = { amount: { edit: { value: 3, by: "pea" } } };
+    const store = createFixtureWorkDoor(
+      {
+        route: "note",
+        title: "",
+        description: "",
+        schema: z.object({ amount: draftCellSchema(z.number()) }),
+      },
+      initial,
+    );
+    const submit = vi.spyOn(store, "submitWork");
+    let custody: "current" | "departed" = "current";
+    const route = await workRoute("none", false, "nothing", undefined, "draft", {
+      output: z.unknown(),
+      run: () => ({}),
+      pane: (ctx) => ctx,
+    });
+    const mount = createRouteShell({ ...t.services, work: store }).mount(
+      route,
+      placeInput(locationPort().address, { custody: { current: () => custody === "current" } }),
+    );
+    closes.push(mount.close);
+    await vi.waitFor(() => expect(mount.work()).not.toBeNull());
+    const cellContext = mount.read("main") as {
+      cells: Record<typeof kind, (id: string, key: string) => Observation<WorkWriteOutcome>>;
+    };
+    const run = () => cellContext.cells[kind]("amount", "amount");
+    expect(() => run()).toThrow("Reading unavailable: notes");
+    expect(submit).not.toHaveBeenCalled();
+    t.frames.at(-1)!(ready("notes"));
+    custody = "departed";
+    expect(() => run()).toThrow(PlaceWriteRefusal);
+    expect(submit).not.toHaveBeenCalled();
+    custody = "current";
+    expect((await settle(run())).kind).toBe("accepted");
+    const label = "Clear amount";
+    expect(submit.mock.calls[0]?.[1]).toMatchObject({ label });
+    expect(submit.mock.calls[0]?.[2]).toMatchObject({ token: { channel: `cell-${kind}:amount` } });
+    expect(mount.work()?.value).toEqual({
+      amount: { edit: null },
+    });
+  },
+);
+
+
+
+
+
+test("a released feed resumes after custody returns through its address notification", async () => {
+  const { args: _args, ...policy } = data.readings.notes;
+  const route = await admitted(false, false, {
+    data: { readings: { notes: { ...policy, kind: "feed", adapter: "args" } } },
+    bodies: { args: { ...bodies.args, kind: "adapter", slot: "readings.notes.adapter" } },
+  });
+  let current = true;
+  const location = locationPort();
+  const t = transports();
+  const m = createRouteShell(t.services).mount(route, placeInput(location.address, { custody: { current: () => current } }));
+  closes.push(m.close);
+  t.frames[0]!(ready("before hide"));
+  m.release();
+  current = false;
+  const stop = m.subscribe(() => {});
+  current = true;
+  location.listeners.forEach((notify) => notify());
+  expect(t.keys).toEqual([0, 0]);
+  t.frames[1]!(ready("after reveal"));
+  expect(m.readingStatus("notes").snapshot).toMatchObject({ current: true, value: "after reveal" });
+  stop();
+});
+
+test("a malformed source reading refuses with a human message instead of schema diagnostics", async () => {
+  const t = transports();
+  const m = createRouteShell(t.services).mount(await admitted(), placeInput(locationPort().address));
+  closes.push(m.close);
+  t.frames[0]!({ status: "ready", current: true, value: null, hash: "null" });
+  expect(m.readingStatus("notes").snapshot).toMatchObject({
+    status: "failed", current: false,
+    reason: "This reading could not be decoded. Refresh the pane to try again.",
+  });
 });

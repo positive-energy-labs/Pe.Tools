@@ -130,7 +130,7 @@ export function useGraphRoute<P, W>(
   const settingsReady =
     !Object.keys(settingFields(graph)).length ||
     (settings.revision >= 0 && !settings.pending && !settings.error);
-  const armed = settingsReady && (!graph.needs || scope.status.resolution.kind === "resolved");
+  const armed = settingsReady && (!graph.needs || scope.status.resolution.kind === "resolved" || !!scope.getSnapshot().unreadable);
   owner.setAvailable(() => armed && !hidden && visible && live && current());
   const active = armed && !hidden && visible && live && current();
   const observed = useRef(new Set<string>());

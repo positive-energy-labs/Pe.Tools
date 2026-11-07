@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, afterEach, expect, test, vi } from "vite-plus/test";
-import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   admittedJournalKeys,
+  admittedSubjectDoor,
+  routeHasSubjectList,
+  PaneStatus,
 } from "./admitted-chrome";
-import type { AdmittedMount } from "./admitted-mount";
-import { routeOwnsKey } from "./mount-work";
+import { SubjectPicker as AdmittedSubjectPicker, subjectOf } from "./subject-picker";
 import { ReviewSurface } from "./review-surface";
-
+import { routeOwnsKey } from "./mount-work";
+import type { AdmittedMount } from "./admitted-mount";
+import { RouteGraphJson } from "../../../../packages/agent-contracts/src/route-kernel-data";
 beforeEach(() => {
   const values = new Map<string, string>();
   vi.stubGlobal("localStorage", {
@@ -62,7 +65,24 @@ test("Work undo follows current focus through portals and preserves native text 
   input.remove();
 });
 
-
+test("many-subject all/none use the declared control and unknown membership never prints ids", () => {
+  const subject = vi.fn();
+  const mount = {
+    picker: () => [{ id: "hidden-id", label: "Supply" }],
+    page: { read: () => ({ system: { kind: "all" } }) },
+    controls: { subject },
+  } as unknown as AdmittedMount;
+  const data = {
+    subject: { field: "system", noun: "systems" },
+    fields: { system: { role: "subject", cardinality: "many" } },
+  } as unknown as RouteGraphJson;
+  const ui = render(<AdmittedSubjectPicker mount={mount} data={data} />);
+  expect(ui.container.textContent).toContain("All systems");
+  expect(ui.container.textContent).not.toContain("hidden-id");
+  fireEvent.click(screen.getByRole("button", { name: "No systems" }));
+  fireEvent.click(screen.getByRole("button", { name: "All systems" }));
+  expect(subject.mock.calls).toEqual([[{ kind: "ids", ids: [] }], [{ kind: "all" }]]);
+});
 
 test("review uses a portal, friendly labels and a footer outside long content; Escape cancels", async () => {
   const cancel = vi.fn(),
@@ -130,4 +150,62 @@ test("admitted declarations preserve pane frames and split bounds for kit projec
     }).main?.frame,
   ).toEqual({ scroll: "clip", picture: true });
   expect(RouteGraphJson.shape.layout.safeParse({ ...node, minSize: -1 }).success).toBe(false);
+});
+
+test("the subject door adds beside what is open, and never narrows all to explicit ids", () => {
+  const subject = vi.fn();
+  let value: unknown = { kind: "all" };
+  const mount = {
+    picker: () => [
+      { id: "a", label: "SA 1" },
+      { id: "b", label: "SA 2" },
+    ],
+    page: { read: () => ({ system: value }) },
+    controls: { subject },
+  } as unknown as AdmittedMount;
+  const data = {
+    subject: { field: "system", noun: "systems" },
+    fields: { system: { role: "subject", cardinality: "many" } },
+  } as unknown as RouteGraphJson;
+  subjectOf(mount, data)!.add(["b"]);
+  expect(subject).not.toHaveBeenCalled();
+  value = { kind: "ids", ids: ["a"] };
+  subjectOf(mount, data)!.add(["a", "b"]);
+  subjectOf(mount, data)!.toggle("a");
+  expect(subject.mock.calls).toEqual([
+    [{ kind: "ids", ids: ["a", "b"] }],
+    [{ kind: "ids", ids: [] }],
+  ]);
+});
+
+ test("all and clear each send one generated subject transition, without enumerating the roster", () => {
+  const subject = vi.fn();
+  const mount = { controls: { subject } } as unknown as AdmittedMount;
+  const data = { subject: { field: "system" }, fields: { system: { role: "subject", cardinality: "many" } } } as unknown as RouteGraphJson;
+  const door = admittedSubjectDoor(mount, data);
+  door.all();
+  expect(subject.mock.calls).toEqual([[{ kind: "all" }]]);
+  subject.mockClear();
+  door.clear();
+  expect(subject.mock.calls).toEqual([[{ kind: "ids", ids: [] }]]);
+ });
+
+test("a route with a subject-list pane suppresses chrome's picker even on another pane", () => {
+  const data = { subject: { field: "system", pane: "detail" }, fields: { system: { role: "subject", picker: { reading: "roster" } } }, panes: { list: { draws: ["roster"] }, detail: { draws: ["detail"] } } } as unknown as RouteGraphJson;
+  expect(routeHasSubjectList(data)).toBe(true);
+});
+
+test("a route without a subject-list pane keeps chrome's picker", () => {
+  const data = { subject: { field: "system", pane: "detail" }, fields: { system: { role: "subject", picker: { reading: "roster" } } }, panes: { detail: { draws: ["detail"] } } } as unknown as RouteGraphJson;
+  expect(routeHasSubjectList(data)).toBe(false);
+});
+
+test("idle explicit readings draw no explanation while real failures remain visible", () => {
+  let reason = "Explicit demand required";
+  const mount = { readingStatus: () => ({ snapshot: { status: "unavailable", current: false, reason } }) } as unknown as AdmittedMount;
+  const view = render(<PaneStatus mount={mount} draws={["detail"]} />);
+  expect(view.container.textContent).toBe("");
+  reason = "Document closed";
+  view.rerender(<PaneStatus mount={mount} draws={["detail"]} />);
+  expect(screen.getByRole("status").textContent).toBe("Document closed");
 });

@@ -1,4 +1,5 @@
 import { podRouteFiles } from "../route/pod-skeleton";
+import { podRoutePath } from "../route/pod-address";
 import { Input } from "@pe/kit/lang/input";
 import { useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
@@ -27,7 +28,11 @@ export function Members({ ctx }: { ctx: PodsRosterContext }) {
   });
   return (
     <>
-      <a href="/pod-admin">Manage Pod installation and trust</a>
+      {value.value?.pods.flatMap((pod) =>
+        pod.contributions.filter((entry) => entry.kind === "route").map((entry) => (
+          <a key={entry.key} href={podRoutePath(entry.key)}>Manage trust for {entry.name}</a>
+        )),
+      )}
       <RouteSource packageId={page.pod}/>
       {value.value?.pods.flatMap((pod) =>
         pod.diagnostics.map((diagnostic, i) => (
@@ -40,7 +45,7 @@ export function Members({ ctx }: { ctx: PodsRosterContext }) {
         aria-label="pod members"
         list={list}
         search="always"
-        empty={{ message: "No Pod members", exit: "install or enable a Pod in Pod administration" }}
+        empty={{ message: "No Pod members", exit: "Ask Pea to import a Pod .zip with pod.import" }}
         row={({ pod, entry }) => ({
           label: entry.path,
           active: page.pod === pod.id && page.path === entry.path,

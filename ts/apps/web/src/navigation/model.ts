@@ -8,7 +8,7 @@ import {
 } from "@pe/agent-contracts";
 import { TOOLS } from "./catalogue";
 import { publicRoutes } from "#/route/route-discovery";
-import { podRoutePath } from "#/route/pod-address";
+import { isPodRoutePath, podRoutePath } from "#/route/pod-address";
 
 // A registered route (builtin or trusted Pod) answers from its authenticated declaration; the generated
 // table covers routes not registered yet. Read at call time, never at import.
@@ -58,7 +58,7 @@ export function admittedDestination(destination: string, origin: string): string
     const url = new URL(destination, origin);
     return url.origin === new URL(origin).origin &&
       ["http:", "https:"].includes(url.protocol) &&
-      (appRouteByPath(url.pathname) || publicRoutes.byAddress(url.pathname))
+      (appRouteByPath(url.pathname) || publicRoutes.byAddress(url.pathname) || isPodRoutePath(url.pathname))
       ? `${url.pathname}${url.search}${url.hash}`
       : null;
   } catch (error) { console.warn("ts/apps/web/src/navigation/model.ts: fallback after failure", error);

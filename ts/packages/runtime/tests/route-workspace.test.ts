@@ -113,7 +113,9 @@ test("start-fresh commits and publishes despite a throwing accepted listener", a
     route: documentA.route,
     value: { version: 1, schemaVersion: 1, revision: 4, doc: { count: "unreadable" } },
   });
-  const module = workspace(memory.store);
+  const olderRegistration = registration();
+  olderRegistration.spec.schemaVersion = 2;
+  const module = workspace(memory.store, { registration: olderRegistration });
   const logged = vi.spyOn(console, "error").mockImplementation(() => {});
   const accepted = vi.fn();
   const published = vi.fn();
@@ -134,7 +136,7 @@ test("start-fresh commits and publishes despite a throwing accepted listener", a
       ok: true,
       revision: 5,
     });
-    expect(await bind(workspace(memory.store)).read()).toMatchObject({
+    expect(await bind(workspace(memory.store, { registration: olderRegistration })).read()).toMatchObject({
       revision: 5,
       doc: { count: 0 },
     });

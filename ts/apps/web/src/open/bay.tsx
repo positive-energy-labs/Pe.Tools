@@ -538,7 +538,8 @@ function PatchBayBody({
       className={
         layout === "row"
           ? "flex min-h-0 min-w-0 flex-col"
-          : "flex max-h-72 min-w-0 shrink-0 flex-col pr-6 [&_table]:table-fixed [&_[data-slot=table-filters]]:gap-y-1 [&_[data-slot=query-box]]:basis-full [&_[data-slot=query-box]]:flex-none [&_[role=group]]:max-w-full [&_[role=group]]:flex-wrap"
+          // Only switchers wrap; wrapping the column-oriented ArtifactFrame moves the grid offscreen.
+          : "flex max-h-72 min-w-0 shrink-0 flex-col pr-6 [&_table]:table-fixed [&_[data-slot=table-filters]]:gap-y-1 [&_[data-slot=query-box]]:basis-full [&_[data-slot=query-box]]:flex-none [&_span[role=group]]:max-w-full [&_span[role=group]]:flex-wrap"
       }
     >
       <ModelTable

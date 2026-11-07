@@ -417,6 +417,7 @@ export const fanInputs = read("fans.inputs", {
     const entry = await current(ctx, request);
     return {
       kind: "inputs" as const,
+      directionOverride: "fan" in entry.value ? (entry.value.fan.directionOverride ?? null) : null,
       target: entry.target,
       basis: entry.value.basis,
       inputs: scopeInputs(entry.inputs, sheetReach(entry.value)),

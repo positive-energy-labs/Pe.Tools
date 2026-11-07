@@ -828,7 +828,7 @@ export class RouteWorkspace {
   }
 
   /**
-   * Either author moves unreadable Work aside, byte-for-byte and never parsed, to the first free
+   * Either author moves provably older Work aside, byte-for-byte and never parsed, to the first free
    * `<route>:aside:<n>`, and starts an empty Work at the same address. Readable Work is refused.
    */
   async startFresh(scope: WorkKey, route: string, by: WorkAuthor): Promise<RouteStateWriteResult> {
@@ -847,14 +847,13 @@ export class RouteWorkspace {
       const raw = await this.#store.getState({ targetKey, route });
       if (raw == null || readable(raw, spec))
         return refuse("refused", "this route's Work is readable", "Nothing to set aside.");
-      // Recovery also covers unreadable values at the current schema (U8rv). The
-      // older-schema-only rule would strand these bytes; newer/unknown schemas stay closed.
+      // ADR 0033 rule 5: only a proven older schema grants recovery authority.
       const age = workSchemaAge(raw, spec);
-      if (age !== "older" && age !== "current")
+      if (age !== "older")
         return refuse(
           "refused",
           UNREADABLE_WORK,
-          "Only a known current or older schema permits Start fresh.",
+          "Only a proven older schema permits Start fresh.",
         );
       let slot = 1;
       while ((await this.#store.getState({ targetKey, route: aside(route, slot) })) != null) slot++;
@@ -992,7 +991,8 @@ export class RouteWorkspace {
     }
     const key = workKey(scope);
     let disposed = false;
-    void this.#serialized(async () => {
+    let state: "absent" | "hydrating" | "ready" = "absent";
+    const acquire = async () => {
       const spec = this.#registry.get(scope.route)?.spec;
       if (disposed) return;
       if (!spec) {
@@ -1003,12 +1003,10 @@ export class RouteWorkspace {
         } satisfies WorkFeedFailure);
         return;
       }
-      const listeners = this.#acceptedListeners.get(key) ?? new Set();
-      this.#acceptedListeners.set(key, listeners);
-      listeners.add(listener);
       const envelope = await this.#load(scope, spec, false);
       if (disposed) return;
-      if (!envelope) { snapshot(null); return; }
+      if (!envelope) { state = "absent"; snapshot(null); return; }
+      state = "ready";
       const records = this.#retain(this.#inverses.get(key) ?? [], envelope.revision);
       snapshot({
         doc: structuredClone(envelope.doc),
@@ -1019,13 +1017,28 @@ export class RouteWorkspace {
           acks: structuredClone(records.map(({ write }) => write)),
         },
       });
-    }).catch((error) => {
+    };
+    const fail = (error: unknown) => {
       if (!disposed) failed(error);
-    });
+    };
+    const accepted = (ack: WorkWriteAck) => {
+      if (disposed) return;
+      if (state === "ready") { listener(ack); return; }
+      if (state === "hydrating") return; // The queued snapshot includes these accepted writes.
+      state = "hydrating";
+      void this.#serialized(acquire).catch(fail);
+    };
+    void this.#serialized(async () => {
+      if (disposed) return;
+      const listeners = this.#acceptedListeners.get(key) ?? new Set();
+      this.#acceptedListeners.set(key, listeners);
+      listeners.add(accepted);
+      await acquire();
+    }).catch(fail);
     return () => {
       disposed = true;
       const listeners = this.#acceptedListeners.get(key);
-      listeners?.delete(listener);
+      listeners?.delete(accepted);
       if (!listeners?.size) this.#acceptedListeners.delete(key);
     };
   }
@@ -1200,8 +1213,8 @@ export class RouteWorkspace {
           ? "reason" in error && typeof error.reason === "string" ? error.reason : error.message
           : String(error);
         throw Object.assign(
-          new Error(`Stored Work '${workKey(scope)}' cannot be read: ${reason}`, { cause: error }),
-          { code: "WorkUnreadable", key: scope, reason },
+          new Error(workSchemaAge(raw, spec) === "older" ? OLDER_WORK : `Stored Work '${workKey(scope)}' cannot be read: ${reason}`),
+          { code: "WorkUnreadable", key: scope, reason, schemaAge: workSchemaAge(raw, spec) },
         );
       }
     }

@@ -37,11 +37,11 @@ function Dock() {
       layout={{ ...chatLayout, minOtherSize: 643 }}
       panes={{
         threads: {
-          ...{ label: "Threads", purpose: "Choose a conversation" },
+          ...{ label: "threads", purpose: "Choose a conversation" },
           verbs: [],
           draws: [],
         },
-        chat: { ...{ label: "Chat", purpose: "Read and compose" }, verbs: [], draws: [] },
+        chat: { ...{ label: "chat", purpose: "Read and compose" }, verbs: [], draws: [] },
       }}
       active={() => true}
       state={{ panes, onChange }}

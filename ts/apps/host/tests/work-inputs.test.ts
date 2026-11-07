@@ -679,6 +679,7 @@ test("command Work reads carry context through binding and revalidation", async 
         previewOnly: true,
         derivedRequest: {},
         seal: {
+          caller: { kind: "human", via: "local" },
           requestHash: "fixture",
           work: { handle: { key, revision: 0 } },
           documentMark: { session: "s", openId: "open", observedSince: null, changedAt: null },

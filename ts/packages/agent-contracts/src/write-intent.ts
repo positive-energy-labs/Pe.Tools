@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { callerSchema } from "./caller.ts";
 import { draftCellSchema } from "./draft.ts";
 import { workHandleSchema, type Command, type WorkHandle } from "./command.ts";
 
@@ -15,6 +16,7 @@ export const writeIntentSchema = z.record(
  * restart moves `observedSince`, and either one is "plan changed". No separate freshness probe.
  */
 export const writeSealSchema = z.object({
+  caller: callerSchema,
   requestHash: z.string(),
   work: z.unknown(),
   documentMark: z.object({

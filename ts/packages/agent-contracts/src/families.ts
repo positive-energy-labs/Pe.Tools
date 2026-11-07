@@ -174,7 +174,7 @@ export function familyCatalogProblem(catalog: {
 /**
  * One proposed cell value on the `/families` audit: a family type's parameter cell and the value
  * someone proposes for it. Pea and a person write the same shape and are told apart by `by`. It is
- * authored Work, not a result â€” it survives a reload. The address is a family NAME, a type and the
+ * authored Work, not a result — it survives a reload. The address is a family NAME, a type and the
  * EXACT Revit parameter name, because that is what a Family Foundry patch keys on
  * (`patch.types.<typeName>.<parameter>`). Never a family element id: every LoadFamily after an edit
  * replaces the Family element, so only the name is stable across applies.

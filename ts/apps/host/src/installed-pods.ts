@@ -1,5 +1,5 @@
 /**
- * First-run import of the shipped Pods (`<exeDir>/pods/*.zip`) as ordinary archives. Each sha is
+ * First-run import of shipped Pods (installed archives or exported checkout examples). Each sha is
  * offered once (a deleted example stays deleted); an installed id or existing folder is never
  * overwritten. Callers await this before anything reads the pods root.
  */
@@ -11,6 +11,8 @@ import { productPathNames, scriptingWorkspaceIdentity } from "@pe/host-contracts
 import { hostOwnership } from "./host-ownership.ts";
 import {
   archiveId,
+  preparePodExport,
+  writePodExport,
   installArchive,
   readZip,
   TransferRefused,
@@ -29,9 +31,31 @@ export type ShippedPodsReport = { shippedRoot: string | null; outcomes: ShippedP
 
 type Ledger = { offered: Record<string, { archive: string; at: string; outcome: string }> };
 
-/** The installed host's shipped pods; the source lane ships none (its examples stay in the checkout). */
-const shippedPodsRoot = (): string | null =>
-  hostOwnership.lane === "installed" ? join(dirname(process.execPath), "pods") : null;
+/** Dev offers the checkout's examples through the same archive importer; trust stays explicit. */
+async function shippedPodsRoot(options: TransferOptions & { ledger?: string }): Promise<string> {
+  if (hostOwnership.lane === "installed") return join(dirname(process.execPath), "pods");
+  const examples = join(hostOwnership.sourceRoot!, "examples", "pods");
+  const listing = await listPackages(examples);
+  if (listing.unreadable.length)
+    throw Error(`Unreadable shipped Pods: ${listing.unreadable.map((pod) => pod.message).join("; ")}`);
+  // The complete admitted input snapshot includes vendored dependencies. Content-addressed
+  // archives are shared safely across hosts, and unchanged examples need no export or rewrite.
+  const fingerprint = createHash("sha256").update(JSON.stringify(listing.packages.map(pod =>
+    [pod.id, pod.members.map(member => [member.path, member.sha256])]))).digest("hex");
+  const shipped = join(dirname(options.ledger ?? ledgerPath()), "shipped-pods", fingerprint);
+  for (const pod of listing.packages) {
+    const archivePath = join(shipped, `${pod.id}.zip`);
+    if (await readFile(archivePath).then(() => true, error => {
+      if (error.code !== "ENOENT") throw error;
+      return false;
+    })) continue;
+    await writePodExport(await preparePodExport(
+      { pod: pod.id, archivePath },
+      { podsRoot: examples, captures: options.captures }, listing,
+    ));
+  }
+  return shipped;
+}
 
 const ledgerPath = () =>
   join(hostOwnership.rootPath, productPathNames.stateDirectoryName, "shipped-pods.json");
@@ -72,7 +96,7 @@ async function run(
   options: TransferOptions & { shippedRoot?: string | null; ledger?: string },
 ): Promise<ShippedPodsReport> {
   await ensureDefaultPod(options.podsRoot);
-  const shippedRoot = options.shippedRoot === undefined ? shippedPodsRoot() : options.shippedRoot;
+  const shippedRoot = options.shippedRoot === undefined ? await shippedPodsRoot(options) : options.shippedRoot;
   if (!shippedRoot) return { shippedRoot, outcomes: [] };
   const archives = (await readdir(shippedRoot).catch(() => [] as string[]))
     .filter((name) => /\.zip$/i.test(name))

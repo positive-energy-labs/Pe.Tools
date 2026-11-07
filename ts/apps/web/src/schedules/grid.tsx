@@ -75,14 +75,18 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
         Bind schedule
       </Button>
       <PreviewAction handle={ctx.write("push")} label="Apply cells" />
-      {!ctx.value.current && (
+      {!ctx.value.current && (data || ctx.value.status === "pending") && (
         <OutcomeLine kind="advisory" label="Schedule reading" says={ctx.value.reason} />
       )}
       {failure && <OutcomeLine kind="error" label="Schedule grid" says={failure} />}
       {data?.outcome.readbackError && (
         <OutcomeLine kind="error" label="Schedule readback" says={data.outcome.readbackError} />
       )}
-      <ScheduleGridWorkspace state={state} onRefused={setFailure} onHidden={setFailure} />
+      {!data && !ctx.value.current && ctx.value.status !== "pending" ? (
+        <OutcomeLine kind="error" label="Schedule reading unavailable" says={ctx.value.reason} />
+      ) : (
+        <ScheduleGridWorkspace state={state} onRefused={setFailure} onHidden={setFailure} />
+      )}
     </>
   );
 }

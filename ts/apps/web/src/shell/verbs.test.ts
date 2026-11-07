@@ -1,9 +1,10 @@
+import { pageBindRpc } from "../../../../packages/mcps/src/shared/rpc-client";
 import {
   scheduleQueries,
 } from "../../../../packages/mcps/src/shared/query-client";
-import { pageBindRpc } from "../../../../packages/mcps/src/shared/rpc-client";
 // @vitest-environment jsdom
-import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
+import { z } from "zod";
 import {
   actionReceiptSchema,
   applyPatches,
@@ -13,8 +14,7 @@ import {
   type RouteStateSpec,
   type WorkKey,
 } from "@pe/agent-contracts";
-import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { z } from "zod";
+import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
 import {
   bind,
   commandVerb,
@@ -23,12 +23,14 @@ import {
   queryVerb,
   rpcVerb,
   pageVerb,
+  workVerb,
   type Caller,
   type InvocationPhase,
   type VerbDelivery,
   type VerbContext,
   type VerbSubject,
 } from "./verbs";
+
 
 const transport = vi.hoisted(() => ({
   run: vi.fn(),
@@ -175,6 +177,17 @@ function environment<C extends Caller>(caller: C, identity: WorkKey = key) {
     },
   };
 }
+
+const edit = () =>
+  workVerb(
+    { label: "edit", subject: "row", input: z.object({ value: z.number() }), chord: "Mod+Enter" },
+    {
+      patches: (scope, input) => [
+        { path: [...scope.subject!.path, "value"], value: input.value },
+        { path: [...scope.subject!.path, "note"], value: "after" },
+      ],
+    },
+  );
 function command(review: "none" | "shown") {
   const declaration = { label: "initialize", input: z.object({ stage: z.string() }) };
   const implementation = {
@@ -189,6 +202,8 @@ const reviewed = (result: VerbDelivery) => {
   if (result.state !== "review") throw new Error("Expected review");
   return result;
 };
+
+
 
 test("shown review can be skipped by agent, and cannot be skipped by human at type or runtime boundary", async () => {
   const human = environment("human");
@@ -206,6 +221,10 @@ test("shown review can be skipped by agent, and cannot be skipped by human at ty
   );
   expect(transport.run).toHaveBeenCalledTimes(2);
 });
+
+
+
+
 
 test.each(["reading", "revision", "target"] as const)(
   "ticket %s drift invalidates without dispatch, and releases admission",
@@ -250,6 +269,42 @@ test("Pea can commit an authentic ticket after JSON transport with the same invo
   expect(transport.run).toHaveBeenCalledTimes(1);
 });
 
+
+
+test("validation, readiness and busy admission prevent writes", async () => {
+  const env = environment("human");
+  const verb = edit();
+  expect((await invoke(env.ctx, verb, env.subject, { value: "bad" })).state).toBe("refused");
+  const blocked = workVerb(
+    { label: "blocked", input: z.undefined() },
+    { ready: () => "Read the sheet first", patches: () => [] },
+  );
+  expect(bind(blocked, { ctx: env.ctx, subject: null, args: undefined }).refusal).toBe(
+    "Read the sheet first",
+  );
+  expect((await invoke(env.ctx, blocked, null, undefined)).state).toBe("refused");
+  const reviewVerb = command("shown");
+  const review = reviewed(await invoke(env.ctx, reviewVerb, null, { stage: "sheet" }));
+  expect(await invoke(env.ctx, verb, env.subject, { value: 2 })).toMatchObject({
+    state: "refused",
+    press: null,
+    refusal: { code: "busy" },
+  });
+  expect(env.writes).toHaveLength(1); // The review staged intent; busy admission added no write.
+  await invoke(env.ctx, reviewVerb, null, undefined, { kind: "cancel", ticket: review.ticket });
+});
+
+
+
+
+
+
+
+
+
+
+
+
 test("a query's final result is admitted only into the scope generation it started in", async () => {
   const env = environment("human");
   let generation = 1;
@@ -272,6 +327,10 @@ test("a query's final result is admitted only into the scope generation it start
   expect(await pressed).toMatchObject({ state: "stale" });
 });
 
+
+
+
+
 test("K1.2: a human-only RPC refuses agent binding and direct invocation before dispatch", async () => {
   const run = vi.fn(async () => ({ ok: true }));
   const verb = rpcVerb(
@@ -291,6 +350,8 @@ test("K1.2: a human-only RPC refuses agent binding and direct invocation before 
   });
   expect(run).toHaveBeenCalledTimes(1);
 });
+
+
 
 test("K1.5: command lands its result and fences late Page changes after A-B-A", async () => {
   const env = environment("human");
@@ -322,6 +383,8 @@ test("K1.5: command lands its result and fences late Page changes after A-B-A", 
   finish(succeededReceipt());
   expect(await pending).not.toHaveProperty("page");
 });
+
+
 
 test("Page verbs run without Work, host transport, or undo writes", async () => {
   const env = environment("human");
@@ -356,3 +419,13 @@ test("K1.2: page.bind resolves its HTTP contract at invocation and validates bef
     vi.unstubAllGlobals();
   }
 });
+
+
+
+
+
+
+
+
+
+

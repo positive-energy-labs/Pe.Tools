@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vite-plus/test";
+import { beforeAll, describe, expect, it } from "vite-plus/test";
+import { publicRoutesReady } from "../route/builtin-routes";
 
 import {
   actionReceiptSchema,
@@ -8,6 +9,8 @@ import {
 } from "@pe/agent-contracts";
 
 import { actionPlace, actionRoute, capturedPlace, proposedRecord } from "./chat-plugins";
+
+beforeAll(async () => { await publicRoutesReady; });
 
 const member = { pod: "mechanical", path: "settings/family.json" };
 const workspace = {
@@ -56,7 +59,7 @@ describe("chat plugin records", () => {
     );
     expect(place).toMatchObject({
       ok: true,
-      page: { workspaceId: "schedule-42" },
+      page: { workspaceId: { kind: "ids", ids: [JSON.stringify(["schedules", "schedule-42"])] } },
       carry: {
         work: "schedule-42",
         target: JSON.stringify({ kind: "open", ref: { session: "one", openId: "original" } }),
@@ -135,7 +138,7 @@ describe("chat plugin records", () => {
       subject: "C:/Models/Original.rvt",
       place: {
         ok: true,
-        page: { workspaceId: "schedule-42" },
+        page: { workspaceId: { kind: "ids", ids: [JSON.stringify(["schedules", "schedule-42"])] } },
         carry: {
           work: "schedule-42",
           target: JSON.stringify({

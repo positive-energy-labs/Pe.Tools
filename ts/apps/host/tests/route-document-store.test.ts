@@ -8,7 +8,7 @@ import { bindWork, workKey } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 
-test("obsolete records and undecodable Work are removed without conversion or backup", async () => {
+test("unreadable Work keeps its bytes until explicit recovery without conversion", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-discard-"));
   const scope = bindWork("test", null);
   const key = { targetKey: workKey(scope), route: scope.route };
@@ -17,15 +17,19 @@ test("obsolete records and undecodable Work are removed without conversion or ba
     const store = fileRouteDocumentStore(dir);
     for (const bytes of ["{broken", JSON.stringify({ ...key, format: "route-state-record-v1", value: { version: 1, revision: 4, doc: {} } })]) {
       await writeFile(path, bytes);
-      expect(await store.getState(key)).toBeNull();
-      expect(await readdir(dir)).toEqual([]);
+      await expect(store.getState(key)).rejects.toMatchObject({ code: "WorkUnreadable", key: key.targetKey });
+      expect(await readFile(path, "utf8")).toBe(bytes);
+      expect(await readdir(dir)).toEqual([path.split(/[\\/]/).at(-1)]);
     }
     await store.setState({ ...key, value: { version: 1, revision: 4, doc: { count: "old" } } });
     const workspace = new RouteWorkspace({ store, registrations: [{ spec: {
       route: scope.route, title: "Test", description: "Test", schema: z.object({ count: z.number().default(0) }),
       schemaVersion: 2, migrations: { 1: () => { throw Error("Conversion must never run"); } },
     } }] });
-    expect(await workspace.read(scope, scope.route)).toBeNull();
+    const bytes = await readFile(path, "utf8");
+    await expect(workspace.read(scope, scope.route)).rejects.toMatchObject({ code: "WorkUnreadable", key: scope });
+    expect(await readFile(path, "utf8")).toBe(bytes);
+    await store.setState({ ...key, value: null });
     expect(await readdir(dir)).toEqual([]);
     expect(await workspace.apply(scope, scope.route, "human", [{ path: ["count"], value: 3 }], 4)).toMatchObject({ ok: false, code: "stale_revision" });
     expect(await workspace.apply(scope, scope.route, "human", [{ path: ["count"], value: 3 }], 0)).toMatchObject({ ok: true, revision: 1 });

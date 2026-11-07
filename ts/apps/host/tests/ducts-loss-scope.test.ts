@@ -40,7 +40,7 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
     revision: 1,
   };
   const seal = (s: typeof snapshot) =>
-    writeSeal({
+    writeSeal({ caller: { kind: "human", via: "local" },
       request: applyRequest(s, price(s, {}, work, (work) ?? neutralFansWork, EMPTY_CATALOGS), "", []),
       input: work,
       work: handle,

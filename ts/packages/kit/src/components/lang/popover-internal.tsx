@@ -293,7 +293,8 @@ export function PopoverContent({
         alignOffset={alignOffset}
         collisionPadding={collisionPadding}
         collisionBoundary={collisionBoundary}
-        collisionAvoidance={away ? { side: "none", align: "shift" } : collisionAvoidance}
+        // Prefer clearing the picture, but keep the controls reachable at the viewport edge (I5).
+        collisionAvoidance={away ? { side: "flip", align: "shift" } : collisionAvoidance}
         className={cn("isolate z-popup", positionerClassName)}
       >
         <Primitive.Popup

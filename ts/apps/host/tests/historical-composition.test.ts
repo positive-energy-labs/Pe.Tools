@@ -39,8 +39,19 @@ const bundle = async () => {
     nativeRequestId: "recorded-native", actualTarget: { processIncarnation: { pid: 7, startedAt: 1000 }, openDocumentLifetime: { kind: "session-only" as const } },
     freshness: { freshnessGeneration: "recorded:g1" }, cost: {}, nativeOutcome: "committed" as const,
   } };
-  const taking = await Effect.runPromise(writer.append(input, outcome));
-  return { dir, writer, taking, input, outcome };
+  // A /call consumes a recorded native.call graph, not an unowned taking.
+  const append: typeof writer.append = (input, outcome) => Effect.gen(function* () {
+    const taking = yield* writer.append(input, outcome);
+    yield* writer.readSets.keep({
+      version: 1, id: randomUUID(), identity,
+      recipe: { key: "native.call", input: { key, input: {}, scope }, scope: JSON.stringify(scope) },
+      state: "complete", inputs: [{ input: input.input, scope: input.scope, start: 0, takingId: taking.id }],
+      children: [], takingLinks: {}, dependencies: {}, exports: [],
+    });
+    return taking;
+  });
+  const taking = await Effect.runPromise(append(input, outcome));
+  return { dir, writer: { ...writer, append }, recording: writer, taking, input, outcome };
 };
 const router = async (dir: string, bindings?: ReadonlyMap<string, string>) => {
   const inputs = await Effect.runPromise(hostInputs(stamp, { kind: "recording", directory: dir, at: null, bindings }));
@@ -104,6 +115,35 @@ test("equal takings remain ambiguous until an exact root binding is supplied", a
   const bound = await router(dir, new Map([[await Effect.runPromise(nativeInputIdentity({ key, input: {}, scope })), taking.id]]));
   try { expect((await bound.send("/call", { key })).status).toBe(200); expect(bound.liveFactories()).toBe(0); }
   finally { await bound.close(); }
+});
+
+test("native root bindings refuse foreign consumers, scopes, unknown takings and occurrence mismatches", async () => {
+  for (const refusal of ["foreign-root", "cross-scope", "unknown-taking", "wrong-occurrence"] as const) {
+    const { dir, recording, taking, input, outcome } = await bundle();
+    const otherScope = { bridgeSessionId: "another-session" };
+    const selectedScope = refusal === "cross-scope" ? otherScope : scope;
+    const boundTaking = refusal === "unknown-taking" ? randomUUID()
+      : (await Effect.runPromise(recording.append({ ...input, scope: JSON.stringify(selectedScope) }, outcome))).id;
+    if (refusal !== "unknown-taking") {
+      await Effect.runPromise(recording.readSets.keep({
+        version: 1, id: randomUUID(), identity,
+        recipe: { key: refusal === "foreign-root" ? "another.consumer" : "native.call",
+          input: { key, input: {}, scope: selectedScope }, scope: JSON.stringify(selectedScope) },
+        state: "complete", inputs: refusal === "wrong-occurrence"
+          ? [{ input: input.input, scope: input.scope, start: 0, takingId: taking.id },
+             { input: input.input, scope: input.scope, start: 1, takingId: boundTaking }]
+          : [{ input: input.input, scope: JSON.stringify(selectedScope), start: 0, takingId: boundTaking }],
+        children: [], takingLinks: {}, dependencies: {}, exports: [],
+      }));
+    }
+    const app = await router(dir, new Map([[await Effect.runPromise(nativeInputIdentity({ key, input: {}, scope })), boundTaking]]));
+    try {
+      const response = await app.send("/call", { key });
+      expect(response.status, refusal).toBe(409);
+      expect(await response.text()).toContain(refusal === "wrong-occurrence" ? "recording.mismatch" : "recording.miss");
+      expect(app.liveFactories()).toBe(0);
+    } finally { await app.close(); }
+  }
 });
 
 test("historical mutation doors refuse without append or any live graph", async () => {
@@ -227,6 +267,7 @@ test("historical entry serves real static files through identity and retains API
       expect(new TextDecoder().decode((await read.read()).value)).toContain("recording.miss");
     } finally { await read.cancel(); abort.abort(); }
     expect(live).toBe(0);
+    await mkdir(join(import.meta.dirname, "../../../../.artifacts/runs/kernel-crusade-20261104/step-7"), { recursive: true });
     await writeFile(join(import.meta.dirname, "../../../../.artifacts/runs/kernel-crusade-20261104/step-7/host-entry-http-receipt.json"), JSON.stringify({
       selection, stampOrigin: "existing historical-composition TEST fixture; no baked artifact/process claim", identity,
       navigation: { status: page.status, contentType: page.headers.get("content-type"), httpOnly: cookie.includes("HttpOnly"), sameSiteStrict: cookie.includes("SameSite=Strict") },

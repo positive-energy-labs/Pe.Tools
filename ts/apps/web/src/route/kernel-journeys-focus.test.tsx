@@ -49,10 +49,11 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
   const a = make("jz-a"), b = make("jz-b");
   const stamp = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
   const address = () => ({ read: () => new URLSearchParams(), write: () => {}, subscribe: () => () => {} });
+  const addressA = address(), addressB = address();
   function Journey() {
     const [hidden, setHidden] = useState(false);
-    return <><button onClick={() => setHidden(true)}>Hide B</button><TypedShell module={a} fingerprint={stamp} address={address()} />
-      <RouteVisibility.Provider value={!hidden}><div hidden={hidden}><TypedShell module={b} fingerprint={stamp} address={address()} /></div></RouteVisibility.Provider></>;
+    return <><button onClick={() => setHidden(true)}>Hide B</button><TypedShell module={a} fingerprint={stamp} address={addressA} />
+      <RouteVisibility.Provider value={!hidden}><div hidden={hidden}><TypedShell module={b} fingerprint={stamp} address={addressB} /></div></RouteVisibility.Provider></>;
   }
   const root = createRootRoute({ component: Journey });
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ["/"] }) });
@@ -60,7 +61,7 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
   await screen.findByRole("button", { name: "jz-b focus" });
   expect(owners).toHaveLength(2);
   const undo = owners.map(owner => vi.spyOn(owner.history, "undo"));
-  const press = (node: HTMLElement) => { node.focus(); return fireEvent.keyDown(node, { key: "z", code: "KeyZ", ctrlKey: true }); };
+  const press = (node: HTMLElement) => { node.focus(); const native = fireEvent.keyDown(node, { key: "z", code: "KeyZ", ctrlKey: true }); fireEvent.keyUp(node, { key: "z", code: "KeyZ", ctrlKey: true }); return native; };
   press(screen.getByRole("textbox", { name: "jz-a text" }));
   expect(undo.map(spy => spy.mock.calls.length), "B02: browser retains text undo").toEqual([0, 0]);
   press(screen.getByRole("button", { name: "jz-a focus" }));
