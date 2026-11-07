@@ -1,6 +1,6 @@
 import { refuse } from "#/route/refusal";
 import { useRef, useState } from "react";
-import { familyCellAddress, type FamilyCellState } from "@pe/agent-contracts";
+import { familyCellAddress } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import type { FamiliesDrawContext } from "./route";
@@ -36,16 +36,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
   };
   const catalog = data?.catalog.families ?? [];
   const categories = data?.categories ?? [];
-  // TODO: Replace the grid's CellWire adapter when owned handles expose all proposal transitions.
-  const live = useLiveCells((work?.cells ?? {}) as Record<string, FamilyCellState>, {
-    segment: "cells",
-    revision: ctx.cells.basis?.workRevision ?? null,
-    write: async (patches) => {
-      if (data?.editRefusal) return refuse("not-ready", data.editRefusal);
-      const result = await ctx.cells.patch(patches);
-      return result ? refuse("not-ready", result.message) : null;
-    },
-  });
+  const live = useLiveCells(work?.cells ?? {}, (key) => ctx.cells.at(["cells", key]));
   const focus = ctx.page.read().focus;
   let landed: { row: number; col: number; n: number } | null = null;
   if (focus) {
@@ -66,10 +57,12 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
             key={category}
             label={`Choose ${category}`}
             onClick={() =>
-              ctx.cells.at(["scope"]).stage(
-                { ...filter, categoryNames: [category], familyNames: [] },
-                { label: "Choose families" },
-              )
+              ctx.cells
+                .at(["scope"])
+                .stage(
+                  { ...filter, categoryNames: [category], familyNames: [] },
+                  { label: "Choose families" },
+                )
             }
           >
             {category}
@@ -82,9 +75,9 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
             onClick={() =>
               ctx.cells.at(["scope"]).stage(
                 {
-                    ...filter,
-                    categoryNames: [...filter.categoryNames],
-                    familyNames: [family.familyName],
+                  ...filter,
+                  categoryNames: [...filter.categoryNames],
+                  familyNames: [family.familyName],
                 },
                 { label: "Choose families" },
               )
@@ -112,6 +105,19 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
       </div>
       {!ctx.value.current && (
         <OutcomeLine kind="advisory" label="Family read" says={ctx.value.reason} />
+      )}
+      {shown?.progress && shown.progress.state !== "complete" && (
+        <OutcomeLine
+          kind={shown.progress.state === "failed" ? "error" : "advisory"}
+          label="Family read"
+          says={[
+            shown.progress.phase,
+            shown.progress.total ? `${shown.progress.completed}/${shown.progress.total}` : null,
+            shown.progress.message,
+          ]
+            .filter(Boolean)
+            .join(" - ")}
+        />
       )}
       {(data?.outcomes ?? []).map((outcome) => (
         <OutcomeLine

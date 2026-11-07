@@ -3,7 +3,7 @@ import { act, fireEvent, render } from "@testing-library/react";
 import { expect, test, vi } from "vite-plus/test";
 
 import type { ParamColumn, TypeRow } from "#/families/matrix-columns";
-import { type PivotRow } from "../../../../packages/agent-contracts/src/families-read";
+import type { PivotRow } from "../../../../packages/agent-contracts/src/families-read";
 import { TypeGrid, identityWidth } from "#/families/pivot-grid";
 
 const param = (key: string): ParamColumn => ({
@@ -70,7 +70,14 @@ test("511 type columns mount a bounded window and expose direct editable cells",
         params: new Map(params.map((entry) => [entry.key, entry])),
         live: {
           cells: {},
-          wire: { segment: "cells", revision: 1, write: async () => null },
+          at: () => ({
+            owner: { route: "families", label: "Work" },
+            value: {},
+            refusal: null,
+            transitions: () => [],
+            stage: async () => null,
+            clear: async () => null,
+          }),
           listeners: new Set(),
         },
         propose,
@@ -188,7 +195,14 @@ test("archived type cells render the saved value without edit controls", () => {
         params: new Map([["w", param("w")]]),
         live: {
           cells: {},
-          wire: { segment: "cells", revision: 1, write: async () => null },
+          at: () => ({
+            owner: { route: "families", label: "Work" },
+            value: {},
+            refusal: null,
+            transitions: () => [],
+            stage: async () => null,
+            clear: async () => null,
+          }),
           listeners: new Set(),
         },
         propose: vi.fn(async () => null),

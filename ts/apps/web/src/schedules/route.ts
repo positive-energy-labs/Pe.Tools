@@ -146,7 +146,7 @@ export const module = route({
               data.saved?.snapshot.columns.findIndex(
                 (column) => column.columnNumber === columnNumber,
               ) ?? -1;
-            return `${row?.values[0] ?? `Row ${rowNumber}`} ? ${column?.headerText ?? `Column ${columnNumber}`}: ${showCellValue(row?.values[index])} ? ${showCellValue(cell.edit?.value)}`;
+            return `${row?.values[0] ?? `Row ${rowNumber}`} \u00b7 ${column?.headerText ?? `Column ${columnNumber}`}: ${showCellValue(row?.values[index])} \u2192 ${showCellValue(cell.edit?.value)}`;
           }),
         };
       },

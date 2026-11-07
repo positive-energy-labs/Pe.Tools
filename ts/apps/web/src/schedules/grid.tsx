@@ -17,25 +17,24 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
     shown?.target.session === ctx.target.ref.session &&
     shown?.target.openId === ctx.target.ref.openId;
   const state: ScheduleGridState = {
+    at: (key) => {
+      const cell = ctx.cells.at(["cells", key]);
+      return {
+        ...cell,
+        refusal: refusal ?? cell.refusal,
+        stage: (value, history) =>
+          refusal ? Promise.resolve({ message: refusal }) : cell.stage(value, history),
+        clear: (history) => (refusal ? Promise.resolve({ message: refusal }) : cell.clear(history)),
+        transitions: (history) => (refusal ? [] : cell.transitions(history)),
+      };
+    },
     slice: ctx.cells.doc ? scheduleGridRouteState.schema.parse(ctx.cells.doc) : null,
     revision: ctx.cells.basis?.workRevision ?? null,
-    hydrated: !!ctx.cells.doc,
+    hydrated: ctx.value.value !== undefined,
     apply: async (patches) => {
       if (refusal) return { code: "not-ready", message: refusal };
       const result = await ctx.cells.edit(patches, { label: "Edit schedule cells" });
       return result ? { code: "not-ready", message: result.message } : null;
-    },
-    execute: async (kind) => {
-      try {
-        if (kind === "read") await ctx.write("read").run();
-        else await ctx.write("push").plan();
-        return null;
-      } catch (error) {
-        return {
-          code: "not-ready",
-          message: error instanceof Error ? error.message : String(error),
-        };
-      }
     },
     documentScope: shown
       ? { bridgeSessionId: shown.target.session, openDocumentId: shown.target.openId }
@@ -46,11 +45,7 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
         : null,
     },
     snapshot,
-    catalog: data?.catalog ? { ...data.catalog, schedules: [...data.catalog.schedules] } : null,
-    busy: null,
-    blockedBecause: refusal ?? null,
     refused: data?.outcome.refused ?? {},
-    onFocus: { grid: () => {} },
     freshness: ctx.value.current ? "current" : "changed",
     table: {
       ...page.table,

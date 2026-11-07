@@ -3,7 +3,6 @@ import {
   familiesRouteState,
   familyCellValueSchema,
   familyCellKey,
-  familyCellKeySchema,
   cellPatches,
   showFamilyCell,
 } from "@pe/agent-contracts";
@@ -16,7 +15,7 @@ import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 const fields = {
   readId: field(z.string(), "", "pose"),
-  focus: field(z.union([z.literal(""), familyCellKeySchema]), "", "pose"),
+  focus: field(z.string(), "", "pose"),
 };
 const edit = z.object({
   address: z.object({ familyName: z.string(), typeName: z.string(), parameter: z.string() }),
