@@ -95,6 +95,7 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
     expect.soft(words.join(" "), where).not.toContain(pod);
   };
   try {
+    await screen.findByText("Family library");
     await ready.promise;
     expect(mount.value().current).toBe(false);
     cleanWords("C746: before the roster publication, no raw identity fallback");
