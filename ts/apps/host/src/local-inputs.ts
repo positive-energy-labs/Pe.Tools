@@ -19,7 +19,8 @@ const operations = {
   "pod.runs": (raw:unknown) => runPods({},listRuns(Schema.decodeUnknownSync(tsOnlyOperationSchemas["pod.runs"].request)(raw))),
 };
 export type LocalReadKey=keyof typeof operations;
-type LocalOutput<K extends LocalReadKey> = K extends "pod.list" ? Extract<OpResponseOf<K>,{pods:unknown}> : OpResponseOf<K>;
+type JsonData<T> = T extends readonly (infer U)[] ? JsonData<U>[] : T extends object ? {-readonly [K in keyof T]:JsonData<T[K]>} : T;
+type LocalOutput<K extends LocalReadKey> = JsonData<K extends "pod.list" ? Extract<OpResponseOf<K>,{pods:unknown}> : OpResponseOf<K>>;
 export const localRead = <K extends LocalReadKey>(key:K) => {
   const contract=tsOnlyOperationSchemas[key];
   const operation=tsOnlyOperationCatalog.find(op=>op.key === key);

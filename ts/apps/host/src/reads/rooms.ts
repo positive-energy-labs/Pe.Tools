@@ -1,7 +1,8 @@
+import { workRead } from "./inputs.ts";
 import { nativeRead } from "./inputs.ts";
 import { z } from "zod";
 import { documentRefSchema, executionTargetSchema, roomsRouteState } from "@pe/agent-contracts";
-import { read, workScope, workValue } from "./evaluator.ts";
+import { read, workScope } from "./evaluator.ts";
 import { documentMark } from "./inputs.ts";
 import { roomsArgs, roomsData } from "@pe/agent-contracts";
 import { planOf } from "./rooms-plan.ts";
@@ -13,9 +14,9 @@ export const reads = {
       if (target.kind !== "document") throw Error("Choose a project document");
       await ctx.read(documentMark, target.ref);
       const key = { ...(await ctx.read(workScope, target.ref)), route: "rooms" };
-      const work = workValue.parse(await ctx.work("rooms", key));
+      const work = await ctx.read(workRead("rooms", roomsRouteState.schema),key);
       const snapshot = (await ctx.read(nativeRead(view ? "rooms.snapshot" : "rooms.roster"), {
-        request: view ? {view} : {}, target:target.ref,
+        request: view ? {view} : {}, target,
       })).body;
       let trace = null,
         traceError = null,
@@ -23,13 +24,13 @@ export const reads = {
         planError = null;
       if (view) {
         try {
-          trace = (await ctx.read(nativeRead("rooms.trace"), {request:{view},target:target.ref})).body;
+          trace = (await ctx.read(nativeRead("rooms.trace"), {request:{view},target:target})).body;
         } catch (error) {
           traceError = String(error);
         }
         try {
           plan = planOf((await ctx.read(nativeRead("revit.context.view-image"), {
-            request:{target:{name:view},pixelSize:8000},target:target.ref,
+            request:{target:{name:view},pixelSize:8000},target,
           })).body);
         } catch (error) {
           planError = String(error);
@@ -47,3 +48,4 @@ export const reads = {
     },
   }),
 };
+

@@ -61,7 +61,13 @@ export const scheduleReceipts = leaf(
   z.object({ kind: z.literal("receipts"), work: workKeySchema }),
   actionReceiptListDecoder(),
 );
-export const captures=leaf("resource",z.object({kind:z.literal("captures")}),capturesValue);
+const captureList=leaf("resource",z.object({kind:z.literal("captures")}),capturesValue);
+const captureAsset=leaf("file:capture",z.string().regex(/^[0-9a-f]{64}$/),z.string(),false);
+export const captures=read("input.captures",{input:captureList.input,output:capturesValue,async run(ctx,args){
+  const value=await ctx.read(captureList,args);
+  for(const sha of new Set(value.captures.map(row=>row.sha))) await ctx.read(captureAsset,sha);
+  return value;
+}});
 export const familySpec=leaf("file:family-spec",podMemberSchema,z.object({doc:parsedDocViewSchema.nullable(),error:z.string().nullable()}));
 export const podProfile=read("input.pod-profile",{
   input:podMemberSchema,

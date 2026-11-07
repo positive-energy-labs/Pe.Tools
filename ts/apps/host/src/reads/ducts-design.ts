@@ -1,8 +1,9 @@
+import { workRead } from "./inputs.ts";
 import { z } from "zod";
 import { ductsDocumentSchema, fansDocumentSchema, documentRefSchema } from "@pe/agent-contracts";
 import { firmReading } from "../ducts-files.ts";
 import { firm } from "../builtin-read-handles.ts";
-import { read, workScope, workValue } from "./evaluator.ts";
+import { read, workScope } from "./evaluator.ts";
 export const designLayers = read("ducts.design-layers", {
   input: documentRefSchema,
   output: z.object({
@@ -14,8 +15,8 @@ export const designLayers = read("ducts.design-layers", {
   }),
   async run(ctx, target) {
     const scope = await ctx.read(workScope, target);
-    const ducts = workValue.parse(await ctx.work("ducts", scope));
-    const fans = workValue.parse(await ctx.work("fans", { ...scope, route: "fans" }));
+    const ducts = await ctx.read(workRead("ducts",ductsDocumentSchema),scope);
+    const fans = await ctx.read(workRead("fans",fansDocumentSchema),{...scope,route:"fans"});
     return {
       ducts: ductsDocumentSchema.parse(ducts?.doc ?? {}),
       fans: fansDocumentSchema.parse(fans?.doc ?? {}),

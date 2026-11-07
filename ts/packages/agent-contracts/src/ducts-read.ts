@@ -36,7 +36,7 @@ export const ductsPriceRow = z
     error: z.string().optional(),
   });
 const splitPart=z.object({dp:z.number(),ids:z.array(z.number()),unpriced:z.number()});
-const split=z.object({rows:z.array(ductsPriceRow),unit:splitPart,duct:splitPart,terminal:splitPart,groups:z.array(z.object({key:z.string(),part:z.enum(["unit","duct","terminal"]),element:z.enum(["duct","fitting","unit","terminal"]),label:z.string(),dp:z.number(),ids:z.array(z.number()),unpriced:z.number()}))});
+const split=z.object({rows:z.array(ductsPriceRow).readonly(),unit:splitPart,duct:splitPart,terminal:splitPart,groups:z.array(z.object({key:z.string(),part:z.enum(["unit","duct","terminal"]),element:z.enum(["duct","fitting","unit","terminal"]),label:z.string(),dp:z.number(),ids:z.array(z.number()),unpriced:z.number()}))});
 const provisional=z.object({worst:z.enum(DUCT_INFERENCE_GRADES),count:z.number(),findingIds:z.array(z.string())}).nullable();
 const systemRow = z
   .object({
@@ -268,3 +268,4 @@ export const ductsPricingCapability = {
   output: ductsPricingReadResponse,
   axes,
 } as const;
+
