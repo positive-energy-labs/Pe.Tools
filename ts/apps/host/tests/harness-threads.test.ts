@@ -368,7 +368,6 @@ test.each(["claude", "codex"] as const)(
                             edit: {
                               value: {
                                 walk: { unitId: 14577391, portIndex: 2 },
-                                cells: [["equipmentFlows", "14577391"]],
                               },
                             },
                           },

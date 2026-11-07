@@ -1,9 +1,18 @@
 /** What the Work has edit for a write, counted from the document alone. */
-import type { DuctsApplyInput, DuctsDesign, WorkPath } from "@pe/agent-contracts";
+import type { DuctsApplyInput, DuctsDesign, WorkPath, FansDocument } from "@pe/agent-contracts";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
 import { pendingRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
+
+/** Fan targets are a projection of current edits, never a list frozen when scope was chosen. */
+export function fanWriteCells(doc: FansDocument | null, snapshot: Pick<DuctSnapshot, "nodes" | "segments">) {
+  const here = new Set([...snapshot.nodes, ...snapshot.segments].map(element => String(element.id)));
+  return (["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows"] as const).flatMap(segment =>
+    Object.entries(doc?.[segment] ?? {}).flatMap(([id, cell]) =>
+      cell.edit != null && here.has(id) ? [[segment, id] as const] : []),
+  );
+}
 
 /**
  * The segments `ducts.apply` writes to elements and the store; `loads` stays in Pe, and the rulings

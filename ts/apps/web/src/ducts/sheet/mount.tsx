@@ -1,3 +1,4 @@
+import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { renderPicturePane } from "#/scene/picture/picture";
 import { EspParameter } from "./esp-parameter";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/ducts-domain/equivalent-length";
@@ -65,10 +66,9 @@ function useSheetData(ctx: SheetContext, snapshot: DuctSnapshot) {
     busy: reading.status === "pending",
   };
 }
-const FAN_CELLS = ["terminalDrops", "componentDrops", "esp", "flows", "equipmentFlows"] as const;
 /**
  * The person's explicit fan write scope, required by the host losses command. Offered from the host
- * sheet's open fan and the cells staged on elements of that sheet's snapshot; staged only on a pick,
+ * sheet's open fan. Current staged cells in that walk are projected by the host; the walk is staged only on a pick,
  * never from the Page or a plan. Another fan's standing scope is shown, not replaced on navigation.
  */
 function WriteScope({
@@ -82,17 +82,9 @@ function WriteScope({
 }) {
   const handle = ctx.cells.at(["writeIntent"]);
   const standing = scopeSchema.optional().parse(handle.value.edit?.value);
-  const here = new Set([...snapshot.nodes, ...snapshot.segments].map((e) => String(e.id)));
-  const cells = FAN_CELLS.flatMap((segment) =>
-    Object.entries(ctx.cells.doc?.[segment] ?? {})
-      .filter(([id, cell]) => cell.edit != null && here.has(id))
-      .map(([id]) => [segment, id] as [(typeof FAN_CELLS)[number], string]),
-  );
+  const cells = fanWriteCells(ctx.cells.doc, snapshot);
   const offered = fan
-    ? scopeSchema.safeParse({
-        walk: { unitId: fan.unitId, portIndex: fan.portIndex },
-        ...(cells.length ? { cells } : {}),
-      })
+    ? scopeSchema.safeParse({ walk: { unitId: fan.unitId, portIndex: fan.portIndex } })
     : null;
   const mine =
     !!fan && standing?.walk?.unitId === fan.unitId && standing.walk.portIndex === fan.portIndex;
@@ -100,7 +92,9 @@ function WriteScope({
   const label = (value: unknown) => {
     const v = value as typeof standing;
     if (!v?.walk) return "None";
-    return `${v.walk.unitId === fan?.unitId && v.walk.portIndex === fan?.portIndex ? fan.mark : `unit ${v.walk.unitId}`} · ${v.cells?.length ?? 0} staged`;
+    return v.walk.unitId === fan?.unitId && v.walk.portIndex === fan?.portIndex
+      ? `${fan.mark} · ${cells.length} staged`
+      : `unit ${v.walk.unitId}`;
   };
   return (
     <span data-sheet-cell="Write scope" className="contents">
