@@ -502,12 +502,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
         "zones"
       ],
       "listed": true,
-      "satellites": [
-        {
-          "to": "/zone-audit",
-          "label": "Zone audit"
-        }
-      ],
+      "satellites": [],
       "surfaces": {
         "web": "full",
         "pwa": "full",
