@@ -1,3 +1,4 @@
+import { writeArtifact } from "./page-artifacts.ts";
 import { scheduleReadingSchema, type ScheduleReading } from "@pe/agent-contracts";
 
 /** The one sentence a surface shows for a retained reading that cannot arm a push. */
@@ -200,7 +201,6 @@ export class TakeoffCaptures {
   private readonly pending = new Map<string, Promise<unknown>>();
   private readonly reads = new OwnerReads();
   private readonly familiesSaves = new Map<string, Promise<unknown>>();
-  private readonly familyRecordFiles = new WeakMap<object, Promise<string>>();
   /** Progressive reads this process is running; a stored "reading" revision outside it was interrupted. */
   private readonly liveReads = new Set<string>();
   private readonly listeners = new Set<(key: string) => void>();
@@ -412,13 +412,7 @@ export class TakeoffCaptures {
     const reading = scheduleReadingSchema.parse({ ...value, id });
     const directory = join(this.directory, "schedules");
     await mkdir(directory, { recursive: true });
-    const temp = join(directory, `${id}.${randomUUID()}.tmp`);
-    try {
-      await writeFile(temp, JSON.stringify(reading), "utf8");
-      await rename(temp, join(directory, `${id}.json`));
-    } finally {
-      await rm(temp, { force: true });
-    }
+    await writeArtifact(directory, join(directory, `${id}.json`), JSON.stringify(reading));
     return reading;
   }
   /**
@@ -504,28 +498,10 @@ export class TakeoffCaptures {
     const capture = familyCaptureSchema.parse({ id, ...value });
     const directory = join(this.directory, "family");
     await mkdir(directory, { recursive: true });
-    const temp = join(directory, `${id}.${randomUUID()}.tmp`);
-    const destination = join(directory, `${id}.json`);
-    const existed = await stat(destination).then(
-      () => true,
-      (error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return false;
-        throw error;
-      },
-    );
-    let published = false;
-    try {
-      await writeFile(temp, JSON.stringify(capture), "utf8");
-      await current?.();
-      await rename(temp, destination);
-      published = true;
-      await current?.();
-    } catch (error) {
-      if (published && !existed) await rm(destination, { force: true });
-      throw error;
-    } finally {
-      await rm(temp, { force: true });
-    }
+    await current?.();
+    await writeArtifact(directory, join(directory, `${id}.json`), JSON.stringify(capture));
+    // Published immutable bytes may already have another consumer; cancellation never deletes them.
+    await current?.();
     this.notify(`family:${canonicalRouteInput(value.key)}`);
     return capture;
   }
@@ -591,16 +567,13 @@ export class TakeoffCaptures {
         if (latestId !== expectedLatestId)
           throw Error("A newer Families reading replaced the readback basis");
       }
-      const tempSnapshot = join(directory, `${id}.${randomUUID()}.tmp`);
       const tempPointer = join(directory, `${key}.${randomUUID()}.tmp`);
       try {
-        await writeFile(tempSnapshot, JSON.stringify(observation), "utf8");
-        await rename(tempSnapshot, snapshot);
+        await writeArtifact(directory, snapshot, JSON.stringify(observation));
         await writeFile(tempPointer, id, "utf8");
         await rename(tempPointer, pointer);
         await this.displayPointer(value.work, id);
       } finally {
-        await rm(tempSnapshot, { force: true });
         await rm(tempPointer, { force: true });
       }
     };
@@ -789,20 +762,10 @@ export class TakeoffCaptures {
     await mkdir(join(folder, "progress"), { recursive: true });
     const records = await Promise.all(
       value.result.families.map(async (record) => {
-        const known = this.familyRecordFiles.get(record);
-        if (known) return known;
-        const saving = (async () => {
-          const text = JSON.stringify(record);
-          const hash = createHash("sha256").update(text).digest("hex");
-          // Content-addressed: a rename over an existing blob writes identical bytes.
-          const path = join(folder, "records", `${hash}.json`);
-          const temp = `${path}.${randomUUID()}.tmp`;
-          await writeFile(temp, text);
-          await rename(temp, path);
-          return hash;
-        })();
-        this.familyRecordFiles.set(record, saving);
-        return saving;
+        const text = JSON.stringify(record);
+        const hash = createHash("sha256").update(text).digest("hex");
+        await writeArtifact(folder, join(folder, "records", `${hash}.json`), text);
+        return hash;
       }),
     );
     const { result: _, ...metadata } = value;
@@ -811,8 +774,8 @@ export class TakeoffCaptures {
       .update(JSON.stringify([metadata, completedAt, records]))
       .digest("hex");
     const observation = { ...metadata, id, completedAt };
-    await writeFile(
-      join(folder, "progress", `${id}.json`),
+    await writeArtifact(
+      folder, join(folder, "progress", `${id}.json`),
       JSON.stringify({ observation, records }),
     );
     const pointer = join(
@@ -977,27 +940,10 @@ export class TakeoffCaptures {
     const id = createHash("sha256").update(JSON.stringify(value)).digest("hex");
     const capture = takeoffCaptureSchema.parse({ id, ...value });
     await mkdir(this.directory, { recursive: true });
-    const temp = join(this.directory, `${id}.${randomUUID()}.tmp`);
-    const destination = join(this.directory, `${id}.json`);
-    const existed = await stat(destination).then(
-      () => true,
-      (error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return false;
-        throw error;
-      },
-    );
-    let renamed = false;
-    try {
-      await writeFile(temp, JSON.stringify(capture), "utf8");
-      await current?.();
-      await rename(temp, destination);
-      renamed = true;
-      await current?.();
-    } catch (error) {
-      await rm(temp, { force: true });
-      if (renamed && !existed) await rm(destination, { force: true });
-      throw error;
-    }
+    await current?.();
+    await writeArtifact(this.directory, join(this.directory, `${id}.json`), JSON.stringify(capture));
+    // Cancellation withdraws the answer, never immutable bytes a peer may already reference.
+    await current?.();
     return capture;
   }
 }

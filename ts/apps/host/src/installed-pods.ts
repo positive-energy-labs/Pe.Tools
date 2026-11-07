@@ -47,10 +47,6 @@ async function shippedPodsRoot(options: TransferOptions & { ledger?: string }): 
   const shipped = join(dirname(options.ledger ?? ledgerPath()), "shipped-pods", fingerprint);
   for (const pod of listing.packages) {
     const archivePath = join(shipped, `${pod.id}.zip`);
-    if (await readFile(archivePath).then(() => true, error => {
-      if (error.code !== "ENOENT") throw error;
-      return false;
-    })) continue;
     await writePodExport(await preparePodExport(
       { pod: pod.id, archivePath },
       { podsRoot: examples, captures: options.captures }, listing,
@@ -153,7 +149,7 @@ async function offer(
     const id = archiveId(readZip(bytes));
     // Installed archives may be replaced on upgrade. Retain every offered version in writable state.
     await mkdir(options.originalsRoot, { recursive: true });
-    await writeFile(join(options.originalsRoot, `${sha256}.zip`), bytes);
+    await writeArtifact(options.originalsRoot, join(options.originalsRoot, `${sha256}.zip`), bytes);
     if (installed) {
       shippedPodUpdateRefusals.delete(id);
       const matches = (entries: ReadonlyMap<string, Buffer>, pod: AdmittedPackage) => {
@@ -175,7 +171,7 @@ async function offer(
             throw Error("its authored members differ from the original archive");
           const retained = join(options.originalsRoot, `${provenance.archiveSha256}.zip`);
           await mkdir(dirname(retained), { recursive: true });
-          await writeFile(retained, original);
+          await writeArtifact(options.originalsRoot, retained, original);
           // Preserve the full old folder too: runtime outputs and other local files are not authored members.
           const backup = join(dirname(options.originalsRoot), "shipped-pod-backups", `${id}-${randomUUID()}`);
           await mkdir(dirname(backup), { recursive: true });
