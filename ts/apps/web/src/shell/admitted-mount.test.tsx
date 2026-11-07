@@ -1189,6 +1189,7 @@ const sealedPreview = (handle: WorkHandle) => ({
   previewOnly: true,
   derivedRequest: { amount: 7 },
   seal: {
+    caller: { kind: "human", via: "local" },
     requestHash: "sealed",
     work: { handle },
     documentMark: { session: "", openId: "", observedSince: null, changedAt: null },

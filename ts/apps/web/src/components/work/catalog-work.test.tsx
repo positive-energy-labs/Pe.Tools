@@ -26,6 +26,7 @@ const sealed = {
     ],
   },
   seal: {
+    caller: { kind: "human", via: "local" },
     requestHash: "h",
     work: {},
     documentMark: { session: "s", openId: "o", observedSince: null, changedAt: null },

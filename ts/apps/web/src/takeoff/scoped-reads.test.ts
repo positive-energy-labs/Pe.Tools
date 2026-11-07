@@ -4,8 +4,8 @@ import { callOp } from "../host/catalog-client";
 import { takeoffSources } from "./sources";
 import type { ReadingContext } from "#/shell/source-contract";
 
-vi.mock("#/shell/readings-api", async (original) => ({
-  ...(await original<typeof import("#/shell/readings-api")>()),
+vi.mock("#/host/catalog-client", async (original) => ({
+  ...(await original<typeof import("#/host/catalog-client")>()),
   callOp: vi.fn(async () => ({ levels: [], regions: [] })),
 }));
 vi.mock("#/shell/readings-use", () => ({ subscriptionSource: () => ({ open: () => undefined }) }));

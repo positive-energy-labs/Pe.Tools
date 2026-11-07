@@ -80,7 +80,7 @@ async function catalogRun(
     const handle = { key, revision: rendered.revision };
     await journal.invoke(
       { id: "plan", key: `${apply}.plan`, target: { kind: "document", ref: target }, input: { work: handle } },
-      { caller: { kind: "human", via: "local" }, basis: { kind: "human" } },
+      { caller: { kind: "pea", context: "catalog-test", thread: run.thread, run, root: run }, basis: null },
     );
     const plan = await journal.wait("plan");
     const planCalls = calls.map((c) => c.key);
