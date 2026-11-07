@@ -339,6 +339,13 @@ export function route<
   };
   const workKeys = Object.keys(spec.edits.work.schema.shape);
   const verbs: MutableTable<RouteGraphJson["verbs"]> = {};
+  const queryFields = Object.keys(spec.fields).filter(key => spec.fields[key]!.role === "query");
+  schemas.pageQuery = z.strictObject(Object.fromEntries(queryFields.map(key => [key, spec.fields[key]!.schema]))).partial();
+  verbs["page:query"] = {
+    kind: "page", input: "pageQuery", label: "Browse", review: "none",
+    captures: [], deps: empty, fields: queryFields,
+    patch: body("pageQuery", "verbs.page:query.patch", "page", (_ctx, input) => input),
+  };
   schemas.patch = z.object({
     patches: z.array(routeStatePatchSchema),
     history: spec.edits.history.optional(),
@@ -650,7 +657,7 @@ function drawContext(
       return projectValue(ctx.readings[id], (packet: any) => packet.value?.data);
     },
     value,
-    page: ctx.page,
+    page: { ...ctx.page, query: (patch) => ctx.verbs["page:query"](patch) },
     selection: {
       read: () => ctx.page.read().selected,
       set: (selected) => ctx.page.select(selected),
