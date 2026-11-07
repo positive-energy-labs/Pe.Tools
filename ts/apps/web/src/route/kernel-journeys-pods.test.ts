@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { expect, test, vi } from "vite-plus/test";
 import { observeResources } from "@pe/runtime";
-import { bindWork, routeFingerprint, workKey } from "@pe/agent-contracts";
+import { workFingerprintSchema, bindWork, routeFingerprint, workKey } from "@pe/agent-contracts";
 import { fixture } from "../../../host/tests/host-read-graph.test-support";
 import { createPackageLifecycle } from "../../../host/src/package-lifecycle";
 import { listPackages } from "../../../host/src/packages";
@@ -493,6 +493,7 @@ import { createPluginsHandler } from "../../../host/src/plugins-handler";
 import { PictureCaptures } from "../../../host/src/captures-route";
 import { Directory } from "../navigation/directory";
 import { NavigationProvider } from "../navigation/state";
+
 import { PodRoutesProvider } from "./pod-routes";
 import { Route as PodTrustRoute } from "../routes/tool.$key";
 import { Members } from "../pods/drawing";
@@ -613,4 +614,86 @@ test("JP5 bootstrap replaces only unchanged imports and Home discovers the untru
       await host.close();
     }
   }
+}, 60_000);
+
+
+import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
+import { hostResourceObserver } from "../../../host/src/resource-adapters";
+import { resourceSnapshot } from "@pe/runtime";
+import { readingKey } from "@pe/agent-contracts";
+import { module as openRoute } from "../open/route";
+import { OpenBody } from "../open/mount";
+const openNavigation = vi.hoisted(() => ({ bypass: false }));
+vi.mock("../navigation/state", async original => {
+  const real = await original<typeof import("../navigation/state")>();
+  return { ...real, useDestination: () => openNavigation.bypass ? () => true : real.useDestination() };
+});
+
+
+test("JZ Open machine census: sampling drift lists documents; content conflict never claims absence", async () => {
+  openNavigation.bypass = true;
+  let samples = 0, conflict = false;
+  const seed = machineFixture([{ session: "running", documents: [{
+    openId: "doc", title: "Running model", address: "C:/Models/Running.rvt", isFamilyDocument: false, isActive: true,
+  }] }]);
+  const machine = { ...seed, revit: { ...seed.revit, sessions: seed.revit.sessions!.map(session => ({
+    ...session, documents: [{ sessionId: "sdk-0", openId: "doc", title: "Running model", path: "C:/Models/Running.rvt",
+      isModified: false, isActive: true, isFamily: false, window: null, isWorkshared: null, isDetached: null,
+      isCloud: null, centralPath: null, region: null, projectGuid: null, modelGuid: null, persistence: null }],
+  })) } };
+  const machineObserver = hostResourceObserver(undefined, undefined, undefined, undefined, undefined, {
+    current: () => machine,
+    refresh: async () => machine, fresh: async () => machine, acquisitions: () => [],
+    observe(accept) {
+      const value = { ...structuredClone(machine), observedAtUtc: new Date(++samples * 1000).toISOString(),
+        revit: { ...machine.revit, sessions: conflict && samples % 2 === 0 ? [] : machine.revit.sessions } };
+      accept(value);
+      return () => {};
+    },
+  });
+  const host = await fixture(false, { resourceObserver: (request, publish, after) => {
+    if (request.kind === "machine") return machineObserver(request, publish, after);
+    publish(resourceSnapshot(readingKey(request), { value: request.kind === "sdk" ? { result: { recents: [] } } : [] }));
+    return () => {};
+  } });
+  const work = createWorkFeedClient({ subscribe: observeResources(host.workspace, { observe: () => () => {} }), dirty() {} }, {
+    write: (key, write) => host.workspace.write(key, key.route, "human", write), submit: () => { throw Error("No native actions"); },
+  });
+  let packet: unknown;
+  const read = async (subscription: string) => {
+    const response = await host.probe({ read: "open.documents", args: { target: { kind: "host" } }, subscription, generation: 1 });
+    expect(response.status).toBe(200);
+    return response.json();
+  };
+  const mounts: ReturnType<typeof mountTypedRoute>[] = [];
+  const draw = async () => {
+    const mount = mountTypedRoute(openRoute, {
+      target: { kind: "host" }, fixture: null, work: { address: null, open: null },
+      address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+      memory: () => ({}), custody: { current: () => true },
+    }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { work, sources: { "open.documents": {
+      kind: "use", open(_ctx, deliver) { deliver({ kind: "complete", revision: 1, value: packet }); return () => {}; },
+    } } });
+    mounts.push(mount); mount.subscribe(() => {});
+    return render(createElement(TooltipProvider, null, mount.draw("documents", ctx => createElement(OpenBody, { ctx })) as React.ReactNode));
+  };
+  try {
+    packet = await read("stable");
+    expect(packet, JSON.stringify(packet)).toMatchObject({ state: "current" });
+    let view = await draw();
+    expect(screen.getAllByText("Running model").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/sdk-0/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/no Revit is running/i)).toBeNull();
+    view.unmount();
+    samples = 0; conflict = true;
+    packet = await read("conflict");
+    expect(packet).toMatchObject({ state: "refresh-needed", value: null, reason: expect.stringMatching(/machine.*changed during evaluation/) });
+    view = await draw();
+    expect(screen.getByText(/machine.*changed during evaluation/)).toBeTruthy();
+    expect(screen.queryByText(/no Revit is running/i)).toBeNull();
+    expect(screen.queryByText(/0 of 0/)).toBeNull();
+    view.unmount();
+    conflict = false;
+    expect(await read("retry")).toMatchObject({ state: "current" });
+  } finally { openNavigation.bypass = false; mounts.forEach(mount => mount.dispose()); cleanup(); await host.close(); }
 }, 60_000);

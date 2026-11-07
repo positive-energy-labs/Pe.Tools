@@ -22,8 +22,21 @@ const resource = <I extends z.ZodType, O extends z.ZodType>(input: I, output: O)
   leaf("resource", input, output);
 export const firm = leaf("file:firm", z.null(), firmReading);
 export const catalogs = leaf("file:catalogs", z.null(), catalogReading);
+// Sampling times, heartbeat and process telemetry do not change the census (ADR 0033).
+// Keep null/present observation evidence, errors, process identity and all admission facts.
+function machineContent(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(machineContent);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).flatMap(([key, value]) =>
+    key === "uptimeSeconds" || key === "privateBytes" ? [] : [[key,
+      key === "observedAtUtc" || key === "attemptedAtUtc" || key === "lastTickUtc"
+        ? value === null ? null : true
+        : machineContent(value),
+    ]],
+  ));
+}
 export const resources = {
-  machine: resource(readingRequestSchema, chatValue.shape.machine),
+  machine: { ...resource(readingRequestSchema, chatValue.shape.machine), content: machineContent },
   capabilities: resource(readingRequestSchema, chatValue.shape.capabilities),
   threads: resource(readingRequestSchema, openData.shape.threads),
   inventory: resource(readingRequestSchema, bindData.shape.inventory),
