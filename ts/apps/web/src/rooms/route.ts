@@ -3,11 +3,7 @@ import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
-import {
-  roomsRouteState,
-  routeStatePatchSchema,
-  valueRead,
-} from "@pe/agent-contracts";
+import { roomsRouteState, routeStatePatchSchema, valueRead } from "@pe/agent-contracts";
 import { roomsPageSchema } from "./page";
 import { route, field } from "../route/defaults";
 import { hostRead } from "../route/host-read";
@@ -22,7 +18,10 @@ export const fields = {
   viewport: field(address.viewport, null, "pose"),
   picked: field(address.selected, [], "pose"),
 };
-export const loaded = read(hostRead(valueRead("rooms.workspace", roomsArgs, roomsData)), (page: { view: string }) => ({ view: page.view }));
+export const loaded = read(
+  hostRead(valueRead("rooms.workspace", roomsArgs, roomsData)),
+  (page: { view: string }) => ({ view: page.view }),
+);
 export const edits = z.array(routeStatePatchSchema);
 export type { Context as RoomsContext } from "./context.generated";
 export const module = route({

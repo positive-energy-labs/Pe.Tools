@@ -10,9 +10,7 @@ import {
   cellPatches,
   showFamilyCell,
 } from "@pe/agent-contracts";
-import {
-  familiesViewCapability,
-} from "../../../../packages/agent-contracts/src/families-read.ts";
+import { familiesViewCapability } from "../../../../packages/agent-contracts/src/families-read.ts";
 import { route, field } from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";

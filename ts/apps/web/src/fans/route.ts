@@ -27,18 +27,32 @@ const shared = ductsPictureFields;
 const fan = subjectSchema(32);
 
 export const fields = {
-  ...poseFields(shared,["contextRadiusFt","contextStyle","encoding","layers","picture","sceneView","viewport"]),
+  ...poseFields(shared, [
+    "contextRadiusFt",
+    "contextStyle",
+    "encoding",
+    "layers",
+    "picture",
+    "sceneView",
+    "viewport",
+  ]),
   fan: field(fan, { kind: "ids", ids: [] }, "subject", "push"),
   stage: stageField(["sheet"]),
   ...listFields("input"),
   ...listFields("roster"),
   sheetPath: field(z.string(), "", "query"),
 };
-export const sheet = read(hostRead(fansSheetCapability, sheetValueFixtures), (page: { fan: Immutable<z.output<typeof fan>>; sheetPath: string }) => ({
+export const sheet = read(
+  hostRead(fansSheetCapability, sheetValueFixtures),
+  (page: { fan: Immutable<z.output<typeof fan>>; sheetPath: string }) => ({
     fan: namesOf(page.fan),
     sheetPath: page.sheetPath,
-  }));
-const roster = read(hostRead(fansSheetCapability, sheetValueFixtures), () => ({ fan: [], sheetPath: "" }));
+  }),
+);
+const roster = read(hostRead(fansSheetCapability, sheetValueFixtures), () => ({
+  fan: [],
+  sheetPath: "",
+}));
 export type { Context as FansDrawContext } from "./context.generated";
 import type { Context as FansDrawContext } from "./context.generated";
 export const module = route({
@@ -144,7 +158,11 @@ export const fansData = module.data;
 export const fansHostModule = module.host;
 export function fansLink(ids: readonly string[], search: Readonly<Record<string, unknown>>) {
   return routeLinks.fans({
-    ...Object.fromEntries(["target", "fixture", "thread"].flatMap(key => typeof search[key] === "string" ? [[key,search[key]]] : [])),
-    fan: { kind: "ids", ids: ids.map(id=>localId("ducts-fan",id)) },
+    ...Object.fromEntries(
+      ["target", "fixture", "thread"].flatMap((key) =>
+        typeof search[key] === "string" ? [[key, search[key]]] : [],
+      ),
+    ),
+    fan: { kind: "ids", ids: ids.map((id) => localId("ducts-fan", id)) },
   });
 }

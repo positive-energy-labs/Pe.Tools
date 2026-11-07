@@ -14,7 +14,15 @@ import {
   DUCTS_SYSTEM_MAX,
 } from "@pe/agent-contracts";
 import { editPatches } from "@pe/ducts-domain/sheet/index";
-import { route, field, subjectSchema, namesOf, localId, split, whenSubject } from "../route/defaults.ts";
+import {
+  route,
+  field,
+  subjectSchema,
+  namesOf,
+  localId,
+  split,
+  whenSubject,
+} from "../route/defaults.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 import { describeInputHistory, editMetaSchema } from "./sheet/input-history.neutral.ts";
@@ -24,7 +32,15 @@ import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
 const shared = ductsPictureFields;
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
 export const fields = {
-  ...poseFields(shared,["contextRadiusFt","contextStyle","encoding","layers","picture","sceneView","viewport"]),
+  ...poseFields(shared, [
+    "contextRadiusFt",
+    "contextStyle",
+    "encoding",
+    "layers",
+    "picture",
+    "sceneView",
+    "viewport",
+  ]),
   system: field(system, { kind: "ids", ids: [] }, "subject", "push"),
   stage: stageField(["network"]),
   systemSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
