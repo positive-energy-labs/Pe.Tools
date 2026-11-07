@@ -18,6 +18,7 @@ const loop = z.array(point).min(3);
 const roomNumber = z.number().optional();
 const definitions = {
   "takeoffs.initialize": {
+    native: ["takeoffs.initialize-carrier"],
     says: "Write the shared parameters this document is missing before any takeoff runs.",
     needs: "project-document",
     effect: "command",
@@ -25,6 +26,7 @@ const definitions = {
     dirties: ["snapshot"],
   },
   "takeoffs.adopt": {
+    native: ["takeoffs.initialize-carrier", "takeoffs.adopt"],
     says: "Adopt selected regions using the submitted names and system tags.",
     needs: "project-document",
     effect: "command",
@@ -34,6 +36,7 @@ const definitions = {
     dirties: ["snapshot", "takeoff-views", "candidates"],
   },
   "takeoffs.partition": {
+    native: ["takeoffs.initialize-carrier", "takeoffs.partition"],
     says: "Prepare carriers and partition the selected adopted zone.",
     needs: "project-document",
     effect: "command",
@@ -47,6 +50,7 @@ const definitions = {
     dirties: ["snapshot", "takeoff-views"],
   },
   "takeoffs.sync": {
+    native: ["takeoffs.rhvac-links"],
     says: "Insert eligible rooms, preserve system/link behavior, and update linked staged rooms in RHVAC.",
     needs: "project-document",
     effect: "command",
@@ -59,6 +63,7 @@ const definitions = {
     dirties: ["snapshot", "rhvac-open"],
   },
   "rooms.partition": {
+    native: ["takeoffs.initialize-carrier", "rooms.partition"],
     says: "Partition every zone drawn on one plan view into rooms, keeping locked and matched rooms.",
     needs: "project-document",
     effect: "command",
@@ -67,6 +72,7 @@ const definitions = {
     dirties: ["snapshot"],
   },
   "rooms.draw": {
+    native: ["takeoffs.initialize-carrier", "rooms.draw"],
     says: "Draw one room (locked) or zone region from loops on a plan view.",
     needs: "project-document",
     effect: "command",
@@ -79,6 +85,7 @@ const definitions = {
     dirties: ["snapshot"],
   },
   "rooms.write": {
+    native: ["takeoffs.initialize-carrier", "rooms.write"],
     says: "Write the given room fields, and a person's room or zone designation, onto regions by guid.",
     needs: "project-document",
     effect: "command",
@@ -103,6 +110,7 @@ const definitions = {
     dirties: ["snapshot"],
   },
   "rooms.merge": {
+    native: ["takeoffs.initialize-carrier", "rooms.merge"],
     says: "Combine two or more touching rooms of one zone on one plan view into one locked room.",
     needs: "project-document",
     effect: "command",
