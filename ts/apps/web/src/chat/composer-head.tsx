@@ -69,6 +69,7 @@ export function useSend(_handle: ChatHandle, draft: ChatDraft, onSent?: (sent: C
     refusal: workbench.sendRefusal ?? emptyPrompt(draft),
     run: async () => {
       try {
+        // SHIM: S gap 9 must expose typed host commands before this can use the shared consent door.
         await workbench.sendPrompt(input);
         onSent?.(draft);
         return null;
@@ -127,6 +128,8 @@ const documentAddress = (
  */
 function useThreadHead(_handle: ChatHandle) {
   const { currentThreadId, draftTarget, setDraftTarget } = useWorkbench();
+  // SHIM: live head stays outside Value until the shared thread Page/carry contract is available.
+  // Scope PUTs publish thread-head snapshots; the existing body cache is not invalidated by them.
   const scope = useThreadScope(currentThreadId, true);
   if (currentThreadId) return scope;
   const set = async (targets: Parameters<typeof scope.set>[0]) => {

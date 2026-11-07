@@ -83,6 +83,7 @@ export function ThreadComposer({
     threads,
     draft: head,
     answerQuestion,
+    // SHIM: S gap 9; keep these Workbench callbacks until typed host commands share the consent door.
     cancel,
     forkThread,
     operationError,

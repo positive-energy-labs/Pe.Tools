@@ -83,14 +83,25 @@ function shape(type: ts.Type): Shape {
 const frame = program.getSourceFile(frameInput)!.statements.find(ts.isTypeAliasDeclaration)!;
 shape(checker.getTypeAtLocation(frame));
 // Caller-selected contracts only. This is not an exhaustive payload union or a verb map.
-const selected = ["SessionListResult"];
+const selected = [
+  "SessionListResult",
+  "SessionObservation",
+  "ProcessIdentity",
+  "DocumentInfo",
+  "SessionDocument",
+  "DocumentHoldings",
+  "Holdings",
+  "UpdatePlan",
+  "UpdateReceipt",
+];
 const sdkExports = checker.getExportsOfModule(checker.getSymbolAtLocation(source)!);
 for (const name of selected) {
   const symbol = sdkExports.find((symbol) => symbol.name === name);
   if (!symbol) throw Error(`SDK contract has no export ${name}`);
-  shape(checker.getDeclaredTypeOfSymbol(symbol));
+  const projected = shape(checker.getDeclaredTypeOfSymbol(symbol));
+  definitions[name] ??= projected;
 }
-const text = `// DO NOT EDIT. Projected from pe-revit-contract.ts by scripts/sdk-wire.ts.\n// SDK authority has no verb/result association; unknown payload leaves remain unknown.\nimport type * as SDK from "./pe-revit-contract.ts";\nexport interface SelectedSdkTypes {\n${selected.map(name => `  readonly ${name}: SDK.${name};`).join("\n")}\n}\nexport const contractSha256 = ${JSON.stringify(createHash("sha256").update(readFileSync(input, "utf8").replace(/\r\n/g, "\n")).digest("hex"))};\nexport const wire = ${
+const text = `// DO NOT EDIT. Projected from pe-revit-contract.ts by scripts/sdk-wire.ts.\n// SDK authority has no verb/result association; unknown payload leaves remain unknown.\nimport type * as SDK from "./pe-revit-contract.ts";\nexport interface SelectedSdkTypes {\n${selected.map((name) => `  readonly ${name}: SDK.${name};`).join("\n")}\n}\nexport const contractSha256 = ${JSON.stringify(createHash("sha256").update(readFileSync(input, "utf8").replace(/\r\n/g, "\n")).digest("hex"))};\nexport const wire = ${
   "{\n" +
   Object.entries(definitions)
     .map(([name, value]) => `  ${JSON.stringify(name)}: ${JSON.stringify(value)}`)

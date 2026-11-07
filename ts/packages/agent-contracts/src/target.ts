@@ -1,6 +1,6 @@
 import { sdkSessionSelectionSchema } from "./sdk-session.ts";
 import { z } from "zod";
-import { capabilityNeedsSchema } from "./capability.ts";
+import { capabilityNeedsSchema } from "./capability-needs.ts";
 
 const documentAddressPattern =
   /^(?:[A-Za-z]:[\\/]|\\\\)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -3,6 +3,14 @@
 import type * as SDK from "./pe-revit-contract.ts";
 export interface SelectedSdkTypes {
   readonly SessionListResult: SDK.SessionListResult;
+  readonly SessionObservation: SDK.SessionObservation;
+  readonly ProcessIdentity: SDK.ProcessIdentity;
+  readonly DocumentInfo: SDK.DocumentInfo;
+  readonly SessionDocument: SDK.SessionDocument;
+  readonly DocumentHoldings: SDK.DocumentHoldings;
+  readonly Holdings: SDK.Holdings;
+  readonly UpdatePlan: SDK.UpdatePlan;
+  readonly UpdateReceipt: SDK.UpdateReceipt;
 }
 export const contractSha256 = "d43eec45607545e270030c011074003662f39712b2490b17b888e53dc411e8b5";
 export const wire = {
@@ -39,5 +47,19 @@ export const wire = {
   "PersistedFailure": {"fields":{"source":{"literal":"receipt"},"failure":"SessionFailureInfo"}},
   "SessionFailureInfo": {"fields":{"atUtc":"string","code":"string","detail":"string"}},
   "JournalFailure": {"fields":{"source":{"literal":"journal"},"event":"string","journalFile":"string","message":{"union":["null","string"]},"process":"ProcessIdentity"}},
-  "UnreadableSessionReceipt": {"fields":{"detail":"string","fix":"string","id":"string","observedAtUtc":"string","receiptPath":"string","schemaVersion":{"union":["null","number"]}}}
+  "UnreadableSessionReceipt": {"fields":{"detail":"string","fix":"string","id":"string","observedAtUtc":"string","receiptPath":"string","schemaVersion":{"union":["null","number"]}}},
+  "SessionObservation": {"union":["ControlledPending","ControlledActive","ObservedActive","GoneReceipt","FailedReceipt"]},
+  "SessionDocument": {"fields":{"centralPath":{"union":["null","string"]},"isActive":{"union":[{"literal":false},{"literal":true}]},"isCloud":{"union":["null",{"literal":false},{"literal":true}]},"isDetached":{"union":["null",{"literal":false},{"literal":true}]},"isFamily":{"union":[{"literal":false},{"literal":true}]},"isModified":{"union":[{"literal":false},{"literal":true}]},"isWorkshared":{"union":["null",{"literal":false},{"literal":true}]},"modelGuid":{"union":["null","string"]},"openId":{"union":["null","string"]},"path":{"union":["null","string"]},"projectGuid":{"union":["null","string"]},"region":{"union":["null","string"]},"sessionId":"string","title":{"union":["null","string"]},"window":{"union":["null","string"]}}},
+  "DocumentHoldings": {"fields":{"holdings":"Holdings","openId":"string","title":"string"}},
+  "Holdings": {"fields":{"elements":{"array":"HeldElement"},"empty":{"union":[{"literal":false},{"literal":true}]},"savedNotSynced":{"union":["null",{"literal":false},{"literal":true}]},"unsaved":{"union":[{"literal":false},{"literal":true}]},"worksets":{"array":"string"},"workshared":{"union":[{"literal":false},{"literal":true}]}}},
+  "HeldElement": {"fields":{"category":{"union":["null","string"]},"changedSinceSync":{"union":["null",{"literal":false},{"literal":true}]},"id":"number","name":{"union":["null","string"]},"requesters":{"array":"string"}}},
+  "UpdatePlan": {"fields":{"available":{"union":[{"literal":false},{"literal":true}]},"blockers":{"array":"UpdateBlocker"},"current":"string","effects":"UpdateEffects","feed":"string","installedRoot":{"union":["null","string"]},"latest":{"union":["null","string"]},"msi":{"union":["null","UpdateAsset"]},"observedAtUtc":"string","planId":"string","product":"string","quiet":{"union":[{"literal":false},{"literal":true}]},"revits":{"array":"UpdateRevit"}}},
+  "UpdateBlocker": {"fields":{"code":"string","detail":"string"}},
+  "UpdateEffects": {"fields":{"close":{"array":"UpdateProcess"},"reopen":{"array":"string"},"restartYears":{"array":"number"}}},
+  "UpdateProcess": {"fields":{"pid":"number","processStartUtc":{"union":["null","string"]}}},
+  "UpdateAsset": {"fields":{"digest":"string","name":"string","size":"number","url":"string"}},
+  "UpdateRevit": {"fields":{"answering":{"union":[{"literal":false},{"literal":true}]},"blockers":{"array":"UpdateBlocker"},"custody":"string","documents":{"array":"UpdateDocument"},"idle":{"union":[{"literal":false},{"literal":true}]},"modal":"unknown","pid":"number","processStartUtc":{"union":["null","string"]},"queue":"unknown","sessionId":{"union":["null","string"]},"unknown":{"union":[{"literal":false},{"literal":true}]},"year":"number"}},
+  "UpdateDocument": {"fields":{"central":{"union":["null","string"]},"isModified":{"union":[{"literal":false},{"literal":true}]},"openId":{"union":["null","string"]},"path":{"union":["null","string"]},"persistence":{"union":["null","string"]},"reopenSource":{"union":["null","string"]},"title":{"union":["null","string"]}}},
+  "UpdateReceipt": {"fields":{"legs":{"array":"UpdateLeg"},"planId":"string","receiptPath":"string","reopen":{"array":"string"},"requestId":"string","restartYears":{"array":"number"},"state":"string","stub":{"union":["null","UpdateProcess"]}}},
+  "UpdateLeg": {"fields":{"detail":{"union":["null","string"]},"exitCode":{"union":["null","number"]},"name":"string","observedAtUtc":"string","status":"string"}}
 };

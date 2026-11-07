@@ -3,17 +3,26 @@ import { useRouter } from "@tanstack/react-router";
 import { routeAddress } from "@pe/agent-contracts";
 import { Button } from "@pe/kit/lang/button";
 import { Code, JsonEditor } from "@pe/kit/lang/code";
-import { List } from "@pe/kit/lang/list-popup";
+import { useList } from "@pe/kit/lang/collection";
+import { ListView } from "@pe/kit/lang/list-view";
 import { Switcher } from "@pe/kit/lang/switcher";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { schemaFormModel } from "#/settings/schema-form";
-import { RunsList } from "#/route/runs-list";
 import { isSpecOf } from "#/route/workflow";
 import { member, type PodsContext, type PodsRosterContext } from "./route.ts";
+import { runRow } from "./run-row.tsx";
 
 export function Members({ ctx }: { ctx: PodsRosterContext }) {
   const page = ctx.page.read(),
     value = ctx.value;
+  const list = useList({
+    value,
+    rowsOf: (data) => data.pods.flatMap((pod) => pod.members.map((entry) => ({ pod, entry }))),
+    keyOf: ({ pod, entry }) => `${pod.id}|${entry.path}`,
+    search: ({ pod, entry }) => ({ text: [pod.name, entry.path] }),
+    groups: { of: ({ pod }) => `${pod.name} · ${pod.version}` },
+    onPick: ({ pod, entry }) => ctx.page.query({ pod: pod.id, path: entry.path }),
+  });
   return (
     <>
       <a href="/pod-admin">Manage Pod installation and trust</a>
@@ -24,19 +33,11 @@ export function Members({ ctx }: { ctx: PodsRosterContext }) {
           </p>
         )),
       )}
-      <List
+      <ListView
         aria-label="pod members"
-        items={
-          value.value?.pods.flatMap((pod) => pod.members.map((entry) => ({ pod, entry }))) ?? []
-        }
-        keyOf={({ pod, entry }) => `${pod.id}|${entry.path}`}
-        labelOf={({ entry }) => entry.path}
-        groupOf={({ pod }) => `${pod.name} · ${pod.version}`}
-        filter="substring"
-        searchPlaceholder="Filter members…"
-        failure={!value.current ? value.reason : undefined}
-        empty="No Pod members"
-        onPick={({ pod, entry }) => ctx.page.query({ pod: pod.id, path: entry.path })}
+        list={list}
+        search="always"
+        empty={{ message: "No Pod members", exit: "install or enable a Pod in Pod administration" }}
         row={({ pod, entry }) => ({
           label: entry.path,
           active: page.pod === pod.id && page.path === entry.path,
@@ -201,11 +202,16 @@ function Editor({ ctx, schema }: { ctx: PodsContext; schema: string | null }) {
 }
 export function Runs({ ctx }: { ctx: PodsContext }) {
   const page = ctx.page.read();
-  const current = ctx.value.value?.scope;
-  const runs =
-    current?.pod === page.pod && current.path === page.path && current.runs === page.runs
-      ? ctx.value.value!.runs
-      : [];
+  const list = useList({
+    value: ctx.value,
+    rowsOf: (data) =>
+      data.scope.pod === page.pod && data.scope.path === page.path && data.scope.runs === page.runs
+        ? data.runs
+        : [],
+    keyOf: (run) => run.runId,
+    search: (run) => ({ text: [run.runId, run.receipt?.operation, run.receipt?.outcome] }),
+    scope: `${page.pod}|${page.path}|${page.runs}`,
+  });
   return (
     <>
       <Button
@@ -214,11 +220,14 @@ export function Runs({ ctx }: { ctx: PodsContext }) {
       >
         {page.runs === "pod" ? "whole pod" : "this member"}
       </Button>
-      <RunsList
-        runs={runs}
-        scope={page.runs}
-        memberSha256={ctx.value.value?.member?.sha256}
-        failure={!ctx.value.current ? ctx.value.reason : undefined}
+      <ListView
+        list={list}
+        aria-label={page.runs === "pod" ? "the pod's runs" : "this member's runs"}
+        empty={{
+          message: page.runs === "pod" ? "no runs in this pod" : "no runs for this member",
+          exit: "apply a spec or draft from its product route",
+        }}
+        row={(run) => runRow(run, page.runs, ctx.value.value?.member?.sha256)}
       />
     </>
   );

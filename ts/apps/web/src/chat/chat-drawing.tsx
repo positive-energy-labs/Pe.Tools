@@ -339,7 +339,10 @@ function ChatSurface({ target, docked = false, handle }: ChatShellProps & { hand
             void store.actions.openWork(id, route, resumed, closed);
             store.actions.revealChat();
           }}
-          onFork={(id, providerId) => void forkThread(providerId, id)}
+          onFork={(id, providerId) => {
+            // SHIM: S gap 9; replace this Workbench fork callback with the typed host command.
+            void forkThread(providerId, id);
+          }}
           onRename={handleRenameThread}
           onDelete={handleDeleteThread}
           onUpdate={updateThread}

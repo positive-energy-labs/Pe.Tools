@@ -1,25 +1,56 @@
-import type { HoldingsReading } from "./reading.ts";
-import type { Machine, MachineSession } from "./machine.ts";
-import type { DocumentHoldings } from "@pe/host-contracts/pe-revit-contract";
+import { z } from "zod";
+import { sdkSchema } from "@pe/host-contracts/decoders";
+import { holdingsReadingSchema } from "./holdings-reading.ts";
+import { machineSchema, machineSessionSchema, type Machine } from "./machine.ts";
 
-export type DiscoveryHoldings = Omit<DocumentHoldings, "holdings"> & {
-  readonly detail:
-    | { readonly state: "available"; readonly request: Omit<HoldingsReading, "kind" | "cursor"> }
-    | { readonly state: "unavailable"; readonly reason: string };
-  readonly holdings: Omit<DocumentHoldings["holdings"], "elements" | "worksets"> & {
-    readonly elementCount: number;
-    readonly worksetCount: number;
-  };
-};
-export type DiscoveryMachine = Omit<Machine, "revit"> & {
-  readonly revit: Omit<Machine["revit"], "sessions"> & {
-    readonly sessions:
-      | readonly (Omit<MachineSession, "holdings"> & {
-          readonly holdings: readonly DiscoveryHoldings[] | null;
-        })[]
-      | null;
-  };
-};
+export const discoveryHoldingsSchema = z.lazy(() =>
+  sdkSchema("DocumentHoldings")
+    .extend({
+      detail: z.discriminatedUnion("state", [
+        z
+          .object({
+            state: z.literal("available"),
+            request: holdingsReadingSchema.omit({ kind: true, cursor: true }),
+          })
+          .readonly(),
+        z.object({ state: z.literal("unavailable"), reason: z.string() }).readonly(),
+      ]),
+      holdings: sdkSchema("Holdings")
+        .omit({ elements: true, worksets: true })
+        .extend({
+          elementCount: z.number().int().nonnegative(),
+          worksetCount: z.number().int().nonnegative(),
+        })
+        .readonly(),
+    })
+    .readonly(),
+);
+export const discoveryMachineSchema = z.lazy(() =>
+  machineSchema
+    .unwrap()
+    .extend({
+      revit: machineSchema
+        .unwrap()
+        .shape.revit.unwrap()
+        .extend({
+          sessions: z
+            .array(
+              machineSessionSchema
+                .unwrap()
+                .extend({
+                  holdings: z.array(discoveryHoldingsSchema).readonly().nullable(),
+                })
+                .readonly(),
+            )
+            .readonly()
+            .nullable(),
+        })
+        .readonly(),
+    })
+    .readonly(),
+);
+export type DiscoveryHoldings = z.infer<typeof discoveryHoldingsSchema>;
+export type DiscoveryMachine = z.infer<typeof discoveryMachineSchema>;
 
 /** Discovery names holdings without copying their potentially model-sized element arrays. */
 export function discoveryMachine(machine: Machine | DiscoveryMachine): DiscoveryMachine {
@@ -82,7 +113,11 @@ function boundedSession(
         }) ?? null,
     };
     if (new TextEncoder().encode(JSON.stringify(summary)).byteLength <= budget) return summary;
-  } catch (error) { console.warn("ts/packages/agent-contracts/src/discovery-machine.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn(
+      "ts/packages/agent-contracts/src/discovery-machine.ts: fallback after failure",
+      error,
+    );
     // A bad SDK entry must not take every other session out of discovery.
   }
   const label =

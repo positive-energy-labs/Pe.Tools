@@ -10,7 +10,7 @@ import type { CaptureReceipt } from "@pe/agent-contracts";
 import { FactChip } from "@pe/kit/lang/chip";
 import { Code, stringify } from "@pe/kit/lang/code";
 import { Button } from "@pe/kit/lang/button";
-import { emptyListState, useList } from "@pe/kit/lang/collection";
+import { emptyListState, useList, type ValueHandle } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { useCopy } from "@pe/kit/lib/use-copy";
 import { runtimeStreamUrl } from "#/host/runtime";
@@ -113,25 +113,27 @@ function CaptureDetail({ receipt }: { receipt: Immutable<CaptureReceipt> }) {
 }
 
 export function CapturesList({
-  captures,
+  value,
   focus,
   open,
   onPage,
 }: {
-  captures: readonly Immutable<CaptureReceipt>[];
+  value: ValueHandle<{ readonly captures: readonly Immutable<CaptureReceipt>[] }>;
   /** The picked picture's sha. */
   focus?: string;
   /** The shas whose detail is unfolded. */
   open: readonly string[];
   onPage: (page: { sha?: string; open?: readonly string[] }) => void;
 }) {
+  const captures = value.value?.captures ?? [];
   // The address speaks shas (one picture may be taken twice); the list keys each taking.
   const ids = (shas: readonly string[]) =>
     captures.filter((c) => shas.includes(c.sha)).map((c) => c.id);
   const shaOf = new Map(captures.map((c) => [c.id, c.sha]));
   const shas = (keys: readonly string[]) => [...new Set(keys.map((k) => shaOf.get(k)!))];
   const list = useList({
-    items: captures,
+    value,
+    rowsOf: (data) => data.captures,
     keyOf: (receipt) => receipt.id,
     search,
     select: "single",

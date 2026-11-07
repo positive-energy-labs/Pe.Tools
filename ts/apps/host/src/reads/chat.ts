@@ -4,6 +4,7 @@ import { leaf, read } from "./evaluator.ts";
 import { chatArgs, chatValue } from "@pe/agent-contracts";
 
 const resource = leaf("resource", readingRequestSchema, z.unknown());
+// TODO: S gap 9 must admit typed host commands before exporting thread prompt/cancel/fork here.
 export const reads = {
   context: read("chat.context", {
     input: chatArgs,

@@ -165,7 +165,8 @@ export function streamThread(options: {
         return;
       }
       const frame = accepted.value.data;
-      // A failed tail has no future events. Recover from the retained body, as for a log gap.
+      // SHIM: S gap 6 queues event tails behind mark capture. Remove this failure-body reread
+      // and its backlog test once the kernel bypasses that queue and exposes stream failures.
       if (frame.kind === "failure") {
         stop();
         onFault?.(new Error(frame.error));

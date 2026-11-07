@@ -1,3 +1,4 @@
+import { holdingsReadingSchema } from "./holdings-reading.ts";
 import { workAdmissionSchema, workFeedFailureSchema } from "./work-journal-door.ts";
 import type { HeldElement, ProcessIdentity } from "@pe/host-contracts/pe-revit-contract";
 import type { MachineLeg } from "./machine.ts";
@@ -139,21 +140,11 @@ export const sdkStandardReadingSchema = z.strictObject({
   year: z.string().min(1).optional(),
   all: z.boolean().optional(),
 });
-export const holdingsReadingSchema = z.strictObject({
-  kind: z.literal("sdk"),
-  read: z.literal("holdings"),
-  section: z.enum(["elements", "worksets"]).default("elements"),
-  session: sdkSessionSelectionSchema,
-  processStartUtc: z.iso.datetime(),
-  openId: z.string().min(1),
-  limit: z.number().int().min(1).max(100).default(50),
-  cursor: z.string().max(300).optional(),
-});
 export const sdkReadingSchema = z.discriminatedUnion("read", [
   sdkStandardReadingSchema,
   holdingsReadingSchema,
 ]);
-export type HoldingsReading = z.infer<typeof holdingsReadingSchema>;
+export { holdingsReadingSchema, type HoldingsReading } from "./holdings-reading.ts";
 export type HoldingsReadingResult =
   | { state: "refused"; code: string; detail: string }
   | {
