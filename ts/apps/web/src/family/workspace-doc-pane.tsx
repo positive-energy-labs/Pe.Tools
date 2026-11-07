@@ -313,7 +313,7 @@ export function FamilyWorkspaceDocPane() {
       <div className="flex shrink-0 items-center gap-2">
         <FactChip
           tone="pea"
-          title="Standing Work proposals, open or accepted. Accept stages the proposed value; deny clears the suggestion."
+          title="Staged Work values. Keep adopts Pea's stage with its citations; Revert clears it."
         >
           {openProposals.length} standing
         </FactChip>
@@ -332,7 +332,7 @@ export function FamilyWorkspaceDocPane() {
               value: "sheet",
               label: "sheet",
               title:
-                "Show the rendered pages with measured block boxes. Focusing a suggestion locates its citation on the sheet.",
+                "Show the rendered pages with measured block boxes. Hover lights evidence; only Locate scrolls.",
             },
           ]}
         />
@@ -376,7 +376,7 @@ export function FamilyWorkspaceDocPane() {
           className="hairline-b shrink-0 max-h-1/3 overflow-y-auto px-2 py-1.5"
           data-surface="page"
         >
-          <TooltipHint content="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the suggestion.">
+          <TooltipHint content="The same staged Work cells as the table. Keep adopts Pea's value and citations; Revert clears the stage. Pin holds the evidence while hover previews another citation.">
             <div className="mb-1 flex items-baseline gap-2">
               <span className="t-small t-upper" data-tone="pea">
                 pea
@@ -399,11 +399,12 @@ export function FamilyWorkspaceDocPane() {
                 // is the one you located — the two-suggestion case has to light both cards or the
                 // count on the rail would be pointing at something the sidebar refuses to show.
                 focused={focusedProposal === suggestion.id || pinnedParam === suggestion.param}
-                blockMd={
-                  world.spec?.blocks.find((block) => block.id === suggestion.sourceBlockId)?.md ??
-                  null
+                spec={world.spec}
+                onLocate={() => locate(suggestion)}
+                pinned={pinnedParam === suggestion.param}
+                onPin={() =>
+                  setPinnedParam(pinnedParam === suggestion.param ? null : suggestion.param)
                 }
-                specFileName={world.spec?.fileName ?? null}
                 onHover={(on) => {
                   setFocus(
                     on

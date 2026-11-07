@@ -7,6 +7,7 @@ import {
   settingsFieldDirectives,
   settingsFieldSegments,
   cellPatches,
+  workKey,
   type ActionReceipt,
   type FamilyDraft,
   type PodMember,
@@ -80,10 +81,18 @@ export function useFamilyStore(owner: FamilyMount) {
     },
     [owner],
   );
+  const identity = work ? workKey(work.handle.key) : null;
   const write = useCallback<CellWire["write"]>(
-    (patches, expectedRevision = owner.snapshot().work?.handle.revision ?? -1) =>
-      run("edit", { patches, expectedRevision }),
-    [owner, run],
+    (patches, expectedRevision = owner.snapshot().work?.handle.revision ?? -1) => {
+      const current = owner.snapshot().work;
+      if (!current || workKey(current.handle.key) !== identity)
+        return Promise.resolve({
+          code: "stale-work",
+          message: "Family Work changed; review the current cells",
+        });
+      return run("edit", { patches, expectedRevision });
+    },
+    [owner, run, identity],
   );
   const edits = useMemo(
     () => (work ? familyEditBuffer(work.handle.key, write) : null),
