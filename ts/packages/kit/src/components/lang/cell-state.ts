@@ -20,7 +20,7 @@ export type CellCommit = (
   text: string,
 ) => string | void | Promise<string | CellRefusal | null | void>;
 
-interface StateCellBase {
+export interface StateCellBase {
   /** The value as shown. Long values are expected — the grammar is built around them. */
   value: React.ReactNode;
   /**

@@ -1,4 +1,4 @@
-import { CELL_STATE_ORDER, StateCell, cellStateLabel, type StateCellProps } from "../lang/cell";
+import { CELL_STATE_ORDER, StateCell, cellStateLabel, handleCellProps, type StateCellProps } from "../lang/cell";
 import { VerdictCell } from "./cells";
 import type { Column, ValueColumn, Verdict } from "./model";
 import type { QueryRead } from "./view";
@@ -39,8 +39,11 @@ function resolveBody<Row>(column: Column<Row>): ResolvedColumn<Row> {
       sort: column.sort ?? ((row: Row) => verdict(row).word),
     } as ResolvedColumn<Row>;
   }
-  const state = column.state;
-  if (state === undefined) return column;
+  if (column.state === undefined) return column;
+  const state = (row: Row) => {
+    const input = column.state!(row);
+    return "cell" in input ? handleCellProps(input) : input;
+  };
   const word = column.word ?? ((row: Row) => cellStateLabel(state(row)));
   return {
     ...column,

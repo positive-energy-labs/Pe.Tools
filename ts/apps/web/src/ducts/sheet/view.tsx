@@ -45,7 +45,7 @@ export function Roster({ props }: { props: RosterProps }) {
   const list = useList({
     persist: props.address,
     sorts: { name: (fan: FanPort) => fan.mark },
-    items: props.roster,
+    ...(props.value ? { value: props.value, rowsOf: () => props.roster } : { items: props.roster }),
     keyOf: fanKey,
     search: rosterSearch,
     select: "multi",
