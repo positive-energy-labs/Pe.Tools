@@ -414,7 +414,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   syncReads();
   const mounted = {
-    spec, subjectState, move,
+    spec, data: module.data, subjectState, move,
     absentOwners:()=>[...owners].filter(([id,owner])=>id!==own&&owner.absent).map(([route])=>route),
     recoveryOwners: () => [...owners].filter(([,record]) => record.failure?.kind === "failed" && record.failure.code === "WorkUnreadable" && record.failure.schemaAge === "older" && !input.readOnly && !input.history && input.fixture === null).map(([id])=>id),
     startFreshAction(owner: string = own) {

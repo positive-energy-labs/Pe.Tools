@@ -69,6 +69,7 @@ export const module = route({
   subject: {
     field: "workspaceId",
     noun: "schedule",
+    multiple: false,
     pane: "grid",
     read: roster,
     options: (data) =>

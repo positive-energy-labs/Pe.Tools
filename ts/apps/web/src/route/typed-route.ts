@@ -147,6 +147,7 @@ export type Specification<
   subject?: {
     field: RoleFields<F,"subject"> & string;
     noun: string;
+    multiple?: boolean;
     pane: string;
     read?: SubjectRead;
     options(data: Immutable<ReadData<SubjectRead>>): readonly { id: IdentityId<"local">; label: string }[];
