@@ -7,6 +7,20 @@ import {
   NodeServices,
 } from "../../../host/node_modules/@effect/platform-node/dist/index.js";
 import { expect, test, vi } from "vite-plus/test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { Effect } from "effect";
+import { RouteWorkspace } from "@pe/runtime";
+import { commands, tools, roomEditKey, takeoffObservationSchema } from "@pe/agent-contracts";
+import { takeoffSeeds } from "../takeoff/seeds";
+import { fileVersion } from "../../../host/src/takeoff-actions";
+import { detachedBridge, sessionView, captureStore, testDuctFiles, testDocumentMarks } from "../../../host/tests/effect-test";
+import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
+import { hostOwnership } from "../../../host/src/host-ownership";
+import { bindCommandRuntime } from "../../../host/src/command-registry";
+import { commandLeafRefusal } from "../../../host/src/bridge";
+import { catalogCommandContext } from "../../../host/src/catalog-command-context";
+import { markDispatched } from "../../../host/src/action-dispatch";
 import {
   actionReceiptSchema,
   workFingerprintSchema,
@@ -22,7 +36,7 @@ import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
 import { ActionJournal } from "../../../host/src/action-journal";
 import { makeCallRoute } from "../../../host/src/call-route";
 import { nativeReadRoot } from "../../../host/src/app";
-import { RevitBridgeLive } from "../../../host/src/bridge";
+import { RevitBridgeLive, RevitBridge } from "../../../host/src/bridge";
 import { DuctFiles } from "../../../host/src/ducts-files";
 import { HostDocumentMarks } from "../../../host/src/document-marks";
 import { PictureCaptureStore } from "../../../host/src/captures-route";
@@ -40,6 +54,130 @@ import { localId } from "./typed-route";
 import type { Readings } from "../host/resource-stream";
 import type { UseSource } from "../shell/source-contract";
 import type { DrawContext, TypedRoute } from "./typed-route";
+
+test.each([
+  ["takeoffs.initialize", { stage: "Adoption" }],
+  ["takeoffs.adopt", { views: [{ view: "Zoning plan", items: [{ elementId: 21, name: "Office", systemTag: "SA1" }] }] }],
+  ["takeoffs.partition", { zoneRegion: 21, view: "Zoning plan", zoneName: "Office", zoneGuid: "zone-a" }],
+  ["rooms.partition", { view: "Zoning plan" }],
+  ["rooms.draw", { view: "Zoning plan", loops: [[[0, 0], [10, 0], [10, 10]]] }],
+  ["rooms.write", {}],
+  ["rooms.merge", { view: "Zoning plan", guids: ["room-a", "room-b"] }],
+  ["takeoffs.sync", {}],
+] as const)("JZ carrier commands run real declarations and guarded native dispatch: %s", async (commandKey, intent) => {
+  const dir = await mkdtemp(join(tmpdir(), "jz-takeoffs-leaf-"));
+  const route = commandKey.startsWith("rooms.") ? "rooms" : "takeoffs";
+  const key = { binding: "address" as const, target: path, route };
+  let saved: unknown;
+  const workspace = new RouteWorkspace({ registrations: [{ spec: tools[route].work }], store: {
+    getState: async () => saved, setState: async ({ value }) => { saved = structuredClone(value); },
+  } });
+  const calls: { key: string; input: unknown; command: string | undefined }[] = [];
+  const bridge = detachedBridge({
+    list: Effect.succeed([sessionView({ sessionId: ref.session, connected: true, processId: 42,
+      processStartUtcUnixMs: 1000, lane: hostOwnership.lane, sourceRoot: hostOwnership.sourceRoot,
+      serviceName: hostOwnership.serviceName,
+      state: { openDocuments: [{ ...ref, address: path, isActive: true, isFamilyDocument: false }] },
+    })]),
+    // Recorded native transport only. Run the production guard with the registry's actual
+    // AsyncLocalStorage command, before recording any dispatch or returning native data.
+    invoke: (leaf, input, session, document, id) => Effect.promise(async () => {
+      const command = catalogCommandContext.getStore();
+      const refusal = commandLeafRefusal(leaf, command);
+      if (refusal) throw Error(refusal);
+      await markDispatched(id!);
+      calls.push({ key: leaf, input, command });
+      return { target: { session: session!, document: document ?? null },
+        value: leaf === "takeoffs.initialize-carrier" ? { remaining: [] } : { adopted: [21], written: 1 } };
+    }),
+  });
+  const journal = new ActionJournal(join(dir, "actions.jsonl"), Date.now);
+  const runs = testConsents(() => {});
+  bindControl({ runs, acquired: () => null });
+  const captures = captureStore(dir);
+  const identity = { fileName: "recorded.r10", projectTitle: "Journey", clientName: "", stamp: "recorded" };
+  let synced = false;
+  const deps: Parameters<typeof bindCommandRuntime>[3] = {
+    workspace, sdk: sdkSessions, files: testDuctFiles(), marks: testDocumentMarks(bridge),
+    openFile: async file => ({ sourceFile: file, fileIdentity: identity, building: {}, systems: [{ number: 1, name: "SA1" }], rooms: [] }),
+    syncFile: async input => {
+      synced = true;
+      return { targetPath: input.targetPath, backupPath: null, swapped: true, fileIdentity: identity,
+        insertedRooms: (input.inserts ?? []).map(room => ({ number: room.number, name: room.name, identifier: room.number + 100 })),
+        updated: 0, systems: [], seedRoom: { identifier: 0, action: "not-requested", reason: "recorded adapter" },
+        assemblyFallbacks: [], roomsBefore: 0, roomsAfter: input.inserts?.length ?? 0, log: "recorded adapter" };
+    },
+  };
+  const web = HttpRouter.toWebHandler(
+    makeCallRoute(journal, captures, deps).pipe(
+      nativeReadRoot(),
+      Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
+      Layer.provideMerge(PictureCaptureStore.layer(join(dir, "pictures"))),
+      HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
+      Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
+    ), { disableLogger: true },
+  );
+  const invoke = async (key: string, input: Record<string, unknown>) => {
+    const id = `${key}-${(await journal.list()).length}`;
+    const response = await withInvocationContext({ caller: who }, () => web.handler(
+      new Request("http://host/actions", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, key, target: { kind: "document", ref }, input }) }),
+      Context.make(RequestIdentity, admittedRequestIdentity(who, {})),
+    ));
+    expect([200, 202], await response.clone().text()).toContain(response.status);
+    const receipt = await journal.wait(id);
+    expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
+    return receipt;
+  };
+  try {
+    let authored: Record<string, unknown> = intent;
+    if (commandKey === "takeoffs.sync") {
+      const recorded = takeoffObservationSchema.parse(takeoffSeeds.sync.readings.snapshot);
+      if (recorded.kind !== "ready") throw Error("Expected a saved snapshot seed");
+      const snapshot = structuredClone(recorded.capture.snapshot);
+      snapshot.reading.at = path;
+      const zone = snapshot.world.zones[0]!;
+      const room = zone.rooms.find(room => room.data !== null)!;
+      zone.rooms = [room]; zone.tags = ["SA1"]; zone.driftSqft = 0; zone.runs = [];
+      room.r10 = null; room.elementId = 21; room.flags = [];
+      room.analysis = { state: "current", hold: null, runId: null, floorZ: null, ceilingZ: null };
+      snapshot.world.zones = [zone];
+      const retained = await captures.refresh(ref, async () => ({ result: null, snapshot }), async () => true);
+      const file = join(dir, "recorded.r10");
+      await writeFile(file, "recorded RHVAC transport input", "utf8");
+      authored = { path: file, captureId: retained.capture.id, fileVersion: await fileVersion(file), zones: [zone.zone.guid] };
+    }
+    const edits = commandKey === "rooms.write" ? [{ path: ["edits", roomEditKey("room-a", "name")], value: { edit: { value: "Office" } } }] : [];
+    await workspace.publish(key, route, [
+      { path: ["writeIntent", commandKey], value: { edit: { value: authored } } }, ...edits,
+    ], 0);
+    const work = { key, revision: (await workspace.read(key, route))!.revision };
+    const definition = commands[commandKey];
+    if ("writeBoundary" in definition) {
+      const plan = await invoke(definition.writeBoundary.previewKey, { work });
+      expect(plan).toMatchObject({ result: { previewOnly: true } });
+      expect(calls, "A plan never dispatches a carrier mutation").toEqual([]);
+    }
+    await invoke(commandKey, { work });
+    if (commandKey === "takeoffs.sync") {
+      expect(synced).toBe(true);
+      expect(calls).toEqual([{ key: "takeoffs.rhvac-links", command: commandKey,
+        input: { writes: [{ elementId: 21, link: expect.objectContaining({ identifier: 101, fileIdentity: "recorded.r10#recorded" }) }] } }]);
+      return;
+    }
+    expect(calls[0]).toEqual({ key: "takeoffs.initialize-carrier", input: {
+      stage: commandKey === "takeoffs.partition" ? "Materialization" : commandKey.startsWith("rooms.") ? "Rooms" : "Adoption",
+    }, command: commandKey });
+    expect(calls.map(row => row.key)).toEqual(commandKey === "takeoffs.initialize"
+      ? ["takeoffs.initialize-carrier"] : ["takeoffs.initialize-carrier", commandKey]);
+    expect(calls.every(row => row.command === commandKey)).toBe(true);
+    expect(commandLeafRefusal("takeoffs.initialize-carrier", "page.publish"), "Unrelated commands still cannot invoke the Internal leaf").toContain("does not declare");
+  } finally {
+    await web.dispose();
+    runs.closeAll(); bindControl({ runs: undefined });
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 60_000);
 
 // Only recorded native inputs and the address bar are adapters. Work, HTTP, SSE,
 // the action registry, consent, journal and typed mount all run their production code.
