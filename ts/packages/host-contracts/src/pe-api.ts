@@ -1,10 +1,10 @@
-import { z } from "zod";
-import { hostDescriptorSchema } from "./host-descriptor.ts";
 import type { HostLocalCatalogEntry } from "./operation-types.ts";
+import { z } from "zod";
 import { podRouteDescriptorSchema } from "./pod-route.ts";
+export * from "./pod-route.ts";
+import { hostDescriptorSchema } from "./host-descriptor.ts";
 import { deviceListingSchema, deviceSessionSchema, pairingSchema } from "./remote-device.ts";
 import type { SessionObservation } from "./vendor/generated/pe-revit-contract.ts";
-export * from "./pod-route.ts";
 export * from "./remote-device.ts";
 
 /** An authored scratch Page. Publication needs no document target. */
@@ -813,6 +813,15 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "human-or-pea",
     ),
     "work.get": route("GET", "/pe/route-state/:route", none, object, "read", "pe", "read"),
+    "work.salvage": route(
+      "GET",
+      "/pe/route-state/:route/salvage",
+      none,
+      object.nullable(),
+      "human",
+      "pe",
+      "human",
+    ),
     "work.apply": route(
       "POST",
       "/pe/route-state/:route/apply",

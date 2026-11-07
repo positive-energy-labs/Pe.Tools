@@ -1,17 +1,17 @@
-import { z } from "zod";
-import { link, type CatalogLink } from "./catalog.ts";
+import { commands, isWritePreviewKey } from "./semantic-actions.ts";
 import type { Command } from "./command.ts";
-import { bare } from "./route-field.ts";
-import { canonicalRouteJson } from "./route-graph.ts";
+import { routeWorkSubject } from "./route-work-subject.ts";
+import { z } from "zod";
+import type { SchemaTable } from "./route-kernel-page.ts";
 import {
   RouteGraphJson,
   type RouteDiagnostic,
   type ReadingDependencies,
   type LayoutJson,
 } from "./route-kernel-data.ts";
-import type { SchemaTable } from "./route-kernel-page.ts";
-import { routeWorkSubject } from "./route-work-subject.ts";
-import { commands, isWritePreviewKey } from "./semantic-actions.ts";
+import { canonicalRouteJson } from "./route-graph.ts";
+import { bare } from "./route-field.ts";
+import { link, type CatalogLink } from "./catalog.ts";
 
 const fn = z.custom<(...args: unknown[]) => unknown>((value) => typeof value === "function");
 const schema = z.custom<z.ZodType>((value) => value instanceof z.ZodType);
@@ -197,6 +197,15 @@ export function linkRouteBodies(
     if (!data.transition)
       fail("transitionDeps", "", "transition body", "Dependencies require transition");
   }
+  body(data.salvage, "salvage", "salvage");
+  body(data.salvagePresent, "salvagePresent", "present");
+  if (data.salvageDeps) {
+    deps(data.salvageDeps, "salvageDeps");
+    if (!data.salvagePresent)
+      fail("salvageDeps", "", "salvage presentation", "Dependencies require salvagePresent");
+  }
+  if (data.salvagePresent && !data.salvage)
+    fail("salvagePresent", "", "salvage body", "Presentation requires salvage");
   for (const [key, identity] of Object.entries(data.identities)) {
     reference(bindings.identities, identity.codec, `identities.${key}.codec`, "identity codec");
     if (bindings.identities[identity.codec]?.kind !== identity.kind)
@@ -480,7 +489,7 @@ export function linkRouteBodies(
   }
   for (const [key, verb] of Object.entries(data.verbs)) {
     const path = `verbs.${key}`;
-    if (key === "work.start-fresh")
+    if (key === "work.start-fresh" || key === "work.salvage")
       fail(path, key, "authored verb", "Recovery verbs are kernel reserved", "policy");
     deps(verb.deps, `${path}.deps`);
     schemaRef(verb.input, `${path}.input`);

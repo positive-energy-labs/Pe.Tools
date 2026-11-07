@@ -770,6 +770,14 @@ export function createPeRoutes(options: PeRoutesOptions) {
           return json({ error: message(error) }, 403);
         }
       }
+      // Human-only and read-only; any other caller is refused by name, not 404.
+      if (method === "GET" && route && verb === "salvage") {
+        const scope = workKey(url, route, "read");
+        if (scope instanceof Response) return scope;
+        const salvaged = await work.salvage(scope, route);
+        if (!salvaged) return json(null);
+        return "ok" in salvaged ? json(salvaged, 403) : json(salvaged);
+      }
       const write = method === "POST" && route && verb ? writes[verb] : undefined;
       if (write && route && caller.kind !== "human" && caller.kind !== "pea")
         return Response.json(

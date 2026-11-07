@@ -1,6 +1,8 @@
 import {
   canonicalRouteInput,
   commands,
+  SALVAGE_VERB,
+  salvageVerb,
   START_FRESH_VERB,
   startFreshVerb,
   workKey,
@@ -12,17 +14,7 @@ import {
 import { causeRefusal, refuse, writeRefusal } from "../route/refusal";
 import { type ReadingAttempt } from "./source-contract";
 
-import {
-  CONFLICT_REFUSAL,
-  type MountAdapters,
-  type MountBinding,
-  type BindingScope,
-} from "./mount-contracts";
-import type { MountPage } from "./mount-page-owner";
-import type { MountReadings } from "./mount-readings-owner";
-import type { MountTarget } from "./mount-target-owner";
-import type { MountTimeline } from "./mount-timeline-owner";
-import type { MountWork } from "./mount-work-owner";
+import { kernelCellVerbs } from "./verbs-cells";
 import {
   bind,
   commit,
@@ -36,7 +28,17 @@ import {
   type VerbContext,
   type VerbSubject,
 } from "./verbs";
-import { kernelCellVerbs } from "./verbs-cells";
+import {
+  CONFLICT_REFUSAL,
+  type MountAdapters,
+  type MountBinding,
+  type BindingScope,
+} from "./mount-contracts";
+import type { MountPage } from "./mount-page-owner";
+import type { MountTarget } from "./mount-target-owner";
+import type { MountReadings } from "./mount-readings-owner";
+import type { MountWork } from "./mount-work-owner";
+import type { MountTimeline } from "./mount-timeline-owner";
 /** Owns verb binding, dispatch, reviews, controls and completion delivery. */
 export function createMountVerbs<P, W>(
   graph: RouteGraph<P, W>,
@@ -51,12 +53,15 @@ export function createMountVerbs<P, W>(
   // One executable recovery for every mount; its declaration is the contract's, so Pea reads the same verb.
   const { kind: _kind, review: _review, ...freshDeclaration } = startFreshVerb;
   const startFresh = recoveryVerb("start-fresh", { ...freshDeclaration, primary: true });
+  const { kind: _salvageKind, review: _salvageReview, ...salvageDeclaration } = salvageVerb;
+  const salvage = recoveryVerb("salvage", salvageDeclaration);
   // Validation ran above: cell verb ids cannot collide with graph verbs, so a plain spread is safe.
   const kernel = kernelCellVerbs(graph);
   const verbs: Readonly<Record<string, VerbDecl>> = {
     ...graph.verbs,
     ...kernel.verbs,
     ...(graph.work && { [START_FRESH_VERB]: startFresh }),
+    ...(graph.work && graph.salvage && { [SALVAGE_VERB]: salvage }),
   };
   let invoking: { verb: string; input: MountBinding } | null = null;
   const dispatches = new Map<
@@ -99,11 +104,13 @@ export function createMountVerbs<P, W>(
         target: work.scope.target,
         work: target.acceptance.readWork(),
         unreadable: work.scope.unreadable ?? null,
+        salvage: work.salvagePatches(),
         basis: {
           pageEpoch: page.view.read().epoch,
           // Only the readings this verb declares; see VerbContext.snapshot.
           readings: verb ? readings.basisFor(adapters.verbDepends?.[verb] ?? []) : readings.basis(),
           unreadable: work.scope.unreadable ? workKey(work.scope.unreadable) : null,
+          salvage: work.salvagePatches(),
         },
       };
     },
@@ -426,7 +433,7 @@ export function createMountVerbs<P, W>(
      */
     stageVerbs(): readonly string[] {
       const own = graph.stages[page.stage()]!.verbs;
-      const offered = [START_FRESH_VERB].filter(
+      const offered = [START_FRESH_VERB, SALVAGE_VERB].filter(
         (id) => verbs[id] && recoveryOffered(verbs[id], context.snapshot()),
       );
       return [...own, ...offered];

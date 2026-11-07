@@ -28,6 +28,11 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   editable?: readonly import("./command.ts").WorkPath[];
   /** Domain-derived bookkeeping after an authored edit, before validation. */
   reconcileEdit?: (next: unknown, patches: readonly RouteStatePatch[]) => unknown;
+  /**
+   * What a person may carry over from Work this schema can no longer read (before or after start
+   * fresh), read tolerantly from the old document. Never throws, never parses into Work.
+   */
+  salvage?: (raw: unknown) => unknown;
 }
 
 /**
@@ -265,4 +270,52 @@ export function message(error: unknown): string {
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Saved Work this version's schema refuses, read as far as it still parses: every segment (and
+ * every keyed cell of a record segment) that parses is kept, only the broken ones are dropped and
+ * named in `dropped` (`segment` or `segment.key`). No migration of old shapes: a dropped cell is
+ * just gone from this read. A document-level refusal (a cross-cell rule) drops the segments it
+ * names. `whole` is true when nothing at all was readable.
+ */
+export function salvageWork<S extends z.ZodObject>(
+  schema: S,
+  raw: unknown,
+): { doc: z.infer<S>; dropped: string[]; whole: boolean } {
+  const whole = schema.safeParse(raw);
+  if (whole.success) return { doc: whole.data, dropped: [], whole: false };
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw))
+    return { doc: schema.parse({}), dropped: ["(whole document)"], whole: true };
+  const kept: Record<string, unknown> = {};
+  const dropped: string[] = [];
+  for (const [segment, value] of Object.entries(raw)) {
+    const shape = (schema.shape as Record<string, z.ZodType | undefined>)[segment];
+    if (!shape) {
+      dropped.push(segment);
+      continue;
+    }
+    if (shape.safeParse(value).success) {
+      kept[segment] = value;
+      continue;
+    }
+    const isRecord = typeof value === "object" && value !== null && !Array.isArray(value);
+    const cells = isRecord ? Object.entries(value) : [];
+    const keptCells = cells.filter(([key, cell]) => {
+      const ok = shape.safeParse({ [key]: cell }).success;
+      if (!ok) dropped.push(`${segment}.${key}`);
+      return ok;
+    });
+    if (!cells.length) dropped.push(segment);
+    else if (keptCells.length) kept[segment] = Object.fromEntries(keptCells);
+  }
+  const second = schema.safeParse(kept);
+  if (second.success) return { doc: second.data, dropped: [...new Set(dropped)], whole: false };
+  // A cross-cell rule broke the kept cells: drop the segments its issues name, whole.
+  const broken = new Set(second.error.issues.map((issue) => String(issue.path[0])));
+  return {
+    doc: schema.parse(Object.fromEntries(Object.entries(kept).filter(([k]) => !broken.has(k)))),
+    dropped: [...new Set([...dropped, ...broken])],
+    whole: false,
+  };
 }

@@ -8,7 +8,7 @@ export function createAdmittedBody<W extends Record<string, unknown>>(context: M
     snapshots = context.readings().snapshots;
 
   const { workBasis, place, invoke } = invocation;
-  const { history, recovery, startFresh } = historyOwner.public;
+  const { history, recovery, startFresh, salvage } = historyOwner.public;
   return (pane: string) => {
     const current = resolve();
     if (!Object.hasOwn(route.data.panes, pane)) throw Error(`Unknown pane: ${pane}`);
@@ -27,7 +27,7 @@ export function createAdmittedBody<W extends Record<string, unknown>>(context: M
         cells: {
           clear: (id: string, key: unknown) => transitionCell.public.clearCell(id, key),
         },
-        recovery: route.data.work ? { state: recovery, startFresh } : undefined,
+        recovery: route.data.work ? { state: recovery, startFresh, carryOver: salvage } : undefined,
         readings: Object.freeze(
           Object.fromEntries(declaration.draws.map((id) => [id, snapshots()[id]])),
         ),

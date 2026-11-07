@@ -1,12 +1,16 @@
 import { OLDER_WORK, UNREADABLE_WORK } from "@pe/agent-contracts";
+import { z } from "zod";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import type { createWorkJournal } from "../../../../packages/runtime/src/work-journal.ts";
 import { peReadings } from "../host/resource-stream";
+import { admittedWorkPatches } from "./admitted-cells.ts";
 import type { MountContext } from "./admitted-context.ts";
+import { currentReadingHashes, projectEvidence } from "./admitted-context.ts";
 import { freezePage } from "./page-port.ts";
 /** The notice is provenance for the existing recovery banner, not another recovery state. */
 export type RecoveryState = (
   | { kind: "idle" }
+  | { kind: "saved"; from: string; value: unknown }
   | { kind: "busy" }
   | { kind: "problem"; sentence: string }
 ) & { notice?: string | null };
@@ -15,6 +19,7 @@ export function createAdmittedHistory<W extends Record<string, unknown>>(context
     route,
     owner,
     read,
+    bindings,
     recoveryHost,
     action,
     resolve,
@@ -22,9 +27,48 @@ export function createAdmittedHistory<W extends Record<string, unknown>>(context
     closed,
     mountJournal,
   } = context;
-  const work = context.work();
+  const work = context.work(),
+    invocation = context.invocation(),
+    snapshots = context.readings().snapshots;
 
   let state: RecoveryState = { kind: "idle" };
+  const { present, reviews } = invocation;
+  let recoveryScope: unknown;
+  let recoveryRevision: number | null = null;
+  function syncRecovery() {
+    const snapshot = owner.read();
+    if (snapshot?.scope !== recoveryScope) {
+      recoveryScope = snapshot?.scope;
+      recoveryRevision = null;
+      state = { kind: "idle" };
+    }
+    if (
+      !recoveryHost ||
+      !route.data.salvage ||
+      !work.ready() ||
+      !snapshot?.work ||
+      snapshot.work.revision === recoveryRevision
+    )
+      return;
+    recoveryRevision = snapshot.work.revision;
+    const scope = snapshot.scope;
+    const revision = recoveryRevision;
+    void recoveryHost.salvageRouteWork(scope.identity.work!).then(
+      (saved) => {
+        if (closed() || owner.read()?.scope !== scope || recoveryRevision !== revision) return;
+        if (state.kind !== "busy")
+          state = saved
+            ? { kind: "saved", ...saved, notice: state.notice }
+            : { kind: "idle", notice: state.notice };
+        notify();
+      },
+      (error: unknown) => {
+        if (closed() || owner.read()?.scope !== scope || recoveryRevision !== revision) return;
+        state = { kind: "problem", sentence: String(error), notice: state.notice };
+        notify();
+      },
+    );
+  }
   const journal = () => {
     const key = owner.read()?.scope.identity.work;
     return key ? mountJournal(key) : null;
@@ -98,6 +142,76 @@ export function createAdmittedHistory<W extends Record<string, unknown>>(context
         revert,
       }
     : undefined;
+  const prepareSalvage = async () => {
+    action();
+    resolve();
+    const key = owner.read()?.scope.identity.work;
+    if (!route.data.salvage || !key || !work.ready() || !recoveryHost)
+      throw Error("Salvage unavailable");
+    const issued = owner.invocation(
+      owner.capture("work-salvage"),
+      currentReadingHashes(snapshots()),
+    );
+    if (!issued.ok) throw Error(issued.reason);
+    const deps = route.data.salvageDeps ?? { page: [], work: [], readings: [] };
+    for (const id of deps.readings)
+      if (!snapshots()[id]?.current) throw Error(`Reading unavailable: ${id}`);
+    // Display evidence only: the invocation owns freshness, never a second write seal.
+    const evidence = projectEvidence(deps, read().page, read().work!.value, snapshots());
+    const saved = await recoveryHost.salvageRouteWork(key);
+    if (!owner.current(issued.value) || !work.ready()) throw Error("Salvage is stale");
+    if (!saved) return null;
+    const decoded = z
+      .discriminatedUnion("ok", [
+        z.strictObject({ ok: z.literal(true), value: z.unknown() }),
+        z.strictObject({ ok: z.literal(false), reason: z.string() }),
+      ])
+      .parse(
+        bindings.bodies[route.data.salvage]!.run(
+          freezePage(saved.value),
+          freezePage({ page: read().page, work: read().work!.value, readings: snapshots() }),
+        ),
+      );
+    if (!decoded.ok) throw Error(decoded.reason);
+    const patches = admittedWorkPatches(
+      route.data,
+      bindings.schemas,
+      decoded.value,
+      route.resolvedWork?.schema,
+    );
+    const presentation = present("work.salvage", patches, evidence, route.data.salvagePresent);
+    reviews.set("work.salvage", {
+      presentation,
+      invocation: issued.value,
+      preview: patches,
+      send: () => {
+        if (!owner.current(issued.value) || !work.ready()) throw Error("Salvage is stale");
+        return work.write(
+          () => patches,
+          issued.value,
+          issued.value.id,
+          { label: "Salvage Work" },
+          issued.value,
+        );
+      },
+    });
+    state = { kind: "saved", ...saved, notice: state.notice };
+    notify();
+    return { kind: "review", preview: patches };
+  };
+  const salvage = async () => {
+    const scope = owner.read()?.scope;
+    if (state.kind === "problem") state = { kind: "idle", notice: state.notice };
+    try {
+      return await prepareSalvage();
+    } catch (error) {
+      if (owner.read()?.scope === scope)
+        state = { kind: "problem", sentence: String(error), notice: state.notice };
+      throw error;
+    } finally {
+      notify();
+    }
+  };
   const recovery = () => ({
     sentence:
       work.problem() === OLDER_WORK || work.problem() === UNREADABLE_WORK
@@ -107,6 +221,7 @@ export function createAdmittedHistory<W extends Record<string, unknown>>(context
           : (state.notice ?? null),
     startFresh:
       !!recoveryHost && (work.problem() === OLDER_WORK || work.problem() === UNREADABLE_WORK),
+    carryOver: !!recoveryHost && work.ready() && state.kind === "saved",
     busy: state.kind === "busy",
     problem: state.kind === "problem" ? state.sentence : null,
   });
@@ -136,6 +251,7 @@ export function createAdmittedHistory<W extends Record<string, unknown>>(context
       });
       await work.reopen();
       if (!owner.current(captured)) throw Error("Recovery is stale");
+      if (route.data.salvage) return await salvage();
       return null;
     } catch (error) {
       if (owner.read()?.scope === scope)
@@ -157,6 +273,7 @@ export function createAdmittedHistory<W extends Record<string, unknown>>(context
         : null;
   const { entryFor, sourceTimeline, now } = context;
   return {
+    sync: syncRecovery,
     logEvidence: (readingId: string, value: unknown) => {
       const key = read().scope.identity.work;
       if (!key) return;
@@ -175,6 +292,7 @@ export function createAdmittedHistory<W extends Record<string, unknown>>(context
     },
     public: {
       history,
+      salvage,
       recovery,
       startFresh,
       stopCommand(id: string) {

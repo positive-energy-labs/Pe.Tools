@@ -1,9 +1,9 @@
+import { Context, Layer } from "effect";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { inputKinds, type InputKind, type SourceProvenance } from "@pe/agent-contracts";
 import { linkedCatalog } from "@pe/agent-contracts/pe-api";
-import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { Context, Layer } from "effect";
-import { InvalidRead } from "./native-reads.ts";
 import type { HostInputLane } from "./native-recording.ts";
+import { InvalidRead } from "./native-reads.ts";
 
 /** One thing a request is about to use; policy derives its safety from catalogs, never the client. */
 export type InputUse =
@@ -12,7 +12,7 @@ export type InputUse =
   | { readonly kind: "command"; readonly key: string }
   | {
       readonly kind: "work";
-      readonly verb: "edit" | "undo" | "redo" | "start-fresh" | "publish" | "retire";
+      readonly verb: "edit" | "undo" | "redo" | "start-fresh" | "salvage" | "publish" | "retire";
     }
   | { readonly kind: "recording"; readonly verb: "bind-point" | "write-metadata" | "append" };
 

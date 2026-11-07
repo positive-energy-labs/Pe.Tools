@@ -1,5 +1,6 @@
+import type { WorkAdmission } from "./route-discovery";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { peClient } from "#/host/pe-client";
-import { peReadings, type Readings } from "#/host/resource-stream";
 import {
   workWriteAckSchema,
   type RouteStateWriteResult,
@@ -7,8 +8,7 @@ import {
   type WorkWriteAck,
   type WorkWrite,
 } from "@pe/agent-contracts";
-import { peRoutes } from "@pe/agent-contracts/pe-api";
-import type { WorkAdmission } from "./route-discovery";
+import { peReadings, type Readings } from "#/host/resource-stream";
 export function routeInput(route: string, key: WorkKey) {
   const query: Record<string, string> = {};
   if (key.work !== undefined) query.work = key.work;
@@ -73,6 +73,21 @@ export async function postRouteWrite(
   });
   return { status: response.status, result: response.ok ? wire : (wire?.error?.details ?? null) };
 }
+
+export async function getRouteSalvage(
+  input: WorkInput,
+): Promise<{ from: string; value: unknown } | null> {
+  const response = await peClient.response("work.salvage", input);
+  if (response.status === 404) return null;
+  const body = await response.json();
+  if (response.ok && body === null) return null;
+  if (!response.ok || !body || typeof body.from !== "string")
+    throw Error(body?.error?.message ?? `salvage failed (${response.status})`);
+  return body;
+}
+
+/** What the host set aside (or cannot read) for this Work, as the route's own `salvage` reads it; null when none. */
+export const salvageRouteWork = (key: WorkKey) => getRouteSalvage(routeInput(key.route, key));
 
 /**
  * The host's accepted writes of one Work, as it stamped them (`by`, press, forward and inverse
