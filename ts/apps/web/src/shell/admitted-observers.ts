@@ -21,8 +21,8 @@ export function createAdmittedObservers(data: RouteGraphJson, bodies: Bodies) {
           z.boolean().parse(bodies[body]!.run(ctx)),
         ]),
       );
-      const nextSubject = data.subject.show
-        ? z.string().parse(bodies[data.subject.show]!.run(ctx.page[data.subject.field]))
+      const nextSubject = data.subject!.show
+        ? z.string().parse(bodies[data.subject!.show]!.run(ctx.page[data.subject!.field]))
         : null;
       const nextText = data.subjectText
         ? z.string().parse(bodies[data.subjectText]!.run(ctx))

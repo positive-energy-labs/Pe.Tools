@@ -14,3 +14,9 @@ export const publicationSchema = <S extends z.ZodType>(data: S) => z.object({
     origin: z.unknown(), freshness: z.enum(["current", "refresh-needed"]),
   }).nullable(),
 });
+export const valueRead = <I extends z.ZodType,O extends z.ZodType>(key:string,input:I,data:O) => ({
+  key,input,output:publicationSchema(data),endpoint:"reads.value" as const,request:()=>({read:key}),
+  axes:{subject:"Document",touches:["Metadata"],effect:"Read",cost:"Cheap",cardinality:"One"} as const,
+});
+export const valueReadRequest = publicationRequest(z.unknown()).extend({read:z.string().min(1)});
+export const valueReadResponse = publicationSchema(z.unknown());

@@ -2,8 +2,7 @@
   "version": 1,
   "capabilities": [
     "work",
-    "native-write",
-    "geometry"
+    "native-write"
   ],
   "key": "fans",
   "address": "/fans",
@@ -205,7 +204,7 @@
     "field": "fan",
     "noun": "fan",
     "roster": "roster",
-    "detail": "value",
+    "detail": "roster",
     "pane": "sheet-roster"
   },
   "historyDetail": "historyDetail",

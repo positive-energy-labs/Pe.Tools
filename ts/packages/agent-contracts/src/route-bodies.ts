@@ -178,16 +178,18 @@ export function linkRouteBodies(
   const list = (table: object, ids: readonly string[], path: string, kind: string) =>
     ids.forEach((id, i) => reference(table, id, `${path}.${i}`, kind));
   if (
-    Object.values(data.fields).filter((f) => f.role === "subject").length !== 1 ||
-    data.fields[data.subject.field]?.role !== "subject"
+    Object.values(data.fields).filter((f) => f.role === "subject").length !== (data.subject ? 1 : 0) ||
+    (data.subject && data.fields[data.subject!.field]?.role !== "subject")
   )
-    fail("subject.field", data.subject.field, "one subject field", "Declare exactly one subject");
+    fail("subject.field", data.subject?.field ?? "", "declared subject field", "Subject fields must match the subject declaration");
   if (Object.values(data.fields).filter((f) => f.role === "selection").length !== 1)
     fail("fields", "", "one selection field", "Declare exactly one selection");
-  reference(data.panes, data.subject.pane, "subject.pane", "pane");
-  reference(data.readings, data.subject.roster, "subject.roster", "reading");
-  reference(data.readings, data.subject.detail, "subject.detail", "reading");
-  body(data.subject.show, "subject.show", "show");
+  if(data.subject) {
+    reference(data.panes, data.subject!.pane, "subject.pane", "pane");
+    reference(data.readings, data.subject!.roster, "subject.roster", "reading");
+    reference(data.readings, data.subject!.detail, "subject.detail", "reading");
+    body(data.subject!.show, "subject.show", "show");
+  }
   body(data.subjectText, "subjectText", "subject");
   body(data.transition, "transition", "transition");
   if (data.transitionDeps) {

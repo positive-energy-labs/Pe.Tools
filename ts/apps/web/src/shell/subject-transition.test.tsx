@@ -41,7 +41,7 @@ test.each([
     await waitFor(() => expect(f.fans.work()?.revision).toBe(1));
   }
   render(<AdmittedSubjectPicker mount={mount} data={data} />);
-  fireEvent.click(screen.getByRole("button", { name: `Choose ${data.subject.noun}` }));
+  fireEvent.click(screen.getByRole("button", { name: `Choose ${data.subject!.noun}` }));
   const option = await screen.findByRole("option", { name: first.label });
   if (input === "mouse") fireEvent.click(option);
   else {

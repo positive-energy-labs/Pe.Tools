@@ -193,8 +193,8 @@ export function createAdmittedGeometry(options: {
       }
     };
     const page = owner.read()!.page;
-    const subject = page[route.data.subject.field];
-    const field = route.data.fields[route.data.subject.field]!;
+    const subject = page[route.data.subject!.field];
+    const field = route.data.fields[route.data.subject!.field]!;
     const identity =
       field.role === "subject"
         ? typeof field.identity === "string"

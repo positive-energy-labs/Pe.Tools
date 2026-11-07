@@ -376,7 +376,7 @@ export function createRouteShell(
             return refuse("Place is inactive or retired");
           // Resolve again: equal revision numbers never authorize a foreign/retired admission.
           if (!resolveRouteBindings(registry, route)) return refuse("Route admission is retired");
-          const subject = route.data.subject;
+          const subject = route.data.subject!;
           const field = route.data.fields[subject.field];
           if (field?.role !== "subject") return refuse("Subject declaration is unavailable");
           let value = read().page[subject.field];

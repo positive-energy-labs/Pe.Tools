@@ -2,8 +2,7 @@
   "version": 1,
   "capabilities": [
     "work",
-    "native-write",
-    "geometry"
+    "native-write"
   ],
   "key": "ducts",
   "address": "/ducts",
@@ -219,7 +218,7 @@
     "field": "system",
     "noun": "system",
     "roster": "roster",
-    "detail": "value",
+    "detail": "roster",
     "pane": "e-systems"
   },
   "historyDetail": "historyDetail",

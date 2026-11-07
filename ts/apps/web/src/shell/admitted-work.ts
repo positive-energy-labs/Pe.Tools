@@ -66,7 +66,7 @@ export function createAdmittedWork(
       fingerprint: route.workFingerprint,
       key,
       target: snapshot.scope.identity.target,
-      subject: snapshot.page[route.data.subject.field] as WorkScope["subject"],
+      subject: snapshot.page[route.data.subject!.field] as WorkScope["subject"],
     };
     const capturedScope = scope;
     connectReceipts(scope);

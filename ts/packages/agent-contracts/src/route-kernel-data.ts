@@ -233,7 +233,7 @@ export const RouteGraphJson = z.strictObject({
     detail: ref,
     pane: ref,
     show: ref.optional(),
-  }),
+  }).optional(),
   subjectText: ref.optional(),
   /** Neutral schema for route-owned history metadata. */
   historyDetail: ref.optional(),

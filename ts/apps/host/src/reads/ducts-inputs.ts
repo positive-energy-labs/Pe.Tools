@@ -2,7 +2,7 @@ import { nativeRequestSchema } from "@pe/host-contracts/decoders";
 import { BridgeError as InputBridgeError } from "@pe/host-internal/dispatch";
 import { BridgeError } from "../bridge.ts";
 
-import { workKeySchema, type WorkKey } from "@pe/agent-contracts";
+import { bindWork, workKeySchema, type WorkKey } from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { z } from "zod";
 import type { HostMarks } from "../document-marks.ts";
@@ -12,7 +12,7 @@ import {
   ductsDocumentSchema,
   ductsSnapshotReadingSchema,
   fansDocumentSchema,
-  documentRefSchema,
+  documentRefSchema, executionTargetSchema,
 } from "@pe/agent-contracts";
 import type { WorkReadContext } from "@pe/runtime";
 import { catalogReading, firmReading } from "../ducts-files.ts";
@@ -80,10 +80,11 @@ export interface DuctsReadSources {
   workKey: (target: import("@pe/agent-contracts").DocumentRef) => Promise<WorkKey>;
   firm: () => Promise<z.infer<typeof firmReading>>;
   catalogs: () => Promise<import("../duct-catalogs.ts").CatalogReading>;
+  resource?: (request:unknown)=>Promise<unknown>;
   call: (
-    key: "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
-    request: z.infer<typeof nativeInput.input>["request"],
-    target: import("@pe/agent-contracts").DocumentRef,
+    key: string,
+    request: unknown,
+    target: import("@pe/agent-contracts").DocumentRef | import("@pe/agent-contracts").ExecutionTarget,
     version?: string,
     role?: "acquire" | "validate" | "join" | "beyond",
   ) => Promise<Response>;
@@ -120,20 +121,43 @@ export function ductsInputPort(options: {
   evaluation: string;
   origin: () => unknown;
   revision: InputPort["revision"];
+  leaves?: NonNullable<import("@pe/agent-contracts").HostRouteModule["leaves"]>;
 }): InputPort {
-  return {
+  const port:InputPort = {
     evaluation: options.evaluation,
     get origin() {
       return options.origin();
     },
     revision: options.revision,
-    take: async (name, raw) => {
+    take: async (name, raw, context) => {
+      const custom=options.leaves?.[name];
+      if(custom) return custom(raw,{...port,take:async (key,args)=> {
+        if(!context) return port.take(key,args);
+        if(key === "native") {
+          const input=z.object({target:z.union([documentRefSchema,executionTargetSchema])}).parse(args);
+          const ref="kind" in input.target ? input.target.kind === "document" ? input.target.ref : null : input.target;
+          if(ref) await context.read(documentMark,ref);
+        }
+        return context.read(leaf(key,z.unknown(),z.unknown(),key !== "native"),args);
+      }});
+
       switch (name) {
+        case "resource":
+          if(!options.source.resource) throw Error("Resource inputs are unavailable");
+          return options.source.resource(raw);
         case "document-mark":
           await options.marks.settled?.();
           return options.run(options.marks.snapshot(documentRefSchema.parse(raw)));
-        case "work-scope":
-          return options.source.workKey!(documentRefSchema.parse(raw));
+        case "work-scope": {
+          const legacy=documentRefSchema.safeParse(raw);
+          if(legacy.success) return options.source.workKey(legacy.data);
+          const request=z.object({route:z.string().min(1),work:z.string().nullable().optional(),target:z.union([documentRefSchema,executionTargetSchema]).optional()}).parse(raw);
+          if(request.work === null) return null;
+          if(request.work !== undefined) return bindWork(request.route,null,request.work);
+          const target=request.target;
+          const ref=target && ("kind" in target ? target.kind === "document"?target.ref:null : target);
+          return ref ? {...await options.source.workKey(ref),route:request.route} : bindWork(request.route,null);
+        }
         case "work": {
           const { owner, scope } = z.object({ owner: z.string(), scope: workKeySchema }).parse(raw);
           return options.workspace.view(scope, owner, options.source.inputs?.work);
@@ -143,7 +167,8 @@ export function ductsInputPort(options: {
         case "catalogs":
           return options.source.catalogs();
         case "native": {
-          const args = nativeInput.input.parse(raw);
+          const args=z.object({key:z.string(),request:z.unknown(),target:z.union([documentRefSchema,executionTargetSchema]),
+            version:z.string().optional(),role:z.enum(["acquire","validate","join","beyond"]).optional()}).parse(raw);
           let response: Response;
           try {
             response = await options.source.call(
@@ -172,4 +197,5 @@ export function ductsInputPort(options: {
       }
     },
   };
+  return port;
 }
