@@ -40,6 +40,7 @@ const receipt = (state: "succeeded" | "cancelled") =>
     steps: [],
     recovery: [],
     startedAt: "2026-11-03T00:00:00Z",
+    effects: [{ kind: "file", path: "C:/result" }],
     consumes: [
       {
         kind: "work",
@@ -86,6 +87,20 @@ test("Reject annotates only consumed edits and higher cursor wins once per recei
   expect(f.lease.entry.activity()).toHaveLength(1);
   expect(f.lease.entry.journal.read().undo.map((step) => !!step.notWritten)).toEqual([true, false]);
   expect(Object.isFrozen(f.lease.entry.activity()[0])).toBe(true);
+  f.lease.release();
+});
+
+test("a successful preview with no effects leaves its consumed Work undoable", async () => {
+  const f = fixture({
+    ...state,
+    snapshot: { handle: { key, revision: 1 }, revision: 1, value: { a: 1, b: 0 } },
+    history: { from: 1, acks: [ack(1, "a")] },
+  });
+  f.emit({ kind: "receipt", cursor: 1, receipt: { ...receipt("succeeded"), effects: [] } });
+  const write = vi.fn(async () => { throw Error("restore reached the write door"); });
+  const result = await f.lease.entry.journal.undo(write);
+  expect(result).toMatchObject({ code: "write-refused" });
+  expect(write).toHaveBeenCalledOnce();
   f.lease.release();
 });
 test("ready receipts restore native undo barriers after reload, irrespective of feed order", async () => {

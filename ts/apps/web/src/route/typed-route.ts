@@ -212,12 +212,6 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     value: { ...policy, kind: "use", entry: spec.core.key, deps: { page: Object.keys(fields), work: [], readings: [] } },
   };
   for (const [read,id] of readIds) readings[id] = { ...policy, kind: "use", entry: read.key, deps: {page:Object.keys(fields),work:[],readings:[]} };
-  // Host Work admission projects ownership edges. The browser subscribes to owners, never readings.
-  for (const [owner, config] of Object.entries(owners)) if (owner !== work.route) {
-    schemas[owner] = config.state.schema;
-    readings[`owner:${owner}`] = { ...policy, kind: "work", route: owner, output: owner,
-      deps: { page: [], work: [], readings: [] } };
-  }
   const verbs: RouteGraphJson["verbs"] = Object.fromEntries(Object.entries(spec.commands).map(([id, cmd]) => [id, {
     kind: "command", entry: cmd.entry, input: "none", label: cmd.label, review: "shown",
     deps: { page: [spec.subject.field], work: Object.keys(work.schema.shape), readings: ["value"] },
@@ -234,7 +228,7 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     readings, verbs, seeds: {}, layout: discoveryLayout(spec.layout), needs: "project", predicates: {}, observe: [],
     resetOnTarget: [], stageOrder: [stage], stages: { [stage]: { panes: Object.keys(spec.panes), verbs: Object.keys(verbs), word: spec.name } } };
   schemas.none = z.strictObject({});
-  const host: HostRouteModule = { data, schemas, bodies: {}, workState: work };
+  const host: HostRouteModule = { data, schemas, bodies: {}, workState: work, readWorks: Object.keys(owners).filter(id=>id!==work.route) };
   const entries: Record<string, EntryContract> = Object.fromEntries([...[...readIds.keys()].map(read=>[read.key,read]), ...Object.values(spec.commands).flatMap(c => [[c.entry,c.contract],[c.plan,c.planContract]])]);
   return { spec: { ...spec, edits: { ...spec.edits, work, owners } }, data, host, entries };
 }

@@ -163,6 +163,7 @@ export class RouteWorkspace {
     {
       fingerprint: RouteFingerprint;
       workRoute: string;
+      readWorks: readonly string[];
       readings: import("@pe/agent-contracts").RouteGraphJson["readings"];
       /** The admitted graph's fields: the host's attention fence reads their agent policy, never a codec. */
       fields: import("@pe/agent-contracts").AdmittedFields;
@@ -285,6 +286,7 @@ export class RouteWorkspace {
     const record = {
       fingerprint: route.workFingerprint,
       workRoute: work.route,
+      readWorks: "readWorks" in bindings ? bindings.readWorks ?? [] : [],
       readings: route.data.readings,
       fields: route.data.fields,
       title: route.data.name,
@@ -355,7 +357,7 @@ export class RouteWorkspace {
       ? reading?.kind === "work"
         ? reading.route
         : null
-      : registered.workRoute;
+      : registered.readWorks.includes(key.route) ? key.route : registered.workRoute;
     if (key.route !== workRoute)
       return {
         kind: "failed",

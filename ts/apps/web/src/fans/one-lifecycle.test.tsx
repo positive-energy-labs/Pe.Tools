@@ -33,7 +33,7 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
       expect(recorded.journalRefusal()).toBe("needs live Revit");
       expect(open.mock.calls.at(-1)![0]).toMatchObject({historyPoint:history.point.id,historyPose:{instance:"recorded",route:route.data.key}});
       await expect(recorded.run("losses")).rejects.toThrow("needs live Revit");
-    } finally { recorded.dispose(); }
+    } finally { recorded.dispose(); expect(recorded.history.entries).toEqual([]); }
     }
 
   } finally { closes.reverse().forEach(close => close()); }

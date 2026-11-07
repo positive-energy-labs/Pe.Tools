@@ -28,6 +28,8 @@ export interface HostRouteModule extends Omit<HostWorkRegistration, "spec"> {
   readonly schemas: Readonly<Record<string, z.ZodType>>;
   /** Complete neutral owner export. No hook is reconstructed from a field allowlist. */
   readonly workState?: Readonly<RouteStateSpec<z.ZodType>>;
+  /** Typed modules name Work owners directly, without executable reading slots. */
+  readonly readWorks?: readonly string[];
   readonly bodies: Readonly<
     Record<
       string,
@@ -82,6 +84,7 @@ const hostModuleSchema = hostZ.strictObject({
     hostZ.string(),
     hostZ.custom<z.ZodType>((v) => v instanceof hostZ.ZodType),
   ),
+  readWorks: hostZ.array(hostZ.string().min(1)).max(128).optional(),
   admit: hostZ.custom<RouteWriteAdmission>((v) => typeof v === "function").optional(),
   workState: hostZ
     .custom<RouteStateSpec<z.ZodType>>((v) => workStateSchema.safeParse(v).success)
@@ -102,6 +105,7 @@ export function captureHostModule(input: unknown): HostRouteModule {
   return Object.freeze({
     data: structuredClone(value.data),
     schemas: Object.freeze({ ...value.schemas }),
+    ...(value.readWorks ? {readWorks:Object.freeze([...value.readWorks])} : {}),
     ...(Object.hasOwn(value, "admit") ? { admit: value.admit } : {}),
     ...(value.workState
       ? {

@@ -1492,6 +1492,12 @@ async function historyFixture(pea = false) {
   };
 }
 
+test("a disposed mount exposes no owner history to retained render props", async () => {
+  const f = await historyFixture();
+  f.mount.close();
+  expect(f.mount.history!.entries).toEqual([]);
+});
+
 test("admitted Work undo/redo crosses the door with restoreOf and declared labels", async () => {
   const f = await historyFixture();
   await settle(f.mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
