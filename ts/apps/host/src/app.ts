@@ -170,7 +170,7 @@ function makeRevitComposition(spa: SpaFallback = () => emptyNotFound, origin?: (
           return makeCallRoute(
             (yield* HostReceipts).journal,
             undefined,
-            { workspace: work.workspace },
+            { workspace: work.workspace, workReads: work.reads },
             { origin, families, pointers: work.pointers, retainedRead: retainedCall, nativeBody },
           );
         }),
@@ -373,7 +373,7 @@ function liveHttpLive(options: HttpLiveOptions) {
               return makeCallRoute(
                 (yield* HostReceipts).journal,
                 undefined,
-                { workspace: work.workspace },
+                { workspace: work.workspace, workReads: work.reads },
                 {
                   origin: () => `http://127.0.0.1:${port()}`,
                   pointers: work.pointers,

@@ -270,6 +270,17 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const problems = new Map<string,string>();
   const plans = new Map<string,InvocationToken>();
   const workSignature = () => canonicalRouteInput([...owners].map(([id,o]) => [id,o.ready,o.handle]));
+  const staleReview = (token: InvocationToken, signature: string) => {
+    const state = gate.read(), current = dependencies();
+    const changed = [
+      signature !== workSignature() && `Work readiness/handles ${signature} -> ${workSignature()}`,
+      token.pageEpoch !== state?.pageEpoch && "Page epoch",
+      token.pageRevision !== state?.pageRevision && `Page revision ${token.pageRevision} -> ${state?.pageRevision}`,
+      token.workRevision !== (state?.work?.revision ?? null) && `Work revision ${token.workRevision} -> ${state?.work?.revision ?? null}`,
+      ...Object.entries(token.dependencies).flatMap(([key, hash]) => current[key] === hash ? [] : [`Value ${key} ${hash} -> ${current[key] ?? "unavailable"}`]),
+    ].filter(Boolean);
+    return Error(`Review is stale; prepare it again (${changed.join("; ") || "attempt retired"})`);
+  };
   const scopeKey = subjectScopeKey(Object.fromEntries(input.address.read()));
   const subjectState = (search: Record<string,unknown>): SubjectState | null => {
     if (subjectScopeKey(search) !== scopeKey) return null;
@@ -344,7 +355,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const preview = writePreviewSchema.parse(cmd.planContract.output.parse(result));
       const handle = z.object({ handle: workHandleSchema }).parse(preview.seal.work).handle;
       if (canonicalRouteInput(handle) !== canonicalRouteInput(primary)) throw Error("Preview sealed a different Work");
-      if (signature !== workSignature() || !gate.current(token)) throw Error("Review is stale; prepare it again");
+      if (signature !== workSignature() || !gate.current(token)) throw staleReview(token, signature);
       const presented=presentationSchema.parse(cmd.present(preview,data,doc));
       reviews.set(id, { preview, input: request as Record<string,unknown>, token, signature,
         presentation: typeof presented === "string" ? {sentence:presented,rows:[]} : presented });

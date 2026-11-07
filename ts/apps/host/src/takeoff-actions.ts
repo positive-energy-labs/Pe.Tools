@@ -44,6 +44,7 @@ export const fileVersion = async (path: string) =>
     .digest("hex");
 export type TakeoffActionDependencies = {
   workspace?: RouteWorkspace;
+  workReads?: import("./command-executor.ts").CommandResources["workReads"];
   sdk?: SdkReceiptReader;
   fileVersion?: typeof fileVersion;
   openFile?: (path: string) => Promise<RhvacExtractData>;

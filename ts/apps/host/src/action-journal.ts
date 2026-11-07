@@ -879,19 +879,22 @@ export class ActionJournal implements ReceiptReader {
       });
     return visible;
   }
+  private workReads(admission: ActionAdmission) {
+    return this.environment?.workReads?.(admission) ?? this.environment?.work;
+  }
   private context(
     admission: ActionAdmission,
     crossing: Crossing,
     consumed: Consumed[],
   ): CommandContext {
-    const workspace = this.environment?.work;
+    const workspace = this.workReads(admission), owner = this.environment?.work;
     const cached = new Map<string, { doc: unknown; revision: number }>();
     const context: CommandContext = {
       admission,
       ...crossing,
       get work() {
-        if (!workspace) throw refused("Work is unavailable", "work.unavailable");
-        return workspace;
+        if (!workspace || !owner) throw refused("Work is unavailable", "work.unavailable");
+        return { read: workspace.read.bind(workspace), view: workspace.view.bind(workspace), publish: owner.publish.bind(owner) };
       },
       consumed,
       selectWork: async (spec, handle, select) => {
@@ -1018,7 +1021,7 @@ export class ActionJournal implements ReceiptReader {
             row.steps.every((step) => step.state === "succeeded"))
         )
           continue;
-        const current = await this.environment?.work?.view(
+        const current = await this.workReads(row)?.view(
           dependency.probe.handle.key,
           dependency.probe.handle.key.route,
         );
@@ -1405,7 +1408,7 @@ export class ActionJournal implements ReceiptReader {
               ),
             );
           if (!outstanding.length) {
-            const current = await this.environment?.work?.view(key, route);
+            const current = await this.workReads(row)?.view(key, route);
             if (!current) throw Error("Work retirement is unavailable");
             return { retired: alreadyRetired, revision: current.revision };
           }

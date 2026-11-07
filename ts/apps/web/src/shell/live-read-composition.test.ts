@@ -22,7 +22,10 @@ import { createRouteTokenIssuer } from "../../../../packages/agent-contracts/src
 import { sourceRouteServices } from "./source-route-services.ts";
 import { hostRead } from "../route/host-read.ts";
 import { watch } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { HostInputContext } from "../../../host/src/input-context.ts";
+import { openRecordingWriter } from "../../../host/src/native-recording.ts";
 import { dirname, join } from "node:path";
 import { firmFilePath, FIRM_SEED } from "../../../host/src/ducts-inputs.ts";
 
@@ -35,15 +38,15 @@ vi.mock("../readings", () => ({ openEventSource: () => ({ close() {} }) }));
 const ambient = <S, I>(tag: Context.Key<S, I>) =>
   Layer.effect(tag, Effect.serviceOption(tag).pipe(Effect.map(Option.getOrThrow)));
 
-async function liveHost(record = false, duringNative?: (root: string) => Promise<void>) {
+async function liveHost(record = false, duringNative?: (root: string) => Promise<void>, isolated?: HostInputContext["Service"]) {
   let target!: { session: string; openId: string };
   const inputRoot = dirname(dirname(firmFilePath()));
   const roster = nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
-  const inputs = record
+  const inputs = isolated ?? (record
     ? await Effect.runPromise(
         hostInputs(admittedReceiptStamps().host, { kind: "live", capture: "automatic" }),
       )
-    : undefined;
+    : undefined);
   const host = await bootHost({
     inputs,
     reads: {
@@ -95,7 +98,7 @@ async function liveHost(record = false, duringNative?: (root: string) => Promise
     "x-pe-context": host.terminal,
     [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
   };
-  return { ...host, target, headers, inputRoot };
+  return { ...host, target, headers, inputRoot, inputs };
 }
 
 test("source startup records a cold Fans publication through real host inputs", async () => {
@@ -294,4 +297,31 @@ test("mounted Fans core and roster cannot supersede one another through their sh
     await host.close();
     transport.fetch.mockReset();
   }
+});
+
+
+test("a stopped recording cannot refuse a current live Fans publication", async () => {
+  const dir=await mkdtemp(join(tmpdir(),"pe-capture-stop-"));
+  const automatic=await Effect.runPromise(hostInputs(admittedReceiptStamps().host,{kind:"live",capture:"automatic"}));
+  if(automatic.lane.kind!=="live" || !automatic.lane.captureStore) throw Error("Expected an automatic recording");
+  const writer=await Effect.runPromise(openRecordingWriter(dir,automatic.lane.captureStore.identity,{maxBytes:256*1024*1024,maxTakings:10000}));
+  const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore:writer}))));
+  const host = await liveHost(false,undefined,inputs);
+  const publish = () => fetch(`${host.base}/pe/fans/sheet`, {method:"POST",headers:host.headers,body:JSON.stringify({subscription:"capture-stop",generation:0,args:{target:host.target,fan:[],sheetPath:""}})});
+  try {
+    const initial = await publish();
+    expect(initial.status,await initial.clone().text()).toBe(200);
+    const historyBefore=await fetch(`${host.base}/pe/history?document=${encodeURIComponent("C:/model.rvt")}`,{headers:host.headers});
+    expect((await historyBefore.json()).points).toHaveLength(1);
+    const writer=host.inputs?.lane.kind === "live" ? host.inputs.lane.captureStore : undefined;
+    expect(writer).toBeTruthy();
+    await Effect.runPromise(writer!.capture.stop(writer!.capture.begin()!,"unsupported"));
+    const response=await publish();
+    expect(response.status,await response.clone().text()).toBe(200);
+    expect((await response.json()).state).toBe("current");
+    const history=await fetch(`${host.base}/pe/history?document=${encodeURIComponent("C:/model.rvt")}`,{headers:host.headers});
+    const body=await history.json();
+    expect(body.points).toHaveLength(1);
+    expect(body.problem).toMatch(/History stopped.*unsupported/);
+  }finally{await host.close();await rm(dir,{recursive:true,force:true});}
 });

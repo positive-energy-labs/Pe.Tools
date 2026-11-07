@@ -65,7 +65,7 @@ export const hostInputs = (stamp: ReceiptStamp | null, selection: HostInputSelec
     Effect.map((writer): HostInputLane => ({ kind: "live", captureStore: writer })),
     Effect.catch((error) =>
       error.problem === "recording.full" || error.problem === "recording.io"
-        ? Effect.succeed<HostInputLane>({ kind: "live", captureSetup: { at: 1, reason: "setup" } })
+        ? Effect.succeed<HostInputLane>({ kind: "live", captureSetup: { at: 1, stoppedAt: Date.now(), reason: "setup" } })
         : Effect.fail(error),
     ),
   );

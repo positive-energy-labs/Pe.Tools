@@ -24,6 +24,7 @@ export function commandResources(
 ): CommandResources {
   return {
     work: deps.workspace,
+    workReads: deps.workReads,
     async effectPath(effect) {
       const listing = await listPackages(deps.podsRoot);
       if (listing.unreadable.length)
