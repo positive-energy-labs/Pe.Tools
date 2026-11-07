@@ -272,12 +272,12 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
       const label = `${element} · ${change.parameter}${write.scope ? ` (${write.scope})` : ""}`;
       const reported = change.parameter === "Specific Loss" && write.reportedPressureDropInWg != null
         ? ` (reported effective pressure: ${write.reportedPressureDropInWg} in-wg)` : "";
-      const before = `${spoken(change.before) ?? "unavailable"}${reported}`;
-      const after = write.outcome === "refused" ? "not written" : spoken(change.after) ?? "unavailable";
+      const before = change.before == null ? null : `${spoken(change.before)}${reported}`;
+      const after = spoken(change.after) ?? "unavailable";
       const remedy = write.outcome === "refused" && /neither|missing|no .*parameter/i.test(write.reason ?? "")
         ? "; add the missing parameter to the family or map to an existing writable parameter" : "";
       return {
-        row: `${label}: ${before} → ${after} · source: ${source} · ${tail}${remedy}`,
+        row: `${label}: ${before ?? "unavailable"} → ${after} · source: ${source} · ${tail}${remedy}`,
         cell: {
           key: changes.length === 1 ? key : `${key}:${index}`,
           label, group, before,
