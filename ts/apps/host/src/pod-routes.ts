@@ -9,6 +9,7 @@ import type { createPackageLifecycle } from "./package-lifecycle.ts";
 import { productRouteTrustPath } from "./product-paths.ts";
 import { readJson, writeArtifact } from "./page-artifacts.ts";
 import { admitPodArtifact, verifyPodArtifact } from "./pod-artifact.ts";
+import { registeredReads } from "./reads/routes.ts";
 
 /** Builtin source admission and verified Pod-byte admission share this host-owned door.
  * The caller supplies the exact authenticated handle, never a browser schema or migration. */
@@ -16,7 +17,39 @@ export function registerAdmittedHostRoute(
   route: contracts.AdmittedRoute | HostAdmittedRoute,
   workspace: RouteWorkspace,
 ): ReturnType<RouteWorkspace["registerAdmitted"]> {
-  return workspace.registerAdmitted(route);
+  // Builtins joined the same registry at startup. A verified Pod owns its runtime entries.
+  const captured = route.fingerprint.startsWith("pod-bytes:")
+    ? contracts.captureAdmittedHostBindings(route)
+    : undefined;
+  let unregister = () => {};
+  try {
+    if (captured) {
+      const bindings = captured.bindings;
+      unregister = registeredReads.register(
+        "reads" in bindings ? bindings.reads : undefined,
+        "leaves" in bindings ? bindings.leaves : undefined,
+      );
+    }
+    const work = workspace.registerAdmitted(route);
+    return {
+      ready: work.ready.then((failure) => {
+        if (failure) {
+          unregister();
+          captured?.deactivate();
+        }
+        return failure;
+      }),
+      close: () => {
+        unregister();
+        captured?.deactivate();
+        work.close();
+      },
+    };
+  } catch (error) {
+    unregister();
+    captured?.deactivate();
+    throw error;
+  }
 }
 
 const trustSchema = z.record(z.string(), z.string().regex(/^pod-bytes:[a-f0-9]{64}$/));
@@ -92,8 +125,11 @@ export function createPodRoutes(
         const bytes = pod.members.find((member) => member.path === route.artifact)!.bytes;
         const value: unknown = JSON.parse(Buffer.from(bytes).toString("utf8"));
         const admitted = await admitPodArtifact(value, route.fingerprint);
-        if (admitted.data.key !== route.workRoute || admitted.data.work?.route !== route.workRoute ||
-          admitted.data.address !== `/tool/${encodeURIComponent(route.key)}`)
+        if (
+          admitted.data.key !== route.workRoute ||
+          admitted.data.work?.route !== route.workRoute ||
+          admitted.data.address !== `/tool/${encodeURIComponent(route.key)}`
+        )
           throw Error("Admitted route identity differs from its package declaration");
         if (closed) return [];
         if (!current(route.key, route.fingerprint)) continue;

@@ -1,5 +1,5 @@
-import {hostReadModules} from "./registry.generated.ts";
-import {valueReadRequest,type HostRouteModule} from "@pe/agent-contracts";
+import { hostReadModules } from "./registry.generated.ts";
+import { valueReadRequest, type HostRouteModule } from "@pe/agent-contracts";
 import {
   fansReadRequest,
   ductsReadRequest,
@@ -9,9 +9,22 @@ import {
 import { fansSheet } from "./fans.ts";
 import { fanRoster, ductSheet } from "./fan-sheet.ts";
 import { ductsRoster, ductsNetwork, ductsPricing } from "./ducts.ts";
-import { evaluate, fingerprint, type InputPort, type Read, type Publications, type Publication } from "./evaluator.ts";
+import {
+  evaluate,
+  fingerprint,
+  type InputPort,
+  type Read,
+  type Publications,
+  type Publication,
+} from "./evaluator.ts";
 
-export const graphRouteIds = ["reads.value","fans.sheet", "ducts.read", "ducts.roster", "ducts.sheet"];
+export const graphRouteIds = [
+  "reads.value",
+  "fans.sheet",
+  "ducts.read",
+  "ducts.roster",
+  "ducts.sheet",
+];
 function bind<I, O>(
   definition: Read<I, O>,
   args: I,
@@ -29,27 +42,55 @@ function bind<I, O>(
     publication,
     readSet: publication?.readSet,
     evaluate: async (port: InputPort) => (await evaluate(definition, args, port)).data,
-    publish: (owner: Publications, id: string, generation: number, port: InputPort,
-      keep?: (publication: Publication<O>) => Promise<() => void>) =>
-      owner.publish(id, generation, definition, args, port, keep),
+    publish: (
+      owner: Publications,
+      id: string,
+      generation: number,
+      port: InputPort,
+      keep?: (publication: Publication<O>) => Promise<() => void>,
+    ) => owner.publish(id, generation, definition, args, port, keep),
   };
 }
 /** Trusted host modules extend the graph without an endpoint or port branch. */
-export function readRegistry(modules:readonly Pick<HostRouteModule,"reads"|"leaves">[]) {
-  const reads=new Map<string,Read<any,any>>();
-  for(const module of modules) for(const read of Object.values(module.reads ?? {})) {
-    if(reads.has(read.name)&&reads.get(read.name)!==read) throw Error(`Duplicate host read ${read.name}`);
-    reads.set(read.name,read);
-  }
-  return {reads};
+export function readRegistry(modules: readonly Pick<HostRouteModule, "reads" | "leaves">[]) {
+  const reads = new Map<string, Read<any, any>>();
+  const leaves: Record<string, NonNullable<HostRouteModule["leaves"]>[string]> = {};
+  const register = (
+    definitions: HostRouteModule["reads"] = {},
+    inputs: HostRouteModule["leaves"] = {},
+  ) => {
+    const incoming = Object.values(definitions),
+      names = new Set<string>();
+    for (const definition of incoming) {
+      if (reads.has(definition.name) || names.has(definition.name))
+        throw Error(`Duplicate host read ${definition.name}`);
+      names.add(definition.name);
+    }
+    for (const name of Object.keys(inputs))
+      if (leaves[name]) throw Error(`Duplicate host leaf ${name}`);
+    for (const definition of incoming) reads.set(definition.name, definition);
+    Object.assign(leaves, inputs);
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      for (const definition of incoming)
+        if (reads.get(definition.name) === definition) reads.delete(definition.name);
+      for (const [name, take] of Object.entries(inputs))
+        if (leaves[name] === take) delete leaves[name];
+    };
+  };
+  for (const module of modules) register(module.reads, module.leaves);
+  return { reads, leaves, register };
 }
-export const registeredReads=readRegistry(hostReadModules);
+export const registeredReads = readRegistry(hostReadModules);
 /** HTTP adapters select a read; composition and freshness belong to the evaluator. */
-export function graphRoute(id: string, raw: unknown, registry=registeredReads) {
-  if(id === "reads.value") {
-    const request=valueReadRequest.parse(raw),definition=registry.reads.get(request.read);
-    if(!definition) throw Error(`Host read is not registered: ${request.read}`);
-    return bind(definition,definition.input.parse(request.args),request);
+export function graphRoute(id: string, raw: unknown, registry = registeredReads) {
+  if (id === "reads.value") {
+    const request = valueReadRequest.parse(raw),
+      definition = registry.reads.get(request.read);
+    if (!definition) throw Error(`Host read is not registered: ${request.read}`);
+    return bind(definition, definition.input.parse(request.args), request);
   }
   if (id === "ducts.roster") return bind(fanRoster, ductsRosterRequestSchema.parse(raw));
   if (id === "ducts.sheet") return bind(ductSheet, ductsSheetRequestSchema.parse(raw));
