@@ -22,6 +22,7 @@ import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as PeaRouteImport } from "./routes/pea";
 import { Route as RoomsRouteImport } from "./routes/rooms";
 import { Route as SchedulesRouteImport } from "./routes/schedules";
+import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemBandRouteImport } from "./routes/design-system_.band";
 import { Route as DesignSystemListRouteImport } from "./routes/design-system_.list";
@@ -98,6 +99,11 @@ const SchedulesRoute = SchedulesRouteImport.update({
   path: "/schedules",
   getParentRoute: () => rootRouteImport,
 } as any);
+const SettingsRoute = SettingsRouteImport.update({
+  id: "/settings",
+  path: "/settings",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DesignSystemArmingRoute = DesignSystemArmingRouteImport.update({
   id: "/design-system_/arming",
   path: "/design-system/arming",
@@ -164,6 +170,7 @@ export interface FileRoutesByFullPath {
   "/pea": typeof PeaRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
+  "/settings": typeof SettingsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
@@ -189,6 +196,7 @@ export interface FileRoutesByTo {
   "/pea": typeof PeaRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
+  "/settings": typeof SettingsRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/band": typeof DesignSystemBandRoute;
   "/design-system/list": typeof DesignSystemListRoute;
@@ -215,6 +223,7 @@ export interface FileRoutesById {
   "/pea": typeof PeaRoute;
   "/rooms": typeof RoomsRoute;
   "/schedules": typeof SchedulesRoute;
+  "/settings": typeof SettingsRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/band": typeof DesignSystemBandRoute;
   "/design-system_/list": typeof DesignSystemListRoute;
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | "/pea"
     | "/rooms"
     | "/schedules"
+    | "/settings"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/list"
@@ -267,6 +277,7 @@ export interface FileRouteTypes {
     | "/pea"
     | "/rooms"
     | "/schedules"
+    | "/settings"
     | "/design-system/arming"
     | "/design-system/band"
     | "/design-system/list"
@@ -292,6 +303,7 @@ export interface FileRouteTypes {
     | "/pea"
     | "/rooms"
     | "/schedules"
+    | "/settings"
     | "/design-system_/arming"
     | "/design-system_/band"
     | "/design-system_/list"
@@ -318,6 +330,7 @@ export interface RootRouteChildren {
   PeaRoute: typeof PeaRoute;
   RoomsRoute: typeof RoomsRoute;
   SchedulesRoute: typeof SchedulesRoute;
+  SettingsRoute: typeof SettingsRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemBandRoute: typeof DesignSystemBandRoute;
   DesignSystemListRoute: typeof DesignSystemListRoute;
@@ -422,6 +435,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SchedulesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/settings": {
+      id: "/settings";
+      path: "/settings";
+      fullPath: "/settings";
+      preLoaderRoute: typeof SettingsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/design-system_/arming": {
       id: "/design-system_/arming";
       path: "/design-system/arming";
@@ -520,6 +540,7 @@ const rootRouteChildren: RootRouteChildren = {
   PeaRoute: PeaRoute,
   RoomsRoute: RoomsRoute,
   SchedulesRoute: SchedulesRoute,
+  SettingsRoute: SettingsRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemBandRoute: DesignSystemBandRoute,
   DesignSystemListRoute: DesignSystemListRoute,

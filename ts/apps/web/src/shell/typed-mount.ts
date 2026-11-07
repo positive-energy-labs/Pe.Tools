@@ -428,7 +428,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             stage:(value2,detail)=>patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"set",rung:{value:value2}}),detail,route),
             transitions:(detail)=>ready&&value.edit?[{kind:"clear",run:()=>clear(detail)}]:[]};
         },
-        label(input,label) { const foreign=[...new Set(edits!.patches(input,core.value).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
+        label(input,label) { const foreign=[...new Set(edits!.patches(input,core.value).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} · ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
         patch,
         edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),core.value),detail),
       };

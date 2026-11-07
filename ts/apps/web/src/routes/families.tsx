@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { TypedShell } from "../shell/typed-shell";
 import { module } from "../families/route";
-import { builtins } from "../route/builtins.neutral";
+import { builtinRouteStamp } from "../route/builtin-inventory";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 export const Route = createFileRoute("/families")({
   validateSearch: (search: Record<string, unknown>) =>
@@ -12,7 +12,7 @@ export const Route = createFileRoute("/families")({
     <TypedShell
       module={module}
       fingerprint={workFingerprintSchema.parse(
-        `builtin-closure:${builtins.families.closure.fingerprint}`,
+        `builtin-closure:${builtinRouteStamp("families")}`,
       )}
     />
   ),

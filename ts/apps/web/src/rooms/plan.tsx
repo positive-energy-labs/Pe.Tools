@@ -26,7 +26,7 @@ import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { boundsOf, contentViewport, fitFrame, type Bounds2, type Point2 } from "#/lib/affine-frame";
 import { token } from "@pe/kit/lib/token";
-import { PlanImageLayer, planCorners, type TakeoffPlanImage } from "#/takeoff/level-plan";
+import { PlanImageLayer, planCorners, type TakeoffPlanImage } from "#/scene/plan-image";
 import { pathD } from "#/takeoff/model";
 import { PLAN_REFUSAL, type PlanRefusal } from "#/takeoff/plan";
 import { ROOMS_LAYERS, toggleLayer } from "@pe/agent-contracts";

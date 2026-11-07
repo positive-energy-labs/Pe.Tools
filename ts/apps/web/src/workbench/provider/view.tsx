@@ -44,7 +44,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     strict: false,
     select: (search) => ({
       thread: search.thread,
-      mode: search.mode,
+      mode: routeAddress("pea").read(search).page.mode,
       turn: search.turn,
       prompt: search.prompt,
     }),

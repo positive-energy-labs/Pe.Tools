@@ -2,7 +2,6 @@
 import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeAll, expect, test, vi } from "vite-plus/test";
 import { address, roomEditKey, roomsRouteState } from "@pe/agent-contracts";
-import { roomsGraph } from "#/rooms/graph";
 import { publicRoutes, publicRoutesReady } from "../route/builtin-routes";
 import { useHeadWorks } from "./head-works";
 
@@ -45,7 +44,7 @@ test("the chat head reads executable graph Work and cell families for addressed 
     },
   });
   expect(reads.entries.find((entry) => entry.work.route === "rooms")).toMatchObject({
-    work: { schema: roomsGraph.work },
+    work: { schema: roomsRouteState.schema },
     key: { binding: "address", route: "rooms", target: "C:/Models/Building.rvt", from: doc },
   });
   expect(

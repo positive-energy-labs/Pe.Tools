@@ -9,7 +9,7 @@ import {
 } from "../../../../packages/agent-contracts/src/route-module";
 import type { KernelServices } from "../../../../packages/agent-contracts/src/route-kernel-environment";
 import type { ReadingSnapshot } from "../../../../packages/agent-contracts/src/route-kernel-bodies";
-import { module as captures } from "../shell/admitted-module.test-fixture";
+import { module as captures } from "../shell/admitted-module.test.fixture";
 import { createRouteShell } from "../shell/admitted-mount";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 import { presentLosses, presentFan } from "../ducts/reviews";

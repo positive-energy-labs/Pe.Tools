@@ -3,7 +3,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildBuiltinClosure, fingerprintRouteSource } from "../../route-source-hash";
-import { module as captures } from "../shell/admitted-module.test-fixture";
+import { module as captures } from "../shell/admitted-module.test.fixture";
 
 test("the builtin closure producer hashes fans without another route", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-w1c-closure-"));

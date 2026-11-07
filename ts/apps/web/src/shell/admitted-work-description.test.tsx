@@ -13,7 +13,7 @@ import type {
   WorkWriteOutcome,
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { forgetWorkJournals } from "./journal";
-import { module as captures } from "../shell/admitted-module.test-fixture";
+import { module as captures } from "../shell/admitted-module.test.fixture";
 import { createRouteShell } from "../shell/admitted-mount";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 
