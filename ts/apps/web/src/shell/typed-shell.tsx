@@ -136,7 +136,9 @@ function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNo
 }
 export function TypedWrite({ mount, id }: { mount: TypedMount; id: string }) {
   const command=mount.spec.commands[id]!,handle=mount.action(id);
-  if("kind" in command) return <Button label={handle.label} refusal={handle.refusal} busy={handle.pending} onClick={()=>void handle.run().catch(()=>{})}>{handle.label}</Button>;
+  if("kind" in command) return <><Button label={handle.label} refusal={handle.refusal} busy={handle.pending} onClick={()=>void handle.run().catch(()=>{})}>{handle.label}</Button>
+    {handle.failure?<span role="alert">{handle.failure}</span>:null}
+    {handle.consent?<Button label={`Reject ${handle.label}`} onClick={handle.consent.run}>Reject? {handle.consent.until}</Button>:null}</>;
   return <PreviewAction handle={handle} label={handle.label} />;
 }
 function layout(node: TypedRoute["spec"]["layout"]): LayoutNode {
@@ -158,6 +160,7 @@ function TypedPane({mount,id,ctx}: {mount:TypedMount;id:string;ctx:DrawContext<a
   const observation=bindings?.observation??{scope:null,references:[]};
   return <ValueScope value={ctx.value}><AttentionScope doc={doc} selected={selected} members={bindings?.members}>
     <NativeObservationScope value={ctx.value.current?observation:{...observation,scope:null}}>
+      {mount.spec.panes[id]!.read!==mount.spec.core&&retainedValueLabel(ctx.value)?<p role="status">{retainedValueLabel(ctx.value)}</p>:null}
       {mount.spec.panes[id]!.draw(ctx) as ReactNode}
     </NativeObservationScope>
   </AttentionScope></ValueScope>;
