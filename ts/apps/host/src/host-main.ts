@@ -1,5 +1,4 @@
 import { NodeRuntime } from "@effect/platform-node";
-import { isSea } from "node:sea";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -9,8 +8,6 @@ import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { hostRedirectionTrust, relaunchOutOfGuard } from "./redirection-trust.ts";
 import { currentReceiptExport, fatalReceipt } from "./receipt-export.ts";
-
-declare const __PE_HOST_RECEIPT_BUILD__: unknown;
 
 // The installer stub and the login Run key start the installed host with no stdio anyone reads, so
 // a host that dies before bind (a refused claim, a thrown binding) leaves nothing behind. Tee every
@@ -28,7 +25,8 @@ if (hostOwnership.lane === "installed") {
           file,
           `${new Date().toISOString()} ${String(chunk).replace(/\x1b\[[0-9;]*m/g, "")}`,
         );
-      } catch (error) { write(`Host log append failed: ${String(error)}\n`);
+      } catch (error) {
+        write(`Host log append failed: ${String(error)}\n`);
         // The log is a courtesy; never let it take the host down.
       }
       return write(chunk, ...rest);
@@ -70,12 +68,10 @@ for (const [event, code] of [
     void fatalReceipt(currentReceiptExport(), code, error);
   });
 
-// Explicit recording wins over the source-only unrecorded exception; stamped admission stays strict.
+// Explicit recording selects replay; source and installed launches otherwise record automatically.
 // effect-edge: process-main
-NodeRuntime.runMain(recordingInputSelection(process.argv).pipe(Effect.flatMap((selection) => hostProgram(
-  undefined,
-  undefined,
-  selection ?? (!isSea() && typeof __PE_HOST_RECEIPT_BUILD__ === "undefined"
-    ? { kind: "live", capture: "off" }
-    : undefined),
-))));
+NodeRuntime.runMain(
+  recordingInputSelection(process.argv).pipe(
+    Effect.flatMap((selection) => hostProgram(undefined, undefined, selection)),
+  ),
+);
