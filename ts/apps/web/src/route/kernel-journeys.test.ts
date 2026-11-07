@@ -8,7 +8,7 @@ import { module as fans } from "../fans/route";
 import { localId } from "./typed-route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import type { UseSource } from "../shell/readings";
+import type { UseSource } from "../shell/source-contract";
 
 // Reuse the existing host HTTP fixture. Only native input and the address bar are recorded adapters.
 async function journey() {
