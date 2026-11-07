@@ -1,12 +1,10 @@
 import { z } from "zod";
-import { captureReceiptSchema } from "@pe/agent-contracts";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
 import { field, route, type DrawContext } from "../route/typed-route.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
-export const capturesArgs = z.object({});
-export const capturesValue = z.object({ captures: z.array(captureReceiptSchema) });
+import { capturesArgs, capturesValue } from "../../../../packages/agent-contracts/src/captures-read.ts";
 const loaded = { ...hostRead(valueRead("captures.browse", capturesArgs, capturesValue)), args: () => ({}) };
 const fields = {
   focus: field(z.string(), "", "pose"),
@@ -14,7 +12,7 @@ const fields = {
 };
 export type CapturesContext = DrawContext<z.output<typeof capturesValue>, typeof fields, never, never>;
 export const module = route({
-  key: "captures", name: "Captures", needs: "host", host: "./read.host.ts",
+  key: "captures", name: "Captures", needs: "host", host: "../../../host/src/reads/captures.ts",
   directory: {
     group: "Coordinate model data", summary: "Inspect retained view pictures and receipts",
     label: "Revit data", exposure: "Preview", runtimeNeed: "Host retained view images", icon: "Image",

@@ -1,4 +1,5 @@
-import { routeAddress, SETTINGS_SECTIONS } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
+import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/settings-sections.ts";
 /**
  * The Machine reading, said in words: the version chip, the status line, and each group's
  * critical state. Runtime ownership comes from the host's enforced connections; stale readings

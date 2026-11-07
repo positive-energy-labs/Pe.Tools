@@ -31,7 +31,7 @@ export function Spec({ ctx }: { ctx: PodsContext }) {
   const thread = router.state.location.search.thread;
   return <>
     <span className="face-mono">{ref.pod} · {ref.path}</span>
-    {isSpecOf(schema, "/schemas/family/spec.json") && <a href={routeAddress("family").link({ stage: "apply", ...ref, ...(thread ? { thread } : {}) })}>Open in Family</a>}
+    {isSpecOf(schema, "/schemas/settings/FamilyFoundry/models.json") && <a href={routeAddress("family").link({ stage: "apply", ...ref, ...(thread ? { thread } : {}) })}>Open in Family</a>}
     {!ctx.value.current && <p role="status">{ctx.value.reason}</p>}
     {data?.member && <Editor key={`${page.pod}|${page.path}|${ctx.cells.doc?.basis?.sha256 ?? ""}`} ctx={ctx} schema={schema} />}
     {data?.composition?.result.diagnostics.map((issue, i) => <p key={i} role="status">{issue.path}: {issue.message}</p>)}

@@ -1,14 +1,11 @@
 import { z } from "zod";
-import { type Machine } from "@pe/agent-contracts";
-import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/routes/settings.ts";
+import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/settings-sections.ts";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
 import { field, route, type DrawContext } from "../route/typed-route.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
-export const settingsArgs = z.object({});
-// Machine is already decoded by its host owner. This read preserves that owner contract.
-export const settingsValue = z.object({ machine: z.custom<Machine>() });
+import { settingsArgs, settingsValue } from "../../../../packages/agent-contracts/src/settings-read.ts";
 const loaded = { ...hostRead(valueRead("settings.machine", settingsArgs, settingsValue)), args: () => ({}) };
 const fields = {
   section: field(z.enum(["none", ...SETTINGS_SECTIONS]), "none", "query"),
@@ -16,7 +13,7 @@ const fields = {
 };
 export type SettingsContext = DrawContext<z.output<typeof settingsValue>, typeof fields, never, never>;
 export const module = route({
-  key: "settings", name: "Settings", needs: "host", host: "./read.host.ts",
+  key: "settings", name: "Settings", needs: "host", host: "../../../host/src/reads/settings.ts",
   directory: {
     group: "Explore / maintain", summary: "This machine and every route's user settings",
     label: "Settings", exposure: "Main", runtimeNeed: "Host machine configuration", icon: "Settings2",

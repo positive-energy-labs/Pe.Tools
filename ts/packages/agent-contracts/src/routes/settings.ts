@@ -1,16 +1,8 @@
 import { z } from "zod";
 import { field, text, type RouteDeclaration } from "../route-field.ts";
 
-/** The Settings sections a link may open, in page order. */
-export const SETTINGS_SECTIONS = [
-  "revit",
-  "update",
-  "share",
-  "pea",
-  "host",
-  "notices",
-  "appearance",
-] as const;
+import { SETTINGS_SECTIONS } from "../settings-sections.ts";
+export { SETTINGS_SECTIONS } from "../settings-sections.ts";
 
 export const settingsAddress = {
   path: "/settings",

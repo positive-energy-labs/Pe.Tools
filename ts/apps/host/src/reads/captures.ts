@@ -1,6 +1,6 @@
 import { contextFetch, invocationContext } from "@pe/runtime/context";
-import { leaf, read } from "../../../host/src/reads/evaluator.ts";
-import { capturesArgs, capturesValue } from "./route.ts";
+import { leaf, read } from "./evaluator.ts";
+import { capturesArgs, capturesValue } from "../../../../packages/agent-contracts/src/captures-read.ts";
 
 const stored = leaf("captures.store", capturesArgs, capturesValue);
 export const reads = { browse: read("captures.browse", {

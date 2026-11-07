@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { contextFetch, invocationContext } from "@pe/runtime/context";
 import { podMemberSchema, memberWork, settingsRouteState, settingsCandidate } from "@pe/agent-contracts";
-import { leaf, read } from "../../../host/src/reads/evaluator.ts";
-import { podsArgs, podsValue, member } from "./route.ts";
-import { podRowsSchema, podRunsSchema, memberReadSchema, compositionReadSchema } from "./schemas.ts";
+import { leaf, read } from "./evaluator.ts";
+import { podsArgs, podsValue, podMemberOfPage as member } from "../../../../packages/agent-contracts/src/pods-read.ts";
+import { podRowsSchema, podRunsSchema, memberReadSchema, compositionReadSchema } from "../../../../packages/agent-contracts/src/pods-read.ts";
 
 const inventory = leaf("pods.inventory", z.object({}), podRowsSchema);
 const saved = leaf("pods.saved", podMemberSchema, memberReadSchema);

@@ -1,17 +1,12 @@
 import { z } from "zod";
-import { memberWork, podMemberSchema, settingsRouteState, type SettingsRouteDocument } from "@pe/agent-contracts";
+import { memberWork, settingsRouteState, type SettingsRouteDocument } from "@pe/agent-contracts";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
 import { field, route, sessionCommand, split, type DrawContext } from "../route/typed-route.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
-import { podRowsSchema, podRunsSchema, memberReadSchema, compositionReadSchema } from "./schemas.ts";
 
-export const podsArgs = z.object({ pod: z.string(), path: z.string(), runs: z.enum(["member", "pod"]) });
-export const podsValue = z.object({
-  pods: podRowsSchema, member: memberReadSchema.nullable(), work: settingsRouteState.schema.nullable(),
-  composition: compositionReadSchema.nullable(), draft: z.string(), runs: podRunsSchema,
-});
-export const member = (page: { pod: string; path: string }) => podMemberSchema.safeParse({ pod: page.pod, path: page.path }).data ?? null;
+import { podsArgs, podsValue, podMemberOfPage as member } from "../../../../packages/agent-contracts/src/pods-read.ts";
+export { member };
 const loaded = { ...hostRead(valueRead("pods.author", podsArgs, podsValue)), args: (page: z.output<typeof podsArgs>) => ({ pod: page.pod, path: page.path, runs: page.runs }) };
 const fields = {
   pod: field(z.string(), "", "query", "push"), path: field(z.string(), "", "query", "push"),
@@ -19,7 +14,7 @@ const fields = {
 };
 export type PodsContext = DrawContext<z.output<typeof podsValue>, typeof fields, SettingsRouteDocument, never>;
 export const module = route({
-  key: "pods", name: "Pods", needs: "host", host: "./read.host.ts",
+  key: "pods", name: "Pods", needs: "host", host: "../../../host/src/reads/pods.ts",
   directory: {
     group: "Ask / automate", summary: "Author a Pod member and inspect its runs.", label: "Pods", exposure: "Preview",
     runtimeNeed: "Host catalogue; Revit depends on the pod", icon: "Settings2", aliases: ["Pods"],
@@ -39,7 +34,7 @@ export const module = route({
   commands: {
     open: { ...sessionCommand("settings.observe"), label: "Open saved bytes", input: ({ page, value }) => ({ member: member(page), sha256: value?.member?.sha256, replaceEdits: false }) },
     adopt: { ...sessionCommand("settings.observe"), label: "Adopt disk bytes and replace edits", input: ({ page, value }) => ({ member: member(page), sha256: value?.member?.sha256, replaceEdits: true }) },
-    save: { ...sessionCommand("settings.write"), label: "Save member", input: () => ({}) },
+    save: { ...sessionCommand("settings.write"), label: "Save staged member", input: () => ({}) },
     saveNew: { ...sessionCommand("settings.write"), label: "Save as new member", input: ({ page }) => ({ destination: { pod: page.pod, path: page.path.replace(/(\.json)?$/, `.${crypto.randomUUID()}.json`) } }) },
   },
   layout: split("h", ["members", split("v", ["spec", "runs"], { id: "pods-detail", size: 240, sized: "end" })], { id: "pods-main", size: 300, sized: "start" }),

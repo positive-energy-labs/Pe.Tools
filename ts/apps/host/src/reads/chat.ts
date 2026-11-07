@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { readingRequestSchema } from "@pe/agent-contracts";
-import { leaf, read } from "../../../host/src/reads/evaluator.ts";
-import { chatArgs, chatValue } from "./route.ts";
+import { leaf, read } from "./evaluator.ts";
+import { chatArgs, chatValue } from "../../../../packages/agent-contracts/src/chat-read.ts";
 
 const resource = leaf("resource", readingRequestSchema, z.unknown());
 export const reads = { context: read("chat.context", {
