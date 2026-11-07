@@ -77,7 +77,16 @@ test("Plan keeps capture and review valid across watched publications and batche
    yield* Effect.forkScoped(Effect.forever(Queue.take(bridge.outgoing).pipe(Effect.flatMap((frame:any)=>{
      const request=frame.request;if(!request)return Effect.void;
      requests.push(request.operationKey);
-     const value=request.operationKey==="ducts.snapshot.roster"?roster:request.operationKey==="ducts.snapshot.walk"?walk:request.operationKey==="ducts.tables"?tables:request.operationKey==="ducts.apply.plan"?{previewOnly:true,writes:[],counts:{planned:0,written:0,refused:0,unchanged:0},systemsAfter:[],storeRevision:0}:request.operationKey==="revit.catalog.field-options"?{descriptor:{key:JSON.parse(request.payloadJson).key,mode:"Suggestion",allowsCustomValue:true,dependsOn:[],requiredRuntimeMode:"LiveDocument"},items:[],result:{kind:"Success",message:""}}:{};
+     const value=request.operationKey==="ducts.snapshot.roster"?roster:request.operationKey==="ducts.snapshot.walk"?walk:request.operationKey==="ducts.tables"?tables:request.operationKey==="ducts.apply.plan"?(()=>{
+       const input=JSON.parse(request.payloadJson);
+       // Same equipment-flow preview shape as host/tests/fans-native.fixture.ts; before comes from the captured walk.
+       const writes=(input.equipmentFlows??[]).map((row:{id:number;cfm:number})=>({
+         id:row.id,kind:"equipment-flow",outcome:"planned",
+         before:`${walk.nodes.find(node=>node.id===row.id)!.facts.find(fact=>fact.key==="fanFlow")!.value} cfm`,
+         after:`${row.cfm} cfm`,reason:null,
+       }));
+       return {previewOnly:true,writes,counts:{planned:writes.length,written:0,refused:0,unchanged:0},systemsAfter:[],storeRevision:0};
+     })():request.operationKey==="revit.catalog.field-options"?{descriptor:{key:JSON.parse(request.payloadJson).key,mode:"Suggestion",allowsCustomValue:true,dependsOn:[],requiredRuntimeMode:"LiveDocument"},items:[],result:{kind:"Success",message:""}}:{};
      const reply=Queue.offer(bridge.incoming,JSON.stringify({kind:"Response",response:{requestId:request.requestId,openDocumentId:request.openDocumentId,ok:true,statusCode:200,payloadJson:JSON.stringify(value),metrics:{requestBytes:0,responseBytes:0,revitExecutionMs:0,roundTripMs:0,serializationMs:0}}}));
      return reply;
    }))));
