@@ -51,7 +51,7 @@ export function readInvalidations(
   const readRevision = (name: string, args: unknown) => {
     if (name === "work" && !watchingWork) {
       watchingWork = true;
-      stopWork = workspace.subscribe((event) =>
+      stopWork = workspace.subscribeUncaptured((event) =>
         changed((name, args) => name === "work" && workMatches(args, event.route, event.scope)),
       );
     }

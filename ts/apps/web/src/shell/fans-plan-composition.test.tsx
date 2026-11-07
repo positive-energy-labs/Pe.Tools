@@ -77,7 +77,16 @@ test("Plan keeps capture and review valid across watched publications and batche
    yield* Effect.forkScoped(Effect.forever(Queue.take(bridge.outgoing).pipe(Effect.flatMap((frame:any)=>{
      const request=frame.request;if(!request)return Effect.void;
      requests.push(request.operationKey);
-     const value=request.operationKey==="ducts.snapshot.roster"?roster:request.operationKey==="ducts.snapshot.walk"?walk:request.operationKey==="ducts.tables"?tables:request.operationKey==="ducts.apply.plan"?{previewOnly:true,writes:[],counts:{planned:0,written:0,refused:0,unchanged:0},systemsAfter:[],storeRevision:0}:request.operationKey==="revit.catalog.field-options"?{descriptor:{key:JSON.parse(request.payloadJson).key,mode:"Suggestion",allowsCustomValue:true,dependsOn:[],requiredRuntimeMode:"LiveDocument"},items:[],result:{kind:"Success",message:""}}:{};
+     const value=request.operationKey==="ducts.snapshot.roster"?roster:request.operationKey==="ducts.snapshot.walk"?walk:request.operationKey==="ducts.tables"?tables:request.operationKey==="ducts.apply.plan"?(()=>{
+       const input=JSON.parse(request.payloadJson);
+       // Same equipment-flow preview shape as host/tests/fans-native.fixture.ts; before comes from the captured walk.
+       const writes=(input.equipmentFlows??[]).map((row:{id:number;cfm:number})=>({
+         id:row.id,kind:"equipment-flow",outcome:"planned",
+         before:`${walk.nodes.find(node=>node.id===row.id)!.facts.find(fact=>fact.key==="fanFlow")!.value} cfm`,
+         after:`${row.cfm} cfm`,reason:null,
+       }));
+       return {previewOnly:true,writes,counts:{planned:writes.length,written:0,refused:0,unchanged:0},systemsAfter:[],storeRevision:0};
+     })():request.operationKey==="revit.catalog.field-options"?{descriptor:{key:JSON.parse(request.payloadJson).key,mode:"Suggestion",allowsCustomValue:true,dependsOn:[],requiredRuntimeMode:"LiveDocument"},items:[],result:{kind:"Success",message:""}}:{};
      const reply=Queue.offer(bridge.incoming,JSON.stringify({kind:"Response",response:{requestId:request.requestId,openDocumentId:request.openDocumentId,ok:true,statusCode:200,payloadJson:JSON.stringify(value),metrics:{requestBytes:0,responseBytes:0,revitExecutionMs:0,roundTripMs:0,serializationMs:0}}}));
      return reply;
    }))));
@@ -159,6 +168,17 @@ test("Plan keeps capture and review valid across watched publications and batche
    fireEvent.click(await screen.findByRole("button",{name:"None"},{timeout:20000}));
    fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*0 staged/}));
    await vi.waitFor(()=>{expect(trace.mounts.at(-1)?.owner()?.handle?.revision).toBe(1);expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull();},{timeout:20000});
+   await vi.waitFor(()=>{
+     const settled=mount.journal().moves.findLast((move:any)=>move.label==="Choose write scope");
+     expect(settled).toBeDefined();
+     expect(mount.owner()?.handle?.revision).toBe(settled.revision);
+     expect(mount.value().current).toBe(true);
+     expect(mount.writeRefusal()).toBeNull();
+   },{timeout:20000});
+   await act(async()=>{
+     const failure=await mount.draw("sheet-inputs",(ctx:any)=>ctx.cells.edit({equipmentFlows:{"14577391":{cfm:925}}},{label:"Stage MUAS-1 airflow"}));
+     if(failure) throw Error(failure.message);
+   });
    fireEvent.click(await screen.findByRole("button",{name:"Refresh Fans"}));
    await vi.waitFor(()=>expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull(),{timeout:20000});
    for(mode of ["recording","batched"] as const){
@@ -223,9 +243,9 @@ test("Plan keeps capture and review valid across watched publications and batche
    expect(changes.flatMap(change=>[...change.add,...change.remove.map((key:string)=>JSON.parse(key))]).every(request=>request.kind==="receipts")).toBe(true);
    expect(trace.samples.slice(sampleStart).every(sample=>JSON.parse(sample.work).every((owner:any)=>owner[1]))).toBe(true);
    }
-   fireEvent.click(screen.getByRole("button",{name:/^MUAS-1.*0 staged$/}));
+   fireEvent.click(screen.getByRole("button",{name:/^MUAS-1.*1 staged$/}));
    fireEvent.click(await screen.findByRole("option",{name:/^None/}));
-   await vi.waitFor(()=>expect(trace.mounts.at(-1).owner().handle.revision).toBe(3),{timeout:20000});
+   await vi.waitFor(()=>expect(trace.mounts.at(-1).owner().handle.revision).toBe(4),{timeout:20000});
    await expect(trace.mounts.at(-1).run("losses",true)).rejects.toThrow("Review is stale; prepare it again");
    expect(trace.submit).toHaveBeenCalledTimes(2);
  }finally{

@@ -113,7 +113,6 @@ export async function writePodExport(
     dirname(archivePath),
     archivePath,
     Buffer.from(prepared.bytesBase64, "base64"),
-    true,
   );
   return prepared.result;
 }

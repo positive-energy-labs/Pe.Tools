@@ -277,7 +277,9 @@ export async function evaluate<I, O>(
   );
   const value: Value<O> = {
     data,
-    evaluation: fingerprint([port.evaluation, dependencies, data]),
+    // Connection/recording identity belongs in inputs, not sealed-input freshness (ADR 0033).
+    // Caller admission and Work revision remain enforced by the write seal at Apply.
+    evaluation: fingerprint([dependencies, data]),
     inputs: port.evaluation,
     trace: dependencies,
     coverage: {

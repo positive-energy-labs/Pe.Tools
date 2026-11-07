@@ -1,3 +1,4 @@
+import { writeArtifact } from "./page-artifacts.ts";
 /**
  * Host input recording (ADR 0031 rules 1, 2 and 5). One bundle of takings answers the host's input
  * services: native reads through `HostNativeRead`, and every other owner (files, marks, inventory,
@@ -496,12 +497,8 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
   const clock = yield* Clock.Clock;
   const writeObservation = (sha: string, bytes: string) => {
     const path = join(observations, `${sha}.json`);
-    const write = writeFile(path, bytes, { flag: "wx" })
-      .catch(async (error: unknown) => {
-        // A blob left by an earlier failed append is reused only if it hashes to its name.
-        if ((error as { code?: string }).code !== "EEXIST") throw error;
-        if ((await readFile(path, "utf8")) !== bytes) throw error;
-      })
+    // An opened bundle losing its observations directory is damage, not a new store.
+    const write = stat(observations).then(() => writeArtifact(observations, path, bytes))
       .then(() => {
         stored.add(sha);
       })
@@ -614,7 +611,7 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
       reserved++;
       const durable = yield* Effect.exit(
         io(async () => {
-          if (holds && !stored.has(sha)) await (writing.get(sha) ?? writeObservation(sha, bytes));
+          if (holds) await (writing.get(sha) ?? writeObservation(sha, bytes));
           await appendFile(takingsPath, line);
         }),
       );

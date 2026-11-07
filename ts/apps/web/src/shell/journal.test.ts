@@ -54,7 +54,7 @@ function fixture() {
   const journal = createWorkJournal(key);
   const timeline = createRouteTimeline();
   timeline.subscribe(journal.record);
-  workspace.subscribe((event) => {
+  workspace.subscribeUncaptured((event) => {
     if (event.ok) {
       journal.observe(stored.get(workKey(key)) as { revision: number; doc: unknown });
       journal.accept(event, event.by === "human" ? { label: event.press ?? "Restore" } : undefined);

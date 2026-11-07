@@ -1,10 +1,14 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, open, readFile, readdir, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
+import { takeoffSnapshotInput } from "../src/reads/takeoffs.ts";
+import { takeoffCaptureSchema } from "@pe/agent-contracts";
+
+
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
 import { historyPointSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
@@ -453,5 +457,62 @@ test("F3 three native batches retain the middle refusal on offline replay; no li
     await live?.dispose();
     await replay?.dispose();
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("HTTP retaining one capture twice with an open reader never rewrites it and refuses corruption", async () => {
+  const retained = leaf("file:takeoff-capture", takeoffSnapshotInput, takeoffCaptureSchema, false);
+  const definition = read("test.capture-retain", {
+    input: takeoffSnapshotInput, output: takeoffCaptureSchema,
+    run: (ctx, args) => ctx.read(retained, args),
+  });
+  const unregister = registeredReads.register({ capture: definition });
+  const f = await fixture(false, {
+    read: () => { throw Error("Retention requires no native dispatch"); },
+    inventory: { sessions: [{ sessionId: ref.session, connected: true, openDocumentCount: 1,
+      openDocuments: [{ openId: ref.openId, title: "Chadds", address: path, isFamilyDocument: false, isActive: true }] }] },
+  });
+  const args = { target: ref, views: [], snapshot: {
+    reading: { at: path, version: "same", observedAt: "2026-11-07T00:00:00.000Z" },
+    snapshot: { status: { systems: [], carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] } },
+      zoneFrs: [], regionsByZone: {} },
+  } };
+  let reader: Awaited<ReturnType<typeof open>> | undefined;
+  const retain = async (generation: number) => {
+    const response = await f.probe({ read: definition.name, subscription: `retain-${generation}`, generation, args });
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+    return body;
+  };
+  try {
+    const raced = await Promise.all([retain(0), retain(1)]);
+    const first = raced[0];
+    expect(raced[1].state, JSON.stringify(raced[1])).toBe("current");
+    expect(raced[1].value.data).toEqual(first.value.data);
+    expect(first.state, JSON.stringify(first)).toBe("current");
+    const files = await readdir(join(f.dir, "captures"));
+    expect(files).toHaveLength(1);
+    const file = join(f.dir, "captures", files[0]!);
+    const bytes = await readFile(file);
+    // Detect replacement even when Node's reader shares delete access on Windows.
+    await utimes(file, new Date(1000), new Date(1000));
+    reader = await open(file, "r");
+    const before = await stat(file, { bigint: true });
+    const second = await retain(2);
+    expect(second.state, JSON.stringify(second)).toBe("current");
+    expect(second.value.data).toEqual(first.value.data);
+    const after = await stat(file, { bigint: true });
+    expect(after.ino, "same file, not replacement bytes").toBe(before.ino);
+    expect(after.mtimeNs).toBe(before.mtimeNs);
+    expect(await readFile(file)).toEqual(bytes);
+    expect(await reader.readFile()).toEqual(bytes);
+    await reader.close(); reader = undefined;
+    await writeFile(file, "corrupt");
+    const refused = await retain(3);
+    expect(refused.state).not.toBe("current");
+    expect(JSON.stringify(refused)).toContain("ContentAddressCorruption");
+    expect(await readFile(file, "utf8")).toBe("corrupt");
+  } finally {
+    await reader?.close(); unregister(); await f.close();
   }
 });
