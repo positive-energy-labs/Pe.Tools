@@ -51,7 +51,7 @@ test("Snowdon publishes deterministic browser and host bytes; tampering either r
   expect(host.workState?.schema.parse({})).toEqual({version:2,inputs:initial});
   for(const client of ["web","host"]) {
     const changed=structuredClone(envelope);
-    changed.artifact.executables.find(entry=>entry.client===client).members[0].bytes[0]^=1;
+    changed.artifact.executables.find(entry=>entry.client===client)!.members[0]!.bytes[0]!^=1;
     await expect(loadPodRoute(row,changed,evaluate)).rejects.toThrow("differ");
     await expect(loadPodHostEntry(changed.artifact,row.fingerprint)).rejects.toThrow("differ");
   }

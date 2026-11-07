@@ -171,7 +171,8 @@ async function hashBytes(bytes: Uint8Array): Promise<string> {
   const hash = await globalThis.crypto.subtle.digest("SHA-256", new Uint8Array(bytes));
   return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
-export async function routeFingerprint(input: RouteFingerprintInput): Promise<RouteFingerprint> {
+/** Decode an untrusted manifest before hashing; wire callers need no type assertion. */
+export async function routeFingerprint(input: unknown): Promise<RouteFingerprint> {
   const hex = await hashBytes(
     new TextEncoder().encode(`pe.route.v1\n${canonicalRouteJson(fingerprintEnvelope(input))}`),
   );
