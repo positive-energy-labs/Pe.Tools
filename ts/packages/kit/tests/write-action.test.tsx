@@ -204,7 +204,7 @@ test("the handle consent window contains the actual owner cell and Reject reache
     <StateCell cell={{owner:{route:"family",label:"Work"},value:{edit:{value:"24in",by:"pea"}},refusal:null,
       transitions:()=>[{kind:"clear",run:clear}],stage:async()=>null,clear}} label="Width"/>
   </PreviewAction></TooltipProvider>);
-  await act(async()=>fireEvent.click(screen.getByRole("button",{name:"Keep · planned 0"})));
+  await act(async()=>fireEvent.click(screen.getByRole("button",{name:writeWord("Keep",0,false)})));
   expect(screen.getByText("24in")).toBeTruthy();
   expect(screen.queryByRole("button",{name:"Keep"})).toBeNull();
   fireEvent.click(document.querySelector("[data-write-reject]")!);

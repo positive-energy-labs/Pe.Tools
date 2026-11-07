@@ -8,7 +8,7 @@ export function EspParameter({cell,value,model,options:offered,error}:{
 }) {
   const options=(offered?.items??[]).flatMap(item=>item.metadata?.name?[{
     key:item.value,label:item.label,value:item.metadata.name,
-    description:[item.metadata.kind,item.metadata.storageType,item.metadata.dataTypeId].filter(Boolean).join(" · "),
+    description:[item.metadata.kind,item.metadata.storageType,item.metadata.dataTypeId].filter(Boolean).join(" Â· "),
   }]:[]);
   const current=String(cell.value.edit?.value??model);
   const refusal=error??(!offered?"Read unit parameter options":offered.result.kind!=="Success"?offered.result.message:!options.length?"No numeric parameters on these units":null);
