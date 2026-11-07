@@ -3,6 +3,7 @@ import { readLocal } from "./local-inputs.ts";
 import { readFamilySpec } from "./family-file-input.ts";
 import { PictureCaptureStore } from "./captures-route.ts";
 import { createHash } from "node:crypto";
+import { nativeOutputLayer } from "./native-output.ts";
 import {hostOpSafety} from "@pe/host-contracts/generated";
 import {executionTargetSchema,documentRefSchema,DUCTS_BODY_VERSION_HEADER} from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
@@ -22,7 +23,7 @@ import { historyPoseSchema, addressSchema } from "@pe/agent-contracts";
 import { HostReceipts } from "./gateway-owner.ts";
 import { readEvents } from "./reads/events.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
-import { graphRoute, graphRouteIds } from "./reads/routes.ts";
+import { graphRoute, graphRouteIds, registeredReads } from "./reads/routes.ts";
 import { ResourceConnectionOwner } from "./request-services.ts";
 import {
   capturedWorkReads,
@@ -125,7 +126,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       HostInputReadSets.layer(lane),
       guardedNativeRead().pipe(
         Layer.provide(
-          hostNativeReadFor(lane, recorded ? liveNativeRecipe : live!.native, basis?.observed),
+          hostNativeReadFor(lane, recorded ? liveNativeRecipe : nativeOutputLayer(pictures!).pipe(Layer.provide(live!.native)), basis?.observed),
         ),
         Layer.provide(Layer.succeed(HostInputContext, inputs)),
       ),
@@ -774,6 +775,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         ? {
             readGraph: async () => {
               const port = inputPort({
+                leaves:registeredReads.leaves,
                 source,
                 workspace,
                 marks,

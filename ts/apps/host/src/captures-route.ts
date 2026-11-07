@@ -16,11 +16,9 @@ import { HttpRouter, HttpServerResponse as Response } from "effect/http";
 import {
   captureReceiptSchema,
   captureUrl,
-  type Caller,
   type CaptureReceipt,
 } from "@pe/agent-contracts";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { BridgeError, type RevitBridge } from "./bridge.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { isNavigation, type SpaFallback } from "./ops-catalog.ts";
 import { sha256Hex, writeArtifact } from "./page-artifacts.ts";
@@ -171,65 +169,6 @@ export class PictureCaptureStore extends Context.Service<PictureCaptureStore, Pi
       ),
     );
 }
-
-type ViewImageAnswer = {
-  filePath?: unknown;
-  view?: { elementId?: unknown; label?: unknown } | null;
-  registration?: { imageSha256?: unknown } | null;
-};
-type ViewImageRequest = { focus?: CaptureReceipt["focus"] } | null | undefined;
-
-/** The receipt's origin from the /call attribution: a web or page path, else the caller. */
-export const captureOrigin = (origin: string, caller: Caller) =>
-  /^(?:web|page):./.test(origin) ? origin : caller.kind === "human" ? "human" : "agent";
-
-/**
- * Register one `revit.context.view-image` answer. The PNG is read from the path the op returned
- * (a quarantined session writes under its own temp folder, so the path is the only honest
- * locator). A failure fails the `/call`: an answer whose picture was not kept would hand out a URL
- * that 404s.
- */
-export const registerViewImage = Effect.fnUntraced(function* (
-  answer: unknown,
-  request: unknown,
-  origin: string,
-  bridge: RevitBridge["Service"],
-  target: { session?: string; openId?: string | null },
-) {
-  const value = (answer ?? {}) as ViewImageAnswer;
-  if (typeof value.filePath !== "string")
-    return yield* Effect.fail(new BridgeError("view-image answered without a filePath", 502));
-  const filePath = value.filePath;
-  const sessions = yield* bridge.list;
-  const title = sessions
-    .find((session) => session.sessionId === target.session)
-    ?.state?.openDocuments.find((document) => document.openId === target.openId)?.title;
-  const focus = (request as ViewImageRequest)?.focus ?? null;
-  const captures = yield* PictureCaptureStore;
-  return yield* Effect.tryPromise({
-    try: async () =>
-      captures.keep(await readFile(filePath), {
-        origin,
-        document: {
-          ...(target.openId ? { openId: target.openId } : {}),
-          ...(title ? { title } : {}),
-        },
-        view: {
-          ...(typeof value.view?.elementId === "number" ? { id: value.view.elementId } : {}),
-          ...(typeof value.view?.label === "string" ? { name: value.view.label } : {}),
-        },
-        focus,
-        registration: (value.registration as CaptureReceipt["registration"]) ?? null,
-      }),
-    catch: (error) =>
-      error instanceof PictureStoreFull
-        ? error
-        : new BridgeError(
-            `capture not kept: ${error instanceof Error ? error.message : String(error)}`,
-            500,
-          ),
-  });
-});
 
 const blobPattern = /^\/captures\/([0-9a-f]{64})\.png$/;
 const failed = (error: unknown) =>

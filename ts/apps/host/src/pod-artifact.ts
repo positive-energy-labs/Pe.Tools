@@ -1,3 +1,4 @@
+import * as contracts from "@pe/agent-contracts";
 import {canonicalRouteJson, type HostAdmittedRoute} from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -62,63 +63,38 @@ export async function verifyPodArtifact(value: unknown, expected: string) {
   return { wire, artifact, contracts, executables };
 }
 
-/** Verify all package bytes before evaluating only its neutral host entry. No registration occurs here. */
-export async function loadPodHostEntry(value:unknown,expected:string) {
-  const evidence=await verifyPodArtifact(value,expected);
-  const entries=evidence.executables.filter(entry=>entry.client === "host");
-  if(entries.length!==1 || entries[0]!.entry!=="host.js" || entries[0]!.members.length!==1 || entries[0]!.members[0]!.path!=="host.js")
-    throw Error("Expected one closed host.js artifact");
-  const loaded=await import(`data:text/javascript;base64,${Buffer.from(entries[0]!.members[0]!.bytes).toString("base64")}`);
-  const {captureHostModule}=await import("@pe/agent-contracts");
-  const host=captureHostModule(z.object({module:z.unknown()}).parse(loaded).module as import("@pe/agent-contracts").HostRouteModule);
-  if(canonicalRouteJson(host.data)!==canonicalRouteJson(evidence.artifact.data)) throw Error("Host declaration differs from artifact");
-  return host;
+/** The neutral export loader shares the original digest-verified executable import owner. */
+export function loadPodHostEntry(value:unknown,expected:string) {
+  return admitPodArtifact(value,expected,true);
 }
-
-export async function admitPodArtifact(value: unknown, expected: string): Promise<AdmittedRoute | HostAdmittedRoute> {
-  const evidence = await verifyPodArtifact(value, expected);
-  if(evidence.executables.some(entry=>entry.client === "host")) {
-    const host=await loadPodHostEntry(value,expected);
-    const port=await createRouteAdmission({...evidence,host:true,loadedBindings:host,
+export function admitPodArtifact(value:unknown,expected:string,hostOnly:true):Promise<import("@pe/agent-contracts").HostRouteModule>;
+export function admitPodArtifact(value:unknown,expected:string):Promise<AdmittedRoute|HostAdmittedRoute>;
+export async function admitPodArtifact(value:unknown,expected:string,hostOnly=false):Promise<AdmittedRoute|HostAdmittedRoute|import("@pe/agent-contracts").HostRouteModule> {
+  const evidence=await verifyPodArtifact(value,expected);
+  const host=evidence.executables.some(entry=>entry.client === "host");
+  if(hostOnly&&!host) throw Error("Expected one closed host.js artifact");
+  const client=host?"host":"web",name=host?"host.js":"route.js";
+  const entries=evidence.executables.filter(entry=>entry.client===client);
+  if(entries.length!==1||entries[0]!.entry!==name||entries[0]!.members.length!==1||entries[0]!.members[0]!.path!==name||
+    !host&&evidence.contracts.some(item=>item.id.startsWith("shared:"))) throw Error(`Expected one closed ${name} artifact`);
+  const loaded=await import(`data:text/javascript;base64,${Buffer.from(entries[0]!.members[0]!.bytes).toString("base64")}`);
+  if(host) {
+    const {captureHostModule}=contracts;
+    const module=captureHostModule(z.object({module:z.unknown()}).parse(loaded).module as contracts.HostRouteModule);
+    if(canonicalRouteJson(module.data)!==canonicalRouteJson(evidence.artifact.data)) throw Error("Host declaration differs from artifact");
+    if(hostOnly) return module;
+    const port=await createRouteAdmission({...evidence,host:true,loadedBindings:module,
       expectedFingerprint:evidence.wire.fingerprint,catalog:[...linkedCatalog().entries.values()]});
-    const result=port.admitHost(host);
+    const result=port.admitHost(module);
     if(!result.ok) throw Error(JSON.stringify(result.diagnostics));
     return result.route;
   }
-  const web = evidence.executables.filter((item) => item.client === "web");
-  if (
-    web.length !== 1 ||
-    web[0]!.entry !== "route.js" ||
-    web[0]!.members.length !== 1 ||
-    web[0]!.members[0]!.path !== "route.js" ||
-    evidence.contracts.some((item) => item.id.startsWith("shared:"))
-  )
-    throw Error("Host requires one closed route.js artifact without shared runtime imports");
-  const loaded = await import(
-    `data:text/javascript;base64,${Buffer.from(web[0]!.members[0]!.bytes).toString("base64")}`
-  );
-  const { module } = z
-    .object({
-      module: z
-        .object({
-          data: z.unknown(),
-          entries: z.record(z.string(), z.object({ axes: z.unknown() }).passthrough()),
-        })
-        .passthrough(),
-    })
-    .parse(loaded);
-  const catalog = requireLinkedCatalog(linkedCatalog().extend(
-    Object.entries(module.entries).map(([key, entry]) =>
-      commandLink(key, entry as unknown as Command, entry.axes as CatalogAxes, "")),
-  ));
-  if ("spec" in module) throw Error("Typed Pods require a separate host entry");
-  const port = await createRouteAdmission({
-    ...evidence,
-    loadedBindings: module,
-    expectedFingerprint: evidence.wire.fingerprint,
-    catalog: [...catalog.entries.values()],
-  });
-  const result = port.admitUnknown({ ...module, artifact: evidence.artifact });
-  if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+  const {module}=z.object({module:z.object({data:z.unknown(),entries:z.record(z.string(),z.object({axes:z.unknown()}).passthrough())}).passthrough()}).parse(loaded);
+  if("spec" in module) throw Error("Typed Pods require a separate host entry");
+  const catalog=requireLinkedCatalog(linkedCatalog().extend(Object.entries(module.entries).map(([key,entry])=>
+    commandLink(key,entry as unknown as Command,entry.axes as CatalogAxes,""))));
+  const port=await createRouteAdmission({...evidence,loadedBindings:module,expectedFingerprint:evidence.wire.fingerprint,catalog:[...catalog.entries.values()]});
+  const result=port.admitUnknown({...module,artifact:evidence.artifact});
+  if(!result.ok) throw Error(JSON.stringify(result.diagnostics));
   return result.route;
 }
