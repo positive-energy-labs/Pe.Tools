@@ -23,6 +23,7 @@ export async function createWitness(
   saved = new Map<string, unknown>(),
   overrides: Readonly<Record<string, ReadingSource>> = {},
   work?: import("../shell/admitted-place").PlaceInput["work"],
+  receipts?: import("@pe/agent-contracts").WorkJournalDoor["receipts"],
 ) {
   const admitted = await admit();
   const ws = new RouteWorkspace({
@@ -57,6 +58,7 @@ export async function createWitness(
   );
   const feed = {
     ...connected,
+    receipts: receipts ?? connected.receipts,
     open: (scope: Parameters<typeof connected.open>[0]) => ({
       subscribe: (
         deliver: Parameters<ReturnType<typeof connected.open>["subscribe"]>[0],

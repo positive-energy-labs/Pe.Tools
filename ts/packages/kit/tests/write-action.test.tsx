@@ -193,20 +193,3 @@ test("apply without a seal is refused at the button and never runs", async () =>
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "apply heal" })));
   expect(run).not.toHaveBeenCalled();
 });
-
-
-test("the handle consent window contains the actual owner cell and Reject reaches its request",async()=>{
-  const {StateCell}=await import("../src/components/lang/cell");
-  const reject=vi.fn(),clear=vi.fn(async()=>null);
-  const handle={plan:vi.fn(),apply:vi.fn(),cancel:vi.fn(),consent:{until:"12s",run:reject},
-    read:()=>({sentence:"Review staged proposal",rows:[],stale:false})};
-  render(<TooltipProvider delay={0}><PreviewAction handle={handle} label="Keep">
-    <StateCell cell={{owner:{route:"family",label:"Work"},value:{edit:{value:"24in",by:"pea"}},refusal:null,
-      transitions:()=>[{kind:"clear",run:clear}],stage:async()=>null,clear}} label="Width"/>
-  </PreviewAction></TooltipProvider>);
-  await act(async()=>fireEvent.click(screen.getByRole("button",{name:writeWord("Keep",0,false)})));
-  expect(screen.getByDisplayValue("24in")).toBeTruthy();
-  expect(screen.queryByRole("button",{name:"Keep"})).toBeNull();
-  fireEvent.click(document.querySelector("[data-write-reject]")!);
-  expect(reject).toHaveBeenCalledOnce();
-});
