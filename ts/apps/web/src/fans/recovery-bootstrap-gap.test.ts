@@ -109,8 +109,7 @@ const bodies = {
 const neutral = {
   data,
   schemas,
-  bodies: { },
-  // The fan cells are the recovery material (fans Work since FANSPLIT), keyed as this witness route.
+  // Current fan Work is keyed as this witness route.
   workState: { ...fansRouteState, route: "ducts", },
 };
 const cleanup: (() => void)[] = [];

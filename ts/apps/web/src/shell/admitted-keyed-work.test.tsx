@@ -182,7 +182,7 @@ test("W3b direct witness: keyed edit preserves the second stale mark while root 
 });
 
 test("host RouteWorkspace applies the same keyed path in one revision and refuses stale writes", async () => {
-  const state = new Map<string, unknown>([["schedules", { version: 1, revision: 0, doc: seed() }]]);
+  const state = new Map<string, unknown>([["schedules", { version: 1, schemaVersion: 1, revision: 0, doc: seed() }]]);
   const reconcile = vi.fn(spec.reconcileEdit);
   const host = new RouteWorkspace({
     registrations: [{ spec: { ...spec, reconcileEdit: reconcile } }],

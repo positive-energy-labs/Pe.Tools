@@ -819,6 +819,7 @@ async function historyFixture(pea = false) {
           structuredClone(
             disk.get(targetKey) ?? {
               version: 1,
+              schemaVersion: 1,
               revision: 0,
               doc: { amount: 0 },
             },

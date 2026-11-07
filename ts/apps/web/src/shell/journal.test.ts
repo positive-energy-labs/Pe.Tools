@@ -40,7 +40,7 @@ function fixture() {
     }),
   };
   const stored = new Map<string, unknown>([
-    [workKey(key), { version: 1, revision: 0, doc: initial }],
+    [workKey(key), { version: 1, schemaVersion: 1, revision: 0, doc: initial }],
   ]);
   const workspace = new RouteWorkspace({
     registrations: [{ spec }],
