@@ -7,17 +7,17 @@ import type { SheetInputs } from "./model";
  * per [family, type], naming the units it covers (it was one raw-key row per instance).
  */
 import {
-DUCT_UNIT_KINDS,
-type DuctUnitKind,
-type DuctsDesign,
-type DuctsSheetEdits,
-type Resolved,
+  DUCT_UNIT_KINDS,
+  type DuctUnitKind,
+  type DuctsDesign,
+  type DuctsSheetEdits,
+  type Resolved,
 } from "@pe/agent-contracts";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
-import { END_KEY,FITTING_DROP_CELL,JOIN_KEY } from "@pe/ducts-domain/sheet/index";
+import { END_KEY, FITTING_DROP_CELL, JOIN_KEY } from "@pe/ducts-domain/sheet/index";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { SubjectPart } from "@pe/kit/lang/subject-text";
-import { kindDisabledReason,kindMeaning } from "./kind-meaning";
+import { kindDisabledReason, kindMeaning } from "./kind-meaning";
 import type { WorkCell } from "./sheet-cell";
 
 export type InputSection = "units" | "terminals" | "parts" | "rulings";
@@ -72,6 +72,7 @@ export interface RowContext {
   /** The open fan's unit: its ESP is an input of this sheet; another unit's is not. */
   fanUnitId: number | null;
   flowConflict?: string;
+  directionOverride?: string | null;
   /** Proposed path keys to the subject that names them (from the fittings census). */
   pathSubject?: (key: string) => SubjectPart[] | null;
 }
@@ -142,7 +143,12 @@ export function inputRows(ctx: RowContext): InputRow[] {
         value: unit.kind.value,
         options: DUCT_UNIT_KINDS.map((kind) => ({
           kind,
-          meaning: node ? kindMeaning(node, kind, unit) : "wait for the element snapshot",
+          meaning: node
+            ? kindMeaning(node, kind, unit) +
+              (kind === unit.kind.value && ids.includes(ctx.fanUnitId!) && ctx.directionOverride
+                ? `; ${ctx.directionOverride}`
+                : "")
+            : "wait for the element snapshot",
           // Only "this kind removes the unit from the fan list" disables; the rest stay pickable.
           disabled: node ? kindDisabledReason(node, kind, unit) : null,
         })),

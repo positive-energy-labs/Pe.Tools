@@ -167,6 +167,8 @@ export interface Sheet {
     inletPortIndex: number | null;
     /** Physical discharge after the ends decide direction; portIndex remains the roster identity. */
     dischargePortIndex: number;
+    /** Network roles contradict native Direction; includes the scorer evidence. */
+    directionOverride?: string | null;
     /** Displayed as the sum of the flows its ends carry; never an input. */
     flowCfm: number | null;
   };

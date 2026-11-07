@@ -246,6 +246,7 @@ const fan = fanRef.extend({
   ratedEspInWg: z.number().nullable(),
   inletPortIndex: portIndex.nullable(),
   dischargePortIndex: portIndex,
+  directionOverride: z.string().nullable().optional(),
   flowCfm: z.number().nullable(),
 });
 const pathEnd = z.object({

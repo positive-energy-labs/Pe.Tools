@@ -19,7 +19,7 @@ export interface InputContext {
   doc: DuctsDesign | null;
   revision: number | null;
   sheet: {
-    overview: { fan: { unitId: number } | null };
+    overview: { fan: { unitId: number; directionOverride?: string | null } | null };
     inputs: { notes: readonly { kind: string; text: string }[] } | null;
   } | null;
   inputs: SheetInputs | null;
@@ -135,6 +135,7 @@ export function inputFields(ctx: InputContext): { criteria: Criterion[]; rows: I
       doc: ctx.doc,
       inputs: ctx.inputs,
       fanUnitId: ctx.sheet?.overview.fan?.unitId ?? null,
+      directionOverride: ctx.sheet?.overview.fan?.directionOverride,
       flowConflict: ctx.sheet?.inputs?.notes.find((n) => n.kind === "flow-conflict")?.text,
       pathSubject: (key) => {
         const f = ctx.fittings.find((x) => x.key === key);
