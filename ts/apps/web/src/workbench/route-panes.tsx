@@ -89,7 +89,6 @@ export function RouteDock({
   );
   return (
     <ChatPlanIntent.Provider value={intent}>
-      <PublishedPlaceViews views={views} />
       {/* Pea and tool pages share this owner so navigation cannot destroy unsent drafts. */}
       <GraphLayoutView
         layout={split(
@@ -166,6 +165,7 @@ export function RouteDock({
             ),
         }}
       />
+      <PublishedPlaceViews views={views} />
     </ChatPlanIntent.Provider>
   );
 }
