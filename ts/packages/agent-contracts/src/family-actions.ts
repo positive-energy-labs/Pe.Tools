@@ -117,7 +117,9 @@ const applyInputSchema = z
 export const familyActions = {
   "families.read": {
     says: "Audit the selected Families Work scope in the exact document, then bind its completed observation at the reviewed Work revision.",
-    dirties: ["families"], needs: "project-document", effect: "command",
+    dirties: ["families"],
+    needs: "project-document",
+    effect: "command",
     input: z.strictObject({ work: workHandleSchema, readId: z.uuid() }),
     result: familiesObservationSchema,
   },

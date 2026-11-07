@@ -339,77 +339,102 @@ export function scheduleExecutors(
   bridge: RevitBridge["Service"],
   deps: FamilyActionDependencies = {},
 ) {
-  const bind = async (ctx:CommandContext, execution:ActionExecution, input:z.output<typeof scheduleActions["schedule.grid.bind"]["input"]>) => {
-      const reading = input.reading ?? (await captures.schedule(input.readingId));
-      if (reading.id !== input.readingId)
-        throw refused("Reading identity differs from the requested evidence");
-      const { id, ...value } = reading;
-      if (
-        input.reading &&
-        createHash("sha256").update(canonicalRouteInput(value)).digest("hex") !== id
-      )
-        throw refused("Schedule evidence hash differs from its content");
-      const work = ctx.work;
-      if (!work) throw refused("Schedule Work is unavailable");
-      const scope = {
-        binding: "workspace" as const,
-        route: "schedules",
-        target: null,
-        work: reading.workspaceId,
-      };
-      const view = await work.view(scope, "schedules");
-      if (!view || view.revision !== input.expectedRevision)
-        throw refused("Schedule Work changed; read it and bind again");
-      const document = scheduleGridDocumentSchema.parse(view.doc);
-      const previous = document.basis
-        ? await captures.schedule(document.basis.captureId).catch((error) => {
-            console.error("schedule-actions: asynchronous operation failed", error);
-            return null;
-          })
-        : null;
-      const patches = document.basis
-        ? rebindScheduleWork(document, previous, reading)
-        : [
-            { path: ["basis"], value: { captureId: reading.id } },
-            { path: ["takenAt"], value: reading.capturedAt },
-          ];
-      if (input.reading)
-        await execution.step("publication", "schedule.retain", { id }, () =>
-          captures.saveSchedule(value),
-        );
-      if (patches.length) {
-        const result = await execution.step(
-          "publication",
-          "schedule.bind",
-          { scope, patches, expectedRevision: input.expectedRevision },
-          () => work.publish(scope, "schedules", patches, input.expectedRevision),
-        );
-        if (!result.ok) throw refused(refusalText(result));
-      }
-      return { envelope: await work.read(scope, "schedules") };
-
+  const bind = async (
+    ctx: CommandContext,
+    execution: ActionExecution,
+    input: z.output<(typeof scheduleActions)["schedule.grid.bind"]["input"]>,
+  ) => {
+    const reading = input.reading ?? (await captures.schedule(input.readingId));
+    if (reading.id !== input.readingId)
+      throw refused("Reading identity differs from the requested evidence");
+    const { id, ...value } = reading;
+    if (
+      input.reading &&
+      createHash("sha256").update(canonicalRouteInput(value)).digest("hex") !== id
+    )
+      throw refused("Schedule evidence hash differs from its content");
+    const work = ctx.work;
+    if (!work) throw refused("Schedule Work is unavailable");
+    const scope = {
+      binding: "workspace" as const,
+      route: "schedules",
+      target: null,
+      work: reading.workspaceId,
+    };
+    const view = await work.view(scope, "schedules");
+    if (!view || view.revision !== input.expectedRevision)
+      throw refused("Schedule Work changed; read it and bind again");
+    const document = scheduleGridDocumentSchema.parse(view.doc);
+    const previous = document.basis
+      ? await captures.schedule(document.basis.captureId).catch((error) => {
+          console.error("schedule-actions: asynchronous operation failed", error);
+          return null;
+        })
+      : null;
+    const patches = document.basis
+      ? rebindScheduleWork(document, previous, reading)
+      : [
+          { path: ["basis"], value: { captureId: reading.id } },
+          { path: ["takenAt"], value: reading.capturedAt },
+        ];
+    if (input.reading)
+      await execution.step("publication", "schedule.retain", { id }, () =>
+        captures.saveSchedule(value),
+      );
+    if (patches.length) {
+      const result = await execution.step(
+        "publication",
+        "schedule.bind",
+        { scope, patches, expectedRevision: input.expectedRevision },
+        () => work.publish(scope, "schedules", patches, input.expectedRevision),
+      );
+      if (!result.ok) throw refused(refusalText(result));
+    }
+    return { envelope: await work.read(scope, "schedules") };
   };
   const bindReading = command(commands["schedule.grid.bind"], z.null(), {
-    bind:async()=>({effects:[]}),
-    run:async(ctx,execution)=>bind(ctx,execution,scheduleActions["schedule.grid.bind"].input.parse(ctx.admission.input)),
+    bind: async () => ({ effects: [] }),
+    run: async (ctx, execution) =>
+      bind(ctx, execution, scheduleActions["schedule.grid.bind"].input.parse(ctx.admission.input)),
   });
-  const readGrid = command(scheduleActions["schedule.grid.read"], scheduleActions["schedule.grid.read"].input, {
-    bind: async(ctx)=> {
-      const input = ctx.admission.input;
-      if(input.work.key.binding !== "workspace" || input.work.key.route !== "schedules") throw refused("Select one schedule's Work before reading");
-      const view = await ctx.work.view(input.work.key,"schedules");
-      if(!view || view.revision !== input.work.revision) throw refused("Schedule Work changed; read its current revision");
-      return {effects:[],prepare:async()=>input};
+  const readGrid = command(
+    scheduleActions["schedule.grid.read"],
+    scheduleActions["schedule.grid.read"].input,
+    {
+      bind: async (ctx) => {
+        const input = ctx.admission.input;
+        if (input.work.key.binding !== "workspace" || input.work.key.route !== "schedules")
+          throw refused("Select one schedule's Work before reading");
+        const view = await ctx.work.view(input.work.key, "schedules");
+        if (!view || view.revision !== input.work.revision)
+          throw refused("Schedule Work changed; read its current revision");
+        return { effects: [], prepare: async () => input };
+      },
+      run: async (ctx, execution) => {
+        const input = execution.prepared;
+        const reading = scheduleReadingSchema.parse(
+          await readSchedule(
+            {
+              key: "schedule.grid.snapshot",
+              input: { scheduleId: input.scheduleId, maxRows: input.maxRows },
+              target: ctx.admission.target.kind === "document" ? ctx.admission.target.ref : null,
+            },
+            captures,
+            bridge,
+            deps,
+          ),
+        );
+        if (input.work.key.binding !== "workspace" || input.work.key.work !== reading.workspaceId)
+          throw refused("The schedule read belongs to another Work");
+        await bind(ctx, execution, {
+          readingId: reading.id,
+          reading,
+          expectedRevision: input.work.revision,
+        });
+        return reading;
+      },
     },
-    run:async(ctx,execution)=>{
-      const input = execution.prepared;
-      const reading = scheduleReadingSchema.parse(await readSchedule({key:"schedule.grid.snapshot",input:{scheduleId:input.scheduleId,maxRows:input.maxRows},target:ctx.admission.target.kind === "document" ? ctx.admission.target.ref : null},captures,bridge,deps));
-      if(input.work.key.binding !== "workspace" || input.work.key.work !== reading.workspaceId) throw refused("The schedule read belongs to another Work");
-      await bind(ctx,execution,{readingId:reading.id,reading,expectedRevision:input.work.revision});
-      return reading;
-    },
-  });
-
+  );
   const gridPush = command(commands["schedule.grid.push"], preparedSchedulePushSchema, {
     seal: (p) => ({
       request: {

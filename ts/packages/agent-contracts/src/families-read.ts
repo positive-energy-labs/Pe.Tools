@@ -7,7 +7,7 @@ import {
   familyCellValueSchema,
 } from "./families.ts";
 import { measuredDisplayUnitSchema } from "./schedule-grid-data.ts";
-import { publicationRequest, publicationSchema } from "./value.ts";
+import { valueRead } from "./value.ts";
 
 export const familyTypeRowSchema = z.object({
   key: z.string(),
@@ -81,16 +81,8 @@ export const familiesViewData = z.object({
   activeReadId: z.string().nullable(),
   editRefusal: z.string().nullable(),
 });
-export const familiesViewRequest = publicationRequest(familiesViewArgs);
-export const familiesViewCapability = {
-  key: "families.view" as const,
-  input: familiesViewArgs.omit({ target: true }),
-  output: publicationSchema(familiesViewData),
-  axes: {
-    subject: "Document",
-    touches: ["Metadata"],
-    effect: "Read",
-    cost: "Cheap",
-    cardinality: "One",
-  } as const,
-};
+export const familiesViewCapability = valueRead(
+  "families.view",
+  familiesViewArgs.omit({ target: true }),
+  familiesViewData,
+);

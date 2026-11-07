@@ -72,8 +72,14 @@ export function unstale(
 export const scheduleActions = {
   "schedule.grid.read": {
     says: "Read the selected schedule and bind its immutable capture to that schedule's reviewed Work without dropping authored cells.",
-    needs: "project-document", effect: "command", dirties: ["schedules"],
-    input: z.strictObject({work:workHandleSchema,scheduleId:z.number().int(),maxRows:z.number().int().min(1).max(2000).default(200)}),
+    needs: "project-document",
+    effect: "command",
+    dirties: ["schedules"],
+    input: z.strictObject({
+      work: workHandleSchema,
+      scheduleId: z.number().int(),
+      maxRows: z.number().int().min(1).max(2000).default(200),
+    }),
     result: scheduleReadingSchema,
   },
   "schedule.grid.bind": {

@@ -66,8 +66,8 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
             key={category}
             label={`Choose ${category}`}
             onClick={() =>
-              ctx.cells.edit(
-                { kind: "scope", value: { ...filter, categoryNames: [category], familyNames: [] } },
+              ctx.cells.at(["scope"]).stage(
+                { ...filter, categoryNames: [category], familyNames: [] },
                 { label: "Choose families" },
               )
             }
@@ -80,14 +80,11 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
             key={family.familyId}
             label={`Choose ${family.familyName}`}
             onClick={() =>
-              ctx.cells.edit(
+              ctx.cells.at(["scope"]).stage(
                 {
-                  kind: "scope",
-                  value: {
                     ...filter,
                     categoryNames: [...filter.categoryNames],
                     familyNames: [family.familyName],
-                  },
                 },
                 { label: "Choose families" },
               )
@@ -138,7 +135,7 @@ export function FamiliesMatrix({ ctx }: { ctx: FamiliesDrawContext }) {
           parse,
           propose: async (address, value, current) => {
             const result = await ctx.cells.edit(
-              { kind: "cell", address, value, current },
+              { address, value, current },
               {
                 label: `${address.familyName} / ${address.typeName} / ${address.parameter} to ${value.value}`,
               },

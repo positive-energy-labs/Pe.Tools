@@ -120,3 +120,5 @@ export const familiesView = read("families.view", {
     );
   },
 });
+
+export const reads = { view: familiesView };

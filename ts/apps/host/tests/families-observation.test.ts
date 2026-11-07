@@ -59,7 +59,13 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
   let matrixCalls = 0;
   let fail = false;
   let connected = true;
-  let storedWork: unknown;
+  let storedWork: unknown = {
+    version: 1,
+    schemaVersion: 1,
+    revision: 0,
+    doc: familiesRouteState.schema.parse({ scope: { edit: { value: filter } } }),
+    history: [],
+  };
   const workspace = new RouteWorkspace({
     registrations: [{ spec: familiesRouteState }],
     store: {
@@ -102,7 +108,12 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
             target: { session: "bridge-a", document: null },
             value: {
               operations: [
-                {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap",
+                {
+                  subject: "None",
+                  touches: "Metadata",
+                  effect: "Read",
+                  cardinality: "One",
+                  costTier: "Cheap",
                   key: "revit.matrix.loaded-families",
                   intent: "Read",
                   needs: "project-document",
@@ -129,7 +140,10 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
             };
           }
           if (input.phase === "Extract")
-            return { target: { session: "bridge-a", document: null }, value: { families: result.families, issues: [], elapsedMs: 1 } };
+            return {
+              target: { session: "bridge-a", document: null },
+              value: { families: result.families, issues: [], elapsedMs: 1 },
+            };
           return { target: { session: "bridge-a", document: null }, value: result };
         }
         throw Error(`Unexpected ${key}`);
@@ -137,14 +151,25 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
   });
   const families = await familiesReader();
   const handlers = new Map<TakeoffCaptures, ReturnType<typeof HttpRouter.toWebHandler>>();
+  const journals = new Map<TakeoffCaptures, ActionJournal>();
   const handler = (captures: TakeoffCaptures) => {
     let current = handlers.get(captures);
     if (!current) {
+      const journal = new ActionJournal(join(dir, `actions-${handlers.size}.json`), Date.now);
+      journals.set(captures, journal);
       current = HttpRouter.toWebHandler(
-        makeCallRoute(new ActionJournal(join(dir, `actions-${handlers.size}.json`), Date.now), captures, {
-          sdk: sdkSessions,
-          workspace,
-        }, { families }).pipe(nativeReadRoot()).pipe(Layer.provide(testHostInputs)).pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
+        makeCallRoute(
+          journal,
+          captures,
+          {
+            sdk: sdkSessions,
+            workspace,
+          },
+          { families },
+        )
+          .pipe(nativeReadRoot())
+          .pipe(Layer.provide(testHostInputs))
+          .pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
         { disableLogger: true },
       );
       handlers.set(captures, current);
@@ -154,20 +179,28 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
   const call = (captures: TakeoffCaptures, request: Request) =>
     asCaller(human, handler(captures).handler)(request, Context.empty() as never);
   const url = "http://host/families/readings";
-  const headers = {
-    "content-type": "application/json",
-    "x-pe-bridge-session-id": target.session,
-    "x-pe-open-document-id": target.openId,
-  };
-  const post = (captures: TakeoffCaptures, document = target, expectedRevision?: number) =>
-    call(
+  const post = async (captures: TakeoffCaptures, document = target, expectedRevision?: number) => {
+    const id = randomUUID();
+    const revision = expectedRevision ?? (await workspace.view(work, "families"))!.revision;
+    const response = await call(
       captures,
-      new Request(url, {
+      new Request("http://host/actions", {
         method: "POST",
-        headers: { ...headers, "x-pe-open-document-id": document.openId },
-        body: JSON.stringify({ work, filter, readId: randomUUID(), expectedRevision }),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id,
+          key: "families.read",
+          target: { kind: "document", ref: document },
+          input: { work: { key: work, revision }, readId: randomUUID() },
+        }),
       }),
     );
+    if (!response.ok) return response;
+    const row = await journals.get(captures)!.wait(id);
+    return row?.state === "succeeded"
+      ? Response.json(row.result)
+      : Response.json({ error: row?.error }, { status: 409 });
+  };
   const get = (captures: TakeoffCaptures) =>
     call(captures, new Request(`${url}?work=${encodeURIComponent(JSON.stringify(work))}`));
   try {
@@ -181,7 +214,8 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
     });
     const first = await post(captures);
     expect(first.status, await first.clone().text()).toBe(200);
-    const saved = await first.json();
+    const { envelope, ...saved } = await first.json();
+    expect(envelope).toEqual({ revision: 1 });
     expect(saved).toMatchObject({ document: target, documentTitle: "Air.rvt", filter, result });
     expect(saved.capturedAt).toEqual(expect.any(String));
     expect(saved.completedAt).toEqual(expect.any(String));
@@ -286,8 +320,8 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
     connected = true;
     fail = true;
     const failed = await post(rebuilt);
-    expect(failed.status).toBe(200);
-    expect((await failed.json()).progress).toMatchObject({
+    expect(failed.status).toBe(409);
+    expect((await rebuilt.displayedFamilies(work))?.progress).toMatchObject({
       state: "failed",
       message: "native failed",
     });
@@ -301,21 +335,21 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
     ).toBe(409);
 
     fail = false;
-    const completed = await post(rebuilt, target, 0);
+    const completed = await post(rebuilt, target, 1);
     expect(completed.status).toBe(200);
     const observed = await completed.json();
     expect(observed).toMatchObject({
       progress: { state: "complete" },
-      envelope: { revision: 1, doc: { takenAt: observed.capturedAt } },
+      envelope: { revision: 2 },
     });
     const before = await workspace.readRaw(work, "families");
     fail = true;
-    const partial = await (await post(rebuilt, target, 1)).json();
-    expect(partial.progress.state).toBe("failed");
-    expect(partial.envelope).toBeUndefined();
+    const partial = await post(rebuilt, target, 2);
+    expect(partial.status).toBe(409);
+    expect((await rebuilt.displayedFamilies(work))?.progress?.state).toBe("failed");
     expect(await workspace.readRaw(work, "families")).toEqual(before);
     expect(
-      await workspace.apply(work, "families", "human", [{ path: ["takenAt"], value: "forged" }], 1),
+      await workspace.apply(work, "families", "human", [{ path: ["takenAt"], value: "forged" }], 2),
     ).toMatchObject({ ok: false });
     expect(
       await workspace.apply(
@@ -323,13 +357,13 @@ test("Families observation survives owner reconstruction; failed and wrong-docum
         "families",
         "pea",
         [{ path: ["scope", "edit"], value: { value: filter } }],
-        1,
+        2,
       ),
-    ).toMatchObject({ ok: true, revision: 2 });
+    ).toMatchObject({ ok: true, revision: 3 });
     fail = false;
-    expect((await post(rebuilt, target, 1)).status).toBe(409);
+    expect((await post(rebuilt, target, 2)).status).toBe(409);
     expect(await workspace.readRaw(work, "families")).toMatchObject({
-      revision: 2,
+      revision: 3,
       doc: { takenAt: observed.capturedAt },
     });
   } finally {

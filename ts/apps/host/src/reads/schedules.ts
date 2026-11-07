@@ -104,3 +104,5 @@ export const schedulesView = read("schedules.view", {
     );
   },
 });
+
+export const reads = { view: schedulesView };
