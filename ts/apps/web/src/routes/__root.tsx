@@ -1,3 +1,4 @@
+import "../route/builtin-routes";
 import {installOpenControls} from "../open/context";
 import {OpenControls} from "../open/kernel";
 installOpenControls(OpenControls);
