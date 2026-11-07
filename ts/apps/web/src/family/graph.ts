@@ -12,7 +12,7 @@ import { field } from "../../../../packages/agent-contracts/src/route-field";
 import { workVerb } from "../shell/verbs";
 import { familyPageSchema, type FamilyPage } from "./page";
 export { familyPageSchema, FAMILY_MODEL_SCHEMA, type FamilyPage } from "./page";
-export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph({
+export const familyGraph: RouteGraph<FamilyPage, FamilyDraft> = defineRouteGraph<FamilyPage,FamilyDraft>({
   directory: {
     path: "/family",
     title: "Family",
