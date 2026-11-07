@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { documentRefSchema } from "./target.ts";
+import { documentReadTargetSchema } from "./target.ts";
 import {
   familiesObservationSchema,
   familiesRouteState,
@@ -65,7 +65,7 @@ export const familyPivotFamilySchema = z.object({
 });
 export type PivotRow = z.output<typeof familyPivotRowSchema>;
 export type PivotFamily = z.output<typeof familyPivotFamilySchema>;
-export const familiesViewArgs = z.object({ target: documentRefSchema });
+export const familiesViewArgs = z.object({ target: documentReadTargetSchema });
 export const familiesViewData = z.object({
   familiesWork: familiesRouteState.schema,
   observation: familiesObservationSchema.nullable(),

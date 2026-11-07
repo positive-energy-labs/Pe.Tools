@@ -1,3 +1,4 @@
+import { FamilyPdfParser } from "./family-spec.ts";
 import { HostInputContext } from "./input-context.ts";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
@@ -948,7 +949,8 @@ export function makeCallRoute(
           captures ??=
             Option.getOrUndefined(yield* Effect.serviceOption(TakeoffCaptureStore)) ??
             Context.get(yield* Layer.build(TakeoffCaptureStore.layer()), TakeoffCaptureStore);
-          actionDeps = { ...actionDeps, marks: yield* HostDocumentMarks, pictures: yield* PictureCaptureStore, files: yield* DuctFiles };
+          const parser = Option.getOrUndefined(yield* Effect.serviceOption(FamilyPdfParser));
+          actionDeps = { ...actionDeps, ...(parser ? { parsePdf: parser.parse } : {}), marks: yield* HostDocumentMarks, pictures: yield* PictureCaptureStore, files: yield* DuctFiles };
           const freshness = yield* ReadFreshness;
           yield* Effect.acquireRelease(
             // Queue/native-read telemetry must not invalidate an in-flight read's identity.
