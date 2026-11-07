@@ -8,7 +8,7 @@ import { draw } from "../route/draw.tsx";
 import { chatArgs, chatValue } from "../../../../packages/agent-contracts/src/chat-read.ts";
 export const loaded = { ...hostRead(valueRead("chat.context", chatArgs, chatValue)), args: () => ({}) };
 export const fields = { mode: field(z.enum(["threads", "world"]), "threads", "query") };
-export type { ChatHandle } from "./context.generated";
+export type { Context as ChatHandle } from "./context.generated";
 export const threadIdentity = (thread: string) => localId("chat", thread);
 export const chatLayout = {
   kind: "split",

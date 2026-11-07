@@ -19,7 +19,7 @@ export const loaded = {
   args: (page: { [K in keyof typeof fields]: z.output<(typeof fields)[K]["schema"]> }) =>
     ductLossArgs.parse(page),
 };
-export type { DuctLossContext } from "./context.generated";
+export type { Context as DuctLossContext } from "./context.generated";
 export const module = route({
   key: "duct-loss",
   name: "Duct Loss",

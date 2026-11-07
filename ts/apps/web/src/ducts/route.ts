@@ -58,8 +58,8 @@ const args = (page: {
 export const roster = { ...hostRead(ductsRosterValueCapability), args: () => ({}) };
 export const network = { ...hostRead(ductsNetworkCapability), args };
 export const pricing = { ...hostRead(ductsPricingValueCapability), args };
-export type { DuctsDrawContext } from "./context.generated";
-import type { DuctsDrawContext } from "./context.generated";
+export type { Context as DuctsDrawContext } from "./context.generated";
+import type { Context as DuctsDrawContext } from "./context.generated";
 const evidence = (
   data: DuctsDrawContext["value"]["value"],
   work: DuctsDrawContext["cells"]["doc"],

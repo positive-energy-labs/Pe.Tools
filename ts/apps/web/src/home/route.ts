@@ -19,7 +19,7 @@ export const fields = {
   sort: field(z.enum(["workflow", "name"]), "workflow", "query", "push"),
   folded: field(z.array(z.string()), [], "query"),
 };
-export type { HomeContext } from "./context.generated";
+export type { Context as HomeContext } from "./context.generated";
 export const module = route({
   key: "home",
   name: "Home",

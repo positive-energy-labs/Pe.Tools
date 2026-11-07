@@ -18,7 +18,7 @@ export const fields = {
   section: field(z.enum(["none", ...SETTINGS_SECTIONS]).optional(), undefined, "query", "push"),
   session: field(z.string(), "", "pose"),
 };
-export type { SettingsContext } from "./context.generated";
+export type { Context as SettingsContext } from "./context.generated";
 export const module = route({
   key: "settings",
   name: "Settings",

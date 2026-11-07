@@ -1,3 +1,4 @@
+import {canonicalRouteJson, type HostAdmittedRoute} from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { commandLink, linkedCatalog, requireLinkedCatalog, type CatalogAxes } from "@pe/agent-contracts/pe-api";
@@ -61,7 +62,7 @@ export async function verifyPodArtifact(value: unknown, expected: string) {
   return { wire, artifact, contracts, executables };
 }
 
-export async function admitPodArtifact(value: unknown, expected: string): Promise<AdmittedRoute> {
+export async function admitPodArtifact(value: unknown, expected: string): Promise<AdmittedRoute | HostAdmittedRoute> {
   const evidence = await verifyPodArtifact(value, expected);
   const web = evidence.executables.filter((item) => item.client === "web");
   if (
@@ -89,6 +90,18 @@ export async function admitPodArtifact(value: unknown, expected: string): Promis
     Object.entries(module.entries).map(([key, entry]) =>
       commandLink(key, entry as unknown as Command, entry.axes as CatalogAxes, "")),
   ));
+  if ("spec" in module) {
+    const typed=z.object({host:z.unknown()}).parse(module);
+    const {captureHostModule}=await import("@pe/agent-contracts");
+    const host=captureHostModule(typed.host as import("@pe/agent-contracts").HostRouteModule);
+    if (canonicalRouteJson(host.data) !== canonicalRouteJson(evidence.artifact.data))
+      throw Error("Typed host declaration differs from artifact");
+    const port=await createRouteAdmission({...evidence,host:true,loadedBindings:host,
+      expectedFingerprint:evidence.wire.fingerprint,catalog:[...catalog.entries.values()]});
+    const result=port.admitHost(host);
+    if(!result.ok) throw Error(JSON.stringify(result.diagnostics));
+    return result.route;
+  }
   const port = await createRouteAdmission({
     ...evidence,
     loadedBindings: module,

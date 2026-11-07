@@ -70,11 +70,12 @@ export async function loadPodRoute(row: PodRouteDescriptor, value: unknown, eval
   const loaded=z.object({spec:z.object({key:z.string(),fields:z.record(z.string(),z.unknown()),panes:z.record(z.string(),z.unknown())}).passthrough(),
     data:z.unknown(),host:z.object({data:z.unknown()}).passthrough(),entries:z.record(z.string(),z.unknown())}).passthrough().parse(verified.module);
   if(loaded.spec.key !== row.workRoute) throw Error("Pod module key differs from inventory");
-  return {module:loaded as unknown as import("./typed-route").TypedRoute,
-    fingerprint:importFingerprint(row.fingerprint)};
+  const host=captureHostModule(loaded.host as unknown as import("@pe/agent-contracts").HostRouteModule);
+  if(canonicalRouteJson(host.data)!==canonicalRouteJson(verified.artifact.data)) throw Error("Typed host declaration differs from artifact");
+  return {module:loaded as unknown as import("./typed-route.ts").TypedRoute,
+    fingerprint:workFingerprintSchema.parse(row.fingerprint)};
 }
-import { workFingerprintSchema as importFingerprintSchema } from "@pe/agent-contracts";
-const importFingerprint = (value:string) => importFingerprintSchema.parse(value);
+import { workFingerprintSchema, captureHostModule, canonicalRouteJson } from "@pe/agent-contracts";
 
 export async function evaluatePodBytes(bytes: Uint8Array): Promise<unknown> {
   const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "text/javascript" }));

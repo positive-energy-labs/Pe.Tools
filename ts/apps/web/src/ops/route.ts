@@ -14,7 +14,7 @@ export const loaded = {
   ...hostRead(valueRead("ops.workspace", opsArgs, opsData)),
   args: (page: { actionId: string }) => ({ actionId: page.actionId }),
 };
-export type { OpsContext } from "./context.generated";
+export type { Context as OpsContext } from "./context.generated";
 export const module = route({
   key: "ops",
   name: "Ops",

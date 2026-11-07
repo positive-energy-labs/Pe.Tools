@@ -17,7 +17,7 @@ export const fields = {
   focus: field(z.string(), "", "pose"),
   open: field(z.array(z.string()), [], "pose"),
 };
-export type { CapturesContext } from "./context.generated";
+export type { Context as CapturesContext } from "./context.generated";
 export const module = route({
   key: "captures",
   name: "Captures",

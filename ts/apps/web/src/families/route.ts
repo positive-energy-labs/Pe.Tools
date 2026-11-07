@@ -36,7 +36,7 @@ export const edit = z.object({
   current: z.string(),
 });
 export const view = { ...hostRead(familiesViewCapability), args: () => ({}) };
-export type { FamiliesDrawContext } from "./context.generated";
+export type { Context as FamiliesDrawContext } from "./context.generated";
 export const module = route({
   key: "families",
   name: "Families",

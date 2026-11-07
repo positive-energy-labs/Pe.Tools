@@ -40,7 +40,7 @@ export const loaded = {
   }),
 };
 export const edits = z.array(routeStatePatchSchema);
-export type { FamilyContext } from "./context.generated";
+export type { Context as FamilyContext } from "./context.generated";
 export const module = route({
   key: "family",
   name: "Family",

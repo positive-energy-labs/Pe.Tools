@@ -34,7 +34,7 @@ export const loaded = {
   ...hostRead(valueRead("open.documents", z.object({}), openData)),
   args: () => ({}),
 };
-export type { OpenContext } from "./context.generated";
+export type { Context as OpenContext } from "./context.generated";
 export const module = route({
   key: "open",
   name: "Open document",

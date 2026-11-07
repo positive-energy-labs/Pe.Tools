@@ -31,6 +31,7 @@ type Legacy = ReturnType<typeof legacyRouteDiscovery.entries>[number];
 export type DiscoveredRoute = Omit<Legacy, "manifest"> & {
   manifest: Pick<Legacy["manifest"], "key" | "name" | "needs">;
   admitted?: AdmittedRoute;
+  typed?: import("./typed-route").TypedRoute;
   work?: DiscoveredWork;
 };
 export const legacyWork = <W>(

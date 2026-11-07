@@ -26,8 +26,9 @@ export const fields = {
   runs: field(podsArgs.shape.runs, "member", "query"),
   mode: field(z.enum(["form", "raw"]), "form", "pose"),
 };
-export type { PodsContext } from "./context.generated";
-export type { PodsRosterContext } from "./context.generated";
+export type { Context as PodsContext } from "./context.generated";
+import type { PaneContext } from "./context.generated";
+export type PodsRosterContext = PaneContext<"members">;
 export const module = route({
   key: "pods",
   name: "Pods",

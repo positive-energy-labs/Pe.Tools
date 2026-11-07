@@ -59,8 +59,8 @@ const roster = {
   ...hostRead(fansSheetCapability, sheetValueFixtures),
   args: () => ({ fan: [], sheetPath: "" }),
 };
-export type { FansDrawContext } from "./context.generated";
-import type { FansDrawContext } from "./context.generated";
+export type { Context as FansDrawContext } from "./context.generated";
+import type { Context as FansDrawContext } from "./context.generated";
 export const module = route({
   key: "fans",
   name: "Fans",

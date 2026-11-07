@@ -51,7 +51,7 @@ export const edit = z
     (patches) => patches.every((p) => p.path[0] === "cells" && p.path.length > 1),
     "Edit individual schedule cells",
   );
-export type { SchedulesDrawContext } from "./context.generated";
+export type { Context as SchedulesDrawContext } from "./context.generated";
 export const module = route({
   key: "schedules",
   name: "Schedules",

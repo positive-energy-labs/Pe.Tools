@@ -14,7 +14,7 @@ export const fields = {
   fragment: field(z.string(), "", "pose"),
 };
 export const loaded = { ...hostRead(valueRead("bind.picker", z.object({}), bindData)), args: () => ({}) };
-export type { BindContext } from "./context.generated";
+export type { Context as BindContext } from "./context.generated";
 export const module = route({
   key: "bind",
   name: "Bind",

@@ -24,7 +24,7 @@ export const loaded = {
   args: (page: { view: string }) => ({ view: page.view }),
 };
 export const edits = z.array(routeStatePatchSchema);
-export type { RoomsContext } from "./context.generated";
+export type { Context as RoomsContext } from "./context.generated";
 export const module = route({
   key: "rooms",
   name: "Rooms",
