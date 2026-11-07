@@ -1,3 +1,4 @@
+import { kernelCellVerbs } from "./verbs-cells";
 import { pageBindRpc } from "../../../../packages/mcps/src/shared/rpc-client";
 import {
   scheduleQueries,
@@ -334,4 +335,80 @@ test("K1.2: page.bind resolves its HTTP contract at invocation and validates bef
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+test("Work acknowledges forward and inverse paths, and two patches share the owner's one press", async () => {
+  const env = environment("human");
+  const run = vi.spyOn(env.owner, "runAction");
+  const bound = bind(edit(), { ctx: env.ctx, subject: env.subject, args: { value: 12 } });
+  expect(bound.label).toBe("edit");
+  expect(bound.chord).toBe("Mod+Enter");
+  expect(bound.refusal).toBeNull();
+  const result = await bound.run();
+  expect(result.state).toBe("done");
+  if (result.state !== "done" || result.kind !== "work")
+    throw new Error("Expected acknowledgement");
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(result.press).toMatch(/^[0-9a-f-]{36}$/);
+  expect(env.writes).toEqual([
+    {
+      patches: [
+        { path: ["rows", "slot", "value"], value: 12 },
+        { path: ["rows", "slot", "note"], value: "after" },
+      ],
+      expectedRevision: 4,
+      press: result.press,
+    },
+  ]);
+  expect(result.acknowledgement).toMatchObject({
+    press: result.press,
+    base: 4,
+    revision: 5,
+    patches: env.writes[0]!.patches,
+    inverse: [
+      { path: ["rows", "slot", "value"], value: 1 },
+      { path: ["rows", "slot", "note"], value: "before" },
+    ],
+  });
+  const restored = applyPatches(
+    spec,
+    { version: 1, revision: 5, doc: env.doc() },
+    "human",
+    result.acknowledgement.inverse,
+    5,
+    true,
+    true,
+  );
+  expect(restored.ok && restored.envelope.doc.rows.slot).toEqual({
+    id: "a",
+    value: 1,
+    note: "before",
+  });
+  expect(env.states).toEqual(["idle", "preparing", "applying", "done"]);
+  // A returned terminal result has released the owner's admission.
+  expect(
+    (await bind(edit(), { ctx: env.ctx, subject: env.subject, args: { value: 13 } }).run()).state,
+  ).toBe("done");
+});
+
+test("cell admission can refuse deletion", async () => {
+  const env = environment("human");
+  const subject = { type: "cell:cells", id: "first", work: key, path: ["cells", "first"] };
+  const locked = kernelCellVerbs({
+    cells: [
+      {
+        segment: "cells",
+        groupOf: () => [],
+        admit: () => ({ code: "locked", message: "This cell is locked" }),
+      },
+    ],
+  });
+  const bound = bind(locked.verbs["cell:cells.delete"]!, {
+    ctx: { ...env.ctx, subjects: locked.subjects },
+    subject,
+    args: undefined,
+  });
+  expect(bound.refusal).toBe("This cell is locked");
+  expect((await bound.run()).state).toBe("refused");
+  expect(env.doc().cells.first).toBeDefined();
 });

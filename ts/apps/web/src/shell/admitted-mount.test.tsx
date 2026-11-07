@@ -1474,3 +1474,202 @@ test("a malformed source reading refuses with a human message instead of schema 
     reason: "This reading could not be decoded. Refresh the pane to try again.",
   });
 });
+
+test.each(["ack-first", "stream-first"])(
+  "Work mount composes B with %s and recovers after departure",
+  async (order) => {
+    const t = transports();
+    const store = createFixtureWorkDoor(
+      { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+      { amount: 0 },
+    );
+    let deliverStream: ((state: WorkFeedState) => void) | undefined;
+    const door: WorkJournalDoor = {
+      ...store,
+      open: (scope) => ({
+        subscribe(deliver, end) {
+          return store.open(scope).subscribe((state) => {
+            if (state.kind === "ack" && order === "ack-first") deliverStream = () => deliver(state);
+            else deliver(state);
+          }, end);
+        },
+      }),
+    };
+    const shell = createRouteShell({ ...t.services, work: door });
+    const route = await workRoute();
+    const mount = shell.mount(route, placeInput(locationPort().address));
+    await vi.waitFor(() => expect(mount.work()?.value).toEqual({ amount: 0 }));
+    await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
+    deliverStream?.({ kind: "pending" });
+    expect(mount.work()).toMatchObject({ revision: 1, value: { amount: 2 } });
+    const pending = mount.invoke("change", 3) as Observation<WorkWriteOutcome>;
+    mount.close();
+    await settle(pending);
+    const reopened = shell.mount(route, placeInput(locationPort().address));
+    closes.push(reopened.close);
+    await vi.waitFor(() =>
+      expect(reopened.work()).toMatchObject({ revision: 2, value: { amount: 5 } }),
+    );
+  },
+);
+
+test("stale-base refuses without recomputing or retrying the Work edit", async () => {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  let first = true;
+  const submitWork: WorkJournalDoor["submitWork"] = (scope, write, invocation) => {
+    if (!first) return store.submitWork(scope, write, invocation);
+    first = false;
+    return {
+      subscribe(deliver, end) {
+        store
+          .submitWork(scope, { ...write, patches: [{ path: ["amount"], value: 10 }] }, invocation)
+          .subscribe(
+            (value) => {
+              if (value.kind !== "accepted") return;
+              deliver({
+                kind: "refused",
+                refusal: {
+                  kind: "refused",
+                  code: "stale_revision",
+                  revision: value.ack.revision,
+                  error: "Moved",
+                  hint: "Rebase",
+                },
+              });
+              end();
+            },
+            () => {},
+          );
+        return () => {};
+      },
+    };
+  };
+  const mount = createRouteShell({ ...t.services, work: { ...store, submitWork } }).mount(
+    await workRoute(),
+    placeInput(locationPort().address),
+  );
+  closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
+  const outcome = await settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
+  expect(outcome).toMatchObject({
+    kind: "refused",
+    refusal: { code: "stale_revision", revision: 1 },
+  });
+  expect(mount.work()?.value).toEqual({ amount: 10 });
+  const refused = mount.refusedEdits()[0]!;
+  expect(refused.input).toMatchObject({
+    expectedRevision: 0,
+    patches: [{ path: ["amount"], value: 2 }],
+  });
+  expect(Object.isFrozen(refused.input.patches)).toBe(true);
+  expect(() => mount.retryEdit(refused.id, mount.workBasis()!)).toThrow(
+    /original, still-current basis/,
+  );
+  expect(mount.work()?.value).toEqual({ amount: 10 });
+  mount.discardEdit(refused.id);
+  expect(mount.refusedEdits()).toEqual([]);
+});
+
+test("rendered Work basis refuses old, copied and foreign edits; current basis accepts", async () => {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  let pane: {
+    workBasis: import("../../../../packages/agent-contracts/src/route-kernel-page").InvocationToken;
+    work: unknown;
+    place(row: number, input: number): { change(): unknown };
+    verbs: { change(input: number, basis?: unknown): unknown };
+  };
+  const route = await workRoute("none", false, "nothing", undefined, false, {
+    output: z.string(),
+    row: true,
+    run: () => ({}),
+    pane: (ctx) => {
+      pane = ctx as typeof pane;
+      return null;
+    },
+  });
+  const submitWork = vi.fn(store.submitWork);
+  const shell = createRouteShell({ ...t.services, work: { ...store, submitWork } });
+  const mount = shell.mount(route, placeInput(locationPort().address));
+  closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
+  mount.read("main");
+  const old = pane!.workBasis;
+  expect(old.workRevision).toBe(0);
+  expect(old.token.scope.identity.work).toBeTruthy();
+  expect(pane!.work).toEqual({ amount: 0 });
+  expect(() => pane!.verbs.change(2)).toThrow("rendered accepted basis");
+  expect(() => pane!.verbs.change(2, { ...old })).toThrow("foreign");
+  await settle(mount.invoke("change", 5) as Observation<WorkWriteOutcome>);
+  const refusal = await settle(pane!.verbs.change(2, old) as Observation<WorkWriteOutcome>);
+  expect(refusal).toMatchObject({
+    kind: "refused",
+    refusal: { code: "stale_revision", revision: 1 },
+  });
+  expect(mount.work()?.value).toEqual({ amount: 5 });
+  expect(await settle(pane!.place(1, 2).change() as Observation<WorkWriteOutcome>)).toMatchObject({
+    kind: "refused",
+    refusal: { code: "stale_revision", revision: 1 },
+  });
+  expect(submitWork.mock.calls.at(-1)![2]).toBe(old);
+  expect(submitWork.mock.calls.at(-1)![1].expectedRevision).toBe(old.workRevision);
+  mount.read("main");
+  expect(pane!.workBasis).not.toBe(old);
+  expect(
+    (await settle(pane!.verbs.change(2, pane!.workBasis) as Observation<WorkWriteOutcome>)).kind,
+  ).toBe("accepted");
+  expect(mount.work()?.value).toEqual({ amount: 7 });
+  const replacement = shell.mount(route, placeInput(locationPort().address));
+  closes.push(replacement.close);
+  expect(() => replacement.invoke("change", 9, old)).toThrow("foreign");
+});
+
+test("a delayed submit keeps its captured expectedRevision across a newer accepted edit", async () => {
+  const t = transports();
+  const store = createFixtureWorkDoor(
+    { route: "note", title: "", description: "", schema: z.object({ amount: z.number() }) },
+    { amount: 0 },
+  );
+  let release: () => void = () => {};
+  let delayed = true;
+  const writes: number[] = [];
+  const door: WorkJournalDoor = {
+    ...store,
+    submitWork(scope, write, invocation) {
+      writes.push(write.expectedRevision!);
+      if (!delayed) return store.submitWork(scope, write, invocation);
+      delayed = false;
+      return {
+        subscribe(deliver, end) {
+          release = () => {
+            store.submitWork(scope, write, invocation).subscribe(deliver, end);
+          };
+          return () => {};
+        },
+      };
+    },
+  };
+  const mount = createRouteShell({ ...t.services, work: door }).mount(
+    await workRoute(),
+    placeInput(locationPort().address),
+  );
+  closes.push(mount.close);
+  await vi.waitFor(() => expect(mount.work()).not.toBeNull());
+  const pending = settle(mount.invoke("change", 2) as Observation<WorkWriteOutcome>);
+  await Promise.resolve();
+  await settle(mount.invoke("change", 10) as Observation<WorkWriteOutcome>);
+  release();
+  expect(await pending).toMatchObject({
+    kind: "refused",
+    refusal: { code: "stale_revision", revision: 1 },
+  });
+  expect(writes).toEqual([0, 0]);
+  expect(mount.work()).toMatchObject({ revision: 1, value: { amount: 10 } });
+});
