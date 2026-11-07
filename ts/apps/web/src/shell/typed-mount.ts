@@ -352,6 +352,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if(!cmd) throw Error(`Unknown command ${id}`);
     problems.delete(id); notify();
     if("kind" in cmd) {
+      const queryPage = cmd.kind === "query" ? gate.read()?.pageEpoch : null;
       const handle=owners.get(own)?.handle ?? null;
       const context={page:page as never,target:input.target,work:handle,value:spec.core?reads.get(spec.core)?.snapshot.value:undefined};
       try {
@@ -367,6 +368,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           const receipt=z.object({receiptId:z.string(),result:z.unknown().optional()}).parse(completion);
           result=catalog && "result" in catalog ? cmd.contract.output.parse(receipt.result) : {kind:"void",receiptId:receipt.receiptId};
         } else result=await cmd.invoke!(request,{target:input.target ?? {kind:"host"},work:handle});
+        if (queryPage && (disposed || !input.custody.current() || gate.read()?.pageEpoch !== queryPage))
+          throw Error("This read finished for an earlier Page; run it again");
         results.set(id,result); syncReads(true); return result;
       } catch(error) {problems.set(id,error instanceof Error?error.message:String(error));throw error;}
       finally {notify();}

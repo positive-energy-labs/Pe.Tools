@@ -42,7 +42,7 @@ import type { DrawContext } from "./typed-route";
 
 // Only recorded native inputs and the address bar are adapters. Work, HTTP, SSE,
 // the action registry, consent, journal and typed mount all run their production code.
-async function journey() {
+async function journey(module = fans) {
   const host = await fixture(true);
   const roster = await host.send(0, []);
   const fan = roster.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
@@ -181,7 +181,7 @@ async function journey() {
   };
   const mounts: ReturnType<typeof mountTypedRoute>[] = [];
   const mount = (readOnly = false, place: Partial<typeof input> = {}) => {
-    const m = mountTypedRoute(fans, { ...input, ...place, readOnly }, fingerprint, {
+    const m = mountTypedRoute(module, { ...input, ...place, readOnly }, fingerprint, {
       work,
       sources: { "fans.sheet": read },
     });
@@ -613,4 +613,39 @@ test("JZ C718/C675/C676/C730 atomic press, isolated cell undo, root addressing a
     expect(j.writes).toHaveLength(writes);
     expect(j.m.owner()!.doc).toEqual(rootBefore);
   } finally { await j.close(); }
+}, 60_000);
+
+// A command read cannot publish into a Page generation that did not invoke it.
+test("JZ direct query drops a retired Page reply after A-B-A and discloses the refusal", async () => {
+  const { z } = await import("zod");
+  const { queryAction } = await import("./typed-actions");
+  const held = gate();
+  let j: Awaited<ReturnType<typeof journey>>;
+  const module = { ...fans, spec: { ...fans.spec, commands: { ...fans.spec.commands,
+    audit: { ...queryAction({ key: "fans.audit-generation", input: z.strictObject({}),
+      run: async () => {
+        held.entered.resolve();
+        await held.release.promise;
+        return j.host.send(901, []);
+      } }), label: "Read fan" },
+  } } };
+  j = await journey(module);
+  try {
+    await j.start();
+    const pageA = j.m.page.read().fan, tokenA = j.m.workBasis()!;
+    const pending = j.m.action("audit").run({}).then(value => ({ value }), error => ({ error }));
+    await held.entered.promise;
+    j.m.page.subject({ kind: "ids", ids: [] });
+    j.m.page.subject(pageA);
+    expect(j.m.current(tokenA), "A-B-A retires the original generation").toBe(false);
+    held.release.resolve();
+    const outcome = await pending;
+    expect(outcome).toHaveProperty("error", expect.any(Error));
+    expect(j.m.result("audit"), "Retired query output never enters the current result slot").toBeUndefined();
+    expect(j.m.action("audit").failure, "The waiting user sees why their read did not land").toMatch(/earlier Page/);
+    expect(j.writes).toHaveLength(0);
+    const current = await j.m.action("audit").run({});
+    expect(j.m.result("audit"), "A fresh invocation can publish normally").toEqual(current);
+    expect(j.m.action("audit").failure).toBeNull();
+  } finally { held.release.resolve(); await j.close(); }
 }, 60_000);
