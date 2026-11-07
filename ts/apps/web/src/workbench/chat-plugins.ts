@@ -112,12 +112,16 @@ export function capturedPlace(
     at.keys.filter((name) => name in input).map((name) => [name, input[name]]),
   );
   if (key === "ducts" && typeof search.system === "string" && search.system.trim()) {
-    const id = identityCodecs.local.encode({namespace:"ducts-system",subject:search.system});
-    if (!id.ok) return {ok:false,refusal:id.reason};
-    search.system = {kind:"ids",ids:[id.value]};
+    const id = identityCodecs.local.encode({ namespace: "ducts-system", subject: search.system });
+    if (!id.ok) return { ok: false, refusal: id.reason };
+    search.system = { kind: "ids", ids: [id.value] };
   }
-  if (key === "schedules" && scope.binding === "workspace") search.workspaceId = scope.work;
-  return { ok: true, route: key, page: at.read(search).page, carry };
+  if (key === "schedules" && scope.binding === "workspace") {
+    const id = identityCodecs.local.encode({ namespace: "schedules", subject: scope.work });
+    if (!id.ok) return { ok: false, refusal: id.reason };
+    search.workspaceId = { kind: "ids", ids: [id.value] };
+  }
+  return { ok: true, route: key, page: at.read(at.write(search)).page, carry };
 }
 
 /** Action receipts retain their execution document, even when the chat head has since moved. */
