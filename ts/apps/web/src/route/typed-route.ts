@@ -1,5 +1,5 @@
-import { identityCodecs, subjectSchema } from "../../../../packages/agent-contracts/src/route-kernel-codecs.ts";
-import { salvageWork } from "../../../../packages/agent-contracts/src/route-state.ts";
+import { identityCodecs, subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
+import { salvageWork } from "@pe/agent-contracts/route-state";
 import { z } from "zod";
 import type {
   HostRouteModule,
