@@ -62,6 +62,20 @@ export class DuctFiles extends Context.Service<
       subscribe: (changed) => {
         const stops = Object.entries({ firm: roots.firm, catalogs: roots.catalogs }).map(
           ([name, path]) => {
+            // A filesystem hint (including an ancestor change) is not a changed input.
+            // Compare the producer's answer so absent files and access metadata stay quiet.
+            const read =
+              name === "firm" ? () => readFirm(roots.firm) : () => readDuctCatalogs(roots.catalogs);
+            let closed = false;
+            let previous = read().then((value) => JSON.stringify(value));
+            const refresh = () => {
+              previous = previous.then(async (before) => {
+                if (closed) return before;
+                const next = JSON.stringify(await read());
+                if (!closed && next !== before) changed(name);
+                return next;
+              });
+            };
             // Watch an existing ancestor: absence, directory creation and atomic replacement still notify.
             let base = dirname(resolve(path));
             while (!existsSync(base) && dirname(base) !== base) base = dirname(base);
@@ -75,10 +89,13 @@ export class DuctFiles extends Context.Service<
                 (!child.startsWith(`..${sep}`) && child !== "..") ||
                 (!ancestor.startsWith(`..${sep}`) && ancestor !== "..")
               )
-                changed(name);
+                refresh();
             });
             watcher.on("error", () => changed(name));
-            return () => watcher.close();
+            return () => {
+              closed = true;
+              watcher.close();
+            };
           },
         );
         return () => stops.forEach((stop) => stop());

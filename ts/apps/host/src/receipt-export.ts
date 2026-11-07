@@ -1,6 +1,8 @@
 import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { Context, Effect, Layer } from "effect";
 import { randomUUID } from "node:crypto";
+import { isSea } from "node:sea";
+import { receiptBuildStamp } from "./build-stamp.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -774,7 +776,11 @@ export function admittedReceiptStamps() {
   return {
     host: admitBuild(
       "host",
-      typeof __PE_HOST_RECEIPT_BUILD__ !== "undefined" ? __PE_HOST_RECEIPT_BUILD__ : null,
+      typeof __PE_HOST_RECEIPT_BUILD__ !== "undefined"
+        ? __PE_HOST_RECEIPT_BUILD__
+        : hostOwnership.lane === "dev" && !isSea()
+          ? receiptBuildStamp("dev")
+          : null,
       install,
       processSessionId,
     ),
