@@ -117,24 +117,9 @@ function RegionsBody({ owner }: Body) {
   );
 }
 
-function PlanBody({
-  owner,
-  page,
-  verbs,
-  renderPane,
-}: Body & { renderPane: PaneApi }) {
-  const {
-    onView,
-    regions,
-    snapshot,
-    empty,
-    cards,
-    labels,
-    view,
-    plan,
-    planError,
-    trace,
-  } = useRoomsWorkspace();
+function PlanBody({ owner, page, verbs, renderPane }: Body & { renderPane: PaneApi }) {
+  const { onView, regions, snapshot, empty, cards, labels, view, plan, planError, trace } =
+    useRoomsWorkspace();
   const selected = new Set(
     roomSelection(
       page.selected,
@@ -289,10 +274,34 @@ export function RoomsBody({ ctx }: { ctx: RoomsContext }) {
     page,
     visible: true,
     thread: undefined,
-    verbs: (row: {kind?:string;id?:string}) => row.kind === "note" && row.id ? <Button label="Delete room note" onClick={()=>void owner.control("delete-note",{id:row.id}).run()}>Delete note</Button> : row.kind === "merge" && row.id ? <Button label="Stage marked room merge" onClick={()=>{
-      const mark=ctx.cells.doc?.marks[row.id!]?.edit?.value;
-      if(mark?.kind==="merge")void ctx.cells.patch([{path:["writeIntent","rooms.merge"],value:{edit:{value:{view:mark.anchor.view,guids:mark.guids??[]}}}}],{label:"Choose marked room merge"});
-    }}>Stage merge</Button>:null,
+    verbs: (row: { kind?: string; id?: string }) =>
+      row.kind === "note" && row.id ? (
+        <Button
+          label="Delete room note"
+          onClick={() => void owner.control("delete-note", { id: row.id }).run()}
+        >
+          Delete note
+        </Button>
+      ) : row.kind === "merge" && row.id ? (
+        <Button
+          label="Stage marked room merge"
+          onClick={() => {
+            const mark = ctx.cells.doc?.marks[row.id!]?.edit?.value;
+            if (mark?.kind === "merge")
+              void ctx.cells.patch(
+                [
+                  {
+                    path: ["writeIntent", "rooms.merge"],
+                    value: { edit: { value: { view: mark.anchor.view, guids: mark.guids ?? [] } } },
+                  },
+                ],
+                { label: "Choose marked room merge" },
+              );
+          }}
+        >
+          Stage merge
+        </Button>
+      ) : null,
     focusRow: () => {},
   } as unknown as Body;
   const frame: PaneApi = (content) => <div className="flex min-h-0 flex-1 flex-col">{content}</div>;
@@ -305,13 +314,28 @@ export function RoomsBody({ ctx }: { ctx: RoomsContext }) {
       <div className="flex min-h-0 flex-1 flex-col gap-(--gutter)">
         <div className="shrink-0 p-(--gutter)">
           <ScopeBody {...body} />
-          <Switcher ariaLabel="Rooms view" value={ctx.page.read().stage} onChange={stage=>ctx.page.pose({stage})} options={[{value:"partition",label:"Partition"},{value:"review",label:"Review"}]}/>
+          <Switcher
+            ariaLabel="Rooms view"
+            value={ctx.page.read().stage}
+            onChange={(stage) => ctx.page.pose({ stage })}
+            options={[
+              { value: "partition", label: "Partition",title:"Inspect and partition rooms" },
+              { value: "review", label: "Review",title:"Review anchored feedback" },
+            ]}
+          />
           <Button
             label="Stage partition view"
             refusal={!page.view ? "Choose a level and plan view" : ctx.cells.refusal}
             onClick={() => {
-              const rejected=Object.values(ctx.cells.doc?.marks??{}).flatMap(cell=>cell.edit?.value?.kind==="reject"&&cell.edit.value.anchor.view===page.view?[cell.edit.value.anchor.polygon]:[]);
-              void stage("rooms.partition", {view:page.view,...(rejected.length?{rejected}:{})});
+              const rejected = Object.values(ctx.cells.doc?.marks ?? {}).flatMap((cell) =>
+                cell.edit?.value?.kind === "reject" && cell.edit.value.anchor.view === page.view
+                  ? [cell.edit.value.anchor.polygon]
+                  : [],
+              );
+              void stage("rooms.partition", {
+                view: page.view,
+                ...(rejected.length ? { rejected } : {}),
+              });
             }}
           >
             Stage partition view

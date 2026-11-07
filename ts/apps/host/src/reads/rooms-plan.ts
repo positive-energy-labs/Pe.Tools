@@ -1,7 +1,9 @@
 import type { RevitContextViewImage } from "@pe/host-contracts/generated";
 import type { RoomsPlanReading } from "@pe/agent-contracts";
 /** The image and registration are a pair; malformed native frames never draw plausible geometry. */
-export function planOf(response: RevitContextViewImage.Res.Response): Exclude<RoomsPlanReading, null> {
+export function planOf(
+  response: RevitContextViewImage.Res.Response,
+): Exclude<RoomsPlanReading, null> {
   if (response.registration && response.imageUrl) {
     const corner = (p: number[]): [number, number] => {
       if (p.length !== 2 || !p.every(Number.isFinite))

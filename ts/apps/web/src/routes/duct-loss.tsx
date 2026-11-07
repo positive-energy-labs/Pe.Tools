@@ -5,5 +5,10 @@ import { builtinRouteStamp } from "../route/builtin-inventory";
 import { module } from "../duct-loss/route";
 export const Route = createFileRoute("/duct-loss")({
   validateSearch: (search: Record<string, unknown>) => search,
-  component: () => <TypedShell module={module} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("duct-loss")}`)} />,
+  component: () => (
+    <TypedShell
+      module={module}
+      fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtinRouteStamp("duct-loss")}`)}
+    />
+  ),
 });

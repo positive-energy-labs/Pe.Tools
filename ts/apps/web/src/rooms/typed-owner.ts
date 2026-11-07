@@ -1,5 +1,5 @@
 import { useMemo, useRef, useContext } from "react";
-import {RegistryContext} from "@effect/atom-react";
+import { RegistryContext } from "@effect/atom-react";
 import type { RoomsContext } from "./route";
 import type { RoomsOwner } from "./workspace";
 export function useRoomsOwner(ctx: RoomsContext): RoomsOwner {
@@ -29,7 +29,7 @@ export function useRoomsOwner(ctx: RoomsContext): RoomsOwner {
         },
         snapshot: () => {
           const ctx = current.current,
-            data = ctx.value.value;
+            data = ctx.value.current ? ctx.value.value : undefined;
           return {
             target: ctx.target,
             work: data?.handle ? { doc: data.roomsWork, handle: data.handle } : null,
@@ -38,9 +38,13 @@ export function useRoomsOwner(ctx: RoomsContext): RoomsOwner {
         readings: {
           get: (id: string) => {
             const value = current.current.value,
-              data = value.value;
+              data = value.current ? value.value : undefined;
             return {
-              status: value.current ? "complete" : "pending",
+              status: value.current
+                ? "complete"
+                : value.status === "pending"
+                  ? "pending"
+                  : "failed",
               current: value.current,
               error: id === "plan" ? data?.planError : !value.current ? value.reason : null,
               value:

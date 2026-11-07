@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { documentRefSchema, executionTargetSchema, roomsRouteState } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { leaf, read } from "./evaluator.ts";
-import { documentMark, workScope, workValue } from "./ducts-inputs.ts";
+import { leaf, read, workScope, workValue } from "./evaluator.ts";
+import { documentMark } from "./ducts-inputs.ts";
 import { roomsArgs, roomsData } from "@pe/agent-contracts";
 import { planOf } from "./rooms-plan.ts";
 const native = leaf(
-  "rooms.native",
+  "native",
   z.object({
     key: z.enum(["rooms.roster", "rooms.snapshot", "rooms.trace", "revit.context.view-image"]),
     request: z.record(z.string(), z.unknown()),
@@ -73,10 +73,4 @@ export const reads = {
       };
     },
   }),
-};
-export const leaves = {
-  "rooms.native": (
-    args: unknown,
-    services: import("./evaluator.ts").InputPort,
-  ) => services.take("native", args),
 };

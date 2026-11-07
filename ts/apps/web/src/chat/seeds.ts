@@ -19,7 +19,7 @@ import {
   type Seed,
   type ThreadWorkSnapshot,
 } from "@pe/agent-contracts";
-import { CHECKOUT_HOT, MACHINE_SEEDS } from "../open/seeds.ts";
+import { CHECKOUT_HOT, MACHINE_SEEDS } from "../design-system/open-examples.ts";
 
 import type { ChatReading } from "./graph.ts";
 import { emptyChatState, type ChatState } from "@pe/agent-contracts/chat-state";

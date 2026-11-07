@@ -4,7 +4,7 @@ import type { NativeMessageEvent } from "@pe/host-contracts/native-adapter";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 
-import { MACHINE_SEEDS } from "#/open/seeds";
+import { MACHINE_SEEDS } from "#/design-system/open-examples";
 
 import { NoticeCard } from "./notice";
 

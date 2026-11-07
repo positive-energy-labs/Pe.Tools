@@ -1,5 +1,5 @@
 import type { SettingsFieldState } from "@pe/agent-contracts";
-import { FAMILY_DEMO_PODS, familyDemoFields } from "#/family/seeds";
+import { FAMILY_DEMO_PODS, familyDemoFields } from "#/design-system/family-authoring-examples";
 import { familyFixtures } from "#/family/authored-families";
 import { DEMO_FAMILIES_SPEC } from "#/families/seeds";
 import {

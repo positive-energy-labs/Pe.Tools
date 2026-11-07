@@ -5,7 +5,7 @@ import {
   valueRead,
   type RoomsRouteDocument,
 } from "@pe/agent-contracts";
-import {roomsPageSchema} from "./page";
+import { roomsPageSchema } from "./page";
 import { route, field, command, type DrawContext } from "../route/typed-route";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";

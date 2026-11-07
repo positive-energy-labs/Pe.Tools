@@ -12,7 +12,6 @@ import { type DuctInput, type DuctResult, materials } from "@pe/ducts-domain/duc
 
 const fmt = (n: number, d = 2) => n.toLocaleString("en-US", { maximumFractionDigits: d });
 
-
 function Field({ label, unit, children }: { label: string; unit?: string; children: ReactNode }) {
   return (
     <label className="grid grid-cols-[8rem_1fr_3rem] items-center gap-2">
@@ -129,7 +128,15 @@ function Inputs(body: Body) {
       <section className="flex flex-col gap-2">
         <h2 className="font-medium">Duct</h2>
         <Field label="shape">
-          <Switcher ariaLabel="Duct shape" value={d.shape} onChange={shape=>set({shape})} options={[{value:"round",label:"Round"},{value:"rect",label:"Rectangular"}]}/>
+          <Switcher
+            ariaLabel="Duct shape"
+            value={d.shape}
+            onChange={(shape) => set({ shape })}
+            options={[
+              { value: "round", label: "Round", title: "Round duct" },
+              { value: "rect", label: "Rectangular", title: "Rectangular duct" },
+            ]}
+          />
         </Field>
         <Field label={d.shape === "round" ? "diameter" : "width"} unit="in">
           <Num value={d.a} onChange={(a) => set({ a })} />
@@ -146,7 +153,22 @@ function Inputs(body: Body) {
           <Num value={d.length} onChange={(length) => set({ length })} />
         </Field>
         <Field label="material">
-          <StateCell value={Object.entries(materials).find(([,value])=>value===d.roughness)?.[0]??"custom"} choice={{current:Object.entries(materials).find(([,value])=>value===d.roughness)?.[0]??"custom",options:[...Object.keys(materials).map(label=>({key:label,label})),...(!knownMaterial?[{key:"custom",label:"custom"}]:[])],pick:key=>set({roughness:materials[key as keyof typeof materials]??d.roughness})}}/>
+          <StateCell
+            value={
+              Object.entries(materials).find(([, value]) => value === d.roughness)?.[0] ?? "custom"
+            }
+            choice={{
+              current:
+                Object.entries(materials).find(([, value]) => value === d.roughness)?.[0] ??
+                "custom",
+              options: [
+                ...Object.keys(materials).map((label) => ({ key: label, label })),
+                ...(!knownMaterial ? [{ key: "custom", label: "custom" }] : []),
+              ],
+              pick: (key) =>
+                set({ roughness: materials[key as keyof typeof materials] ?? d.roughness }),
+            }}
+          />
         </Field>
         <Field label="roughness ε" unit="ft">
           <Num value={d.roughness} onChange={(roughness) => set({ roughness })} step={0.0001} />

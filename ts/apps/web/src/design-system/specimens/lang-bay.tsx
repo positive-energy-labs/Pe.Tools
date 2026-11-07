@@ -20,7 +20,7 @@ import {
 import type { QueryCommand, QueryVocabulary } from "@pe/kit/table/model";
 import { QueryBox } from "@pe/kit/table/query";
 import { useTableState } from "@pe/kit/table/view";
-import { BACKGROUND_BOOTING, CHECKOUT_HOT, OBSERVED_ICON } from "#/open/seeds";
+import { BACKGROUND_BOOTING, CHECKOUT_HOT, OBSERVED_ICON } from "#/design-system/open-examples";
 
 import { SpecimenFrame } from "./recipe-grid";
 
