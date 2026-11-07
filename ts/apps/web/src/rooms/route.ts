@@ -17,7 +17,7 @@ const fields = {
   layers: field(address.layers, [], "pose"),
   show: field(address.show, "all", "query"),
   viewport: field(address.viewport, null, "pose"),
-  picked: field(z.array(z.string()), [], "pose"),
+  picked: field(address.selected, [], "pose"),
 };
 const loaded = {
   ...hostRead(valueRead("rooms.workspace", roomsArgs, roomsData)),

@@ -1,35 +1,31 @@
-/** Family's model projections and pane memory. The graph mount owns acquisition, Work and verbs. */
+/** Family's domain projections and pane memory; the typed shell owns acquisition, Work and verbs. */
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
-  familyEvidenceSchema,
   settingsCandidate,
-  type SettingsSnapshot,
   settingsFieldDirectives,
   settingsFieldSegments,
   cellPatches,
   workKey,
-  type ActionReceipt,
   type FamilyDraft,
   type PodMember,
 } from "@pe/agent-contracts";
-import { z } from "zod";
+import { useValue } from "@pe/kit/lang/collection";
 import type { TableState } from "@pe/kit/table/model";
 import type { CellWire } from "#/components/work/band";
 import type { GraphMount } from "#/shell/mount";
 import { useWork } from "@pe/kit/lang/work";
 import type { FamilyPage } from "./page";
-import { readingValue, type FamilySpecReading } from "./value";
 import { familySource } from "./source";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "./model";
 import { draftToPatches, FAMILY_CELLS } from "./project";
 import { familyEditBuffer } from "./edit-buffer";
 import { displaySpec } from "./spec";
-import { projectBuildReceipt } from "./build";
-import type { FamilySnapshot } from "./types";
+import type { FamilySnapshot, EvidenceSlice } from "./types";
+import type { FamilyContext } from "./route";
 
 export type FamilyMount = Pick<
   GraphMount<FamilyPage, FamilyDraft>,
-  "snapshot" | "view" | "readings" | "control" | "busy" | "registry" | "subscribe" | "version"
+  "snapshot" | "view" | "control" | "busy" | "registry" | "subscribe" | "version"
 >;
 export type Inspect = { kind: "part"; slug: string } | { kind: "param"; name: string } | null;
 export type Binding = { slug: string; property: string } | null;
@@ -48,16 +44,11 @@ const inspectorOf = (value: Inspect) =>
 const noEdit = { draft: null, failure: null };
 const noSubscribe = () => () => {};
 
-export function useFamilyStore(owner: FamilyMount) {
+export function useFamilyStore(owner: FamilyMount, value?: FamilyContext["value"]) {
+  const data = useValue(value ?? { current: false, status: "pending" });
   const scope = {
     ...owner.snapshot(),
     page: owner.view.read().page,
-    readings: Object.fromEntries(
-      ["profile", "spec", "pods", "receipts", "captureReceipt", "buildReceipt"].map((id) => [
-        id,
-        owner.readings.get(id),
-      ]),
-    ),
   };
   const { page, work, target } = scope;
   const member = useMemo<PodMember | null>(
@@ -94,6 +85,7 @@ export function useFamilyStore(owner: FamilyMount) {
     },
     [owner, run, identity],
   );
+  // CHEAT(K gaps 1/4): grouped domain edits retain their unacknowledged input until typed Work observes it.
   const edits = useMemo(
     () => (work ? familyEditBuffer(work.handle.key, write) : null),
     [work?.handle.key, write],
@@ -145,7 +137,7 @@ export function useFamilyStore(owner: FamilyMount) {
     },
     [work?.doc, member],
   );
-  const profile = readingValue<SettingsSnapshot>(scope.readings.profile);
+  const profile = value?.current ? data?.profile : null;
   // Selecting a saved member is inspection; only an explicit Open replaces the document draft.
   const snapshot = useMemo(() => {
     if (member)
@@ -197,22 +189,10 @@ export function useFamilyStore(owner: FamilyMount) {
     (value: Partial<typeof memory>) => setMemory((current) => ({ ...current, ...value })),
     [],
   );
-  const capturedResult = readingValue<ActionReceipt[]>(scope.readings.captureReceipt)?.[0];
-  const captured = useMemo(() => {
-    const parsed = z
-      .object({
-        member: z.object({ pod: z.string(), path: z.string() }),
-        evidence: familyEvidenceSchema,
-      })
-      .safeParse(capturedResult?.state === "succeeded" ? capturedResult.result : null);
-    return parsed.success ? parsed.data : null;
-  }, [capturedResult]);
-  const evidence =
-    captured && captured.member.pod === member?.pod && captured.member.path === member.path
-      ? captured.evidence
-      : null;
+  // Capture/build receipts belong to shell History; this Value exposes no native evidence sheet.
+  const evidence: EvidenceSlice | null = null;
   const attached = work?.doc.spec;
-  const fileSpec = readingValue<FamilySpecReading>(scope.readings.spec);
+  const fileSpec = value?.current ? data?.spec : null;
   const spec = useMemo(() => {
     if (!member) return null;
     const doc =
@@ -243,10 +223,6 @@ export function useFamilyStore(owner: FamilyMount) {
         : undefined,
     [documentTarget?.session, documentTarget?.openId],
   );
-  const buildReceipts = readingValue<ActionReceipt[]>(scope.readings.buildReceipt);
-  const buildReceipt = buildReceipts?.[0]
-    ? projectBuildReceipt(buildReceipts, buildReceipts[0].id)
-    : null;
   const actions = useMemo(
     () => ({
       setDraft: (value: Setter<Draft>): string | void => {
@@ -357,7 +333,6 @@ export function useFamilyStore(owner: FamilyMount) {
     target: documentTarget?.session ?? "",
     documentScope,
     evidence,
-    captured,
     lane,
     snapshot,
     review: { revision: work?.handle.revision ?? null },
@@ -365,7 +340,6 @@ export function useFamilyStore(owner: FamilyMount) {
     wire,
     saved,
     draft,
-    buildReceipt,
     ...memory,
     overlay: page.overlay,
     table,

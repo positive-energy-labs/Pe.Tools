@@ -17,7 +17,7 @@ import type { FamilyContext } from "./route";
 export function FamilyBody({ ctx }: { ctx: FamilyContext }) {
   const owner = useFamilyOwner(ctx);
   return (
-    <FamilyProvider owner={owner}>
+    <FamilyProvider owner={owner} cells={ctx.cells} value={ctx.value}>
       <Workspace ctx={ctx} />
     </FamilyProvider>
   );
@@ -28,13 +28,14 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
     page = ctx.page.read();
   const [failure, setFailure] = useState<string | null>(null),
     [source, setSource] = useState("");
-  const rows = (data?.pods ?? []).flatMap((pod) =>
-    pod.members
-      .filter((member) => isSpecOf(member.schema ?? null, FAMILY_MODEL_SCHEMA))
-      .map((member) => ({ ...member, pod: pod.id })),
-  );
   const list = useList({
-    items: rows,
+    value: ctx.value,
+    rowsOf: (data) =>
+      data.pods.flatMap((pod) =>
+        pod.members
+          .filter((member) => isSpecOf(member.schema ?? null, FAMILY_MODEL_SCHEMA))
+          .map((member) => ({ ...member, pod: pod.id })),
+      ),
     keyOf: (row) => `${row.pod}/${row.path}`,
     search: (row) => ({ text: [row.pod, row.path] }),
     select: "single",
