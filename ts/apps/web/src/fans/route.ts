@@ -1,3 +1,4 @@
+import { poseFields } from "../route/defaults";
 import { bindings } from "./bindings";
 import { routeLinks } from "../route/links.generated";
 import { read } from "../route/defaults";
@@ -33,23 +34,12 @@ const shared = ductsPictureFields;
 const fan = subjectSchema(32);
 
 export const fields = {
+  ...poseFields(shared,["contextRadiusFt","contextStyle","encoding","layers","picture","sceneView","viewport"]),
   fan: field(fan, { kind: "ids", ids: [] }, "subject", "push"),
   stage: stageField(["sheet"]),
   ...listFields("input"),
-  contextRadiusFt: field(shared.contextRadiusFt.schema, 10, "pose"),
-  contextStyle: field(shared.contextStyle.schema, "glass", "pose"),
-  encoding: field(shared.encoding.schema, "health", "pose", "push"),
-  layers: field(
-    shared.layers.schema,
-    ["meshes", "system-colours", "stub-labels", "halo", "no-run", "labels", "findings"],
-    "pose",
-    "push",
-  ),
-  picture: field(shared.picture.schema, "model", "pose", "push"),
   ...listFields("roster"),
-  sceneView: field(shared.sceneView.schema, { preset: "all", section: null }, "pose"),
   sheetPath: field(z.string(), "", "query"),
-  viewport: field(shared.viewport.schema, null, "pose"),
 };
 export const sheet = read(hostRead(fansSheetCapability, sheetValueFixtures), (page: { fan: Immutable<z.output<typeof fan>>; sheetPath: string }) => ({
     fan: namesOf(page.fan),

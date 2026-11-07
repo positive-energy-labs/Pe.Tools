@@ -1,3 +1,4 @@
+import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { paneLayout } from "../route/defaults";
 import { z } from "zod";
@@ -85,6 +86,7 @@ export const module = route({
     grid: {
       title: "Schedules",
       purpose: "Inspect and edit schedule cells",
+      bindings,
       draw: draw(() => import("./grid.tsx"), "SchedulesGrid"),
     },
   },

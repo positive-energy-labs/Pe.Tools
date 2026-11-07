@@ -1,3 +1,4 @@
+import { poseFields } from "../route/defaults";
 import { bindings } from "./bindings";
 import { read } from "../route/defaults";
 import { stageField } from "../route/defaults";
@@ -31,6 +32,7 @@ import { presentLosses, presentHeal, presentFan } from "./reviews.ts";
 const shared = ductsPictureFields;
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
 export const fields = {
+  ...poseFields(shared,["contextRadiusFt","contextStyle","encoding","layers","picture","sceneView","viewport"]),
   system: field(system, { kind: "ids", ids: [] }, "subject", "push"),
   stage: stageField(["network"]),
   systemSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
@@ -39,18 +41,6 @@ export const fields = {
   treeSort: field(z.enum(["", "name"]), "", "query"),
   rulingSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
   rulingSort: field(z.enum(["", "name", "status"]), "", "query"),
-  contextRadiusFt: field(shared.contextRadiusFt.schema, 10, "pose"),
-  contextStyle: field(shared.contextStyle.schema, "glass", "pose"),
-  encoding: field(shared.encoding.schema, "health", "pose", "push"),
-  layers: field(
-    shared.layers.schema,
-    ["meshes", "system-colours", "stub-labels", "halo", "no-run", "labels", "findings"],
-    "pose",
-    "push",
-  ),
-  picture: field(shared.picture.schema, "model", "pose", "push"),
-  sceneView: field(shared.sceneView.schema, { preset: "all", section: null }, "pose"),
-  viewport: field(shared.viewport.schema, null, "pose"),
 };
 const args = (page: {
   system:

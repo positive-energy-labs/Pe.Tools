@@ -28,3 +28,10 @@ export function route<D, const F extends Fields, W extends z.ZodObject, Edit ext
     [id,{...pane,read:pane.read ?? spec.core}])) as typeof spec.panes;
   return declareRoute({...spec,panes});
 }
+
+/** Reuse a declared field group's schemas, defaults and history policy; the route picks its keys. */
+export function poseFields<const F extends Record<string,{schema:z.ZodType;url?:"push"|"replace"}>,const K extends keyof F>(group:F,keys:readonly K[]) {
+  return Object.fromEntries(keys.map(key=>[key,field(group[key].schema,group[key].schema.parse(undefined),"pose",group[key].url)])) as {
+    [P in K]:{schema:F[P]["schema"];initial:z.output<F[P]["schema"]>;role:"pose";url:"push"|"replace"}
+  };
+}
