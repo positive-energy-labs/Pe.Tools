@@ -34,6 +34,7 @@ import { createAdmittedEnvironment, createAdmittedScope } from "./admitted-scope
 import { createAdmittedWork } from "./admitted-work.ts";
 import { createApplicationWorkRegistry } from "./application-work-registry.ts";
 import { fixtureGeometryDoor } from "./fixture-geometry-door.ts";
+import { recordedWorkDoor } from "./history.ts";
 import { createNamedFixtureRouteEnvironment } from "./fixture-lane";
 import { createAttention } from "./admitted-attention.ts";
 import { createPagePorts } from "./page-port.ts";
@@ -72,7 +73,6 @@ export function createRouteShell(
   services: Omit<KernelServices, "target">,
   settings?: import("./settings").SettingsOwner,
 ) {
-  const liveDoor = services.work ?? createWorkFeedClient();
   const workRegistry = createApplicationWorkRegistry();
   const sourceTimeline = new WeakMap<
     object,
@@ -87,14 +87,15 @@ export function createRouteShell(
       W extends Record<string, unknown>,
     >(admitted: AdmittedRoute<G, S, E, Render, W>, input: PlaceInput) {
       const { address, fixture, target, memory } = input;
-      const routeSettings = fixture === null ? settings : undefined;
+      const liveDoor = input.history ? recordedWorkDoor(input.history) : (services.work ?? createWorkFeedClient());
+      const routeSettings = fixture === null && !input.history ? settings : undefined;
       const route = admitted;
       const subjectScope = subjectScopeKey(Object.fromEntries(address.read()));
       const scope = createAdmittedScope({
         admission: mountAdmittedRoute(route, route.fingerprint),
         route,
         input,
-        workRegistry: fixture === null ? workRegistry : createApplicationWorkRegistry(),
+        workRegistry: fixture === null && !input.history ? workRegistry : createApplicationWorkRegistry(),
         snapshots: () => readings.snapshots(),
         closed: () => closed,
         observeReceipts: () => readings.observeReceipts(),
@@ -145,6 +146,7 @@ export function createRouteShell(
       const schedule = (): void => readings.sync();
       const evidence = sourceReadingEvidence(services);
       const submitNative: NonNullable<KernelServices["submitNative"]> = (command) => {
+        if (input.history || input.readOnly) throw Error("needs live Revit");
         if (!door) throw Error("Native commands unavailable");
         return fixture === null
           ? services.submitNative
@@ -183,10 +185,10 @@ export function createRouteShell(
             drawing = false;
           }
         },
-        recoveryHost: fixture === null ? recoveryHost : undefined,
+        recoveryHost: fixture === null && !input.history ? recoveryHost : undefined,
         sourceEvidence: {
           dependencies: evidence?.dependencies.bind(evidence),
-          observe: fixture === null ? evidence?.observe.bind(evidence) : undefined,
+          observe: fixture === null && !input.history ? evidence?.observe.bind(evidence) : undefined,
         },
         submitNative,
         local: fixture === null ? services.local : undefined,

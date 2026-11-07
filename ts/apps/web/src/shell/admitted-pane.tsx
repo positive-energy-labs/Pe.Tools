@@ -212,9 +212,11 @@ export function AdmittedPlacePane({
   route,
   place,
   input,
+  onPage,
 }: Omit<AdmittedPaneProps, "address"> & {
   place: PanePlace;
   input: PlaceInput;
+  onPage?: (page: Record<string, unknown>) => void;
 }) {
   const visible = useContext(RouteVisibility);
   const [mounted, setMounted] = useState<PlaceMount | null>(null);
@@ -237,7 +239,7 @@ export function AdmittedPlacePane({
       state.mount = shell.mount(route, input);
     }
     const { mount } = state;
-    const publish = () => place.remember(mount.page.read());
+    const publish = () => { const page = mount.page.read(); place.remember(page); onPage?.(page); };
     publish();
     const unsubscribe = mount.subscribe(publish);
     setMounted({ ...state });

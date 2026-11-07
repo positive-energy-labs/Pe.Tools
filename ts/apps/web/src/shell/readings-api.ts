@@ -150,8 +150,9 @@ export const callCompose = async <K extends PeRouteId>(
   context: { signal: AbortSignal; headers?: Readonly<Record<string, string>> },
   key: K,
   input: ComposeInput<K>,
+  headers?: Readonly<Record<string, string>>,
 ): Promise<ComposeOutput<K>> => {
-  const value = await pe.call(key, input, { signal: context.signal, headers: context.headers });
+  const value = await pe.call(key, input, { signal: context.signal, headers: { ...context.headers, ...headers } });
   return value as ComposeOutput<K>;
 };
 
@@ -345,7 +346,7 @@ export function publicationSource<T extends { generation: number; version: numbe
           fresh: result.state === "current" && !result.value.coverage.refused.length && !result.value.coverage.unknown.length,
           reason: result.reason ?? [...result.value.coverage.refused.map(part => `${part.keys.join(", ")}: ${part.reason}`),
             ...(result.value.coverage.unknown.length ? [`Not covered: ${result.value.coverage.unknown.join(", ")}`] : [])].join("; ") });
-        if (!events) {
+        if (!events && !ctx.historyPoint) {
           events = openEventSource(`/pe/read-events?subscription=${encodeURIComponent(publication.subscription)}&generation=${publication.generation}`);
           events.onmessage = event => {
             const state = z.object({ generation: z.number(), state: z.string() }).parse(JSON.parse(event.data));
@@ -359,6 +360,6 @@ export function publicationSource<T extends { generation: number; version: numbe
       finally { refreshing = false; if (invalidated) { invalidated = false; void refresh(); } }
     };
     void refresh();
-    return () => { closed = true; events?.close(); void options.read({ ...ctx, signal: new AbortController().signal }, publication, true).catch(() => {}); };
+    return () => { closed = true; events?.close(); if (!ctx.historyPoint) void options.read({ ...ctx, signal: new AbortController().signal }, publication, true).catch(() => {}); };
   } };
 }

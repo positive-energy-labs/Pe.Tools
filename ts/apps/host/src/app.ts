@@ -7,6 +7,7 @@ import {
   type ReadOwnerOptions,
 } from "./builtin-inputs.ts";
 import { HostInputContext } from "./input-context.ts";
+import { historyRoutes } from "./reads/history-routes.ts";
 import { nativeReadRoot } from "./native-read-root.ts";
 export { historicalRoutes, makeReadOwner, readInputRoutes } from "./builtin-inputs.ts";
 export { nativeReadRoot } from "./native-read-root.ts";
@@ -402,6 +403,7 @@ function liveHttpLive(options: HttpLiveOptions) {
         capturesRoute(spa),
         pagesRoute(),
         builtinFileRoutes,
+        historyRoutes(reads.history),
         adminShutdownRoute,
         adminWindowRoute,
         updateRoutes,

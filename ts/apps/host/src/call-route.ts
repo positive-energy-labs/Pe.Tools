@@ -197,6 +197,7 @@ export function makeCallRoute(
   };
   const callDoor = peRoutes["operation.call"];
   const post = HttpRouter.add(callDoor.method, callDoor.path, (req) => {
+    if (req.headers["x-pe-history-point"]) return Effect.succeed(Response.jsonUnsafe({ error: { code: "history.read-only", message: "needs live Revit" } }, { status: 409 }));
     let captureId: string | undefined;
     let admissionRequestId: string = randomUUID();
     // Set once dispatch begins so the catch below can attribute failures to the op.
@@ -738,6 +739,7 @@ export function makeCallRoute(
   const admitDoor = peRoutes["actions.admit"];
   const actions = HttpRouter.add(admitDoor.method, admitDoor.path, (req) =>
     Effect.gen(function* () {
+      if (req.headers["x-pe-history-point"]) return Response.jsonUnsafe({ error: { code: "history.read-only", message: "needs live Revit" } }, { status: 409 });
       // The caller lives in AsyncLocalStorage; the Node body read resumes outside it. Read first.
       const caller = currentCaller();
       const body = yield* req.json;
@@ -837,6 +839,7 @@ export function makeCallRoute(
   const controls = controlVerbs.map((id) => {
     const choice = id.slice("action.".length);
     return HttpRouter.add(peRoutes[id].method, peRoutes[id].path, (req) => {
+      if (req.headers["x-pe-history-point"]) return Effect.succeed(Response.jsonUnsafe({ error: { code: "history.read-only", message: "needs live Revit" } }, { status: 409 }));
       const caller = currentCaller();
       return RevitBridge.use((_bridge) =>
         Effect.tryPromise({
@@ -1533,6 +1536,7 @@ const retainedReadFailure = (error: unknown) => isDoorFailure(error) ? error : n
 export const nativeCallRouteFor = (retained?: (input: NativeReadInput, options: {version?:string;refresh?:string}) => ReturnType<typeof retainedDuctsRead>,
   normal?: (input: NativeReadInput) => ReturnType<typeof retainedDuctsRead>) => HttpRouter.add("POST", peRoutes["operation.call"].path, (req) =>
   Effect.gen(function* () {
+    if (req.headers["x-pe-history-point"]) return yield* new InvalidRead({ message: "needs live Revit", status: 409, problem: "history.read-only" });
     const identity = yield* RequestIdentity;
     const body = yield* nativeCallBody(req);
     const inputs = yield* HostInputContext;
