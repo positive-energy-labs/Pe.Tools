@@ -52,7 +52,7 @@ export async function buildRouteArtifact(options: {
       {
         name: "route-artifact-source-eol",
         enforce: "pre",
-        resolveId(id) {
+        resolveId(id, importer) {
           // Never silently bundle a second copy of a stateful shell runtime. Subpath
           // imports need their own explicit deployment pin, not the parent package's bytes.
           if (
@@ -61,7 +61,7 @@ export async function buildRouteArtifact(options: {
             ) &&
             !shared.some((item) => item.specifier === id)
           )
-            throw Error(`Shared route module needs an explicit deployment pin: ${id}`);
+            throw Error(`Shared route module needs an explicit deployment pin: ${id} (imported by ${importer})`);
         },
         load(id) {
           if (/\.[cm]?[jt]sx?$/.test(id)) return readFileSync(id, "utf8").replaceAll("\r\n", "\n");
