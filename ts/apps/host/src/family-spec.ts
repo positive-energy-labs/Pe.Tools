@@ -1,3 +1,5 @@
+import { blobRefSchema } from "@pe/agent-contracts";
+import { put, get } from "./action-blobs.ts";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
@@ -50,14 +52,7 @@ export async function familySpecAsset(url: URL): Promise<Response> {
   }
 }
 
-const assetSchema = z
-  .strictObject({ path: z.string(), bytesBase64: z.string(), sha256: z.string() })
-  .refine(
-    (asset) =>
-      createHash("sha256").update(Buffer.from(asset.bytesBase64, "base64")).digest("hex") ===
-      asset.sha256,
-    "Asset bytes must match their hash",
-  );
+const assetSchema = z.strictObject({ path: z.string(), blob: blobRefSchema });
 const preparedSpecSchema = z.strictObject({
   member: z.strictObject({ pod: z.string(), path: z.string() }),
   doc: parsedDocViewSchema,
@@ -94,7 +89,8 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
           type: "application/pdf",
         });
       } else {
-        file = new File([Buffer.from(source.base64, "base64")], basename(source.fileName), {
+        if (!("digest" in source)) throw refused("Upload bytes were not retained", "blob.unretained");
+        file = new File([new Uint8Array(await get(source))], basename(source.fileName), {
           type: "application/pdf",
         });
       }
@@ -107,7 +103,6 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
             kind: "member",
             probe: member,
             expected: createHash("sha256").update(memberBytes).digest("hex"),
-            bytesBase64: memberBytes.toString("base64"),
           },
           ...("path" in source
             ? [
@@ -115,7 +110,7 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
                   kind: "file" as const,
                   probe: { path: source.path },
                   expected: createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
-                  bytesBase64: Buffer.from(bytes).toString("base64"),
+                  blob: await put(Buffer.from(bytes), file.name),
                 },
               ]
             : "url" in source
@@ -124,7 +119,7 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
                     kind: "capture" as const,
                     expected: createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
                     probe: {
-                      bytesBase64: Buffer.from(bytes).toString("base64"),
+                      blob: await put(Buffer.from(bytes), file.name),
                       origin: { kind: "url" as const, url: source.url },
                       capturedAt: new Date().toISOString(),
                     },
@@ -142,13 +137,10 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
           const assetDir = `${name || "document"}-${doc.jobId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
           const folder = safePath(root, `${dir}/${assetDir}`);
           const assets: z.infer<typeof assetSchema>[] = [];
-          const retain = (path: string, bytes: Buffer) =>
-            assets.push({
-              path,
-              bytesBase64: bytes.toString("base64"),
-              sha256: createHash("sha256").update(bytes).digest("hex"),
-            });
-          retain(join(folder, "source.pdf"), Buffer.from(bytes));
+          const retain = async (path: string, bytes: Buffer) => {
+            assets.push({ path, blob: await put(bytes, basename(path)) });
+          };
+          await retain(join(folder, "source.pdf"), Buffer.from(bytes));
           const download = async (url: string, name: string) => {
             const response = await fetch(url);
             if (!response.ok) throw Error(`Spec asset download failed (${response.status})`);
@@ -156,7 +148,7 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
               ? ".png"
               : ".jpg";
             const path = `${name}${extension}`;
-            retain(join(folder, path), Buffer.from(await response.arrayBuffer()));
+            await retain(join(folder, path), Buffer.from(await response.arrayBuffer()));
             return `${assetDir}/${path}`;
           };
           for (const page of doc.pages) {
@@ -167,9 +159,9 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
             image.url = await download(image.url, `image-${index}`);
           // The canonical JSON is named after the PDF; a member sidecar binds a family to that JSON.
           const specPath = `${dir}/${assetDir}.json`;
-          retain(safePath(root, specPath), Buffer.from(JSON.stringify(doc, null, 2)));
+          await retain(safePath(root, specPath), Buffer.from(JSON.stringify(doc, null, 2)));
           const sidecar = safePath(root, `${member.path}.spec.json`);
-          retain(sidecar, Buffer.from(JSON.stringify({ path: specPath })));
+          await retain(sidecar, Buffer.from(JSON.stringify({ path: specPath })));
           return { member, doc, specPath, assets };
         },
       };
@@ -182,9 +174,9 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
         await execution.step("file", "family.spec.asset", asset, async () => {
           await mkdir(dirname(asset.path), { recursive: true });
           const temporary = `${asset.path}.${randomUUID()}.tmp`;
-          await writeFile(temporary, Buffer.from(asset.bytesBase64, "base64"), { flag: "wx" });
+          await writeFile(temporary, await get(asset.blob), { flag: "wx" });
           await rename(temporary, asset.path);
-          return { path: asset.path, sha256: asset.sha256 };
+          return { path: asset.path, sha256: asset.blob.digest };
         });
       await execution.publishWork(ctx.admission.input.work!.key, "family", [
         { path: ["spec"], value: { member, doc } },
@@ -201,12 +193,13 @@ export function familySpecExecutor(deps: PodDependencies = {}): CommandExecutor 
       if (step.kind !== "file" || step.key !== "family.spec.asset")
         return { step, evidence: { reason: "No independent file witness" } };
       const asset = assetSchema.parse(step.input);
+      await get(asset.blob);
       const bytes = await readFile(asset.path).catch((error) => {
         console.error("family-spec: asynchronous operation failed", error);
         return null;
       });
       const hash = bytes ? createHash("sha256").update(bytes).digest("hex") : null;
-      return hash === asset.sha256
+      return hash === asset.blob.digest
         ? {
             step: { ...step, state: "succeeded", result: { path: asset.path, sha256: hash } },
             evidence: { path: asset.path, sha256: hash },

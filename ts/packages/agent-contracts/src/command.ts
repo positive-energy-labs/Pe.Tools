@@ -1,3 +1,4 @@
+import { blobRefSchema } from "./blob-ref.ts";
 import { z } from "zod";
 import {
   canonicalWorkKey,
@@ -52,9 +53,11 @@ export const consumedSchema = z.discriminatedUnion("kind", [
   ),
   observed("member", { pod: z.string(), path: z.string() }, sha.nullable()).extend({
     bytesBase64: z.string().optional(),
+    blob: blobRefSchema.optional(),
   }),
   observed("file", { path: z.string() }, sha.nullable()).extend({
     bytesBase64: z.string().optional(),
+    blob: blobRefSchema.optional(),
   }),
   // A read names when it was taken; a sealed write names the mark its plan sealed (ADR 0030 rule 4),
   // so the journal's dispatch probe and the seal share one authority, never a second wall clock.
@@ -78,7 +81,7 @@ export const consumedSchema = z.discriminatedUnion("kind", [
   observed(
     "capture",
     {
-      bytesBase64: z.string(),
+      blob: blobRefSchema,
       origin: z.strictObject({ kind: z.literal("url"), url: z.url() }),
       capturedAt: z.string(),
     },

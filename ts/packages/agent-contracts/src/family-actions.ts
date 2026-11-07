@@ -1,3 +1,4 @@
+import { blobRefSchema } from "./blob-ref.ts";
 import type { Command } from "./command.ts";
 import { z } from "zod";
 import { specDocSchema } from "./family.ts";
@@ -142,6 +143,7 @@ export const familyActions = {
         z.strictObject({ path: z.string().min(1) }),
         z.strictObject({ url: z.url() }),
         z.strictObject({ fileName: z.string().min(1), base64: z.string().min(1) }),
+        blobRefSchema,
       ]),
     }),
     result: z.object({

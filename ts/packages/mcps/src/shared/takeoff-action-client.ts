@@ -67,17 +67,23 @@ function retain(slot: string, value?: InvocationRecord) {
   else records.delete(slot);
 }
 const terminal = (row: ActionReceipt) => ["succeeded", "failed", "cancelled"].includes(row.state);
-const normalizedInput = (key: string, input: Record<string, unknown>) =>
-  Object.hasOwn(commands, key) ? commands[key as SemanticActionKey].input.parse(input) : input;
-function assertIdentity(admission: ActionAdmission, row: ActionReceipt) {
+async function normalizedInput(key: string, input: Record<string, unknown>) {
+  const parsed = Object.hasOwn(commands, key) ? commands[key as SemanticActionKey].input.parse(input) : input;
+  if (key !== "family.attach-spec") return parsed;
+  const source = (parsed as Record<string, unknown>).source;
+  if (!source || typeof source !== "object" || !("base64" in source)) return parsed;
+  const upload = source as {base64: string; fileName: string};
+  const bytes = Uint8Array.from(atob(upload.base64), char => char.charCodeAt(0));
+  const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map(b => b.toString(16).padStart(2, "0")).join("");
+  return {...parsed, source: {digest, size: bytes.length, fileName: upload.fileName}};
+}
+async function assertIdentity(admission: ActionAdmission, row: ActionReceipt) {
   if (
-    row.id !== admission.id ||
-    row.key !== admission.key ||
+    row.id !== admission.id || row.key !== admission.key ||
     canonicalRouteInput(row.target) !== canonicalRouteInput(admission.target) ||
-    canonicalRouteInput(normalizedInput(row.key, row.input)) !==
-      canonicalRouteInput(normalizedInput(admission.key, admission.input))
-  )
-    throw Error(`Action '${admission.id}' returned a receipt for different intent or target`);
+    canonicalRouteInput(await normalizedInput(row.key, row.input)) !==
+      canonicalRouteInput(await normalizedInput(admission.key, admission.input))
+  ) throw Error(`Action '${admission.id}' returned a receipt for different intent or target`);
 }
 function transportLost(error: unknown) {
   if (error instanceof z.ZodError || (error as { receiptRejected?: boolean })?.receiptRejected)
@@ -175,8 +181,8 @@ export async function recoverAction(
   if (script) ({ key, input } = script);
   if (
     original.key !== key ||
-    canonicalRouteInput(normalizedInput(key, input)) !==
-      canonicalRouteInput(normalizedInput(key, original.input))
+    canonicalRouteInput(await normalizedInput(key, input)) !==
+      canonicalRouteInput(await normalizedInput(key, original.input))
   )
     throw Error(`Action '${id}' conflicts with its original intent`);
   if (target && canonicalRouteInput(target) !== canonicalRouteInput(original.target))
@@ -250,7 +256,7 @@ async function recoverInvocation(
 ): Promise<ActionReceipt | DetachedAction> {
   const row = await readAction(pending.id, base).catch(transportLost);
   if (row) {
-    if (pending.admission) assertIdentity(pending.admission, row);
+    if (pending.admission) await assertIdentity(pending.admission, row);
     retain(slot, { id: pending.id });
     return waitForAction(pending.id, base, waitMs, undefined, row);
   }
@@ -284,7 +290,7 @@ export async function submitAction(
         );
       } catch {
         row = await readAction(admission.id, base, AbortSignal.timeout(5000)).catch(transportLost);
-        if (row) assertIdentity(admission, row);
+        if (row) await assertIdentity(admission, row);
         if (!row) {
           if (Date.now() >= deadline)
             return { state: "detached", id: admission.id, key: admission.key, acceptance };
@@ -299,7 +305,7 @@ export async function submitAction(
         throw refusal;
       }
       row = actionReceiptSchema.parse(await response.json());
-      assertIdentity(admission, row);
+      await assertIdentity(admission, row);
     }
     acceptance = "admitted";
     retain(slot, { id: admission.id });
@@ -364,9 +370,9 @@ export async function waitForAction(
         const release = observer(
           id,
           base,
-          (next) => {
+          async (next) => {
             try {
-              assertIdentity(original, next);
+              await assertIdentity(original, next);
               if (next.state !== "waiting" && next.state !== "running") finish(() => resolve(next));
             } catch (error) {
               finish(() => reject(error));
