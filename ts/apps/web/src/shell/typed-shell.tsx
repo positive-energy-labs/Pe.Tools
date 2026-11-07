@@ -24,6 +24,8 @@ import { readLayoutState, writeLayoutState } from "./mount-page";
 import { GraphHistory } from "./mount-timeline";
 import { PaneActionSlots, usePaneActionSlot } from "./pane-actions";
 import { SubjectDoor } from "./subject";
+import { SubjectPicker } from "./subject-picker";
+import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { typedSubjectDoor } from "./subject";
 import { PrimaryRouteControls, useHasGlobalNavigation } from "../navigation/route-controls";
 import { useRouteViewBridge } from "../route/view-bridge";
@@ -100,7 +102,7 @@ function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: Histo
     </section></>;
 
 }
-function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNode }) {
+export function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNode }) {
   useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);
   const { spec }=mount;
   const visible=useContext(RouteVisibility), portal=useHasGlobalNavigation();
@@ -111,7 +113,7 @@ function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNo
   useRouteViewBridge({ route:spec.key,codec,visible,surface:"route",page:mount.page.read(),context:{},facts:{},apply:patch=>{
     mount.move(patch as Record<string,unknown>,"push"); return {ok:true,moved:true,receipt:{current:()=>visible,rendered:page=>canonicalRouteInput(page)===canonicalRouteInput(mount.page.read())}};
   } });
-  const head=<SituationBand name={spec.name} context={<>{document}{spec.edits?<span>{mount.work()?.revision === undefined ? "Reading Work..." : `r${mount.work()!.revision}`}</span>:null}</>}
+  const head=<SituationBand name={spec.name} context={<>{document}<TypedSubject mount={mount} />{spec.edits && mount.work()?<span>{`r${mount.work()!.revision}`}</span>:null}</>}
     alerts={<>{mount.value().value!==undefined&&!mount.value().current?<span role="status">{retainedValueLabel(mount.value())}</span>:null}{mount.problem() ? <span role="alert">{mount.problem()}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
     verbs={[...mount.recoveryOwners().map(owner=><TypedRecovery key={owner} mount={mount} owner={owner}/>),...(mount.startAction()?[<TypedStart key="start" mount={mount}/>]:[]),...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)]}
     timeline={<TimelineHead owner={mount} history={<GraphHistory owner={mount} />} />} />;
@@ -130,6 +132,18 @@ export function TypedWrite({ mount, id }: { mount: TypedMount; id: string }) {
     {handle.failure?<span role="alert">{handle.failure}</span>:null}
     {handle.consent?<Button label={`Reject ${handle.label}`} onClick={handle.consent.run}>Reject? {handle.consent.until}</Button>:null}</>;
   return <PreviewAction handle={handle} label={handle.label} />;
+}
+/** Subject discovery precedes Work selection and acquisition. */
+export function TypedSubject({ mount }: { mount: TypedMount }) {
+  useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
+  const subject = mount.spec.subject;
+  if (!subject) return null;
+  const roster = mount.value(subject.read ?? mount.spec.core);
+  if (!roster.current) return <OutcomeLine kind={roster.status === "pending" ? "busy" : "refused"} label={`Choose ${subject.noun}`} says={roster.reason} />;
+  return <SubjectPicker data={mount.data} single={subject.multiple === false} mount={{
+    picker: () => subject.options(roster.value), page: mount.page,
+    controls: { subject: mount.page.subject },
+  }} />;
 }
 function layout(node: TypedRoute["spec"]["layout"]): LayoutNode {
   return node.kind==="split"?{...node,sized:node.sized??"end",minSize:node.minSize??80,minOtherSize:node.minOtherSize??80,children:node.children.map(layout)}:node.kind==="gate"?{...node,child:layout(node.child)}:node;

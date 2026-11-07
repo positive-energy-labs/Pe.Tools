@@ -56,7 +56,7 @@ export function subjectOf(mount: SubjectMount, data: RouteGraphJson) {
     setActive: (id: unknown) => (many ? move(set.setActive(open, id)) : one(id)),
   };
 }
-export function SubjectPicker({ mount, data }: { mount: SubjectMount; data: RouteGraphJson }) {
+export function SubjectPicker({ mount, data, single = false }: { mount: SubjectMount; data: RouteGraphJson; single?: boolean }) {
   const subject = subjectOf(mount, data);
   if (!subject) return null;
   const { options, many, all, selected, active, unknown } = subject;
@@ -93,13 +93,13 @@ export function SubjectPicker({ mount, data }: { mount: SubjectMount; data: Rout
         keyOf={(o) => identity(o.id)}
         labelOf={(o) => o.label}
         filter="substring"
-        select={many ? "multi" : "single"}
+        select={many && !single ? "multi" : "single"}
         selected={selected}
         empty={`No ${noun} available`}
         row={(o) => ({ label: o.label })}
-        onPick={(option) => subject.toggle(option.id)}
+        onPick={(option) => single ? subject.select([option.id]) : subject.toggle(option.id)}
         onSelectedChange={
-          many
+          many && !single
             ? (keys) =>
                 subject.select(
                   options.filter((o) => keys.includes(identity(o.id))).map((o) => o.id),
@@ -107,7 +107,7 @@ export function SubjectPicker({ mount, data }: { mount: SubjectMount; data: Rout
             : undefined
         }
       />
-      {many && (
+      {many && !single && (
         <>
           <Button label={`All ${noun}`} onClick={() => mount.controls.subject({ kind: "all" })}>
             All
