@@ -1,5 +1,5 @@
 import type { RoomsSnapshot } from "@pe/host-contracts/generated";
-import type { TakeoffPlanImage } from "#/takeoff/level-plan";
+import type { PlanImage } from "./plan-reading";
 import type { TraceRead } from "./layers";
 
 export const DEMO_VIEW = "Fixture level plan";
@@ -37,7 +37,7 @@ export const DEMO_ROOMS: RoomsSnapshot.Res.Response = {
     stale: index === 2,
   })),
 };
-export const DEMO_PLAN: TakeoffPlanImage = {
+export const DEMO_PLAN: PlanImage = {
   href: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480"><rect width="800" height="480" fill="white"/><path d="M2 2H798V478H2ZM400 0V240M0 240H800" fill="none" stroke="gray" stroke-width="4"/></svg>')}`,
   registration: {
     width: 800,
