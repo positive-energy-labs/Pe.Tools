@@ -18,7 +18,7 @@ const envelope = z.object({
     contracts: z.array(z.object({ id: z.string(), bytes: octets })),
     executables: z.array(
       z.object({
-        client: z.enum(["web", "pea", "shared"]),
+        client: z.enum(["web", "pea", "shared", "host"]),
         entry: z.string(),
         resolved: z.boolean(),
         members: z.array(z.object({ path: z.string(), bytes: octets })),
