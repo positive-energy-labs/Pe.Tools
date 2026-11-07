@@ -1,69 +1,39 @@
 // @vitest-environment jsdom
-import { cleanup, render } from "@testing-library/react";
-import { createMemoryHistory, createRouter, RouterContextProvider } from "@tanstack/react-router";
-import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
-import { Route as root } from "../routes/__root";
-vi.mock("../routes/__root", async () => ({
-  Route: (await import("@tanstack/react-router")).createRootRoute(),
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, expect, test, vi } from "vite-plus/test";
+import { CapturesList } from "./list";
+vi.mock("#/host/runtime", () => ({
+  runtimeStreamUrl: (path: string) => `${path}?pe-runtime=checkout`,
 }));
-const releases: (() => void)[] = [];
-beforeEach(() => {
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    },
+afterEach(cleanup);
+test("a retained picture names its runtime owner and reports a failed image", async () => {
+  const sha = "a".repeat(64);
+  render(
+    <CapturesList
+      captures={[
+        {
+          id: "taking",
+          sha,
+          at: "2026-11-06T00:00:00Z",
+          origin: "human",
+          document: { title: "MEP" },
+          view: { name: "Ground plan" },
+          focus: null,
+          registration: null,
+          byteSize: 93823,
+          url: `/captures/${sha}.png`,
+        },
+      ]}
+      focus={sha}
+      open={[sha]}
+      onPage={() => {}}
+    />,
   );
-  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1200);
-});
-afterEach(() => {
-  cleanup();
-  releases.splice(0).forEach((release) => release());
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
-
-import { capturesRoute } from "./route";
-import { captureQueries } from "./host";
-async function mounted(captures: unknown[] = [], sha = "abc") {
-  const open = vi
-    .spyOn(captureQueries["captures.list"], "run")
-    .mockResolvedValue(captures as never);
-  const router = createRouter({
-    routeTree: root.addChildren([capturesRoute]),
-    history: createMemoryHistory({ initialEntries: [`/captures?sha=${sha}&open=${sha}`] }),
-  });
-  releases.push(router.history.subscribe(router.load));
-  await router.load();
-  const Component = capturesRoute.options.component!;
-  const view = render(
-    <RouterContextProvider router={router}>
-      <Component />
-    </RouterContextProvider>,
+  const image = await screen.findByRole("img", { name: /Ground plan.*MEP/ });
+  expect(image.getAttribute("src")).toContain("pe-runtime=checkout");
+  fireEvent.error(image);
+  expect(screen.getByText(/The retained picture could not be loaded/)).toBeTruthy();
+  expect(screen.getByRole("link", { name: "open png" }).getAttribute("href")).toContain(
+    "pe-runtime=checkout",
   );
-  return { view, router, open };
-}
-test("the admitted reading renders the retained capture and its restored detail", async () => {
-  const { view } = await mounted(
-    [
-      {
-        id: "taking",
-        sha: "a".repeat(64),
-        at: "2026-10-01T00:00:00Z",
-        origin: "human",
-        document: { title: "MEP" },
-        view: { name: "Ground plan" },
-        focus: null,
-        registration: null,
-        byteSize: 1,
-        url: "/captures/abc.png",
-      },
-    ],
-    "a".repeat(64),
-  );
-  expect(await view.findByRole("option", { name: /Ground plan/ })).toBeTruthy();
-  expect(await view.findByRole("link", { name: "open png" })).toBeTruthy();
 });

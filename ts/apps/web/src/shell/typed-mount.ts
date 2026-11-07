@@ -306,11 +306,14 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         const catalog=commands[cmd.entry as keyof typeof commands];
         const request=cmd.contract.input.parse(catalog && "work" in catalog && catalog.work
           ? {...z.record(z.string(),z.unknown()).parse(proposed),work:handle} : proposed);
-        const result=cmd.kind === "session" || cmd.kind === "catalog"
-          ? await settleNative(door.submit({id:crypto.randomUUID(),key:cmd.entry,
-              target:commandTarget(cmd.entry,z.record(z.string(),z.unknown()).parse(request),input.target?.kind === "document"?input.target.ref:undefined),
-              input:z.record(z.string(),z.unknown()).parse(request)}))
-          : await cmd.invoke!(request,{target:input.target ?? {kind:"host"},work:handle});
+        let result:unknown;
+        if(cmd.kind === "session" || cmd.kind === "catalog") {
+          const completion=await settleNative(door.submit({id:crypto.randomUUID(),key:cmd.entry,
+            target:commandTarget(cmd.entry,z.record(z.string(),z.unknown()).parse(request),input.target?.kind === "document"?input.target.ref:undefined),
+            input:z.record(z.string(),z.unknown()).parse(request)}),true);
+          const receipt=z.object({receiptId:z.string(),result:z.unknown().optional()}).parse(completion);
+          result=catalog && "result" in catalog ? cmd.contract.output.parse(receipt.result) : {kind:"void",receiptId:receipt.receiptId};
+        } else result=await cmd.invoke!(request,{target:input.target ?? {kind:"host"},work:handle});
         results.set(id,result); syncReads(true); return result;
       } catch(error) {problems.set(id,error instanceof Error?error.message:String(error));throw error;}
       finally {notify();}
@@ -408,7 +411,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             // Scalar cells travel whole; record cells keep their narrow keys (host inverse authority).
             const normalized=[...new Set(patches.map(p=>String(p.path[0])))].flatMap(key => bare(record.config.state.schema.shape[key]!) instanceof z.ZodRecord
               ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
-            const label=id===own ? detail.label : `${detail.label} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· from /${id}`;
+            const label=id===own ? detail.label : `${detail.label} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· from /${id}`;
             await submit(record,{kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))},token);
           }));
           return null;
@@ -425,7 +428,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             stage:(value2,detail)=>patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"set",rung:{value:value2}}),detail,route),
             transitions:(detail)=>ready&&value.edit?[{kind:"clear",run:()=>clear(detail)}]:[]};
         },
-        label(input,label) { const foreign=[...new Set(edits!.patches(input,core.value).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
+        label(input,label) { const foreign=[...new Set(edits!.patches(input,core.value).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
         patch,
         edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),core.value),detail),
       };
@@ -441,10 +444,10 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   } catch (error) { cleanups.reverse().forEach(stop => stop()); throw error; }
 }
 export type TypedMount = ReturnType<typeof mountTypedRoute>;
-async function settleNative(submission: ReturnType<WorkJournalDoor["submit"]>) {
+async function settleNative(submission: ReturnType<WorkJournalDoor["submit"]>,receipt=false) {
   return new Promise<unknown>((resolve,reject)=>submission.accepted.subscribe(outcome=>{
     if(outcome.kind==="pending") return;
-    if(outcome.kind==="accepted-native"&&outcome.outcome==="committed") resolve(outcome.result);
+    if(outcome.kind==="accepted-native"&&outcome.outcome==="committed") resolve(receipt?{receiptId:outcome.receiptId,result:outcome.result}:outcome.result);
     else reject(Error(outcome.kind==="rejected"?outcome.problem:"Outcome unknown; inspect History"));
   },()=>reject(Error("Command detached; inspect History before retrying"))));
 }

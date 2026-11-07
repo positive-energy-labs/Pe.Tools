@@ -1,31 +1,10 @@
+// Generated from settings/route.ts by codegen:routes. Do not edit.
 import { z } from "zod";
-import { field, text, type RouteDeclaration } from "../route-field.ts";
-
-/** The Settings sections a link may open, in page order. */
-export const SETTINGS_SECTIONS = [
-  "revit",
-  "update",
-  "share",
-  "pea",
-  "host",
-  "notices",
-  "appearance",
-] as const;
-
-export const settingsAddress = {
-  path: "/settings",
-  title: "Settings",
-  fields: {
-    /** The open group; absent = what waits on the person opens, `none` = every group folded. */
-    section: field(z.enum([...SETTINGS_SECTIONS, "none"]).optional(), {
-      url: "push",
-      agent: "set",
-    }),
-    /** The Revit session the revit group shows. */
-    session: field(text(), { url: "push", agent: "read" }),
-  },
-  agent: {
-    policy:
-      "Open one Settings group, or fold them all with none. Facts name the groups and the state each header shows. Repair, install and configuration actions stay the person's.",
-  },
-} satisfies RouteDeclaration;
+import { subjectSchema, focusSelectionSchema } from "../route-kernel-codecs.ts";
+import { jsonCodec } from "../route-field.ts";
+const field = <S extends z.ZodType>(schema:S,url:"push"|"replace") => ({ schema, url, agent:"set" as const, codec: jsonCodec(schema) });
+export const settingsAddress = { path: "/settings" as const, title: "Settings", fields: {
+"section": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","enum":["none","revit","update","share","pea","host","notices","appearance"]}).default(undefined), "push"),
+"session": field(z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string"}).default(""), "replace"),
+selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
+}, agent: { policy: "Use the route fields as declared." } };

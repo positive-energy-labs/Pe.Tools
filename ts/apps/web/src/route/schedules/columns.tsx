@@ -6,8 +6,8 @@ import {
   type MeasuredValue,
 } from "@pe/agent-contracts";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
-import { reviewTransitions, type CellWire } from "#/components/work/band";
-import type { CellTransition, StateCellProps } from "@pe/kit/lang/cell";
+import type { CellHandle } from "@pe/kit/lang/cell";
+import type { StateCellProps } from "@pe/kit/lang/cell";
 import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 import type { Column } from "@pe/kit/table/model";
 import { parseConditionNumber } from "@pe/kit/table/view";
@@ -64,34 +64,14 @@ export const staleAnswer = (key: string, cell: GridCell, kind: "set" | "clear") 
     kind === "set" ? { kind: "set", rung: cell.edit! } : { kind: "clear" },
   );
 
-function scheduleTransitions(
-  wire: CellWire,
-  key: string,
-  cell: GridCell,
-  stale: readonly StaleCell[],
-): CellTransition[] {
-  if (cell.edit == null || !stale.some((s) => s.key === key))
-    return reviewTransitions(wire, key, cell);
-  const run = (kind: "clear") => () =>
-    wire.write(staleAnswer(key, cell, kind), wire.revision ?? undefined);
-  return [
-    {
-      kind: "clear",
-      reason: "Drop your stale value; the Revit value stands.",
-      run: run("clear"),
-    },
-  ];
-}
-
-/** What writing a schedule cell needs: the Work's cells, its wire, and the grid's edit doors. */
+/** What writing a schedule cell needs: the Work's cells, owned handles, and measured parse. */
 export interface ScheduleCellWrites {
   cells: ScheduleGridDocument["cells"];
-  wire: CellWire;
+  at: (key: string) => CellHandle;
   stale: readonly StaleCell[];
   refused: Readonly<Record<string, string>>;
   stageEdit: (key: string, value: string | MeasuredValue) => Promise<string | void>;
   parseMeasured: (key: string, text: string) => Promise<MeasuredValue | { refusal: string } | null>;
-  transitions?: (key: string) => CellTransition[] | undefined;
 }
 
 /**
@@ -100,7 +80,7 @@ export interface ScheduleCellWrites {
  * reviewed.
  */
 function scheduleCellState(
-  { cells, wire, stale, refused, stageEdit, parseMeasured, transitions }: ScheduleCellWrites,
+  { cells, at, stale, refused, stageEdit, parseMeasured }: ScheduleCellWrites,
   row: ScheduleRow,
   columnNumber: number,
   columnIndex: number,
@@ -114,7 +94,7 @@ function scheduleCellState(
   const isStale = staleAt != null;
   const current = binding?.displayValue ?? row.values[columnIndex] ?? "";
   const shown = isStaged ? showCellValue(cell.edit?.value) : current;
-  const lock = scheduleLock(binding);
+  const lock = scheduleLock(binding) ?? at(key).refusal;
   const note =
     [
       isStale ? STALE_NOTE : null,
@@ -159,20 +139,14 @@ function scheduleCellState(
                 : stageEdit(key, text),
           }),
     ...(refused[key] ? { refused: refused[key] } : {}),
-    transitions: isStale
-      ? scheduleTransitions(wire, key, cell, stale)
-      : (transitions?.(key)?.filter((transition) =>
-          scheduleTransitions(wire, key, cell, stale).some(
-            (allowed) => allowed.kind === transition.kind,
-          ),
-        ) ?? scheduleTransitions(wire, key, cell, stale)),
+    transitions: lock ? [] : at(key).transitions({ label: `Clear schedule cell ${key}` }),
   };
 }
 
 export function useScheduleGridColumns(
   snapshot: Snapshot | null,
   cells: ScheduleGridDocument["cells"],
-  wire: CellWire,
+  at: (key: string) => CellHandle,
   stageEdit: (key: string, value: string | MeasuredValue) => Promise<string | void>,
   /** One read-only host parse for a measured cell; a re-read cancels it (resolves null). */
   parseMeasured: (key: string, text: string) => Promise<MeasuredValue | { refusal: string } | null>,
@@ -234,7 +208,7 @@ export function useScheduleGridColumns(
           condition: { kind: numeric ? "number" : "text", read },
           state: (row) =>
             scheduleCellState(
-              { cells, wire, stale, refused, stageEdit, parseMeasured },
+              { cells, at, stale, refused, stageEdit, parseMeasured },
               row,
               column.columnNumber,
               columnIndex,
@@ -242,6 +216,6 @@ export function useScheduleGridColumns(
         };
       }),
     ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stageEdit and wire close over `cells` and the revision, listed
-  }, [snapshot, cells, wire.revision, stale.map((s) => s.key).join("|"), refused]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stageEdit and cell handles close over the rendered Work
+  }, [snapshot, cells, at, stale.map((s) => s.key).join("|"), refused]);
 }

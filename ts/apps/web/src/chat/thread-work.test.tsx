@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { readingKey, threadWorkSnapshotSchema } from "@pe/agent-contracts";
 import { peReadings } from "#/readings";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
-import { CHAT_SEED_THREAD_WORK } from "./seeds";
+import { CHAT_SEED_THREAD_WORK } from "../design-system/chat-examples";
 import { demoThreads } from "./thread-navigation";
 import { ThreadsSidebar } from "./thread-palette";
 import * as work from "./thread-work";

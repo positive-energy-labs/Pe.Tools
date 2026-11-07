@@ -1,4 +1,5 @@
-import { routeAddress, SETTINGS_SECTIONS } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
+import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/settings-sections.ts";
 /**
  * The Machine reading, said in words: the version chip, the status line, and each group's
  * critical state. Runtime ownership comes from the host's enforced connections; stale readings
@@ -7,7 +8,7 @@ import { routeAddress, SETTINGS_SECTIONS } from "@pe/agent-contracts";
 import type { Machine, MachineSession, Reading } from "@pe/agent-contracts";
 import type { UpdateBlocker, UpdatePlan, UpdateRevit } from "@pe/host-contracts/pe-revit-contract";
 
-import { phaseOf, unsavedOf } from "./session";
+import { unsavedOf } from "./session";
 
 export type GroupKey = (typeof SETTINGS_SECTIONS)[number];
 /** The one address of every Settings group; `session` focuses a Revit row. */
@@ -218,16 +219,20 @@ export function revitState(machine: Machine): Said {
       text: machine.legs.sessions?.error ? "census failed" : "census unread",
       tone: "caution",
     };
-  if (!sessions.length) return { text: "none running" };
-  const booting = sessions.filter((session) => phaseOf(session.row) === "booting").length;
-  const unsaved = sessions.filter((session) => unsavedOf(session).length).length;
-  const dialogs = sessions.filter(
+  const active = sessions.filter(
+    ({ row }) => row.case === "controlled-active" || row.case === "observed-active",
+  );
+  const booting = sessions.filter(({ row }) => row.case === "controlled-pending").length;
+  const historical = sessions.length - active.length - booting;
+  const unsaved = active.filter((session) => unsavedOf(session).length).length;
+  const dialogs = active.filter(
     (session) => session.row.case === "controlled-active" && session.row.dialogs,
   ).length;
   return {
     text: [
-      `${sessions.length} running`,
+      active.length ? `${active.length} running` : "none running",
       booting ? `${booting} booting` : null,
+      historical ? `${historical} historical` : null,
       unsaved ? `${unsaved} unsaved` : null,
       dialogs ? `${dialogs} dialog` : null,
     ]

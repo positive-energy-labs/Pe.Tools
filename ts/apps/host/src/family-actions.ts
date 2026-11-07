@@ -32,6 +32,8 @@ import {
   workKey,
   bindWork,
   address,
+  addressSchema,
+  familiesObservationSchema,
   type FamilyActionKey,
   type FamilyReadKey,
   type DocumentRef,
@@ -125,7 +127,7 @@ export type FamilyActionDependencies = TakeoffActionDependencies &
     marks?: DocumentMarks;
     files?: import("./ducts-files.ts").DuctFiles["Service"];
     pictures?: import("./captures-route.ts").PictureCaptureStore["Service"];
-    families?: Pick<FamiliesReader["Service"], "cancel">;
+    families?: Pick<FamiliesReader["Service"], "read" | "cancel">;
     /** The demo owner keeps native reads inside its own root; a build has no output path to place. */
     nativePaths?: (
       input: { modelDirectory?: string },
@@ -1538,6 +1540,81 @@ export function familyExecutors(
     "settings.write": settingsWrite,
     "family.observe": familyObserve,
     "family.capture": familyCapture,
+    "families.read": command(
+      familyActions["families.read"],
+      z.object({
+        work: familyActions["families.read"].input.shape.work,
+        readId: z.uuid(),
+        filter: appliedScopeSchema,
+        document: documentRefSchema,
+        title: z.string().optional(),
+      }),
+      {
+        bind: async (ctx) => {
+          if (!deps.families) throw refused("Families reader is unavailable");
+          const target = targetOf(ctx);
+          const { session } = await lifetime(bridge, target, "project", deps);
+          const document = session.state?.openDocuments.find((d) => d.openId === target.openId);
+          const handle = ctx.admission.input.work;
+          const expected = bindWork(
+            "families",
+            document?.address ? addressSchema.parse(document.address) : null,
+            undefined,
+            target,
+          );
+          if (workKey(handle.key) !== workKey(expected))
+            throw refused("Families Work belongs to another document");
+          const work = await ctx.selectWork(tools.families.work, handle, () => ({
+            facts: [["scope"]],
+          }));
+          const filter = stagedFilter(work);
+          if (!filter?.categoryNames.length) throw refused("Choose a family category before reading");
+          return {
+            effects: [],
+            prepare: async () => ({
+              work: handle,
+              readId: ctx.admission.input.readId,
+              filter,
+              document: target,
+              title: document?.title ?? undefined,
+            }),
+          };
+        },
+        run: async (ctx, execution) => {
+          if (!deps.families) throw refused("Families reader is unavailable");
+          const p = execution.prepared;
+          const saved = await deps.families.read({
+            bridge,
+            captures,
+            readId: p.readId,
+            work: p.work.key,
+            document: p.document,
+            documentTitle: p.title,
+            filter: p.filter,
+          });
+          if (saved.progress && saved.progress.state !== "complete")
+            throw refused(saved.progress.message ?? `Families read ${saved.progress.state}`);
+          const published = await execution.step(
+            "publication",
+            "families.bind-observation",
+            { work: p.work, observation: saved.id },
+            () =>
+              ctx.work.publish(
+                p.work.key,
+                "families",
+                [{ path: ["takenAt"], value: saved.capturedAt }],
+                p.work.revision,
+              ),
+          );
+          if (!published.ok)
+            throw refused("Families Work changed during the read; read the current scope again");
+          return familiesObservationSchema.parse({
+            ...saved,
+            envelope: { revision: published.revision },
+          });
+        },
+      },
+    ),
     "families.cancel-read": command(
       commands["families.cancel-read"],
       z.strictObject({ readId: z.uuid(), document: documentRefSchema }),
