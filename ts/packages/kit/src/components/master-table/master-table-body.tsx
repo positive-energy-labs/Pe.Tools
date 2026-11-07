@@ -15,7 +15,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import type { ReactTable, RowData } from "@tanstack/react-table";
 import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/react-virtual";
 
@@ -443,7 +443,8 @@ export function MasterTableBody<Row extends RowData>({
   useScopeKeys(actionScopeKeys(actions), tbody);
   const handleGridKey = useCallback(
     (event: KeyboardEvent<HTMLTableCellElement>) => {
-      if (cellEdit && isTypingKey(event) && table.getSelectedCellCount() > 1) {
+      const typing = isTypingKey(event) || event.nativeEvent.isComposing || event.keyCode === 229;
+      if (cellEdit && typing && table.getSelectedCellCount() > 1) {
         const selected = visibleRows.flatMap((row) =>
           row
             .getVisibleCells()
@@ -454,8 +455,14 @@ export function MasterTableBody<Row extends RowData>({
             })),
         );
         draftFinished.current = false;
-        setDraft({ id: event.currentTarget.dataset.cellId!, text: event.key, targets: selected });
-        event.preventDefault();
+        // Mount/focus before this keystroke's native text event. Never seed a character
+        // in keydown: the text event is its only owner, including composition.
+        const id = event.currentTarget.dataset.cellId!;
+        flushSync(() => setDraft({ id, text: "", targets: selected }));
+        return;
+      }
+      if (typing && event.currentTarget.querySelector(CELL_EDITOR)) {
+        editCell(event.currentTarget, "");
         return;
       }
       if (isTypingKey(event) && editCell(event.currentTarget, event.key))
@@ -567,6 +574,9 @@ export function MasterTableBody<Row extends RowData>({
                             }}
                             onKeyDown={(event) => {
                               if (event.target === event.currentTarget) handleGridKey(event);
+                            }}
+                            onCompositionStart={(event) => {
+                              if (event.target === event.currentTarget) editCell(event.currentTarget, "");
                             }}
                             onCopy={
                               cellEdit

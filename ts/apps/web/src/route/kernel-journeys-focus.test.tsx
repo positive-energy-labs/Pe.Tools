@@ -13,7 +13,7 @@ import * as mounts from "../shell/typed-mount";
 import { familiesRouteState, address, workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
 import { ReviewSurface } from "../shell/review-surface";
 import { RouteVisibility } from "./activity";
-import { setup as scheduleHost } from "../../../host/tests/schedule-test-fixture";
+import { setup as scheduleHost, cellsApplied } from "../../../host/tests/schedule-test-fixture";
 import { module as schedules } from "../schedules/route";
 import { namesOf } from "./typed-route";
 import { createWorkFeedClient } from "../shell/work-feed-client";
@@ -26,9 +26,12 @@ import { detailResponse } from "../../../host/tests/schedule-fixture";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { contextFetch } from "@pe/runtime/context";
 import { routeInput } from "./host";
+import userEvent from "@testing-library/user-event";
 
-test("JZ Schedules Description Enter stages r3, reviews BEFORE to AFTER, and shows a refused edit at its cell", async () => {
+test.each(["insertText", "pointer keyboard", "navigation keyboard", "pointer shifted text", "navigation shifted text", "navigation composition", "navigation paste", "range shifted text"] as const)("JZ Schedules Description Enter stages r3, reviews BEFORE to AFTER, and shows a refused edit at its cell (%s)", async (entryMode) => {
+  const user = userEvent.setup();
   const host = await scheduleHost({ cold: true });
+  if (entryMode.startsWith("range")) host.setResponse(cellsApplied([[1, 2, true], [2, 2, true]]));
   const detail = detailResponse();
   const entry = detail.entries[0]!;
   entry.columns[1]!.headerText = "Description";
@@ -111,37 +114,103 @@ test("JZ Schedules Description Enter stages r3, reviews BEFORE to AFTER, and sho
     await screen.findByText("SH1");
     await screen.findByText("SH2");
     const input = (await screen.findAllByDisplayValue("Duct heater"))[0] as HTMLInputElement;
-    // Driver clicked the cell's left edge, then Ctrl+A and Input.insertText.
-    // A mouse-selected editable cell must give native text insertion an input.
     const cell = input.closest("td")!;
-    act(() => cell.focus()); // jsdom has no browser default mousedown focus.
-    fireEvent.mouseDown(cell);
-    fireEvent.mouseUp(cell);
-    fireEvent.click(cell);
-    expect.soft(document.activeElement, "A clicked editable cell receives native text input before Enter").toBe(input);
-    const active = document.activeElement!;
-    fireEvent.keyDown(active, { key: "a", code: "KeyA", ctrlKey: true });
-    // Native insertText has no printable keydown. It can edit only a focused editor.
-    if (active === input) fireEvent.input(input, { target: { value: "Duct heater - gate review" }, inputType: "insertText", data: "Duct heater - gate review" });
-    fireEvent.keyDown(active, { key: "Enter", code: "Enter" });
+    const text = "Duct heater - gate review";
+    if (entryMode === "insertText") {
+      // Retain the original no-printable-keydown witness alongside real keyboard entry.
+      act(() => cell.focus()); // jsdom has no browser default mousedown focus.
+      fireEvent.mouseDown(cell);
+      fireEvent.mouseUp(cell);
+      fireEvent.click(cell);
+      expect.soft(document.activeElement, "A clicked editable cell receives native text input before Enter").toBe(input);
+      const active = document.activeElement!;
+      fireEvent.keyDown(active, { key: "a", code: "KeyA", ctrlKey: true });
+      if (active === input) fireEvent.input(input, { target: { value: text }, inputType: "insertText", data: text });
+      fireEvent.keyDown(active, { key: "Enter", code: "Enter" });
+    } else {
+      if (entryMode.startsWith("range")) {
+        const last = screen.getAllByDisplayValue("Duct heater")[1]!.closest("td")!;
+        await user.pointer([
+          { keys: "[MouseLeft>]", target: cell },
+          { target: last },
+          { keys: "[/MouseLeft]", target: last },
+        ]);
+        expect(cell.getAttribute("aria-selected")).toBe("true");
+        expect(last.getAttribute("aria-selected")).toBe("true");
+      } else if (entryMode.startsWith("pointer")) {
+        await user.click(cell);
+        await user.keyboard("{Control>}a{/Control}");
+      } else {
+        // Enter the preceding cell as a keyboard user, then navigate; no mouse gesture.
+        const previous = cell.parentElement!.querySelector<HTMLElement>('[data-column-key="c1"]')!;
+        act(() => previous.focus());
+        await user.keyboard("{ArrowRight}");
+        expect(document.activeElement).toBe(cell);
+      }
+      if (entryMode === "navigation paste") {
+        await user.paste(text);
+      } else {
+        if (entryMode.endsWith("shifted text") || entryMode === "navigation composition") {
+          const composing = entryMode === "navigation composition";
+          fireEvent.keyDown(document.activeElement!, composing
+            ? { key: "Process", keyCode: 229, isComposing: true }
+            : { key: "D", code: "KeyD", keyCode: 68, shiftKey: true });
+          if (composing) fireEvent.compositionStart(document.activeElement!);
+          const editor = document.activeElement as HTMLInputElement;
+          expect(editor.tagName, `${entryMode}: native insertion has an editor`).toBe("INPUT");
+          const data = composing ? text : "D";
+          if (composing) fireEvent.compositionUpdate(editor, { data });
+          // Replay the Driver's separate character delivery after keydown. Unlike
+          // user-event, CDP delivers this even if keydown was prevented.
+          const inputType = composing ? "insertCompositionText" : "insertText";
+          const insert = (data: string) => {
+            const allowed = fireEvent(editor, new InputEvent("beforeinput", { bubbles: true, cancelable: true, data, inputType, isComposing: composing }));
+            const start = editor.selectionStart!, end = editor.selectionEnd!;
+            if (allowed) {
+              fireEvent.input(editor, { target: { value: editor.value.slice(0, start) + data + editor.value.slice(end) }, data, inputType, isComposing: composing });
+              editor.setSelectionRange(start + data.length, start + data.length);
+            }
+          };
+          insert(data);
+          if (composing) fireEvent.compositionEnd(editor, { data });
+          else fireEvent.keyUp(editor, { key: "D", code: "KeyD", keyCode: 68 });
+          if (!composing) for (const char of text.slice(1)) {
+            fireEvent.keyDown(editor, { key: char });
+            insert(char);
+            fireEvent.keyUp(editor, { key: char });
+          }
+        } else {
+          await user.keyboard("{Shift>}D{/Shift}");
+          await user.keyboard(text.slice(1));
+        }
+        expect.soft((document.activeElement as HTMLInputElement).value, `${entryMode}: draft text is exact`).toBe(text);
+        await user.keyboard("{Enter}");
+      }
+    }
     await waitFor(async () => expect(await host.view()).toMatchObject({ revision: 3, doc: { cells: { "1::2": { edit: { value: "Duct heater - gate review" } } } } }));
+    if (entryMode.startsWith("range")) expect(await host.view()).toMatchObject({ revision: 3, doc: { cells: { "2::2": { edit: { value: text } } } } });
     // This recorded HTTP read adapter has no invalidation socket; Refresh re-reads host Value.
     act(() => mount.refresh());
     await waitFor(() => expect(mount.problem()).toBeNull());
-    await screen.findByDisplayValue("Duct heater - gate review");
+    await screen.findAllByDisplayValue("Duct heater - gate review");
     fireEvent.click(screen.getByRole("button", { name: /plan Apply cells/i }));
     await screen.findByText(/SH1.*Description: Duct heater → Duct heater - gate review/);
     act(() => mount.cancel("push"));
     // Another writer advances Work behind the drawn cell. The host must refuse the
     // stale revision and its real reason must remain beside the user's cell.
     await host.patch([{ path: ["cells", "1::2"], value: { edit: { value: "Other writer" } } }]);
-    const current = screen.getByDisplayValue("Duct heater - gate review");
-    fireEvent.mouseDown(current);
-    fireEvent.mouseUp(current);
-    fireEvent.click(current);
-    expect(document.activeElement).toBe(current);
-    fireEvent.change(current, { target: { value: "Must visibly refuse" } });
-    fireEvent.keyDown(current, { key: "Enter", code: "Enter" });
+    const current = screen.getAllByDisplayValue("Duct heater - gate review")[0]!;
+    if (entryMode === "insertText") {
+      fireEvent.mouseDown(current);
+      fireEvent.mouseUp(current);
+      fireEvent.click(current);
+      expect(document.activeElement).toBe(current);
+      fireEvent.change(current, { target: { value: "Must visibly refuse" } });
+      fireEvent.keyDown(current, { key: "Enter", code: "Enter" });
+    } else {
+      act(() => current.focus());
+      await user.keyboard("{Control>}a{/Control}Must visibly refuse{Enter}");
+    }
     await waitFor(() => expect(within(current.closest("td")!).getByText(/document moved|revision|changed/i)).toBeTruthy());
     expect(await host.view()).toMatchObject({ revision: 4, doc: { cells: { "1::2": { edit: { value: "Other writer" } } } } });
   } finally { view.unmount(); mount.dispose(); await Promise.all(pending); }
