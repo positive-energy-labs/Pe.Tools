@@ -44,7 +44,7 @@ test("digest-verified Pod host reads enter reads.value and retire with their Wor
     `import {z} from ${JSON.stringify(zod)};
 process.env.${sentinel} = 'loaded';
 const input=z.object({}), output=z.object({total:z.number()}), work=z.object({amount:z.number()});
-export const module={data:${JSON.stringify(data)},schemas:{work},bodies:{},
+export const module={data:${JSON.stringify(data)},schemas:{work},
 workState:{route:'pod.registry.tool',title:'Registry',description:'Host input admission',schema:work,schemaVersion:1},
 reads:{value:{name:'${name}',input,output,run:(ctx)=>ctx.read({name:'${leaf}',input,output,leaf:true,validate:false},{})}},
 leaves:{'${leaf}':async()=>({total:17})}};`,

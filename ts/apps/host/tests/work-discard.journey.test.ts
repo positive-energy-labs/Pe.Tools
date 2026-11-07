@@ -25,7 +25,9 @@ test("D rule 5 opens discarded disk Work empty and saves the first edit without 
     // The old stamp is rejected even when the document otherwise fits today's schema.
     const old = JSON.stringify({ format: "route-state-record-v2", targetKey, route: key.route,
       value: { version: 1, schemaVersion: 1, revision: 7, doc: { note: "OLD WORK MUST DISAPPEAR" }, history: [] } });
-    for (const bytes of [old, "{UNDECODABLE WORK MUST DISAPPEAR"]) {
+    const foreign = JSON.stringify({ format: "route-state-record-v2", targetKey: "foreign/target:", route: key.route,
+      value: { version: 1, schemaVersion: 2, revision: 7, doc: { note: "FOREIGN WORK MUST DISAPPEAR" }, history: [] } });
+    for (const bytes of [old, "{UNDECODABLE WORK MUST DISAPPEAR", foreign]) {
       await writeFile(path, bytes);
       const app = createPeRoutes({ store, registrations: [{ spec }] });
       const opened = await app.fetch(request("GET"));
@@ -46,7 +48,7 @@ test("D rule 5 opens discarded disk Work empty and saves the first edit without 
       expect((await app.fetch(request("POST", "/start-fresh", {}))).status).toBe(404);
       expect((await app.fetch(request("GET", "/salvage"))).status).toBe(404);
     }
-    expect(log).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledTimes(3);
     for (const [line] of log.mock.calls) {
       expect(line).toContain(path);
       expect(line).toMatch(/Discarded stored Work .*: .+/);
@@ -59,6 +61,6 @@ test("D rule 5 opens discarded disk Work empty and saves the first edit without 
     expect(failed.status).toBe(403);
     expect(await failed.json()).toMatchObject({ error: "disk access denied" });
     expect(await readdir(dir)).toEqual([name]);
-    expect(log).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledTimes(3);
   } finally { log.mockRestore(); await rm(dir, { recursive: true, force: true }); }
 });

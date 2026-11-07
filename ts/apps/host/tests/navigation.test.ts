@@ -37,7 +37,7 @@ const registration = (route = "family"): RouteWorkspaceRegistration => ({
     schema: z.object({ secret: z.string().default("") }).prefault({}),
   },
 });
-const envelope = { version: 1, revision: 3, doc: { secret: "PRIVATE-RAW-WORK" } };
+const envelope = { version: 1, schemaVersion: 1, revision: 3, doc: { secret: "PRIVATE-RAW-WORK" } };
 const filename = (targetKey: string, route: string) =>
   `${createHash("sha256").update(`${route}:${targetKey}`).digest("hex")}.json`;
 const bytes = async (directory: string) =>
@@ -87,7 +87,7 @@ test("HTTP navigation resumes only the exact unique current document and reflect
   expect((await read()).works[0]!.reason).toContain("not currently available");
 });
 
-test("transplanted identity and malformed data are reported without mutating their files", async () => {
+test("discovery reports transplanted Work identity without mutating its file", async () => {
   const directory = await temporary();
   const store = fileRouteDocumentStore(directory);
   const scope = bindWork("family", address("C:\\Models\\A.rvt"));
@@ -98,9 +98,6 @@ test("transplanted identity and malformed data are reported without mutating the
   await writeFile(path, JSON.stringify({ ...content, targetKey: workKey(other) }));
   const before = await bytes(directory);
   expect(await store.listState!()).toMatchObject({ records: [], unreadable: 1 });
-  await expect(store.getState({ targetKey: workKey(scope), route: "family" })).rejects.toThrow(
-    "identity",
-  );
   expect(await bytes(directory)).toEqual(before);
 });
 
