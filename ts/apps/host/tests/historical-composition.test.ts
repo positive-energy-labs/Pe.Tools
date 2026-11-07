@@ -51,7 +51,7 @@ const bundle = async () => {
     return taking;
   });
   const taking = await Effect.runPromise(append(input, outcome));
-  return { dir, writer: { ...writer, append }, taking, input, outcome };
+  return { dir, writer: { ...writer, append }, recording: writer, taking, input, outcome };
 };
 const router = async (dir: string, bindings?: ReadonlyMap<string, string>) => {
   const inputs = await Effect.runPromise(hostInputs(stamp, { kind: "recording", directory: dir, at: null, bindings }));
@@ -115,6 +115,35 @@ test("equal takings remain ambiguous until an exact root binding is supplied", a
   const bound = await router(dir, new Map([[await Effect.runPromise(nativeInputIdentity({ key, input: {}, scope })), taking.id]]));
   try { expect((await bound.send("/call", { key })).status).toBe(200); expect(bound.liveFactories()).toBe(0); }
   finally { await bound.close(); }
+});
+
+test("native root bindings refuse foreign consumers, scopes, unknown takings and occurrence mismatches", async () => {
+  for (const refusal of ["foreign-root", "cross-scope", "unknown-taking", "wrong-occurrence"] as const) {
+    const { dir, recording, taking, input, outcome } = await bundle();
+    const otherScope = { bridgeSessionId: "another-session" };
+    const selectedScope = refusal === "cross-scope" ? otherScope : scope;
+    const boundTaking = refusal === "unknown-taking" ? randomUUID()
+      : (await Effect.runPromise(recording.append({ ...input, scope: JSON.stringify(selectedScope) }, outcome))).id;
+    if (refusal !== "unknown-taking") {
+      await Effect.runPromise(recording.readSets.keep({
+        version: 1, id: randomUUID(), identity,
+        recipe: { key: refusal === "foreign-root" ? "another.consumer" : "native.call",
+          input: { key, input: {}, scope: selectedScope }, scope: JSON.stringify(selectedScope) },
+        state: "complete", inputs: refusal === "wrong-occurrence"
+          ? [{ input: input.input, scope: input.scope, start: 0, takingId: taking.id },
+             { input: input.input, scope: input.scope, start: 1, takingId: boundTaking }]
+          : [{ input: input.input, scope: JSON.stringify(selectedScope), start: 0, takingId: boundTaking }],
+        children: [], takingLinks: {}, dependencies: {}, exports: [],
+      }));
+    }
+    const app = await router(dir, new Map([[await Effect.runPromise(nativeInputIdentity({ key, input: {}, scope })), boundTaking]]));
+    try {
+      const response = await app.send("/call", { key });
+      expect(response.status, refusal).toBe(409);
+      expect(await response.text()).toContain(refusal === "wrong-occurrence" ? "recording.mismatch" : "recording.miss");
+      expect(app.liveFactories()).toBe(0);
+    } finally { await app.close(); }
+  }
 });
 
 test("historical mutation doors refuse without append or any live graph", async () => {

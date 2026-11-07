@@ -453,7 +453,8 @@ export class HostInputReadSets extends Context.Service<
   {
     readonly open: (
       recipe: ConsumerRecipe,
-      selected: ReadSetId | null,
+      /** Exact read set, or an exact taking that must belong to one matching consumer. */
+      selected: ReadSetId | { readonly takingId: string } | null,
     ) => Effect.Effect<InputConsumption, InvalidRead>;
   }
 >()("pe/HostInputReadSets") {
@@ -466,13 +467,18 @@ export class HostInputReadSets extends Context.Service<
             return Effect.fail(refuse("fixture", "A fixture has no input source"));
           if (lane.kind === "recording")
             return Effect.gen(function* () {
-              let id = selected;
+              let id = typeof selected === "string" ? selected : null;
               if (id === null) {
                 // ponytail: O(read sets) admission; memoize recipeKey→ids only if measured slow.
                 const matches: string[] = [];
                 for (const id of lane.recordingStore.readSets.ids()) {
                   const record = yield* lane.recordingStore.readSets.get(id);
-                  if (recipeKey(record.recipe) === recipeKey(recipe)) matches.push(id);
+                  if (
+                    recipeKey(record.recipe) === recipeKey(recipe) &&
+                    (selected === null || typeof selected === "string" ||
+                      record.inputs.some((entry) => entry.takingId === selected.takingId))
+                  )
+                    matches.push(id);
                 }
                 if (matches.length === 0)
                   return yield* refuse("miss", "No recorded consumer matches this recipe");
