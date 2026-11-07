@@ -395,10 +395,15 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
             seed:id===own?edits.seed!(page as never,input.target):record.config.state.schema.parse({})}));
           for(const request of requests){
             requireWritable();
-            await settleNative(door.submit({id:crypto.randomUUID(),key:"work.start",target:{kind:"host"},input:request}));
+            const started=z.object({ok:z.literal(true),handle:workHandleSchema,doc:z.json()}).parse(
+              await settleNative(door.submit({id:crypto.randomUUID(),key:"work.start",target:{kind:"host"},input:request})));
+            requireWritable();
+            const record=owners.get(request.key.route);
+            if(!record) throw Error("Started Work no longer belongs to this route");
+            accept(record,started.handle,started.doc);
           }
           if(canonicalRouteInput(selected)!==canonicalRouteInput(selectedKey())) return;
-          ownerKey=undefined;syncWork();syncReads(true);
+          syncReads(true);
         } catch(error){problems.set("work.start",error instanceof Error?error.message:String(error));throw error;}
         finally{pending.delete("work.start");notify();}
       };
