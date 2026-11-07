@@ -275,7 +275,7 @@ export function triage(input: TriageInput) {
     );
   for (const f of healFindings(findings, heal)) {
     if (!inScope(f) || f.kind === "no-flow" || f.kind === "no-terminal-flow") continue;
-    if (f.findingIds.some((id) => (heal?.covered instanceof Set?heal.covered.has(id):heal?.covered.includes(id)))) continue;
+    if (f.findingIds.some((id) => (Array.isArray(heal?.covered)?heal.covered.includes(id):(heal?.covered as ReadonlySet<string>|undefined)?.has(id)))) continue;
     const base = { key: f.id, findingIds: f.findingIds, ids: f.elementIds, note: f.note };
     // A Fix or Set row off the system's runs is another system's in a shared group: Diagnostics.
     const off = !pricesSystem(f);

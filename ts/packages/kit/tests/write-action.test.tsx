@@ -205,7 +205,7 @@ test("the handle consent window contains the actual owner cell and Reject reache
       transitions:()=>[{kind:"clear",run:clear}],stage:async()=>null,clear}} label="Width"/>
   </PreviewAction></TooltipProvider>);
   await act(async()=>fireEvent.click(screen.getByRole("button",{name:writeWord("Keep",0,false)})));
-  expect(screen.getByText("24in")).toBeTruthy();
+  expect(screen.getByDisplayValue("24in")).toBeTruthy();
   expect(screen.queryByRole("button",{name:"Keep"})).toBeNull();
   fireEvent.click(document.querySelector("[data-write-reject]")!);
   expect(reject).toHaveBeenCalledOnce();

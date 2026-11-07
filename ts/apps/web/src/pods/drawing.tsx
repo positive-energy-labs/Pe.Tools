@@ -1,3 +1,5 @@
+import { podRouteSkeleton } from "../route/pod-skeleton";
+import { Input } from "@pe/kit/lang/input";
 import { useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { routeAddress } from "@pe/agent-contracts";
@@ -26,6 +28,7 @@ export function Members({ ctx }: { ctx: PodsRosterContext }) {
   return (
     <>
       <a href="/pod-admin">Manage Pod installation and trust</a>
+      <RouteSource packageId={page.pod}/>
       {value.value?.pods.flatMap((pod) =>
         pod.diagnostics.map((diagnostic, i) => (
           <p key={`${pod.id}:${i}`} role="alert">
@@ -231,4 +234,18 @@ export function Runs({ ctx }: { ctx: PodsContext }) {
       />
     </>
   );
+}
+
+/** Source for a typed tool, handed to the same publisher as builtin route modules. */
+function RouteSource({packageId}:{packageId:string}) {
+  const [slug,setSlug]=useState("worksheet");
+  let source="",problem:string|null=null;
+  try {source=podRouteSkeleton(packageId,slug);} catch(error){problem=String(error);}
+  return <details><summary>New typed tool</summary>
+    <label>Route slug<Input aria-label="Route slug" value={slug} onChange={event=>setSlug(event.target.value)}/></label>
+    {problem?<p role="status">{packageId?problem:"Choose a Pod to generate its typed tool source"}</p>:<>
+      <Code code={source} lang="typescript" title="route.ts"/>
+      <a download="route.ts" href={`data:text/plain;charset=utf-8,${encodeURIComponent(source)}`}>Download route.ts</a>
+    </>}
+  </details>;
 }

@@ -4,7 +4,7 @@ import type { OpResponseOf } from "@pe/host-contracts/operation-types";
 /** The accepted Value owns options and their freshness; the slot stages a parameter name. */
 export function EspParameter({cell,value,model,options:offered,error}:{
   cell:CellHandle;value?:ValueHandle<unknown>;model:string;
-  options:OpResponseOf<"revit.catalog.field-options">|null;error:string|null;
+  options:import("@pe/agent-contracts").Immutable<OpResponseOf<"revit.catalog.field-options">>|null;error:string|null;
 }) {
   const options=(offered?.items??[]).flatMap(item=>item.metadata?.name?[{
     key:item.value,label:item.label,value:item.metadata.name,

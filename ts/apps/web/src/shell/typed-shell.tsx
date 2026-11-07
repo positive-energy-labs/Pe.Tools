@@ -9,7 +9,7 @@ import { GraphLayoutView, type GraphLayoutState } from "@pe/kit";
 import { Button } from "@pe/kit/lang/button";
 import { PreviewAction } from "@pe/kit/lang/write-action";
 import { KeyScope, ScopeKeys, actionScopeKeys } from "@pe/kit/keys";
-import { canonicalRouteInput, type LayoutNode } from "@pe/agent-contracts";
+import { routeOf, routeAddress, canonicalRouteInput, type LayoutNode } from "@pe/agent-contracts";
 import { useRouteTarget } from "../route/route-target";
 import { appAtomRegistry } from "./owner";
 import { admittedRouterAddress, PlaceBoundary } from "./admitted-pane";
@@ -122,7 +122,7 @@ function TypedChrome({ mount, document }: { mount: TypedMount; document: ReactNo
     mount.move(patch as Record<string,unknown>,"push"); return {ok:true,moved:true,receipt:{current:()=>visible,rendered:page=>canonicalRouteInput(page)===canonicalRouteInput(mount.page.read())}};
   } });
   const head=<SituationBand name={spec.name} context={<>{document}{spec.edits?<span>{mount.work()?.revision === undefined ? "Reading Work..." : `r${mount.work()!.revision}`}</span>:null}</>}
-    alerts={<>{mount.problem() ? <span role="alert">{mount.problem()}</span> : null}<CatalogWorkReviews mount={mount} /></>}
+    alerts={<>{mount.problem() ? <span role="alert">{mount.problem()}</span> : null}{mount.absentOwners().map(owner=>{const route=routeOf(owner);return <span key={owner}>Work is absent: {route?<a href={routeAddress(route).link()}>Start {owner}</a>:owner}</span>;})}<CatalogWorkReviews mount={mount} /></>}
     verbs={[<TypedStart key="start" mount={mount}/>,...Object.keys(spec.commands).map(id=><TypedWrite key={id} mount={mount} id={id} />)]}
     timeline={<TimelineHead owner={mount} history={<GraphHistory owner={mount} />} />} />;
   return <SubjectDoor.Provider value={subject}><KeyScope id={`route:${spec.key}`}><div className="flex min-h-0 flex-1 flex-col">

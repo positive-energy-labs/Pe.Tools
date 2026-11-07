@@ -7,7 +7,7 @@ import type { PricedView as Priced } from "@pe/ducts-domain/pricing-view";
 import type { FlowSource } from "@pe/ducts-domain/terminal-flows";
 import { slotWord } from "./airflow";
 import { proposedStatic } from "@pe/ducts-domain/pricing";
-import { unitFlowIn } from "@pe/ducts-domain/survey";
+import { unitFlowView as unitFlowIn } from "@pe/ducts-domain/pricing-view";
 import { groupTree, type GroupTree } from "@pe/ducts-domain/topology";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 

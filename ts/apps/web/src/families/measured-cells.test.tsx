@@ -1,3 +1,4 @@
+import {useCellCollection} from "@pe/kit/lang/cell";
 // @vitest-environment jsdom
 /**
  * `/families` reads the PROJECT, so a measured cell there shows and stages the project's unit. A
@@ -10,7 +11,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
 import { Table } from "@pe/kit/table/table";
 
-import { ParamCell, useLiveCells, type ParamColumn, type TypeRow } from "./matrix-columns";
+import { ParamCell, type ParamColumn, type TypeRow } from "./matrix-columns";
 
 afterEach(cleanup);
 
@@ -61,7 +62,7 @@ const matrix = (
   initialCells: Record<string, FamilyCellState> = {},
 ) => {
   function Matrix({ cells }: { cells: Record<string, FamilyCellState> }) {
-    const live = useLiveCells(cells, () => ({
+    const live = useCellCollection(cells, () => ({
       owner: { route: "families", label: "Work" },
       value: {},
       refusal: null,

@@ -40,6 +40,11 @@ export async function createWitness(
     await registration.ready;
     closes.push(() => registration.close());
   }
+  // Explicit fixture setup: reading absent production Work never creates it.
+  for(const host of [admitted.hostOwner,admitted.hostPresenter]) {
+    const state=host.workState!;
+    if(!saved.has(state.route)) saved.set(state.route,{version:1,schemaVersion:state.schemaVersion??1,revision:0,doc:state.schema.parse({})});
+  }
   const observe = observeResources(ws, { observe: () => () => {} });
   const calls = new Map<string,number>();
   const inputs = new Map<string,unknown>();
@@ -134,7 +139,7 @@ export async function createWitness(
                     effectiveDesign:
                       withStoredRulings(ductsDesign(ductsWork, fansWork), snapshot.store) ??
                       ductsDesign(ductsWork, fansWork),
-                    catalogFindings: [],
+                    catalogFindings: [],espOptions:null,espOptionsError:"Fixture has no native parameter options",
                   };
           deliver({ kind: "complete", revision: ++version, value: packet(data, version) });
         };
@@ -165,7 +170,7 @@ export async function createWitness(
           worstLegs: [],
           worksheet: null,
         });
-        const data = fansSheetData.parse({
+        const data = fansSheetData.parse({espOptions:null,espOptionsError:"Fixture has no native parameter options",
           open,
           opened: [],
           rows: sheet.roster.rows,

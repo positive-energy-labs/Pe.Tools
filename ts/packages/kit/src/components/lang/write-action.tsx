@@ -57,7 +57,7 @@ export interface PlanHandle {
   readonly pending?: boolean;
   readonly refusal?: string | null;
   readonly failure?: string | null;
-  readonly consent?: { until: string; run(): void } | null;
+  readonly consent?: { until: string; run(): void; content?:ReactNode } | null;
   plan(): unknown;
   apply(): unknown;
   cancel(): unknown;
@@ -90,7 +90,7 @@ export function PreviewAction({ handle, label, children, says = `Plan ${label} f
     finally { redraw(); }
   };
   const consent=handle.consent??props.reject;
-  return <WriteAction {...props} busy={handle.pending ?? props.busy} refusal={handle.refusal ?? props.refusal} reject={consent?{...consent,content:children??("content" in consent?consent.content:null)}:null} label={`plan ${label}`} says={says}
+  return <WriteAction {...props} busy={handle.pending ?? props.busy} refusal={handle.refusal ?? props.refusal} reject={consent?{...consent,content:children??consent.content}:null} label={`plan ${label}`} says={says}
     failed={raw != null && !parsed.success ? "Plan review unavailable" : handle.failure ?? props.failed}
     held={review && !review.stale ? {
       word: writeWord(label, review.cells?.length || review.rows.length, false),
