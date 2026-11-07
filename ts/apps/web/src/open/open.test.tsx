@@ -11,6 +11,8 @@ import { beforeEach, afterEach, describe, expect, test, vi } from "vite-plus/tes
 
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { PatchBay } from "./bay";
+import { installOpenControls } from "./context";
+import { OpenControls } from "./kernel";
 import { lifecycleRequest } from "./lifecycle";
 import { EMPTY_DRAFT, launchPlan, modelRows, type DocRow } from "./model";
 import {
@@ -23,7 +25,10 @@ import {
   RECENTS,
 } from "../design-system/open-examples";
 
-vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
+vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("../../../../packages/mcps/src/shared/takeoff-action-client")
+  >()),
   readActionStatuses: vi.fn(),
   runSemanticAction: vi.fn(async (key, input) =>
     actionReceiptSchema.parse({
@@ -65,6 +70,7 @@ vi.mock("./sources", async () => {
 });
 HTMLElement.prototype.scrollIntoView = vi.fn();
 beforeEach(() => {
+  installOpenControls(OpenControls);
   vi.stubGlobal(
     "ResizeObserver",
     class {
