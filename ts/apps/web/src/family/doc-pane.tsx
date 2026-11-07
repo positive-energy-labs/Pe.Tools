@@ -1,4 +1,4 @@
-import type { CellLike } from "@pe/agent-contracts";
+import type { SettingsFieldState } from "@pe/agent-contracts";
 import { token } from "@pe/kit/lib/token";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
@@ -12,6 +12,7 @@ import { Switcher } from "@pe/kit/lang/switcher";
 import type { ProtoProposal, ProtoSpec } from "#/family/world";
 import { Code } from "@pe/kit/lang/code";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { Button } from "@pe/kit/lang/button";
 
 export function SpecText({
   spec,
@@ -94,6 +95,7 @@ export function SpecSheet({
   const engine = useGroundedDoc();
   const refs = useRef(new Map<string, HTMLElement>());
   const viewport = useRef<HTMLDivElement>(null);
+  const revealed = useRef<typeof reveal>(null);
   useEffect(() => {
     if (spec) engine.setDoc(spec);
     else engine.clear();
@@ -103,10 +105,13 @@ export function SpecSheet({
     engine.hoverBlock(blockId, "external");
   }, [blockId, engine.doc, engine.hoverBlock]);
   useEffect(() => {
+    if (reveal === revealed.current) return;
     const node = reveal ? refs.current.get(reveal.block) : null;
     const pane = viewport.current;
-    if (node && pane)
+    if (node && pane) {
       pane.scrollTop += node.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+      revealed.current = reveal;
+    }
   }, [reveal, engine.doc]);
   if (!spec)
     return (
@@ -141,22 +146,49 @@ export function ProposalCard({
   wire,
   cell,
   focused,
-  blockMd,
-  specFileName,
+  spec,
+  onLocate,
+  pinned,
+  onPin,
   onHover,
   register,
 }: {
   suggestion: ProtoProposal;
   wire: CellWire;
   /** The Work field the suggestion stands on. */
-  cell: CellLike;
+  cell: SettingsFieldState;
   /** Named so the citation line can say WHICH document it read from. */
-  specFileName?: string | null;
+  spec: ProtoSpec | null;
   focused: boolean;
-  blockMd: string | null;
+  onLocate: () => void;
+  pinned: boolean;
+  onPin: () => void;
   onHover: (on: boolean) => void;
   register: (node: HTMLDivElement | null) => void;
 }) {
+  const block = spec?.blocks.find((entry) => entry.id === suggestion.sourceBlockId);
+  const region = block ?? spec?.images.find((entry) => entry.id === suggestion.sourceBlockId);
+  const locked =
+    wire.lockOf?.(suggestion.id) ??
+    (wire.revision === null ? "Read the current Work before reviewing cells" : null);
+  // CHEAT(gap 7b): adopt/clear the existing stage until generic accept/deny transitions land.
+  // The host stamps the human adoption; keep every citation, not a second acceptance state.
+  const decide = async (keep: boolean) => {
+    if (locked) return { message: locked };
+    const revision = wire.revision;
+    if (revision === null) return { message: "Read the current Work before reviewing cells" };
+    if (!cell.edit) return { message: "This cell is no longer staged" };
+    const { by: _by, at: _at, base: _base, ...stage } = cell.edit;
+    return wire.write(
+      [
+        {
+          path: [...(wire.segment === null ? [] : [wire.segment]), suggestion.id, "edit"],
+          value: keep ? stage : null,
+        },
+      ],
+      revision,
+    );
+  };
   const target = suggestion.constituent
     ? `${suggestion.constituent.section} · ${suggestion.constituent.slug}${
         suggestion.constituent.property ? ` · ${suggestion.constituent.property}` : ""
@@ -200,17 +232,51 @@ export function ProposalCard({
         facts={{
           value: suggestion.proposed,
           ...(suggestion.current != null ? { modelValue: suggestion.current } : {}),
+          ...(region && spec
+            ? { grounding: { doc: spec.fileName, page: region.page }, onLocate }
+            : {}),
           foot: "hover",
         }}
+        transitions={[]}
         mark={false}
       />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          label={`Keep ${target}`}
+          refusal={
+            locked ?? (cell.edit?.by !== "pea" ? "The current stage is already yours" : null)
+          }
+          onPress={() => decide(true)}
+        >
+          Keep
+        </Button>
+        <Button label={`Revert ${target}`} refusal={locked} onPress={() => decide(false)}>
+          Revert
+        </Button>
+        <Button
+          label={`Locate ${suggestion.sourceBlockId || "citation"}`}
+          kind="nav"
+          direction="forward"
+          refusal={region ? null : "The cited region is unavailable in the attached PDF"}
+          onClick={onLocate}
+        >
+          {region
+            ? `${spec!.fileName} p.${region.page} · ${suggestion.sourceBlockId}`
+            : "Citation unavailable"}
+        </Button>
+        {suggestion.param && (
+          <Button label={`Pin ${suggestion.param} evidence`} pressed={pinned} onClick={onPin}>
+            {pinned ? "Unpin" : "Pin"}
+          </Button>
+        )}
+      </div>
       <p className="mt-0.5 text-ink">{suggestion.note}</p>
-      {blockMd && (
+      {block && (
         <TooltipHint
-          content={`Read from ${suggestion.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
+          content={`Read from ${suggestion.sourceBlockId} of ${spec?.fileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           <p className="hairline-l mt-1 max-h-[3lh] overflow-hidden pl-1.5 whitespace-pre-line t-small face-mono text-ink-2">
-            {blockMd}
+            {block.md}
           </p>
         </TooltipHint>
       )}

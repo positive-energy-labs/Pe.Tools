@@ -440,12 +440,13 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
   const litBlocks = useMemo(() => {
     const set = new Set<string>();
     for (const param of focusedParams) for (const id of world.grounding[param] ?? []) set.add(id);
+    if (pinnedParam !== null) for (const id of world.grounding[pinnedParam] ?? []) set.add(id);
     if (focusedProposal) {
       const suggestion = world.proposals.find((entry) => entry.id === focusedProposal);
       if (suggestion) set.add(suggestion.sourceBlockId);
     }
     return set;
-  }, [world, focusedParams, focusedProposal]);
+  }, [world, focusedParams, focusedProposal, pinnedParam]);
 
   // ── columns ───────────────────────────────────────────────────────────────────────────────────
   //
