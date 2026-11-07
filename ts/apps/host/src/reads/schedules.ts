@@ -12,8 +12,8 @@ import {
   schedulesViewArgs,
   schedulesViewData,
 } from "../../../../packages/agent-contracts/src/schedules-read.ts";
-import { read, leaf } from "./evaluator.ts";
-import { documentMark, workValue } from "./ducts-inputs.ts";
+import { read, leaf, workValue } from "@pe/host/read-graph";
+import { documentMark } from "./ducts-inputs.ts";
 import { scheduleOutcome } from "./schedule-outcome.ts";
 const scheduleCatalog = leaf(
   "resource",
