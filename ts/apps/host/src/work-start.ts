@@ -1,6 +1,6 @@
 import { commands, refusalText } from "@pe/agent-contracts";
 
-import { command, refused } from "./command-executor.ts";
+import { command, refused, StepFailure } from "./command-executor.ts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { productRouteWorkPath } from "./product-paths.ts";
 
@@ -16,7 +16,7 @@ export const workStartExecutor=(workspace:RouteWorkspace|undefined)=>command(com
     const {key,seed}=execution.prepared;
     return execution.step("publication","work.start",{key},async()=>{
       const result=await workspace.start(key,seed,caller.kind === "pea"?"pea":"human",admission.id);
-      if(!result.ok) throw refused(refusalText(result));
+      if(!result.ok) throw new StepFailure(refusalText(result),409,"refused",result);
       return result;
     });
   },
