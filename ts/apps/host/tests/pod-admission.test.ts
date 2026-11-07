@@ -15,8 +15,15 @@ import { createPluginsHandler } from "../src/plugins-handler.ts";
 import { linkedCatalog, peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { admitPodArtifact } from "../src/pod-artifact.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
+import { createPeRoutes } from "../src/pe-routes.ts";
+import { withInvocationContext } from "@pe/runtime/context";
 
-async function fixture(root: string, salt = "first", native?: { key: string; cost: "Cheap" | "Bounded" }, address = `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}`) {
+async function fixture(
+  root: string,
+  salt = "first",
+  native?: { key: string; cost: "Cheap" | "Bounded" },
+  address = `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}`,
+) {
   const data = {
     ...builtinData,
     key: "pod.fixture.tool",
@@ -70,18 +77,34 @@ entries: {...builtinModule.entries, roster: {...builtinModule.entries.roster, ${
 test("host and browser refuse a fingerprinted raw-slash Pod address alias", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-pod-address-"));
   try {
-    const artifact = await fixture(root, "address", undefined, "/tool/route:@fixture/routes/tool/route.artifact");
-    const lifecycle = createPackageLifecycle({ packages: () => listPackages(join(root, "Pods")), decisionsPath: join(root, "enabled.json") });
-    const workspace = new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(join(root, "Work")) });
+    const artifact = await fixture(
+      root,
+      "address",
+      undefined,
+      "/tool/route:@fixture/routes/tool/route.artifact",
+    );
+    const lifecycle = createPackageLifecycle({
+      packages: () => listPackages(join(root, "Pods")),
+      decisionsPath: join(root, "enabled.json"),
+    });
+    const workspace = new RouteWorkspace({
+      registrations: [],
+      store: fileRouteDocumentStore(join(root, "Work")),
+    });
     const routes = createPodRoutes(lifecycle, { workspace, trustPath: join(root, "trust.json") });
     try {
       const [row] = await routes.list();
       await expect(routes.trust(row!.key, artifact.fingerprint, true)).rejects.toThrow("identity");
       expect(workspace.admittedRoutes()).toEqual([]);
-      const { admitPodArtifact: browserAdmit } = await import("../../web/src/route/pod-artifact.ts");
-      await expect(browserAdmit({ ...row!, trusted: true }, { fingerprint: artifact.fingerprint, artifact: artifact.wire },
-        (bytes) => import(`data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`),
-      )).rejects.toThrow("identity");
+      const { admitPodArtifact: browserAdmit } =
+        await import("../../web/src/route/pod-artifact.ts");
+      await expect(
+        browserAdmit(
+          { ...row!, trusted: true },
+          { fingerprint: artifact.fingerprint, artifact: artifact.wire },
+          (bytes) => import(`data:text/javascript;base64,${Buffer.from(bytes).toString("base64")}`),
+        ),
+      ).rejects.toThrow("identity");
     } finally {
       routes.close();
       await lifecycle.close();
@@ -93,13 +116,19 @@ test("host and browser refuse a fingerprinted raw-slash Pod address alias", asyn
 
 test("Pod loader preserves native dependency cost through the linked catalog", async () => {
   const leaf = [...linkedCatalog().entries.values()].find(
-    (entry) => !entry.key.startsWith("command:") && entry.cost === "Bounded" && entry.cardinality === "One" && entry.effect === "Read",
+    (entry) =>
+      !entry.key.startsWith("command:") &&
+      entry.cost === "Bounded" &&
+      entry.cardinality === "One" &&
+      entry.effect === "Read",
   )!;
   expect(leaf).toBeDefined();
   const root = await mkdtemp(join(tmpdir(), "pe-pod-native-link-"));
   try {
     const valid = await fixture(root, "linked", { key: leaf.key, cost: "Bounded" });
-    expect((await admitPodArtifact(valid.wire, valid.fingerprint)).data.key).toBe("pod.fixture.tool");
+    expect((await admitPodArtifact(valid.wire, valid.fingerprint)).data.key).toBe(
+      "pod.fixture.tool",
+    );
     const understated = await fixture(root, "refused", { key: leaf.key, cost: "Cheap" });
     await expect(admitPodArtifact(understated.wire, understated.fingerprint)).rejects.toThrow(
       `roster: cost understates ${leaf.key}`,
@@ -109,7 +138,13 @@ test("Pod loader preserves native dependency cost through the linked catalog", a
   }
 }, 30_000);
 
-const currentWork = { version: 1, schemaVersion: 2, revision: 7, doc: { amount: 4, note: "first" }, history: [] };
+const currentWork = {
+  version: 1,
+  schemaVersion: 2,
+  revision: 7,
+  doc: { amount: 4, note: "first" },
+  history: [],
+};
 async function setup(saved: unknown = currentWork, blockRead = false) {
   const root = await mkdtemp(join(tmpdir(), "pe-p2-"));
   try {
@@ -132,13 +167,21 @@ async function setup(saved: unknown = currentWork, blockRead = false) {
       unblock = resolve;
     });
     let readStarted!: () => void;
-    const reading = new Promise<void>((resolve) => { readStarted = resolve; });
+    const reading = new Promise<void>((resolve) => {
+      readStarted = resolve;
+    });
     const workspace = new RouteWorkspace({
       registrations: [],
-      store: { ...disk, getState: async (query) => {
-        if (blockRead && query.targetKey === workKey(key) && query.route === key.route) { readStarted(); await gate; }
-        return disk.getState(query);
-      } },
+      store: {
+        ...disk,
+        getState: async (query) => {
+          if (blockRead && query.targetKey === workKey(key) && query.route === key.route) {
+            readStarted();
+            await gate;
+          }
+          return disk.getState(query);
+        },
+      },
     });
     const routes = createPodRoutes(lifecycle, { workspace, trustPath: join(root, "trust.json") });
     const releases: (() => void)[] = [];
@@ -162,6 +205,12 @@ async function setup(saved: unknown = currentWork, blockRead = false) {
       artifact,
       lifecycle,
       workspace,
+      readStored: () =>
+        withInvocationContext({ caller: { kind: "human", via: "local" } }, () =>
+          createPeRoutes({ workspace, registrations: [] }).fetch(
+            new Request(`http://host/pe/route-state/${key.route}`),
+          ),
+        ),
       routes,
       key,
       feed,
@@ -271,19 +320,26 @@ test("trusted Pod transports complete evidence and opens fingerprint-bound curre
 }, 30_000);
 
 test("undecodable Pod Work refuses both feeds and preserves its stored bytes", async () => {
-  const f = await setup({ version: 1, schemaVersion: 1, revision: 7, doc: { oldAmount: 3 }, history: [] });
+  const f = await setup({
+    version: 1,
+    schemaVersion: 1,
+    revision: 7,
+    doc: { oldAmount: 3 },
+    history: [],
+  });
   try {
     const [row] = await f.routes.list();
     await f.routes.trust(row!.key, f.artifact.fingerprint, true);
     const snapshot = f.feed("work"),
       acks = f.feed("work-acks");
     f.unblock();
-    await vi.waitFor(() =>
-      expect(snapshot[0]).toMatchObject({ kind: "failure" }),
-    );
+    await vi.waitFor(() => expect(snapshot[0]).toMatchObject({ kind: "failure" }));
     await vi.waitFor(() => expect(acks[0]).toMatchObject({ kind: "failure" }));
     expect(await readFile(f.savedPath, "utf8")).toBe(f.original);
-    await expect(f.workspace.read(f.key, f.key.route)).rejects.toMatchObject({code:"WorkUnreadable",key:f.key});
+    await expect(f.workspace.read(f.key, f.key.route)).rejects.toMatchObject({
+      code: "WorkUnreadable",
+      key: f.key,
+    });
   } finally {
     await f.close();
   }
@@ -341,9 +397,7 @@ test("replacement during Work acquisition fences the retired feed", async () => 
       }),
     );
     expect(old[0]?.kind).toBe("failure");
-    expect(JSON.parse(await readFile(f.savedPath, "utf8")).value.doc.note).toBe(
-      "first",
-    );
+    expect(JSON.parse(await readFile(f.savedPath, "utf8")).value.doc.note).toBe("first");
   } finally {
     await f.close();
   }
@@ -355,7 +409,8 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
   const { buildCapabilities } = await import("../../../packages/mcps/src/pea/capabilities.ts");
   const { peDo } = await import("../../../packages/mcps/src/pea/capability-tools.ts");
   const { fakeRuntimeHost } = await import("../../../packages/mcps/tests/runtime-host-fixture.ts");
-  const { machineFixture } = await import("../../../packages/agent-contracts/tests/machine-fixture.ts");
+  const { machineFixture } =
+    await import("../../../packages/agent-contracts/tests/machine-fixture.ts");
   const { hostResourceObserver } = await import("../src/resource-adapters.ts");
   const { emptyThreadHead } = await import("@pe/agent-contracts");
   const root = await mkdtemp(join(tmpdir(), "pe-pod-view-"));
@@ -374,23 +429,44 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
       heads: { observe: () => () => {} },
       observeHostResource: hostResourceObserver(),
     });
-    const pods = createPodRoutes(lifecycle, { workspace: app.workspace, trustPath: join(root, "trust.json") });
+    const pods = createPodRoutes(lifecycle, {
+      workspace: app.workspace,
+      trustPath: join(root, "trust.json"),
+    });
     // The host's capability provider wiring (pe-routes `admittedRoutes`), over this app's workspace.
     const rows = () =>
-      buildCapabilities({ ops: [], routes: [], packages: [], skills: [], admittedRoutes: () => app.workspace.admittedRoutes() });
+      buildCapabilities({
+        ops: [],
+        routes: [],
+        packages: [],
+        skills: [],
+        admittedRoutes: () => app.workspace.admittedRoutes(),
+      });
     fakeRuntimeHost("http://127.0.0.1:9");
     vi.stubEnv("PE_CONTEXT", `context-${thread}`);
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
       if (url.pathname === "/pe/scope/self") return Response.json({ ...emptyThreadHead, thread });
       if (url.pathname === "/pe/capabilities")
-        return Response.json({ at: new Date().toISOString(), machine: machineFixture([]), sources: {}, diagnostics: [], capabilities: rows() });
+        return Response.json({
+          at: new Date().toISOString(),
+          machine: machineFixture([]),
+          sources: {},
+          diagnostics: [],
+          capabilities: rows(),
+        });
       return app.fetch(input instanceof Request ? input : new Request(url, init));
     });
     const pe = (key: string, input: object) =>
-      peDo.execute!({ key, input, timeoutSeconds: 30 } as never, { agent: { toolCallId: "call-1" } } as never) as Promise<Record<string, unknown>>;
+      peDo.execute!(
+        { key, input, timeoutSeconds: 30 } as never,
+        { agent: { toolCallId: "call-1" } } as never,
+      ) as Promise<Record<string, unknown>>;
     const stream = await app.fetch(
-      new Request(`http://host/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "world" }]))}`, { signal: abort.signal }),
+      new Request(
+        `http://host/pe/resources?keys=${encodeURIComponent(JSON.stringify([{ kind: "world" }]))}`,
+        { signal: abort.signal },
+      ),
     );
     const reader = stream.body!.getReader();
     const intents: Record<string, unknown>[] = [];
@@ -415,7 +491,16 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
         new Request(`http://host/pe/route-view/${route}`, {
           method: "PUT",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ route, thread, instance, surface: "route", page, context: {}, facts: {}, ...(openCommandId ? { openCommandId } : {}) }),
+          body: JSON.stringify({
+            route,
+            thread,
+            instance,
+            surface: "route",
+            page,
+            context: {},
+            facts: {},
+            ...(openCommandId ? { openCommandId } : {}),
+          }),
         }),
       );
 
@@ -424,20 +509,31 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
     expect((await mounted({ system: "" })).status).toBe(404);
     const [row] = await pods.list();
     await pods.trust(row!.key, fingerprint, true);
-    await vi.waitFor(() => expect(app.workspace.admittedRoutes().map((each) => each.key)).toContain(route));
-    expect(rows().filter((each) => each.key.startsWith(`route:${route}.`)).map((each) => each.key)).toEqual([
-      `route:${route}.view`,
-      `route:${route}.set-view`,
-    ]);
+    await vi.waitFor(() =>
+      expect(app.workspace.admittedRoutes().map((each) => each.key)).toContain(route),
+    );
+    expect(
+      rows()
+        .filter((each) => each.key.startsWith(`route:${route}.`))
+        .map((each) => each.key),
+    ).toEqual([`route:${route}.view`, `route:${route}.set-view`]);
 
     // Explicit open: the host links the registered address; the call waits for the matching rendered command.
     const opening = pe(`route:${route}.set-view`, { system: "owner-text" });
-    await vi.waitFor(() => expect(intents.some((each) => each.type === "route-view-open")).toBe(true));
+    await vi.waitFor(() =>
+      expect(intents.some((each) => each.type === "route-view-open")).toBe(true),
+    );
     const open = intents.find((each) => each.type === "route-view-open")!;
-    expect(open).toMatchObject({ route, thread, link: `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}` });
+    expect(open).toMatchObject({
+      route,
+      thread,
+      link: `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}`,
+    });
     const page = { system: "", viewport: "" };
     expect((await mounted(page, open.commandId as string)).status).toBe(200);
-    await vi.waitFor(() => expect(intents.some((each) => each.type === "route-view-intent")).toBe(true));
+    await vi.waitFor(() =>
+      expect(intents.some((each) => each.type === "route-view-intent")).toBe(true),
+    );
     const intent = intents.find((each) => each.type === "route-view-intent")!;
     // The owner codec's text crosses undecoded.
     expect(intent.patch).toEqual({ system: "owner-text" });
@@ -446,7 +542,14 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
       new Request(`http://host/pe/route-view/${route}/ack`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ outcome: "rendered", instance, commandId: intent.commandId, revision: intent.revision, page: { ...page, system: "owner-text" }, facts: {} }),
+        body: JSON.stringify({
+          outcome: "rendered",
+          instance,
+          commandId: intent.commandId,
+          revision: intent.revision,
+          page: { ...page, system: "owner-text" },
+          facts: {},
+        }),
       }),
     );
     expect(ack.status).toBe(200);
@@ -456,7 +559,9 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
     // Withdrawal: discovery drops the rows, and execution through a stale row refuses at the live gate.
     const work = await readdir(join(root, "Work")).catch(() => []);
     await pods.trust(row!.key, fingerprint, false);
-    await vi.waitFor(() => expect(app.workspace.admittedRoutes().map((each) => each.key)).not.toContain(route));
+    await vi.waitFor(() =>
+      expect(app.workspace.admittedRoutes().map((each) => each.key)).not.toContain(route),
+    );
     expect(rows().some((each) => each.key.startsWith(`route:${route}.`))).toBe(false);
     expect((await mounted(page)).status).toBe(404);
     expect(await readdir(join(root, "Work")).catch(() => [])).toEqual(work);
@@ -471,14 +576,31 @@ test("Pea finds, reads, sets and opens a trusted Pod view through its one regist
 }, 60_000);
 
 test("corrupt stored Work refuses direct reads and the file remains byte-for-byte inspectable", async () => {
-  const f = await setup({ version: 1, schemaVersion: 1, revision: 7, doc: { oldAmount: 3 }, history: [] });
+  const f = await setup({
+    version: 1,
+    schemaVersion: 1,
+    revision: 7,
+    doc: { oldAmount: 3 },
+    history: [],
+  });
   try {
     const [row] = await f.routes.list();
     await f.routes.trust(row!.key, f.artifact.fingerprint, true);
-    await expect(f.workspace.read(f.key, f.key.route)).rejects.toMatchObject({code:"WorkUnreadable",key:f.key});
+    const refused = await f.readStored();
+    expect(refused?.status).toBe(403);
+    expect(await refused!.json()).toMatchObject({
+      failure: { code: "WorkUnreadable", key: f.key, reason: expect.any(String) },
+    });
     expect(await readFile(f.savedPath, "utf8")).toBe(f.original);
-    const corrupt="{not JSON";await writeFile(f.savedPath,corrupt);
-    await expect(f.workspace.read(f.key, f.key.route)).rejects.toMatchObject({code:"WorkUnreadable",key:workKey(f.key)});
+    const corrupt = "{not JSON";
+    await writeFile(f.savedPath, corrupt);
+    const corruptResponse = await f.readStored();
+    expect(corruptResponse?.status).toBe(403);
+    expect(await corruptResponse!.json()).toMatchObject({
+      failure: { code: "WorkUnreadable", key: workKey(f.key), reason: expect.any(String) },
+    });
     expect(await readFile(f.savedPath, "utf8")).toBe(corrupt);
-  } finally { await f.close(); }
+  } finally {
+    await f.close();
+  }
 }, 30_000);
