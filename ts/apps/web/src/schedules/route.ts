@@ -104,9 +104,9 @@ export const module = route({
       ...sessionCommand("schedule.grid.read"),
       label: "Read schedule",
       input: ({ work, page, value }) => {
-        if (!work) throw Error("Choose a schedule before reading");
         const row = value?.catalog.schedules.find((row) => row.workspaceId === workspace(page));
         if (!row) throw Error("Choose a schedule before reading");
+        if (!work) throw Error("Start this schedule Work before reading");
         return { work, scheduleId: row.scheduleId, maxRows: 200 };
       },
     },

@@ -397,6 +397,13 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
   await pendingFamiliesChoice();
   const host = await scheduleHost();
   host.addSchedule(43, "ElectricDuctHeater");
+  // Replay the native boundary for the unstarted member, not the fixture's seeded Panel Work.
+  const { detailResponse } = await import("../../../host/tests/schedule-fixture");
+  const heater = detailResponse();
+  Object.assign(heater.entries[0]!, { scheduleId: 43, scheduleUniqueId: "uid-43", scheduleName: "ElectricDuctHeater" });
+  heater.entries[0]!.rows[0]!.values[0] = "SH1";
+  heater.entries[0]!.rows.push({ ...structuredClone(heater.entries[0]!.rows[0]!), rowNumber: 2, values: ["SH2", "100 VA"] });
+  host.setDetail(heater);
   const pending = new Set<Promise<void>>();
   const source: UseSource = {
     kind: "use",
@@ -428,7 +435,9 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
     ...native,
     open: scope => ({ subscribe(deliver, end) {
       let closed = false;
-      const task = host.view().then(state => {
+      const task = host.view(scope.key.work).then(state => {
+        // The HTTP inspection door returns schema defaults at r0 for absent Work.
+        if (state.revision === 0) { if (!closed) deliver({ kind: "absent" }); return; }
         if (!closed) deliver({ kind: "ready", history: { from: 0, acks: [] }, snapshot: {
           handle: { key: scope.key, revision: state.revision }, revision: state.revision, value: state.doc,
         } });
@@ -457,7 +466,7 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
     await waitFor(() => expect(mount.value().current).toBe(true));
     expect(mount.work(), "B03: catalogue discovery does not require selected Work").toBeNull();
     await waitFor(() => expect(screen.getAllByRole("button", { name: "Read schedule" })).toHaveLength(2));
-    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" })[1]!); });
+    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" }).at(-1)!); });
     expect(screen.getAllByText("Choose a schedule before reading").length, "B03: refused Read is visible").toBeGreaterThan(0);
     expect.soft(screen.queryAllByText(/.+ complete$/i), "B03: a refused verb must never produce any completion receipt").toEqual([]);
     const chooser = screen.queryByRole("button", { name: "Choose schedule" });
@@ -465,12 +474,25 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
     if (!chooser) return; // Both base defects above remain assertion failures, not a missing-control exception.
     fireEvent.click(chooser);
     expect(await screen.findByRole("option", { name: "ElectricDuctHeater" }), "B03: choices come from the host catalogue").toBeTruthy();
-    fireEvent.click(screen.getByRole("option", { name: "Panel" }));
-    await waitFor(() => expect(mount.work()?.handle.key).toEqual(host.scope));
-    expect(namesOf(mount.page.read().workspaceId), "B03: chosen name reaches its canonical member").toEqual([host.scope.work]);
+    fireEvent.click(screen.getByRole("option", { name: "ElectricDuctHeater" }));
+    const chosen = namesOf(mount.page.read().workspaceId);
+    expect(chosen).not.toEqual([host.scope.work]);
+    expect(search.has("workspaceId"), "B03: picker creates the Page address without a URL seed").toBe(true);
+    await screen.findByRole("button", { name: "Start" });
     await waitFor(() => expect(mount.value().current).toBe(true));
     const before = host.reads();
-    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" })[1]!); });
+    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" }).at(-1)!); });
+    expect.soft(screen.queryAllByText("Start this schedule Work before reading").length,
+      "B03: a chosen but unstarted schedule names Start").toBeGreaterThan(0);
+    expect.soft(screen.queryAllByText(/choose a schedule before reading|no schedule open/i),
+      "B03: a selected schedule never asks to choose again").toEqual([]);
+    expect(host.reads(), "B03: refused Read dispatches no native detail").toBe(before);
+    expect(mount.work(), "B03: Read cannot implicitly Start").toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Start" })); });
+    await waitFor(() => expect(mount.work()).not.toBeNull());
+    expect([mount.work()!.handle.key.work]).toEqual(chosen);
+    await waitFor(() => expect(mount.value().current).toBe(true));
+    await act(async () => { fireEvent.click(screen.getAllByRole("button", { name: "Read schedule" }).at(-1)!); });
     await waitFor(() => expect(host.reads(), "B03: Read reaches native schedule detail").toBeGreaterThan(before));
     await waitFor(() => expect(mount.result("read")).toBeDefined());
     await waitFor(() => {
@@ -478,6 +500,13 @@ test("JZ B03 people choose named subjects: pending Families scope, cold Schedule
       expect(mount.value().value?.reading, "B03: publication contains the completed Read, not the old capture").toEqual(mount.result("read"));
     });
     expect(mount.action("read").failure).toBeNull();
+    expect(mount.value().value?.reading?.snapshot.scheduleId).toBe(43);
+    expect(mount.value().value?.reading?.snapshot.scheduleName).toBe("ElectricDuctHeater");
+    expect(host.sent.filter(row => row.key === "revit.detail.schedules").at(-1)?.input)
+      .toMatchObject({ query: { kind: "ScheduleReferences", scheduleIds: [43] } });
+    // TypedChrome mounts the shipped pane: members must reach the grid.
+    await screen.findByText("SH1");
+    await screen.findByText("SH2");
     expect(screen.getAllByRole("button", { name: "Choose schedule" }), "B03: one declared subject control").toHaveLength(1);
     expect(view.container.textContent, "B03: people see names, not internal Work identities").not.toContain(host.scope.work);
   } finally {

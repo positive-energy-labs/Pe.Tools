@@ -5,6 +5,7 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { scheduleGridRouteState, scheduleReadingSchema } from "@pe/agent-contracts";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "../route/schedules/workspace";
 import type { SchedulesDrawContext } from "./route";
+import { namesOf } from "../route/typed-route";
 
 export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
   const [failure, setFailure] = useState<string | null>(null);
@@ -28,6 +29,9 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
     slice: ctx.cells.doc ? scheduleGridRouteState.schema.parse(ctx.cells.doc) : null,
     revision: ctx.cells.basis?.workRevision ?? null,
     hydrated: ctx.value.value !== undefined,
+    readPrompt: namesOf(page.workspaceId).length
+      ? ctx.cells.doc ? "Read schedule" : "Start this schedule Work, then Read schedule"
+      : "Choose schedule in the header, then Read schedule",
     apply: async (patches) => {
       if (refusal) return { code: "not-ready", message: refusal };
       const result = await ctx.cells.edit(patches, { label: "Edit schedule cells" });
