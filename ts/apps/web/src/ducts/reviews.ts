@@ -178,7 +178,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
   const snapshot =
     snapshotOf(scope) ?? (scope.readings.sheetSnapshot?.value as DuctSnapshot | undefined);
   const slots = { ...snapshot?.slots, ...request?.slots };
-  const name = snapshot ? subjectNamer(snapshot) : () => null;
+  const name = snapshot ? subjectNamer(snapshot, { unique: true }) : () => null;
   const lines = response.writes.map((write) => {
     const proposed =
       write.kind === "component"
@@ -204,8 +204,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
             : write.kind === "terminal"
               ? slots.terminalDrop
               : write.kind === "terminal-flow"
-                ? (proposed && "slot" in proposed ? proposed.slot : slots.terminalFlow)
-                : write.kind === "fitting"
+                ? proposed && "slot" in proposed ? proposed.slot : slots.terminalFlow: write.kind === "fitting"
                   ? "Loss Method"
                   : proposed && "slot" in proposed
                     ? proposed.slot
@@ -229,7 +228,16 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
             ? "Work"
             : "derived Work";
     const tail = `${write.outcome}${write.reason ? ` · ${write.reason}` : ""}`;
-    const before = spoken(write.before) ?? null;
+    const loss = snapshot?.nodes.find((n) => n.id === write.id)?.loss;
+    const before = loss && (write.kind === "component" || write.kind === "fitting")
+        ? loss.specificLossInWg != null
+          ? `${loss.specificLossInWg} in-wg (Revit Specific Loss)`
+          : loss.coefficient != null
+            ? `${loss.coefficient} (${loss.method === "ashrae-table" ? "ASHRAE " + (loss.table ?? "table") : "Revit coefficient"})`
+            : loss.revitPressureDropInWg != null
+              ? `${loss.revitPressureDropInWg} in-wg (Revit reported)`
+              : (spoken(write.before) ?? null)
+        : (spoken(write.before) ?? null);
     const key = `${write.kind}:${write.id ?? write.key ?? ""}`;
     // The store row is Pe's provenance record in Project Information; its "absent"/"revision n" are machine words.
     // A slot entry names the slot the value resolver now reads (after), not only the record's old name.
@@ -242,7 +250,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
           label,
           before,
           after: `${spoken(write.after) ?? "none"} · ${tail}`,
-          author: author ?? "unknown" as const,
+          author: author ?? ("unknown" as const),
         },
       };
     }
@@ -255,7 +263,7 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
           label,
           before: write.before === "absent" ? "none yet" : before,
           after: `${write.before === "absent" ? "created" : "updated"} · ${tail}`,
-          author: author ?? "unknown" as const,
+          author: author ?? ("unknown" as const),
         },
       };
     }
@@ -266,8 +274,13 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
       cell: {
         key,
         label,
+        group:
+          write.kind === "component" &&
+          !scope.readings.fansWork?.value?.componentDrops?.[String(write.id)]?.edit
+            ? "Computed losses written back"
+            : "Your edits",
         before,
-        after: `${after} · ${source} · ${tail}`,
+        after: `${after} · ${source} · ${tail}${write.outcome === "refused" ? "; add the missing parameter to the family or map to an existing writable parameter" : ""}`,
         author: author ?? fanAuthor(scope, write.kind, write.id),
       },
     };
@@ -277,7 +290,12 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
       ? `${response.writes.length} Revit target${response.writes.length === 1 ? "" : "s"}: ${outcomeWords(response)}`
       : "Nothing to write: no native targets were derived from this Work in the selected scope.",
     rows: lines.map((line) => line.row),
-    cells: lines.map((line) => line.cell),
+    cells: lines.map((line) => ({ ...line.cell, group: line.cell.group ?? "Pe loss record" }))
+      .sort(
+        (a, b) =>
+          ["Your edits", "Computed losses written back", "Pe loss record"].indexOf(a.group) -
+          ["Your edits", "Computed losses written back", "Pe loss record"].indexOf(b.group),
+      ),
   };
 }
 

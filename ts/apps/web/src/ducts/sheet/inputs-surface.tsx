@@ -403,7 +403,7 @@ function InputRowView({
           source={row.source}
           cell={c.cell as WorkCell}
           sourceWrap={row.source.startsWith("Conflict:")}
-          refusal={refusal}
+          refusal={refusal?? c.refusal ?? null}
           positive={c.positive}
           clearable={row.clear != null}
           onValue={(value) =>

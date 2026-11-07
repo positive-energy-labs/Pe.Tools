@@ -25,6 +25,7 @@ export type WriteRun = Promise<{ readonly message: string } | null>;
 /** One consumed value the write changes: the model's value, the staged one, and who staged it. */
 export interface WriteCell {
   key: string;
+  group?: string;
   label: string;
   before: string | null;
   after: string;
@@ -67,8 +68,11 @@ const reviewSchema = z.object({
   preview: z.unknown().optional(),
   sentence: z.string().nullable(),
   rows: z.array(z.string()),
-  cells: z.array(z.object({ key: z.string(), label: z.string(), before: z.string().nullable(),
-    after: z.string(), author: z.enum(["pea", "human", "unknown"]) })).optional(),
+  cells: z.array(z.object({ key: z.string(), group: z.string().optional(),
+        label: z.string(), before: z.string().nullable(),
+    after: z.string(), author: z.enum(["pea", "human", "unknown"]) ,
+      }),
+    ).optional(),
   stale: z.boolean(),
 });
 
@@ -79,12 +83,13 @@ export function PreviewAction({ handle, label, children, says = `Plan ${label} f
   label: string;
   says?: string;
 } & Pick<WriteActionProps, "refusal" | "busy" | "failed" | "reject" | "icon">) {
-  const [, redraw] = useReducer(value => value + 1, 0);
+  const [, redraw] = useReducer((value ) => value + 1, 0);
   const raw = handle.read();
   const parsed = reviewSchema.safeParse(raw);
   const review = parsed.success ? parsed.data : null;
   const nativeWrites = z.object({ value: z.object({ writes: z.array(z.object({ outcome: z.string() })) }) }).safeParse(review?.preview);
-  const empty = nativeWrites.success && !nativeWrites.data.value.writes.some(write => write.outcome === "planned");
+  const empty = nativeWrites.success && (!nativeWrites.data.value.writes.some((write ) => write.outcome === "planned") ||
+      nativeWrites.data.value.writes.some((write) => write.outcome === "refused"));
   const sealed = !!review && !review.stale && writeResponseSchema.safeParse(review.preview).success;
   const run = async (action: () => unknown): WriteRun => {
     try { await action(); return null; }
@@ -92,8 +97,10 @@ export function PreviewAction({ handle, label, children, says = `Plan ${label} f
     finally { redraw(); }
   };
   const consent=handle.consent??props.reject;
-  return <WriteAction {...props} busy={handle.pending ?? props.busy} refusal={handle.refusal ?? props.refusal} reject={consent?{...consent,content:children??consent.content}:null} label={`plan ${label}`} says={says}
-    failed={raw != null && !parsed.success ? "Plan review unavailable" : handle.failure ?? props.failed}
+  return (
+    <WriteAction {...props} busy={handle.pending ?? props.busy} refusal={handle.refusal ?? props.refusal} reject={consent?{...consent,content:children??consent.content}:null} label={`plan ${label}`} says={says}
+    failed={raw != null && !parsed.success ? "Plan review unavailable" : (handle.failure ?? props.failed)
+      }
     held={review && !review.stale ? {
       word: writeWord(label, review.cells?.length || review.rows.length, false),
       summary: review.sentence ?? "",
@@ -102,7 +109,8 @@ export function PreviewAction({ handle, label, children, says = `Plan ${label} f
     stale={review?.stale ? "changed since plan" : null}
     plan={() => run(() => handle.plan())}
     apply={{ hidden: empty, label, says: `${label} what the plan sealed`, refusal: sealed ? null : "Plan the current Work first",
-      run: () => run(() => handle.apply()), done: `${label} sent` }} />;
+      run: () => run(() => handle.apply()), done: `${label} sent` ,
+      }} />);
 }
 /** The armed word. A plan is a Read: only a successful declared rehearsal says "checked in Revit". */
 export const writeWord = (verb: string, count: number, rehearsed: boolean) =>
@@ -228,11 +236,13 @@ export function WriteAction({
         {armed ? (
           <div className="flex flex-col gap-1.5">
             <div className="t-small face-mono text-ink-2">{held.summary}</div>
-            {held.cells?.map((cell) => (
+            {held.cells?.map((cell, index) => (
               <div key={cell.key} data-write-cell={cell.key} className="flex flex-col">
+                {cell.group && cell.group !== held.cells?.[index - 1]?.group ? (
+                  <p className="t-small">{cell.group}</p>
+                ) : null}
                 <span className="t-small text-ink-2">
-                  {cell.label} ·{" "}
-                  <span data-write-author={cell.author}>{AUTHOR[cell.author]}</span>
+                  {cell.label} ·<span data-write-author={cell.author}>{AUTHOR[cell.author]}</span>
                 </span>
                 <StateCell value={cell.after} modelValue={cell.before ?? "unknown"} agree="drift" author={cell.author} stage="edit" />
               </div>
