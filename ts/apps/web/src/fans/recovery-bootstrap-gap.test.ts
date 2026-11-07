@@ -123,7 +123,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 async function witness(
-  raw?: unknown,
   limits?: { maxCount: number; maxBytes: number },
   description?: { label: string; meta?: z.output<typeof inputHistoryMetaSchema> },
   onHistory?: (history: Parameters<typeof bodies.main.run>[0]["history"]) => void,
@@ -170,7 +169,7 @@ async function witness(
   const host = (await inventory.prepare("host", fingerprint)).admitHost(neutral);
   if (!web.ok) throw Error(JSON.stringify(web.diagnostics));
   if (!host.ok) throw Error(JSON.stringify(host.diagnostics));
-  const saved = new Map<string, unknown>(raw ? [["ducts", raw]] : []);
+  const saved = new Map<string, unknown>();
   const ws = new RouteWorkspace({
     registrations: [],
     workHistoryLimits: limits,
@@ -183,9 +182,6 @@ async function witness(
   });
   const registration = ws.registerAdmitted(host.route);
   await registration.ready;
-  // ADR 0033 deletes undecodable Work on read; exercise explicit recovery before mounting it.
-  if (raw === unreadable)
-    expect(await ws.startFresh(bindWork("ducts", null, undefined, { session: "fixture", openId: "w1f" }), "ducts", "human")).toMatchObject({ ok: true });
   cleanup.push(() => registration.close());
   const observe = observeResources(ws, { observe: () => () => {} });
   let skipped = 0;
@@ -285,12 +281,6 @@ async function witness(
     },
   };
 }
-const unreadable = {
-  version: 1,
-  schemaVersion: 1,
-  revision: 7,
-  doc: { componentDrops: { "100": { edit: { value: { inWg: 0.18 } } } }, unknownOldField: true },
-};
 
 
 

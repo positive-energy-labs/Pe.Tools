@@ -23,6 +23,7 @@ async function fixture(
   salt = "first",
   native?: { key: string; cost: "Cheap" | "Bounded" },
   address = `/tool/${encodeURIComponent("route:@fixture/routes/tool/route.artifact")}`,
+  initialWork = false,
 ) {
   const data = {
     ...builtinData,
@@ -39,6 +40,7 @@ async function fixture(
     entry,
     `import { builtinModule } from ${JSON.stringify(imports)};
 export const module = { ...builtinModule, data: ${JSON.stringify(data)},
+${initialWork ? `schemas: {...builtinModule.schemas, work: builtinModule.schemas.work.extend({amount: builtinModule.schemas.work.shape.amount.default(0), note: builtinModule.schemas.work.shape.note.default("")})},` : ""}
 entries: {...builtinModule.entries, roster: {...builtinModule.entries.roster, ${native ? `native: [${JSON.stringify(native.key)}], axes: {...builtinModule.entries.roster.axes, cost: '${native.cost}'}` : ""}}}, bodies: {
 ...Object.fromEntries(Object.entries(builtinModule.bodies).map(([key, body]) => [key, {...body, source: {module:'route.js', export:key}}])),
 
@@ -145,10 +147,10 @@ const currentWork = {
   doc: { amount: 4, note: "first" },
   history: [],
 };
-async function setup(saved: unknown = currentWork, blockRead = false) {
+async function setup(saved: unknown = currentWork, blockRead = false, initialWork = false) {
   const root = await mkdtemp(join(tmpdir(), "pe-p2-"));
   try {
-    const artifact = await fixture(root);
+    const artifact = await fixture(root, "first", undefined, undefined, initialWork);
     const lifecycle = createPackageLifecycle({
       packages: () => listPackages(join(root, "Pods")),
       decisionsPath: join(root, "enabled.json"),
@@ -609,7 +611,7 @@ test("G17 HTTP Start fresh accepts only older Work and preserves refused schema 
   for (const age of ["current", "newer", "unknown", "older"] as const) {
     const schemaVersion = age === "older" ? 1 : age === "current" ? 2 : age === "newer" ? 3 : undefined;
     const f = await setup({ version: 1, ...(schemaVersion === undefined ? {} : { schemaVersion }),
-      revision: 7, doc: { oldAmount: 3 }, history: [] });
+      revision: 7, doc: { oldAmount: 3 }, history: [] }, false, true);
     try {
       const [row] = await f.routes.list();
       await f.routes.trust(row!.key, f.artifact.fingerprint, true);
@@ -631,7 +633,8 @@ test("G17 HTTP Start fresh accepts only older Work and preserves refused schema 
         const original = JSON.parse(f.original);
         expect(records).toContainEqual({ ...original, route: `${f.key.route}:aside:1` });
       } else {
-        expect(response!.status, `${age}: ${JSON.stringify(body)}`).toBe(403);
+        expect(response!.status, `${age}: ${JSON.stringify(body)}`).toBe(200);
+        expect(body).toMatchObject({ ok: false, kind: "refused" });
         expect(JSON.stringify(body)).toContain("Only a proven older schema permits Start fresh");
         expect(await readFile(f.savedPath, "utf8"), age).toBe(f.original);
         expect(await readdir(join(f.root, "Work")), age).toEqual(files);

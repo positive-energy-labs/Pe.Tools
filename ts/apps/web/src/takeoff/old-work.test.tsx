@@ -67,7 +67,11 @@ test.each([OLDER_WORK, UNREADABLE_WORK])(
       {work,sources:Object.fromEntries([module.spec.core!,...Object.values(module.spec.reads??{})].map(read=>[read.key,{kind:"use",open:()=>()=>{}}]))});
     try {
       render(<Recovery mount={mount}/>);
-      expect(await screen.findByText(message)).toBeTruthy();
+      await waitFor(()=>expect(mount.owner()?.failure).toMatchObject({kind:"failed",code:"WorkUnreadable",
+        schemaAge:message===OLDER_WORK?"older":"unknown"}));
+      const refusal=mount.owner()?.failure;
+      if(!refusal||refusal.kind!=="failed") throw Error("Expected the host's named Work refusal");
+      await waitFor(()=>expect(screen.getAllByRole("alert").map(node=>node.textContent)).toContain(refusal.message));
       if(message===UNREADABLE_WORK) {
         expect(screen.queryByRole("button",{name:"Start fresh"})).toBeNull();
         expect(posts).toEqual([]);

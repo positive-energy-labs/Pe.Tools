@@ -27,11 +27,19 @@ const routes = [
   sessionsGraph,
   familyGraph,
   takeoffGraph,
-] as unknown as RouteGraph<any, any>[];
+] as (RouteGraph<any, any> | typeof familyGraph)[];
 
-test.each(routes.map((graph) => [graph.address, graph] as const))(
+test.each(routes.map((graph) => ["module" in graph ? graph.module.data.address : graph.address, graph] as const))(
   "/%s renders no internal identity in its subject, verb, pane or stage words",
   async (_, graph) => {
+    if ("module" in graph) {
+      const { spec } = graph.module;
+      const internal = [...Object.keys(spec.commands), ...Object.keys(spec.panes)].filter(id => id.includes("-"));
+      const words = [spec.name, ...Object.values(spec.commands).map(verb => verb.label),
+        ...Object.values(spec.panes).map(pane => pane.title)];
+      for (const word of words) expect(leaks(word, internal), `${spec.key}: ${word}`).toEqual([]);
+      return;
+    }
     vi.stubGlobal(
       "fetch",
       vi.fn(() => {
@@ -90,9 +98,15 @@ function displayStrings(value: unknown, key = "", out: string[] = []): string[] 
 }
 
 // Manual D re-drive #5 defect 7: widened from words to what each fixture seed hands its panes.
-test.each(routes.map((graph) => [graph.address, graph] as const))(
+test.each(routes.map((graph) => ["module" in graph ? graph.module.data.address : graph.address, graph] as const))(
   "/%s fixture seeds carry no internal identity in any display text",
   async (_, graph) => {
+    if ("module" in graph) {
+      // Family's real DocLab flow is protected in family/cells.test.tsx. The typed
+      // declaration has no legacy fixture URLs to inspect or silently revive.
+      expect(graph.module.data.seeds).toEqual({});
+      return;
+    }
     for (const [name, seed] of Object.entries(graph.seeds ?? {})) {
       const loaded = await (seed as { load: () => Promise<unknown> }).load();
       for (const text of displayStrings(loaded))
