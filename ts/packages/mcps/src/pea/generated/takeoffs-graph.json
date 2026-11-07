@@ -193,6 +193,34 @@
         "resource": "scope"
       },
       "refresh": "dependencies"
+    },
+    "views": {
+      "kind": "use",
+      "entry": "takeoffs.views",
+      "deps": {
+        "page": [
+          "level",
+          "zone",
+          "room",
+          "viewport",
+          "threadSearch",
+          "threadSort",
+          "views",
+          "zones",
+          "work",
+          "r10",
+          "stage",
+          "selected"
+        ],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
     }
   },
   "verbs": {

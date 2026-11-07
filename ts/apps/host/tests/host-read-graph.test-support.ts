@@ -145,7 +145,7 @@ export async function fixture(
               }
               return {
                 value: Schema.decodeUnknownSync(Schema.Json)(
-                  native ? native.read(input) : input.key === "revit.catalog.field-options"
+                  native ? yield* Effect.promise(async () => native.read(input)) : input.key === "revit.catalog.field-options"
                     ? unavailableFieldOptions
                     : input.key === "ducts.tables"
                       ? {

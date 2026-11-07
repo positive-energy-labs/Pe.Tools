@@ -9,7 +9,7 @@ import {
   routeStatePatchSchema,
   canonicalRouteInput,
 } from "@pe/agent-contracts";
-import { adoptionArgs, adoptionData } from "@pe/agent-contracts/takeoff-read";
+import { adoptionArgs, adoptionData, viewCatalogueArgs, viewCatalogueData } from "@pe/agent-contracts/takeoff-read";
 import {
   threadListFields,
   threadSearchDefault,
@@ -36,6 +36,10 @@ export const loaded = read(
     zones: page.zones,
     work: page.work,
   }),
+);
+export const viewCatalogue = read(
+  hostRead(valueRead("takeoffs.views", viewCatalogueArgs, viewCatalogueData)),
+  (page: { work: string }) => ({ work: page.work }),
 );
 export const patches = z.array(routeStatePatchSchema);
 export type AdoptionContext = ContextOf<
@@ -64,6 +68,7 @@ export const module = route({
   },
   fields,
   core: loaded,
+  reads: { views: viewCatalogue },
   edits: {
     work: takeoffsRouteState,
     seed: () => takeoffsRouteState.schema.parse({}),
