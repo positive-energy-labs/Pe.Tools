@@ -1,6 +1,5 @@
 import { circuitReadSchema, inferenceReadSchema, overridesReadSchema, stagedDuctsReadSchema } from "./ducts-pricing-read.ts";
 import { z } from "zod";
-import type { FlowSource, EquipmentFlowSource } from "../../ducts-domain/src/terminal-flows.ts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { documentRefSchema } from "./target.ts";
 import { ductsDocumentSchema } from "./ducts.ts";
@@ -69,14 +68,16 @@ export const ductsRosterData = nativeResponseSchema("ducts.snapshot.roster").and
   z.object({ sourceVersion: z.string(), rows: z.array(systemRow) }),
 );
 const record = <T extends z.ZodType>(schema: T) => z.record(z.string(), schema);
-const flowSource=z.union([z.enum(["override","revit"]),z.templateLiteral(["rooms:",z.string()])]) satisfies z.ZodType<FlowSource>;
-const equipmentSource=z.enum(["override","revit","derived"]) satisfies z.ZodType<EquipmentFlowSource>;
+export const ductTerminalFlowSourceSchema=z.union([z.enum(["override","revit"]),z.templateLiteral(["rooms:",z.string()])]);
+export const ductEquipmentFlowSourceSchema=z.enum(["override","revit","derived"]);
+export type DuctTerminalFlowSource=z.infer<typeof ductTerminalFlowSourceSchema>;
+export type DuctEquipmentFlowSource=z.infer<typeof ductEquipmentFlowSourceSchema>;
 const flow = z.object({
   cfm: numberOrNull,
-  source: flowSource.nullable(),
+  source: ductTerminalFlowSourceSchema.nullable(),
   finding: z.literal("no-flow").optional(),
 });
-const equipmentFlow=z.object({cfm:numberOrNull,source:equipmentSource.nullable(),grilles:z.number().optional()});
+const equipmentFlow=z.object({cfm:numberOrNull,source:ductEquipmentFlowSourceSchema.nullable(),grilles:z.number().optional()});
 const path = z.object({
   groupId: z.string(),
   total: z.number(),

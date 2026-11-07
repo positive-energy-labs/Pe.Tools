@@ -1,3 +1,4 @@
+import type { DuctTerminalFlowSource, DuctEquipmentFlowSource } from "@pe/agent-contracts";
 /**
  * The design flow at every air terminal (pressure-drop ledger, 2026-10-16 "terminal design flow",
  * ruling 5 of 2026-10-20; Load Preview deleted at FANSPLIT, kaitpw 2026-11-03): an edit override
@@ -13,7 +14,7 @@ import type { DuctSnapshot } from "./types.ts";
 
 type Node = DuctSnapshot["nodes"][number];
 
-export type FlowSource = "override" | `rooms:${string}` | "revit";
+export type FlowSource = DuctTerminalFlowSource;
 export interface TerminalFlow {
   cfm: number | null;
   source: FlowSource | null;
@@ -56,7 +57,7 @@ export function terminalFlows(
 }
 
 /** `derived`: no stated flow, so the sum of the terminal flows its section serves (`derivedUnitFlows`); never written. */
-export type EquipmentFlowSource = "override" | "revit" | "derived";
+export type EquipmentFlowSource = DuctEquipmentFlowSource;
 export interface EquipmentFlow {
   cfm: number | null;
   source: EquipmentFlowSource | null;
@@ -84,3 +85,4 @@ export function equipmentFlows(
       }),
   );
 }
+
