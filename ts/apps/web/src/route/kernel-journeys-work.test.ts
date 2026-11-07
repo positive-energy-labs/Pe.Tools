@@ -235,8 +235,7 @@ async function journey() {
       await ready();
     },
     async close() {
-      // Each journey owns a fresh host store at the same recorded address.
-      // Do not carry its refused browser intents into the next independent host.
+      // Refused intents outlive a Place in production, but not this disposable host fixture.
       mounts.forEach(m => m.journal().intents.forEach(intent => m.discardIntent(intent.id)));
       mounts.forEach((m) => m.dispose());
       streams.forEach((stop) => stop());
@@ -248,6 +247,38 @@ async function journey() {
     },
   };
 }
+
+test("JZ release reads preserves Work edits until departure or disposal", async () => {
+  const j = await journey();
+  try {
+    await j.start();
+    const cells = j.cells(), token = cells.basis!;
+    const revision = j.m.owner()!.handle!.revision;
+    j.m.release();
+    expect(j.m.current(token)).toBe(true);
+    expect(await cells.at(["flows", "4"]).stage({ cfm: 270 }, { label: "Edit after read release" })).toBeNull();
+    expect(j.m.available()).toBe(true);
+    expect(j.m.owner()!.handle!.revision).toBe(revision + 1);
+    expect(j.m.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 270 });
+    // Read release does not relax the captured revision fence.
+    expect(await cells.at(["flows", "4"]).stage({ cfm: 280 }, { label: "Old draw" })).toMatchObject({ code: "refused" });
+    const reopened = j.mount(false, { custody: { current: () => true } });
+    await vi.waitFor(() => expect(reopened.owner()?.ready).toBe(true));
+    expect(reopened.owner()!.handle!.revision).toBe(revision + 1);
+    expect(reopened.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 270 });
+    const stop = j.m.subscribe(() => {}); stop();
+    await j.ready();
+    const retained = j.cells().at(["flows", "4"]);
+    j.depart();
+    expect(await retained.stage({ cfm: 290 }, { label: "After departure" })).toMatchObject({ code: "refused" });
+    await vi.waitFor(() => expect(reopened.workBasis()).toBeTruthy());
+    const disposedCell = (reopened.draw("sheet-inputs", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"]).at(["flows", "4"]);
+    reopened.dispose();
+    expect(await disposedCell.stage({ cfm: 300 }, { label: "After disposal" })).toMatchObject({ code: "refused" });
+    expect(reopened.owner()!.handle!.revision).toBe(revision + 1);
+    expect(reopened.owner()!.doc.flows["4"].edit.value).toEqual({ cfm: 270 });
+  } finally { await j.close(); }
+}, 60_000);
 
 test("JW1 edit typed flows and race two atomic HTTP writes at the accepted revision", async () => {
   const j = await journey();

@@ -1191,7 +1191,7 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
 }, 30_000);
 
 
-test.each(["takeoffs", "families"] as const)("JZ kernel Start on %s settles while Reading or after it, and exposes a stale-custody refusal", async (route) => {
+test.each(["takeoffs", "families"] as const)("JZ kernel Start on %s after read release settles while Reading or after it", async (route) => {
   const { gate } = await import("../../../host/tests/host-read-graph.test-support");
   for (const phase of ["settled", "reading"] as const) {
     const catalogue = phase === "reading" ? gate() : undefined;
@@ -1205,17 +1205,16 @@ test.each(["takeoffs", "families"] as const)("JZ kernel Start on %s settles whil
     render(<RouterProvider router={router} />);
     try {
       const start = await screen.findByRole("button", { name: "Start" });
+      const retainedStart = j.mount.startAction()!;
       if (!catalogue) await waitFor(() => expect(j.mount.value().current).toBe(true), { timeout: 20000 });
       else expect(j.mount.value()).toMatchObject({ current: false, status: "pending" });
-      // A retained press can race custody loss. At base this rejects before the catch and vanishes.
-      await act(async () => { j.mount.release(); fireEvent.click(start); });
-      expect(screen.getAllByRole("alert").some(row => row.textContent === "Place is not writable")).toBe(true);
-      expect((await j.host.journal.list()).filter(row => row.key === "work.start")).toHaveLength(0);
-      await act(async () => { const reacquire = j.mount.subscribe(() => {}); reacquire(); });
-      await waitFor(() => expect(screen.getByRole("button", { name: "Start" }).getAttribute("aria-disabled")).toBeNull());
-      fireEvent.click(screen.getByRole("button", { name: "Start" }));
+      // Resource release alone leaves the selected Place's Start authority intact.
+      await act(async () => { j.mount.release(); });
+      expect(j.mount.available()).toBe(true);
+      fireEvent.click(start);
       catalogue?.release.resolve();
       await waitFor(() => expect(j.mount.owner()?.ready).toBe(true));
+      await act(async () => { const stop = j.mount.subscribe(() => {}); stop(); });
       await j.ready();
       const receipts = (await j.host.journal.list()).filter(row => row.key === "work.start");
       expect(receipts).toHaveLength(1);
@@ -1229,6 +1228,10 @@ test.each(["takeoffs", "families"] as const)("JZ kernel Start on %s settles whil
         await j.ready();
         await waitFor(() => expect(j.mount.owner()?.doc.scope.edit?.value.categoryNames).toEqual(["Air Terminal Tags"]));
       }
+      j.mount.dispose();
+      await expect(retainedStart.run()).rejects.toThrow("Place is not writable");
+      expect(retainedStart.failure).toBe("Place is not writable");
+      expect((await j.host.journal.list()).filter(row => row.key === "work.start")).toHaveLength(1);
     } finally { await j.close(); }
   }
 }, 60000);
