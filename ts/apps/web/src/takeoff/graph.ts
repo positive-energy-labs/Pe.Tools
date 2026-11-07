@@ -299,7 +299,7 @@ export const takeoffGraph: RouteGraph<TakeoffGraphPage, TakeoffsRouteDocument> =
     ...takeoffBase.directory!,
     title: "View adoption",
     blurb: "Adopt zoning regions from chosen views.",
-    satellites: [{ to: "/zone-audit", label: "Zone audit" }],
+    satellites: [],
   },
   subject: (p) => (p.views === "all" ? "All views" : p.views.join(", ")) || "Choose views",
   fields: {

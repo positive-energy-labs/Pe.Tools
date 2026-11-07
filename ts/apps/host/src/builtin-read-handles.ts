@@ -3,6 +3,7 @@ import { localRead } from "./local-inputs.ts";
 import { familiesObservationSchema, workKeySchema, actionReceiptListDecoder, scheduleReadingSchema, scheduleCatalogSchema, documentRefSchema } from "@pe/agent-contracts";
 import { z } from "zod";
 import { leaf, read } from "./reads/evaluator.ts";
+import { assetFile } from "./reads/inputs.ts";
 import { readingRequestSchema, chatValue, openData, opsData, bindData } from "@pe/agent-contracts";
 import { firmReading, catalogReading } from "./ducts-files.ts";
 const resource = <I extends z.ZodType,O extends z.ZodType>(input:I,output:O) => leaf("resource", input,output);
@@ -62,10 +63,9 @@ export const scheduleReceipts = leaf(
   actionReceiptListDecoder(),
 );
 const captureList=leaf("resource",z.object({kind:z.literal("captures")}),capturesValue);
-const captureAsset=leaf("file:capture",z.string().regex(/^[0-9a-f]{64}$/),z.string().regex(/^[0-9a-f]{64}$/),false);
 export const captures=read("input.captures",{input:captureList.input,output:capturesValue,async run(ctx,args){
   const value=await ctx.read(captureList,args);
-  for(const sha of new Set(value.captures.map(row=>row.sha))) await ctx.read(captureAsset,sha);
+  for(const sha of new Set(value.captures.map(row=>row.sha))) await ctx.read(assetFile,sha);
   return value;
 }});
 export const familySpec=leaf("file:family-spec",podMemberSchema,z.object({doc:parsedDocViewSchema.nullable(),error:z.string().nullable()}));

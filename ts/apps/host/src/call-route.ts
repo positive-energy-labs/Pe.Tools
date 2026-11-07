@@ -1,3 +1,4 @@
+import { captureReceiptSchema } from "@pe/agent-contracts";
 import { FamilyPdfParser } from "./family-spec.ts";
 import { HostInputContext } from "./input-context.ts";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
@@ -60,10 +61,8 @@ import { CommandRejected, StepFailure } from "./command-executor.ts";
 import { ActionJournal } from "./action-journal.ts";
 import { bindCommandRuntime } from "./command-registry.ts";
 import {
-  captureOrigin,
   PictureCaptureStore,
   PictureStoreFull,
-  registerViewImage,
 } from "./captures-route.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
 import { DuctFiles } from "./ducts-files.ts";
@@ -492,15 +491,7 @@ export function makeCallRoute(
         "nativeRequestId" in result && typeof result.nativeRequestId === "string"
           ? result.nativeRequestId
           : requestId;
-      const kept = entry.capture
-        ? yield* registerViewImage(
-            result.value,
-            request,
-            captureOrigin(origin, caller),
-            bridge,
-            { session: bridgeSessionId, openId: openDocumentId },
-          )
-        : null;
+      const kept = captureReceiptSchema.safeParse((result.value as {capture?:unknown}|null)?.capture).data;
       recordOperation(op, { ok: true });
       // Every /call response names the target it actually ran against, so a tool card can show
       // what was touched rather than the selector that was typed. Headers, not a payload wrapper.

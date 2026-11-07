@@ -191,7 +191,7 @@ async function fixture(capture = false) {
   };
   return {
     dir,
-    probe: (body:unknown) => withInvocationContext({caller:who},()=>web.handler(new Request(new URL(peRouteUrl("reads.value"),"http://host"),{
+    probe: (body:unknown) => withInvocationContext({caller:who},()=>web.handler(new Request(new URL(peRouteUrl("reads.value",{}),"http://host"),{
       method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body),
     }),Context.make(RequestIdentity,admittedRequestIdentity(who,scope)))),
     send,
