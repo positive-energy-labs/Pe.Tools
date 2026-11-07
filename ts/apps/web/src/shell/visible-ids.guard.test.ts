@@ -26,6 +26,8 @@ const fixtures = (module: (typeof routes)[number]) => {
   })));
 };
 
+// C746 Family runtime picker/roster/stage labels are also driven by the D G07 Family journey
+// in route/kernel-journeys-focus.test.tsx; this registry inventory stays exhaustive.
 test.each(routes.map((module) => [module.data.address, module] as const))(
   "/%s renders no internal identity in its subject, verb, pane or stage words",
   (_, module) => {
@@ -54,6 +56,8 @@ function displayStrings(value: unknown, key = "", out: string[] = []): string[] 
   return out;
 }
 
+// C747 Family has no fixture publication: the same D G07 Family journey renders actual Work
+// and the asynchronous host-evaluated member payload. Keep every provider check below as well.
 // Inspect the display fields of the actual typed fixture providers, not legacy seed URLs.
 test.each(routes.map((module) => [module.data.address, module] as const))(
   "/%s fixture seeds carry no internal identity in any display text",
