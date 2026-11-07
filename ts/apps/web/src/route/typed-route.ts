@@ -29,6 +29,7 @@ import type {
 import type { Many } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
 import type { Publication } from "./host-read.ts";
 import { settleWork } from "../shell/work-door-observation.ts";
+import { bare } from "../../../../packages/agent-contracts/src/route-field.ts";
 
 type Field = {
   schema: z.ZodType;
@@ -102,13 +103,18 @@ type FieldValues<F extends Fields> = {
 type Page<F extends Fields> = FieldValues<F> & {
   readonly selected: readonly { kind: "focus"; id: IdentityId<"local"> }[];
 };
-type RoleFields<F extends Fields, R extends Field["role"]> = { [K in keyof F]: F[K]["role"] extends R ? K : never }[keyof F];
+type RoleFields<F extends Fields, R extends Field["role"]> = {
+  [K in keyof F]: F[K]["role"] extends R ? K : never;
+}[keyof F];
 type DrawPage<F extends Fields> = Omit<
   PagePort<RouteGraphJson, {}>,
   "read" | "pose" | "query" | "select"
 > & {
   read(): Page<F>;
-  pose(patch: Partial<Pick<FieldValues<F>, RoleFields<F, "pose">>>, intent?: "gesture" | "named"): unknown;
+  pose(
+    patch: Partial<Pick<FieldValues<F>, RoleFields<F, "pose">>>,
+    intent?: "gesture" | "named",
+  ): unknown;
   query(patch: Partial<Pick<FieldValues<F>, RoleFields<F, "query">>>): unknown;
   select(value: Page<F>["selected"]): unknown;
 };
@@ -137,7 +143,6 @@ export interface DrawContext<D, F extends Fields, W, Edit> {
   readonly selection: { read(): Page<F>["selected"]; set(value: Page<F>["selected"]): unknown };
   readonly cells: EditableCells<W, Edit>;
   write(command: string): { plan(): unknown; apply(): unknown; cancel(): unknown; read(): unknown };
-  readonly fixture: string | null;
 }
 type Owner = { state: RouteStateSpec<z.ZodObject>; value: string };
 type Owners = Readonly<Record<string, Owner>>;
@@ -375,7 +380,17 @@ export function route<
         if (!applied.ok) throw Error(applied.error);
         return [
           ...new Set<string>(input.patches.map((p: RouteStatePatch) => String(p.path[0]))),
-        ].map((key) => ({ path: [key], value: (applied.envelope.doc as any)[key] }));
+        ].flatMap((key) =>
+          bare(config.state.schema.shape[key]!) instanceof z.ZodRecord
+            ? input.patches
+                .filter((p: RouteStatePatch) => String(p.path[0]) === key)
+                .map((p: RouteStatePatch) => ({
+                  ...p,
+                  path: p.path.map(String),
+                  ...(!Object.hasOwn(p, "value") ? { op: "delete" } : {}),
+                }))
+            : [{ path: [key], value: (applied.envelope.doc as any)[key] }],
+        );
       }),
       describe: body(`${id}Describe`, `verbs.${id}.describe`, "describe", (input) => {
         const history = input.history ?? { label: "Edit" };
@@ -454,7 +469,7 @@ export function route<
     };
   }
   const seeds: MutableTable<RouteGraphJson["seeds"]> = {};
-  for (const [name, provide] of Object.entries(spec.core.fixtures ?? {})) {
+  for (const name of Object.keys(spec.core.fixtures ?? {})) {
     seeds[name] = {
       title: name,
       load: body(`fixture:${name}`, `seeds.${name}.load`, "seed", () => {
@@ -464,7 +479,10 @@ export function route<
           ),
           [spec.subject.field]: { kind: "ids", ids: [] },
         } as Page<F>;
-        const packet: any = provide(spec.core.input.parse(spec.core.args(page)));
+        const packet: any = spec.core.source.provide!(
+          name,
+          spec.core.input.parse(spec.core.args(page)),
+        );
         return {
           readings: {},
           work: packet.value?.data[owners[own]!.value],
@@ -622,7 +640,6 @@ function drawContext(
       if (!Object.hasOwn(spec.commands, command)) throw Error(`Unknown command: ${command}`);
       return { plan: () => ctx.verbs[command]({}), ...ctx.writeControls[command] };
     },
-    fixture: ctx.fixture,
     cells: {
       doc: ctx.work,
       basis: ctx.workBasis,

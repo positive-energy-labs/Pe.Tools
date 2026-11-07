@@ -42,6 +42,10 @@ test("a rendered foreign cell keeps its owner, label and undo, and refuses a con
     ),
   );
   expect(f.fans.work()?.revision).toBe(before);
+  expect(f.owner.journal()?.receipts[0]?.patches[0]?.path).toEqual([
+    "assumptions",
+    JOIN_KEY(pair),
+  ]);
   await vi.waitFor(() =>
     expect(draw().cells.history.entries).toEqual(
       expect.arrayContaining([

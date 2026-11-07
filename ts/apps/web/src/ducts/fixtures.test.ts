@@ -9,7 +9,7 @@ test("scene pairs the existing system-bearing scene with fans present in its sna
   const units = new Set(readings.sheetSnapshot.nodes.map((node) => node.id));
   expect(readings.fans.rows.length).toBeGreaterThan(0);
   expect(readings.fans.rows.every((row) => units.has(row.unitId))).toBe(true);
-  const fans = sheetValueFixtures.scene!({ fan: "all" }).value.data;
+  const fans = sheetValueFixtures.scene!({ fan: "all" }).data;
   expect(fans.sheetSnapshot).toEqual(readings.sheetSnapshot);
   if (!fans.fans) throw Error("Scene fan roster is missing");
   expect(fans.fans.rows).toEqual(readings.fans.rows);

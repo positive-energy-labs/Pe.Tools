@@ -28,14 +28,18 @@ export interface HostRead {
   input: z.ZodType;
   output: z.ZodType<Publication>;
   axes: EntryContract["axes"];
-  fixtures?: Readonly<Record<string, (args: any) => Publication>>;
+  fixtures?: Readonly<Record<string, (args: any) => FixtureValue<z.ZodType<Publication>>>>;
   source: UseSource & { provide?(name: string, args: unknown): Publication };
 }
+type FixtureValue<O extends z.ZodType<Publication>> = Pick<
+  NonNullable<z.output<O>["value"]>,
+  "data" | "coverage"
+>;
 
 /** A host publication handle. Importing a route on the host never loads browser transport. */
 export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
   contract: { key: PeRouteId; input: I; output: O; axes: EntryContract["axes"] },
-  fixtures?: Readonly<Record<string, (args: z.output<I>) => z.output<O>>>,
+  fixtures?: Readonly<Record<string, (args: z.output<I>) => FixtureValue<O>>>,
 ) {
   const { key } = contract;
   return {
@@ -70,7 +74,23 @@ export function hostRead<I extends z.ZodType, O extends z.ZodType<Publication>>(
             provide(name: string, args: unknown) {
               const provider = fixtures[name];
               if (!provider) throw Error(`No fixture '${name}' for ${key}`);
-              return contract.output.parse(provider(contract.input.parse(args)));
+              const input = contract.input.parse(args);
+              const value = provider(input);
+              const id = `fixture:${key}:${name}:${JSON.stringify(input)}`;
+              return contract.output.parse({
+                key: id,
+                generation: 0,
+                version: 1,
+                state: "current",
+                value: {
+                  ...value,
+                  evaluation: id,
+                  inputs: id,
+                  origin: { kind: "fixture", name },
+                  trace: [],
+                  freshness: "current",
+                },
+              });
             },
           }
         : {}),
