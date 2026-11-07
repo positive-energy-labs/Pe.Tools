@@ -137,7 +137,7 @@ function WriteScope({
         show={label}
         refusal={
           !ctx.cells.ready
-            ? "Read Work before editing"
+            ? ctx.cells.refusal
             : !offered?.success
               ? "Open a fan first"
               : null
@@ -255,7 +255,7 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
               {...cellFromDraft(friction, {
                 value: String(friction.edit?.value ?? DEFAULT_DESIGN_FRICTION_RATE),
                 cap: ctx.cells.ready ? "editable" : "locked",
-                capReason: "Read Work before editing",
+                capReason: ctx.cells.refusal ?? undefined,
               })}
               scale="row"
               numeric={{ min: 0, digits: 3 }}
@@ -298,10 +298,8 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
                     units={snapshot.nodes
                       .filter((node) => node.kind === "equipment")
                       .flatMap((node) => (node.uniqueId ? [node.uniqueId] : []))}
-                    cell={cell}
+                    cell={handle}
                     model={snapshot.slots[key]}
-                    commit={commit}
-                    transitions={transitions}
                   />
                 ) : (
                   <StateCell
@@ -344,7 +342,7 @@ function InputsContent({ ctx, snapshot }: { ctx: SheetContext; snapshot: DuctSna
                     { key: "passive", label: "Passive" },
                   ]}
                   refusal={
-                    ctx.cells.ready ? null : "Read the current Value and Work before editing"
+                    ctx.cells.refusal
                   }
                   pick={(role) => void ctx.cells.at(["roles", key]).stage({ role }, { label })}
                   act={() => ctx.cells.at(["roles", key]).clear({ label })}

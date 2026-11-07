@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { applyPatches, bindWork, cellPatches, commands, canonicalRouteInput, workKey,
   writePreviewSchema, presentationSchema, workHandleSchema, workFeedFailureMessage, type WorkFeedFailure, type WorkHandle, type WorkWrite, type RouteStatePatch,
-  bare, type WorkJournalDoor, type WorkScope, type RouteFingerprint, type InvocationToken,
+  bare, focusSelectionSchema, type WorkJournalDoor, type WorkScope, type RouteFingerprint, type InvocationToken,
   type RouteStateWriteResult } from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";
@@ -44,7 +44,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     return freezePage({ ...Object.fromEntries(Object.entries(spec.fields).map(([key, field]) => {
       const raw = search.get(key);
       return [key, field.schema.parse(raw === null ? memory[key] ?? field.initial : JSON.parse(raw))];
-    })), selected: memory.selected ?? [] });
+    })), selected: focusSelectionSchema.parse(search.has("selected") ? JSON.parse(search.get("selected")!) : memory.selected ?? []) });
   };
   const owners = new Map<string, {
     scope: WorkScope; config: typeof spec.edits.owners[string]; handle: WorkHandle | null;
@@ -70,9 +70,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     if (!packet?.value) throw Error(`Missing fixture ${input.fixture}`);
     const data = packet.value.data as Record<string,unknown>;
     door = createFixtureWorkDoor(spec.edits.work, data[spec.edits.owners[own]!.value],
-      Object.fromEntries(Object.entries(spec.edits.owners).map(([id,c]) => [`owner:${id}`,c.state.schema])),
+      Object.fromEntries(Object.entries(spec.edits.owners).map(([id,c]) => [id,c.state.schema])),
       Object.fromEntries(Object.entries(spec.edits.owners).map(([id,c]) => [id,data[c.value]])),
-      Object.fromEntries(Object.keys(spec.edits.owners).map(id => [`owner:${id}`,id])));
+      Object.fromEntries(Object.keys(spec.edits.owners).map(id => [id,id])));
   }
   const accept = (record: typeof owners extends Map<string, infer R> ? R : never, handle: WorkHandle, doc: unknown) => {
     if (record.handle && handle.revision < record.handle.revision) return;
@@ -87,7 +87,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   for (const [id, config] of Object.entries(spec.edits.owners)) {
     const scope: WorkScope = { route: spec.key, fingerprint, key: { ...key, route: id },
-      target: input.target, subject: null, ...(id === own ? {} : { reading: `owner:${id}` }) };
+      target: input.target, subject: null };
     const lease = registry.acquire(scope.key);
     const record = { scope, config, handle: null as WorkHandle | null, doc: null as any,
       ready: false, problem: null as string | null, failure: null as WorkFeedFailure | null, lease };
@@ -169,7 +169,8 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     requireCurrent();
     const next = { ...page, ...patch };
     for (const [key,value] of Object.entries(patch)) {
-      if (key !== "selected") spec.fields[key]!.schema.parse(value);
+      if (key === "selected") focusSelectionSchema.parse(value);
+      else spec.fields[key]!.schema.parse(value);
     }
     if(canonicalRouteInput(next)===canonicalRouteInput(page)) return {kind:"accepted",changed:false} as const;
     history ??= Object.keys(patch).some(key=>spec.fields[key]?.url==="push") ? "push" : "replace";
@@ -177,20 +178,29 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     gate.movePage(page, { kind: "human", source: "query", history: "replace" });
     syncReads(); notify();
     const search = input.address.read();
-    for (const [key,value] of Object.entries(patch)) if (key !== "selected") search.set(key, JSON.stringify(value));
+    for (const [key,value] of Object.entries(patch)) search.set(key, JSON.stringify(value));
     input.address.write(search, history);
     return { kind: "accepted", changed: true } as const;
   };
   const stopAddress = input.address.subscribe(() => {
     const next = decodePage();
-    if (canonicalRouteInput({ ...next, selected: page.selected }) === canonicalRouteInput(page)) return;
-    page = freezePage({ ...next, selected: page.selected });
+    const selected = input.address.read().has("selected") ? next.selected : page.selected;
+    if (canonicalRouteInput({ ...next, selected }) === canonicalRouteInput(page)) return;
+    page = freezePage({ ...next, selected });
     gate.movePage(page, { kind: "human", source: "query", history: "replace" }); syncReads(); notify();
   });
   cleanups.push(stopAddress);
+  const basisRefusal = () => {
+    if (input.readOnly || input.history) return "needs live Revit";
+    const owner = [...owners.values()].find(o=>!o.ready);
+    if (owner) return owner.problem ?? "Reading Work...";
+    const core = reads.get(spec.core)?.snapshot;
+    if (!core?.current) return core?.reason ?? "Reading Value...";
+    return [...owners.values()].some(o=>canonicalRouteInput(o.doc)!==canonicalRouteInput(core.value?.[o.config.value])) ? "Refreshing Value after Work changed" : null;
+  };
   let renderedBasis: InvocationToken | null = null;
   const basis = () => {
-    if (input.readOnly || input.history || !owners.get(own)?.ready) return null;
+    if (basisRefusal()) return null;
     if(renderedBasis && gate.current(renderedBasis)) return renderedBasis;
     const issued = gate.invocation(gate.capture("draw"), dependencies());
     return renderedBasis = issued.ok ? issued.value : null;
@@ -212,7 +222,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     const step = press ? entries().find(e => e.press === press) : entries().filter(e => e.state === (direction === "undo" ? "applied" : "undone")).at(-1);
     const record = [...owners.values()].find(o => o.lease.entry.journal.entries().some(e => e.press === step?.press));
     const token = basis();
-    if (!record?.ready || !token) return { ok: false, code: "write-refused", message: "Work unavailable" } as const;
+    if (!record?.ready || !token) return { ok: false, code: "write-refused", message: basisRefusal() ?? "Work unavailable" } as const;
     return record.lease.entry.journal[direction](async request => {
       try { return await submit(record, request, token); }
       catch (error) { return { ok: false, kind: "refused", error: String(error), hint: "Read Work again" } as RouteStateWriteResult; }
@@ -239,7 +249,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const field = spec.subject.field;
       const subject = spec.fields[field]!.schema.parse(search[field] === undefined ? page[field] : JSON.parse(String(search[field]))) as {kind:string;ids?:string[];active?:string};
       const core = reads.get(spec.subject.read ?? spec.core)?.snapshot;
-      if (!core?.value) return refused("Reading the subject roster");
+      if (!core?.current) return refused(core?.reason ?? "Reading the subject roster");
       const options=spec.subject.options(core.value), ids=subject.kind==="all"?options.map(o=>o.id):subject.ids??[];
       if (ids.some(id=>!options.some(o=>o.id===id))) return refused(`A ${spec.subject.noun} in this link is not in this model; choose it again from the roster`);
       if (canonicalRouteInput(subject)!==canonicalRouteInput(page[field])) return null;
@@ -264,7 +274,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     }
     let token: InvocationToken | undefined;
     try {
-      if (!basis() || [...owners.values()].some(o => !o.ready)) throw Error("Work unavailable; wait for the owning Work feed");
+      if (!basis() || [...owners.values()].some(o => !o.ready)) throw Error(basisRefusal() ?? "Work unavailable");
+      const core = reads.get(spec.core)?.snapshot;
+      if (!core?.current) throw Error(core?.reason ?? "Read the current Value before planning");
       const issued=gate.invocation(gate.capture(`plan:${id}`),dependencies());
       if(!issued.ok) throw Error(issued.reason);
       token=issued.value; plans.set(id,token); reviews.delete(id);
@@ -305,7 +317,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => move(patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => move(patch), select: (selected: any) => move({selected}), subject: (subject: any) => move({ [spec.subject.field]: subject },"push") },
     subscribe(listener: () => void) { released = false; listeners.add(listener); syncReads(); return () => { listeners.delete(listener); }; },
     revision: () => revision, work: () => gate.read()?.work ?? null, workBasis: basis, history,
-    problem: () => [...owners.values()].find(o => !o.ready)?.problem ?? null,
+    problem: basisRefusal, writeRefusal: () => input.fixture !== null ? "Fixture has no native writes" : basisRefusal(),
     refresh: () => syncReads(true), run,
     review: (id: string) => { const r=reviews.get(id); if(!r) return null;
       const stale = r.signature !== workSignature() || !gate.current(r.token);
@@ -320,17 +332,18 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const core = reads.get(spec.core)?.snapshot ?? unavailable("Reading...");
       const token = basis();
       const handles = new Map([...owners].map(([id,o]) => [id,o.handle]));
-      const ready = !!token && value.current && core.current && [...owners.values()].every(o => o.ready && canonicalRouteInput(o.doc) === canonicalRouteInput(core.value?.[o.config.value]));
+      const ready = !!token && value.current;
       const ownerOf = (path: readonly string[], preferred?: string) => {
         const id = preferred ?? (Object.hasOwn(spec.edits.work.schema.shape,path[0]!) ? own : [...owners].find(([,o]) => Object.hasOwn(o.config.state.schema.shape,path[0]!))?.[0]);
         if (!id || !owners.has(id) || !Object.hasOwn(owners.get(id)!.config.state.schema.shape,path[0]!)) throw Error(`No owning Work for ${path.join(".")}`);
         return id;
       };
-      const patch = async (patches: readonly RouteStatePatch[], detail: EditHistory = {label:"Edit"}, preferred?: string): Promise<EditFailure> => {
-        if (!ready || !token) return {code:"unavailable",message:"Read the current Value and Work before editing"};
+      const patch = async (request: readonly RouteStatePatch[] | (()=>readonly RouteStatePatch[]), detail: EditHistory = {label:"Edit"}, preferred?: string): Promise<EditFailure> => {
+        if (!ready || !token) return {code:"unavailable",message:basisRefusal() ?? (!value.current ? value.reason : "Read the current Value before editing")};
         try {
           requireWritable();
-          if (!gate.current(token)) throw Error("Stale accepted Work basis");
+          if (!basis() || !gate.current(token)) throw Error("Stale accepted Work basis");
+          const patches = typeof request === "function" ? request() : request;
           const groups = new Map<string,RouteStatePatch[]>();
           for (const p of patches) { const id=ownerOf(p.path.map(String),preferred); groups.set(id,[...(groups.get(id)??[]),p]); }
           await Promise.all([...groups].map(async ([id, patches]) => {
@@ -348,19 +361,19 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         } catch(error) { return {code:"refused",message:error instanceof Error?error.message:String(error)}; }
       };
       const cells: DrawContext<any, any, any, any>["cells"] = {
-        doc: owners.get(own)!.doc, basis: token, ready, history,
+        doc: owners.get(own)!.doc, basis: token, ready, refusal: basisRefusal(), history,
         owner(path) { const route=ownerOf(path); return {route,label:route===own?"Work":`from /${route}`}; },
         at(path,preferred) {
           const route=ownerOf(path,preferred), address=[...path];
           const value=address.reduce((doc,key)=>doc?.[key],owners.get(route)!.doc)??{};
           const clear=(detail?:EditHistory)=>patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"clear"}),detail,route);
-          return {owner:{route,label:route===own?"Work":`from /${route}`},value, clear,
+          return {owner:{route,label:route===own?"Work":`from /${route}`},value, refusal: basisRefusal(), clear,
             stage:(value2,detail)=>patch(cellPatches(address.slice(0,-1),address.at(-1)!,value,{kind:"set",rung:{value:value2}}),detail,route),
             transitions:(detail)=>ready&&value.edit?[{kind:"clear",run:()=>clear(detail)}]:[]};
         },
         label(input,label) { const foreign=[...new Set(spec.edits.patches(input,core.value).map(p=>ownerOf(p.path.map(String))))].filter(id=>id!==own); return foreign.length?`${label} · ${foreign.map(id=>`from /${id}`).join(", ")}`:label; },
         patch,
-        edit: (edit,detail)=>patch(spec.edits.patches(spec.edits.input.parse(edit),core.value),detail),
+        edit: (edit,detail)=>patch(()=>spec.edits.patches(spec.edits.input.parse(edit),core.value),detail),
       };
       return pane.draw({ target: input.target, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
         write:(id:string)=>({plan:()=>run(id),apply:()=>run(id,true),cancel:()=>mounted.cancel(id),read:()=>mounted.review(id)}) } as any);

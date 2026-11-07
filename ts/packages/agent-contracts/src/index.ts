@@ -41,7 +41,7 @@ export type { EntryContract, WorkHistoryPort } from "./route-kernel-bodies.ts";
 export type { WorkJournalDoor, WorkScope } from "./work-journal-door.ts";
 export { workFingerprintSchema, type RouteFingerprint } from "./route-kernel-admission.ts";
 export { bare } from "./route-field.ts";
-export { subjectSchema } from "./route-kernel-codecs.ts";
+export { subjectSchema, focusSelectionSchema } from "./route-kernel-codecs.ts";
 export { workFeedFailureMessage } from "./work-journal-door.ts";
 export type { WorkFeedFailure } from "./work-journal-door.ts";
 export { presentationSchema } from "./route-kernel-bodies.ts";

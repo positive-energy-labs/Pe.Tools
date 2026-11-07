@@ -100,6 +100,7 @@ export type EditFailure = { code: string; message: string } | null;
 export interface OwnedCell {
   readonly owner: { route: string; label: string };
   readonly value: import("@pe/agent-contracts").CellLike;
+  readonly refusal: string | null;
   transitions(history?: EditHistory): import("@pe/kit/lang/cell").CellTransition[];
   stage(value: unknown, history?: EditHistory): Promise<EditFailure>;
   clear(history?: EditHistory): Promise<EditFailure>;
@@ -108,11 +109,13 @@ export interface EditableCells<W, Edit> {
   readonly doc: Immutable<W> | null;
   readonly basis: InvocationToken | null;
   readonly ready: boolean;
+  readonly refusal: string | null;
   readonly history: WorkHistoryPort<any>;
   owner(path: readonly string[]): { route: string; label: string };
   at(path: readonly [string, ...string[]], owner?: string): OwnedCell;
   label(input: Edit, label: string): string;
   edit(input: Edit, history?: EditHistory): Promise<EditFailure>;
+  /** Mixed claim edits still use multiple paths; retire with their drawing adapters in wave 4. */
   patch(patches: readonly RouteStatePatch[], history?: EditHistory): Promise<EditFailure>;
 }
 export interface DrawContext<D, F extends Fields, W, Edit> {

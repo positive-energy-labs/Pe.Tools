@@ -111,15 +111,16 @@ export const identityCodecs: IdentityCodecs = Object.freeze({
   ),
 });
 
-export const subjectSchema = (max: number) => {
-  const id = z.string().transform((value, ctx) => {
+export const localIdentitySchema = z.string().transform((value, ctx) => {
     const decoded = identityCodecs.local.decode(value);
     if (decoded.ok) return decoded.value;
     ctx.addIssue({ code: "custom", message: decoded.reason });
     return z.NEVER;
   });
+export const focusSelectionSchema = z.array(z.strictObject({kind:z.literal("focus"),id:localIdentitySchema})).default([]);
+export const subjectSchema = (max: number) => {
   return z.discriminatedUnion("kind", [
-    z.strictObject({ kind: z.literal("ids"), ids: z.array(id).max(max), active: id.optional() }),
+    z.strictObject({ kind: z.literal("ids"), ids: z.array(localIdentitySchema).max(max), active: localIdentitySchema.optional() }),
     z.strictObject({ kind: z.literal("all") }),
   ]);
 };

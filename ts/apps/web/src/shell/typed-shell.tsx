@@ -7,12 +7,12 @@ import { KeyScope, ScopeKeys, actionScopeKeys } from "@pe/kit/keys";
 import { canonicalRouteInput, type LayoutNode } from "@pe/agent-contracts";
 import { useRouteTarget } from "../route/route-target";
 import { appAtomRegistry } from "./owner";
-import { admittedRouterAddress } from "./admitted-pane";
-import { createAdmittedPlace, type PlaceInput } from "./admitted-place";
+import { admittedRouterAddress, PlaceBoundary } from "./admitted-pane";
+import type { AdmittedPlace, PlaceInput } from "./admitted-place";
 import { HistoryBoundary, HistoryRail } from "./history-rail";
 import { historyRequest, publicationPose, type HistorySnapshot } from "./history";
 import { DocumentPicker } from "./application-route-shell";
-import { RouteVisibility, useRouteActivity } from "../route/activity";
+import { RouteVisibility } from "../route/activity";
 import { SituationBand, TimelineHead } from "./situation-band";
 import { writeHeld, writeReject, CatalogWorkReviews } from "./admitted-chrome";
 import { readLayoutState, writeLayoutState } from "./mount-page";
@@ -32,27 +32,14 @@ import { hostedRouteAddress, type HostedRouteProps } from "../workbench/hosted-r
 
 /** A typed route bypasses web admission. Only its host Work registration needs the closure stamp. */
 export function TypedRouteView({ module, fingerprint, address: supplied }: { module: TypedRoute; fingerprint: RouteFingerprint; address?: AdmittedAddressPort }) {
-  const router = useRouter(), activity = useRouteActivity(), visible = useContext(RouteVisibility);
+  const router = useRouter();
   const address = useMemo(() => supplied ?? admittedRouterAddress(router.history), [router,supplied]);
-  const [place, setPlace] = useState<ReturnType<typeof createAdmittedPlace<{ mount: TypedMount; dispose(): void }>> | null>(null);
-  const held = useRef<typeof place>(null);
-  const lifetime = useRef({ module, address, activity });
-  useEffect(() => {
-    if(held.current && (lifetime.current.module!==module || lifetime.current.address!==address || lifetime.current.activity!==activity)) {
-      if(lifetime.current.activity) lifetime.current.activity.retire(held.current); else held.current.dispose();
-      held.current=null;
-    }
-    lifetime.current={module,address,activity};
-    const p = held.current ?? createAdmittedPlace<{ mount: TypedMount; dispose(): void }>({ address,
-      search: activity ? new URLSearchParams(Object.entries(activity.search).filter((e): e is [string,string] => typeof e[1] === "string")) : address.read(),
-      visible, scope: activity ?? { pathname: `/${module.spec.key}`, search: {}, current: () => true, retain() {}, retire() {} } });
-    held.current=p; p.setVisible(visible); setPlace(p);
-    return () => { p.setVisible(false); if(!activity) {p.dispose();held.current=null;} };
-  }, [module, address, activity]);
-  useEffect(() => { place?.setVisible(visible); }, [place,visible]);
-  return place ? <HistoryBoundary address={place.address}>{snapshot => <TypedPlace module={module} place={place} fingerprint={fingerprint} snapshot={snapshot} />}</HistoryBoundary> : null;
+  return <PlaceBoundary<{mount:TypedMount;dispose():void}> identity={module} path={`/${module.spec.key}`} address={address}>
+    {place => <HistoryBoundary address={place.address}>{snapshot => <TypedPlace module={module} place={place} fingerprint={fingerprint} snapshot={snapshot} />}</HistoryBoundary>}
+  </PlaceBoundary>;
 }
-function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: HistorySnapshot; module: TypedRoute; place: ReturnType<typeof createAdmittedPlace<{ mount: TypedMount; dispose(): void }>>; fingerprint: RouteFingerprint }) {
+
+function TypedPlace({ module, place, fingerprint, snapshot }: { snapshot?: HistorySnapshot; module: TypedRoute; place: AdmittedPlace<{ mount: TypedMount; dispose(): void }>; fingerprint: RouteFingerprint }) {
   const search = useSyncExternalStore(place.address.subscribe, () => place.address.read().toString());
   const fixture = place.fixture, visible = useContext(RouteVisibility);
   const params = new URLSearchParams(search), compare = !!snapshot && params.get("compare") === "now";
@@ -143,7 +130,7 @@ export function TypedWrite({ mount, id }: { mount: TypedMount; id: string }) {
   const command=mount.spec.commands[id]!,review=mount.review(id),held=writeHeld(command.label,review);
   const run=async(apply=false)=>{try{await mount.run(id,apply);return null;}catch(error){return {message:error instanceof Error?error.message:String(error)};}};
   return <WriteAction label={`plan ${command.label}`} says={`Plan ${command.label} from current Work`}
-    held={held.held} stale={held.stale} failed={mount.reviewProblem(id)} plan={()=>run()}
+    refusal={mount.writeRefusal()} held={held.held} stale={held.stale} failed={mount.reviewProblem(id)} plan={()=>run()}
     apply={{label:command.label,says:`${command.label} what the plan sealed`,refusal:held.sealed?null:"Plan the current Work first",run:()=>run(true),done:`${command.label} sent`}}
     reject={writeReject(mount.timeline(),[command.entry],(thread,request)=>void harnessClient(resolveWorkbenchConfig().origin).permission(thread,request,"stop_writes"))} />;
 }

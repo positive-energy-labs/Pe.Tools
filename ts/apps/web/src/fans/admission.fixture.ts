@@ -43,5 +43,5 @@ export async function admit(hostVersion = "fans-fixture") {
   });
   const hostPresenter = (await inventory.prepare("host", fingerprint)).admitHost(fansHostModule);
   if (!hostPresenter.ok) throw Error(JSON.stringify(hostPresenter.diagnostics));
-  return { owner: { typed: ducts, data: ducts.data, workFingerprint: hostOwner.route.workFingerprint }, presenter: { typed: fans, data: fans.data, workFingerprint: hostPresenter.route.workFingerprint }, hostOwner: hostOwner.route, hostPresenter: hostPresenter.route };
+  return { owner: { typed: ducts as unknown as import("../route/typed-route").TypedRoute, data: ducts.data, workFingerprint: hostOwner.route.workFingerprint }, presenter: { typed: fans as unknown as import("../route/typed-route").TypedRoute, data: fans.data, workFingerprint: hostPresenter.route.workFingerprint }, hostOwner: hostOwner.route, hostPresenter: hostPresenter.route };
 }

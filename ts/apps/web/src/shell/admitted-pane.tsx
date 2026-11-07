@@ -146,30 +146,32 @@ type PlaceMount = {
 export type PanePlace = AdmittedPlace<PlaceMount>;
 
 /** Establish Place custody before any application input is resolved. */
-export function AdmittedPlaceBoundary({
-  route,
+export function PlaceBoundary<State extends {dispose(): void}>({
+  identity,
+  path,
   address,
   children,
 }: {
-  route: AdmittedRoute;
+  identity: object;
+  path: string;
   address: AdmittedAddressPort;
-  children: (place: PanePlace) => ReactNode;
+  children: (place: AdmittedPlace<State>) => ReactNode;
 }) {
   const scope = useRouteActivity();
   const visible = useContext(RouteVisibility);
-  const held = useRef<PanePlace | null>(null);
-  const lifetime = useRef({ route, address });
-  const [ready, setReady] = useState<PanePlace | null>(null);
+  const held = useRef<AdmittedPlace<State> | null>(null);
+  const lifetime = useRef({ identity, address, scope });
+  const [ready, setReady] = useState<AdmittedPlace<State> | null>(null);
   useEffect(() => {
     let place = held.current;
-    if (place && (lifetime.current.route !== route || lifetime.current.address !== address)) {
-      if (scope) scope.retire(place);
+    if (place && (lifetime.current.identity !== identity || lifetime.current.scope !== scope || lifetime.current.address !== address)) {
+      if (lifetime.current.scope) lifetime.current.scope.retire(place);
       else place.dispose();
       place = null;
       held.current = null;
     }
     if (!place) {
-      lifetime.current = { route, address };
+      lifetime.current = { identity, address, scope };
       const captured = scope
         ? new URLSearchParams(
             Object.entries(scope.search).filter(
@@ -177,9 +179,9 @@ export function AdmittedPlaceBoundary({
             ),
           )
         : address.read();
-      place = createAdmittedPlace<PlaceMount>({
+      place = createAdmittedPlace<State>({
         scope: scope ?? {
-          pathname: route.data.address,
+          pathname: path,
           search: Object.fromEntries(captured),
           current: () => true,
           retain() {},
@@ -200,10 +202,15 @@ export function AdmittedPlaceBoundary({
         held.current = null;
       }
     };
-  }, [route, address, scope, visible]);
-  return ready && lifetime.current.route === route && lifetime.current.address === address
+  }, [identity, address, scope, visible, path]);
+  return ready && lifetime.current.identity === identity && lifetime.current.address === address
     ? children(ready)
     : null;
+}
+
+/** Legacy admission supplies identity only; Place custody is shared with typed modules. */
+export function AdmittedPlaceBoundary(props: {route:AdmittedRoute;address:AdmittedAddressPort;children(place:PanePlace):ReactNode}) {
+  return createElement(PlaceBoundary<PlaceMount>,{identity:props.route,path:props.route.data.address,address:props.address,children:props.children});
 }
 
 /** Composition runs after commit, including StrictMode cleanup/remount. */

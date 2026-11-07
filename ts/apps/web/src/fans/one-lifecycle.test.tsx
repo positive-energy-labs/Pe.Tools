@@ -6,7 +6,7 @@ import { mountTypedRoute } from "../shell/typed-mount";
 import type { ReadingContext } from "../shell/readings";
 import { createWitness } from "./cutover.test-support";
 
-test("four Fans panes share their Value and independent roster subscriptions, closed with the typed mount", async () => {
+test("typed panes share declared Values; recorded Fans and Ducts use frozen Work and refuse writes", async () => {
   const closes: (() => void)[] = [];
   const stop = vi.fn();
   const open = vi.fn((_ctx: ReadingContext) => stop);
@@ -18,22 +18,24 @@ test("four Fans panes share their Value and independent roster subscriptions, cl
     expect(stop).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(f.typed.owner()?.ready).toBe(true));
     const input = f.places.get("fans")!;
-    const recordedPage = {...f.typed.page.read(),contextRadiusFt:23};
+    for (const route of [f.admitted.presenter,f.admitted.owner]) {
+    const recordedPage = {...(route.data.key === "fans" ? f.typed : (f.owner as unknown as {native:typeof f.typed}).native).page.read(),contextRadiusFt:23};
     const history = historySnapshotSchema.parse({
       point: { id:crypto.randomUUID(),document,at:Date.now(),takingRange:{start:0,end:0},reason:{kind:"captured"},
-        history:{address:document,target:{session:"fixture",openId:"fans"},poses:[{instance:"recorded",route:"fans",href:"/fans",page:recordedPage}],publications:[]} },
+        history:{address:document,target:{session:"fixture",openId:"fans"},poses:[{instance:"recorded",route:route.data.key,href:`/${route.data.key}`,page:recordedPage}],publications:[]} },
       work: Object.keys(f.typed.spec.edits.owners).map(id => { const owner=f.typed.owner(id)!;return {handle:owner.handle,revision:owner.handle!.revision,doc:owner.doc}; }),
     });
-    const recorded = mountTypedRoute(f.admitted.presenter.typed,{...input,history,readOnly:true,publicationInstance:"recorded",memory:()=>recordedPage},f.admitted.presenter.workFingerprint,{sources:{"fans.sheet":{kind:"use",open}}});
+    const recorded = mountTypedRoute(route.typed,{...input,history,readOnly:true,publicationInstance:"recorded",memory:()=>recordedPage},route.workFingerprint,{sources:Object.fromEntries([route.typed.spec.core,...Object.values(route.typed.spec.reads ?? {})].map(read=>[read.key,{kind:"use",open}]))});
     try {
       expect(recorded.owner()?.ready).toBe(true);
       expect(recorded.page.read().contextRadiusFt).toBe(23);
       expect(recorded.workBasis()).toBeNull();
       expect(recorded.journalRefusal()).toBe("needs live Revit");
-      expect(open.mock.calls.at(-1)![0]).toMatchObject({historyPoint:history.point.id,historyPose:{instance:"recorded",route:"fans"}});
+      expect(open.mock.calls.at(-1)![0]).toMatchObject({historyPoint:history.point.id,historyPose:{instance:"recorded",route:route.data.key}});
       await expect(recorded.run("losses")).rejects.toThrow("needs live Revit");
     } finally { recorded.dispose(); }
+    }
 
   } finally { closes.reverse().forEach(close => close()); }
-  await vi.waitFor(() => expect(stop).toHaveBeenCalledTimes(4));
+  await vi.waitFor(() => expect(stop).toHaveBeenCalledTimes(7));
 });

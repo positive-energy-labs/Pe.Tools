@@ -200,6 +200,6 @@ describe("chat plugin records", () => {
       },
       { ok: true, target: { session: "original-session", document: "C:/Models/Original.rvt" } },
     );
-    expect(record).toMatchObject({ changes: 2, place: { ok: true, page: { system: ["AHU-1"] } } });
+    expect(record).toMatchObject({ changes: 2, place: { ok: true, page: { system: {kind:"ids",ids:[JSON.stringify(["ducts-system","AHU-1"])]} } } });
   });
 });

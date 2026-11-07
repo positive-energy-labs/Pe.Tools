@@ -17,6 +17,7 @@ export function nativeTestAdapter(mount: TypedMount, _door: WorkJournalDoor) {
     }
     if (mount.spec.reads?.[id]) return mount.value(mount.spec.reads[id]);
     const value = mount.value();
+    if (value.value === undefined) return value;
     const data = id === "value" ? {value:{data:value.value}} : id === "sheet" ? value.value : value.value?.[id];
     return {...value,value:data};
   };

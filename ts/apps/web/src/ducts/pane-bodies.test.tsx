@@ -52,7 +52,7 @@ function registry() {
 }
 
 test("F16 the sidebar navigates the document roster before pricing and keeps atomic all/clear", async () => {
-  const f = await createWitness(closes, new Map(), { "ducts.tables": { kind: "use", open() {} } });
+  const f = await createWitness(closes, new Map(), { "ducts.pricing.value": { kind: "use", open() {} } });
   await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.current).toBe(true));
   expect(f.owner.readingStatus("value").snapshot.value).toBeFalsy();
   render(<RegistryContext value={registry()}>
@@ -262,7 +262,7 @@ test("/fans edits Ducts criteria and a criterion choice in place through the duc
 
 test("a rule owner crossing without system context still lands on its rule", async () => {
   const f = await createWitness(closes);
-  const url = new URL(ductsLink([], { fixture: "scene" }, { kind: "rule", key: "tap-std" }), "http://127.0.0.1");
+  const url = new URL(ductsLink([], {}, { kind: "rule", key: "tap-std" }), "http://127.0.0.1");
   const destination = f.mount(f.admitted.owner, url.searchParams, "rule-no-system");
   expect(destination.page.read().selected.map((item: {id:Parameters<typeof localSubject>[0]}) => localSubject(item.id))).toEqual(["rule:tap-std"]);
   await vi.waitFor(() => expect(destination.readingStatus("value").snapshot.current).toBe(true));

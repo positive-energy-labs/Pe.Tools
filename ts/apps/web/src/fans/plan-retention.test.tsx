@@ -30,7 +30,8 @@ test.each([false, true])(
     const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
     if (large) expect(bytes(capture)).toBeGreaterThan(1024 * 1024);
     let plan!: (result: unknown) => void;
-    let snapshot!: ReadingDelivery;
+    const snapshots: ReadingDelivery[] = [];
+    const snapshot:ReadingDelivery = frame => snapshots.forEach(deliver=>deliver(frame));
     native.submit.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -41,7 +42,7 @@ test.each([false, true])(
       "ducts.sheet-snapshot": {
         kind: "use",
         open(_ctx, deliver) {
-          snapshot = deliver;
+          snapshots.push(deliver);
           deliver({ kind: "complete", value: capture, revision: 1 });
         },
       },

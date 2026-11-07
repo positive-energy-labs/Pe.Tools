@@ -216,7 +216,7 @@ function useNetworkData(ctx: NetworkContext) {
     return choice.success ? (
       <Button
         label="Choose write scope"
-        refusal={ctx.cells.ready ? null : "Read the current Value and Work before editing"}
+        refusal={ctx.cells.refusal}
         onPress={async () => (await stageScope(choice.data)) ?? null}
       >
         Choose write scope
@@ -1008,7 +1008,7 @@ export function AllRulesBody({ ctx }: { ctx: DuctsDrawContext }) {
                   description: kindMeaning(node, kind),
                   disabled: kindDisabledReason(node, kind) ?? undefined,
                 }))}
-                refusal={ctx.cells.basis ? null : "Read Work before editing"}
+                refusal={ctx.cells.refusal}
                 pick={(kind) =>
                   void work.write(
                     cellPatches(["kinds"], key, cell, { kind: "set", rung: { value: { kind } } }),

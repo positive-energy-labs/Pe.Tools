@@ -1,5 +1,5 @@
-import type { CellLike } from "@pe/agent-contracts";
-import { cellFromDraft, StateCell, type CellTransition } from "@pe/kit/lang/cell";
+import type { OwnedCell } from "../../route/typed-route";
+import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";
 import { previousOf, useFieldOptionsReading } from "#/shell/readings-hooks";
 
 /** The slot contract consumes a parameter name, not the catalog's identity/scope key. */
@@ -8,15 +8,11 @@ export function EspParameter({
   units,
   cell,
   model,
-  transitions,
-  commit,
 }: {
   target: { session: string; openId: string } | null;
   units: readonly string[];
-  cell: CellLike;
+  cell: OwnedCell;
   model: string;
-  transitions: CellTransition[];
-  commit: (name: string) => Promise<string | undefined>;
 }) {
   const reading = useFieldOptionsReading(
     target,
@@ -28,7 +24,7 @@ export function EspParameter({
     },
   );
   const data = previousOf(reading);
-  const current = String(cell.edit?.value ?? model);
+  const current = String(cell.value.edit?.value ?? model);
   const options = (data?.items ?? []).flatMap((item) =>
     item.metadata?.name
       ? [
@@ -43,7 +39,7 @@ export function EspParameter({
         ]
       : [],
   );
-  const reason = !target
+  const reason = cell.refusal ?? (!target
     ? "Choose a document for parameter options"
     : !units.length
       ? "No unit identities in this fan scope"
@@ -55,10 +51,10 @@ export function EspParameter({
             ? (data?.result.message ?? "Parameter options unavailable")
             : !options.length
               ? "No numeric parameters on these units"
-              : null;
+              : null);
   return (
     <StateCell
-      {...cellFromDraft(cell, {
+      {...cellFromDraft(cell.value, {
         value: current,
         modelValue: model,
         ...(!reason && !options.some((option) => option.name === current)
@@ -72,10 +68,10 @@ export function EspParameter({
         current: options.find((option) => option.name === current)?.key ?? null,
         pick: (key) => {
           const option = options.find((option) => option.key === key);
-          return option ? commit(option.name) : undefined;
+          return option ? cell.stage(option.name,{label:"Unit ESP"}).then(result=>result?.message) : undefined;
         },
       }}
-      transitions={transitions}
+      transitions={cell.transitions({label:"Unit ESP"})}
     />
   );
 }

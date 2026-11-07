@@ -46,7 +46,7 @@
       "identity": "subject",
       "picker": {
         "reading": "roster",
-        "options": "pickSubject"
+        "options": "subject"
       }
     },
     "stage": {
@@ -233,7 +233,6 @@
     "value": {
       "kind": "use",
       "entry": "ducts.pricing.value",
-      "args": "valueArgs",
       "deps": {
         "page": [
           "system",
@@ -266,7 +265,6 @@
     "roster": {
       "kind": "use",
       "entry": "ducts.roster.value",
-      "args": "rosterArgs",
       "deps": {
         "page": [
           "system",
@@ -299,7 +297,6 @@
     "network": {
       "kind": "use",
       "entry": "ducts.network.value",
-      "args": "networkArgs",
       "deps": {
         "page": [
           "system",
@@ -332,7 +329,7 @@
     "owner:fans": {
       "kind": "work",
       "route": "fans",
-      "output": "owner:fans",
+      "output": "fans",
       "deps": {
         "page": [],
         "work": [],
@@ -344,127 +341,9 @@
         "resource": "scope"
       },
       "refresh": "dependencies"
-    },
-    "lossesPlan": {
-      "kind": "use",
-      "entry": "ducts.plan-losses",
-      "args": "lossesPlanArgs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "explicit",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "explicit"
-    },
-    "healPlan": {
-      "kind": "use",
-      "entry": "ducts.plan-heal",
-      "args": "healPlanArgs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "explicit",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "explicit"
-    },
-    "assignPlan": {
-      "kind": "use",
-      "entry": "ducts.plan-assign-fan",
-      "args": "assignPlanArgs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "demand": "explicit",
-      "retain": {
-        "evidence": "scope",
-        "resource": "scope"
-      },
-      "refresh": "explicit"
     }
   },
   "verbs": {
-    "page:query": {
-      "kind": "page",
-      "input": "pageQuery",
-      "label": "Browse",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      },
-      "captures": [],
-      "patch": "pageQuery",
-      "fields": [
-        "systemSearch",
-        "systemSort",
-        "treeSearch",
-        "treeSort",
-        "rulingSearch",
-        "rulingSort"
-      ]
-    },
-    "edit": {
-      "kind": "work",
-      "input": "patch",
-      "label": "Edit",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [
-          "criteria",
-          "kinds",
-          "writeIntent",
-          "assumptions",
-          "rules",
-          "catalogs",
-          "ruleAssignments",
-          "subject",
-          "claims",
-          "labelParameter",
-          "workingPhase",
-          "systemColours"
-        ],
-        "readings": [
-          "value"
-        ]
-      },
-      "captures": [],
-      "ready": "editReady",
-      "patches": "editPatches",
-      "describe": "editDescribe"
-    },
-    "edit:fans": {
-      "kind": "work",
-      "input": "patch",
-      "label": "Edit",
-      "review": "none",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": [
-          "value",
-          "owner:fans"
-        ]
-      },
-      "captures": [],
-      "ready": "edit:fansReady",
-      "patches": "edit:fansPatches",
-      "describe": "edit:fansDescribe",
-      "target": "owner:fans"
-    },
     "losses": {
       "kind": "command",
       "input": "none",
@@ -489,16 +368,14 @@
           "systemColours"
         ],
         "readings": [
-          "value",
-          "owner:fans"
+          "value"
         ]
       },
       "captures": [
         "value"
       ],
-      "present": "lossesPresent",
       "entry": "ducts.apply-losses",
-      "intent": "lossesIntent"
+      "intent": "losses"
     },
     "heal": {
       "kind": "command",
@@ -524,16 +401,14 @@
           "systemColours"
         ],
         "readings": [
-          "value",
-          "owner:fans"
+          "value"
         ]
       },
       "captures": [
         "value"
       ],
-      "present": "healPresent",
       "entry": "ducts.apply-heal",
-      "intent": "healIntent"
+      "intent": "heal"
     },
     "assign": {
       "kind": "command",
@@ -559,16 +434,14 @@
           "systemColours"
         ],
         "readings": [
-          "value",
-          "owner:fans"
+          "value"
         ]
       },
       "captures": [
         "value"
       ],
-      "present": "assignPresent",
       "entry": "ducts.apply-assign-fan",
-      "intent": "assignIntent"
+      "intent": "assign"
     }
   },
   "panes": {
@@ -576,115 +449,73 @@
       "label": "Systems",
       "purpose": "Choose a system to inspect",
       "draws": [
-        "value",
-        "roster",
-        "network",
-        "owner:fans"
+        "value"
       ],
       "verbs": [
-        "page:query",
-        "edit",
-        "edit:fans",
         "losses",
         "heal",
         "assign"
-      ],
-      "body": "e-systems"
+      ]
     },
     "e-sidebar": {
       "label": "System tree",
       "purpose": "Inspect the opened systems and their runs",
       "draws": [
-        "value",
-        "roster",
-        "network",
-        "owner:fans"
+        "value"
       ],
       "verbs": [
-        "page:query",
-        "edit",
-        "edit:fans",
         "losses",
         "heal",
         "assign"
-      ],
-      "body": "e-sidebar"
+      ]
     },
     "e-rules-all": {
       "label": "All-systems rules",
       "purpose": "Price every read fitting type",
       "draws": [
-        "value",
-        "roster",
-        "network",
-        "owner:fans"
+        "value"
       ],
       "verbs": [
-        "page:query",
-        "edit",
-        "edit:fans",
         "losses",
         "heal",
         "assign"
-      ],
-      "body": "e-rules-all"
+      ]
     },
     "e-rules": {
       "label": "This system’s rules",
       "purpose": "Review fitting rules for the opened systems",
       "draws": [
-        "value",
-        "roster",
-        "network",
-        "owner:fans"
+        "value"
       ],
       "verbs": [
-        "page:query",
-        "edit",
-        "edit:fans",
         "losses",
         "heal",
         "assign"
-      ],
-      "body": "e-rules"
+      ]
     },
     "e-picture": {
       "label": "Picture",
       "purpose": "Inspect the model or schematic",
       "draws": [
-        "value",
-        "roster",
-        "network",
-        "owner:fans"
+        "value"
       ],
       "verbs": [
-        "page:query",
-        "edit",
-        "edit:fans",
         "losses",
         "heal",
         "assign"
-      ],
-      "body": "e-picture"
+      ]
     },
     "e-inbox": {
       "label": "Rulings",
       "purpose": "Review assumptions and planned writes",
       "draws": [
-        "value",
-        "roster",
-        "network",
-        "owner:fans"
+        "value"
       ],
       "verbs": [
-        "page:query",
-        "edit",
-        "edit:fans",
         "losses",
         "heal",
         "assign"
-      ],
-      "body": "e-inbox"
+      ]
     }
   },
   "layout": {
@@ -710,12 +541,8 @@
                 "id": "e-systems"
               },
               {
-                "kind": "gate",
-                "when": "subject",
-                "child": {
-                  "kind": "pane",
-                  "id": "e-sidebar"
-                }
+                "kind": "pane",
+                "id": "e-sidebar"
               }
             ],
             "sized": "start"
@@ -731,12 +558,8 @@
                 "id": "e-rules-all"
               },
               {
-                "kind": "gate",
-                "when": "subject",
-                "child": {
-                  "kind": "pane",
-                  "id": "e-rules"
-                }
+                "kind": "pane",
+                "id": "e-rules"
               }
             ],
             "sized": "start"
@@ -801,131 +624,8 @@
   "stageOrder": [
     "network"
   ],
-  "predicates": {
-    "subject": "hasSubject"
-  },
-  "cells": {
-    "criteria": {
-      "segment": null,
-      "value": "criteriaCell",
-      "groupOf": "groupcriteria",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "kinds": {
-      "segment": "kinds",
-      "value": "kindsCell",
-      "groupOf": "groupkinds",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "writeIntent": {
-      "segment": null,
-      "value": "writeIntentCell",
-      "groupOf": "groupwriteIntent",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "assumptions": {
-      "segment": "assumptions",
-      "value": "assumptionsCell",
-      "groupOf": "groupassumptions",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "rules": {
-      "segment": "rules",
-      "value": "rulesCell",
-      "groupOf": "grouprules",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "catalogs": {
-      "segment": "catalogs",
-      "value": "catalogsCell",
-      "groupOf": "groupcatalogs",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "ruleAssignments": {
-      "segment": "ruleAssignments",
-      "value": "ruleAssignmentsCell",
-      "groupOf": "groupruleAssignments",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "subject": {
-      "segment": "subject",
-      "value": "subjectCell",
-      "groupOf": "groupsubject",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "claims": {
-      "segment": "claims",
-      "value": "claimsCell",
-      "groupOf": "groupclaims",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "labelParameter": {
-      "segment": null,
-      "value": "labelParameterCell",
-      "groupOf": "grouplabelParameter",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "workingPhase": {
-      "segment": null,
-      "value": "workingPhaseCell",
-      "groupOf": "groupworkingPhase",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    },
-    "systemColours": {
-      "segment": null,
-      "value": "systemColoursCell",
-      "groupOf": "groupsystemColours",
-      "deps": {
-        "page": [],
-        "work": [],
-        "readings": []
-      }
-    }
-  },
+  "predicates": {},
+  "cells": {},
   "workFields": {},
   "seeds": {},
   "needs": "project",

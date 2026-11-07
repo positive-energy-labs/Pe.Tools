@@ -44,7 +44,7 @@
       "cardinality": "many",
       "identity": "subject",
       "picker": {
-        "reading": "value",
+        "reading": "roster",
         "options": "subject"
       }
     },
@@ -204,7 +204,7 @@
   "subject": {
     "field": "fan",
     "noun": "fan",
-    "roster": "value",
+    "roster": "roster",
     "detail": "value",
     "pane": "sheet-roster"
   },
@@ -217,6 +217,37 @@
   },
   "readings": {
     "value": {
+      "kind": "use",
+      "entry": "fans.sheet",
+      "deps": {
+        "page": [
+          "fan",
+          "stage",
+          "inputSort",
+          "inputSearch",
+          "contextRadiusFt",
+          "contextStyle",
+          "encoding",
+          "layers",
+          "picture",
+          "rosterSearch",
+          "rosterSort",
+          "sceneView",
+          "sheetPath",
+          "viewport",
+          "selected"
+        ],
+        "work": [],
+        "readings": []
+      },
+      "demand": "visible",
+      "retain": {
+        "evidence": "scope",
+        "resource": "scope"
+      },
+      "refresh": "dependencies"
+    },
+    "roster": {
       "kind": "use",
       "entry": "fans.sheet",
       "deps": {

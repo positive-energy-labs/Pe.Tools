@@ -220,7 +220,7 @@ export async function createWitness(
   };
   const places = new Map<string, ReturnType<typeof placeInput>>();
   function mount(
-    route: Awaited<ReturnType<typeof admit>>["presenter"] | Awaited<ReturnType<typeof admit>>["owner"],
+    route: {typed: unknown; data: import("@pe/agent-contracts").RouteGraphJson; workFingerprint: import("@pe/agent-contracts").RouteFingerprint},
     initial = new URLSearchParams(),
     place: string = route.data.key,
   ) {
@@ -248,7 +248,7 @@ export async function createWitness(
       });
       places.set(place, input);
     }
-    const mounted = nativeTestAdapter(mountTypedRoute(route.typed, input, route.workFingerprint, {work: feed, sources: Object.fromEntries(Object.entries({...native,...overrides}).map(([entry,source])=>[entry, source.kind === "use" ? { ...source, open(ctx,deliver) {
+    const mounted = nativeTestAdapter(mountTypedRoute(route.typed as import("../route/typed-route").TypedRoute, input, route.workFingerprint, {work: feed, sources: Object.fromEntries(Object.entries({...native,...overrides}).map(([entry,source])=>[entry, source.kind === "use" ? { ...source, open(ctx,deliver) {
       const call = `${route.data.key}:${entry}`; calls.set(call,(calls.get(call)??0)+1); inputs.set(call,ctx.args);
       return source.open(ctx,deliver);
     } } : source])) }), feed);

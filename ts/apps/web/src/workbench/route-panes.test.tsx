@@ -1,3 +1,6 @@
+import {localId,localSubject} from "../ducts/identity";
+import type {TypedRoute} from "../route/typed-route";
+import type {RouteFingerprint} from "@pe/agent-contracts";
 import { TypedShell } from "../shell/typed-shell";
 // @vitest-environment jsdom
 import { StrictMode, useMemo, useState } from "react";
@@ -37,7 +40,7 @@ const store = createChatPageStore({
 const ducts: ThreadTab = {
   id: "aaaaaaaa-0000-4000-8000-000000000001",
   route: "ducts",
-  link: routeAddress("ducts").link({ system: ["S1"] } as never),
+  link: routeAddress("ducts").link({ system: {kind:"ids",ids:[localId("ducts-system","S1")]} }),
   at: "2026-10-24T00:00:00.000Z",
 };
 const TAB = routeAddress("ducts").title;
@@ -47,7 +50,7 @@ const DOC_A = address("C:/Jobs/Level A.rvt"),
 const place = (id: string, system: string, selected: string, target: unknown): ThreadTab => ({
   id,
   route: "ducts",
-  link: routeAddress("ducts").link({ system: [system], selected } as never, {
+  link: routeAddress("ducts").link({ system: {kind:"ids",ids:[localId("ducts-system",system)]}, selected: [{kind:"focus",id:localId("ducts-focus",selected)}] } as never, {
     target: JSON.stringify(target),
   }),
   at: "2026-10-24T00:00:00.000Z",
@@ -149,9 +152,9 @@ function DuctsProbe() {
   useState(() => ++mounts);
   bodyCurrent = useRouteCurrent();
   const system = useRouterState({
-    select: (state) => (state.location.search as { system?: string }).system,
+    select: (state) => routeAddress("ducts").read(state.location.search).page.system,
   });
-  return <output data-ducts-probe="">{system}</output>;
+  return <output data-ducts-probe="">{system.kind === "all" ? "all" : system.ids.map(localSubject).join(" + ")}</output>;
 }
 
 beforeEach(() => {
@@ -171,7 +174,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-let fansRoute: Awaited<ReturnType<typeof import("../fans/admission.fixture")["admit"]>>["presenter"] | null = null;
+let fansRoute: {typed:TypedRoute;workFingerprint:RouteFingerprint} | null = null;
 function FansProbe() {
   const route = fansRoute;
   if (!route) throw Error("Fans must be admitted before the router mounts");
@@ -233,7 +236,7 @@ test("a tab press expands the tools on that Place; a Work press restores its Pag
   sessionStorage.setItem(
     "pe.places",
     JSON.stringify([
-      { ...ducts, link: routeAddress("ducts").link({ system: ["S1"] } as never, { work: "w1" }) },
+      { ...ducts, link: routeAddress("ducts").link({ system: {kind:"ids",ids:[localId("ducts-system","S1")]} }, { work: "w1" }) },
     ]),
   );
   const router = await mount();
@@ -256,7 +259,7 @@ test("a tab press expands the tools on that Place; a Work press restores its Pag
     }),
   );
   await waitFor(() => expect(router.state.location.pathname).toBe("/ducts"));
-  expect((router.state.location.search as { system?: string }).system).toBe("S1");
+  expect(shown(router).system).toBe("S1");
   // A Work press is outside the tools bar: focus lands on the tool's pane.
   expect(document.activeElement).toBe(tools());
   expect(document.querySelector("[data-chat-probe]")).toBeTruthy();
@@ -276,13 +279,8 @@ const resume = (
 });
 const shown = (router: Awaited<ReturnType<typeof mount>>) => ({
   path: router.state.location.pathname,
-  system:
-    routeAddress("ducts").read(router.state.location.search).page.system instanceof Array
-      ? (routeAddress("ducts").read(router.state.location.search).page.system as string[]).join(
-          " + ",
-        )
-      : "all",
-  selected: routeAddress("ducts").read(router.state.location.search).page.selected,
+  system: (()=>{const subject=routeAddress("ducts").read(router.state.location.search).page.system; return subject.kind === "all" ? "all" : subject.ids.map(localSubject).join(" + ");})(),
+  selected: routeAddress("ducts").read(router.state.location.search).page.selected.map(item=>localSubject(item.id)).join(","),
   target: (router.state.location.search as { target?: string }).target,
   tab: (router.state.location.state as { __peRouteTab?: { id: string } }).__peRouteTab?.id ?? null,
 });
@@ -317,7 +315,7 @@ test("no Work-key match opens a new Place; Places are never guessed by route", a
     route: "ducts",
     target: address("C:/Jobs/Level C.rvt"),
   } as const;
-  await press(resume(key, "/ducts?system=SC"));
+  await press(resume(key, routeAddress("ducts").link({system:{kind:"ids",ids:[localId("ducts-system","SC")]}})));
   await waitFor(() => expect(shown(router)).toMatchObject({ path: "/ducts", system: "SC" }));
   expect(seeded.map((tab) => tab.id)).not.toContain(shown(router).tab);
 });
@@ -652,7 +650,7 @@ test("an explicit open's command id clears when the thread association changes",
 test("a saved legacy open-ref Place keeps its id under StrictMode, /pea and a cross-row Work press", async () => {
   sessionStorage.clear();
   // The bytes a writer saves (host navigation.ts resume link); a restore matches saved bytes exactly.
-  const legacy = routeAddress("ducts").link({ system: ["Office retained page"] } as never, {
+  const legacy = routeAddress("ducts").link({ system: {kind:"ids",ids:[localId("ducts-system","Office retained page")]} }, {
     target: JSON.stringify({ kind: "open", ref: { session: "closed-session", openId: "closed-open" } }),
   });
   // New enrollment is exercised above through actual Fans admission. This tests saved-Place rebinding.
