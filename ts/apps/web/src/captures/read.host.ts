@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { contextFetch, invocationContext } from "@pe/runtime/context";
 import { leaf, read } from "../../../host/src/reads/evaluator.ts";
 import { capturesArgs, capturesValue } from "./route.ts";

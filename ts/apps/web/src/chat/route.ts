@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type Machine } from "@pe/agent-contracts";
 import { valueRead } from "../../../../packages/agent-contracts/src/value.ts";
-import { field, route, localId, split, type DrawContext } from "../route/typed-route.ts";
+import { field, route, localId, type DrawContext } from "../route/typed-route.ts";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
@@ -11,7 +11,8 @@ const loaded = { ...hostRead(valueRead("chat.context", chatArgs, chatValue)), ar
 const fields = { mode: field(z.enum(["threads", "world"]), "threads", "query") };
 export type ChatHandle = DrawContext<z.output<typeof chatValue>, typeof fields, never, never>;
 export const threadIdentity = (thread: string) => localId("chat", thread);
-export const chatLayout = split("h", ["threads", "chat"], { id: "chat-threads", sized: "start", size: 300, minSize: 240, persist: "pe.sideWidth" });
+export const chatLayout = { kind: "split", axis: "h", id: "chat-threads", sized: "start", size: 300, minSize: 240, minOtherSize: 80,
+  persist: "pe.sideWidth", children: [{ kind: "pane", id: "threads" }, { kind: "pane", id: "chat" }] } as const;
 export const module = route({
   key: "chat", address: "/pea", name: "Pea", needs: "host", host: "./read.host.ts",
   directory: {

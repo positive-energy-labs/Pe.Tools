@@ -9,7 +9,7 @@ test("a retained picture names its runtime owner and reports a failed image", as
   render(<CapturesList captures={[{ id: "taking", sha, at: "2026-11-06T00:00:00Z", origin: "human",
     document: { title: "MEP" }, view: { name: "Ground plan" }, focus: null, registration: null, byteSize: 93823,
     url: `/captures/${sha}.png` }]} focus={sha} open={[sha]} onPage={() => {}} />);
-  const image = await screen.findByRole("img", { name: "Ground plan ? MEP" });
+  const image = await screen.findByRole("img", { name: /Ground plan.*MEP/ });
   expect(image.getAttribute("src")).toContain("pe-runtime=checkout");
   fireEvent.error(image);
   expect(screen.getByText(/The retained picture could not be loaded/)).toBeTruthy();

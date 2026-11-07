@@ -7,7 +7,8 @@ import type { SettingsContext } from "./route.ts";
 export function SettingsDrawing({ ctx }: { ctx: SettingsContext }) {
   const { section, session } = ctx.page.read();
   const host = useSurfaceHost();
-  const machine = ctx.value.value?.machine;
+  // Machine drawings predate Value's deep readonly projection; they only inspect this value.
+  const machine = ctx.value.value?.machine as Machine | undefined;
   const reading: Reading<Machine> = ctx.value.current && machine ? { state: "ready", observation: machine }
     : ctx.value.status === "failed" ? { state: "failed", message: ctx.value.reason, previous: machine }
     : machine ? { state: "stale", reason: "disconnected", previous: machine } : { state: "absent" };

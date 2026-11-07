@@ -54,7 +54,7 @@ function Editor({ ctx, schema }: { ctx: PodsContext; schema: string | null }) {
   };
   return <>
     <Switcher ariaLabel="editor mode" value={raw ? "raw" : "form"} onChange={mode => ctx.page.pose({ mode })}
-      options={[{ value: "form", label: "form", disabled: !form }, { value: "raw", label: "raw" }]} />
+      options={[{ value: "form", label: "form", title: "Edit through the schema form", disabled: !form }, { value: "raw", label: "raw", title: "Edit the saved JSON text" }]} />
     {raw ? <JsonEditor aria-label="spec JSON" value={value} onChange={setTyped} readOnly={!!cell.refusal} /> : form && baseline &&
       <fieldset disabled={!!cell.refusal}><SchemaToFieldRender schema={form.schema} values={form.parsedRaw} baselineValues={baseline.baseline}
         issues={[...(data.composition?.result.diagnostics ?? [])]} optionsFrom={null} onChange={(path, nextValue) => {

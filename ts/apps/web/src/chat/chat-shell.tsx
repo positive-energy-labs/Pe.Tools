@@ -402,7 +402,7 @@ function ChatSurface({ target, docked = false, handle }: ChatShellProps & { hand
         )}
         <SidebarShown.Provider value={threadFold !== "start"}>
           <GraphLayoutView
-            layout={{ ...chatLayout, minOtherSize: peaFloor() } as Parameters<typeof GraphLayoutView>[0]["layout"]}
+            layout={{ ...chatLayout, minOtherSize: peaFloor() }}
             panes={{
               threads: { label: "Threads", purpose: "Choose a conversation", draws: [], verbs: [] },
               chat: { label: "Chat", purpose: "Read and compose", draws: [], verbs: [] },
