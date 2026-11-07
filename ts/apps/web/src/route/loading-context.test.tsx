@@ -169,7 +169,9 @@ test.each([
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.queryByText(/Local authority/)).toBeNull();
     host.fetch.mockResolvedValueOnce(
-      features(JSON.stringify({ ...recorded, truncated: { at: 3, reason: "full" } })),
+      features(JSON.stringify({ ...recorded, truncated: {
+        at: 3, stoppedAt: 1, site: "occurrence", op: "families.read", reason: "full",
+      } })),
     );
     fireEvent.click(screen.getByRole("button", { name: "Retry host connection" }));
     expect(await screen.findByText("Recorded · read only · partial")).toBeTruthy();
