@@ -19,7 +19,7 @@ export function registerAdmittedHostRoute(
   host?: Pick<contracts.HostRouteModule, "reads" | "leaves">,
 ): ReturnType<RouteWorkspace["registerAdmitted"]> {
   // Builtins joined the same registry at startup. A verified Pod owns its runtime entries.
-  const captured = route.fingerprint.startsWith("pod-bytes:")
+  const captured = route.workFingerprint.startsWith("pod-bytes:")
     ? contracts.captureAdmittedHostBindings(route)
     : undefined;
   let unregister = () => {};
