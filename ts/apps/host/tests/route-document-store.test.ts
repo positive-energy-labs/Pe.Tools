@@ -8,7 +8,7 @@ import { bindWork, workKey } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 
-test("obsolete records and undecodable Work are removed without conversion or backup", async () => {
+test("unreadable Work keeps its bytes; obsolete decoded Work is removed without conversion", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-discard-"));
   const scope = bindWork("test", null);
   const key = { targetKey: workKey(scope), route: scope.route };
@@ -17,8 +17,9 @@ test("obsolete records and undecodable Work are removed without conversion or ba
     const store = fileRouteDocumentStore(dir);
     for (const bytes of ["{broken", JSON.stringify({ ...key, format: "route-state-record-v1", value: { version: 1, revision: 4, doc: {} } })]) {
       await writeFile(path, bytes);
-      expect(await store.getState(key)).toBeNull();
-      expect(await readdir(dir)).toEqual([]);
+      await expect(store.getState(key)).rejects.toMatchObject({ code: "WorkUnreadable", key: key.targetKey });
+      expect(await readFile(path, "utf8")).toBe(bytes);
+      expect(await readdir(dir)).toEqual([path.split(/[\\/]/).at(-1)]);
     }
     await store.setState({ ...key, value: { version: 1, revision: 4, doc: { count: "old" } } });
     const workspace = new RouteWorkspace({ store, registrations: [{ spec: {

@@ -3,7 +3,7 @@ import { cp, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { capturePackage, readPackage } from "../src/packages.ts";
+import { capturePackage, readPackage, isPackageMember } from "../src/packages.ts";
 import { exportPage } from "../src/page-export.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
 import { exportPod, importPod } from "../src/pod-transfer.ts";
@@ -14,6 +14,7 @@ async function authored(root: string, directory = root): Promise<[string, string
   const files: [string, string][] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
+    if (!isPackageMember(relative(root, path).replaceAll("\\", "/"))) continue;
     if (entry.isDirectory()) files.push(...(await authored(root, path)));
     else files.push([relative(root, path).replaceAll("\\", "/"), sha(await readFile(path))]);
   }
@@ -30,7 +31,10 @@ test.each(["snowdon-ducts", "snowdon-circuits"])(
     try {
       const from = join(root, "from"),
         to = join(root, "to");
-      await cp(source, join(from, "Renamed"), { recursive: true });
+      await cp(source, join(from, "Renamed"), {
+        recursive: true,
+        filter: (path) => path === source || isPackageMember(relative(source, path).replaceAll("\\", "/")),
+      });
       const archivePath = join(root, `${id}.zip`);
       const exported = await exportPod({ pod: id, archivePath }, { podsRoot: from });
       expect(exported.transforms).toEqual([]);

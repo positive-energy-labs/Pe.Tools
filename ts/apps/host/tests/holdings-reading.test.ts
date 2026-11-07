@@ -12,7 +12,7 @@ function fixture(count = 7) {
   const machine = machineFixture([{ session: "s1", documents: null }]);
   const session = machine.revit.sessions![0]!;
   Object.assign(session, {
-    documents: [{ openId: "o1" }],
+    documents: null,
     holdingsLeg: { ...machine.legs.sessions },
     holdings: [
       {
