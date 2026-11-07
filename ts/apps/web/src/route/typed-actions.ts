@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { commands } from "../../../../packages/agent-contracts/src/semantic-actions.ts";
-import { commandCatalogAxes } from "../../../../packages/agent-contracts/src/command-axes.ts";
+import { commands } from "@pe/agent-contracts/semantic-actions";
+import { commandCatalogAxes } from "@pe/agent-contracts/command-axes";
 
 type ResultCommand = {
   [K in keyof typeof commands]: (typeof commands)[K] extends { result: z.ZodType } ? K : never;
