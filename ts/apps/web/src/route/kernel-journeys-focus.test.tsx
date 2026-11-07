@@ -1334,3 +1334,40 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   expect(explanation.textContent).toBe(`Apply is held: ${reason}`);
   expect(explanation.parentElement?.textContent).toContain("Esc");
 });
+
+// The declared roster is the route's sole subject-choice surface, even on another pane.
+test("JZ C042 a subject-list route suppresses the header chooser across panes", async () => {
+  const { useAdmittedSubject } = await import("../shell/subject");
+  const read = fans.spec.core!;
+  function Roster({ ctx }: { ctx: any }) {
+    const subject = useAdmittedSubject()!;
+    const first = fans.spec.subject!.options(ctx.value.value)[0]!;
+    return <section aria-label="Fan subject list"><button onClick={() => subject.add([first.id])}>{first.label}</button></section>;
+  }
+  for (const pane of ["detail", "roster"] as const) {
+    const module = route({ ...fans.spec, needs: "browser", edits: undefined, commands: {}, reads: {},
+      subject: { ...fans.spec.subject!, pane: "roster", read },
+      panes: {
+        roster: { title: "Fan list", purpose: "Choose the subject", read, draw: ctx => <Roster ctx={ctx} /> },
+        detail: { title: "Detail", purpose: "Inspect the subject", read: { ...read }, draw: () => <p>Subject detail</p> },
+      }, layout: { kind: "pane", id: pane } });
+    const mount = mounts.mountTypedRoute(module, {
+      target: { kind: "host" }, fixture: "layout", work: { address: null, open: null },
+      address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+      custody: { current: () => true }, memory: () => ({}),
+    }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`));
+    const router = createRouter({ routeTree: createRootRoute({ component: () => <TypedChrome mount={mount} document={<span>Recorded Fans</span>} /> }),
+      history: createMemoryHistory({ initialEntries: ["/"] }) });
+    const view = render(<RouterProvider router={router} />);
+    try {
+      if (pane === "detail") await screen.findByText("Subject detail");
+      else await screen.findByRole("region", { name: "Fan subject list" });
+      expect(screen.queryByRole("button", { name: "Choose fan" }), "One subject capability has one choice path").toBeNull();
+      if (pane === "roster") {
+        const first = fans.spec.subject!.options(mount.value().value)[0]!;
+        fireEvent.click(screen.getByRole("button", { name: first.label }));
+        expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [first.id] });
+      }
+    } finally { view.unmount(); mount.dispose(); cleanup(); }
+  }
+});
