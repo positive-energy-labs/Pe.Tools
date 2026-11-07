@@ -1,3 +1,7 @@
+import { captureInput, replayInput, type RecordedInput } from "./native-recording.ts";
+import { readLocal } from "./local-inputs.ts";
+import { readFamilySpec } from "./family-file-input.ts";
+import { PictureCaptureStore } from "./captures-route.ts";
 import {hostOpSafety} from "@pe/host-contracts/generated";
 import {executionTargetSchema,documentRefSchema,DUCTS_BODY_VERSION_HEADER} from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
@@ -9,7 +13,7 @@ import {
   type ReadSetId,
 } from "./input-occurrence.ts";
 import type { TakingObserver } from "./native-recording.ts";
-import { ductsInputPort, type DuctsReadSources } from "./reads/ducts-inputs.ts";
+import { inputPort, type ReadSources } from "./reads/inputs.ts";
 import { Publications } from "./reads/evaluator.ts";
 import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
@@ -112,6 +116,9 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   if (!recorded && (!live || !options.store))
     return yield* Effect.die(Error("Live input graph needs its real live inputs and Work store"));
   const writer = lane.kind === "live" ? lane.captureStore : undefined;
+  const pictureService = yield* Effect.serviceOption(PictureCaptureStore);
+  const pictures = recorded ? undefined : Option.isSome(pictureService) ? pictureService.value
+    : yield* PictureCaptureStore.pipe(Effect.provide(PictureCaptureStore.layer()));
   const services = yield* Layer.build(
     Layer.mergeAll(
       HostInputReadSets.layer(lane),
@@ -326,7 +333,20 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       }
     };
     const inventory = Context.get(services, HostSessionInventory);
-    const sources = (current: InputConsumption): DuctsReadSources => {
+    // Every host-only input starts a taking in the same evaluation as native and Work inputs.
+    const takeOwner = (current:InputConsumption,input:RecordedInput,live:()=>Promise<unknown>) => {
+      const scope="{}";
+      const codec=Schema.Json;
+      const effect=recorded ? replayInput(lane.recordingStore,input,scope,codec) : (()=>{
+        const value=Effect.tryPromise({try:async()=>json(await live()),catch:error=>new InvalidRead({message:String(error),status:409,problem:"input.failed"})});
+        return writer ? captureInput(writer,input,scope,codec,value,options.observed) : value;
+      })();
+      return scoped(current)(effect);
+    };
+    const takeFile=(name:string,args:unknown,current:InputConsumption)=>takeOwner(current,
+      {kind:"files",file:canonicalJson([name,json(args)])},
+      ()=>name.startsWith("local:")?readLocal(name.slice(6),args):name === "family-spec"?readFamilySpec(args):Promise.reject(Error(`Unknown file input ${name}`)));
+    const sources = (current: InputConsumption): ReadSources => {
       const context = Context.add(admitted, CurrentInputConsumption, current);
       const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) =>
         runPods({}, Effect.provide(effect, context));
@@ -344,21 +364,27 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       const document = (ref: import("@pe/agent-contracts").DocumentRef) =>
         invoke(documentRead(ref));
       return {
-        firm: () => invoke(files.firm),
-        catalogs: () => invoke(files.ductCatalogs),
+        file: (name,args) => name === "firm" ? invoke(files.firm) : name === "catalogs" ? invoke(files.ductCatalogs) : takeFile(name,args,current),
         workKey: async (ref) => bindWork("ducts", (await document(ref)).address, undefined, ref),
         inputs: {
           consumption: current,
           run: scoped(current),
           work: workReadContext(current, scoped(current)),
         },
-        resource: request => new Promise((resolve,reject)=> {
-          let settled=false,stop=()=>{};
-          stop=observe(request as Parameters<ResourceObserver>[0],frame=> {
-            if(frame.kind === "snapshot") {settled=true;resolve(frame.value);stop();}
-            else if(frame.kind === "failure") {settled=true;reject(Error(frame.error));stop();}
-          },0);
-          if(settled) stop();
+        resource: request => takeOwner(current,{kind:"resource",key:"snapshot",args:canonicalJson(json(request))},()=> {
+          if((request as {kind:string}).kind === "captures") return (async()=>({captures:await Promise.all((await pictures!.list()).map(async receipt=>{
+            const bytes=await pictures!.blob(receipt.sha);
+            if(!bytes) throw Error(`Capture ${receipt.id} has no retained PNG`);
+            return {...receipt,url:`data:image/png;base64,${bytes.toString("base64")}`};
+          }))}))();
+          return new Promise((resolve,reject)=> {
+            let settled=false,stop=()=>{};
+            stop=fallback(request as Parameters<ResourceObserver>[0],frame=> {
+              if(frame.kind === "snapshot") {settled=true;resolve(frame.value);stop();}
+              else if(frame.kind === "failure") {settled=true;reject(Error(frame.error));stop();}
+            },0);
+            if(settled) stop();
+          });
         }),
         call: async (key, input, target, version, role) => {
           const requestTarget=executionTargetSchema.safeParse(target);
@@ -727,9 +753,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       ...(graph && source
         ? {
             readGraph: async () => {
-              const port = ductsInputPort({
+              const port = inputPort({
                 source,
-                leaves:registeredReads.leaves,
                 workspace,
                 marks,
                 run: scoped(consumption!),

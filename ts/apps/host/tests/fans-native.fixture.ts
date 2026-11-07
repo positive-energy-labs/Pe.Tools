@@ -30,7 +30,7 @@ import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
 import { RunConsents, runConsentsPromise, type ConsentEvent } from "../src/run-consent.ts";
 import { bindControl } from "../src/control.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
-import type { DuctsReadSources } from "../src/reads/ducts-inputs.ts";
+import type { ReadSources } from "../src/reads/inputs.ts";
 import { evaluate } from "../src/reads/evaluator.ts";
 import { ductSheet, fanRoster } from "../src/reads/fan-sheet.ts";
 import { sheetPort } from "./ducts-read.fixture.ts";
@@ -330,7 +330,7 @@ export async function nativeFixture(
           ),
         ),
     );
-    const readDucts: DuctsReadSources["call"] = (op, input, raw, version) => {
+    const readDucts: ReadSources["call"] = (op, input, raw, version) => {
       const ref="kind" in raw ? raw.kind === "document"?raw.ref:null : raw;
       if(!ref) throw Error("Fixture requires a document target");
       return request(

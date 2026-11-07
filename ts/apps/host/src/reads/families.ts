@@ -1,5 +1,6 @@
+import { nativeRead } from "./inputs.ts";
+import { familyObservation, familyReceipts } from "../builtin-read-handles.ts";
 import { z } from "zod";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import {
   familiesRouteState,
   familiesObservationSchema,
@@ -13,34 +14,14 @@ import {
   familiesViewArgs,
   familiesViewData,
 } from "../../../../packages/agent-contracts/src/families-read.ts";
-import { read, leaf, workScope, workValue } from "@pe/host/read-graph";
-import { documentMark } from "./ducts-inputs.ts";
+import { read, workScope, workValue } from "@pe/host/read-graph";
+import { documentMark } from "./inputs.ts";
 import { applyOutcome, applyTally } from "./families-outcome.ts";
 import { matrixModel, buildPivot } from "./families-matrix.ts";
 
-const familyCatalog = leaf(
-  "native",
-  z.object({
-    key: z.literal("revit.catalog.loaded-families"),
-    request: z.object({ filter: z.object({}), budget: z.object({ maxEntries: z.number() }) }),
-    target: documentRefSchema,
-  }),
-  z.object({
-    body: nativeResponseSchema("revit.catalog.loaded-families"),
-    version: z.string().nullable(),
-  }),
-  false,
-);
-const familyObservation = leaf(
-  "resource",
-  z.object({ kind: z.literal("families-reading"), work: workKeySchema }),
-  familiesObservationSchema.nullable(),
-);
-const familyReceipts = leaf(
-  "resource",
-  z.object({ kind: z.literal("receipts"), work: workKeySchema }),
-  actionReceiptListDecoder(),
-);
+
+
+
 /** Immutable native evidence, Work and matrix calculation meet only on the host. */
 export const familiesView = read("families.view", {
   input: familiesViewArgs,
@@ -50,8 +31,7 @@ export const familiesView = read("families.view", {
     const scope = { ...(await ctx.read(workScope, args.target)), route: "families" };
     const view = workValue.parse(await ctx.work("families", scope));
     const work = familiesRouteState.schema.parse(view?.doc ?? {});
-    const { body: catalog } = await ctx.read(familyCatalog, {
-      key: "revit.catalog.loaded-families",
+    const { body: catalog } = await ctx.read(nativeRead("revit.catalog.loaded-families"), {
       request: { filter: {}, budget: { maxEntries: 5000 } },
       target: args.target,
     });
