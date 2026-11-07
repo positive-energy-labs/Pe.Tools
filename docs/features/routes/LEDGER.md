@@ -4,7 +4,7 @@ The route kernel and every web route's shared shape (ADR 0026, ADR 0027). Route-
 
 ## Decided
 
-- 2026-11-06, wave 3 S: Fans and Ducts execute their typed specifications directly in `shell/typed-mount.ts`; `RouteGraphJson` is a discovery/catalog projection. Neutral host `readWorks` names admitted foreign owners directly; typed modules generate no Work reading slots. `PlaceBoundary`, History loading/rail, recorded Work and Page pose recording are shell-owned. F-02 retains D's sole late-ack invalidation fix (`27cd5a26`); S's competing feed change was removed. Families' preview receipts remain undoable (`304c8b19`); disposed history getters expose an empty projection. Browser/native acceptance remains Driver work.
+- 2026-11-06, wave 3 S: Fans and Ducts execute their typed specifications directly in `shell/typed-mount.ts`; `RouteGraphJson` is a discovery/catalog projection. Neutral host `readWorks` names admitted foreign owners directly; typed modules generate no Work reading slots. `PlaceBoundary`, History loading/rail, recorded Work and Page pose recording are shell-owned. Retention captures codec text before Page/target resolution (N-03); decoded JSON capture dropped document, selection and pose on hide. F-02 retains D's sole late-ack invalidation fix (`27cd5a26`); S's competing feed change was removed. Families' preview receipts remain undoable (`304c8b19`); disposed history getters expose an empty projection. Browser/native acceptance remains Driver work.
 
 - 2026-11-06, wave 3 S: `shell/typed-mount.ts` and `shell/typed-shell.tsx` are kernel composition roots. They own the fixture/live boundary for typed modules; route bodies still cannot select fixture transport. This extends the existing composition-root guard, not its offender baseline.
 

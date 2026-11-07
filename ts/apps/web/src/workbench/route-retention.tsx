@@ -12,7 +12,7 @@ import { THREAD_TABS_MAX, routeOf, routeAddress, type ThreadTab } from "@pe/agen
 import { RouteActivity, RouteVisibility, type RouteActivityScope } from "#/route/activity";
 import { useSyncExternalStore } from "react";
 import { publicRoutes } from "#/route/route-discovery";
-import { currentLocation } from "#/route/url";
+import { currentLocation, rawQuery } from "#/route/url";
 import { PaneErrorBoundary, PaneLoading } from "@pe/kit/lang/pane";
 
 interface RetainedRoute {
@@ -104,7 +104,9 @@ export function RouteRetention({
   );
   if (route) {
     const pathname = publicRoutes.declaration(route)?.address ?? routeAddress(routeOf(route)!).path;
-    const search = location.search as Record<string, unknown>;
+    // N-03: retain codec text before resolving Page/target. Router-decoded JSON was dropped by
+    // the Place's string-only address capture, retiring its document/Work when Activity hid it.
+    const search = Object.fromEntries(rawQuery(router));
     const source = JSON.stringify(search.fixture ?? null);
     let entry = retained.current.find(
       (item) =>
@@ -142,7 +144,7 @@ export function RouteRetention({
         unmarkedEntry: router.history.location.state,
         scope: {
           pathname,
-          search: location.search,
+          search,
           current: () => {
             if (!next.visible) return false;
             const at = currentLocation(router);
@@ -180,7 +182,7 @@ export function RouteRetention({
     entry.id = selectedId ?? entry.id;
     entry.visible = true;
     entry.unmarkedEntry = router.history.location.state;
-    entry.scope.search = location.search;
+    entry.scope.search = search;
   }
   return retained.current.map((entry) => (
     <RetainedPane
