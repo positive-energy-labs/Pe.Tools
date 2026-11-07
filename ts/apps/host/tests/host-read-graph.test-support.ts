@@ -62,6 +62,7 @@ export async function fixture(
     document?: HostSessionInventory["Service"]["document"];
     read?: (input: NativeReadInput) => unknown;
     inventory?: BridgeSessionsListData;
+    freshness?: () => string;
   } = {},
 ) {
   const native = recorded.read && recorded.inventory ? { read: recorded.read, inventory: recorded.inventory } : undefined;
@@ -187,7 +188,7 @@ export async function fixture(
                   input.key === "ducts.tables"
                     ? { ...target, openDocumentLifetime: { kind: "session-only" as const } }
                     : target,
-                freshness: { freshnessGeneration: "g1" },
+                freshness: { freshnessGeneration: recorded.freshness?.() ?? "g1" },
                 cost: {},
                 outcome: "committed" as const,
               };
