@@ -130,18 +130,12 @@ export async function verifyRouteArtifact(
   // The existing browser/Pod import owner supplies evaluation and owns URL cleanup.
   // Do not add a second unchecked dynamic-import door beside that owner.
   const exports = await evaluate(new Uint8Array(entry.bytes));
-  const factory = z.object({
-    instantiate: z.custom<(shared: Readonly<Record<string, object>>) => unknown>(
-      (value) => typeof value === "function",
-    ),
-  });
-  const loaded = pins.length
-    ? factory
-        .parse(exports)
-        .instantiate(
-          Object.freeze(Object.fromEntries(pins.map((pin) => [pin.specifier, pin.namespace]))),
-        )
-    : exports;
+  let loaded = exports;
+  if (pins.length) {
+    const factory=z.object({instantiate:z.unknown()}).parse(exports);
+    if(typeof factory.instantiate !== "function") throw Error("Expected a pinned module factory");
+    loaded=factory.instantiate(Object.freeze(Object.fromEntries(pins.map(pin=>[pin.specifier,pin.namespace]))));
+  }
   const { module } = z
     .object({ module: z.object({ data: z.unknown() }).passthrough() })
     .parse(loaded);

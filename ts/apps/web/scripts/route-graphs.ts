@@ -109,8 +109,8 @@ for (const key of keys) {
     const index=typedEntries.length;
     hostImports.push(`import {host as h${index}} from "../../../web/src/${folder}/host.generated.ts";`,`import c${index} from "../../../web/src/${folder}/source-closure.generated.json" with {type:"json"};`);
     hostEntries.push(`${JSON.stringify(key)}:{host:h${index},closure:c${index}}`);
-    typedImports.push(`import {module as m${index}} from "../${folder}/${kernel}";`, `import c${index} from "../${folder}/source-closure.generated.json" with {type:"json"};`);
-    typedEntries.push(`${JSON.stringify(key)}:{host:m${index}.host,closure:c${index}}`);
+    typedImports.push(`import {host as h${index}} from "../${folder}/neutral.generated.ts";`, `import c${index} from "../${folder}/source-closure.generated.json" with {type:"json"};`);
+    typedEntries.push(`${JSON.stringify(key)}:{host:h${index},closure:c${index}}`);
     const typed = module as unknown as import("../src/route/typed-route.ts").TypedRoute;
 
     const source = await readFile(entry, "utf8");
@@ -243,8 +243,11 @@ for (const key of keys) {
       hostReadImports.push(`import * as m${hostReadEntries.length} from ${JSON.stringify(path.startsWith(".")?path:`./${path}`)};`);
       hostReadEntries.push(`m${hostReadEntries.length}`);
     }
+    await emit(new URL(`../src/${folder}/neutral.generated.ts`,import.meta.url),
+      `// Generated from route.ts by codegen:routes. Neutral projection only.\n${workImport}${typed.spec.edits?'import {z} from "zod";\n':""}import {RouteGraphJson} from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type {HostRouteModule} from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with {type:"json"};\nconst data=RouteGraphJson.parse(closure.envelope.data);\nexport const host:HostRouteModule={data,bodies:{},${workBody||"schemas:{},"}};\n`);
     await emit(new URL(`../src/${folder}/host.generated.ts`,import.meta.url),
-      `// Generated from route.ts by codegen:routes. Do not edit.\n${workImport}${runtime?`import * as runtime from ${JSON.stringify(runtime)};\n`:""}${typed.spec.edits?'import {z} from "zod";\n':""}import {RouteGraphJson} from "../../../../packages/agent-contracts/src/route-kernel-data.ts";\nimport type {HostRouteModule} from "@pe/agent-contracts";\nimport closure from "./source-closure.generated.json" with {type:"json"};\nconst data=RouteGraphJson.parse(closure.envelope.data);\nexport const host:HostRouteModule={data,bodies:{},${workBody||"schemas:{},"}${runtime?'reads:(runtime as Pick<HostRouteModule,"reads">).reads,':""}};\n`);
+      `// Generated from route.ts by codegen:routes. Host only.\nimport {host as neutral} from "./neutral.generated.ts";\n${runtime?`import * as runtime from ${JSON.stringify(runtime)};\n`:""}import type {HostRouteModule} from "@pe/agent-contracts";\nexport const host:HostRouteModule={...neutral,${runtime?'reads:(runtime as Pick<HostRouteModule,"reads">).reads,':""}};\n`);
+
 
 
   }
