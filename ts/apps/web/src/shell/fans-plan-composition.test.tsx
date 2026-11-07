@@ -1,0 +1,168 @@
+// @vitest-environment jsdom
+import { Context, Effect, Layer, Queue, Option } from "effect";
+import { expect, test, vi } from "vite-plus/test";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { createRootRoute, createRouter, createMemoryHistory, RouterProvider } from "@tanstack/react-router";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { openRecordingWriter, nativeCatalogIdentity } from "../../../host/src/native-recording";
+import { HostInputContext } from "../../../host/src/input-context";
+import { writeFileSync } from "node:fs";
+import { HostNativeRead } from "../../../../packages/host-internal/src/native-read.ts";
+import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-roster.json";
+import walkCapture from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
+import { hostOwnership } from "../../../host/src/host-ownership";
+import { HostDocumentMarks } from "../../../host/src/document-marks";
+import { HostSessionInventory } from "../../../host/src/session-inventory";
+import { DuctFiles } from "../../../host/src/ducts-files";
+import { RevitBridge, RevitBridgeLive } from "../../../host/src/bridge";
+import { SdkSession } from "../../../host/src/sdk-session";
+import { HostReceipts } from "../../../host/src/gateway-owner";
+import { ReadOwner } from "../../../host/src/builtin-inputs";
+import { makeCallRoute } from "../../../host/src/call-route";
+import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
+import { bootHost } from "../../../host/tests/real-server";
+import { connectTestBridge } from "../../../host/tests/bridge-fixture";
+import { admittedReceiptStamps } from "../../../host/src/receipt-export";
+import { canonicalRouteInput, workFingerprintSchema, actionStatusSchema } from "@pe/agent-contracts";
+import { localId } from "../route/typed-route";
+import "../ducts/sheet/mount";
+import { TypedShell } from "./typed-shell";
+import { module as fans } from "../fans/route";
+import { builtins } from "../route/builtins.neutral";
+import { peReadings, bindActionReadings } from "../readings";
+
+const trace = vi.hoisted(()=>({gates:[] as any[],tokens:[] as any[],samples:[] as any[],stops:[] as any[],mounts:[] as any[],submit:vi.fn(),http:[] as any[],fetch:vi.fn(),base:"",target:null as any}));
+vi.mock("../host/runtime",()=>({hostFetch:trace.fetch,runtimeStreamUrl:(url:string)=>new URL(url,trace.base).toString()}));
+vi.mock("../../../host/src/session-route",async actual=>{const real=await actual<any>();const {Effect}=await import("effect");const {sdkSessions}=await import("../../../host/tests/native-receipt-fixture");return {...real,runPeRevitCli:(args:any)=>Effect.promise(()=>sdkSessions(args))};});
+vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async actual => {const real=await actual<any>(); trace.submit.mockImplementation(async(...args:any[])=>{const row=await real.submitAction(...args);((trace as any).results??=[]).push(row);return row;}); return {...real,submitAction:trace.submit};});
+vi.mock("../../../../packages/runtime/src/route-scope-gate",async actual=>{
+ const original=await actual<any>();
+ return {...original,createRouteScopeGate(options:any){const gate=original.createRouteScopeGate(options);trace.gates.push({gate,options});
+ const invocation=gate.invocation;gate.invocation=(...args:any[])=>{const result=invocation(...args);if(result.ok&&args[0].channel.startsWith("plan:"))trace.tokens.push({token:result.value,gate});return result;};return gate;}};
+});
+vi.mock("./typed-mount",async actual=>{
+ const original=await actual<any>();
+ return {...original,mountTypedRoute(...args:any[]){const mount=original.mountTypedRoute(...args);trace.mounts.push(mount);mount.subscribe(()=>{const plan=trace.tokens.at(-1),state=plan?.gate.read();trace.samples.push({page:mount.page.read(),work:JSON.stringify(Object.keys(mount.spec.edits.owners).map((id:string)=>{const o=mount.owner(id);return[id,o.ready,o.handle];})),core:mount.value().current?mount.value().hash:"unavailable",plan:plan?{current:plan.gate.current(plan.token),samePageEpoch:plan.token.pageEpoch===state?.pageEpoch,pageRevision:state?.pageRevision,workRevision:state?.work?.revision}:null});});return mount;}};
+});
+const ambient = <S,I>(tag:Context.Key<S,I>)=>Layer.effect(tag,Effect.serviceOption(tag).pipe(Effect.map(Option.getOrThrow)));
+
+test("batched Plan receipts preserve the review; receipt recovery spares Work and changed Work refuses",async()=>{
+ const originalFetch=globalThis.fetch;
+ const streams=new Set<any>();
+ const requests:any[]=[];
+ let bridge:any;
+ const roster=nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
+ const walk=nativeResponseSchema("ducts.snapshot.walk").parse(walkCapture);
+ const tables=nativeResponseSchema("ducts.tables").parse({folder:"fixture",tables:{},missing:[],unsupported:{}});
+ const native=Layer.effect(HostNativeRead,Effect.gen(function*(){
+   bridge=yield* connectTestBridge(); trace.target=bridge.target;
+   yield* Effect.forkScoped(Effect.forever(Queue.take(bridge.outgoing).pipe(Effect.flatMap((frame:any)=>{
+     const request=frame.request;if(!request)return Effect.void;
+     requests.push(request.operationKey);
+     const value=request.operationKey==="ducts.snapshot.roster"?roster:request.operationKey==="ducts.snapshot.walk"?walk:request.operationKey==="ducts.tables"?tables:request.operationKey==="ducts.apply.plan"?{previewOnly:true,writes:[],counts:{planned:0,written:0,refused:0,unchanged:0},systemsAfter:[],storeRevision:0}:request.operationKey==="revit.catalog.field-options"?{descriptor:{key:JSON.parse(request.payloadJson).key,mode:"Suggestion",allowsCustomValue:true,dependsOn:[],requiredRuntimeMode:"LiveDocument"},items:[],result:{kind:"Success",message:""}}:{};
+     return Queue.offer(bridge.incoming,JSON.stringify({kind:"Response",response:{requestId:request.requestId,openDocumentId:request.openDocumentId,ok:true,statusCode:200,payloadJson:JSON.stringify(value),metrics:{requestBytes:0,responseBytes:0,revitExecutionMs:0,roundTripMs:0,serializationMs:0}}}));
+   }))));
+   return yield* HostNativeRead;
+ })).pipe(Layer.provide(ambient(HostNativeRead)),Layer.provide(ambient(RevitBridge)));
+ const dir=await mkdtemp(join(tmpdir(),"pe-f05-bisect-"));
+ const stamp=admittedReceiptStamps().host!;
+ const captureStore=await Effect.runPromise(openRecordingWriter(dir,{build:JSON.stringify({version:stamp.version,build:stamp.build,commit:stamp.commit}),catalog:nativeCatalogIdentity()},{maxBytes:256*1024*1024,maxTakings:10000}));
+ const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore}))));
+ const writer=inputs.lane.kind==="live"?inputs.lane.captureStore:undefined;
+ if(writer){const stop=writer.capture.stop;vi.spyOn(writer.capture,"stop").mockImplementation((at,reason)=>{trace.stops.push({at,reason,stack:new Error().stack});return stop(at,reason);});}
+ const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return makeCallRoute((yield* HostReceipts).journal,undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
+ trace.base=host.base;
+ const subscriptionChanges:any[]=[];
+ const forward=async(url:any,init:any={})=>{
+   const headers=new Headers(init.headers);headers.set("x-pe-context",host.terminal);headers.set(HOST_RUNTIME_SERVICE_HEADER,hostOwnership.serviceName);
+   const target=new URL(typeof url==="string"?url:url.url??url.href,host.base);if(typeof init.body==="string"){const body=JSON.parse(init.body);if(body.add&&body.remove)subscriptionChanges.push(body);}const response=await originalFetch(`${host.base}${target.pathname}${target.search}`,{...init,headers});if(target.pathname.includes("sheet")||target.pathname.includes("actions")||target.pathname.includes("history")||target.pathname.includes("route-view")||target.pathname.includes("work"))trace.http.push({url:target.pathname,method:init.method??"GET",status:response.status,body:await response.clone().json().catch(()=>null)});return response;
+ };
+ trace.fetch.mockImplementation(forward);vi.stubGlobal("fetch",forward);
+ const heldReceipts:string[]=[];
+ const receiptBatch:any[]=[];
+ let batchReleased=false;
+ const readyAfterBatch:string[]=[];
+ class Stream {
+   onopen:any;onmessage:any;onerror:any;controller=new AbortController();
+   keys=new Set<string>();
+   constructor(url:string){streams.add(this);void this.start(url);}
+   deliver(data:string){
+     const frame=JSON.parse(data);
+     this.keys.add(frame.key);
+     if(!batchReleased&&trace.tokens.length && (frame.value?.kind==="receipt"||frame.value?.kind==="ready"&&frame.value.receipts)){
+       heldReceipts.push(data);receiptBatch.push({kind:"held",key:frame.key,cursor:frame.value.cursor??frame.value.receipts.through,state:frame.value.receipt?.state??frame.value.receipts.rows.at(-1)?.state});return;
+     }
+     if(Array.isArray(frame.value)&&frame.value.some((row:any)=>row.key==="ducts.plan-losses"&&row.state==="succeeded")){
+       batchReleased=true;
+       receiptBatch.push({kind:"flush",count:heldReceipts.length});
+       for(const held of heldReceipts.splice(0))this.onmessage?.({data:held});
+     }
+     if(batchReleased&&frame.value?.kind==="ready"&&frame.value.receipts)readyAfterBatch.push(frame.key);
+     this.onmessage?.({data});
+   }
+   async start(url:string){try{const response=await forward(url,{signal:this.controller.signal});if(!response.ok)throw Error(await response.text());this.onopen?.({});const reader=response.body!.getReader();let buffer="";while(!this.controller.signal.aborted){const chunk=await reader.read();if(chunk.done)break;buffer+=new TextDecoder().decode(chunk.value);let end;while((end=buffer.indexOf("\n\n"))>=0){const frame=buffer.slice(0,end);buffer=buffer.slice(end+2);const data=frame.split("\n").filter(s=>s.startsWith("data:")).map(s=>s.slice(5).trimStart()).join("\n");if(data)this.deliver(data);}}}catch(error){if(!this.controller.signal.aborted)this.onerror?.(error);}}
+   close(){this.controller.abort();streams.delete(this);}
+ }
+ vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
+ vi.stubGlobal("EventSource",Stream);
+ const unbind=bindActionReadings();
+ const dirties:any[]=[];const originalDirty=peReadings.dirty.bind(peReadings);
+ peReadings.dirty=(request:any,scope?:"connection"|"subject")=>{dirties.push({request,scope});originalDirty(request,scope);};
+ let search=new URLSearchParams({target:JSON.stringify({kind:"open",ref:trace.target}),thread:"f05-probe",fan:JSON.stringify({kind:"ids",ids:[localId("ducts-fan",`${walk.nodes.find(n=>n.id===14577391)!.uniqueId}@2`)]})});
+ const listeners=new Set<()=>void>();
+ const address={read:()=>new URLSearchParams(search),write:(next:URLSearchParams)=>{search=new URLSearchParams(next);listeners.forEach(f=>f());},subscribe:(f:()=>void)=>{listeners.add(f);return()=>{listeners.delete(f);};}};
+ const root=createRootRoute({validateSearch:(s:Record<string,unknown>)=>s,component:()=> <TypedShell module={fans} fingerprint={workFingerprintSchema.parse(`builtin-closure:${builtins.fans.closure.fingerprint}`)} address={address}/>});
+ const router=createRouter({routeTree:root,history:createMemoryHistory({initialEntries:["/?thread=f05-probe"]})});
+ let before:any,after:any;
+ const sample=()=>{const {gate,options}=trace.gates.at(-1);const state=gate.read();const mount=trace.mounts.at(-1);return {pageEpoch:state.pageEpoch,pageRevision:state.pageRevision,workRevision:state.work?.revision??null,dependencies:options.dependencies(),workSignature:canonicalRouteInput(Object.keys(mount.spec.edits.owners).map(id=>{const o=mount.owner(id);return[id,o.ready,o.handle];}))};};
+ try{
+   render(<RouterProvider router={router}/>);
+   await screen.findByRole("button",{name:"plan Write to Revit"});
+   await vi.waitFor(()=>expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull(),{timeout:20000});
+   fireEvent.click(await screen.findByRole("button",{name:"None"},{timeout:20000}));
+   fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*0 staged/}));
+   await vi.waitFor(()=>{expect(trace.mounts.at(-1)?.owner()?.handle?.revision).toBe(1);expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull();},{timeout:20000});
+   fireEvent.click(await screen.findByRole("button",{name:"Refresh Fans"}));
+   await vi.waitFor(()=>expect(trace.mounts.at(-1)?.writeRefusal()).toBeNull(),{timeout:20000});
+     before=sample();
+     fireEvent.click(screen.getByRole("button",{name:"plan Write to Revit"}));
+     await vi.waitFor(()=>expect((trace as any).results?.at(-1)?.state).toBe("succeeded"),{timeout:45000});
+     await screen.findByRole("button",{name:"Write to Revit"},{timeout:5000});
+     after=sample();
+     expect(after.pageEpoch).toBe(before.pageEpoch);expect(after).toEqual(before);
+     const plan=trace.tokens.at(-1);expect(plan.gate.current(plan.token)).toBe(true);
+     expect(document.body.textContent).not.toContain("Review is stale");
+   expect(trace.submit).toHaveBeenCalledTimes(1);
+   expect(dirties).toEqual([]);
+   const receiptKey=receiptBatch.find(row=>row.kind==="held").key;
+   const stream=[...streams].find(stream=>stream.keys.has(receiptKey));
+   const skippedCursor=receiptBatch.filter(row=>row.kind==="held"&&row.key===receiptKey).at(-1).cursor+2;
+   for(const gap of [{kind:"gap",key:receiptKey,dropped:1},
+     {kind:"event",key:receiptKey,value:{kind:"receipt",cursor:skippedCursor,receipt:actionStatusSchema.parse((trace as any).results[0])}}]){
+   const sampleStart=trace.samples.length, updateStart=subscriptionChanges.length, streamCount=streams.size,dirtyStart=dirties.length;
+   const readyCount=readyAfterBatch.filter(key=>key===receiptKey).length;
+   await act(async()=>stream.onmessage({data:JSON.stringify(gap)}));
+   await vi.waitFor(()=>expect(readyAfterBatch.filter(key=>key===receiptKey).length).toBeGreaterThan(readyCount),{timeout:10000});
+   expect(dirties.slice(dirtyStart)).toEqual([{request:JSON.parse(receiptKey),scope:"subject"}]);
+   expect(streams.size).toBe(streamCount);
+   const changes=subscriptionChanges.slice(updateStart);
+   expect(changes.some(change=>change.remove.includes(receiptKey))).toBe(true);
+   expect(changes.some(change=>change.add.some((request:any)=>canonicalRouteInput(request)===receiptKey))).toBe(true);
+   expect(changes.flatMap(change=>[...change.add,...change.remove.map((key:string)=>JSON.parse(key))]).every(request=>request.kind==="receipts")).toBe(true);
+   expect(trace.samples.slice(sampleStart).every(sample=>JSON.parse(sample.work).every((owner:any)=>owner[1]))).toBe(true);
+   }
+   fireEvent.click(screen.getByRole("button",{name:/^MUAS-1.*0 staged$/}));
+   fireEvent.click(await screen.findByRole("option",{name:/^None/}));
+   await vi.waitFor(()=>expect(trace.mounts.at(-1).owner().handle.revision).toBe(2),{timeout:20000});
+   await expect(trace.mounts.at(-1).run("losses",true)).rejects.toThrow("Review is stale; prepare it again");
+   expect(trace.submit).toHaveBeenCalledTimes(1);
+ }finally{
+   if(process.env.PE_F05_EVIDENCE)writeFileSync(process.env.PE_F05_EVIDENCE,JSON.stringify({submits:trace.submit.mock.calls.length,results:(trace as any).results,receiptBatch,dirties,subscriptionChanges,http:trace.http,before,after,samples:trace.samples,stops:trace.stops,plans:trace.tokens.map(({token,gate})=>({id:token.id,current:gate.current(token),samePageEpoch:token.pageEpoch===gate.read()?.pageEpoch})),requests,body:document.body.textContent,problem:trace.mounts.at(-1)?.reviewProblem("losses")},null,2));
+   cleanup();unbind();peReadings.dirty=originalDirty;peReadings.close();for(const stream of streams)stream.close();vi.unstubAllGlobals();await host.close();await rm(dir,{recursive:true,force:true});
+ }
+},150000);
+
