@@ -3,6 +3,7 @@ packages:
   - packages/*
   - tests/*
   - tools/*
+  - ../examples/pods/snowdon-circuits
 
 catalogMode: prefer
 
