@@ -5,5 +5,5 @@ type AddressSearch<R extends RouteKey> = ReturnType<ReturnType<typeof routeAddre
 /** The typed mount owns field decoding. Router validation preserves the original search object. */
 export function routeFile<R extends RouteKey>(_route: R) {
   return {validateSearch:(search:SearchSchemaInput & Record<string,unknown>) =>
-    search as ReturnType<typeof routeSearch> & AddressSearch<R>};
+    search as unknown as ReturnType<typeof routeSearch> & AddressSearch<R>};
 }
