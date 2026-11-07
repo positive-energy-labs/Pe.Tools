@@ -58,7 +58,7 @@ test("ADR 0021: a thread slot that writes names its document; no clock, no revok
   expect(await screen.findByText("MEP")).toBeTruthy();
   expect(screen.queryByRole("button")).toBeNull();
   expect(screen.getByRole("link", { name: "Bind…" }).getAttribute("href")).toBe(
-    "/bind?page=todo&target=project%3Aclinic&work=work-a",
+    "/bind?page=%22todo%22&target=project%3Aclinic&work=work-a",
   );
 });
 test("access-061/062: a disconnected Page reading immediately stops naming its document", async () => {
@@ -66,7 +66,7 @@ test("access-061/062: a disconnected Page reading immediately stops naming its d
   mocks.read.mockResolvedValue(writes);
   await renderChip();
   await screen.findByText("MEP");
-  expect(screen.getByRole("link", { name: "Bind…" }).getAttribute("href")).toBe("/bind?page=todo");
+  expect(screen.getByRole("link", { name: "Bind…" }).getAttribute("href")).toBe("/bind?page=%22todo%22");
   Stream.current.onerror?.();
   await waitFor(() => expect(screen.queryByText("MEP")).toBeNull());
   expect(screen.getByText("unverified")).toBeTruthy();

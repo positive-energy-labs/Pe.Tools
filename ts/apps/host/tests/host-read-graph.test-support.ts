@@ -42,7 +42,14 @@ export const identity = { build: "host-read-spike", catalog: nativeCatalogIdenti
 export const bounds = { maxBytes: 256 * 1024 * 1024, maxTakings: 2000 };
 export const roster = nativeResponseSchema("ducts.snapshot.walk").parse(rosterCapture);
 export const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(fanCapture);
-export async function fixture(capture = false) {
+export async function fixture(
+  capture = false,
+  recorded: {
+    snapshot?: typeof snapshot;
+    roster?: typeof roster;
+    document?: HostSessionInventory["Service"]["document"];
+  } = {},
+) {
   const dir = await mkdtemp(join(tmpdir(), "host-read-spike-"));
   await mkdir(join(dir, "catalogs"));
   await writeFile(join(dir, "firm.json"), JSON.stringify(FIRM_SEED));
@@ -102,7 +109,7 @@ export async function fixture(capture = false) {
             }),
         }),
         inventory: Layer.succeed(HostSessionInventory, {
-          document: () => Effect.succeed({ ...ref, address: path }),
+          document: recorded.document ?? (() => Effect.succeed({ ...ref, address: path })),
           session: () => Effect.succeed({ sessionId: ref.session }),
           attachment: () => Effect.succeed({ sessionId: ref.session }),
           list: () => Effect.die("No inventory list requested"),
@@ -142,8 +149,8 @@ export async function fixture(capture = false) {
                           unsupported: {},
                         }
                       : input.key === "ducts.snapshot.roster"
-                        ? roster
-                        : snapshot,
+                        ? (recorded.roster ?? roster)
+                        : (recorded.snapshot ?? snapshot),
                 ),
                 nativeRequestId: `native-${nativeCalls}`,
                 actualTarget:
